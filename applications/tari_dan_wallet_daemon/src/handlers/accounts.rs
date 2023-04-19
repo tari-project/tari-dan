@@ -62,7 +62,6 @@ pub async fn handle_create(
     context: &HandlerContext,
     req: AccountsCreateRequest,
 ) -> Result<AccountsCreateResponse, anyhow::Error> {
-    info!(target: LOG_TARGET, "handle_create {:?}", req);
     let sdk = context.wallet_sdk();
 
     if let Some(name) = req.account_name.as_ref() {
@@ -80,7 +79,6 @@ pub async fn handle_create(
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
-    info!(target: LOG_TARGET, "Creating account with owner token {}", owner_pk);
     let component_address = ComponentAddress::new(ACCOUNT_TEMPLATE_ADDRESS, req.account_index);
     let transaction = Transaction::builder()
         .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
