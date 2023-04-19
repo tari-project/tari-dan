@@ -80,6 +80,8 @@ pub enum AccountsSubcommand {
 pub struct CreateArgs {
     #[clap(long, alias = "name")]
     pub account_name: Option<String>,
+    #[clap(long, alias = "index")]
+    pub account_index: Option<u64>,
     #[clap(long, alias = "dry-run")]
     pub is_dry_run: bool,
 }
@@ -165,6 +167,7 @@ async fn handle_create(args: CreateArgs, client: &mut WalletDaemonClient) -> Res
             signing_key_index: None,
             custom_access_rules: None,
             fee: Some(2),
+            account_index: args.account_index.unwrap_or(0),
         })
         .await?;
 

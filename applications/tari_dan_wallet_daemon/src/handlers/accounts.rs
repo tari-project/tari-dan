@@ -25,7 +25,7 @@ use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, NonFungibleAddress, UnclaimedConfidentialOutputAddress},
-    prelude::{ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+    prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
 };
 use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
@@ -62,6 +62,7 @@ pub async fn handle_create(
     context: &HandlerContext,
     req: AccountsCreateRequest,
 ) -> Result<AccountsCreateResponse, anyhow::Error> {
+    info!(target: LOG_TARGET, "handle_create {:?}", req);
     let sdk = context.wallet_sdk();
 
     if let Some(name) = req.account_name.as_ref() {
@@ -80,11 +81,12 @@ pub async fn handle_create(
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
     info!(target: LOG_TARGET, "Creating account with owner token {}", owner_pk);
-
+    let component_address = ComponentAddress::new(ACCOUNT_TEMPLATE_ADDRESS, req.account_index);
     let transaction = Transaction::builder()
         .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
         .with_new_outputs(1)
         .sign(&signing_key.k)
+        .with_new_components(vec![component_address])
         .build();
 
     let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;

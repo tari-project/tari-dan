@@ -27,6 +27,7 @@ use tari_crypto::{
     signatures::CommitmentSignature,
     tari_utilities::ByteArray,
 };
+use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::{
     types::{AccountsCreateRequest, ClaimBurnRequest, ClaimBurnResponse},
@@ -74,11 +75,13 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         .account_public_keys
         .insert(account_name.clone(), (key.secret_key.clone(), key.public_key.clone()));
 
+    let new_component_output = world.next_component_output(ACCOUNT_TEMPLATE_ADDRESS);
     let request = AccountsCreateRequest {
         account_name: Some(account_name.clone()),
         signing_key_index: None,
         custom_access_rules: None,
         fee: None,
+        account_index: new_component_output.index,
     };
 
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
