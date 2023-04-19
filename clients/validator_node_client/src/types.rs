@@ -55,6 +55,7 @@ pub struct TemplateRegistrationRequest {
     #[serde(with = "serde_with::base64")]
     pub binary_sha: Vec<u8>,
     pub binary_url: String,
+    pub template_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,9 +85,15 @@ pub struct TemplateAbi {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionDef {
     pub name: String,
-    pub arguments: Vec<String>,
+    pub arguments: Vec<ArgDef>,
     pub output: String,
     pub is_mut: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArgDef {
+    pub name: String,
+    pub arg_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

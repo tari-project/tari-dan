@@ -45,9 +45,6 @@ mod fee_state;
 mod tracker;
 mod working_state;
 
-#[cfg(test)]
-mod tests;
-
 use std::{fmt::Debug, sync::Arc};
 
 use tari_crypto::ristretto::RistrettoSecretKey;

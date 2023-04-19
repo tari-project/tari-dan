@@ -39,9 +39,15 @@ impl TemplateDef {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionDef {
     pub name: String,
-    pub arguments: Vec<Type>,
+    pub arguments: Vec<ArgDef>,
     pub output: Type,
     pub is_mut: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArgDef {
+    pub name: String,
+    pub arg_type: Type,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
