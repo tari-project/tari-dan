@@ -7510,7 +7510,6 @@ dependencies = [
  "serde",
  "tari_bor",
  "tari_common_types 0.50.0-pre.0",
- "tari_core",
  "tari_crypto",
  "tari_template_abi",
  "tari_template_lib",

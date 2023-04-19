@@ -45,7 +45,7 @@ mod metadata;
 pub use metadata::Metadata;
 
 mod non_fungible;
-pub use non_fungible::{NonFungible, NonFungibleAddress, NonFungibleId};
+pub use non_fungible::{NonFungible, NonFungibleAddress, NonFungibleAddressContents, NonFungibleId};
 
 mod resource;
 pub use resource::ResourceAddress;

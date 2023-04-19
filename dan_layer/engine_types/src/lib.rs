@@ -7,6 +7,7 @@ pub mod commit_result;
 pub mod confidential;
 pub mod fees;
 pub mod hashing;
+pub mod indexed_value;
 pub mod instruction;
 pub mod instruction_result;
 pub mod logs;

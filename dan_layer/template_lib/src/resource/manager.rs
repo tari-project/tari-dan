@@ -94,7 +94,7 @@ impl ResourceManager {
         });
 
         resp.decode()
-            .expect("[register_non_fungible] Failed to decode ResourceAddress")
+            .expect("[register_non_fungible] Failed to decode ResourceAddress, Option<Bucket> tuple")
     }
 
     pub fn mint_non_fungible<T: Serialize, U: Serialize>(
