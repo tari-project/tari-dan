@@ -29,12 +29,19 @@ use std::{
     str::FromStr,
 };
 
-use reqwest::{header, header::HeaderMap, IntoUrl, Url};
+use json::Value;
+use reqwest::{
+    header::{self, HeaderMap, AUTHORIZATION},
+    IntoUrl,
+    Url,
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_template_lib::models::ComponentAddress;
 use types::{
+    AccountsCreateFreeTestCoinsRequest,
+    AccountsCreateFreeTestCoinsResponse,
     ClaimBurnRequest,
     ClaimBurnResponse,
     ProofsCancelRequest,
@@ -113,6 +120,7 @@ pub struct WalletDaemonClient {
     client: reqwest::Client,
     endpoint: Url,
     request_id: i64,
+    jwt: Option<String>,
 }
 
 impl WalletDaemonClient {
@@ -129,6 +137,7 @@ impl WalletDaemonClient {
             client,
             endpoint: endpoint.into_url()?,
             request_id: 0,
+            jwt: None,
         })
     }
 
@@ -280,20 +289,19 @@ impl WalletDaemonClient {
             .await
     }
 
+    pub async fn create_free_test_coins<T: Borrow<AccountsCreateFreeTestCoinsRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AccountsCreateFreeTestCoinsResponse, WalletDaemonClientError> {
+        self.send_request("accounts.create_free_test_coins", req.borrow()).await
+    }
+
     fn next_request_id(&mut self) -> i64 {
         self.request_id += 1;
         self.request_id
     }
 
-    async fn send_request<T: Serialize, R: DeserializeOwned>(
-        &mut self,
-        method: &str,
-        params: &T,
-    ) -> Result<R, WalletDaemonClientError> {
-        let params = json::to_value(params).map_err(|e| WalletDaemonClientError::SerializeRequest {
-            source: e,
-            method: method.to_string(),
-        })?;
+    async fn jrpc_call<T: Serialize>(&mut self, method: &str, params: &T) -> Result<Value, WalletDaemonClientError> {
         let request_json = json!(
             {
                 "jsonrpc": "2.0",
@@ -302,15 +310,36 @@ impl WalletDaemonClient {
                 "params": params,
             }
         );
-        let resp = self
-            .client
-            .post(self.endpoint.clone())
-            .body(request_json.to_string())
-            .send()
-            .await?;
+        let mut builder = self.client.post(self.endpoint.clone());
+        if let Some(token) = &self.jwt {
+            // If we don't have the token and the method is anything else than "auth.login" it will fail.
+            builder = builder.header(AUTHORIZATION, format!("Bearer {}", token));
+        }
+        let resp = builder.body(request_json.to_string()).send().await?;
         let val = resp.json().await?;
-        let resp = jsonrpc_result(val)?;
+        jsonrpc_result(val)
+    }
 
+    async fn send_request<T: Serialize, R: DeserializeOwned>(
+        &mut self,
+        method: &str,
+        params: &T,
+    ) -> Result<R, WalletDaemonClientError> {
+        if self.jwt.is_none() {
+            // We don't have the JWT token yet. Lets get it.
+            let resp = self.jrpc_call("auth.login", &KeysListRequest {}).await?;
+            self.jwt = Some(serde_json::from_value::<String>(resp).map_err(|e| {
+                WalletDaemonClientError::DeserializeResponse {
+                    source: e,
+                    method: "auth.login".to_string(),
+                }
+            })?);
+        }
+        let params = json::to_value(params).map_err(|e| WalletDaemonClientError::SerializeRequest {
+            source: e,
+            method: method.to_string(),
+        })?;
+        let resp = self.jrpc_call(method, &params).await?;
         match serde_json::from_value(resp) {
             Ok(r) => Ok(r),
             Err(e) => Err(WalletDaemonClientError::DeserializeResponse {

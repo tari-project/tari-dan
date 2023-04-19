@@ -27,12 +27,13 @@ tari_bor = { path = "../../dan_layer/tari_bor" }
 
 anyhow = "1.0.69"
 base64 = "0.20.0-alpha.1"
-axum = "0.6"
+axum = { version = "0.6", features = ["headers"] }
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
 clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"
 dirs = "4.0.0"
 futures = "0.3.26"
+jsonwebtoken = "8.3.0"
 log = "0.4.17"
 multiaddr = "0.17.0"
 serde = "1.0.152"

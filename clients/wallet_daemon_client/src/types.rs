@@ -133,6 +133,9 @@ pub struct TransactionClaimBurnResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthLoginRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeysListRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -196,8 +199,14 @@ pub struct AccountsListRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountInfo {
+    pub account: Account,
+    pub public_key: PublicKey,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListResponse {
-    pub accounts: Vec<(Account, PublicKey)>,
+    pub accounts: Vec<AccountInfo>,
     pub total: u64,
 }
 
@@ -272,6 +281,7 @@ pub struct ProofsGenerateRequest {
     pub reveal_amount: Amount,
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
+    #[serde(deserialize_with = "string_or_struct")]
     pub resource_address: ResourceAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
     pub destination_public_key: PublicKey,
@@ -346,6 +356,7 @@ pub struct ProofsCancelResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RevealFundsRequest {
+    #[serde(deserialize_with = "string_or_struct")]
     /// Account with funds to reveal
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
@@ -361,6 +372,22 @@ pub struct RevealFundsRequest {
 pub struct RevealFundsResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
+    pub fee: Amount,
+    pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountsCreateFreeTestCoinsRequest {
+    pub account_name: String,
+    pub amount: Amount,
+    pub fee: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountsCreateFreeTestCoinsResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub amount: Amount,
     pub fee: Amount,
     pub result: FinalizeResult,
 }

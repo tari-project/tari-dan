@@ -36,6 +36,8 @@ use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
         AccountByNameResponse,
+        AccountInfo,
+        AccountsCreateFreeTestCoinsRequest,
         AccountsCreateRequest,
         AccountsGetBalancesRequest,
         AccountsInvokeRequest,
@@ -72,6 +74,8 @@ pub enum AccountsSubcommand {
     ClaimBurn(ClaimBurnArgs),
     #[clap(alias = "reveal")]
     RevealFunds(RevealFundsArgs),
+    #[clap(alias = "faucet")]
+    CreateFreeTestCoins(CreateFreeTestCoinsArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -123,6 +127,16 @@ pub struct RevealFundsArgs {
     pay_from_reveal: bool,
 }
 
+#[derive(Debug, Args, Clone)]
+pub struct CreateFreeTestCoinsArgs {
+    #[clap(long, short = 'n', alias = "name")]
+    pub account_name: String,
+    #[clap(long, short, alias = "amount")]
+    pub amount: u64,
+    #[clap(long, short, alias = "fee")]
+    pub fee: u64,
+}
+
 impl AccountsSubcommand {
     pub async fn handle(self, mut client: WalletDaemonClient) -> Result<(), anyhow::Error> {
         match self {
@@ -144,6 +158,7 @@ impl AccountsSubcommand {
             AccountsSubcommand::GetByName(args) => handle_get_by_name(args, &mut client).await?,
             AccountsSubcommand::ClaimBurn(args) => handle_claim_burn(args, &mut client).await?,
             AccountsSubcommand::RevealFunds(args) => handle_reveal_funds(args, &mut client).await?,
+            AccountsSubcommand::CreateFreeTestCoins(args) => handle_create_free_test_coins(args, &mut client).await?,
         }
         Ok(())
     }
@@ -270,6 +285,25 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
     Ok(())
 }
 
+async fn handle_create_free_test_coins(
+    args: CreateFreeTestCoinsArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<(), anyhow::Error> {
+    println!("Creating free test coins for account '{}'...", args.account_name);
+    let resp = client
+        .create_free_test_coins(AccountsCreateFreeTestCoinsRequest {
+            account_name: args.account_name,
+            amount: Amount::new(args.amount as i64),
+            fee: Amount::new(args.fee as i64),
+        })
+        .await?;
+
+    println!("✅ Free test coins created");
+    println!("   amount: {}", resp.amount);
+    println!("   transaction fee: {}", resp.fee);
+    Ok(())
+}
+
 async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Submitted account list transaction...");
     let resp = client.list_accounts(0, 100).await?;
@@ -283,8 +317,8 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
     table.enable_row_count();
     table.set_titles(vec!["Name", "Address", "Public Key"]);
     println!("Accounts:");
-    for (account, pk) in resp.accounts {
-        table.add_row(table_row!(account.name, account.address, pk));
+    for AccountInfo { account, public_key } in resp.accounts {
+        table.add_row(table_row!(account.name, account.address, public_key));
     }
     table.print_stdout();
     Ok(())

@@ -7521,6 +7521,7 @@ dependencies = [
  "config",
  "dirs",
  "futures 0.3.27",
+ "jsonwebtoken",
  "libsqlite3-sys",
  "log",
  "log4rs",
