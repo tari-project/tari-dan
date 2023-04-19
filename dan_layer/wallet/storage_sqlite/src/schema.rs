@@ -1,6 +1,4 @@
-// @generated automatically by Diesel CLI.
-
-diesel::table! {
+table! {
     accounts (id) {
         id -> Integer,
         name -> Text,
@@ -8,10 +6,11 @@ diesel::table! {
         owner_key_index -> BigInt,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        is_default -> Bool,
     }
 }
 
-diesel::table! {
+table! {
     config (id) {
         id -> Integer,
         key -> Text,
@@ -22,7 +21,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     key_manager_states (id) {
         id -> Integer,
         branch_seed -> Text,
@@ -33,7 +32,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     outputs (id) {
         id -> Integer,
         account_id -> Integer,
@@ -51,7 +50,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     proofs (id) {
         id -> Integer,
         account_id -> Integer,
@@ -61,7 +60,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     substates (id) {
         id -> Integer,
         module_name -> Nullable<Text>,
@@ -74,7 +73,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     transactions (id) {
         id -> Integer,
         hash -> Text,
@@ -94,7 +93,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     vaults (id) {
         id -> Integer,
         account_id -> Integer,
@@ -108,13 +107,13 @@ diesel::table! {
     }
 }
 
-diesel::joinable!(outputs -> accounts (account_id));
-diesel::joinable!(outputs -> vaults (vault_id));
-diesel::joinable!(proofs -> accounts (account_id));
-diesel::joinable!(proofs -> vaults (vault_id));
-diesel::joinable!(vaults -> accounts (account_id));
+joinable!(outputs -> accounts (account_id));
+joinable!(outputs -> vaults (vault_id));
+joinable!(proofs -> accounts (account_id));
+joinable!(proofs -> vaults (vault_id));
+joinable!(vaults -> accounts (account_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
+allow_tables_to_appear_in_same_query!(
     accounts,
     config,
     key_manager_states,

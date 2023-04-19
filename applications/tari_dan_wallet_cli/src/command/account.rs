@@ -35,7 +35,6 @@ use tari_template_lib::models::Amount;
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
-        AccountByNameResponse,
         AccountInfo,
         AccountsCreateFreeTestCoinsRequest,
         AccountsCreateRequest,
@@ -44,6 +43,7 @@ use tari_wallet_daemon_client::{
         ClaimBurnRequest,
         RevealFundsRequest,
     },
+    ComponentAddressOrName,
     WalletDaemonClient,
 };
 
@@ -62,18 +62,20 @@ pub enum AccountsSubcommand {
     List,
     Invoke {
         #[clap(long, alias = "name", short = 'n')]
-        account: String,
+        account: Option<ComponentAddressOrName>,
         method: String,
         #[clap(long, short = 'a')]
         args: Vec<CliArg>,
+        fee: Option<u32>,
     },
-    #[clap(alias = "get")]
-    GetByName(GetByNameArgs),
+    Get(GetArgs),
     ClaimBurn(ClaimBurnArgs),
     #[clap(alias = "reveal")]
     RevealFunds(RevealFundsArgs),
     #[clap(alias = "faucet")]
     CreateFreeTestCoins(CreateFreeTestCoinsArgs),
+    #[clap(alias = "default")]
+    SetDefault(SetDefaultArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -82,55 +84,60 @@ pub struct CreateArgs {
     pub account_name: Option<String>,
     #[clap(long, alias = "dry-run")]
     pub is_dry_run: bool,
+    pub is_default: bool,
+    pub fee: Option<u32>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct SetDefaultArgs {
+    pub account_name: ComponentAddressOrName,
 }
 
 #[derive(Debug, Args, Clone)]
 pub struct GetBalancesArgs {
-    pub account_name: String,
+    pub account_name: Option<ComponentAddressOrName>,
 }
 
 #[derive(Debug, Args, Clone)]
-pub struct GetByNameArgs {
-    #[clap(long, alias = "name")]
-    pub name: String,
+pub struct GetArgs {
+    pub name: ComponentAddressOrName,
 }
 
 #[derive(Debug, Args, Clone)]
 pub struct ClaimBurnArgs {
-    #[clap(long, short = 'n', alias = "name")]
-    account_name: String,
+    #[clap(long, short = 'a', alias = "account")]
+    account: Option<ComponentAddressOrName>,
     #[clap(long, short = 'i', alias = "input")]
     proof_file: Option<PathBuf>,
     /// Optional proof JSON from the L1 console wallet. If not provided, you will be prompted to enter it.
     #[clap(long, short = 'j', alias = "json")]
     proof_json: Option<serde_json::Value>,
-    #[clap(long, short = 'f', default_value_t = 1000)]
-    fee: u64,
+    #[clap(long, short = 'f')]
+    fee: Option<u32>,
 }
 
 #[derive(Debug, Args, Clone)]
 pub struct RevealFundsArgs {
-    /// The account name where the funds will be revealed
-    account_name: String,
     /// Amount of funds to reveal
     reveal_amount: u64,
+    /// The account name where the funds will be revealed
+    account: Option<ComponentAddressOrName>,
     /// The fee to pay for the reveal transaction
-    #[clap(long, short = 'f', default_value_t = 1000)]
-    fee: u64,
+    #[clap(long, short = 'f')]
+    fee: Option<u32>,
     /// If set, the fee will be paid from the revealed funds instead of from the account resulting in less revealed
     /// funds than requested.
-    #[clap(long)]
+    #[clap(long, default_value_t = true)]
     pay_from_reveal: bool,
 }
 
 #[derive(Debug, Args, Clone)]
 pub struct CreateFreeTestCoinsArgs {
-    #[clap(long, short = 'n', alias = "name")]
-    pub account_name: String,
+    pub account: Option<ComponentAddressOrName>,
     #[clap(long, short, alias = "amount")]
-    pub amount: u64,
+    pub amount: Option<u64>,
     #[clap(long, short, alias = "fee")]
-    pub fee: u64,
+    pub fee: Option<u64>,
 }
 
 impl AccountsSubcommand {
@@ -145,13 +152,17 @@ impl AccountsSubcommand {
             AccountsSubcommand::List => {
                 handle_list(&mut client).await?;
             },
-            AccountsSubcommand::Invoke { account, method, args } => {
-                hande_invoke(account, method, args, &mut client).await?
-            },
-            AccountsSubcommand::GetByName(args) => handle_get_by_name(args, &mut client).await?,
+            AccountsSubcommand::Invoke {
+                account,
+                method,
+                args,
+                fee,
+            } => hande_invoke(account, method, args, fee, &mut client).await?,
+            AccountsSubcommand::Get(args) => handle_get(args, &mut client).await?,
             AccountsSubcommand::ClaimBurn(args) => handle_claim_burn(args, &mut client).await?,
             AccountsSubcommand::RevealFunds(args) => handle_reveal_funds(args, &mut client).await?,
             AccountsSubcommand::CreateFreeTestCoins(args) => handle_create_free_test_coins(args, &mut client).await?,
+            AccountsSubcommand::SetDefault(args) => handle_set_default(args, &mut client).await?,
         }
         Ok(())
     }
@@ -164,7 +175,8 @@ async fn handle_create(args: CreateArgs, client: &mut WalletDaemonClient) -> Res
             account_name: args.account_name,
             signing_key_index: None,
             custom_access_rules: None,
-            fee: Some(2),
+            is_default: args.is_default,
+            fee: args.fee.map(|u| Amount::new(u.into())),
         })
         .await?;
 
@@ -176,19 +188,26 @@ async fn handle_create(args: CreateArgs, client: &mut WalletDaemonClient) -> Res
     Ok(())
 }
 
+async fn handle_set_default(args: SetDefaultArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
+    let _resp = client.accounts_set_default(args.account_name).await?;
+    println!("✅ Default account set");
+    Ok(())
+}
+
 async fn hande_invoke(
-    account: String,
+    account: Option<ComponentAddressOrName>,
     method: String,
     args: Vec<CliArg>,
+    fee: Option<u32>,
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
-    println!("Submitted invoke transaction for account {}...", account);
+    println!("Submitted invoke transaction for account...",);
     let resp = client
         .invoke_account_method(AccountsInvokeRequest {
-            account_name: account,
+            account,
             method,
             args: args.into_iter().map(|a| a.into_arg()).collect(),
-            fee: Amount(1000),
+            fee: fee.map(|u| Amount::new(u.into())),
         })
         .await?;
 
@@ -205,10 +224,9 @@ async fn hande_invoke(
 }
 
 async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
-    println!("Checking balances for account '{}'...", args.account_name);
     let resp = client
         .get_account_balances(AccountsGetBalancesRequest {
-            account_name: args.account_name,
+            account: args.account_name,
         })
         .await?;
 
@@ -235,13 +253,11 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
 
 pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     let ClaimBurnArgs {
-        account_name,
+        account,
         proof_json,
         fee,
         proof_file,
     } = args;
-
-    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&account_name).await?;
 
     let claim_proof = if let Some(proof_json) = proof_json {
         proof_json
@@ -262,9 +278,9 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
     println!("✅ Claim burn submitted");
 
     let req = ClaimBurnRequest {
-        account: account.address.as_component_address().unwrap(),
+        account,
         claim_proof,
-        fee: fee.try_into()?,
+        fee: fee.map(|f| f.try_into()).transpose()?,
     };
 
     let resp = client
@@ -283,12 +299,12 @@ async fn handle_create_free_test_coins(
     args: CreateFreeTestCoinsArgs,
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
-    println!("Creating free test coins for account '{}'...", args.account_name);
+    println!("Creating free test coins...");
     let resp = client
         .create_free_test_coins(AccountsCreateFreeTestCoinsRequest {
-            account_name: args.account_name,
-            amount: Amount::new(args.amount as i64),
-            fee: Amount::new(args.fee as i64),
+            account: args.account,
+            amount: Amount::new(args.amount.unwrap_or(100000) as i64),
+            fee: args.fee.map(|u| u.try_into()).transpose()?,
         })
         .await?;
 
@@ -318,11 +334,14 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
     Ok(())
 }
 
-async fn handle_get_by_name(args: GetByNameArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
+async fn handle_get(args: GetArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     println!("Get account component address by its name...");
-    let resp = client.accounts_get_by_name(&args.name).await?;
+    let resp = client.accounts_get(args.name.clone()).await?;
 
-    println!("Account {} substate_address: {}", args.name, resp.account.address);
+    println!(
+        "Account {} substate_address: {}",
+        resp.account.name, resp.account.address
+    );
     println!();
 
     Ok(())
@@ -330,20 +349,18 @@ async fn handle_get_by_name(args: GetByNameArgs, client: &mut WalletDaemonClient
 
 pub async fn handle_reveal_funds(args: RevealFundsArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     let RevealFundsArgs {
-        account_name,
+        account,
         reveal_amount,
         fee,
         pay_from_reveal,
     } = args;
 
-    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&account_name).await?;
-
     println!("Submitting reveal transaction...");
     let resp = client
         .accounts_reveal_funds(RevealFundsRequest {
-            account: account.address.as_component_address().unwrap(),
+            account,
             amount_to_reveal: Amount::try_from(reveal_amount).expect("Reveal amount too large"),
-            fee: fee.try_into()?,
+            fee: fee.map(|f| f.try_into()).transpose()?,
             pay_fee_from_reveal: pay_from_reveal,
         })
         .await?;

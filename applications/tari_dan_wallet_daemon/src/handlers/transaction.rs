@@ -49,7 +49,7 @@ pub async fn handle_submit(
         substates.extend(get_referenced_component_addresses(&req.fee_instructions));
         let loaded_dependent_substates = sdk
             .substate_api()
-            .load_dependent_substates(&substates.into_iter().collect::<Vec<_>>())?;
+            .load_dependent_substates(&substates.iter().collect::<Vec<_>>())?;
         vec![req.inputs, loaded_dependent_substates].concat()
     };
 

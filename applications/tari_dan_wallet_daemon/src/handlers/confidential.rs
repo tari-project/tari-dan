@@ -22,7 +22,7 @@ use tari_wallet_daemon_client::types::{
     ProofsGenerateResponse,
 };
 
-use crate::handlers::HandlerContext;
+use crate::handlers::{get_account_or_default, HandlerContext};
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc::confidential";
 
@@ -41,7 +41,7 @@ pub async fn handle_create_transfer_proof(
         .into());
     }
 
-    let account = sdk.accounts_api().get_account_by_name(&req.source_account_name)?;
+    let account = get_account_or_default(req.account, sdk)?;
     let vault = sdk
         .accounts_api()
         .get_vault_by_resource(&account.address, &req.resource_address)?;
