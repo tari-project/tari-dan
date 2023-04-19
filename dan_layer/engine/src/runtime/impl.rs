@@ -25,6 +25,7 @@ use std::collections::{BTreeSet, HashMap};
 use log::warn;
 use tari_bor::encode;
 use tari_crypto::{
+    commitment::HomomorphicCommitmentFactory,
     range_proof::RangeProofService,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
@@ -770,6 +771,25 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let bucket_id = self.tracker.new_bucket(resource)?;
 
         self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
+        Ok(())
+    }
+
+    fn create_free_test_coins(&self, amount: u64, private_key: RistrettoSecretKey) -> Result<(), RuntimeError> {
+        let commitment = get_commitment_factory().commit(&private_key, &RistrettoSecretKey::from(amount));
+        let resource = ResourceContainer::confidential(
+            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            Some((commitment.as_public_key().clone(), ConfidentialOutput {
+                commitment,
+                stealth_public_nonce: None,
+                encrypted_value: None,
+                minimum_value_promise: 0,
+            })),
+            Amount::new(amount as i64),
+        );
+
+        let bucket_id = self.tracker.new_bucket(resource)?;
+        self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
+
         Ok(())
     }
 

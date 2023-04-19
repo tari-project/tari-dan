@@ -57,10 +57,32 @@ const renderJson = (json: any) => {
   }
 };
 
-function toHexString(byteArray: number[]) {
-  return Array.from(byteArray, function (byte) {
-    return ('0' + (byte & 0xff).toString(16)).slice(-2);
-  }).join('');
+
+function removeTagged(obj: any) {
+  if (obj === undefined) {
+    return "undefined";
+  }
+  if (obj["@@TAGGED@@"] !== undefined) {
+    return obj["@@TAGGED@@"][1];
+  }
+  return obj;
+}
+
+function toHexString(byteArray: any ) {
+
+  if (Array.isArray( byteArray )) {
+    return Array.from(byteArray, function (byte) {
+      return ('0' + (byte & 0xff).toString(16)).slice(-2);
+    }).join('');
+  }
+  if (byteArray === undefined) {
+    return "undefined";
+  }
+  // object might be a tagged object
+  if (byteArray["@@TAGGED@@"] !== undefined) {
+    return toHexString(byteArray["@@TAGGED@@"][1]);
+  }
+  return "Unsupported type";
 }
 
 function fromHexString(hexString: string) {
@@ -75,4 +97,4 @@ function shortenString(string: string, start: number = 8, end: number = 8) {
   return string.substring(0, start) + '...' + string.slice(-end);
 }
 
-export {renderJson, toHexString, fromHexString, shortenString};
+export {renderJson, toHexString, fromHexString, shortenString, removeTagged};

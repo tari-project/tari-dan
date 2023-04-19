@@ -23,6 +23,7 @@
 use std::sync::Arc;
 
 use log::*;
+use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
@@ -36,6 +37,7 @@ use tari_template_lib::{
     models::{Amount, ComponentAddress},
 };
 use tari_transaction::{id_provider::IdProvider, Transaction};
+use tari_utilities::ByteArray;
 
 use crate::{
     packager::LoadedTemplate,
@@ -250,6 +252,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             Instruction::ClaimBurn { claim } => {
                 // Need to call it on the runtime so that a bucket is created.
                 runtime.interface().claim_burn(*claim)?;
+                Ok(InstructionResult::empty())
+            },
+            Instruction::CreateFreeTestCoins { amount, private_key } => {
+                runtime
+                    .interface()
+                    .create_free_test_coins(amount, RistrettoSecretKey::from_bytes(&private_key)?)?;
                 Ok(InstructionResult::empty())
             },
         }

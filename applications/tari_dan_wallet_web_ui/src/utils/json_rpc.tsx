@@ -20,24 +20,32 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import { Mutex } from "async-mutex";
 import { json } from "react-router-dom";
 
-export async function jsonRpc(method: string, params: any = null) {
-  let id = 0;
-  id += 1;
+let token: String | null = null;
+let json_id = 0;
+const mutex_token = new Mutex();
+const mutex_id = new Mutex();
+
+async function internalJsonRpc(method: string, token: any = null, params: any = null) {
+  let id;
+  await mutex_id.runExclusive(() => {
+    id = json_id;
+    json_id += 1;
+  })
   let address = "localhost:9000";
   try {
     let text = await (await fetch("json_rpc_address")).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }
-  } catch {}
-  console.log(JSON.stringify({
-    method: method,
-    jsonrpc: "2.0",
-    id: id,
-    params: params,
-  }));
+  } catch { }
+  let headers: { [key: string]: string } = { "Content-Type": "application/json" };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+
   let response = await fetch(`http://${address}`, {
     method: "POST",
     body: JSON.stringify({
@@ -46,19 +54,31 @@ export async function jsonRpc(method: string, params: any = null) {
       id: id,
       params: params,
     }),
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: headers
   });
   let json = await response.json();
   if (json.error) {
-    throw json.error;
+      console.error(json.error);
+      throw json.error;
   }
   return json.result;
 }
 
+export async function jsonRpc(method: string, params: any = null) {
+  await mutex_token.runExclusive(async () => {
+    if (token === null) {
+      token = await internalJsonRpc("auth.login");
+    }
+  })
+  // This will fail if the token is expired
+  return internalJsonRpc(method, token, params)
+}
+
 
 // The 'any' types are structs I don't define them here, but we can add them later.
+
+// auth
+export const authLogin = () => jsonRpc("auth.login");
 
 // rpc
 export const rpcDiscover = () => jsonRpc("rpc.discover");
@@ -102,7 +122,8 @@ export const transactionsWaitResult = (hash: string, timeoutSecs: number | null)
 
 // accounts
 export const accountsClaimBurn = (account: string, claimProof: any, fee: number) =>
-  jsonRpc("accounts.claim_burn", [account, claimProof, fee]);
+    // Fees are passed as strings because Amount is tagged
+  jsonRpc("accounts.claim_burn", { account, claim_proof: claimProof, fee : fee.toString()});
 export const accountsCreate = (
   accountName: string | undefined,
   signingKeyIndex: number | undefined,

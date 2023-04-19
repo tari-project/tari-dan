@@ -39,6 +39,8 @@ use tari_template_lib::{
 };
 use tari_transaction::Transaction;
 
+use crate::serialize::string_or_struct;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionSubmitRequest {
     pub signing_key_index: Option<u64>,
@@ -128,6 +130,9 @@ pub struct TransactionClaimBurnResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthLoginRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeysListRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -189,8 +194,14 @@ pub struct AccountsListRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountInfo {
+    pub account: Account,
+    pub public_key: PublicKey,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsListResponse {
-    pub accounts: Vec<(Account, PublicKey)>,
+    pub accounts: Vec<AccountInfo>,
     pub total: u64,
 }
 
@@ -254,6 +265,7 @@ pub struct ProofsGenerateRequest {
     pub amount: Amount,
     pub reveal_amount: Amount,
     pub source_account_name: String,
+    #[serde(deserialize_with = "string_or_struct")]
     pub resource_address: ResourceAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
     pub destination_public_key: PublicKey,
@@ -290,6 +302,7 @@ pub struct ConfidentialCreateOutputProofResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConfidentialTransferRequest {
+    #[serde(deserialize_with = "string_or_struct")]
     pub account: ComponentAddress,
     pub amount: Amount,
     pub resource_address: ResourceAddress,
@@ -308,6 +321,7 @@ pub struct ConfidentialTransferResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimBurnRequest {
+    #[serde(deserialize_with = "string_or_struct")]
     pub account: ComponentAddress,
     pub claim_proof: serde_json::Value,
     pub fee: Amount,
@@ -326,6 +340,7 @@ pub struct ProofsCancelResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RevealFundsRequest {
+    #[serde(deserialize_with = "string_or_struct")]
     /// Account with funds to reveal
     pub account: ComponentAddress,
     /// Amount to reveal
@@ -340,6 +355,22 @@ pub struct RevealFundsRequest {
 pub struct RevealFundsResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
+    pub fee: Amount,
+    pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountsCreateFreeTestCoinsRequest {
+    pub account_name: String,
+    pub amount: Amount,
+    pub fee: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountsCreateFreeTestCoinsResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub amount: Amount,
     pub fee: Amount,
     pub result: FinalizeResult,
 }
