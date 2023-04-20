@@ -30,6 +30,7 @@ pub mod cli;
 mod comms;
 pub mod config;
 mod dan_layer_scanner;
+mod graphql;
 mod http_ui;
 mod json_rpc;
 mod p2p;
@@ -63,6 +64,7 @@ use tokio::{task, time};
 use crate::{
     bootstrap::{spawn_services, Services},
     config::ApplicationConfig,
+    graphql::server::run_graphql,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
 };
 
@@ -111,6 +113,12 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
         let handlers = JsonRpcHandlers::new(&services, base_node_client, substate_manager.clone());
         task::spawn(run_json_rpc(address, handlers));
+    }
+    // Run the GraphQL API
+    let graphql_address = config.indexer.graphql_address;
+    if let Some(address) = graphql_address {
+        info!(target: LOG_TARGET, "🌐 Started GraphQL server on {}", address);
+        task::spawn(run_graphql(address));
     }
     // Run the http ui
     if let Some(address) = config.indexer.http_ui_address {
