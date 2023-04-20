@@ -22,12 +22,12 @@
 
 use tari_template_abi::TemplateDef;
 
-use crate::wasm::LoadedWasmTemplate;
+use crate::{flow::FlowFactory, wasm::LoadedWasmTemplate};
 
 #[derive(Debug, Clone)]
 pub enum LoadedTemplate {
     Wasm(LoadedWasmTemplate),
-    // Flow(Flow)
+    Flow(FlowFactory),
 }
 
 impl LoadedTemplate {
@@ -36,18 +36,24 @@ impl LoadedTemplate {
     pub fn template_name(&self) -> &str {
         match self {
             LoadedTemplate::Wasm(wasm) => wasm.template_name(),
+            LoadedTemplate::Flow(flow) => flow.name(),
         }
     }
 
     pub fn template_def(&self) -> &TemplateDef {
         match self {
             LoadedTemplate::Wasm(wasm) => wasm.template_def(),
+            LoadedTemplate::Flow(flow) => flow.template_def(),
         }
     }
 
     pub fn code_size(&self) -> usize {
         match self {
             LoadedTemplate::Wasm(wasm) => wasm.code_size(),
+            LoadedTemplate::Flow(_) => {
+                // todo: idk what this should be
+                128
+            },
         }
     }
 }

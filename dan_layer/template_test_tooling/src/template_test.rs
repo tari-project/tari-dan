@@ -5,6 +5,7 @@
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
+    sync::Arc,
 };
 
 use anyhow::anyhow;
@@ -55,7 +56,7 @@ use crate::track_calls::TrackCallsModule;
 pub const TEST_FAUCET_COMPONENT: ComponentAddress = ComponentAddress::new(Hash::from_array([0xfau8; 32]));
 
 pub struct TemplateTest {
-    package: Package,
+    package: Arc<Package>,
     track_calls: TrackCallsModule,
     secret_key: RistrettoSecretKey,
     last_outputs: HashSet<SubstateAddress>,
@@ -107,7 +108,7 @@ impl TemplateTest {
         }
 
         Self {
-            package,
+            package: Arc::new(package),
             track_calls: TrackCallsModule::new(),
             secret_key,
             name_to_template,
@@ -116,7 +117,7 @@ impl TemplateTest {
             // TODO: cleanup
             consensus_context: ConsensusContext { current_epoch: 0 },
             enable_fees: false,
-            fee_table: FeeTable::new(10, 1, 1, 250),
+            fee_table: FeeTable::new(1, 1, 250),
         }
     }
 
@@ -227,6 +228,9 @@ impl TemplateTest {
         let addr = self.name_to_template.get(module_name).unwrap();
         match self.package.get_template_by_address(addr).unwrap() {
             LoadedTemplate::Wasm(wasm) => wasm,
+            LoadedTemplate::Flow(_) => {
+                panic!("Not supported")
+            },
         }
     }
 
@@ -357,7 +361,7 @@ impl TemplateTest {
         transaction: Transaction,
         proofs: Vec<NonFungibleAddress>,
     ) -> Result<ExecuteResult, TransactionError> {
-        let mut modules: Vec<Box<dyn RuntimeModule>> = vec![Box::new(self.track_calls.clone())];
+        let mut modules: Vec<Box<dyn RuntimeModule<Package>>> = vec![Box::new(self.track_calls.clone())];
 
         if self.enable_fees {
             modules.push(Box::new(FeeModule::new(self.fee_table.loan(), self.fee_table.clone())));

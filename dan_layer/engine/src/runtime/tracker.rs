@@ -29,7 +29,7 @@ use std::{
 };
 
 use log::debug;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_engine_types::{
     bucket::Bucket,
     commit_result::{RejectReason, TransactionResult},
@@ -68,6 +68,7 @@ use tari_template_lib::{
 use tari_transaction::id_provider::IdProvider;
 
 use crate::{
+    packager::LoadedTemplate,
     runtime::{fee_state::FeeState, working_state::WorkingState, RuntimeError, TransactionCommitError},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
@@ -75,11 +76,11 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::engine::runtime::state_tracker";
 
 #[derive(Debug, Clone)]
-pub struct StateTracker {
+pub struct StateTracker<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
     working_state: Arc<RwLock<WorkingState>>,
     fee_state: Arc<RwLock<FeeState>>,
     id_provider: IdProvider,
-    template_defs: HashMap<TemplateAddress, TemplateDef>,
+    template_provider: Arc<TTemplateProvider>,
     fee_checkpoint: Arc<Mutex<Option<WorkingState>>>,
 }
 
@@ -88,17 +89,17 @@ pub struct RuntimeState {
     pub template_address: TemplateAddress,
 }
 
-impl StateTracker {
+impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracker<TTemplateProvider> {
     pub fn new(
         state_store: MemoryStateStore,
         id_provider: IdProvider,
-        template_defs: HashMap<TemplateAddress, TemplateDef>,
+        template_provider: Arc<TTemplateProvider>,
     ) -> Self {
         Self {
             working_state: Arc::new(RwLock::new(WorkingState::new(state_store))),
             fee_state: Arc::new(RwLock::new(FeeState::new())),
             id_provider,
-            template_defs,
+            template_provider,
             fee_checkpoint: Arc::new(Mutex::new(None)),
         }
     }
@@ -111,12 +112,16 @@ impl StateTracker {
         self.write_with(|state| mem::take(&mut state.logs))
     }
 
-    pub fn get_template_def(&self) -> Result<&TemplateDef, RuntimeError> {
+    pub fn get_template_def(&self) -> Result<TemplateDef, RuntimeError> {
         let runtime_state = self.runtime_state()?;
         Ok(self
-            .template_defs
-            .get(&runtime_state.template_address)
-            .expect("Template def not found for current template"))
+            .template_provider
+            .get_template_module(&runtime_state.template_address)
+            .map_err(|_e| RuntimeError::TemplateNotFound {
+                template_name: runtime_state.template_address.to_string(),
+            })?
+            .template_def()
+            .clone())
     }
 
     fn check_amount(&self, amount: Amount) -> Result<(), RuntimeError> {

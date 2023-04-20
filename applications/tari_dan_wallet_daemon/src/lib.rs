@@ -34,10 +34,11 @@ use std::{error::Error, panic, process};
 use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::ShutdownSignal;
+use tari_template_lib::models::Amount;
 
 use crate::{config::ApplicationConfig, handlers::HandlerContext, jwt::Jwt, notify::Notify, services::spawn_services};
 
-const _LOG_TARGET: &str = "tari::dan_wallet_daemon::main";
+const DEFAULT_FEE: Amount = Amount::new(1000);
 
 pub async fn run_tari_dan_wallet_daemon(
     config: ApplicationConfig,

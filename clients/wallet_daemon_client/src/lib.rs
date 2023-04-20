@@ -23,7 +23,11 @@ pub mod error;
 pub mod serialize;
 pub mod types;
 
-use std::borrow::Borrow;
+use std::{
+    borrow::Borrow,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
 use json::Value;
 use reqwest::{
@@ -31,9 +35,10 @@ use reqwest::{
     IntoUrl,
     Url,
 };
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
+use tari_template_lib::models::ComponentAddress;
 use types::{
     AccountsCreateFreeTestCoinsRequest,
     AccountsCreateFreeTestCoinsResponse,
@@ -50,8 +55,11 @@ use types::{
 use crate::{
     error::WalletDaemonClientError,
     types::{
-        AccountByNameRequest,
-        AccountByNameResponse,
+        AccountGetDefaultRequest,
+        AccountGetRequest,
+        AccountGetResponse,
+        AccountSetDefaultRequest,
+        AccountSetDefaultResponse,
         AccountsCreateRequest,
         AccountsCreateResponse,
         AccountsGetBalancesRequest,
@@ -82,6 +90,33 @@ use crate::{
         TransactionWaitResultResponse,
     },
 };
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ComponentAddressOrName {
+    ComponentAddress(ComponentAddress),
+    Name(String),
+}
+
+impl Display for ComponentAddressOrName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ComponentAddress(address) => write!(f, "{}", address),
+            Self::Name(name) => write!(f, "{}", name),
+        }
+    }
+}
+
+impl FromStr for ComponentAddressOrName {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(address) = ComponentAddress::from_str(s) {
+            Ok(Self::ComponentAddress(address))
+        } else {
+            Ok(Self::Name(s.to_string()))
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct WalletDaemonClient {
@@ -198,8 +233,24 @@ impl WalletDaemonClient {
             .await
     }
 
-    pub async fn accounts_get_by_name(&mut self, name: &str) -> Result<AccountByNameResponse, WalletDaemonClientError> {
-        self.send_request("accounts.get_by_name", &AccountByNameRequest { name: name.to_string() })
+    pub async fn accounts_get(
+        &mut self,
+        name_or_address: ComponentAddressOrName,
+    ) -> Result<AccountGetResponse, WalletDaemonClientError> {
+        self.send_request("accounts.get", &AccountGetRequest { name_or_address })
+            .await
+    }
+
+    pub async fn accounts_get_default(&mut self) -> Result<AccountGetResponse, WalletDaemonClientError> {
+        self.send_request("accounts.get_default", &AccountGetDefaultRequest {})
+            .await
+    }
+
+    pub async fn accounts_set_default(
+        &mut self,
+        account: ComponentAddressOrName,
+    ) -> Result<AccountSetDefaultResponse, WalletDaemonClientError> {
+        self.send_request("accounts.set_default", &AccountSetDefaultRequest { account })
             .await
     }
 
