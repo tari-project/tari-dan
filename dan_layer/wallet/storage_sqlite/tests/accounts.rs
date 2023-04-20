@@ -15,7 +15,7 @@ fn update_account() {
         SubstateAddress::from_str("component_91bef6af37bfb39b20260275c37a9e8acfc0517127284cd8f05944c8ea814934")
             .unwrap();
     let mut tx = db.create_write_tx().unwrap();
-    tx.accounts_insert("test", &address, 0).unwrap();
+    tx.accounts_insert("test", &address, 0, false).unwrap();
     tx.accounts_update(&address, Some("foo")).unwrap();
     tx.commit().unwrap();
 

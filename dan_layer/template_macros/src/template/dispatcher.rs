@@ -110,10 +110,10 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                 ]
             },
             // non-self argument
-            TypeAst::Typed(type_ident) => {
+            TypeAst::Typed { type_path, .. } => {
                 args.push(parse_quote! { #arg_ident });
                 vec![parse_quote! {
-                    let #arg_ident = decode_exact::<#type_ident>(&call_info.args[#i])
+                    let #arg_ident = decode_exact::<#type_path>(&call_info.args[#i])
                         .unwrap_or_else(|e| panic!("failed to decode argument at position {} for function '{}': {}", #i, #func_name, e));
                 }]
             },
@@ -166,7 +166,7 @@ fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt
     let mut stmts: Vec<Stmt> = vec![];
     match &ast.output_type {
         Some(output_type) => match output_type {
-            TypeAst::Typed(type_path) => {
+            TypeAst::Typed { type_path, .. } => {
                 if let Some(stmt) = replace_self_in_single_value(template_ident, type_path) {
                     stmts.push(stmt);
                 }
@@ -209,7 +209,7 @@ fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt
                 let ident = path.path.segments[0].ident.clone();
                 let field_expr = build_tuple_field_expr("rtn".to_string(), i as u32);
                 if ident == "Self" {
-                    // TODO: AccessRules - currently we allow all calls for functions that return Self. 
+                    // TODO: AccessRules - currently we allow all calls for functions that return Self.
                     parse_quote! {
                         engine().create_component(#template_name_str.to_string(), #field_expr, ::tari_template_lib::auth::AccessRules::with_default_allow())
                     }

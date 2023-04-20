@@ -60,13 +60,14 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
 
     let listen_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), json_rpc_port);
     let signaling_server_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), signaling_server_port);
-    let validator_node_endpoint = format!("/ip4/127.0.0.1/tcp/{}", validator_node_jrpc_port);
+    let validator_node_endpoint = format!("http://127.0.0.1:{}/json_rpc", validator_node_jrpc_port);
 
     let mut config = ApplicationConfig {
         common: CommonConfig::default(),
         dan_wallet_daemon: WalletDaemonConfig::default(),
     };
 
+    config.common.base_path = base_dir.clone();
     config.dan_wallet_daemon.listen_addr = Some(listen_addr);
     config.dan_wallet_daemon.signaling_server_addr = Some(signaling_server_addr);
     config.dan_wallet_daemon.validator_node_endpoint = Some(validator_node_endpoint);

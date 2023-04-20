@@ -43,14 +43,11 @@ pub async fn handle_data(
         "{{\"method\":\"{}\", \"jsonrpc\":\"2.0\", \"id\": 1, \"params\":{}}}",
         method, params
     );
-    println!("Body {:?}", body);
     let mut builder = client.post(url).header(CONTENT_TYPE, "application/json");
     if let Some(token) = token {
-        println!("With token {}", token);
         builder = builder.header(AUTHORIZATION, format!("Bearer {token}"));
     }
     let resp = builder.body(body).send().await?.json::<JsonRpcResponse>().await?;
-    println!("Resp {:?}", resp);
     match resp.result {
         JsonRpcAnswer::Result(result) => Ok(result),
         JsonRpcAnswer::Error(error) => Err(anyhow::Error::msg(error.to_string())),
@@ -68,7 +65,8 @@ fn get_rtc_configuration() -> RTCConfiguration {
 }
 
 pub async fn webrtc_start_session(
-    token: String,
+    signaling_server_token: String,
+    local_jrpc_token: String,
     address: SocketAddr,
     signaling_server_address: SocketAddr,
     shutdown_signal: ShutdownSignal,
@@ -77,14 +75,16 @@ pub async fn webrtc_start_session(
 
     let pc = api.new_peer_connection(get_rtc_configuration()).await?;
     pc.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
+        let local_jrpc_token = local_jrpc_token.clone();
         Box::pin(async move {
             let d_on_message = d.clone();
             d.on_message(Box::new(move |msg: DataChannelMessage| {
                 let d_on_message = d_on_message.clone();
+                let local_jrpc_token = local_jrpc_token.clone();
                 Box::pin(async move {
                     let msg_str = String::from_utf8(msg.data.to_vec()).unwrap();
                     let request = serde_json::from_str::<Request>(&msg_str).unwrap();
-                    let result = handle_data(address, None, request.method, request.params)
+                    let result = handle_data(address, Some(local_jrpc_token), request.method, request.params)
                         .await
                         .unwrap();
                     let response = Response {
@@ -100,16 +100,14 @@ pub async fn webrtc_start_session(
         })
     }));
 
-    let token_clone = token.clone();
+    let signaling_server_token_clone = signaling_server_token.clone();
     pc.on_ice_candidate(Box::new(move |ice_candidate: Option<RTCIceCandidate>| {
         if let Some(ice_candidate) = ice_candidate {
-            let token = token_clone.clone();
-            println!("Ice candidate {:?}", ice_candidate);
-            println!("Ice candidate {:?}", ice_candidate.to_json());
+            let signaling_server_token = signaling_server_token_clone.clone();
             tokio::task::spawn(async move {
                 handle_data(
                     signaling_server_address,
-                    Some(token),
+                    Some(signaling_server_token),
                     "add.answer_ice_candidate".to_string(),
                     serde_json::to_string(&ice_candidate.to_json().unwrap()).unwrap(),
                 )
@@ -122,7 +120,7 @@ pub async fn webrtc_start_session(
 
     let offer = handle_data(
         signaling_server_address,
-        Some(token.clone()),
+        Some(signaling_server_token.clone()),
         "get.offer".to_string(),
         serde_json::to_string("").unwrap(),
     )
@@ -134,7 +132,7 @@ pub async fn webrtc_start_session(
 
     let ices = handle_data(
         signaling_server_address,
-        Some(token.clone()),
+        Some(signaling_server_token.clone()),
         "get.offer_ice_candidates".to_string(),
         serde_json::to_string("").unwrap(),
     )
@@ -146,11 +144,10 @@ pub async fn webrtc_start_session(
         pc.add_ice_candidate(ice_candidate).await?;
     }
     let answer = pc.create_answer(None).await?;
-    println!("Answer {:?}", answer);
     pc.set_local_description(answer.clone()).await?;
     handle_data(
         signaling_server_address,
-        Some(token),
+        Some(signaling_server_token),
         "add.answer".to_string(),
         serde_json::to_string(&answer.sdp).unwrap(),
     )

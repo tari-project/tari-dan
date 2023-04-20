@@ -34,6 +34,11 @@ pub enum Instruction {
     ClaimBurn {
         claim: Box<ConfidentialClaim>,
     },
+    #[cfg(feature = "debugging")]
+    CreateFreeTestCoins {
+        amount: u64,
+        private_key: Vec<u8>,
+    },
 }
 
 impl Display for Instruction {
@@ -69,6 +74,9 @@ impl Display for Instruction {
                     "ClaimBurn {{ commitment_address: {}, proof_of_knowledge: {:?} }}",
                     claim.output_address, claim.proof_of_knowledge
                 )
+            },
+            Instruction::CreateFreeTestCoins { .. } => {
+                write!(f, "CreateFreeTestCoins")
             },
         }
     }

@@ -2,13 +2,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 pub mod error;
+mod flow_context;
 mod flow_factory;
 mod flow_instance;
 pub mod workers;
-
 use std::any::Any;
 
 pub use error::FlowEngineError;
+pub use flow_context::FlowContext;
 pub use flow_factory::FlowFactory;
 pub use flow_instance::FlowInstance;
 use tari_common_types::types::PublicKey;

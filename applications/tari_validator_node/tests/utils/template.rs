@@ -38,6 +38,7 @@ pub async fn send_template_registration(
     let request = TemplateRegistrationRequest {
         template_name,
         template_version: 0,
+        template_type: "wasm".to_string(),
         repo_url: String::new(),
         commit_hash: vec![],
         binary_sha,

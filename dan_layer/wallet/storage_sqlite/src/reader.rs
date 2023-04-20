@@ -267,6 +267,29 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(count as u64)
     }
 
+    fn accounts_get_default(&mut self) -> Result<Account, WalletStorageError> {
+        use crate::schema::accounts;
+
+        let row = accounts::table
+            .filter(accounts::is_default.eq(true))
+            .order_by(accounts::name.asc()) // order by name if there are multiples somehow
+            .first::<models::Account>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("accounts_get_default", e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: "accounts_get_default",
+                entity: "account".to_string(),
+                key: "default".to_string(),
+            })?;
+
+        let account = row.try_into().map_err(|e| WalletStorageError::DecodingError {
+            operation: "accounts_get_default",
+            item: "account",
+            details: format!("Failed to convert SQL record to Account: {}", e),
+        })?;
+        Ok(account)
+    }
+
     fn accounts_get_by_name(&mut self, name: &str) -> Result<Account, WalletStorageError> {
         use crate::schema::accounts;
 

@@ -20,6 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::string::FromUtf8Error;
+
+use serde_json;
+use tari_common_types::types::FixedHashSizeError;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_core::storage::StorageError;
 use tari_dan_engine::packager::PackageError;
@@ -43,6 +47,16 @@ pub enum TemplateManagerError {
     TemplateUnavailable,
     #[error(transparent)]
     PackageError(#[from] PackageError),
+    #[error("Unsupported template type")]
+    UnsupportedTemplateType,
+    #[error("The template is not valid UTF-8: {0}")]
+    FlowJsonNotValidUtf8(#[from] FromUtf8Error),
+    #[error("The flow was not valid JSON: {0}")]
+    InvalidJson(#[from] serde_json::Error),
+    #[error("The flow engine encountered an error: {0}")]
+    FlowEngineError(#[from] tari_dan_engine::flow::FlowEngineError),
+    #[error("FixedHashSizeError: {0}")]
+    FixedHashSizeError(#[from] FixedHashSizeError),
 }
 
 impl IsNotFoundError for TemplateManagerError {

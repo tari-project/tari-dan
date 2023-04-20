@@ -74,7 +74,7 @@ function TemplateFunctions() {
                 <DataTableCell style={{ textAlign: 'left' }}>
                   {fn.name}
                 </DataTableCell>
-                <DataTableCell>{fn.arguments.join(', ')}</DataTableCell>
+                <DataTableCell>{fn.arguments.map((a:any) => { return a.name + ":" + a.arg_type;}).join(', ')}</DataTableCell>
                 <DataTableCell>{fn.output}</DataTableCell>
               </TableRow>
             ))}
