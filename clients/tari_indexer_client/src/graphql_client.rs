@@ -21,6 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use anyhow::anyhow;
+use async_graphql_axum::GraphQLRequest;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
@@ -55,17 +56,14 @@ impl IndexerGraphQLClient {
     }
 
     pub async fn send_request<T: Serialize, R: DeserializeOwned>(&mut self, params: T) -> Result<R, anyhow::Error> {
+        // let params = json::to_value(params)?;
+        // let query = params["query"].as_str().unwrap_or("Invalid query").to_string();
+        // let operation_name = params["operation_name"].as_str().map(|o| o.to_string());
+        // let variables = params["variables"].as_str().unwrap().into();
         let params = json::to_value(params)?;
         let query = params["query"].as_str().unwrap_or("Invalid query").to_string();
-        let operation_name = params["operation_name"].as_str().map(|o| o.to_string());
-        let variables = params["variables"].as_str().unwrap().into();
-        let request_json = juniper::http::GraphQLRequest::new(query, operation_name, variables);
-        let resp = self
-            .client
-            .post(self.endpoint.clone())
-            .body(request_json)
-            .send()
-            .await?;
+        let req = async_graphql::Request::new(query);
+        let resp = self.client.post(self.endpoint.clone()).body(req).send().await?;
         let val = resp.json().await?;
         let resp = graphql_result(val)?;
         match serde_json::from_value(resp) {
