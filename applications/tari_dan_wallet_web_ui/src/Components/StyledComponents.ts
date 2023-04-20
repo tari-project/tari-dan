@@ -25,7 +25,7 @@ import TableCell from '@mui/material/TableCell';
 import { styled } from '@mui/material/styles';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
-import theme from '../theme';
+import theme from '../theme/theme';
 import Typography from '@mui/material/Typography';
 
 interface IAccordionIconButton {
