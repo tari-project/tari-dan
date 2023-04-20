@@ -35,4 +35,8 @@ pub enum TransactionError {
     RuntimeError(#[from] RuntimeError),
     #[error(transparent)]
     ByteArrayError(#[from] ByteArrayError),
+    #[error(transparent)]
+    FlowEngineError(#[from] crate::flow::FlowEngineError),
+    #[error("Recursion limit exceeded")]
+    RecursionLimitExceeded,
 }

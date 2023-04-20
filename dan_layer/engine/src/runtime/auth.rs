@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::sync::Arc;
+
 use tari_template_lib::{auth::AccessRules, models::NonFungibleAddress};
 
 use crate::runtime::{FunctionIdent, RuntimeError};
@@ -10,14 +12,15 @@ pub struct AuthParams {
     pub initial_ownership_proofs: Vec<NonFungibleAddress>,
 }
 
-pub struct AuthorizationScope<'a> {
+#[derive(Clone)]
+pub struct AuthorizationScope {
     /// Virtual proofs are system-issued non-fungibles that exist for no longer than the execution e.g. derived from
     /// the transaction sender public key
-    virtual_proofs: &'a [NonFungibleAddress],
+    virtual_proofs: Arc<Vec<NonFungibleAddress>>,
 }
 
-impl<'a> AuthorizationScope<'a> {
-    pub fn new(virtual_proofs: &'a [NonFungibleAddress]) -> Self {
+impl AuthorizationScope {
+    pub fn new(virtual_proofs: Arc<Vec<NonFungibleAddress>>) -> Self {
         Self { virtual_proofs }
     }
 
@@ -26,7 +29,7 @@ impl<'a> AuthorizationScope<'a> {
             FunctionIdent::Native(native_fn) => {
                 if access_rules
                     .get_native_access_rule(native_fn)
-                    .is_access_allowed(self.virtual_proofs)
+                    .is_access_allowed(&self.virtual_proofs)
                 {
                     Ok(())
                 } else {
@@ -38,7 +41,7 @@ impl<'a> AuthorizationScope<'a> {
             FunctionIdent::Template { function, .. } => {
                 if access_rules
                     .get_method_access_rule(function)
-                    .is_access_allowed(self.virtual_proofs)
+                    .is_access_allowed(&self.virtual_proofs)
                 {
                     Ok(())
                 } else {

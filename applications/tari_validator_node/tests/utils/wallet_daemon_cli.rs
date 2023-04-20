@@ -31,6 +31,7 @@ use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::{
     types::{AccountsCreateRequest, ClaimBurnRequest, ClaimBurnResponse},
+    ComponentAddressOrName,
     WalletDaemonClient,
 };
 
@@ -48,11 +49,8 @@ pub async fn claim_burn(
 ) -> ClaimBurnResponse {
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
 
-    let account = client.accounts_get_by_name(account_name.as_str()).await.unwrap();
-    let account_address = account.account.address.as_component_address().unwrap();
-
     let claim_burn_request = ClaimBurnRequest {
-        account: account_address,
+        account: Some(ComponentAddressOrName::Name(account_name)),
         claim_proof: json!({
             "commitment": BASE64.encode(commitment.as_bytes()),
             "ownership_proof": {
@@ -63,7 +61,7 @@ pub async fn claim_burn(
             "reciprocal_claim_public_key": BASE64.encode(reciprocal_claim_public_key.as_bytes()),
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
-        fee: Amount(1),
+        fee: Some(Amount(1)),
     };
 
     client.claim_burn(claim_burn_request).await.unwrap()
@@ -80,6 +78,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         account_name: Some(account_name.clone()),
         signing_key_index: None,
         custom_access_rules: None,
+        is_default: false,
         fee: None,
         account_index: new_component_output.index,
     };

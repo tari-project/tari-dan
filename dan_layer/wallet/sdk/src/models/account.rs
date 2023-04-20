@@ -8,4 +8,5 @@ pub struct Account {
     pub name: String,
     pub address: SubstateAddress,
     pub key_index: u64,
+    pub is_default: bool,
 }

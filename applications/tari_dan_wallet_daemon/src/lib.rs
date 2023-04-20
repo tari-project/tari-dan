@@ -24,6 +24,7 @@ pub mod cli;
 pub mod config;
 mod handlers;
 mod jrpc_server;
+mod jwt;
 mod notify;
 mod services;
 mod webrtc;
@@ -33,10 +34,11 @@ use std::{error::Error, panic, process};
 use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::ShutdownSignal;
+use tari_template_lib::models::Amount;
 
-use crate::{config::ApplicationConfig, handlers::HandlerContext, notify::Notify, services::spawn_services};
+use crate::{config::ApplicationConfig, handlers::HandlerContext, jwt::Jwt, notify::Notify, services::spawn_services};
 
-const _LOG_TARGET: &str = "tari::dan_wallet_daemon::main";
+const DEFAULT_FEE: Amount = Amount::new(1000);
 
 pub async fn run_tari_dan_wallet_daemon(
     config: ApplicationConfig,
@@ -71,7 +73,11 @@ pub async fn run_tari_dan_wallet_daemon(
 
     let address = config.dan_wallet_daemon.listen_addr.unwrap();
     let signaling_server_address = config.dan_wallet_daemon.signaling_server_addr.unwrap();
-    let handlers = HandlerContext::new(wallet_sdk.clone(), notify);
+    let jwt = Jwt::new(
+        config.dan_wallet_daemon.jwt_expiration.unwrap(),
+        config.dan_wallet_daemon.secret_key.unwrap(),
+    );
+    let handlers = HandlerContext::new(wallet_sdk.clone(), notify, jwt);
     let listen_fut = jrpc_server::listen(address, signaling_server_address, handlers, shutdown_signal);
 
     // Wait for shutdown, or for any service to error

@@ -122,6 +122,7 @@ pub trait WalletStoreReader {
     // Accounts
     fn accounts_get(&mut self, address: &SubstateAddress) -> Result<Account, WalletStorageError>;
     fn accounts_get_many(&mut self, offset: u64, limit: u64) -> Result<Vec<Account>, WalletStorageError>;
+    fn accounts_get_default(&mut self) -> Result<Account, WalletStorageError>;
     fn accounts_count(&mut self) -> Result<u64, WalletStorageError>;
     fn accounts_get_by_name(&mut self, name: &str) -> Result<Account, WalletStorageError>;
     fn accounts_get_by_vault(&mut self, vault_address: &SubstateAddress) -> Result<Account, WalletStorageError>;
@@ -205,11 +206,13 @@ pub trait WalletStoreWriter {
     fn substates_remove(&mut self, substate: &VersionedSubstateAddress) -> Result<SubstateModel, WalletStorageError>;
 
     // Accounts
+    fn accounts_set_default(&mut self, address: &SubstateAddress) -> Result<(), WalletStorageError>;
     fn accounts_insert(
         &mut self,
         account_name: &str,
         address: &SubstateAddress,
         owner_key_index: u64,
+        is_default: bool,
     ) -> Result<(), WalletStorageError>;
 
     fn accounts_update(&mut self, address: &SubstateAddress, new_name: Option<&str>) -> Result<(), WalletStorageError>;

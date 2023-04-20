@@ -137,7 +137,7 @@ impl Test {
         .unwrap();
         let accounts_api = sdk.accounts_api();
         accounts_api
-            .add_account(Some("test"), &Test::test_account_address(), 0)
+            .add_account(Some("test"), &Test::test_account_address(), 0, true)
             .unwrap();
         accounts_api
             .add_vault(

@@ -111,6 +111,8 @@ pub enum RuntimeError {
     ConfidentialOutputAlreadyClaimed {
         address: UnclaimedConfidentialOutputAddress,
     },
+    #[error("Template not found with name '{template_name}'")]
+    TemplateNotFound { template_name: String },
     #[error("Insufficient fees paid: required {required_fee}, paid {fees_paid}")]
     InsufficientFeesPaid { required_fee: Amount, fees_paid: Amount },
     #[error("No checkpoint")]

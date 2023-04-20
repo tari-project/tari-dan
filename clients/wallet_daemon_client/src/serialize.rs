@@ -51,3 +51,36 @@ where
 
     deserializer.deserialize_any(StringOrStruct(PhantomData))
 }
+
+pub fn opt_string_or_struct<'de, T, D, TErr>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    T: Deserialize<'de> + FromStr<Err = TErr>,
+    D: Deserializer<'de>,
+    TErr: fmt::Display,
+{
+    struct OptStringOrStruct<T>(PhantomData<T>);
+
+    impl<'de, T, TErr> Visitor<'de> for OptStringOrStruct<T>
+    where
+        T: Deserialize<'de> + FromStr<Err = TErr>,
+        TErr: fmt::Display,
+    {
+        type Value = Option<T>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a nul, a string or map")
+        }
+
+        fn visit_none<E>(self) -> Result<Self::Value, E>
+        where E: de::Error {
+            Ok(None)
+        }
+
+        fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+        where D: Deserializer<'de> {
+            string_or_struct(deserializer).map(Some)
+        }
+    }
+
+    deserializer.deserialize_option(OptStringOrStruct(PhantomData))
+}

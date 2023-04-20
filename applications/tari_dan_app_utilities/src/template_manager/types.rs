@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_storage::global::DbTemplate;
+use tari_dan_storage::global::{DbTemplate, DbTemplateType};
 use tari_template_lib::models::TemplateAddress;
 use tari_validator_node_client::types::TemplateAbi;
 use tokio::sync::oneshot;
@@ -65,9 +65,16 @@ impl From<DbTemplate> for TemplateMetadata {
 }
 
 #[derive(Debug, Clone)]
+pub enum TemplateExecutable {
+    CompiledWasm(Vec<u8>),
+    Manifest(String),
+    Flow(String),
+}
+
+#[derive(Debug, Clone)]
 pub struct Template {
     pub metadata: TemplateMetadata,
-    pub compiled_code: Vec<u8>,
+    pub executable: TemplateExecutable,
 }
 
 // we encapsulate the db row format to not expose it to the caller
@@ -83,7 +90,11 @@ impl From<DbTemplate> for Template {
                 binary_sha: vec![],
                 height: record.height,
             },
-            compiled_code: record.compiled_code,
+            executable: match record.template_type {
+                DbTemplateType::Wasm => TemplateExecutable::CompiledWasm(record.compiled_code.unwrap()),
+                DbTemplateType::Flow => TemplateExecutable::Flow(record.flow_json.unwrap()),
+                DbTemplateType::Manifest => TemplateExecutable::Manifest(record.manifest.unwrap()),
+            },
         }
     }
 }

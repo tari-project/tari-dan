@@ -22,6 +22,6 @@
 
 create table epochs
 (
-    epoch integer primary key not null,
+    epoch bigint primary key not null,
     validator_node_mr blob not null
 );
