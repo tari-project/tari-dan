@@ -287,6 +287,9 @@ impl<T: Borrow<TransactionMeta>> From<T> for proto::transaction::TransactionMeta
                 change: proto::transaction::SubstateChange::from(*ch) as i32,
             });
         }
+        for c in val.borrow().new_components_iter() {
+            meta.new_components.push(proto::transaction::ComponentAddress::from(*c));
+        }
         meta.max_outputs = val.borrow().max_outputs();
         meta
     }
