@@ -35,6 +35,7 @@ import './ConnectorLink.css';
 import Permissions from './Permissions';
 import CheckMark from './CheckMark';
 import connectorLogo from './assets/tari-connector.png';
+import ConnectorLogo from './ConnectorLogo';
 
 const ConnectorDialog = () => {
   const [page, setPage] = useState(1);
@@ -186,7 +187,7 @@ const ConnectorDialog = () => {
       <Dialog open={isOpen} onClose={handleClose}>
         <div className="dialog-heading">
           <div style={{ height: '24px', width: '24px' }}></div>
-          <img src={connectorLogo} width="250px" height="40px" />
+          <ConnectorLogo />
           <IconButton onClick={handleClose}>
             <CloseIcon />
           </IconButton>

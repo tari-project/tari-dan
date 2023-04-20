@@ -37,6 +37,7 @@ import theme from './theme';
 import { Outlet, Link } from 'react-router-dom';
 import Logo from '../assets/Logo';
 import Container from '@mui/material/Container';
+import ConnectorLink from '../Components/ConnectorLink';
 
 const drawerWidth = 300;
 
@@ -127,9 +128,25 @@ export default function Layout() {
             >
               <MenuOutlinedIcon />
             </IconButton>
-            <Link to="/">
-              <Logo />
-            </Link>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                width: '100%',
+                alignContent: 'center',
+              }}
+            >
+              <Link to="/">
+                <Logo />
+              </Link>
+              <div
+                style={{
+                  marginTop: '2px',
+                }}
+              >
+                <ConnectorLink />
+              </div>
+            </div>
           </Toolbar>
         </AppBar>
         <Drawer variant="permanent" open={open}>

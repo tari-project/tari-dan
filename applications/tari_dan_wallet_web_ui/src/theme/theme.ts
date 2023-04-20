@@ -96,6 +96,24 @@ const theme = createTheme({
         },
       },
     },
+    MuiDivider: {
+      defaultProps: {
+        sx: {
+          borderBottom: '1px solid #f5f5f5',
+        },
+      },
+    },
+    MuiFormControlLabel: {
+      defaultProps: {
+        sx: {
+          '& .MuiTypography-root': {
+            fontSize: '0.875rem',
+            lineHeight: '1.8rem',
+            color: 'rgba(0, 0, 0, 0.6)',
+          },
+        },
+      },
+    },
   },
 });
 

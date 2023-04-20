@@ -1,5 +1,5 @@
 .dialog-inner {
-  min-width: 500px;
+  min-width: 100%;
 }
 .dialog-heading {
   width: 100%;
@@ -13,4 +13,10 @@
   flex-direction: row;
   gap: 1rem;
   align-self: flex-end;
+}
+
+@media screen and (min-width: 767px) {
+  .dialog-inner {
+    min-width: 500px;
+  }
 }

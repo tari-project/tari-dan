@@ -20,17 +20,18 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import * as React from 'react';
-import Box from '@mui/material/Box';
-import FormLabel from '@mui/material/FormLabel';
+import { useState } from 'react';
 import FormControl from '@mui/material/FormControl';
 import FormGroup from '@mui/material/FormGroup';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import FormHelperText from '@mui/material/FormHelperText';
-import Checkbox from '@mui/material/Checkbox';
+import Switch from '@mui/material/Switch';
+import Divider from '@mui/material/Divider';
+import Typography from '@mui/material/Typography';
+import './Permissions.css';
 
 export default function Permissions() {
-  const [permissions, setPermissions] = React.useState([
+  const [permissions, setPermissions] = useState([
     {
       id: 1,
       name: 'Choose an identity (account public key) to log in with',
@@ -78,27 +79,44 @@ export default function Permissions() {
   };
 
   return (
-    <Box sx={{ display: 'flex' }}>
-      <FormControl sx={{ m: 3 }} component="fieldset" variant="standard">
-        <FormLabel component="legend">This app would like to:</FormLabel>
+    <>
+      <Typography style={{ textAlign: 'center', marginBottom: '20px' }}>
+        Select what the app is allowed to access:
+      </Typography>
+      <FormControl
+        component="fieldset"
+        variant="standard"
+        style={{ width: '100%' }}
+      >
+        <Divider />
         <FormGroup>
-          {permissions.map(({ checked, name }) => {
+          {permissions.map(({ checked, name, id }) => {
             return (
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={checked}
-                    onChange={handleChange}
-                    name={name}
-                  />
-                }
-                label={name}
-              />
+              <>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={checked}
+                      onChange={handleChange}
+                      name={name}
+                      value={name}
+                    />
+                  }
+                  label={name}
+                  labelPlacement="start"
+                  key={id}
+                  className="permissions-switch"
+                />
+                <Divider />
+              </>
             );
           })}
         </FormGroup>
-        <FormHelperText>Approve or deny permissions</FormHelperText>
+        <FormHelperText style={{ marginBottom: '20px', marginTop: '20px' }}>
+          You may be sharing sensitive information with this site. Approve or
+          deny access above.
+        </FormHelperText>
       </FormControl>
-    </Box>
+    </>
   );
 }
