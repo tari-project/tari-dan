@@ -21,10 +21,9 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use anyhow::anyhow;
-use async_graphql_axum::GraphQLRequest;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
-use serde_json as json;
+use serde_json::{json, Value};
 
 #[derive(Debug, Clone)]
 pub struct IndexerGraphQLClient {
@@ -55,31 +54,37 @@ impl IndexerGraphQLClient {
         self.request_id
     }
 
-    pub async fn send_request<T: Serialize, R: DeserializeOwned>(&mut self, params: T) -> Result<R, anyhow::Error> {
-        // let params = json::to_value(params)?;
-        // let query = params["query"].as_str().unwrap_or("Invalid query").to_string();
-        // let operation_name = params["operation_name"].as_str().map(|o| o.to_string());
-        // let variables = params["variables"].as_str().unwrap().into();
-        let params = json::to_value(params)?;
-        let query = params["query"].as_str().unwrap_or("Invalid query").to_string();
-        let req = async_graphql::Request::new(query);
-        let resp = self.client.post(self.endpoint.clone()).body(req).send().await?;
-        let val = resp.json().await?;
-        let resp = graphql_result(val)?;
-        match serde_json::from_value(resp) {
+    pub async fn send_request<R: DeserializeOwned>(
+        &mut self,
+        query: &str,
+        variables: Option<Value>,
+        headers: Option<HeaderMap>,
+    ) -> Result<R, anyhow::Error> {
+        let body = json!({
+            "query": query,
+            "variablaes": variables
+        });
+        let mut req = self.client.post(self.endpoint.clone());
+        if let Some(headers) = headers {
+            req = req.headers(headers);
+        }
+        let resp = req.body(serde_json::to_string(&body)?).send().await?;
+        let val = resp.json::<Value>().await?;
+        let data = graphql_data(val)?;
+        match serde_json::from_value::<R>(data) {
             Ok(r) => Ok(r),
             Err(e) => Err(anyhow!("Failed to deserialize response: {}", e)),
         }
     }
 }
 
-fn graphql_result(val: json::Value) -> Result<json::Value, anyhow::Error> {
+fn graphql_data(val: Value) -> Result<Value, anyhow::Error> {
     if let Some(err) = val.get("error") {
         let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
         let message = err.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error");
-        return Err(anyhow!("JSON-RPC error {}: {}", code, message));
+        return Err(anyhow!("GraphQL error {}: {}", code, message));
     }
 
-    let result = val.get("result").ok_or_else(|| anyhow!("Missing result field"))?;
+    let result = val.get("data").ok_or_else(|| anyhow!("Missing result field"))?;
     Ok(result.clone())
 }

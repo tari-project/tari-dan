@@ -34,6 +34,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use axum_jrpc::JrpcResult;
 use log::*;
 
 use crate::graphql::model::{QueryRoot, ServiceSchema};
@@ -44,7 +45,7 @@ const LOG_TARGET: &str = "tari::indexer::graphql";
 pub async fn run_graphql(preferred_address: SocketAddr) -> Result<(), anyhow::Error> {
     let schema = Schema::build(QueryRoot, EmptyMutation, EmptySubscription).finish();
     let router = Router::new()
-        .route("/", get(graphql_playground).post(graphql_handler))
+        .route("/", post(graphql_handler))
         .route("/health", get(health))
         .layer(Extension(schema));
 
@@ -78,9 +79,6 @@ pub(crate) async fn graphql_playground() -> impl IntoResponse {
     ))
 }
 
-pub(crate) async fn graphql_handler(
-    req: GraphQLRequest,
-    Extension(schema): Extension<ServiceSchema>,
-) -> GraphQLResponse {
+pub(crate) async fn graphql_handler(req: GraphQLRequest, Extension(schema): Extension<ServiceSchema>) -> JrpcResult {
     schema.execute(req.into_inner()).await.into()
 }
