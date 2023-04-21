@@ -97,45 +97,24 @@ cargo run --bin tari_validator_node_cli -- templates publish
 
 Once the template is registered on the base layer and sufficiently mined, you should see it in the `templates` table of the `global_storage.sqlite` file  under `data/validator`. The `compiled_code` column should contain binary data and the `status` column should be `Active`.
 
-### Claiming L1 burn Tari on the DAN
+### Get base layer (Mino)Tari tokens to pay for fees
 
-The user will need to claim burn tari (from the L1) before submitting transactions, otherwise, it will not be
-able to pay for network fees. To be able to claim burn tari, it is necessary to first burn L1 tari, on the base layer. After
-burning tari on the Tari base layer, the client is prompted with the following data
-
-```
-{
-    "transaction_id": <transaction_id>,
-    "is_success": <IS_SUCCESS>,
-    "failure_message": <FAILURE_MESSAGE>,
-    "commitment": <commitment>,
-    "ownership_proof": <ownership_proof>,
-    "rangeproof": <rangeproof>
-}
-```
-
-Now, it is possible to claim burn Tari on the DAN layer, as follows. Create a new `.json` file, with path
-`<json_file_to_retrieve_burn_tari>`
+Before the user can start submitting transactions to the network, it has to obtain base layer (Mino)Tari tokens. At the moment, the
+simplest way to do so is to request an airdrop of (free test) tokens from the network itself. In order to do so, the user should
+first create an account, using the tari wallet client, as follows:
 
 ```
-{
-    "claim_public_key": <claim_public_key>,
-    "transaction_id": <transaction_id>,
-    "commitment": <commitment>,
-    "ownership_proof": <ownership_proof>,
-    "rangeproof": <rangeproof>
-}
+    cargo run --bin tari_dan_wallet_cli -- accounts create --account-name <USER_ACCOUNT_NAME>
 ```
 
-where `<claim_public_key>` is the claim public key that it was provided to the tari console wallet to burn base layer Tari,
-in the first place.
+After the user has created an account, it can request an airdrop via the command
 
 ```
-cargo run --bin tari_dan_wallet_cli --claim-burn --account <account_name> --input <json_file_to_retrieve_burn_tari> --fee 1
+    cargo run --bin tari_dan_wallet_cli -- accounts faucet --account-name <USER_ACCOUNT_NAME> --amount <AMOUNT> --fee <FEE_AMOUNT>
 ```
 
-where `<account_name>` is the user account name, `<json_file_to_retrieve_burn_tari>` is the json generate previously.
-
+Notice that for the DAN wallet cli to execute successfully, the user must have a wallet daemon connected to a validator node (see the
+above).
 
 ### Calling a function
 With the templated registered we can invoke a function by using the `tari_dan_wallet_cli`.
