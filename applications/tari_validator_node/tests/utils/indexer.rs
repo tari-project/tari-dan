@@ -30,12 +30,9 @@ use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
-    run_indexer,
-    AddAddressRequest,
-    GetNonFungiblesRequest,
-    GetSubstateRequest,
+    run_indexer, AddAddressRequest, GetNonFungiblesRequest, GetSubstateRequest,
 };
-use tari_indexer_client::IndexerClient;
+use tari_indexer_client::{graphql_client::IndexerGraphQLClient, json_rpc_client::IndexerJsonRpcClient};
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tempfile::tempdir;
@@ -48,6 +45,7 @@ pub struct IndexerProcess {
     pub name: String,
     pub port: u16,
     pub json_rpc_port: u16,
+    pub graphql_port: u16,
     pub base_node_grpc_port: u16,
     pub http_ui_port: u16,
     pub handle: task::JoinHandle<()>,
@@ -61,8 +59,8 @@ impl IndexerProcess {
 
         let params = AddAddressRequest { address };
 
-        let mut client = self.get_indexer_client().await;
-        let _: () = client.send_request("add_address", params).await.unwrap();
+        let mut jrpc_client = self.get_jrpc_indexer_client().await;
+        let _: () = jrpc_client.send_request("add_address", params).await.unwrap();
     }
 
     pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> Value {
@@ -73,8 +71,8 @@ impl IndexerProcess {
             version: Some(version),
         };
 
-        let mut client = self.get_indexer_client().await;
-        let resp: Value = client.send_request("get_substate", params).await.unwrap();
+        let mut jrpc_client = self.get_jrpc_indexer_client().await;
+        let resp: Value = jrpc_client.send_request("get_substate", params).await.unwrap();
         resp
     }
 
@@ -93,14 +91,19 @@ impl IndexerProcess {
             end_index,
         };
 
-        let mut client = self.get_indexer_client().await;
-        let resp: Vec<Value> = client.send_request("get_non_fungibles", params).await.unwrap();
+        let mut jrpc_client = self.get_jrpc_indexer_client().await;
+        let resp: Vec<Value> = jrpc_client.send_request("get_non_fungibles", params).await.unwrap();
         resp
     }
 
-    pub async fn get_indexer_client(&self) -> IndexerClient {
+    pub async fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {
         let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.json_rpc_port)).unwrap();
-        IndexerClient::connect(endpoint).unwrap()
+        IndexerJsonRpcClient::connect(endpoint).unwrap()
+    }
+
+    pub async fn get_graphql_indexer_client(&self) -> IndexerGraphQLClient {
+        let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.graphql_port)).unwrap();
+        IndexerGraphQLClient::connect(endpoint).unwrap()
     }
 }
 
@@ -122,6 +125,7 @@ fn get_adddress_from_output(world: &TariWorld, output_ref: String) -> String {
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
     // each spawned indexer will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
+    let (graphql_port, _) = get_os_assigned_ports();
     let (http_ui_port, _) = get_os_assigned_ports();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let name = indexer_name.clone();
@@ -168,6 +172,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         };
         config.indexer.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.indexer.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
+        config.indexer.graphql_address = Some(format!("127.0.0.1:{}", graphql_port).parse().unwrap());
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
@@ -194,6 +199,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         http_ui_port,
         handle,
         json_rpc_port,
+        graphql_port,
         temp_dir_path,
         shutdown,
     };

@@ -42,31 +42,31 @@ Feature: Indexer node
     # Create a new SparkleNft component and mint an NFT
     When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT" with new resource "SPKL"
     When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 12 outputs named "TX2"
-        ```
-            // $mint NFT/resources/0 6
-            // $nft_index NFT/resources/0 0
-            // $nft_index NFT/resources/0 1
-            // $nft_index NFT/resources/0 2
-            // $nft_index NFT/resources/0 3
-            // $nft_index NFT/resources/0 4
-            // $nft_index NFT/resources/0 5
-            let sparkle_nft = global!["NFT/components/SparkleNft"];
-            let mut acc1 = global!["ACC1/components/Account"];
+    ```
+    // $mint NFT/resources/0 6
+    // $nft_index NFT/resources/0 0
+    // $nft_index NFT/resources/0 1
+    // $nft_index NFT/resources/0 2
+    // $nft_index NFT/resources/0 3
+    // $nft_index NFT/resources/0 4
+    // $nft_index NFT/resources/0 5
+    let sparkle_nft = global!["NFT/components/SparkleNft"];
+    let mut acc1 = global!["ACC1/components/Account"];
 
-            // mint a couple of nfts with random ids
-            let nft_bucket_1 = sparkle_nft.mint("Astronaut (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622024.jpg");
-            acc1.deposit(nft_bucket_1);
-            let nft_bucket_2 = sparkle_nft.mint("Baby (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629576.jpg");
-            acc1.deposit(nft_bucket_2);
-            let nft_bucket_3 = sparkle_nft.mint("Cool (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622021.jpg");
-            acc1.deposit(nft_bucket_3);
-            let nft_bucket_4 = sparkle_nft.mint("Metaverse (Image by Freepik.com)", "https://img.freepik.com/premium-vector/hand-drawn-monkey-ape-vr-box-virtual-nft-style_361671-246.jpg");
-            acc1.deposit(nft_bucket_4);
-            let nft_bucket_5 = sparkle_nft.mint("Suit (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629594.jpg");
-            acc1.deposit(nft_bucket_5);
-            let nft_bucket_6 = sparkle_nft.mint("Cook  (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629582.jpg");
-            acc1.deposit(nft_bucket_6);
-        ```
+    // mint a couple of nfts with random ids
+    let nft_bucket_1 = sparkle_nft.mint("Astronaut (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622024.jpg");
+    acc1.deposit(nft_bucket_1);
+    let nft_bucket_2 = sparkle_nft.mint("Baby (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629576.jpg");
+    acc1.deposit(nft_bucket_2);
+    let nft_bucket_3 = sparkle_nft.mint("Cool (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149622021.jpg");
+    acc1.deposit(nft_bucket_3);
+    let nft_bucket_4 = sparkle_nft.mint("Metaverse (Image by Freepik.com)", "https://img.freepik.com/premium-vector/hand-drawn-monkey-ape-vr-box-virtual-nft-style_361671-246.jpg");
+    acc1.deposit(nft_bucket_4);
+    let nft_bucket_5 = sparkle_nft.mint("Suit (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629594.jpg");
+    acc1.deposit(nft_bucket_5);
+    let nft_bucket_6 = sparkle_nft.mint("Cook  (Image by Freepik.com)", "https://img.freepik.com/free-vector/hand-drawn-nft-style-ape-illustration_23-2149629582.jpg");
+    acc1.deposit(nft_bucket_6);
+    ```
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
@@ -95,5 +95,29 @@ Feature: Indexer node
     # List the nfts of a resource
     Then the indexer IDX returns 6 non fungibles for resource NFT/resources/0
 
-    # When I print the cucumber world
-    # When I wait 5000 seconds
+  # When I print the cucumber world
+  # When I wait 5000 seconds
+
+
+  @serial
+  Scenario: Indexer GraphQL requests work
+    # Initialize a base node, wallet, miner and VN
+    Given a base node BASE
+    Given a wallet WALLET connected to base node BASE
+    Given a miner MINER connected to base node BASE and wallet WALLET
+
+    # Initialize a VN
+    Given a validator node VN connected to base node BASE and wallet WALLET
+
+    # The wallet must have some funds before the VN sends transactions
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 2000000000 uT
+
+    # VN registration
+    When validator node VN sends a registration transaction
+
+    # Initialize an indexer
+    Given an indexer IDX connected to base node BASE
+
+    # Check GraphQL request
+    Given IDX indexer GraphQL request work

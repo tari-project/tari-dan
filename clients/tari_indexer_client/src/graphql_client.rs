@@ -22,7 +22,7 @@
 
 use anyhow::anyhow;
 use reqwest::{header, header::HeaderMap, IntoUrl, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
 use serde_json::{json, Value};
 
 #[derive(Debug, Clone)]
@@ -62,7 +62,7 @@ impl IndexerGraphQLClient {
     ) -> Result<R, anyhow::Error> {
         let body = json!({
             "query": query,
-            "variablaes": variables
+            "variables": variables
         });
         let mut req = self.client.post(self.endpoint.clone());
         if let Some(headers) = headers {

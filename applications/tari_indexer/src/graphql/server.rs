@@ -34,7 +34,6 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use axum_jrpc::JrpcResult;
 use log::*;
 
 use crate::graphql::model::{QueryRoot, ServiceSchema};
@@ -79,6 +78,9 @@ pub(crate) async fn graphql_playground() -> impl IntoResponse {
     ))
 }
 
-pub(crate) async fn graphql_handler(req: GraphQLRequest, Extension(schema): Extension<ServiceSchema>) -> JrpcResult {
+pub(crate) async fn graphql_handler(
+    Extension(schema): Extension<ServiceSchema>,
+    req: GraphQLRequest,
+) -> GraphQLResponse {
     schema.execute(req.into_inner()).await.into()
 }
