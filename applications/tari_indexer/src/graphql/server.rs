@@ -31,7 +31,7 @@ use axum::{
     extract::Extension,
     http::StatusCode,
     response::{Html, IntoResponse},
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use log::*;
@@ -44,7 +44,7 @@ const LOG_TARGET: &str = "tari::indexer::graphql";
 pub async fn run_graphql(preferred_address: SocketAddr) -> Result<(), anyhow::Error> {
     let schema = Schema::build(QueryRoot, EmptyMutation, EmptySubscription).finish();
     let router = Router::new()
-        .route("/", post(graphql_handler))
+        .route("/", get(graphql_playground).post(graphql_handler))
         .route("/health", get(health))
         .layer(Extension(schema));
 
