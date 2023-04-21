@@ -20,8 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use async_graphql::{Context, Object, Schema};
-use async_graphql::{EmptyMutation, EmptySubscription};
+use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema};
 
 pub(crate) type ServiceSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
 

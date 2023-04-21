@@ -24,7 +24,9 @@ use std::net::SocketAddr;
 
 use async_graphql::{
     http::{playground_source, GraphQLPlaygroundConfig},
-    EmptyMutation, EmptySubscription, Schema,
+    EmptyMutation,
+    EmptySubscription,
+    Schema,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
@@ -32,12 +34,13 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::get,
-    Json, Router,
+    Json,
+    Router,
 };
 use log::*;
+use serde::Serialize;
 
 use crate::graphql::model::{QueryRoot, ServiceSchema};
-use serde::Serialize;
 
 const LOG_TARGET: &str = "tari::indexer::graphql";
 
