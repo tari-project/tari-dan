@@ -55,6 +55,9 @@ pub struct PublishTemplateArgs {
     #[clap(long, alias = "template-version")]
     pub template_version: Option<u16>,
 
+    #[clap(long, alias = "template-type")]
+    pub template_type: Option<String>,
+
     #[clap(long, short = 'u', alias = "binary-url", alias = "url")]
     pub binary_url: Option<String>,
 }
@@ -191,6 +194,7 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
 
     let template_type = Prompt::new("Choose a template type (wasm, flow):")
         .with_default("wasm")
+        .with_value(args.template_type)
         .ask()?;
 
     // TODO: ask repository info
