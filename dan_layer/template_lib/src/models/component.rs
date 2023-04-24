@@ -50,7 +50,7 @@ impl ComponentAddress {
         &self.0 .0.template_address
     }
 
-    pub fn comoponent_id(&self) -> Hash {
+    pub fn component_id(&self) -> Hash {
         self.0 .0.component_id
     }
 }

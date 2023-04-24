@@ -129,7 +129,7 @@ impl SubstateAddress {
         match self {
             SubstateAddress::Component(address) => hasher(EngineHashDomainLabel::ComponentAddress)
                 .chain(address.template_address())
-                .chain(&address.comoponent_id())
+                .chain(&address.component_id())
                 .result(),
             SubstateAddress::Resource(address) => *address.hash(),
             SubstateAddress::Vault(id) => *id.hash(),
