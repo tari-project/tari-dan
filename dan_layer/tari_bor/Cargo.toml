@@ -4,7 +4,9 @@ version = "0.50.0-pre.0"
 edition = "2021"
 
 [dependencies]
-ciborium = { version = "0.2.0", default-features = false }
+# Remove once https://github.com/enarx/ciborium/pull/77 is released
+ciborium = { git = "https://github.com/sdbondi/ciborium.git", branch = "fix-option-bug", default-features = false }
+#ciborium = { version = "0.2.0", default-features = false }
 ciborium-io = { version = "0.2.0", default-features = false }
 serde = { version = "1.0.143", default-features = false, features = ["alloc", "derive"] }
 
