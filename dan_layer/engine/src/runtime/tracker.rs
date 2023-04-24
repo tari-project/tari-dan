@@ -361,9 +361,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         access_rules: AccessRules,
     ) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
-        let component = ComponentBody { state };
-        let component_address = self.id_provider().new_component_address()?;
+        let template_address = runtime_state.template_address;
+
+        // TODO: allow the template code to specify the "component_id" field
+        let component_address = self.id_provider().new_component_address(template_address, None)?;
         debug!(target: LOG_TARGET, "New component created: {}", component_address);
+
+        let component = ComponentBody { state };
         let component = ComponentHeader {
             template_address: runtime_state.template_address,
             module_name,

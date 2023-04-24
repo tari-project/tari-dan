@@ -157,7 +157,7 @@ impl Test {
     }
 
     pub fn test_account_address() -> SubstateAddress {
-        "component_0dc41b5cc74b36d696c7b140323a40a2f98b71df5d60e5a6bf4c1a071d15f562"
+        "component_0dc41b5cc74b36d696c7b140323a40a2f98b71df5d60e5a6bf4c1a071d15f562_0dc41b5cc74b36d696c7b140323a40a2f98b71df5d60e5a6bf4c1a071d15f562"
             .parse()
             .unwrap()
     }

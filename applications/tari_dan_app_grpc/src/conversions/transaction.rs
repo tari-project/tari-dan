@@ -33,7 +33,14 @@ use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instructio
 use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
-    models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedValue},
+    models::{
+        ConfidentialOutputProof,
+        ConfidentialStatement,
+        ConfidentialWithdrawProof,
+        EncryptedValue,
+        TemplateAddress,
+    },
+    prelude::ComponentAddress,
     Hash,
 };
 use tari_transaction::{SubstateChange, Transaction, TransactionMeta};
@@ -114,8 +121,11 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
             // method
             1 => {
                 let method = request.method;
+                let template_address: TemplateAddress = request.template_address.try_into()?;
+                let component_id: Hash = request.component_id.try_into()?;
+                let component_address = ComponentAddress::new(template_address, component_id);
                 Instruction::CallMethod {
-                    component_address: Hash::try_from(request.component_address)?.into(),
+                    component_address,
                     method,
                     args,
                 }
@@ -171,7 +181,8 @@ impl From<Instruction> for proto::transaction::Instruction {
                 args,
             } => {
                 result.instruction_type = 1;
-                result.component_address = component_address.as_bytes().to_vec();
+                result.template_address = component_address.template_address().to_vec();
+                result.component_id = component_address.comoponent_id().to_vec();
                 result.method = method;
                 result.args = args.into_iter().map(|a| a.into()).collect();
             },

@@ -71,8 +71,14 @@ impl IdProvider {
             .into())
     }
 
-    pub fn new_component_address(&self) -> Result<ComponentAddress, IdProviderError> {
-        Ok(self.new_id()?.into())
+    pub fn new_component_address(
+        &self,
+        template_address: TemplateAddress,
+        component_id: Option<Hash>,
+    ) -> Result<ComponentAddress, IdProviderError> {
+        // if the component_id is not specified by the caller, then it will be random
+        let component_id = component_id.unwrap_or(self.new_id()?);
+        Ok(ComponentAddress::new(template_address, component_id))
     }
 
     pub fn new_address_hash(&self) -> Result<Hash, IdProviderError> {
