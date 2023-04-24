@@ -129,6 +129,7 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
     let name;
     let binary_sha;
     let binary_url;
+    let template_type;
     if let Some(root_folder) = args.template_code_path {
         // retrieve the root folder of the template
         println!("Template code path {}", root_folder.display());
@@ -167,11 +168,16 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
 
         version = cargo_version;
         name = cargo_name;
+        template_type = "wasm";
     } else if let Some(arg_binary_url) = args.binary_url {
         let parsed_url = Url::parse(&arg_binary_url)?;
         let file_name = parsed_url.path().split('/').last().unwrap();
         version = file_name.split('-').nth(1).unwrap_or("0").parse::<u16>()?;
         name = file_name.split('-').next().unwrap_or(file_name).to_string();
+        template_type = match file_name.split('.').last().unwrap_or("wasm") {
+            "flow" => "flow",
+            _ => "wasm",
+        };
 
         binary_sha = calculate_template_binary_hash(reqwest::get(&arg_binary_url).await?.bytes().await?.as_ref());
         binary_url = arg_binary_url;
@@ -193,7 +199,7 @@ async fn handle_publish(args: PublishTemplateArgs, mut client: ValidatorNodeClie
         .ask_parsed()?;
 
     let template_type = Prompt::new("Choose a template type (wasm, flow):")
-        .with_default("wasm")
+        .with_default(template_type)
         .with_value(args.template_type)
         .ask()?;
 
