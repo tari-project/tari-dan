@@ -182,7 +182,7 @@ impl From<Instruction> for proto::transaction::Instruction {
             } => {
                 result.instruction_type = 1;
                 result.template_address = component_address.template_address().to_vec();
-                result.component_id = component_address.comoponent_id().to_vec();
+                result.component_id = component_address.component_id().to_vec();
                 result.method = method;
                 result.args = args.into_iter().map(|a| a.into()).collect();
             },
