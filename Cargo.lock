@@ -1171,21 +1171,10 @@ dependencies = [
 [[package]]
 name = "ciborium"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0c137568cc60b904a7724001b35ce2630fd00d5d84805fbb608ab89509d788f"
-dependencies = [
- "ciborium-io 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "ciborium-ll 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "serde",
-]
-
-[[package]]
-name = "ciborium"
-version = "0.2.0"
-source = "git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug#c14d7be4252b62435cf04061625137a4e3af90bf"
+source = "git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug#31888ed0733f962c4899a06d9acc7bc3d16330b7"
 dependencies = [
  "ciborium-io 0.2.0 (git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug)",
- "ciborium-ll 0.2.0 (git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug)",
+ "ciborium-ll",
  "serde",
 ]
 
@@ -1198,22 +1187,12 @@ checksum = "346de753af073cc87b52b2083a506b38ac176a44cfb05497b622e27be899b369"
 [[package]]
 name = "ciborium-io"
 version = "0.2.0"
-source = "git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug#c14d7be4252b62435cf04061625137a4e3af90bf"
+source = "git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug#31888ed0733f962c4899a06d9acc7bc3d16330b7"
 
 [[package]]
 name = "ciborium-ll"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "213030a2b5a4e0c0892b6652260cf6ccac84827b83a85a534e178e3906c4cf1b"
-dependencies = [
- "ciborium-io 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "half",
-]
-
-[[package]]
-name = "ciborium-ll"
-version = "0.2.0"
-source = "git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug#c14d7be4252b62435cf04061625137a4e3af90bf"
+source = "git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug#31888ed0733f962c4899a06d9acc7bc3d16330b7"
 dependencies = [
  "ciborium-io 0.2.0 (git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug)",
  "half",
@@ -6776,7 +6755,7 @@ dependencies = [
 name = "tari_bor"
 version = "0.50.0-pre.0"
 dependencies = [
- "ciborium 0.2.0 (git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug)",
+ "ciborium",
  "ciborium-io 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
 ]
@@ -7558,7 +7537,7 @@ dependencies = [
  "axum",
  "axum-jrpc",
  "chrono",
- "ciborium 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciborium",
  "ciborium-io 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 3.2.23",
  "config",
@@ -7815,7 +7794,7 @@ dependencies = [
 name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
- "ciborium 0.2.0 (git+https://github.com/sdbondi/ciborium.git?branch=fix-option-bug)",
+ "ciborium",
  "hex",
  "newtype-ops",
  "serde",
