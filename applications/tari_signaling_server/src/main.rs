@@ -5,15 +5,13 @@ mod cli;
 mod data;
 mod jrpc_server;
 
-use std::error::Error;
-
 use cli::Cli;
 use data::Data;
 use tari_common::initialize_logging;
 use tari_shutdown::Shutdown;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::init();
 
     let shutdown = Shutdown::new();
@@ -25,6 +23,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         include_str!("../log4rs_sample.yml"),
     ) {
         eprintln!("{}", e);
+        return Err(e.into());
     }
 
     let data = Data::new();
