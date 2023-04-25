@@ -263,6 +263,7 @@ pub struct GetSubstateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateResponse {
     pub value: Option<SubstateValue>,
+    pub created_by_tx: Option<FixedHash>,
     pub status: SubstateStatus,
 }
 

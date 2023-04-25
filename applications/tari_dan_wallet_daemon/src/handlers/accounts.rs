@@ -14,7 +14,7 @@ use tari_crypto::{
 };
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{
-    apis::{jwt::JrpcPermission, key_manager},
+    apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
 };
@@ -570,9 +570,12 @@ pub async fn handle_claim_burn(
     );
 
     // We have to unmask the commitment to allow us to reveal funds for the fee payment
-    let (_, output) = sdk
+    let ValidatorScanResult { substate: output, .. } = sdk
         .substate_api()
-        .scan_from_vn(&commitment_substate_address.address)
+        .scan_from_vn(
+            &commitment_substate_address.address,
+            Some(commitment_substate_address.version),
+        )
         .await?;
     let output = output.into_unclaimed_confidential_output().unwrap();
     let unmasked_output = sdk.confidential_crypto_api().unblind_output(

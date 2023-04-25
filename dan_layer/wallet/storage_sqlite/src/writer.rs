@@ -10,7 +10,7 @@ use std::{
 use chrono::NaiveDateTime;
 use diesel::{
     sql_query,
-    sql_types::{BigInt, Bool, Integer, Text},
+    sql_types::{BigInt, Bool, Text},
     OptionalExtension,
     QueryDsl,
     RunQueryDsl,
@@ -270,7 +270,6 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Substates -------------------------------- //
-
     fn substates_insert_root(
         &mut self,
         tx_hash: FixedHash,
@@ -289,7 +288,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 substates::version.eq(address.version as i32),
             ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("substates_insert_parent", e))?;
+            .map_err(|e| WalletStorageError::general("substates_insert_root", e))?;
 
         Ok(())
     }
@@ -315,14 +314,12 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn substates_remove(
-        &mut self,
-        substate_addr: &VersionedSubstateAddress,
-    ) -> Result<SubstateModel, WalletStorageError> {
-        let substate = self.transaction.substates_get(&substate_addr.address)?;
-        let num_rows = sql_query("DELETE FROM substates WHERE address = ? AND version = ?")
-            .bind::<Text, _>(substate_addr.address.to_string())
-            .bind::<Integer, _>(substate_addr.version as i32)
+    fn substates_remove(&mut self, substate_addr: &SubstateAddress) -> Result<SubstateModel, WalletStorageError> {
+        use crate::schema::substates;
+
+        let substate = self.transaction.substates_get(substate_addr)?;
+        let num_rows = diesel::delete(substates::table)
+            .filter(substates::address.eq(substate_addr.to_string()))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("substates_remove", e))?;
 

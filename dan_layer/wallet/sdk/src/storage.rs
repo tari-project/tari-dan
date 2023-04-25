@@ -76,7 +76,7 @@ pub enum WalletStorageError {
         item: &'static str,
         details: String,
     },
-    #[error("{entity} not found with key {key}")]
+    #[error("[{operation}] {entity} not found with key {key}")]
     NotFound {
         operation: &'static str,
         entity: String,
@@ -206,8 +206,7 @@ pub trait WalletStoreWriter {
         parent: SubstateAddress,
         address: VersionedSubstateAddress,
     ) -> Result<(), WalletStorageError>;
-
-    fn substates_remove(&mut self, substate: &VersionedSubstateAddress) -> Result<SubstateModel, WalletStorageError>;
+    fn substates_remove(&mut self, substate: &SubstateAddress) -> Result<SubstateModel, WalletStorageError>;
 
     // Accounts
     fn accounts_set_default(&mut self, address: &SubstateAddress) -> Result<(), WalletStorageError>;

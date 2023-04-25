@@ -211,20 +211,13 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         tx_hash: FixedHash,
         diff: &SubstateDiff,
     ) -> Result<(), TransactionApiError> {
-        for (addr, version) in diff.down_iter() {
+        for (addr, _) in diff.down_iter() {
             if addr.is_layer1_commitment() {
                 info!(target: LOG_TARGET, "Layer 1 commitment {} downed", addr);
                 continue;
             }
 
-            if tx
-                .substates_remove(&VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: *version,
-                })
-                .optional()?
-                .is_none()
-            {
+            if tx.substates_remove(addr).optional()?.is_none() {
                 warn!(target: LOG_TARGET, "Downed substate {} not found", addr);
             }
         }
