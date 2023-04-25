@@ -123,18 +123,19 @@ export const transactionsWaitResult = (hash: string, timeoutSecs: number | null)
 // accounts
 export const accountsClaimBurn = (account: string, claimProof: any, fee: number) =>
     // Fees are passed as strings because Amount is tagged
-  jsonRpc("accounts.claim_burn", { account, claim_proof: claimProof, fee : fee.toString()});
+  jsonRpc("accounts.claim_burn", { account, claim_proof: claimProof, fee : fee});
 export const accountsCreate = (
   accountName: string | undefined,
   signingKeyIndex: number | undefined,
   customAccessRules: any | undefined,
-  fee: number | undefined
-) => jsonRpc("accounts.create", [accountName, signingKeyIndex, customAccessRules, fee]);
+  fee: number | undefined,
+  is_default: boolean | false
+) => jsonRpc("accounts.create", [accountName, signingKeyIndex, customAccessRules, fee, is_default]);
 export const accountsList = (offset: number, limit: number) => jsonRpc("accounts.list", [offset, limit]);
 export const accountsGetBalances = (accountName: string) => jsonRpc("accounts.get_balances", [accountName]);
 export const accountsInvoke = (accountName: string, method: string, args: any[]) =>
   jsonRpc("accounts.invoke", [accountName, method, args]);
-export const accountsGetByName = (name: string) => jsonRpc("accounts.get_by_name", [name]);
+export const accountsGet = (nameOrAddress: string) => jsonRpc("accounts.get", [nameOrAddress]);
 
 // confidential
 export const confidentialCreateTransferProof = (
