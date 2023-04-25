@@ -21,13 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from 'react';
-import {
-  addAddress,
-  getNonFungibleCollections,
-} from '../../../utils/json_rpc';
+import { addAddress, getNonFungibleCollections } from '../../../utils/json_rpc';
 import { Form } from 'react-router-dom';
-import { useNavigate } from "react-router-dom";
-import { renderJson } from '../../../utils/helpers';
+import { useNavigate } from 'react-router-dom';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -36,18 +32,15 @@ import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import {
   DataTableCell,
-  CodeBlock,
-  AccordionIconButton,
   BoxHeading2,
 } from '../../../Components/StyledComponents';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import Collapse from '@mui/material/Collapse';
 import TablePagination from '@mui/material/TablePagination';
 import Typography from '@mui/material/Typography';
 import { Button, TextField } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import { ConfirmDialog } from '../../../Components/AlertDialog';
+import Fade from '@mui/material/Fade';
 
 interface ITableAddresses {
   id: string;
@@ -71,7 +64,13 @@ function RowData({
   let navigate = useNavigate();
   return (
     <>
-      <TableRow key={id} sx={{ borderBottom: 'none', cursor: 'pointer' }} onClick={() => { navigate(`/nfts/${address}/`); }}>
+      <TableRow
+        key={id}
+        sx={{ borderBottom: 'none', cursor: 'pointer' }}
+        onClick={() => {
+          navigate(`/nfts/${address}/`);
+        }}
+      >
         <DataTableCell
           style={{
             paddingBottom: 0,
@@ -168,39 +167,53 @@ function MonitoredNftCollections() {
   };
   if (addresses === undefined) {
     return (
-      <Typography variant="h4">Monitored NFT collections ... loading</Typography>
+      <Typography variant="h4">
+        Monitored NFT collections ... loading
+      </Typography>
     );
   }
 
   return (
     <TableContainer>
-      <BoxHeading2 style={{ minHeight: '75px' }}>
-        {showAddressDialog ? (
-          <Form onSubmit={onSubmitAddAddress} className="add-confirm-form">
-            <TextField
-              name="address"
-              label="Address"
-              value={formState.address}
-              onChange={onChange}
-            />
-            <Button variant="contained" type="submit">
-              Add Address
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => showAddAddressDialog(false)}
+      <BoxHeading2>
+        {showAddressDialog && (
+          <Fade in={showAddressDialog}>
+            <Form
+              onSubmit={onSubmitAddAddress}
+              // className="add-confirm-form"
+              className="flex-container"
             >
-              Cancel
-            </Button>
-          </Form>
-        ) : (
-          <Button
-            startIcon={<AddIcon />}
-            onClick={() => showAddAddressDialog()}
-            variant="outlined"
-          >
-            Add address
-          </Button>
+              <TextField
+                name="address"
+                label="Address"
+                value={formState.address}
+                onChange={onChange}
+                style={{ flexGrow: 1 }}
+              />
+              <Button variant="contained" type="submit">
+                Add Address
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => showAddAddressDialog(false)}
+              >
+                Cancel
+              </Button>
+            </Form>
+          </Fade>
+        )}
+        {!showAddressDialog && (
+          <Fade in={!showAddressDialog}>
+            <div className="flex-container">
+              <Button
+                startIcon={<AddIcon />}
+                onClick={() => showAddAddressDialog()}
+                variant="outlined"
+              >
+                Add address
+              </Button>
+            </div>
+          </Fade>
         )}
       </BoxHeading2>
 
@@ -261,12 +274,7 @@ function MonitoredNftCollections() {
           {addresses
             .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
             .map(({ id, address, count }) => (
-              <RowData
-                key={id}
-                id={id}
-                address={address}
-                count={count}
-              />
+              <RowData key={id} id={id} address={address} count={count} />
             ))}
           {emptyRows > 0 && (
             <TableRow
