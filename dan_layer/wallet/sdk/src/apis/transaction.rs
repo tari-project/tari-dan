@@ -1,14 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
-
 use log::*;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
-    substate::{SubstateAddress, SubstateDiff},
-    TemplateAddress,
+    indexed_value::{IndexedValue, ValueVisitorError},
+    substate::SubstateDiff,
 };
 use tari_transaction::Transaction;
 use tari_validator_node_client::{
@@ -213,101 +211,62 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         tx_hash: FixedHash,
         diff: &SubstateDiff,
     ) -> Result<(), TransactionApiError> {
-        let mut component = None;
-        let mut children = vec![];
-        let mut downed_children = HashMap::<_, _>::new();
-
         for (addr, version) in diff.down_iter() {
             if addr.is_layer1_commitment() {
                 info!(target: LOG_TARGET, "Layer 1 commitment {} downed", addr);
                 continue;
             }
-            let maybe_substate = tx
+
+            if tx
                 .substates_remove(&VersionedSubstateAddress {
                     address: addr.clone(),
                     version: *version,
                 })
-                .optional()?;
-            match maybe_substate {
-                Some(substate) => {
-                    if let Some(parent) = substate.parent_address {
-                        downed_children.insert(substate.address.address, parent);
-                    }
-                },
-                None => {
-                    warn!(target: LOG_TARGET, "Downed substate {} not found", addr);
-                },
+                .optional()?
+                .is_none()
+            {
+                warn!(target: LOG_TARGET, "Downed substate {} not found", addr);
             }
         }
 
-        for (addr, substate) in diff.up_iter() {
-            match addr {
-                addr @ SubstateAddress::Component(_) => {
-                    let header = substate.substate_value().component().unwrap();
-                    tx.substates_insert_parent(
-                        tx_hash,
-                        VersionedSubstateAddress {
-                            address: addr.clone(),
-                            version: substate.version(),
-                        },
-                        header.module_name.clone(),
-                        header.template_address,
-                    )?;
-                    component = Some(addr);
-                },
-                addr @ SubstateAddress::Resource(_) |
-                addr @ SubstateAddress::Vault(_) |
-                addr @ SubstateAddress::NonFungible(_) |
-                addr @ SubstateAddress::NonFungibleIndex(_) => {
-                    children.push(VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: substate.version(),
-                    });
-                },
-                addr @ SubstateAddress::UnclaimedConfidentialOutput(_) => {
-                    todo!("Not supported {}", addr);
-                },
-            }
-        }
+        let (components, mut rest) = diff.up_iter().partition::<Vec<_>, _>(|(addr, _)| addr.is_component());
 
-        for ch in children {
-            match downed_children.remove(&ch.address) {
-                Some(parent) => {
-                    tx.substates_insert_child(tx_hash, parent, VersionedSubstateAddress {
-                        address: ch.address.clone(),
-                        version: ch.version,
+        for (component_addr, substate) in components {
+            let header = substate.substate_value().component().unwrap();
+
+            tx.substates_insert_root(
+                tx_hash,
+                VersionedSubstateAddress {
+                    address: component_addr.clone(),
+                    version: substate.version(),
+                },
+                Some(header.module_name.clone()),
+                Some(header.template_address),
+            )?;
+
+            let value = IndexedValue::from_raw(&header.state.state)?;
+
+            for owned_addr in value.owned_substates() {
+                if let Some(pos) = rest.iter().position(|(addr, _)| addr == &owned_addr) {
+                    let (_, s) = rest.swap_remove(pos);
+                    tx.substates_insert_child(tx_hash, component_addr.clone(), VersionedSubstateAddress {
+                        address: owned_addr,
+                        version: s.version(),
                     })?;
-                },
-                None => {
-                    // FIXME: We dont really know what the parent is, so we just use a component from the transaction
-                    //        because this is more likely than not to be correct. Obviously this is not good enough.
-                    match component {
-                        Some(parent) => {
-                            warn!(
-                                target: LOG_TARGET,
-                                "Assuming parent component is {} for substate {} in transaction {}.",
-                                parent,
-                                ch,
-                                tx_hash
-                            );
-                            tx.substates_insert_child(tx_hash, parent.clone(), ch)?;
-                        },
-                        None => {
-                            warn!(
-                                target: LOG_TARGET,
-                                "No parent component found for substate {} in transaction {}.", ch, tx_hash
-                            );
-                            // FIXME: We don't have a component in this transaction with other upped substates.
-                            tx.substates_insert_parent(
-                                tx_hash,
-                                ch,
-                                "<unknown>".to_string(),
-                                TemplateAddress::default(),
-                            )?;
-                        },
-                    }
-                },
+                }
             }
+        }
+
+        for (addr, substate) in rest {
+            tx.substates_insert_root(
+                tx_hash,
+                VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: substate.version(),
+                },
+                None,
+                None,
+            )?;
         }
 
         Ok(())
@@ -320,6 +279,8 @@ pub enum TransactionApiError {
     StoreError(#[from] WalletStorageError),
     #[error("Validator node client error: {0}")]
     ValidatorNodeClientError(#[from] ValidatorNodeClientError),
+    #[error("Failed to extract known type data from value: {0}")]
+    ValueVisitorError(#[from] ValueVisitorError),
 }
 
 impl IsNotFoundError for TransactionApiError {

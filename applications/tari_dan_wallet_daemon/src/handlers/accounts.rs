@@ -116,8 +116,14 @@ pub async fn handle_create(
         .find(|(addr, _)| addr.is_component())
         .ok_or_else(|| anyhow!("Create account transaction accepted but no component address was returned"))?;
 
-    sdk.accounts_api()
-        .add_account(req.account_name.as_deref(), addr, key_index, req.is_default)?;
+    let is_first_account = sdk.accounts_api().count()? == 0;
+
+    sdk.accounts_api().add_account(
+        req.account_name.as_deref(),
+        addr,
+        key_index,
+        req.is_default || is_first_account,
+    )?;
 
     Ok(AccountsCreateResponse {
         address: addr.clone(),

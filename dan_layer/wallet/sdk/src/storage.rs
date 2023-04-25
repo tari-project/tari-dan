@@ -193,12 +193,12 @@ pub trait WalletStoreWriter {
     ) -> Result<(), WalletStorageError>;
 
     // Substates
-    fn substates_insert_parent(
+    fn substates_insert_root(
         &mut self,
         tx_hash: FixedHash,
         address: VersionedSubstateAddress,
-        module_name: String,
-        template_addr: TemplateAddress,
+        module_name: Option<String>,
+        template_addr: Option<TemplateAddress>,
     ) -> Result<(), WalletStorageError>;
     fn substates_insert_child(
         &mut self,

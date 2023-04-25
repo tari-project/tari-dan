@@ -10,7 +10,7 @@ use std::{
 use chrono::NaiveDateTime;
 use diesel::{
     sql_query,
-    sql_types::{BigInt, Bool, Integer, Nullable, Text},
+    sql_types::{BigInt, Bool, Integer, Text},
     OptionalExtension,
     QueryDsl,
     RunQueryDsl,
@@ -271,25 +271,25 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     // -------------------------------- Substates -------------------------------- //
 
-    fn substates_insert_parent(
+    fn substates_insert_root(
         &mut self,
         tx_hash: FixedHash,
-        substate: VersionedSubstateAddress,
-        module_name: String,
-        template_addr: TemplateAddress,
+        address: VersionedSubstateAddress,
+        module_name: Option<String>,
+        template_addr: Option<TemplateAddress>,
     ) -> Result<(), WalletStorageError> {
-        sql_query(
-            "INSERT INTO substates (module_name, address, parent_address, transaction_hash, template_address, \
-             version) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind::<Nullable<Text>, _>(Some(module_name))
-        .bind::<Text, _>(substate.address.to_string())
-        .bind::<Nullable<Text>, _>(None::<String>)
-        .bind::<Text, _>(tx_hash.to_string())
-        .bind::<Nullable<Text>, _>(Some(template_addr.to_string()))
-        .bind::<Integer, _>(substate.version as i32)
-        .execute(self.connection())
-        .map_err(|e| WalletStorageError::general("substates_insert", e))?;
+        use crate::schema::substates;
+
+        diesel::insert_into(substates::table)
+            .values((
+                substates::address.eq(address.address.to_string()),
+                substates::transaction_hash.eq(tx_hash.to_string()),
+                substates::module_name.eq(module_name),
+                substates::template_address.eq(template_addr.map(|a| a.to_string())),
+                substates::version.eq(address.version as i32),
+            ))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("substates_insert_parent", e))?;
 
         Ok(())
     }
@@ -300,13 +300,18 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         parent: SubstateAddress,
         child: VersionedSubstateAddress,
     ) -> Result<(), WalletStorageError> {
-        sql_query("INSERT INTO substates (transaction_hash, address, parent_address, version) VALUES (?, ?, ?, ?)")
-            .bind::<Text, _>(tx_hash.to_string())
-            .bind::<Text, _>(child.address.to_string())
-            .bind::<Nullable<Text>, _>(Some(parent.to_string()))
-            .bind::<Integer, _>(child.version as i32)
+        use crate::schema::substates;
+
+        diesel::insert_into(substates::table)
+            .values((
+                substates::address.eq(child.address.to_string()),
+                substates::transaction_hash.eq(tx_hash.to_string()),
+                substates::parent_address.eq(Some(parent.to_string())),
+                substates::version.eq(child.version as i32),
+            ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("substates_insert", e))?;
+            .map_err(|e| WalletStorageError::general("substates_insert_child", e))?;
+
         Ok(())
     }
 
