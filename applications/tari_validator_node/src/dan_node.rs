@@ -20,14 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::time::Duration;
+
 use log::*;
-use tari_comms::{connectivity::ConnectivityEvent, peer_manager::NodeId};
+use tari_comms::{connection_manager::LivenessStatus, connectivity::ConnectivityEvent, peer_manager::NodeId};
 use tari_dan_core::{
     services::epoch_manager::{EpochManager, EpochManagerError},
     workers::events::HotStuffEvent,
 };
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::Hash;
+use tokio::{time, time::MissedTickBehavior};
 
 use crate::{p2p::services::networking::NetworkingService, Services};
 
@@ -55,6 +58,10 @@ impl DanNode {
         if status.is_online() {
             self.services.networking.announce().await?;
         }
+
+        let mut current_inbound_status = self.services.comms.liveness_status();
+        let mut tick = time::interval(Duration::from_secs(10));
+        tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             tokio::select! {
@@ -85,6 +92,20 @@ impl DanNode {
                 Err(err) = self.services.on_any_exit() => {
                     error!(target: LOG_TARGET, "Error in service: {}", err);
                     return Err(err);
+                }
+
+                _ = tick.tick() => {
+                    let status = self.services.comms.liveness_status() ;
+                    match status {
+                        LivenessStatus::Disabled | LivenessStatus::Checking => {},
+                        LivenessStatus::Unreachable => { warn!(target: LOG_TARGET, "🔌 Node is unreachable"); }
+                        LivenessStatus::Live(t) => {
+                            if !matches!(current_inbound_status, LivenessStatus::Live(_)) {
+                                info!(target: LOG_TARGET, "⚡️ Node is reachable (ping {:.2?})", t);
+                            }
+                        }
+                    }
+                    current_inbound_status = status;
                 }
             }
         }

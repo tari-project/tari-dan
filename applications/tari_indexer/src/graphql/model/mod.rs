@@ -1,4 +1,4 @@
-//   Copyright 2022. The Tari Project
+//   Copyright 2023. The Tari Project
 //
 //   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //   following conditions are met:
@@ -20,5 +20,15 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod graphql_client;
-pub mod json_rpc_client;
+use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema};
+
+pub(crate) type ServiceSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
+
+pub(crate) struct QueryRoot;
+
+#[Object]
+impl QueryRoot {
+    async fn hello(&self, _ctx: &Context<'_>) -> &'static str {
+        "Hello world"
+    }
+}
