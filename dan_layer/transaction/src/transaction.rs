@@ -166,7 +166,7 @@ impl TransactionMeta {
         self.involved_objects.keys().copied().collect()
     }
 
-    pub(crate) fn involved_objects_mut(&mut self) -> &mut HashMap<ShardId, SubstateChange> {
+    pub fn involved_objects_mut(&mut self) -> &mut HashMap<ShardId, SubstateChange> {
         &mut self.involved_objects
     }
 

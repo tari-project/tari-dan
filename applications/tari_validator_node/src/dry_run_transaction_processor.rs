@@ -154,17 +154,20 @@ impl DryRunTransactionProcessor {
         }
     }
 
-    pub async fn calculate_new_output_shards(
+    pub async fn calculate_missing_output_shards(
         &self,
         transaction: &Transaction,
     ) -> Result<Vec<ShardId>, DryRunTransactionProcessorError> {
-        let shard_ids = self
+        let known_shard_ids = transaction.meta().involved_shards();
+        let missing_shard_ids: Vec<ShardId> = self
             .calculate_new_outputs(transaction)
             .await?
-            .into_iter()
-            .map(|(addr, substate)| ShardId::from_address(&addr, substate.version()))
+            .iter()
+            .map(|(addr, substate)| ShardId::from_address(addr, substate.version()))
+            .filter(|s| !known_shard_ids.contains(s))
             .collect();
-        Ok(shard_ids)
+
+        Ok(missing_shard_ids)
     }
 
     async fn get_consensus_context(&self) -> Result<ConsensusContext, DryRunTransactionProcessorError> {
