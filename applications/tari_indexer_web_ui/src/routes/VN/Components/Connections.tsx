@@ -37,6 +37,7 @@ import AddIcon from '@mui/icons-material/Add';
 import Button from '@mui/material/Button';
 import { TextField } from '@mui/material';
 import { Form } from 'react-router-dom';
+import Fade from '@mui/material/Fade';
 
 interface IConnection {
   address: string;
@@ -91,37 +92,48 @@ function Connections() {
 
   return (
     <TableContainer>
-      <BoxHeading2 style={{ minHeight: '75px' }}>
-        {showPeerDialog ? (
-          <Form onSubmit={onSubmitAddPeer} className="add-confirm-form">
-            <TextField
-              name="publicKey"
-              label="Public Key"
-              value={formState.publicKey}
-              onChange={onChange}
-            />
-            <TextField
-              name="address"
-              label="Address"
-              value={formState.address}
-              onChange={onChange}
-              size="small"
-            />
-            <Button variant="contained" type="submit">
-              Add Peer
-            </Button>
-            <Button variant="outlined" onClick={() => showAddPeerDialog(false)}>
-              Cancel
-            </Button>
-          </Form>
-        ) : (
-          <Button
-            variant="outlined"
-            startIcon={<AddIcon />}
-            onClick={() => showAddPeerDialog()}
-          >
-            Add Peer
-          </Button>
+      <BoxHeading2>
+        {showPeerDialog && (
+          <Fade in={showPeerDialog}>
+            <Form onSubmit={onSubmitAddPeer} className="flex-container">
+              <TextField
+                name="publicKey"
+                label="Public Key"
+                value={formState.publicKey}
+                onChange={onChange}
+                style={{ flexGrow: 1 }}
+              />
+              <TextField
+                name="address"
+                label="Address"
+                value={formState.address}
+                onChange={onChange}
+                style={{ flexGrow: 1 }}
+              />
+              <Button variant="contained" type="submit">
+                Add Peer
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => showAddPeerDialog(false)}
+              >
+                Cancel
+              </Button>
+            </Form>
+          </Fade>
+        )}
+        {!showPeerDialog && (
+          <Fade in={!showPeerDialog}>
+            <div className="flex-container">
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => showAddPeerDialog()}
+              >
+                Add Peer
+              </Button>
+            </div>
+          </Fade>
         )}
       </BoxHeading2>
       <Table>

@@ -49,6 +49,7 @@ import Typography from '@mui/material/Typography';
 import { Button, TextField } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import { ConfirmDialog } from '../../../Components/AlertDialog';
+import Fade from '@mui/material/Fade';
 
 interface ITableAddresses {
   id: string;
@@ -223,32 +224,40 @@ function MonitoredSubstates() {
   return (
     <TableContainer>
       <BoxHeading2 style={{ minHeight: '75px' }}>
-        {showAddressDialog ? (
-          <Form onSubmit={onSubmitAddAddress} className="add-confirm-form">
-            <TextField
-              name="address"
-              label="Address"
-              value={formState.address}
-              onChange={onChange}
-            />
-            <Button variant="contained" type="submit">
-              Add Address
-            </Button>
-            <Button
-              variant="outlined"
-              onClick={() => showAddAddressDialog(false)}
-            >
-              Cancel
-            </Button>
-          </Form>
-        ) : (
-          <Button
-            startIcon={<AddIcon />}
-            onClick={() => showAddAddressDialog()}
-            variant="outlined"
-          >
-            Add address
-          </Button>
+        {showAddressDialog && (
+          <Fade in={showAddressDialog}>
+            <Form onSubmit={onSubmitAddAddress} className="add-confirm-form">
+              <TextField
+                name="address"
+                label="Address"
+                value={formState.address}
+                onChange={onChange}
+                style={{ flexGrow: 1 }}
+              />
+              <Button variant="contained" type="submit">
+                Add Address
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => showAddAddressDialog(false)}
+              >
+                Cancel
+              </Button>
+            </Form>
+          </Fade>
+        )}
+        {!showAddressDialog && (
+          <Fade in={!showAddressDialog}>
+            <div className="flex-container">
+              <Button
+                startIcon={<AddIcon />}
+                onClick={() => showAddAddressDialog()}
+                variant="outlined"
+              >
+                Add address
+              </Button>
+            </div>
+          </Fade>
         )}
       </BoxHeading2>
 
