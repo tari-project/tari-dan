@@ -22,7 +22,7 @@
 
 mod steps;
 mod utils;
-use std::{convert::TryFrom, future, io, str::FromStr, time::Duration};
+use std::{collections::HashMap, convert::TryFrom, future, io, str::FromStr, time::Duration};
 
 use cucumber::{
     gherkin::{Scenario, Step},
@@ -685,6 +685,18 @@ fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
 #[given(expr = "an indexer {word} connected to base node {word}")]
 async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: String) {
     spawn_indexer(world, indexer_name, bn_name).await;
+}
+
+#[given(expr = "{word} indexer GraphQL request work")]
+async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
+    let indexer = world.indexers.get(&indexer_name).unwrap();
+    let mut graphql_client = indexer.get_graphql_indexer_client().await;
+    let res = graphql_client
+        .send_request::<HashMap<String, String>>("{ hello }", None, None)
+        .await
+        .unwrap();
+    let res = res.get("hello").unwrap();
+    assert_eq!(res.as_str(), "Hello world");
 }
 
 #[when(expr = "the indexer {word} tracks the address {word}")]
