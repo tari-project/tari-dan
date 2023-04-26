@@ -325,10 +325,15 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
 
     let mut table = Table::new();
     table.enable_row_count();
-    table.set_titles(vec!["Name", "Address", "Public Key"]);
+    table.set_titles(vec!["Name", "Address", "Public Key", "Default"]);
     println!("Accounts:");
     for AccountInfo { account, public_key } in resp.accounts {
-        table.add_row(table_row!(account.name, account.address, public_key));
+        table.add_row(table_row!(
+            account.name,
+            account.address,
+            public_key,
+            if account.is_default { "✅" } else { "" }
+        ));
     }
     table.print_stdout();
     Ok(())
