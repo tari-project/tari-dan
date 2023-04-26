@@ -172,6 +172,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
             WalletEvent::TransactionInvalid(_) |
             WalletEvent::TransactionFinalized(_) |
             WalletEvent::AccountChanged(_) => {},
+            WalletEvent::AuthLoginRequest(_) => {},
         }
         Ok(())
     }

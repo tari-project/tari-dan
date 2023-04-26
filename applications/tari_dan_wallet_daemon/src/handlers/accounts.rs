@@ -14,7 +14,7 @@ use tari_crypto::{
 };
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{
-    apis::key_manager,
+    apis::{jwt::JrpcPermission, key_manager},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
 };
@@ -69,9 +69,11 @@ const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
 
 pub async fn handle_create(
     context: &HandlerContext,
+    token: Option<String>,
     req: AccountsCreateRequest,
 ) -> Result<AccountsCreateResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
     if let Some(name) = req.account_name.as_ref() {
         if sdk.accounts_api().get_account_by_name(name).optional()?.is_some() {
@@ -126,9 +128,11 @@ pub async fn handle_create(
 
 pub async fn handle_set_default(
     context: &HandlerContext,
+    token: Option<String>,
     req: AccountSetDefaultRequest,
 ) -> Result<AccountSetDefaultResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let account = get_account(req.account, sdk)?;
     sdk.accounts_api().set_default_account(&account.address)?;
     Ok(AccountSetDefaultResponse {})
@@ -136,9 +140,11 @@ pub async fn handle_set_default(
 
 pub async fn handle_list(
     context: &HandlerContext,
+    token: Option<String>,
     req: AccountsListRequest,
 ) -> Result<AccountsListResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let accounts = sdk.accounts_api().get_many(req.offset, req.limit)?;
     let total = sdk.accounts_api().count()?;
     let km = sdk.key_manager_api();
@@ -159,9 +165,11 @@ pub async fn handle_list(
 
 pub async fn handle_invoke(
     context: &HandlerContext,
+    token: Option<String>,
     req: AccountsInvokeRequest,
 ) -> Result<AccountsInvokeResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let (_, signing_key) = sdk
         .key_manager_api()
         .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
@@ -215,10 +223,13 @@ pub async fn handle_invoke(
 
 pub async fn handle_get_balances(
     context: &HandlerContext,
+    token: Option<String>,
     req: AccountsGetBalancesRequest,
 ) -> Result<AccountsGetBalancesResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     let account = get_account_or_default(req.account, sdk)?;
+    sdk.jwt_api()
+        .check_auth(token, &[JrpcPermission::AccountBalance(account.clone().address)])?;
     let vaults = sdk.accounts_api().get_vaults_by_account(&account.address)?;
     let outputs_api = sdk.confidential_outputs_api();
 
@@ -246,8 +257,13 @@ pub async fn handle_get_balances(
     })
 }
 
-pub async fn handle_get(context: &HandlerContext, req: AccountGetRequest) -> Result<AccountGetResponse, anyhow::Error> {
+pub async fn handle_get(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: AccountGetRequest,
+) -> Result<AccountGetResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let account = get_account(req.name_or_address, sdk)?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
@@ -257,9 +273,11 @@ pub async fn handle_get(context: &HandlerContext, req: AccountGetRequest) -> Res
 
 pub async fn handle_get_default(
     context: &HandlerContext,
+    token: Option<String>,
     _req: AccountGetDefaultRequest,
 ) -> Result<AccountGetResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let account = get_account_or_default(None, sdk)?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
@@ -270,10 +288,12 @@ pub async fn handle_get_default(
 #[allow(clippy::too_many_lines)]
 pub async fn handle_reveal_funds(
     context: &HandlerContext,
+    token: Option<String>,
     req: RevealFundsRequest,
 ) -> Result<RevealFundsResponse, anyhow::Error> {
-    let notifier = context.notifier().clone();
     let sdk = context.wallet_sdk().clone();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+    let notifier = context.notifier().clone();
 
     task::spawn(async move {
         let mut inputs = vec![];
@@ -422,8 +442,13 @@ pub async fn handle_reveal_funds(
 #[allow(clippy::too_many_lines)]
 pub async fn handle_claim_burn(
     context: &HandlerContext,
+    token: Option<String>,
     req: ClaimBurnRequest,
 ) -> Result<ClaimBurnResponse, anyhow::Error> {
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Admin])?;
     let ClaimBurnRequest {
         account,
         claim_proof,
@@ -631,9 +656,11 @@ pub async fn handle_claim_burn(
 
 pub async fn handle_create_free_test_coins(
     context: &HandlerContext,
+    token: Option<String>,
     req: AccountsCreateFreeTestCoinsRequest,
 ) -> Result<AccountsCreateFreeTestCoinsResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let account = get_account_or_default(req.account, &sdk)?;
 
     let account_secret_key = sdk
@@ -721,9 +748,11 @@ pub async fn handle_create_free_test_coins(
 #[allow(clippy::too_many_lines)]
 pub async fn handle_confidential_transfer(
     context: &HandlerContext,
+    token: Option<String>,
     req: ConfidentialTransferRequest,
 ) -> Result<ConfidentialTransferResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let notifier = context.notifier().clone();
 
     task::spawn(async move {
