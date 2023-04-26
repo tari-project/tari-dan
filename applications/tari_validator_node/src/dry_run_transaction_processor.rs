@@ -245,7 +245,14 @@ impl DryRunTransactionProcessor {
 
             // build a client with the VN
             let mut sync_vn_client = self.validator_node_client_factory.create_client(&vn_public_key);
-            let mut sync_vn_rpc_client = sync_vn_client.create_connection().await?;
+            let mut sync_vn_rpc_client = match sync_vn_client.create_connection().await {
+                Ok(rpc_client) => rpc_client,
+                Err(e) => {
+                    info!(target: LOG_TARGET, "Unable to create connection to peer: {} ", e);
+                    // we do not stop when an indiviual VN does not respond, we try all VNs
+                    continue;
+                },
+            };
 
             // request the shard substate to the VN
             let shard_id_proto: tari_dan_app_grpc::proto::common::ShardId = shard_id.into();
