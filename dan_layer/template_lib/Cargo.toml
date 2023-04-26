@@ -9,7 +9,7 @@ tari_template_macros = { path = "../template_macros", optional = true }
 tari_bor = { path = "../tari_bor" }
 tari_crypto = "0.16.10"
 
-ciborium = { git = "https://github.com/sdbondi/ciborium.git", branch = "fix-option-bug", default-features = false }
+ciborium = { git = "https://github.com/enarx/ciborium.git", ref = "ac38b3dddeadf81f93cc8e58689ea92dc46a8e56", default-features = false }
 #ciborium = { version = "0.2.0", default-features = false }
 newtype-ops = "0.1.4"
 serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
