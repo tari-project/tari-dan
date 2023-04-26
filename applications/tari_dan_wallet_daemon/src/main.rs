@@ -20,14 +20,12 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::error::Error;
-
 use tari_common::{initialize_logging, load_configuration};
 use tari_dan_wallet_daemon::{cli::Cli, config::ApplicationConfig, run_tari_dan_wallet_daemon};
 use tari_shutdown::Shutdown;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::init();
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli)?;
@@ -42,6 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         include_str!("../log4rs_sample.yml"),
     ) {
         eprintln!("{}", e);
+        return Err(e.into());
     }
 
     run_tari_dan_wallet_daemon(config, shutdown_signal).await
