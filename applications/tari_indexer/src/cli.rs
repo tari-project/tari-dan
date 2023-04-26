@@ -34,10 +34,6 @@ pub struct Cli {
     #[clap(flatten)]
     pub common: CommonCliArgs,
 
-    /// Supply a network (overrides existing configuration)
-    #[clap(long, env = "TARI_NETWORK")]
-    pub cli_network: Option<String>,
-
     #[clap(long, short = 'a', multiple_values = true)]
     pub address: Vec<SubstateAddress>,
 
