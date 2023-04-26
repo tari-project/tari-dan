@@ -29,7 +29,7 @@ mod notify;
 mod services;
 mod webrtc;
 
-use std::{error::Error, panic, process};
+use std::{panic, process};
 
 use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
@@ -43,7 +43,7 @@ const DEFAULT_FEE: Amount = Amount::new(1000);
 pub async fn run_tari_dan_wallet_daemon(
     config: ApplicationConfig,
     shutdown_signal: ShutdownSignal,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), anyhow::Error> {
     // Uncomment to enable tokio tracing via tokio-console
     // console_subscriber::init();
 

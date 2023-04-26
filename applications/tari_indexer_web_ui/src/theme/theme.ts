@@ -78,9 +78,14 @@ const theme = createTheme({
     MuiButton: {
       defaultProps: {
         disableRipple: true,
-        style: {
-          borderRadius: '5px',
+        sx: {
+          minHeight: '55px',
           boxShadow: 'none',
+          textTransform: 'none',
+          fontSize: '1rem',
+          fontWeight: 500,
+          fontFamily: '"AvenirMedium", sans-serif',
+          letterSpacing: '0.5px',
         },
       },
     },
@@ -89,16 +94,6 @@ const theme = createTheme({
         sx: {
           borderBottom: '1px solid #f5f5f5',
         },
-      },
-    },
-    MuiDialogTitle: {
-      defaultProps: {
-        fontSize: '1rem',
-      },
-    },
-    MuiTextField: {
-      defaultProps: {
-        size: 'small',
       },
     },
   },
