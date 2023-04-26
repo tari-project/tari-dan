@@ -35,7 +35,7 @@ use tari_dan_core::{
     services::{epoch_manager::EpochManager, infrastructure_services::OutboundService},
 };
 use tari_template_lib::Hash;
-use tari_transaction::{SubstateChange, Transaction};
+use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc, oneshot};
 
 use super::MempoolError;
@@ -144,7 +144,10 @@ where V: Validator<Transaction, Error = MempoolError>
 
         // we do a dry run processsor to precalculate shards for new outputs,
         // so the client does not need to specify them
-        let transaction = self.add_missing_shards(transaction).await?;
+        let mut transaction = transaction.clone();
+        if let Err(e) = self.dry_run_processor.add_missing_shards(&mut transaction).await {
+            error!(target: LOG_TARGET, "Could not add missing shards: {}", e);
+        }
 
         let shards = transaction.meta().involved_shards();
         if shards.is_empty() {
@@ -200,36 +203,6 @@ where V: Validator<Transaction, Error = MempoolError>
             }
         }
         Ok(())
-    }
-
-    // Returns an updated version of the transaction with all the missing shards included in the metadata
-    async fn add_missing_shards(&self, transaction: Transaction) -> Result<Transaction, MempoolError> {
-        // simulate and execution to known the new shard ids that are going to be created by the transaction
-        let missing_shard_ids = self
-            .dry_run_processor
-            .calculate_missing_output_shards(&transaction)
-            .await?;
-
-        // nothing else to do when the transaction already has everyting it needs
-        if missing_shard_ids.is_empty() {
-            return Ok(transaction);
-        }
-
-        // return a copy of the transaction with all the extra shard ids that it needs to execute properly
-        info!(
-            target: LOG_TARGET,
-            "Adding {} missing shard ids to the transaction",
-            missing_shard_ids.len()
-        );
-        let mut new_transaction = transaction.clone();
-        for shard_id in missing_shard_ids {
-            new_transaction
-                .meta_mut()
-                .involved_objects_mut()
-                .insert(shard_id, SubstateChange::Create);
-        }
-
-        Ok(new_transaction)
     }
 
     pub async fn propagate_transaction(

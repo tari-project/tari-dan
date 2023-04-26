@@ -52,7 +52,7 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason, TransactionResult},
     substate::{Substate, SubstateAddress},
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateChange, Transaction};
 use thiserror::Error;
 
 use crate::{
@@ -168,6 +168,36 @@ impl DryRunTransactionProcessor {
             .collect();
 
         Ok(missing_shard_ids)
+    }
+
+    // Updateds the transaction to add all missing shards
+    pub async fn add_missing_shards(
+        &self,
+        transaction: &mut Transaction,
+    ) -> Result<(), DryRunTransactionProcessorError> {
+        // simulate and execution to known the new shard ids that are going to be created by the transaction
+        let missing_shard_ids = self.calculate_missing_output_shards(transaction).await?;
+
+        // nothing else to do when the transaction already has everyting it needs
+        if missing_shard_ids.is_empty() {
+            return Ok(());
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Adding {} missing shard ids to the transaction",
+            missing_shard_ids.len()
+        );
+
+        // add all missing shards
+        for shard_id in missing_shard_ids {
+            transaction
+                .meta_mut()
+                .involved_objects_mut()
+                .insert(shard_id, SubstateChange::Create);
+        }
+
+        Ok(())
     }
 
     async fn get_consensus_context(&self) -> Result<ConsensusContext, DryRunTransactionProcessorError> {
