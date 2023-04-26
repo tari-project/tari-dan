@@ -49,7 +49,7 @@ use tari_dan_core::{
 use tari_dan_engine::runtime::ConsensusContext;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::{
-    commit_result::ExecuteResult,
+    commit_result::{ExecuteResult, RejectReason, TransactionResult},
     substate::{Substate, SubstateAddress},
 };
 use tari_transaction::Transaction;
@@ -74,9 +74,11 @@ pub enum DryRunTransactionProcessorError {
     ValidatorNodeClient(#[from] ValidatorNodeClientError),
     #[error("Rpc error: {0}")]
     RpcRequestFailed(#[from] RpcStatus),
+    #[error("Transaction rejected: {reason}")]
+    TransactionRejected { reason: RejectReason },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DryRunTransactionProcessor {
     epoch_manager: EpochManagerHandle,
     payload_processor: TariDanPayloadProcessor<TemplateManager>,
@@ -104,7 +106,7 @@ impl DryRunTransactionProcessor {
 
     pub async fn process_transaction(
         &self,
-        transaction: Transaction,
+        transaction: &Transaction,
     ) -> Result<ExecuteResult, DryRunTransactionProcessorError> {
         // get the list of involved shards for the transaction
         let payload = TariDanPayload::new(transaction.clone());
@@ -136,6 +138,33 @@ impl DryRunTransactionProcessor {
         }
 
         Ok(result)
+    }
+
+    pub async fn calculate_new_outputs(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<Vec<(SubstateAddress, Substate)>, DryRunTransactionProcessorError> {
+        let exec_result = self.process_transaction(transaction).await?;
+        match exec_result.finalize.result {
+            TransactionResult::Accept(diff) => {
+                let up_substates = diff.into_up_iter().collect();
+                Ok(up_substates)
+            },
+            TransactionResult::Reject(reason) => Err(DryRunTransactionProcessorError::TransactionRejected { reason }),
+        }
+    }
+
+    pub async fn calculate_new_output_shards(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<Vec<ShardId>, DryRunTransactionProcessorError> {
+        let shard_ids = self
+            .calculate_new_outputs(transaction)
+            .await?
+            .into_iter()
+            .map(|(addr, substate)| ShardId::from_address(&addr, substate.version()))
+            .collect();
+        Ok(shard_ids)
     }
 
     async fn get_consensus_context(&self) -> Result<ConsensusContext, DryRunTransactionProcessorError> {
