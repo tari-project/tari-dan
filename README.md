@@ -143,7 +143,7 @@ Notice that, to burn MinoTari, the user had to pass a claim public key
 As in the previous section, the user creates an account on the Tari network, via the wallet cli. After an account is created
 with 
 
-````
+```
 "account_name": <ACCOUNT_NAME>
 ```
 
