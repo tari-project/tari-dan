@@ -21,11 +21,5 @@ fn basic_emit_event() {
         .expect("Failed to emit test event");
     assert!(result.finalize.is_accept());
     assert_eq!(result.finalize.events.len(), 1);
-    // assert_eq!(
-    //     result.finalize.events[0],
-    //     Event {
-
-    //         message: "Hello world".to_string()
-    //     }
-    // );
+    assert_eq!(result.finalize.events[0].message, "Hello world !");
 }
