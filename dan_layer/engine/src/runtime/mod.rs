@@ -51,8 +51,20 @@ use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine_types::confidential::ConfidentialClaim;
 use tari_template_lib::{
     args::{
-        Arg, BucketAction, BucketRef, CallerContextAction, ComponentAction, ComponentRef, ConsensusAction,
-        GenerateRandomAction, InvokeResult, LogLevel, NonFungibleAction, ResourceAction, ResourceRef, VaultAction,
+        Arg,
+        BucketAction,
+        BucketRef,
+        CallerContextAction,
+        ComponentAction,
+        ComponentRef,
+        ConsensusAction,
+        GenerateRandomAction,
+        InvokeResult,
+        LogLevel,
+        NonFungibleAction,
+        ResourceAction,
+        ResourceRef,
+        VaultAction,
         WorkspaceAction,
     },
     invoke_args,
