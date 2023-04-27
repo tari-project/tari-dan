@@ -3,29 +3,8 @@
 
 use proc_macro2::{Ident, TokenStream};
 use syn::{
-    parse::ParseStream,
-    parse2,
-    punctuated::Punctuated,
-    token::Comma,
-    Block,
-    Expr,
-    ExprCall,
-    ExprLit,
-    ExprMacro,
-    ExprMethodCall,
-    ExprPath,
-    Item,
-    ItemFn,
-    ItemUse,
-    Lit,
-    LitStr,
-    Local,
-    Macro,
-    Pat,
-    PatIdent,
-    Path,
-    Stmt,
-    UseTree,
+    parse::ParseStream, parse2, punctuated::Punctuated, token::Comma, Block, Expr, ExprCall, ExprLit, ExprMacro,
+    ExprMethodCall, ExprPath, Item, ItemFn, ItemUse, Lit, LitStr, Local, Macro, Pat, PatIdent, Path, Stmt, UseTree,
 };
 use tari_engine_types::TemplateAddress;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
@@ -324,6 +303,7 @@ fn macro_call(mac: &Ident, tokens: TokenStream) -> Result<ManifestIntent, syn::E
             level: LogLevel::Error,
             message: parse2::<LitStr>(tokens)?.value(),
         })),
+        "store" => todo!("Implement me later"),
         _ => Err(syn::Error::new_spanned(mac, "Invalid macro name")),
     }
 }

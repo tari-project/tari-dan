@@ -25,9 +25,10 @@ use tari_bor::encode;
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
-    args::{ComponentAction, ComponentInvokeArg, ComponentRef, CreateComponentArg, EmitLogArg, InvokeResult, LogLevel},
+    args::{ComponentAction, ComponentInvokeArg, ComponentRef, CreateComponentArg, InvokeResult, LogLevel},
     component::ComponentManager,
     context::Context,
+    events::emit_event,
     get_context,
     models::ComponentAddress,
     prelude::AccessRules,
@@ -56,24 +57,24 @@ impl TariEngine {
     ) -> ComponentAddress {
         let encoded_state = encode(&initial_state).unwrap();
 
-        let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
-            component_ref: ComponentRef::Component,
-            action: ComponentAction::Create,
-            args: invoke_args![CreateComponentArg {
-                module_name,
-                encoded_state,
-                access_rules,
-            }],
-        });
+        let result = call_engine::<_, InvokeResult>(
+            EngineOp::ComponentInvoke,
+            &ComponentInvokeArg {
+                component_ref: ComponentRef::Component,
+                action: ComponentAction::Create,
+                args: invoke_args![CreateComponentArg {
+                    module_name,
+                    encoded_state,
+                    access_rules,
+                }],
+            },
+        );
 
         result.decode().expect("failed to decode component address")
     }
 
     pub fn emit_log<T: Into<String>>(&self, level: LogLevel, msg: T) {
-        call_engine::<_, ()>(EngineOp::EmitLog, &EmitLogArg {
-            level,
-            message: msg.into(),
-        });
+        emit_event(level, msg.into())
     }
 
     pub fn component_manager(&self, component_address: ComponentAddress) -> ComponentManager {

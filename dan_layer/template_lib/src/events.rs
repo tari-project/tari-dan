@@ -20,44 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod auth;
+use tari_template_abi::{call_engine, EngineOp};
 
-mod hash;
-pub use hash::Hash;
+use crate::args::{EmitLogArg, LogLevel};
 
-#[macro_use]
-pub mod args;
-pub mod models;
-
-pub mod component;
-pub mod consensus;
-
-pub mod caller_context;
-mod context;
-pub use context::{get_context, init_context, AbiContext};
-
-pub mod rand;
-pub mod resource;
-
-pub mod crypto;
-pub mod events;
-
-// ---------------------------------------- WASM target exports ------------------------------------------------
-
-#[cfg(target_arch = "wasm32")]
-pub mod template_dependencies;
-
-mod engine;
-pub use engine::engine;
-
-#[cfg(target_arch = "wasm32")]
-pub mod panic_hook;
-pub mod prelude;
-#[cfg(feature = "macro")]
-pub use prelude::template;
-// Re-export for macro
-pub use tari_bor::encode;
-
-pub mod constants;
-#[cfg(target_arch = "wasm32")]
-pub mod workspace;
+pub fn emit_event<T: Into<String>>(level: LogLevel, event: T) {
+    call_engine::<_, ()>(
+        EngineOp::EmitLog,
+        &EmitLogArg {
+            level,
+            message: event.into(),
+        },
+    );
+}

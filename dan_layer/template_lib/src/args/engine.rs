@@ -31,15 +31,8 @@ use tari_template_abi::rust::{
 
 use crate::{
     models::{
-        Amount,
-        BucketId,
-        ComponentAddress,
-        ConfidentialWithdrawProof,
-        Metadata,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        VaultRef,
+        Amount, BucketId, ComponentAddress, ConfidentialWithdrawProof, Metadata, NonFungibleAddress, NonFungibleId,
+        ResourceAddress, VaultRef,
     },
     prelude::{AccessRules, ConfidentialOutputProof},
     resource::ResourceType,
@@ -58,6 +51,7 @@ pub enum LogLevel {
     Warn,
     Info,
     Debug,
+    Store,
 }
 
 impl Display for LogLevel {
@@ -67,6 +61,7 @@ impl Display for LogLevel {
             LogLevel::Warn => write!(f, "WARN"),
             LogLevel::Info => write!(f, "INFO"),
             LogLevel::Debug => write!(f, "DEBUG"),
+            LogLevel::Store => write!(f, "STORE"),
         }
     }
 }
@@ -80,6 +75,7 @@ impl FromStr for LogLevel {
             "WARN" => Ok(LogLevel::Warn),
             "INFO" => Ok(LogLevel::Info),
             "DEBUG" => Ok(LogLevel::Debug),
+            "STORE" => Ok(LogLevel::Store),
             _ => Err(LogLevelParseError(s.to_string())),
         }
     }
