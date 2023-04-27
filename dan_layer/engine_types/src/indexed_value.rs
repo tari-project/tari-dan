@@ -55,8 +55,8 @@ impl FromTagAndValue for TariValue {
         let tag = BinaryTag::from_u64(tag).ok_or(ValueVisitorError::InvalidTag(tag))?;
         match tag {
             BinaryTag::ComponentAddress => {
-                let component: Hash = value.deserialized().map_err(BorError::from)?;
-                Ok(Self::ComponentAddress(component.into()))
+                let component_address: Hash = value.deserialized().map_err(BorError::from)?;
+                Ok(Self::ComponentAddress(component_address.into()))
             },
             BinaryTag::BucketId => {
                 let bucket_id: u32 = value.deserialized().map_err(BorError::from)?;
@@ -165,7 +165,6 @@ mod tests {
     #[derive(Serialize, Deserialize)]
     struct TestStruct {
         name: String,
-
         component: ComponentAddress,
         components: Vec<ComponentAddress>,
         resource_map: HashMap<ResourceAddress, ComponentAddress>,

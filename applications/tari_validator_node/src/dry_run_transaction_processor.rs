@@ -49,10 +49,10 @@ use tari_dan_core::{
 use tari_dan_engine::runtime::ConsensusContext;
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::{
-    commit_result::ExecuteResult,
+    commit_result::{ExecuteResult, RejectReason, TransactionResult},
     substate::{Substate, SubstateAddress},
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateChange, Transaction};
 use thiserror::Error;
 
 use crate::{
@@ -74,9 +74,11 @@ pub enum DryRunTransactionProcessorError {
     ValidatorNodeClient(#[from] ValidatorNodeClientError),
     #[error("Rpc error: {0}")]
     RpcRequestFailed(#[from] RpcStatus),
+    #[error("Transaction rejected: {reason}")]
+    TransactionRejected { reason: RejectReason },
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DryRunTransactionProcessor {
     epoch_manager: EpochManagerHandle,
     payload_processor: TariDanPayloadProcessor<TemplateManager>,
@@ -104,7 +106,7 @@ impl DryRunTransactionProcessor {
 
     pub async fn process_transaction(
         &self,
-        transaction: Transaction,
+        transaction: &Transaction,
     ) -> Result<ExecuteResult, DryRunTransactionProcessorError> {
         // get the list of involved shards for the transaction
         let payload = TariDanPayload::new(transaction.clone());
@@ -136,6 +138,66 @@ impl DryRunTransactionProcessor {
         }
 
         Ok(result)
+    }
+
+    pub async fn calculate_new_outputs(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<Vec<(SubstateAddress, Substate)>, DryRunTransactionProcessorError> {
+        let exec_result = self.process_transaction(transaction).await?;
+        match exec_result.finalize.result {
+            TransactionResult::Accept(diff) => {
+                let up_substates = diff.into_up_iter().collect();
+                Ok(up_substates)
+            },
+            TransactionResult::Reject(reason) => Err(DryRunTransactionProcessorError::TransactionRejected { reason }),
+        }
+    }
+
+    pub async fn calculate_missing_output_shards(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<Vec<ShardId>, DryRunTransactionProcessorError> {
+        let known_shard_ids = transaction.meta().involved_shards();
+        let missing_shard_ids: Vec<ShardId> = self
+            .calculate_new_outputs(transaction)
+            .await?
+            .iter()
+            .map(|(addr, substate)| ShardId::from_address(addr, substate.version()))
+            .filter(|s| !known_shard_ids.contains(s))
+            .collect();
+
+        Ok(missing_shard_ids)
+    }
+
+    // Updateds the transaction to add all missing shards
+    pub async fn add_missing_shards(
+        &self,
+        transaction: &mut Transaction,
+    ) -> Result<(), DryRunTransactionProcessorError> {
+        // simulate and execution to known the new shard ids that are going to be created by the transaction
+        let missing_shard_ids = self.calculate_missing_output_shards(transaction).await?;
+
+        // nothing else to do when the transaction already has everyting it needs
+        if missing_shard_ids.is_empty() {
+            return Ok(());
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Adding {} missing shard ids to the transaction",
+            missing_shard_ids.len()
+        );
+
+        // add all missing shards
+        for shard_id in missing_shard_ids {
+            transaction
+                .meta_mut()
+                .involved_objects_mut()
+                .insert(shard_id, SubstateChange::Create);
+        }
+
+        Ok(())
     }
 
     async fn get_consensus_context(&self) -> Result<ConsensusContext, DryRunTransactionProcessorError> {
@@ -183,7 +245,14 @@ impl DryRunTransactionProcessor {
 
             // build a client with the VN
             let mut sync_vn_client = self.validator_node_client_factory.create_client(&vn_public_key);
-            let mut sync_vn_rpc_client = sync_vn_client.create_connection().await?;
+            let mut sync_vn_rpc_client = match sync_vn_client.create_connection().await {
+                Ok(rpc_client) => rpc_client,
+                Err(e) => {
+                    info!(target: LOG_TARGET, "Unable to create connection to peer: {} ", e);
+                    // we do not stop when an indiviual VN does not respond, we try all VNs
+                    continue;
+                },
+            };
 
             // request the shard substate to the VN
             let shard_id_proto: tari_dan_app_grpc::proto::common::ShardId = shard_id.into();

@@ -31,9 +31,12 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::p2p::services::{
-    mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, Validator},
-    messaging::OutboundMessaging,
+use crate::{
+    dry_run_transaction_processor::DryRunTransactionProcessor,
+    p2p::services::{
+        mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, Validator},
+        messaging::OutboundMessaging,
+    },
 };
 
 pub fn spawn<TValidator>(
@@ -42,6 +45,7 @@ pub fn spawn<TValidator>(
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
     validator: TValidator,
+    dry_run_processor: DryRunTransactionProcessor,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
     TValidator: Validator<Transaction, Error = MempoolError> + Send + Sync + 'static,
@@ -57,6 +61,7 @@ where
         epoch_manager,
         node_identity,
         validator,
+        dry_run_processor,
     );
     let handle = MempoolHandle::new(rx_valid_transactions, tx_mempool_request);
 

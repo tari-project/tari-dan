@@ -22,6 +22,7 @@
 
 use std::{
     convert::{TryFrom, TryInto},
+    fmt,
     fs::create_dir_all,
     ops::{Deref, DerefMut},
     path::PathBuf,
@@ -255,6 +256,14 @@ impl SqliteShardStore {
         })
     }
 }
+
+// we mock the Debug implementation because "SqliteConnection" does not implement the Debug trait
+impl fmt::Debug for SqliteShardStore {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SqliteShardStore")
+    }
+}
+
 impl ShardStore for SqliteShardStore {
     type Addr = PublicKey;
     type Payload = TariDanPayload;
