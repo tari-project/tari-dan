@@ -72,6 +72,7 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
+use super::tracker::FinalizeTracker;
 use crate::{
     packager::LoadedTemplate,
     runtime::{
@@ -834,9 +835,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let substates_to_persist = self.tracker.take_substates_to_persist();
         self.invoke_modules_on_before_finalize(&substates_to_persist)?;
 
-        let events = self.tracker.take_events();
-        let logs = self.tracker.take_logs();
-        let (result, fee_receipt) = self.tracker.finalize(substates_to_persist)?;
+        let FinalizeTracker {
+            result,
+            fee_receipt,
+            events,
+            logs,
+        } = self.tracker.finalize(substates_to_persist)?;
         let finalized = FinalizeResult::new(
             self.tracker.transaction_hash(),
             logs,

@@ -76,6 +76,13 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::state_tracker";
 
+pub struct FinalizeTracker {
+    pub result: TransactionResult,
+    pub events: Vec<Event>,
+    pub fee_receipt: FeeReceipt,
+    pub logs: Vec<LogEntry>,
+}
+
 #[derive(Debug, Clone)]
 pub struct StateTracker<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
     working_state: Arc<RwLock<WorkingState>>,
@@ -488,9 +495,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     pub fn finalize(
         &self,
         mut substates_to_persist: HashMap<SubstateAddress, SubstateValue>,
-    ) -> Result<(TransactionResult, FeeReceipt), RuntimeError> {
+    ) -> Result<FinalizeTracker, RuntimeError> {
         // Resolve the transfers to the fee pool resource and vault refunds
         let finalized_fee = self.finalize_fees(&mut substates_to_persist)?;
+        // events and logs
+        let events = self.take_events();
+        let logs = self.take_logs();
+
         // Finalise will always reset the state
         let state = self.take_working_state();
 
@@ -503,7 +514,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
         };
 
-        Ok((result, finalized_fee))
+        Ok(FinalizeTracker {
+            result,
+            events,
+            fee_receipt: finalized_fee,
+            logs,
+        })
     }
 
     fn generate_substate_diff(
