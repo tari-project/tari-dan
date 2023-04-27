@@ -236,6 +236,12 @@ pub async fn handle_get_balances(
     let account = get_account_or_default(req.account, sdk)?;
     sdk.jwt_api()
         .check_auth(token, &[JrpcPermission::AccountBalance(account.clone().address)])?;
+    if req.refresh {
+        context
+            .account_monitor()
+            .refresh_account(account.address.clone())
+            .await?;
+    }
     let vaults = sdk.accounts_api().get_vaults_by_account(&account.address)?;
     let outputs_api = sdk.confidential_outputs_api();
 

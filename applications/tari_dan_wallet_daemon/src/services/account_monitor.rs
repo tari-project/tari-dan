@@ -22,11 +22,15 @@ use tari_engine_types::{
 };
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::resource::TOKEN_SYMBOL;
-use tokio::{time, time::MissedTickBehavior};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time,
+    time::MissedTickBehavior,
+};
 
 use crate::{
     notify::Notify,
-    services::{AccountChangedEvent, WalletEvent},
+    services::{AccountChangedEvent, Reply, WalletEvent},
 };
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::account_monitor";
@@ -34,18 +38,29 @@ const LOG_TARGET: &str = "tari::dan_wallet_daemon::account_monitor";
 pub struct AccountMonitor<TStore> {
     notify: Notify<WalletEvent>,
     wallet_sdk: DanWalletSdk<TStore>,
+    request_rx: mpsc::Receiver<AccountMonitorRequest>,
     shutdown_signal: ShutdownSignal,
 }
 
 impl<TStore> AccountMonitor<TStore>
 where TStore: WalletStore + Clone + Send + Sync + 'static
 {
-    pub fn new(notify: Notify<WalletEvent>, wallet_sdk: DanWalletSdk<TStore>, shutdown_signal: ShutdownSignal) -> Self {
-        Self {
-            notify,
-            wallet_sdk,
-            shutdown_signal,
-        }
+    pub fn new(
+        notify: Notify<WalletEvent>,
+        wallet_sdk: DanWalletSdk<TStore>,
+        shutdown_signal: ShutdownSignal,
+    ) -> (Self, AccountMonitorHandle) {
+        let (request_tx, request_rx) = mpsc::channel(1);
+
+        (
+            Self {
+                notify,
+                wallet_sdk,
+                request_rx,
+                shutdown_signal,
+            },
+            AccountMonitorHandle { sender: request_tx },
+        )
     }
 
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
@@ -64,12 +79,24 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                     self.on_poll().await;
                 }
 
+                Some(req) = self.request_rx.recv() => {
+                    self.handle_request(req).await;
+                }
+
                 Ok(event) = events_subscription.recv() => {
                     if let Err(e) = self.on_event(event).await {
                         error!(target: LOG_TARGET, "Error handling event: {}", e);
                     }
                 },
             }
+        }
+    }
+
+    async fn handle_request(&self, req: AccountMonitorRequest) {
+        match req {
+            AccountMonitorRequest::RefreshAccount { account, reply } => {
+                let _ignore = reply.send(self.refresh_account(&account).await);
+            },
         }
     }
 
@@ -142,7 +169,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
 
             if let Some(vault_version) = maybe_vault_version {
                 if versioned_addr.version == vault_version {
-                    debug!(target: LOG_TARGET, "Vault {} is up to date", versioned_addr.address);
+                    info!(target: LOG_TARGET, "Vault {} is up to date", versioned_addr.address);
                     continue;
                 }
             }
@@ -309,6 +336,33 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
     }
 }
 
+#[derive(Debug)]
+enum AccountMonitorRequest {
+    RefreshAccount {
+        account: SubstateAddress,
+        reply: Reply<Result<bool, AccountMonitorError>>,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountMonitorHandle {
+    sender: mpsc::Sender<AccountMonitorRequest>,
+}
+
+impl AccountMonitorHandle {
+    pub async fn refresh_account(&self, account: SubstateAddress) -> Result<bool, AccountMonitorError> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        self.sender
+            .send(AccountMonitorRequest::RefreshAccount {
+                account,
+                reply: reply_tx,
+            })
+            .await
+            .map_err(|_| AccountMonitorError::ServiceShutdown)?;
+        reply_rx.await.map_err(|_| AccountMonitorError::ServiceShutdown)?
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AccountMonitorError {
     #[error("Transaction API error: {0}")]
@@ -323,4 +377,6 @@ pub enum AccountMonitorError {
     UnexpectedSubstate(String),
     #[error("Failed to decode binary value: {0}")]
     DecodeValueFailed(#[from] ValueVisitorError),
+    #[error("Monitor service is not running")]
+    ServiceShutdown,
 }

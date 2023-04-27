@@ -227,6 +227,7 @@ async fn handle_get_balances(args: GetBalancesArgs, client: &mut WalletDaemonCli
     let resp = client
         .get_account_balances(AccountsGetBalancesRequest {
             account: args.account_name,
+            refresh: true,
         })
         .await?;
 
