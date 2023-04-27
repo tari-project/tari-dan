@@ -97,11 +97,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     }
 
     pub fn add_event(&self, event: Event) {
-        self.write_with(|state| {
-            println!("FLAG: add event = {}", event);
-            state.events.push(event);
-            println!("FLAG: add event events = {:?}", state.events);
-        })
+        self.write_with(|state| state.events.push(event))
     }
 
     pub fn add_log(&self, log: LogEntry) {
