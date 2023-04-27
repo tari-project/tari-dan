@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use tari_bor::BorError;
+use tari_engine_types::indexed_value::ValueVisitorError;
 use thiserror::Error;
 use wasmer::{ExportError, HostEnvInitError, InstantiationError};
 
@@ -58,4 +59,6 @@ pub enum WasmExecutionError {
         message: String,
         runtime_error: wasmer::RuntimeError,
     },
+    #[error("Value visitor error: {0}")]
+    ValueVisitorError(#[from] ValueVisitorError),
 }

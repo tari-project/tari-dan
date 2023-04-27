@@ -114,8 +114,9 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
             // method
             1 => {
                 let method = request.method;
+                let component_address = Hash::try_from(request.component_address)?.into();
                 Instruction::CallMethod {
-                    component_address: Hash::try_from(request.component_address)?.into(),
+                    component_address,
                     method,
                     args,
                 }

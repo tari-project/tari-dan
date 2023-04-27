@@ -39,9 +39,12 @@ use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc, oneshot};
 
 use super::MempoolError;
-use crate::p2p::services::{
-    mempool::{handle::MempoolRequest, Validator},
-    messaging::OutboundMessaging,
+use crate::{
+    dry_run_transaction_processor::DryRunTransactionProcessor,
+    p2p::services::{
+        mempool::{handle::MempoolRequest, Validator},
+        messaging::OutboundMessaging,
+    },
 };
 
 const LOG_TARGET: &str = "tari::validator_node::mempool::service";
@@ -56,6 +59,7 @@ pub struct MempoolService<V> {
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
     validator: V,
+    dry_run_processor: DryRunTransactionProcessor,
 }
 
 impl<V> MempoolService<V>
@@ -69,6 +73,7 @@ where V: Validator<Transaction, Error = MempoolError>
         epoch_manager: EpochManagerHandle,
         node_identity: Arc<NodeIdentity>,
         validator: V,
+        dry_run_processor: DryRunTransactionProcessor,
     ) -> Self {
         Self {
             transactions: Default::default(),
@@ -79,6 +84,7 @@ where V: Validator<Transaction, Error = MempoolError>
             epoch_manager,
             node_identity,
             validator,
+            dry_run_processor,
         }
     }
 
@@ -135,6 +141,13 @@ where V: Validator<Transaction, Error = MempoolError>
         }
 
         self.validator.validate(&transaction).await?;
+
+        // we do a dry run processsor to precalculate shards for new outputs,
+        // so the client does not need to specify them
+        let mut transaction = transaction.clone();
+        if let Err(e) = self.dry_run_processor.add_missing_shards(&mut transaction).await {
+            error!(target: LOG_TARGET, "Could not add missing shards: {}", e);
+        }
 
         let shards = transaction.meta().involved_shards();
         if shards.is_empty() {

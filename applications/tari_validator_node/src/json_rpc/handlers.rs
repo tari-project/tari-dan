@@ -186,7 +186,7 @@ impl JsonRpcHandlers {
         if is_dry_run {
             let result = self
                 .dry_run_transaction_processor
-                .process_transaction(transaction)
+                .process_transaction(&transaction)
                 .await;
             match result {
                 Ok(exec_result) => {
