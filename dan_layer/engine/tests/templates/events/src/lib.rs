@@ -21,26 +21,16 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use tari_template_lib::prelude::*;
 
-// #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-// struct Event {}
-
 #[template]
 mod event {
     use super::*;
 
-    pub struct Event {
-        name: String,
-        age: u32,
-        address: ComponentAddress,
-    }
+    pub struct EventEmitter {}
 
-    impl Event {
-        pub fn new(name: String, age: u32, address: ComponentAddress) -> Self {
-            Self { name, age, address }
-        }
-
-        pub fn emit(&self) {
-            println!("Event with name: {}, age: {}, address: {}", name, age, address);
+    impl EventEmitter {
+        pub fn test_function() {
+            println!("Emitting a new event");
+            emit_event("Hello world !");
         }
     }
 }

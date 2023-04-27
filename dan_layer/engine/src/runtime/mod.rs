@@ -51,20 +51,8 @@ use tari_crypto::ristretto::RistrettoSecretKey;
 use tari_engine_types::{commit_result::FinalizeResult, confidential::ConfidentialClaim, fees::FeeReceipt};
 use tari_template_lib::{
     args::{
-        Arg,
-        BucketAction,
-        BucketRef,
-        CallerContextAction,
-        ComponentAction,
-        ComponentRef,
-        ConsensusAction,
-        GenerateRandomAction,
-        InvokeResult,
-        LogLevel,
-        NonFungibleAction,
-        ResourceAction,
-        ResourceRef,
-        VaultAction,
+        Arg, BucketAction, BucketRef, CallerContextAction, ComponentAction, ComponentRef, ConsensusAction,
+        GenerateRandomAction, InvokeResult, LogLevel, NonFungibleAction, ResourceAction, ResourceRef, VaultAction,
         WorkspaceAction,
     },
     invoke_args,
@@ -74,6 +62,8 @@ pub use tracker::{RuntimeState, StateTracker};
 
 pub trait RuntimeInterface: Send + Sync {
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError>;
+
+    fn emit_event(&self, message: String) -> Result<(), RuntimeError>;
 
     fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError>;
 

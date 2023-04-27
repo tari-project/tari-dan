@@ -25,10 +25,9 @@ use tari_bor::encode;
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
-    args::{ComponentAction, ComponentInvokeArg, ComponentRef, CreateComponentArg, InvokeResult, LogLevel},
+    args::{ComponentAction, ComponentInvokeArg, ComponentRef, CreateComponentArg, EmitLogArg, InvokeResult, LogLevel},
     component::ComponentManager,
     context::Context,
-    events::emit_event,
     get_context,
     models::ComponentAddress,
     prelude::AccessRules,
@@ -74,7 +73,13 @@ impl TariEngine {
     }
 
     pub fn emit_log<T: Into<String>>(&self, level: LogLevel, msg: T) {
-        emit_event(level, msg.into())
+        call_engine::<_, ()>(
+            EngineOp::EmitLog,
+            &EmitLogArg {
+                level,
+                message: msg.into(),
+            },
+        );
     }
 
     pub fn component_manager(&self, component_address: ComponentAddress) -> ComponentManager {

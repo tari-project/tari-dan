@@ -22,14 +22,13 @@
 
 use tari_template_abi::{call_engine, EngineOp};
 
-use crate::args::{EmitLogArg, LogLevel};
+use crate::args::EmitEventArg;
 
-pub fn emit_event<T: Into<String>>(level: LogLevel, event: T) {
+pub fn emit_event<T: Into<String>>(message: T) {
     call_engine::<_, ()>(
-        EngineOp::EmitLog,
-        &EmitLogArg {
-            level,
-            message: event.into(),
+        EngineOp::EmitEvent,
+        &EmitEventArg {
+            message: message.into(),
         },
     );
 }

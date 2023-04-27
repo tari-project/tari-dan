@@ -31,6 +31,9 @@ pub enum Instruction {
         level: LogLevel,
         message: String,
     },
+    EmitEvent {
+        message: String,
+    },
     ClaimBurn {
         claim: Box<ConfidentialClaim>,
     },
@@ -75,8 +78,11 @@ impl Display for Instruction {
                     claim.output_address, claim.proof_of_knowledge
                 )
             },
-            Instruction::CreateFreeTestCoins { .. } => {
+            Self::CreateFreeTestCoins { .. } => {
                 write!(f, "CreateFreeTestCoins")
+            },
+            Self::EmitEvent { message } => {
+                write!(f, "EmitEvent {{ message: {} }}", message)
             },
         }
     }

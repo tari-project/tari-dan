@@ -20,24 +20,34 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use tari_bor::{encode, serde};
-#[cfg(feature = "macro")]
-pub use tari_template_macros::template;
-
-pub use crate::{
-    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
-    caller_context::CallerContext,
-    component::{
-        interface::{ComponentInstanceInterface, ComponentInterface},
-        ComponentManager,
-    },
-    consensus::Consensus,
-    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
-    events::emit_event,
-    models::{
-        Amount, Bucket, BucketId, ComponentAddress, ConfidentialOutputProof, ConfidentialWithdrawProof, Metadata,
-        NonFungible, NonFungibleAddress, NonFungibleId, ResourceAddress, Vault,
-    },
-    rand,
-    resource::{ResourceBuilder, ResourceManager, ResourceType},
+use std::{
+    fmt::Display,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
+
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Event {
+    pub timestamp: u64,
+    pub message: String,
+}
+
+impl Event {
+    pub fn new(message: String) -> Self {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_else(|_| Duration::from_secs(0))
+            .as_secs();
+        Self {
+            timestamp: now,
+            message,
+        }
+    }
+}
+
+impl Display for Event {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "event: {}, emitted: {}", self.message, self.timestamp)
+    }
+}

@@ -42,15 +42,8 @@ use tari_utilities::ByteArray;
 use crate::{
     packager::LoadedTemplate,
     runtime::{
-        AuthParams,
-        AuthorizationScope,
-        ConsensusContext,
-        FunctionIdent,
-        Runtime,
-        RuntimeInterfaceImpl,
-        RuntimeModule,
-        RuntimeState,
-        StateTracker,
+        AuthParams, AuthorizationScope, ConsensusContext, FunctionIdent, Runtime, RuntimeInterfaceImpl, RuntimeModule,
+        RuntimeState, StateTracker,
     },
     state_store::memory::MemoryStateStore,
     traits::Invokable,
@@ -247,6 +240,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             },
             Instruction::EmitLog { level, message } => {
                 runtime.interface().emit_log(level, message)?;
+                Ok(InstructionResult::empty())
+            },
+            Instruction::EmitEvent { message } => {
+                runtime.interface().emit_event(message)?;
                 Ok(InstructionResult::empty())
             },
             Instruction::ClaimBurn { claim } => {

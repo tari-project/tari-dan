@@ -34,6 +34,7 @@ use tari_engine_types::{
     base_layer_hashing::ownership_proof_hasher,
     commit_result::FinalizeResult,
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
+    events::Event,
     fees::FeeReceipt,
     logs::LogEntry,
     resource_container::ResourceContainer,
@@ -132,6 +133,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("set_current_runtime_state")?;
         self.tracker.set_current_runtime_state(state);
+        Ok(())
+    }
+
+    fn emit_event(&self, message: String) -> Result<(), RuntimeError> {
+        self.invoke_modules_on_runtime_call("emit_event")?;
+
+        self.tracker.add_event(Event::new(message));
         Ok(())
     }
 
@@ -803,9 +811,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         let (result, fee_receipt) = self.tracker.finalize(substates_to_persist)?;
         let logs = self.tracker.take_logs();
+        let events = self.tracker.take_events();
         let finalized = FinalizeResult::new(
             self.tracker.transaction_hash(),
             logs,
+            events,
             result,
             fee_receipt.to_cost_breakdown(),
         );

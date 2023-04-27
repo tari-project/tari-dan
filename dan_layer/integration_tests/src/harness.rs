@@ -10,12 +10,8 @@ use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::{vote_message::VoteMessage, HotStuffMessage, Payload, TariDanPayload},
     services::{
-        epoch_manager::EpochManager,
-        leader_strategy::LeaderStrategy,
-        NodeIdentitySigningService,
-        PayloadProcessor,
-        PayloadProcessorError,
-        SigningService,
+        epoch_manager::EpochManager, leader_strategy::LeaderStrategy, NodeIdentitySigningService, PayloadProcessor,
+        PayloadProcessorError, SigningService,
     },
     workers::{
         hotstuff_waiter::{HotStuffWaiter, RecoveryMessage},
@@ -64,6 +60,7 @@ impl PayloadProcessor<TariDanPayload> for PayloadProcessorListener {
         Ok(ExecuteResult {
             finalize: FinalizeResult::new(
                 Hash::default(),
+                vec![],
                 vec![],
                 TransactionResult::Accept(SubstateDiff::new()),
                 FeeCostBreakdown {

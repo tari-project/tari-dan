@@ -184,6 +184,10 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.log_level = level.to_string();
                 result.log_message = message;
             },
+            Instruction::EmitEvent { message } => {
+                result.instruction_type = 102;
+                result.event_message = message;
+            },
             Instruction::ClaimBurn { claim } => {
                 result.instruction_type = 4;
                 result.claim_burn_commitment_address = claim.output_address.to_vec();

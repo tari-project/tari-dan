@@ -47,6 +47,7 @@ message Instruction {
     EMIT_LOG = 3;
     CLAIM_BURN = 4;
     CREATE_FREE_TEST_COINS = 101;
+    EMIT_EVENT = 102;
   }
   InstructionType instruction_type = 1;
 
@@ -76,6 +77,9 @@ message Instruction {
   // DEBUGGING: Test coins
   uint64 create_free_test_coins_amount = 101;
   bytes create_free_test_coins_private_key = 102;
+
+  // Events
+  string event_message = 200;
 }
 
 message Arg {

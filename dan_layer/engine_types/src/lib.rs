@@ -5,6 +5,7 @@ pub mod base_layer_hashing;
 pub mod bucket;
 pub mod commit_result;
 pub mod confidential;
+pub mod events;
 pub mod fees;
 pub mod hashing;
 pub mod instruction;
