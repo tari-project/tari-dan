@@ -3,9 +3,13 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+mod walker;
+pub use walker::*;
+
 extern crate alloc;
 use alloc::collections::BTreeMap;
 
+pub use ciborium::value::Value;
 use ciborium::{de::from_reader, ser::into_writer};
 pub use serde;
 use serde::{de::DeserializeOwned, Serialize};
@@ -30,6 +34,12 @@ impl std::fmt::Display for BorError {
 impl std::error::Error for BorError {
     fn description(&self) -> &str {
         &self.0
+    }
+}
+
+impl From<ciborium::value::Error> for BorError {
+    fn from(value: ciborium::value::Error) -> Self {
+        BorError(format!("{}", value))
     }
 }
 

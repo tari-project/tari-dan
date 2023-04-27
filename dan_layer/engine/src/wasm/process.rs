@@ -22,7 +22,7 @@
 
 use serde::{de::DeserializeOwned, Serialize};
 use tari_bor::{decode_exact, encode, encode_into, encode_with_len};
-use tari_engine_types::instruction_result::InstructionResult;
+use tari_engine_types::{indexed_value::IndexedValue, instruction_result::InstructionResult};
 use tari_template_abi::{CallInfo, EngineOp};
 use tari_template_lib::{
     args::{
@@ -241,8 +241,11 @@ impl Invokable for WasmProcess {
                 .set_last_instruction_output(Some(raw.clone()))?;
         }
 
+        let value = IndexedValue::from_raw(&raw)?;
+
         Ok(InstructionResult {
             raw,
+            value,
             return_type: func_def.output.clone(),
         })
     }
