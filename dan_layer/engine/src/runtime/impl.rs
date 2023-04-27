@@ -43,28 +43,10 @@ use tari_engine_types::{
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
-        BucketAction,
-        BucketRef,
-        CallerContextAction,
-        ComponentAction,
-        ComponentRef,
-        ConfidentialRevealArg,
-        ConsensusAction,
-        CreateComponentArg,
-        CreateResourceArg,
-        GenerateRandomAction,
-        InvokeResult,
-        LogLevel,
-        MintResourceArg,
-        NonFungibleAction,
-        PayFeeArg,
-        ResourceAction,
-        ResourceGetNonFungibleArg,
-        ResourceRef,
-        ResourceUpdateNonFungibleDataArg,
-        VaultAction,
-        VaultWithdrawArg,
-        WorkspaceAction,
+        BucketAction, BucketRef, CallerContextAction, ComponentAction, ComponentRef, ConfidentialRevealArg,
+        ConsensusAction, CreateComponentArg, CreateResourceArg, GenerateRandomAction, InvokeResult, LogLevel,
+        MintResourceArg, NonFungibleAction, PayFeeArg, ResourceAction, ResourceGetNonFungibleArg, ResourceRef,
+        ResourceUpdateNonFungibleDataArg, VaultAction, VaultWithdrawArg, WorkspaceAction,
     },
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
@@ -75,14 +57,8 @@ use tari_utilities::ByteArray;
 use crate::{
     packager::LoadedTemplate,
     runtime::{
-        engine_args::EngineArgs,
-        tracker::StateTracker,
-        AuthParams,
-        ConsensusContext,
-        RuntimeError,
-        RuntimeInterface,
-        RuntimeModule,
-        RuntimeState,
+        engine_args::EngineArgs, tracker::StateTracker, AuthParams, ConsensusContext, RuntimeError, RuntimeInterface,
+        RuntimeModule, RuntimeState,
     },
 };
 
@@ -95,6 +71,11 @@ pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = L
     sender_public_key: RistrettoPublicKey,
     modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
     fee_loan: Amount,
+}
+
+pub struct StateFinalize {
+    pub finalized: FinalizeResult,
+    pub fee_receipt: FeeReceipt,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterfaceImpl<TTemplateProvider> {
@@ -175,7 +156,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             LogLevel::Warn => log::Level::Warn,
             LogLevel::Info => log::Level::Info,
             LogLevel::Debug => log::Level::Debug,
-            LogLevel::Store => todo!("Implement me later"),
         };
 
         eprintln!("{}: {}", log_level, message);
@@ -787,12 +767,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let commitment = get_commitment_factory().commit(&private_key, &RistrettoSecretKey::from(amount));
         let resource = ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            Some((commitment.as_public_key().clone(), ConfidentialOutput {
-                commitment,
-                stealth_public_nonce: None,
-                encrypted_value: None,
-                minimum_value_promise: 0,
-            })),
+            Some((
+                commitment.as_public_key().clone(),
+                ConfidentialOutput {
+                    commitment,
+                    stealth_public_nonce: None,
+                    encrypted_value: None,
+                    minimum_value_promise: 0,
+                },
+            )),
             Amount::new(amount as i64),
         );
 
@@ -817,7 +800,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         self.tracker.reset_to_fee_checkpoint()
     }
 
-    fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError> {
+    fn finalize(&self) -> Result<StateFinalize, RuntimeError> {
         self.invoke_modules_on_runtime_call("finalize")?;
 
         // TODO: this should not be checked here because it will silently fail
@@ -841,7 +824,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             fee_receipt.to_cost_breakdown(),
         );
 
-        Ok((finalized, fee_receipt))
+        Ok(StateFinalize { finalized, fee_receipt })
     }
 }
 

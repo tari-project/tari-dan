@@ -24,7 +24,7 @@ mod auth;
 pub use auth::{AuthParams, AuthorizationScope};
 
 mod r#impl;
-pub use r#impl::RuntimeInterfaceImpl;
+pub use r#impl::{RuntimeInterfaceImpl, StateFinalize};
 
 mod consensus;
 pub use consensus::ConsensusContext;
@@ -48,23 +48,11 @@ mod working_state;
 use std::{fmt::Debug, sync::Arc};
 
 use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_engine_types::{commit_result::FinalizeResult, confidential::ConfidentialClaim, fees::FeeReceipt};
+use tari_engine_types::confidential::ConfidentialClaim;
 use tari_template_lib::{
     args::{
-        Arg,
-        BucketAction,
-        BucketRef,
-        CallerContextAction,
-        ComponentAction,
-        ComponentRef,
-        ConsensusAction,
-        GenerateRandomAction,
-        InvokeResult,
-        LogLevel,
-        NonFungibleAction,
-        ResourceAction,
-        ResourceRef,
-        VaultAction,
+        Arg, BucketAction, BucketRef, CallerContextAction, ComponentAction, ComponentRef, ConsensusAction,
+        GenerateRandomAction, InvokeResult, LogLevel, NonFungibleAction, ResourceAction, ResourceRef, VaultAction,
         WorkspaceAction,
     },
     invoke_args,
@@ -131,7 +119,7 @@ pub trait RuntimeInterface: Send + Sync {
     fn create_free_test_coins(&self, amount: u64, private_key: RistrettoSecretKey) -> Result<(), RuntimeError>;
     fn fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
-    fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError>;
+    fn finalize(&self) -> Result<StateFinalize, RuntimeError>;
 
     fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError>;
 }

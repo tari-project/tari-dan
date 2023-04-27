@@ -84,8 +84,8 @@ impl ExecuteResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinalizeResult {
     pub transaction_hash: Hash,
-    pub logs: Vec<LogEntry>,
     pub events: Vec<Event>,
+    pub logs: Vec<LogEntry>,
     // TOOD: Remove from FinalizeResult
     pub execution_results: Vec<InstructionResult>,
     pub result: TransactionResult,
@@ -103,9 +103,9 @@ impl FinalizeResult {
         Self {
             transaction_hash,
             logs,
+            events,
             execution_results: Vec::new(),
             result,
-            events,
             cost_breakdown: Some(cost_breakdown),
         }
     }
