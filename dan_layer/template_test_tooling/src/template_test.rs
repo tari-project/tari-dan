@@ -54,7 +54,7 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use crate::track_calls::TrackCallsModule;
 
 pub fn test_faucet_component() -> ComponentAddress {
-    ComponentAddress::new(Hash::from_array([0xfau8; 32]), Hash::default())
+    ComponentAddress::new(Hash::from_array([0xfau8; 32]))
 }
 
 pub struct TemplateTest {

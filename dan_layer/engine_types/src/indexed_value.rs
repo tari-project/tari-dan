@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, BorError, FromTagAndValue, ValueVisitor};
 use tari_template_lib::{
-    models::{BinaryTag, BucketId, ComponentAddressContent, NonFungibleAddressContents, ResourceAddress, VaultId},
+    models::{BinaryTag, BucketId, NonFungibleAddressContents, ResourceAddress, VaultId},
     prelude::{ComponentAddress, Metadata, NonFungibleAddress},
     Hash,
 };
@@ -55,7 +55,7 @@ impl FromTagAndValue for TariValue {
         let tag = BinaryTag::from_u64(tag).ok_or(ValueVisitorError::InvalidTag(tag))?;
         match tag {
             BinaryTag::ComponentAddress => {
-                let component_address: ComponentAddressContent = value.deserialized().map_err(BorError::from)?;
+                let component_address: Hash = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::ComponentAddress(component_address.into()))
             },
             BinaryTag::BucketId => {
@@ -157,10 +157,6 @@ mod tests {
             .result()
     }
 
-    fn new_component_address() -> ComponentAddress {
-        ComponentAddress::new(new_hash(), new_hash())
-    }
-
     #[derive(Serialize, Deserialize)]
     struct SubStruct {
         buckets: Vec<BucketId>,
@@ -181,11 +177,7 @@ mod tests {
 
     #[test]
     fn it_extracts_known_types_from_binary_data() {
-        let addrs: [ComponentAddress; 3] = [
-            new_component_address(),
-            new_component_address(),
-            new_component_address(),
-        ];
+        let addrs: [ComponentAddress; 3] = [new_hash().into(), new_hash().into(), new_hash().into()];
         let resx_addr = ResourceAddress::new(new_hash());
 
         let data = TestStruct {

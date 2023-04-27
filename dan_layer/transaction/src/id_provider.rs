@@ -78,7 +78,13 @@ impl IdProvider {
     ) -> Result<ComponentAddress, IdProviderError> {
         // if the component_id is not specified by the caller, then it will be random
         let component_id = component_id.unwrap_or(self.new_id()?);
-        Ok(ComponentAddress::new(template_address, component_id))
+
+        let hash = hasher(EngineHashDomainLabel::ComponentAddress)
+            .chain(&template_address)
+            .chain(&component_id)
+            .result();
+
+        Ok(ComponentAddress::new(hash))
     }
 
     pub fn new_address_hash(&self) -> Result<Hash, IdProviderError> {

@@ -127,10 +127,7 @@ impl SubstateAddress {
 
     pub fn to_canonical_hash(&self) -> Hash {
         match self {
-            SubstateAddress::Component(address) => hasher(EngineHashDomainLabel::ComponentAddress)
-                .chain(address.template_address())
-                .chain(&address.component_id())
-                .result(),
+            SubstateAddress::Component(address) => *address.hash(),
             SubstateAddress::Resource(address) => *address.hash(),
             SubstateAddress::Vault(id) => *id.hash(),
             SubstateAddress::UnclaimedConfidentialOutput(address) => *address.hash(),
@@ -492,7 +489,7 @@ mod tests {
 
         #[test]
         fn it_parses_valid_substate_addresses() {
-            SubstateAddress::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
+            SubstateAddress::from_str("component_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64")
                 .unwrap()
                 .as_component_address()
                 .unwrap();
