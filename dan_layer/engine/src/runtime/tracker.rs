@@ -51,8 +51,17 @@ use tari_template_lib::{
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{
-        Amount, BucketId, ComponentAddress, ComponentBody, ComponentHeader, Metadata, NonFungibleAddress,
-        NonFungibleIndexAddress, ResourceAddress, UnclaimedConfidentialOutputAddress, VaultId,
+        Amount,
+        BucketId,
+        ComponentAddress,
+        ComponentBody,
+        ComponentHeader,
+        Metadata,
+        NonFungibleAddress,
+        NonFungibleIndexAddress,
+        ResourceAddress,
+        UnclaimedConfidentialOutputAddress,
+        VaultId,
     },
     resource::ResourceType,
     Hash,
@@ -97,7 +106,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     }
 
     pub fn add_event(&self, event: Event) {
-        self.write_with(|state| state.events.push(event));
+        self.write_with(|state| {
+            state.events.push(event);
+        })
     }
 
     pub fn add_log(&self, log: LogEntry) {
@@ -105,10 +116,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     }
 
     pub fn take_events(&self) -> Vec<Event> {
-        self.write_with(|state| {
-            panic!("FLAG: state events = {:?}", state.events);
-            mem::take(&mut state.events)
-        })
+        self.write_with(|state| mem::take(&mut state.events))
     }
 
     pub fn take_logs(&self) -> Vec<LogEntry> {
@@ -605,11 +613,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn take_substates_to_persist(&self) -> HashMap<SubstateAddress, SubstateValue> {
         self.write_with(|state| {
-            let total_items = state.new_resources.len()
-                + state.new_components.len()
-                + state.new_vaults.len()
-                + state.new_non_fungibles.len()
-                + state.new_non_fungible_indexes.len();
+            let total_items = state.new_resources.len() +
+                state.new_components.len() +
+                state.new_vaults.len() +
+                state.new_non_fungibles.len() +
+                state.new_non_fungible_indexes.len();
             let mut up_states = HashMap::with_capacity(total_items);
 
             for (component_addr, substate) in state.new_components.drain() {

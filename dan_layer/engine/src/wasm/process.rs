@@ -26,8 +26,19 @@ use tari_engine_types::instruction_result::InstructionResult;
 use tari_template_abi::{CallInfo, EngineOp};
 use tari_template_lib::{
     args::{
-        Arg, BucketInvokeArg, CallerContextInvokeArg, ComponentInvokeArg, ConsensusInvokeArg, EmitEventArg, EmitLogArg,
-        GenerateRandomInvokeArg, LogLevel, NonFungibleInvokeArg, ResourceInvokeArg, VaultInvokeArg, WorkspaceInvokeArg,
+        Arg,
+        BucketInvokeArg,
+        CallerContextInvokeArg,
+        ComponentInvokeArg,
+        ConsensusInvokeArg,
+        EmitEventArg,
+        EmitLogArg,
+        GenerateRandomInvokeArg,
+        LogLevel,
+        NonFungibleInvokeArg,
+        ResourceInvokeArg,
+        VaultInvokeArg,
+        WorkspaceInvokeArg,
     },
     AbiContext,
 };

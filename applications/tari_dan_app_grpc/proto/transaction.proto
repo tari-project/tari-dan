@@ -46,8 +46,8 @@ message Instruction {
     PUT_OUTPUT_IN_WORKSPACE = 2;
     EMIT_LOG = 3;
     CLAIM_BURN = 4;
+    EMIT_EVENT = 5;
     CREATE_FREE_TEST_COINS = 101;
-    EMIT_EVENT = 102;
   }
   InstructionType instruction_type = 1;
 
@@ -74,12 +74,12 @@ message Instruction {
   bytes claim_burn_public_key = 13;
   ConfidentialWithdrawProof claim_burn_withdraw_proof = 14;
 
+  // Events
+  string event_message = 15;
+
   // DEBUGGING: Test coins
   uint64 create_free_test_coins_amount = 101;
   bytes create_free_test_coins_private_key = 102;
-
-  // Events
-  string event_message = 200;
 }
 
 message Arg {

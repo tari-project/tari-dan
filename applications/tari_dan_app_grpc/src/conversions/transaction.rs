@@ -185,7 +185,7 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.log_message = message;
             },
             Instruction::EmitEvent { message } => {
-                result.instruction_type = 102;
+                result.instruction_type = 5;
                 result.event_message = message;
             },
             Instruction::ClaimBurn { claim } => {

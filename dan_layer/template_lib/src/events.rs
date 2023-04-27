@@ -25,10 +25,7 @@ use tari_template_abi::{call_engine, EngineOp};
 use crate::args::EmitEventArg;
 
 pub fn emit_event<T: Into<String>>(message: T) {
-    call_engine::<_, ()>(
-        EngineOp::EmitEvent,
-        &EmitEventArg {
-            message: message.into(),
-        },
-    );
+    call_engine::<_, ()>(EngineOp::EmitEvent, &EmitEventArg {
+        message: message.into(),
+    });
 }

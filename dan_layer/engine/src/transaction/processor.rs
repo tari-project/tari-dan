@@ -42,8 +42,15 @@ use tari_utilities::ByteArray;
 use crate::{
     packager::LoadedTemplate,
     runtime::{
-        AuthParams, AuthorizationScope, ConsensusContext, FunctionIdent, Runtime, RuntimeInterfaceImpl, RuntimeModule,
-        RuntimeState, StateTracker,
+        AuthParams,
+        AuthorizationScope,
+        ConsensusContext,
+        FunctionIdent,
+        Runtime,
+        RuntimeInterfaceImpl,
+        RuntimeModule,
+        RuntimeState,
+        StateTracker,
     },
     state_store::memory::MemoryStateStore,
     traits::Invokable,
