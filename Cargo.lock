@@ -1280,10 +1280,9 @@ dependencies = [
 [[package]]
 name = "ciborium"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0c137568cc60b904a7724001b35ce2630fd00d5d84805fbb608ab89509d788f"
+source = "git+https://github.com/enarx/ciborium.git#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
 dependencies = [
- "ciborium-io",
+ "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git)",
  "ciborium-ll",
  "serde",
 ]
@@ -1295,12 +1294,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "346de753af073cc87b52b2083a506b38ac176a44cfb05497b622e27be899b369"
 
 [[package]]
+name = "ciborium-io"
+version = "0.2.0"
+source = "git+https://github.com/enarx/ciborium.git#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+
+[[package]]
 name = "ciborium-ll"
 version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "213030a2b5a4e0c0892b6652260cf6ccac84827b83a85a534e178e3906c4cf1b"
+source = "git+https://github.com/enarx/ciborium.git#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
 dependencies = [
- "ciborium-io",
+ "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git)",
  "half",
 ]
 
@@ -6909,7 +6912,7 @@ name = "tari_bor"
 version = "0.50.0-pre.0"
 dependencies = [
  "ciborium",
- "ciborium-io",
+ "ciborium-io 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
 ]
 
@@ -7666,7 +7669,6 @@ dependencies = [
  "serde",
  "tari_bor",
  "tari_common_types 0.50.0-pre.0",
- "tari_core",
  "tari_crypto",
  "tari_template_abi",
  "tari_template_lib",
@@ -7694,7 +7696,7 @@ dependencies = [
  "axum-jrpc",
  "chrono",
  "ciborium",
- "ciborium-io",
+ "ciborium-io 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "clap 3.2.23",
  "config",
  "diesel",

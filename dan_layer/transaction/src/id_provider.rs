@@ -91,7 +91,7 @@ impl IdProvider {
 
     pub fn new_bucket_id(&self) -> BucketId {
         // Buckets are not saved to shards, so should not increment the hashes
-        self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed).into()
     }
 
     pub fn new_uuid(&self) -> Result<[u8; 32], IdProviderError> {

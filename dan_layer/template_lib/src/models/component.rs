@@ -32,18 +32,18 @@ use serde::{Deserialize, Serialize};
 use super::BinaryTag;
 use crate::{models::TemplateAddress, prelude::AccessRules, Hash};
 
-const TAG: u64 = BinaryTag::ComponentAddress as u64;
+const TAG: u64 = BinaryTag::ComponentAddress.as_u64();
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ComponentAddress(Required<ComponentAddressInner, TAG>);
+pub struct ComponentAddress(Required<ComponentAddressContent, TAG>);
 
 impl ComponentAddress {
     pub fn new(template_address: TemplateAddress, component_id: Hash) -> Self {
-        let inner = ComponentAddressInner {
+        let inner = ComponentAddressContent {
             template_address,
             component_id,
         };
-        Self(Required::<ComponentAddressInner, TAG>(inner))
+        Self(Required::<ComponentAddressContent, TAG>(inner))
     }
 
     pub fn template_address(&self) -> &TemplateAddress {
@@ -56,9 +56,15 @@ impl ComponentAddress {
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
-struct ComponentAddressInner {
+pub struct ComponentAddressContent {
     template_address: TemplateAddress,
     component_id: Hash,
+}
+
+impl From<ComponentAddressContent> for ComponentAddress {
+    fn from(content: ComponentAddressContent) -> Self {
+        Self(Required(content))
+    }
 }
 
 impl Display for ComponentAddress {
