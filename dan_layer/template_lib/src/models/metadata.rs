@@ -48,6 +48,12 @@ impl Metadata {
     }
 }
 
+impl From<HashMap<String, String>> for Metadata {
+    fn from(value: HashMap<String, String>) -> Self {
+        Self(Required(value))
+    }
+}
+
 impl Default for Metadata {
     fn default() -> Self {
         Self::new()

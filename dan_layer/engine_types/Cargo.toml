@@ -6,7 +6,6 @@ edition = "2021"
 
 [dependencies]
 tari_bor = { path = "../tari_bor" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", default-features = false, features = ["transactions"] }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_crypto = { version="0.16.10", features = ["borsh"] }
 tari_template_abi = { path = "../template_abi", features = ["std"] }

@@ -53,7 +53,9 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use crate::track_calls::TrackCallsModule;
 
-pub const TEST_FAUCET_COMPONENT: ComponentAddress = ComponentAddress::new(Hash::from_array([0xfau8; 32]));
+pub fn test_faucet_component() -> ComponentAddress {
+    ComponentAddress::new(Hash::from_array([0xfau8; 32]))
+}
 
 pub struct TemplateTest {
     package: Arc<Package>,
@@ -146,7 +148,7 @@ impl TemplateTest {
         })
         .unwrap();
         tx.set_state(
-            &SubstateAddress::Component(TEST_FAUCET_COMPONENT),
+            &SubstateAddress::Component(test_faucet_component()),
             Substate::new(0, ComponentHeader {
                 template_address: test_faucet_template_address,
                 module_name: "TestFaucet".to_string(),
@@ -312,7 +314,7 @@ impl TemplateTest {
         let result = self
             .try_execute_and_commit(
                 Transaction::builder()
-                    .call_method(TEST_FAUCET_COMPONENT, "take_free_coins", args![])
+                    .call_method(test_faucet_component(), "take_free_coins", args![])
                     .put_last_instruction_output_on_workspace("bucket")
                     .call_function(self.get_template_address("Account"), "create_with_bucket", args![
                         &owner_proof,

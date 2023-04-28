@@ -71,8 +71,23 @@ impl IdProvider {
             .into())
     }
 
-    pub fn new_component_address(&self) -> Result<ComponentAddress, IdProviderError> {
-        Ok(self.new_id()?.into())
+    pub fn new_component_address(
+        &self,
+        template_address: TemplateAddress,
+        component_id: Option<Hash>,
+    ) -> Result<ComponentAddress, IdProviderError> {
+        // if the component_id is not specified by the caller, then it will be random
+        let component_id = match component_id {
+            Some(hash) => hash,
+            None => self.new_id()?,
+        };
+
+        let hash = hasher(EngineHashDomainLabel::ComponentAddress)
+            .chain(&template_address)
+            .chain(&component_id)
+            .result();
+
+        Ok(ComponentAddress::new(hash))
     }
 
     pub fn new_address_hash(&self) -> Result<Hash, IdProviderError> {
@@ -85,7 +100,7 @@ impl IdProvider {
 
     pub fn new_bucket_id(&self) -> BucketId {
         // Buckets are not saved to shards, so should not increment the hashes
-        self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed).into()
     }
 
     pub fn new_uuid(&self) -> Result<[u8; 32], IdProviderError> {

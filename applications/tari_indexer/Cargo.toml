@@ -38,9 +38,12 @@ tari_validator_node_client = { path = "../../clients/validator_node_client" }
 anyhow = "1.0.53"
 async-trait = "0.1.50"
 axum = "0.6.0"
+async-graphql = "5.0.7"
+async-graphql-axum = "5.0.7"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
 chrono = "0.4.22"
-ciborium = { version = "0.2.0" }
+#ciborium = { version = "0.2.0" }
+ciborium = { git = "https://github.com/enarx/ciborium.git", ref = "ac38b3dddeadf81f93cc8e58689ea92dc46a8e56", default-features = false }
 ciborium-io = { version = "0.2.0" }
 clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"

@@ -78,6 +78,8 @@ pub struct IndexerConfig {
     pub p2p: P2pConfig,
     /// JSON-RPC address of the indexer application
     pub json_rpc_address: Option<SocketAddr>,
+    /// GraphQL port of the indexer application
+    pub graphql_address: Option<SocketAddr>,
     /// The address of the HTTP UI
     pub http_ui_address: Option<SocketAddr>,
     /// Substate addresses to keep watching
@@ -122,6 +124,7 @@ impl Default for IndexerConfig {
             data_dir: PathBuf::from("data/indexer"),
             p2p,
             json_rpc_address: Some("127.0.0.1:18300".parse().unwrap()),
+            graphql_address: Some("127.0.0.1:18301".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:15000".parse().unwrap()),
             address_watchlist: vec![],
             dan_layer_scanning_internal: Duration::from_secs(10),

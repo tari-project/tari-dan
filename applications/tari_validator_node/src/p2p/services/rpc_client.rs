@@ -197,7 +197,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
     // }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TariCommsValidatorNodeClientFactory {
     connectivity: ConnectivityRequester,
 }

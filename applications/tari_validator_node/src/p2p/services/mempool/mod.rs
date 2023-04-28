@@ -41,6 +41,8 @@ mod service;
 mod validator;
 pub use validator::{FeeTransactionValidator, TemplateExistsValidator};
 
+use crate::dry_run_transaction_processor::DryRunTransactionProcessorError;
+
 #[derive(Error, Debug)]
 pub enum MempoolError {
     #[error("Epoch Manager Error: {0}")]
@@ -53,6 +55,8 @@ pub enum MempoolError {
     RequestCancelled,
     #[error("No fee instructions")]
     NoFeeInstructions,
+    #[error("DryRunTransactionProcessor Error: {0}")]
+    DryRunTransactionProcessorError(#[from] DryRunTransactionProcessorError),
 }
 
 impl From<SendError<MempoolRequest>> for MempoolError {

@@ -31,14 +31,14 @@ use serde::{Deserialize, Serialize};
 use super::BinaryTag;
 use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
 
-const TAG: u64 = BinaryTag::ComponentAddress as u64;
+const TAG: u64 = BinaryTag::ComponentAddress.as_u64();
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct ComponentAddress(Required<Hash, TAG>);
 
 impl ComponentAddress {
     pub const fn new(address: Hash) -> Self {
-        Self(Required::<Hash, TAG>(address))
+        Self(Required(address))
     }
 
     pub fn hash(&self) -> &Hash {

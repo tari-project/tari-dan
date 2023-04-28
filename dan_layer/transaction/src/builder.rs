@@ -39,7 +39,6 @@ pub struct TransactionBuilder {
     sender_public_key: Option<RistrettoPublicKey>,
     new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
     new_resources: Vec<(TemplateAddress, String)>,
-    new_components: Vec<(TemplateAddress, u32)>,
     new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
 }
 
@@ -52,7 +51,6 @@ impl TransactionBuilder {
             sender_public_key: None,
             meta: TransactionMeta::default(),
             new_resources: Vec::new(),
-            new_components: Vec::new(),
             new_non_fungible_outputs: vec![],
             new_non_fungible_index_outputs: vec![],
         }
@@ -188,11 +186,6 @@ impl TransactionBuilder {
 
     pub fn with_new_resources(mut self, new_resources: Vec<(TemplateAddress, String)>) -> Self {
         self.new_resources = new_resources;
-        self
-    }
-
-    pub fn with_new_components(mut self, new_components: Vec<(TemplateAddress, u32)>) -> Self {
-        self.new_components = new_components;
         self
     }
 

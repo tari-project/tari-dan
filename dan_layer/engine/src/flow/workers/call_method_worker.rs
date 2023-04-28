@@ -1,7 +1,7 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, convert::TryFrom};
+use std::{collections::HashMap, str::FromStr};
 
 use d3ne::{Node, OutputValue, Worker};
 use tari_dan_common_types::services::template_provider::TemplateProvider;
@@ -32,8 +32,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             .cloned()
             .or(node.get_data("self")?.map(OutputValue::Bytes))
             .ok_or_else(|| anyhow::anyhow!("could not find arg `self`"))?;
+        let component_address = String::from_utf8(component_address.as_bytes()?.to_vec())?;
+        let component_address = ComponentAddress::from_str(&component_address)?;
         dbg!(&component_address);
-        let component_address = ComponentAddress::try_from(component_address.as_bytes()?.to_vec())?;
 
         let method_name = &node
             .get_data::<String>("method")?

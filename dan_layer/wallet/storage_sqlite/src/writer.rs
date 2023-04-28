@@ -41,7 +41,13 @@ use tari_template_lib::{models::Amount, Hash};
 use tari_transaction::Transaction;
 use tari_utilities::hex::Hex;
 
-use crate::{diesel::ExpressionMethods, models, reader::ReadTransaction, serialization::serialize_json};
+use crate::{
+    diesel::ExpressionMethods,
+    models,
+    reader::ReadTransaction,
+    schema::auth_status,
+    serialization::serialize_json,
+};
 
 const LOG_TARGET: &str = "auth::tari::dan::wallet_sdk::storage_sqlite::writer";
 
@@ -67,6 +73,34 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     fn rollback(mut self) -> Result<(), WalletStorageError> {
         self.transaction.rollback()?;
+        Ok(())
+    }
+
+    fn jwt_add_empty_token(&mut self) -> Result<u64, WalletStorageError> {
+        diesel::insert_into(auth_status::table)
+            .values((auth_status::user_decided.eq(false), auth_status::granted.eq(false)))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("jwt_add_empty_token", e))?;
+        let last_inserted_id: i32 =
+            diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>("last_insert_rowid()"))
+                .get_result(self.connection())
+                .unwrap();
+        Ok(last_inserted_id as u64)
+    }
+
+    fn jwt_store_decision(&mut self, id: u64, permissions_token: Option<String>) -> Result<(), WalletStorageError> {
+        // let values = match token {
+        //     Some(token) => (auth_status::user_decided.eq(true),auth_status::granted.eq(true),auth_status::token)
+        // }
+        diesel::update(auth_status::table)
+            .set((
+                auth_status::user_decided.eq(true),
+                auth_status::granted.eq(permissions_token.is_some()),
+                permissions_token.map(|token| auth_status::token.eq(token)),
+            ))
+            .filter(auth_status::id.eq(id as i32))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("jwt_store_decision", e))?;
         Ok(())
     }
 
