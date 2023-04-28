@@ -21,7 +21,7 @@ pub fn handle_start(
     value: JsonRpcExtractor,
     token: Option<String>,
     shutdown_signal: Arc<ShutdownSignal>,
-    addresses: Arc<(SocketAddr, SocketAddr)>,
+    addresses: (SocketAddr, SocketAddr),
 ) -> JrpcResult {
     let answer_id = value.get_answer_id();
     context
@@ -40,8 +40,8 @@ pub fn handle_start(
         })?;
     let webrtc_start_request = value.parse_params::<WebRtcStartRequest>()?;
     let shutdown_signal = (*shutdown_signal).clone();
-    let (preferred_address, signaling_server_address) = *addresses.clone();
     tokio::spawn(async move {
+        let (preferred_address, signaling_server_address) = addresses;
         webrtc_start_session(
             webrtc_start_request.signaling_server_token,
             webrtc_start_request.permissions_token,
