@@ -99,7 +99,7 @@ Once the template is registered on the base layer and sufficiently mined, you sh
 
 ### Get airdropped base layer (Mino)Tari tokens to pay for fees
 
-Before the user can start submitting transactions to the network, it has to obtain base layer (Mino)Tari tokens. At the moment, the
+Before the user can start submitting transactions to the network, it has to obtain base layer (Mino)Tari tokens to pay for fees. At the moment, the
 simplest way to do so is to request an airdrop of (free test) tokens from the network itself. In order to do so, the user should
 first create an account, using the tari wallet client, as follows:
 
@@ -118,10 +118,10 @@ above).
 
 ### Claiming L1 burn Tari on the DAN
 
-On the other hand, a user wishing to pay for fees in the Tari network, can claim these from MinoTari on the base layer.
-This process is more complex and tedious at the moment, but has the advantage that it will be process to be used when
-the mainnet is launched. To be able to claim burn Tari, it is necessary to first burn MinoTari, on the base layer. After
-burning tari on the Tari base layer, the client is prompted with the following data
+L1 Minotari coins are able to be burnt and claimed, the user may convert (1:1) these to Tari coins on the layer-2 network. This process is
+fairly complex and manual at the time of writing, but is planned to improve in the future. The first step is to burn Minotari base layer
+funds making sure to include a claim public key. A private claim key must be known to claim the funds on the layer-2 Tari network. Burning
+yields the following data:
 
 ```
 {
@@ -134,18 +134,8 @@ burning tari on the Tari base layer, the client is prompted with the following d
 }
 ```
 
-Notice that, to burn MinoTari, the user had to pass a claim public key
-
-```
-"claim_public_key": <CLAIM_PUBLIC_KEY>
-```
-
-As in the previous section, the user creates an account on the Tari network, via the wallet cli. After an account is created
-with 
-
-```
-"account_name": <ACCOUNT_NAME>
-```
+The user must create an account on the Tari network using the `accounts create` wallet CLI command prior to claiming. See the previous
+section for details on creating an account. The public key of this account should be used as the claim public key when burning funds.
 
 the user can then claim burn Tari on the second layer, as follows: create a new `.json` file, with path
 `<JSON_FILE_TO_RETRIEVE_BURN_TARI>`
