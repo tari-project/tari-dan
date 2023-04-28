@@ -100,7 +100,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
 
 pub async fn get_walletd_client(port: u16) -> WalletDaemonClient {
     let endpoint: Url = Url::parse(&format!("http://127.0.0.1:{}", port)).unwrap();
-    WalletDaemonClient::connect(endpoint).unwrap()
+    WalletDaemonClient::connect(endpoint, None).unwrap()
 }
 
 impl DanWalletDaemonProcess {

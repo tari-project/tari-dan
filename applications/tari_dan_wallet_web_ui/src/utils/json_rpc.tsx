@@ -58,8 +58,8 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
   });
   let json = await response.json();
   if (json.error) {
-      console.error(json.error);
-      throw json.error;
+    console.error(json.error);
+    throw json.error;
   }
   return json.result;
 }
@@ -122,8 +122,8 @@ export const transactionsWaitResult = (hash: string, timeoutSecs: number | null)
 
 // accounts
 export const accountsClaimBurn = (account: string, claimProof: any, fee: number) =>
-    // Fees are passed as strings because Amount is tagged
-  jsonRpc("accounts.claim_burn", { account, claim_proof: claimProof, fee : fee});
+  // Fees are passed as strings because Amount is tagged
+  jsonRpc("accounts.claim_burn", { account, claim_proof: claimProof, fee: fee });
 export const accountsCreate = (
   accountName: string | undefined,
   signingKeyIndex: number | undefined,

@@ -23,6 +23,7 @@ struct Request {
     id: u64,
     method: String,
     params: String,
+    token: String,
 }
 
 #[derive(Serialize, Debug)]
@@ -66,7 +67,7 @@ fn get_rtc_configuration() -> RTCConfiguration {
 
 pub async fn webrtc_start_session(
     signaling_server_token: String,
-    local_jrpc_token: String,
+    permissions_token: String,
     address: SocketAddr,
     signaling_server_address: SocketAddr,
     shutdown_signal: ShutdownSignal,
@@ -75,22 +76,30 @@ pub async fn webrtc_start_session(
 
     let pc = api.new_peer_connection(get_rtc_configuration()).await?;
     pc.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
-        let local_jrpc_token = local_jrpc_token.clone();
+        let permissions_token = permissions_token.clone();
         Box::pin(async move {
             let d_on_message = d.clone();
             d.on_message(Box::new(move |msg: DataChannelMessage| {
                 let d_on_message = d_on_message.clone();
-                let local_jrpc_token = local_jrpc_token.clone();
+                let permissions_token = permissions_token.clone();
                 Box::pin(async move {
                     let msg_str = String::from_utf8(msg.data.to_vec()).unwrap();
                     let request = serde_json::from_str::<Request>(&msg_str).unwrap();
-                    let result = handle_data(address, Some(local_jrpc_token), request.method, request.params)
-                        .await
-                        .unwrap();
-                    let response = Response {
-                        payload: result.to_string(),
-                        id: request.id,
-                    };
+                    let response;
+                    if request.method == "get.token" {
+                        response = Response {
+                            payload: serde_json::to_string(&permissions_token).unwrap(),
+                            id: request.id,
+                        };
+                    } else {
+                        let result = handle_data(address, Some(request.token), request.method, request.params)
+                            .await
+                            .unwrap();
+                        response = Response {
+                            payload: result.to_string(),
+                            id: request.id,
+                        };
+                    }
                     d_on_message
                         .send_text(serde_json::to_string(&response).unwrap())
                         .await

@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use tari_crypto::tari_utilities::SafePassword;
 use tari_dan_common_types::optional::Optional;
@@ -13,6 +13,7 @@ use crate::{
         confidential_crypto::ConfidentialCryptoApi,
         confidential_outputs::ConfidentialOutputsApi,
         config::{ConfigApi, ConfigApiError, ConfigKey},
+        jwt::JwtApi,
         key_manager::KeyManagerApi,
         substate::SubstatesApi,
         transaction::TransactionApi,
@@ -25,6 +26,8 @@ pub struct WalletSdkConfig {
     /// Encryption password for the wallet database. NOTE: Not yet implemented, this field is ignored
     pub password: Option<SafePassword>,
     pub validator_node_jrpc_endpoint: String,
+    pub jwt_duration: Duration,
+    pub jwt_secret_key: String,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +72,14 @@ impl<TStore: WalletStore> DanWalletSdk<TStore> {
 
     pub fn confidential_crypto_api(&self) -> ConfidentialCryptoApi {
         ConfidentialCryptoApi::new()
+    }
+
+    pub fn jwt_api(&self) -> JwtApi<'_, TStore> {
+        JwtApi::new(
+            &self.store,
+            self.config.jwt_duration,
+            self.config.jwt_secret_key.clone(),
+        )
     }
 
     pub fn confidential_outputs_api(&self) -> ConfidentialOutputsApi<'_, TStore> {

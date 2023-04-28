@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use futures::{future, future::Either};
 use log::*;
 use tari_dan_common_types::{optional::Optional, ShardId};
-use tari_dan_wallet_sdk::apis::key_manager;
+use tari_dan_wallet_sdk::apis::{jwt::JrpcPermission, key_manager};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{models::Amount, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
@@ -32,9 +32,11 @@ const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
 
 pub async fn handle_submit(
     context: &HandlerContext,
+    token: Option<String>,
     req: TransactionSubmitRequest,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let key_api = sdk.key_manager_api();
     // Fetch the key to sign the transaction
     // TODO: Ideally the SDK should take care of signing the transaction internally
@@ -107,8 +109,13 @@ pub async fn handle_submit(
 
 pub async fn handle_get(
     context: &HandlerContext,
+    token: Option<String>,
     req: TransactionGetRequest,
 ) -> Result<TransactionGetResponse, anyhow::Error> {
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Admin])?;
     let transaction = context
         .wallet_sdk()
         .transaction_api()
@@ -126,8 +133,13 @@ pub async fn handle_get(
 
 pub async fn handle_get_result(
     context: &HandlerContext,
+    token: Option<String>,
     req: TransactionGetResultRequest,
 ) -> Result<TransactionGetResultResponse, anyhow::Error> {
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Admin])?;
     let transaction = context
         .wallet_sdk()
         .transaction_api()
@@ -146,8 +158,13 @@ pub async fn handle_get_result(
 
 pub async fn handle_wait_result(
     context: &HandlerContext,
+    token: Option<String>,
     req: TransactionWaitResultRequest,
 ) -> Result<TransactionWaitResultResponse, anyhow::Error> {
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Admin])?;
     let mut events = context.notifier().subscribe();
     let transaction = context
         .wallet_sdk()
