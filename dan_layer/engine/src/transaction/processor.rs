@@ -50,6 +50,7 @@ use crate::{
         RuntimeInterfaceImpl,
         RuntimeModule,
         RuntimeState,
+        StateFinalize,
         StateTracker,
     },
     state_store::memory::MemoryStateStore,
@@ -151,11 +152,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
         match instruction_result {
             Ok(execution_results) => {
-                let (mut finalize, fee_receipt) = runtime.interface().finalize()?;
+                let StateFinalize {
+                    mut finalized,
+                    fee_receipt,
+                } = runtime.interface().finalize()?;
 
                 if !fee_receipt.is_paid_in_full() && fee_receipt.total_fees_charged() > self.fee_loan {
                     return Ok(ExecuteResult {
-                        finalize,
+                        finalize: finalized,
                         transaction_failure: Some(RejectReason::FeesNotPaid(format!(
                             "Required fees {} but {} paid",
                             fee_receipt.total_fees_charged(),
@@ -164,10 +168,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                         fee_receipt: Some(fee_receipt),
                     });
                 }
-                finalize.execution_results = execution_results;
+                finalized.execution_results = execution_results;
 
                 Ok(ExecuteResult {
-                    finalize,
+                    finalize: finalized,
                     fee_receipt: Some(fee_receipt),
                     transaction_failure: None,
                 })
@@ -178,12 +182,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 // successful instructions are still charged even though the transaction failed.
                 runtime.interface().reset_to_fee_checkpoint()?;
                 // Finalize will now contain the fee payments and vault refunds only
-                let (mut finalize, fee_payment) = runtime.interface().finalize()?;
-                finalize.execution_results = fee_exec_result;
+                let StateFinalize {
+                    mut finalized,
+                    fee_receipt,
+                } = runtime.interface().finalize()?;
+                finalized.execution_results = fee_exec_result;
 
                 Ok(ExecuteResult {
-                    finalize,
-                    fee_receipt: Some(fee_payment),
+                    finalize: finalized,
+                    fee_receipt: Some(fee_receipt),
                     transaction_failure: Some(RejectReason::ExecutionFailure(err.to_string())),
                 })
             },

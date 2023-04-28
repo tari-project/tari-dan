@@ -20,51 +20,23 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::rust::fmt;
+use std::fmt::Display;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(i32)]
-pub enum EngineOp {
-    EmitLog = 0x00,
-    ComponentInvoke = 0x01,
-    ResourceInvoke = 0x02,
-    VaultInvoke = 0x03,
-    BucketInvoke = 0x04,
-    WorkspaceInvoke = 0x05,
-    NonFungibleInvoke = 0x06,
-    GenerateUniqueId = 0x07,
-    ConsensusInvoke = 0x08,
-    CallerContextInvoke = 0x09,
-    GenerateRandomInvoke = 0x0A,
-    EmitEvent = 0x0B,
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Event {
+    pub message: String,
 }
 
-impl EngineOp {
-    pub fn from_i32(value: i32) -> Option<Self> {
-        match value {
-            0x00 => Some(EngineOp::EmitLog),
-            0x01 => Some(EngineOp::ComponentInvoke),
-            0x02 => Some(EngineOp::ResourceInvoke),
-            0x03 => Some(EngineOp::VaultInvoke),
-            0x04 => Some(EngineOp::BucketInvoke),
-            0x05 => Some(EngineOp::WorkspaceInvoke),
-            0x06 => Some(EngineOp::NonFungibleInvoke),
-            0x07 => Some(EngineOp::GenerateUniqueId),
-            0x08 => Some(EngineOp::ConsensusInvoke),
-            0x09 => Some(EngineOp::CallerContextInvoke),
-            0x0A => Some(EngineOp::GenerateRandomInvoke),
-            0x0B => Some(EngineOp::EmitEvent),
-            _ => None,
-        }
-    }
-
-    pub fn as_i32(&self) -> i32 {
-        *self as i32
+impl Event {
+    pub fn new(message: String) -> Self {
+        Self { message }
     }
 }
 
-impl fmt::Display for EngineOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+impl Display for Event {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "event: {}", self.message)
     }
 }
