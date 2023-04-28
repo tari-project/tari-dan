@@ -79,9 +79,13 @@ const theme = createTheme({
       defaultProps: {
         disableRipple: true,
         sx: {
-          // borderRadius: '5px',
           minHeight: '55px',
           boxShadow: 'none',
+          textTransform: 'none',
+          fontSize: '1rem',
+          fontWeight: 500,
+          fontFamily: '"AvenirMedium", sans-serif',
+          letterSpacing: '0.5px',
         },
       },
     },
@@ -89,6 +93,24 @@ const theme = createTheme({
       defaultProps: {
         sx: {
           borderBottom: '1px solid #f5f5f5',
+        },
+      },
+    },
+    MuiDivider: {
+      defaultProps: {
+        sx: {
+          borderBottom: '1px solid #f5f5f5',
+        },
+      },
+    },
+    MuiFormControlLabel: {
+      defaultProps: {
+        sx: {
+          '& .MuiTypography-root': {
+            fontSize: '0.875rem',
+            lineHeight: '1.8rem',
+            color: 'rgba(0, 0, 0, 0.6)',
+          },
         },
       },
     },
