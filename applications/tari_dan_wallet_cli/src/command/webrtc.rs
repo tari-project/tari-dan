@@ -20,36 +20,35 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use clap::Subcommand;
+use clap::{Args, Subcommand};
+use tari_wallet_daemon_client::{types::WebRtcStartRequest, WalletDaemonClient};
 
-use self::{auth::AuthSubcommand, webrtc::WebRtcSubcommand};
-use crate::command::{
-    account::AccountsSubcommand,
-    key::KeysSubcommand,
-    proof::ProofsSubcommand,
-    transaction::TransactionSubcommand,
-};
-
-mod account;
-mod auth;
-mod key;
-mod proof;
-pub mod transaction;
-mod webrtc;
-
-#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Subcommand, Clone)]
-pub enum Command {
-    #[clap(subcommand, alias = "keys")]
-    Keys(KeysSubcommand),
-    #[clap(subcommand, alias = "transaction")]
-    Transactions(TransactionSubcommand),
-    #[clap(subcommand, alias = "account")]
-    Accounts(AccountsSubcommand),
-    #[clap(subcommand, alias = "proof")]
-    Proofs(ProofsSubcommand),
-    #[clap(subcommand, alias = "webrtc")]
-    WebRtc(WebRtcSubcommand),
-    #[clap(subcommand, alias = "auth")]
-    Auth(AuthSubcommand),
+pub enum WebRtcSubcommand {
+    #[clap(alias = "start")]
+    Start(StartArgs),
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct StartArgs {
+    pub signaling_server_token: String,
+    pub webrtc_permissions_token: String,
+}
+
+impl WebRtcSubcommand {
+    pub async fn handle(self, mut client: WalletDaemonClient) -> anyhow::Result<()> {
+        #[allow(clippy::enum_glob_use)]
+        use WebRtcSubcommand::*;
+        match self {
+            Start(args) => {
+                let _resp = client
+                    .webrtc_start(WebRtcStartRequest {
+                        signaling_server_token: args.signaling_server_token,
+                        permissions_token: args.webrtc_permissions_token,
+                    })
+                    .await?;
+            },
+        }
+        Ok(())
+    }
 }

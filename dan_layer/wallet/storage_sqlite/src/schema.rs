@@ -22,6 +22,15 @@ table! {
 }
 
 table! {
+    auth_status(id) {
+        id -> Integer,
+        user_decided -> Bool,
+        granted -> Bool,
+        token -> Text,
+    }
+}
+
+table! {
     key_manager_states (id) {
         id -> Integer,
         branch_seed -> Text,

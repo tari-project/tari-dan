@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::time::Duration;
+
 use tari_common_types::types::Commitment;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_dan_common_types::optional::Optional;
@@ -133,6 +135,8 @@ impl Test {
         let sdk = DanWalletSdk::initialize(store.clone(), WalletSdkConfig {
             password: None,
             validator_node_jrpc_endpoint: "".to_string(),
+            jwt_duration: Duration::from_secs(60),
+            jwt_secret_key: "secret_key".to_string(),
         })
         .unwrap();
         let accounts_api = sdk.accounts_api();

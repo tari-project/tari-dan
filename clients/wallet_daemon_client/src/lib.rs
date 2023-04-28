@@ -42,6 +42,12 @@ use tari_template_lib::models::ComponentAddress;
 use types::{
     AccountsCreateFreeTestCoinsRequest,
     AccountsCreateFreeTestCoinsResponse,
+    AuthLoginAcceptRequest,
+    AuthLoginAcceptResponse,
+    AuthLoginDenyRequest,
+    AuthLoginDenyResponse,
+    AuthLoginRequest,
+    AuthLoginResponse,
     ClaimBurnRequest,
     ClaimBurnResponse,
     ProofsCancelRequest,
@@ -50,6 +56,8 @@ use types::{
     ProofsFinalizeResponse,
     ProofsGenerateRequest,
     ProofsGenerateResponse,
+    WebRtcStartRequest,
+    WebRtcStartResponse,
 };
 
 use crate::{
@@ -123,11 +131,11 @@ pub struct WalletDaemonClient {
     client: reqwest::Client,
     endpoint: Url,
     request_id: i64,
-    jwt: Option<String>,
+    pub token: Option<String>,
 }
 
 impl WalletDaemonClient {
-    pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, WalletDaemonClientError> {
+    pub fn connect<T: IntoUrl>(endpoint: T, token: Option<String>) -> Result<Self, WalletDaemonClientError> {
         let client = reqwest::Client::builder()
             .default_headers({
                 let mut headers = HeaderMap::with_capacity(1);
@@ -140,7 +148,7 @@ impl WalletDaemonClient {
             client,
             endpoint: endpoint.into_url()?,
             request_id: 0,
-            jwt: None,
+            token,
         })
     }
 
@@ -312,6 +320,35 @@ impl WalletDaemonClient {
         self.send_request("accounts.create_free_test_coins", req.borrow()).await
     }
 
+    pub async fn auth_request<T: Borrow<AuthLoginRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AuthLoginResponse, WalletDaemonClientError> {
+        dbg!();
+        self.send_request("auth.request", req.borrow()).await
+    }
+
+    pub async fn auth_accept<T: Borrow<AuthLoginAcceptRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AuthLoginAcceptResponse, WalletDaemonClientError> {
+        self.send_request("auth.accept", req.borrow()).await
+    }
+
+    pub async fn auth_deny<T: Borrow<AuthLoginDenyRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AuthLoginDenyResponse, WalletDaemonClientError> {
+        self.send_request("auth.deny", req.borrow()).await
+    }
+
+    pub async fn webrtc_start<T: Borrow<WebRtcStartRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<WebRtcStartResponse, WalletDaemonClientError> {
+        self.send_request("webrtc.start", req.borrow()).await
+    }
+
     fn next_request_id(&mut self) -> i64 {
         self.request_id += 1;
         self.request_id
@@ -327,7 +364,7 @@ impl WalletDaemonClient {
             }
         );
         let mut builder = self.client.post(self.endpoint.clone());
-        if let Some(token) = &self.jwt {
+        if let Some(token) = &self.token {
             // If we don't have the token and the method is anything else than "auth.login" it will fail.
             builder = builder.header(AUTHORIZATION, format!("Bearer {}", token));
         }
@@ -341,16 +378,6 @@ impl WalletDaemonClient {
         method: &str,
         params: &T,
     ) -> Result<R, WalletDaemonClientError> {
-        if self.jwt.is_none() {
-            // We don't have the JWT token yet. Lets get it.
-            let resp = self.jrpc_call("auth.login", &KeysListRequest {}).await?;
-            self.jwt = Some(serde_json::from_value::<String>(resp).map_err(|e| {
-                WalletDaemonClientError::DeserializeResponse {
-                    source: e,
-                    method: "auth.login".to_string(),
-                }
-            })?);
-        }
         let params = json::to_value(params).map_err(|e| WalletDaemonClientError::SerializeRequest {
             source: e,
             method: method.to_string(),

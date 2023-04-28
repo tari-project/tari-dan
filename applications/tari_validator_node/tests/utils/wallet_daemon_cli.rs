@@ -27,9 +27,10 @@ use tari_crypto::{
     signatures::CommitmentSignature,
     tari_utilities::ByteArray,
 };
+use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::{
-    types::{AccountsCreateRequest, ClaimBurnRequest, ClaimBurnResponse},
+    types::{AccountsCreateRequest, AuthLoginAcceptRequest, AuthLoginRequest, ClaimBurnRequest, ClaimBurnResponse},
     ComponentAddressOrName,
     WalletDaemonClient,
 };
@@ -63,6 +64,19 @@ pub async fn claim_burn(
         fee: Some(Amount(1)),
     };
 
+    let auth_response = client
+        .auth_request(AuthLoginRequest {
+            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+        })
+        .await
+        .unwrap();
+    let auth_response = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token: auth_response.auth_token,
+        })
+        .await
+        .unwrap();
+    client.token = Some(auth_response.permissions_token);
     client.claim_burn(claim_burn_request).await.unwrap()
 }
 
@@ -81,6 +95,20 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
     };
 
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
+    let auth_reponse = client
+        .auth_request(AuthLoginRequest {
+            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+        })
+        .await
+        .unwrap();
+    let auth_response = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token: auth_reponse.auth_token,
+        })
+        .await
+        .unwrap();
+
+    client.token = Some(auth_response.permissions_token);
     let _resp = client.create_account(request).await.unwrap();
 }
 

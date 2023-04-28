@@ -31,7 +31,7 @@ use crate::command::Command;
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
 pub struct Cli {
-    #[clap(long, alias = "endpoint", env = "JRPC_ENDPOINT")]
+    #[clap(long, short = 'e', alias = "endpoint", env = "JRPC_ENDPOINT")]
     pub vn_daemon_jrpc_endpoint: Option<Multiaddr>,
     #[clap(long, short = 'b', alias = "basedir")]
     pub base_dir: Option<PathBuf>,

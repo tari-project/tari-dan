@@ -71,6 +71,8 @@ impl<'a> ReadTransaction<'a> {
 }
 
 impl WalletStoreReader for ReadTransaction<'_> {
+    // -------------------------------- JWT -------------------------------- //
+
     // -------------------------------- KeyManager -------------------------------- //
 
     fn key_manager_get_all(&mut self, branch: &str) -> Result<Vec<(u64, bool)>, WalletStorageError> {

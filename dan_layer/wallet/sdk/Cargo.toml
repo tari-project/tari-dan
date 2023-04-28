@@ -22,6 +22,7 @@ tari_bor = { path = "../../tari_bor" }
 anyhow = "1.0"
 chacha20poly1305 = "0.10.1"
 digest = "0.9"
+jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
 log = "0.4.14"
 rand = "0.7"
