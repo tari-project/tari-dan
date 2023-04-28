@@ -40,7 +40,10 @@ use tari_dan_core::storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use thiserror::Error;
 
-use super::models::non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex};
+use super::models::{
+    events::{EventData, NewEvent},
+    non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
+};
 use crate::{
     diesel_migrations::MigrationHarness,
     substate_storage_sqlite::models::substate::{NewSubstate, Substate},
@@ -92,15 +95,19 @@ impl SqliteSubstateStore {
 }
 pub trait SubstateStore {
     type ReadTransaction<'a>: SubstateStoreReadTransaction
-    where Self: 'a;
+    where
+        Self: 'a;
     type WriteTransaction<'a>: SubstateStoreWriteTransaction + Deref<Target = Self::ReadTransaction<'a>>
-    where Self: 'a;
+    where
+        Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError>;
 
     fn with_write_tx<F: FnOnce(&mut Self::WriteTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let mut tx = self.create_write_tx()?;
         match f(&mut tx) {
             Ok(r) => {
@@ -117,7 +124,9 @@ pub trait SubstateStore {
     }
 
     fn with_read_tx<F: FnOnce(&Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let tx = self.create_read_tx()?;
         let ret = f(&tx)?;
         Ok(ret)
@@ -179,6 +188,7 @@ pub trait SubstateStoreReadTransaction {
         start_idx: i32,
         end_idx: i32,
     ) -> Result<Vec<IndexedNftSubstate>, StorageError>;
+    fn get_events(&mut self, template_address: String, topic: String) -> Result<Vec<EventData>, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
@@ -282,6 +292,20 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 
         Ok(res)
     }
+
+    fn get_events(&mut self, template_address: String, tx_hash: String) -> Result<Vec<EventData>, StorageError> {
+        let res = sql_query(
+            "SELECT template_address, tx_hash, topic, payload FROM events WHERE template_address = ? AND tx_hash = ?",
+        )
+        .bind::<Text, _>(template_address)
+        .bind::<Text, _>(tx_hash)
+        .get_results::<EventData>(self.connection())
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("get_events: {}", e),
+        })?;
+
+        Ok(res)
+    }
 }
 
 pub struct SqliteSubstateStoreWriteTransaction<'a> {
@@ -308,6 +332,7 @@ pub trait SubstateStoreWriteTransaction {
     fn delete_substate(&mut self, address: String) -> Result<(), StorageError>;
     fn clear_substates(&mut self) -> Result<(), StorageError>;
     fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError>;
+    fn save_events(&mut self, new_event: NewEvent) -> Result<(), StorageError>;
 }
 
 impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
@@ -404,6 +429,19 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             new_nft_index.resource_address,
             new_nft_index.idx
         );
+
+        Ok(())
+    }
+
+    fn save_events(&mut self, new_event: NewEvent) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::events;
+
+        diesel::insert_into(events::table)
+            .values(&new_event)
+            .execute(&mut *self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("events: {}", e),
+            })?;
 
         Ok(())
     }

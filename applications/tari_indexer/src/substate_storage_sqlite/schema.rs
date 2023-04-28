@@ -38,4 +38,14 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(substates, non_fungible_indexes);
+diesel::table! {
+    events (id) {
+        id -> Integer,
+        template_address -> Text,
+        tx_hash -> Text,
+        topic -> Text,
+        payload -> Text,
+    }
+}
+
+diesel::allow_tables_to_appear_in_same_query!(substates, non_fungible_indexes, events);

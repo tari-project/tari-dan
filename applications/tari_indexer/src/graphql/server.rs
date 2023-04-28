@@ -20,13 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use async_graphql::{
     http::{playground_source, GraphQLPlaygroundConfig},
-    EmptyMutation,
-    EmptySubscription,
-    Schema,
+    EmptyMutation, EmptySubscription, Schema,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
@@ -34,18 +32,24 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::get,
-    Json,
-    Router,
+    Json, Router,
 };
 use log::*;
 use serde::Serialize;
 
-use crate::graphql::model::{QueryRoot, ServiceSchema};
+use crate::{
+    graphql::model::{EventQuery, EventSchema},
+    substate_manager::SubstateManager,
+};
 
 const LOG_TARGET: &str = "tari::indexer::graphql";
 
-pub async fn run_graphql(preferred_address: SocketAddr) -> Result<(), anyhow::Error> {
-    let schema = Schema::build(QueryRoot, EmptyMutation, EmptySubscription).finish();
+pub async fn run_graphql(
+    preferred_address: SocketAddr,
+    substate_manager: Arc<SubstateManager>,
+) -> Result<(), anyhow::Error> {
+    let event_query = EventQuery { substate_manager };
+    let schema = Schema::build(event_query, EmptyMutation, EmptySubscription).finish();
     let router = Router::new()
         .route("/", get(graphql_playground).post(graphql_handler))
         .route("/health", get(health))
@@ -81,9 +85,6 @@ pub(crate) async fn graphql_playground() -> impl IntoResponse {
     ))
 }
 
-pub(crate) async fn graphql_handler(
-    Extension(schema): Extension<ServiceSchema>,
-    req: GraphQLRequest,
-) -> GraphQLResponse {
+pub(crate) async fn graphql_handler(Extension(schema): Extension<EventSchema>, req: GraphQLRequest) -> GraphQLResponse {
     schema.execute(req.into_inner()).await.into()
 }
