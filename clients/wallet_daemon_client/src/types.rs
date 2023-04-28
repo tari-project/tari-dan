@@ -257,6 +257,7 @@ impl BalanceEntry {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountGetRequest {
+    #[serde(deserialize_with = "string_or_struct")]
     pub name_or_address: ComponentAddressOrName,
 }
 

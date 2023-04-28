@@ -86,7 +86,8 @@ function Accounts() {
       accountFormState.accountName,
       accountFormState.signingKeyIndex ? +accountFormState.signingKeyIndex : undefined,
       undefined,
-      accountFormState.fee ? +accountFormState.fee : undefined
+      accountFormState.fee ? +accountFormState.fee : undefined,
+        false
     ).then((response) => {
       loadAccounts();
     });

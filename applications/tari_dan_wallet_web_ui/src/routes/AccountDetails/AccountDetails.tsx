@@ -32,7 +32,7 @@ import TableCell from "@mui/material/TableCell";
 import TableBody from "@mui/material/TableBody";
 import {useEffect, useState} from "react";
 import {useParams} from 'react-router-dom';
-import {accountsGetBalances, accountsGetByName} from "../../utils/json_rpc";
+import {accountsGetBalances, accountsGet} from "../../utils/json_rpc";
 import Alert from '@mui/material/Alert';
 import {removeTagged, toHexString} from '../../utils/helpers';
 
@@ -54,7 +54,7 @@ function AccountDetailsLayout() {
     let [error, setError] = useState(null);
 
     const loadAccount = () => {
-        accountsGetByName(name).then((response: any) => {
+        accountsGet(name).then((response: any) => {
             setState(response);
         }).catch((error: any) => {
             console.error(error);
