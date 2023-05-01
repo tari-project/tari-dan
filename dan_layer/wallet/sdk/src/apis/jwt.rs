@@ -15,7 +15,7 @@ use crate::storage::{WalletStorageError, WalletStore, WalletStoreWriter};
 
 pub struct JwtApi<'a, TStore> {
     store: &'a TStore,
-    duration: Duration,
+    default_expiry: Duration,
     auth_secret_key: String,
     jwt_secret_key: String,
 }
@@ -115,10 +115,10 @@ pub struct AuthClaims {
 }
 
 impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
-    pub(crate) fn new(store: &'a TStore, duration: Duration, secret_key: String) -> Self {
+    pub(crate) fn new(store: &'a TStore, default_expiry: Duration, secret_key: String) -> Self {
         Self {
             store,
-            duration,
+            default_expiry,
             auth_secret_key: format!("auth-{secret_key}"),
             jwt_secret_key: format!("jwt-{secret_key}"),
         }
@@ -138,7 +138,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         duration: Option<Duration>,
     ) -> Result<(String, SystemTime), JwtApiError> {
         let id = self.get_index()?;
-        let valid_till = SystemTime::now() + duration.unwrap_or(self.duration);
+        let valid_till = SystemTime::now() + duration.unwrap_or(self.default_expiry);
         let my_claims = AuthClaims {
             id,
             permissions,
@@ -171,6 +171,10 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
     }
 
     pub fn grant(&mut self, auth_token: String) -> Result<String, JwtApiError> {
+        self.grant_with_expiry(auth_token, self.default_expiry)
+    }
+
+    pub fn grant_with_expiry(&mut self, auth_token: String, expiry: Duration) -> Result<String, JwtApiError> {
         let auth_claims = self.check_auth_token(auth_token.as_ref())?;
         let my_claims = Claims {
             id: auth_claims.id,
@@ -183,7 +187,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
             &EncodingKey::from_secret(self.jwt_secret_key.as_ref()),
         )?;
         let mut tx = self.store.create_write_tx()?;
-        println!("Storing ID {}", auth_claims.id);
+
         tx.jwt_store_decision(auth_claims.id, Some(permissions_token.clone()))?;
         tx.commit()?;
         Ok(permissions_token)

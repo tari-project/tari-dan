@@ -68,7 +68,7 @@ pub async fn run_tari_dan_wallet_daemon(
         // TODO: Configure
         password: None,
         indexer_jrpc_endpoint: config.dan_wallet_daemon.indexer_node_json_rpc_url,
-        jwt_duration: config.dan_wallet_daemon.jwt_expiry.unwrap(),
+        jwt_expiry: config.dan_wallet_daemon.jwt_expiry.unwrap(),
         jwt_secret_key: config.dan_wallet_daemon.jwt_secret_key.unwrap(),
     };
     let indexer = IndexerJsonRpcNetworkInterface::new(&sdk_config.indexer_jrpc_endpoint);

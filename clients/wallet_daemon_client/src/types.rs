@@ -478,6 +478,7 @@ pub struct AuthLoginResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginAcceptRequest {
     pub auth_token: String,
+    pub token_expiry: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

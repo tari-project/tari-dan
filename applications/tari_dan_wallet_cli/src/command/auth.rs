@@ -31,11 +31,8 @@ use tari_wallet_daemon_client::{
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum AuthSubcommand {
-    #[clap(alias = "request")]
     Request(RequestArgs),
-    #[clap(alias = "grant")]
     Grant(GrantArgs),
-    #[clap(alias = "deny")]
     Deny(DenyArgs),
 }
 
@@ -52,6 +49,8 @@ pub struct RequestArgs {
 #[derive(Debug, Args, Clone)]
 pub struct GrantArgs {
     auth_token: String,
+    #[clap(long, short = 'e', value_parser = duration_str::parse)]
+    token_expiry: Option<Duration>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -81,6 +80,7 @@ impl AuthSubcommand {
                 let resp = client
                     .auth_accept(AuthLoginAcceptRequest {
                         auth_token: args.auth_token,
+                        token_expiry: args.token_expiry,
                     })
                     .await?;
                 println!("Access granted. Your JRPC token : {}", resp.permissions_token);
