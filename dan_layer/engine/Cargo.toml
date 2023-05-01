@@ -19,7 +19,6 @@ tari_transaction = { path = "../transaction" }
 
 anyhow = "1.0.53"
 cargo_toml = "0.11.5"
-digest = "0.9.0"
 d3ne = { git = "https://github.com/stringhandler/d3ne-rs.git", tag = "v0.8.0-pre.3" }
 log = { version = "0.4.8", features = ["std"] }
 rand = "0.7"
