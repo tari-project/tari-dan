@@ -3328,9 +3328,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "hex-literal"
@@ -7326,25 +7323,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tari_dan_app_grpc"
-version = "0.50.0-pre.0"
-dependencies = [
- "anyhow",
- "chrono",
- "prost 0.9.0",
- "tari_common 0.50.0-pre.0",
- "tari_common_types 0.50.0-pre.0",
- "tari_comms",
- "tari_crypto",
- "tari_dan_common_types",
- "tari_dan_core",
- "tari_engine_types",
- "tari_template_lib",
- "tari_transaction",
- "tonic 0.6.2",
-]
-
-[[package]]
 name = "tari_dan_app_utilities"
 version = "0.50.0-pre.0"
 dependencies = [
@@ -7621,7 +7599,6 @@ dependencies = [
  "log",
  "rand 0.7.3",
  "serde",
- "tari_bor",
  "tari_common_types 0.50.0-pre.0",
  "tari_crypto",
  "tari_dan_common_types",
@@ -7641,7 +7618,6 @@ dependencies = [
 name = "tari_dan_wallet_storage_sqlite"
 version = "0.50.0-pre.0"
 dependencies = [
- "anyhow",
  "bigdecimal",
  "chrono",
  "diesel",
@@ -7717,10 +7693,8 @@ dependencies = [
  "tari_common_types 0.50.0-pre.0",
  "tari_comms",
  "tari_comms_logging",
- "tari_comms_rpc_macros",
  "tari_core",
  "tari_crypto",
- "tari_dan_app_grpc",
  "tari_dan_app_utilities",
  "tari_dan_common_types",
  "tari_dan_core",
@@ -7733,8 +7707,8 @@ dependencies = [
  "tari_storage",
  "tari_template_lib",
  "tari_transaction",
- "tari_validator_node",
  "tari_validator_node_client",
+ "tari_validator_node_rpc",
  "thiserror",
  "tokio",
  "tokio-stream",
@@ -7956,7 +7930,6 @@ name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
  "ciborium",
- "hex",
  "newtype-ops",
  "serde",
  "serde-big-array 0.5.1",
@@ -8097,7 +8070,6 @@ dependencies = [
  "tari_console_wallet",
  "tari_core",
  "tari_crypto",
- "tari_dan_app_grpc",
  "tari_dan_app_utilities",
  "tari_dan_common_types",
  "tari_dan_core",
@@ -8120,6 +8092,7 @@ dependencies = [
  "tari_transaction_manifest",
  "tari_validator_node_cli",
  "tari_validator_node_client",
+ "tari_validator_node_rpc",
  "tari_wallet",
  "tari_wallet_daemon_client",
  "tari_wallet_grpc_client",
@@ -8180,6 +8153,26 @@ dependencies = [
  "tari_engine_types",
  "tari_transaction",
  "thiserror",
+]
+
+[[package]]
+name = "tari_validator_node_rpc"
+version = "0.50.0-pre.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "prost 0.9.0",
+ "tari_common 0.50.0-pre.0",
+ "tari_common_types 0.50.0-pre.0",
+ "tari_comms",
+ "tari_comms_rpc_macros",
+ "tari_crypto",
+ "tari_dan_common_types",
+ "tari_dan_core",
+ "tari_engine_types",
+ "tari_template_lib",
+ "tari_transaction",
+ "tonic 0.6.2",
 ]
 
 [[package]]

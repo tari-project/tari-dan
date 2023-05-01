@@ -32,7 +32,7 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_comms::{CommsNode, NodeIdentity};
 use tari_dan_app_utilities::{
     base_layer_scanner,
     base_node_client::GrpcBaseNodeClient,
@@ -45,15 +45,7 @@ use tari_shutdown::ShutdownSignal;
 
 use crate::{
     comms,
-    p2p::{
-        create_validator_node_rpc_service,
-        services::{
-            comms_peer_provider::CommsPeerProvider,
-            epoch_manager,
-            rpc_client::TariCommsValidatorNodeClientFactory,
-            template_manager,
-        },
-    },
+    p2p::services::{epoch_manager, rpc_client::TariCommsValidatorNodeClientFactory, template_manager},
     substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore,
     ApplicationConfig,
 };
@@ -80,7 +72,6 @@ pub async fn spawn_services(
 
     // Initialize comms
     let (comms, _) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
-    let peer_provider = CommsPeerProvider::new(comms.peer_manager());
 
     // Connect to substate db
     let substate_store = SqliteSubstateStore::try_create(config.indexer.state_db_path())?;
@@ -112,7 +103,6 @@ pub async fn spawn_services(
         config.indexer.base_layer_scanning_interval,
     );
 
-    let comms = setup_p2p_rpc(config, comms, peer_provider);
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
@@ -133,19 +123,6 @@ pub struct Services {
     pub epoch_manager: EpochManagerHandle,
     pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     pub substate_store: SqliteSubstateStore,
-}
-
-fn setup_p2p_rpc(
-    config: &ApplicationConfig,
-    comms: UnspawnedCommsNode,
-    peer_provider: CommsPeerProvider,
-) -> UnspawnedCommsNode {
-    let rpc_server = RpcServer::builder()
-        .with_maximum_simultaneous_sessions(config.indexer.p2p.rpc_max_simultaneous_sessions)
-        .finish()
-        .add_service(create_validator_node_rpc_service(peer_provider));
-
-    comms.add_protocol_extension(rpc_server)
 }
 
 fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {

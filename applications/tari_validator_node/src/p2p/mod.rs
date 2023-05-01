@@ -21,6 +21,6 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod rpc;
-pub use rpc::create_validator_node_rpc_service;
+pub use rpc::create_tari_validator_node_rpc_service;
 
 pub mod services;

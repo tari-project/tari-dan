@@ -17,7 +17,6 @@ tari_transaction = { path = "../../transaction" }
 tari_validator_node_client = { path = "../../../clients/validator_node_client" }
 tari_template_lib = { path = "../../template_lib" }
 tari_utilities = "0.4.10"
-tari_bor = { path = "../../tari_bor" }
 
 anyhow = "1.0"
 chacha20poly1305 = "0.10.1"
