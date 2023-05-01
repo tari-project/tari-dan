@@ -28,27 +28,28 @@ tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
 tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 
 anyhow = "1.0.69"
-base64 = "0.20.0-alpha.1"
 axum = { version = "0.6", features = ["headers"] }
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
+base64 = "0.20.0-alpha.1"
 clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"
 dirs = "4.0.0"
+duration-str = "0.5.0"
 futures = "0.3.26"
 jsonwebtoken = "8.3.0"
 log = "0.4.17"
 multiaddr = "0.17.0"
+reqwest = "0.11.16"
 serde = "1.0.152"
 serde_json = "1.0.92"
 thiserror = "1.0.38"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 tokio-stream = "0.1.11"
 tower-http = { version = "0.3.5", default-features = false, features = ["cors", "trace"] }
+webrtc = "0.7.1"
 
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
-webrtc = "0.7.1"
-reqwest = "0.11.16"
 
 [dev-dependencies]
 tari_utilities = "0.4.10"
