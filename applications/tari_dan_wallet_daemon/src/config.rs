@@ -67,7 +67,7 @@ impl Default for WalletDaemonConfig {
             signaling_server_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9100))),
             validator_node_endpoint: Some("http://127.0.0.1:18200/json_rpc".to_string()),
             // TODO: Come up with a reasonable default value
-            jwt_duration: Some(Duration::from_secs(5 * 60)),
+            jwt_duration: Some(Duration::from_secs(500 * 60)),
             // TODO: Generate a random secret key at start if not set by hand. Otherwise anyone can generate a JWT token
             // when they know the secret_key.
             jwt_secret_key: Some("secret_key".to_string()),
