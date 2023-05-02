@@ -133,8 +133,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         Ok(self
             .template_provider
             .get_template_module(&runtime_state.template_address)
-            .map_err(|_e| RuntimeError::TemplateNotFound {
-                template_name: runtime_state.template_address.to_string(),
+            .map_err(|e| RuntimeError::FailedToLoadTemplate {
+                address: runtime_state.template_address,
+                details: e.to_string(),
+            })?
+            .ok_or(RuntimeError::TemplateNotFound {
+                template_address: runtime_state.template_address,
             })?
             .template_def()
             .clone())
