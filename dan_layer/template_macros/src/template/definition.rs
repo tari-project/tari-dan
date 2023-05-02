@@ -42,8 +42,8 @@ pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
             impl ::tari_template_lib::component::interface::ComponentInterface for #component_ident {
                 type Component = #component_wrapper_ident;
 
-                fn create_with_access_rules(self, access_rules: ::tari_template_lib::auth::AccessRules) -> Self::Component {
-                    let address = engine().create_component(#component_ident_as_str.to_string(), self, access_rules);
+                fn create_with_options(self, access_rules: ::tari_template_lib::auth::AccessRules, component_id: Option<::tari_template_lib::Hash>) -> Self::Component {
+                    let address = engine().create_component(#component_ident_as_str.to_string(), self, access_rules, component_id);
                     #component_wrapper_ident{ address }
                 }
             }
@@ -117,8 +117,8 @@ mod tests {
             }
             impl :: tari_template_lib :: component :: interface :: ComponentInterface for Foo {
                 type Component = FooComponent ;
-                fn create_with_access_rules (self , access_rules : :: tari_template_lib :: auth :: AccessRules) -> Self :: Component {
-                    let address = engine () . create_component ("Foo" . to_string () , self , access_rules) ;
+                fn create_with_options (self , access_rules : :: tari_template_lib :: auth :: AccessRules , component_id : Option < :: tari_template_lib :: Hash > ) -> Self :: Component {
+                    let address = engine () . create_component ("Foo" . to_string () , self , access_rules, component_id) ;
                     FooComponent { address }
                 }
             }

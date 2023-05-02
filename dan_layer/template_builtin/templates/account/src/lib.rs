@@ -62,7 +62,7 @@ mod account_template {
                 vaults.insert(b.resource_address(), Vault::from_bucket(b));
             }
 
-            Self { vaults }.create_with_access_rules(rules)
+            Self { vaults }.create_with_options(rules, None)
         }
 
         // #[access_rule(allow_all)]
