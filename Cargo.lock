@@ -7948,6 +7948,7 @@ dependencies = [
 name = "tari_template_builtin"
 version = "0.50.0-pre.0"
 dependencies = [
+ "sha2 0.10.6",
  "tari_engine_types",
 ]
 

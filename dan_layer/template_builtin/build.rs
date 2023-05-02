@@ -25,12 +25,39 @@ use std::{
     error::Error,
     fs,
     io,
-    io::ErrorKind,
+    io::{ErrorKind, Write},
     path::{Path, PathBuf},
     process::Command,
 };
 
+use sha2::{Digest, Sha256};
+
 const TEMPLATE_BUILTINS: &[&str] = &["templates/account"];
+
+fn get_files_from_dir(path: &PathBuf) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    let mut res = Vec::new();
+    for entry in fs::read_dir(path)? {
+        let entry = entry?;
+        let path = entry.path();
+        let metadata = fs::metadata(&path)?;
+        if metadata.is_dir() {
+            res.extend(get_files_from_dir(&path)?);
+        } else {
+            res.push(path);
+        }
+    }
+    Ok(res)
+}
+
+fn hash_files(files: Vec<PathBuf>) -> Result<Vec<u8>, Box<dyn Error>> {
+    let mut hasher = Sha256::new();
+    for file in files {
+        let bytes = std::fs::read(file).unwrap();
+        // let hash = Sha256::digest(bytes);
+        hasher.update(bytes);
+    }
+    Ok(hasher.finalize().to_vec())
+}
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Rebuild templates if abi or lib changes
@@ -41,16 +68,29 @@ fn main() -> Result<(), Box<dyn Error>> {
         println!("cargo:rerun-if-changed={}/src", template);
 
         let template_path = env::current_dir()?.join(template);
+        let mut files = get_files_from_dir(&template_path.join("src"))?;
+        files.sort();
+
+        // get the path of the wasm executable
+        let wasm_name = Path::new(template).file_name().unwrap().to_str().unwrap();
+        let wasm_dest = template_path.join(wasm_name).with_extension("wasm");
+        if wasm_dest.exists() {
+            let hash = hash_files(files)?;
+            let hash_file = template_path.join("hash");
+            if let Ok(content) = std::fs::read(&hash_file) {
+                if content == hash {
+                    continue;
+                }
+            }
+            let mut hash_file = std::fs::File::create(hash_file)?;
+            hash_file.write_all(&hash)?;
+        }
 
         // compile the template into wasm
         compile_template(&template_path)?;
 
-        // get the path of the wasm executable
-        let wasm_name = Path::new(template).file_name().unwrap().to_str().unwrap();
         let wasm_path = get_compiled_wasm_path(&template_path, wasm_name);
-
         // copy the wasm binary to the root folder of the template, to be included in source control
-        let wasm_dest = template_path.join(wasm_name).with_extension("wasm");
         if wasm_dest.exists() {
             let existing_contents = fs::read(&wasm_dest)?;
             let dest_contents = fs::read(&wasm_path)?;
