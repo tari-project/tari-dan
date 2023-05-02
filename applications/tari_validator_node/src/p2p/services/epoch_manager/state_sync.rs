@@ -68,7 +68,7 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
 
         let inventory = inventory
             .into_iter()
-            .map(tari_dan_app_grpc::proto::common::ShardId::from)
+            .map(tari_validator_node_rpc::proto::common::ShardId::from)
             .collect::<Vec<_>>();
 
         // the validator node has to sync state with vn's in the committee
@@ -82,7 +82,7 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 .create_connection()
                 .await
                 .map_err(EpochManagerError::ValidatorNodeClientError)?;
-            let request = tari_dan_app_grpc::proto::rpc::VnStateSyncRequest {
+            let request = tari_validator_node_rpc::proto::rpc::VnStateSyncRequest {
                 start_shard_id: Some(start_shard_id.into()),
                 end_shard_id: Some(end_shard_id.into()),
                 inventory: inventory.clone(),

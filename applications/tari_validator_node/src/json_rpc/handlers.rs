@@ -390,18 +390,20 @@ impl JsonRpcHandlers {
         let shard_id = ShardId::from_address(&data.address, data.version);
         match tx.get_substate_states(&[shard_id]) {
             Ok(substates) => {
-                let (value, status) = if substates.is_empty() {
-                    (None, SubstateStatus::DoesNotExist)
+                let (value, tx_hash, status) = if substates.is_empty() {
+                    (None, None, SubstateStatus::DoesNotExist)
                 } else if substates[0].destroyed_height().is_some() {
-                    (None, SubstateStatus::Down)
+                    (None, None, SubstateStatus::Down)
                 } else {
                     (
                         Some(substates[0].substate().substate_value().clone()),
+                        Some(substates[0].created_payload_id().into_array().into()),
                         SubstateStatus::Up,
                     )
                 };
                 Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
                     status,
+                    created_by_tx: tx_hash,
                     value,
                 }))
             },

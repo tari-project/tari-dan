@@ -32,12 +32,13 @@ use tari_comms::{
     types::CommsPublicKey,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_app_grpc::proto::rpc::{GetPeersRequest, SubmitTransactionRequest};
 use tari_dan_core::services::{DanPeer, ValidatorNodeClientError, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 use tari_transaction::Transaction;
+use tari_validator_node_rpc::{
+    proto::rpc::{GetPeersRequest, SubmitTransactionRequest},
+    rpc_service,
+};
 use tokio_stream::StreamExt;
-
-use crate::p2p::rpc;
 
 pub struct TariCommsValidatorNodeRpcClient {
     connectivity: ConnectivityRequester,
@@ -45,7 +46,7 @@ pub struct TariCommsValidatorNodeRpcClient {
 }
 
 impl TariCommsValidatorNodeRpcClient {
-    pub async fn create_connection(&mut self) -> Result<rpc::ValidatorNodeRpcClient, ValidatorNodeClientError> {
+    pub async fn create_connection(&mut self) -> Result<rpc_service::ValidatorNodeRpcClient, ValidatorNodeClientError> {
         let mut conn = self
             .connectivity
             .dial_peer(NodeId::from_public_key(&self.address))

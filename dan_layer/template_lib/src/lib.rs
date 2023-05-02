@@ -40,6 +40,7 @@ pub mod rand;
 pub mod resource;
 
 pub mod crypto;
+pub mod events;
 
 // ---------------------------------------- WASM target exports ------------------------------------------------
 

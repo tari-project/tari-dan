@@ -134,6 +134,13 @@ pub struct CreateComponentArg {
     pub access_rules: AccessRules,
 }
 
+// -------------------------------- Events -------------------------------- //
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EmitEventArg {
+    pub message: String,
+}
+
 // -------------------------------- Resource -------------------------------- //
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ResourceInvokeArg {

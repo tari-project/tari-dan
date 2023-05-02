@@ -36,8 +36,7 @@ pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
     let output = quote! {
         #[no_mangle]
         pub unsafe extern "C" fn #abi_function_name() -> *mut u8 {
-            use ::tari_template_abi::{ArgDef, FunctionDef, TemplateDef, Type, wrap_ptr};
-            use ::tari_template_lib::template_dependencies::encode_with_len;
+            use ::tari_template_lib::template_dependencies::{encode_with_len, ArgDef, FunctionDef, TemplateDef, Type, wrap_ptr};
 
             let template = TemplateDef {
                 template_name: #template_name_as_str.to_string(),
@@ -223,8 +222,7 @@ mod tests {
         assert_code_eq(output, quote! {
             #[no_mangle]
             pub unsafe extern "C" fn Foo_abi() -> *mut u8 {
-                use ::tari_template_abi::{ArgDef, FunctionDef, TemplateDef, Type, wrap_ptr};
-                use ::tari_template_lib::template_dependencies::encode_with_len;
+                use ::tari_template_lib::template_dependencies::{encode_with_len, ArgDef, FunctionDef, TemplateDef, Type, wrap_ptr};
 
                 let template = TemplateDef {
                     template_name: "Foo".to_string(),

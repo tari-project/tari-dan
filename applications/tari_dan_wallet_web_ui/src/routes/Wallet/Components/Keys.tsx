@@ -71,8 +71,8 @@ function Keys() {
       setState(response);
       setError(undefined);
     })
-    .catch((reason) => {
-      setError(reason);
+    .catch((err) => {
+      setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`);
     });
   };
   const setActive = (index:number) => {

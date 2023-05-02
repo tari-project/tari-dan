@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use tari_template_lib::Hash;
 
 use crate::{
+    events::Event,
     fees::{FeeCostBreakdown, FeeReceipt},
     instruction_result::InstructionResult,
     logs::LogEntry,
@@ -83,6 +84,7 @@ impl ExecuteResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinalizeResult {
     pub transaction_hash: Hash,
+    pub events: Vec<Event>,
     pub logs: Vec<LogEntry>,
     // TOOD: Remove from FinalizeResult
     pub execution_results: Vec<InstructionResult>,
@@ -94,12 +96,14 @@ impl FinalizeResult {
     pub fn new(
         transaction_hash: Hash,
         logs: Vec<LogEntry>,
+        events: Vec<Event>,
         result: TransactionResult,
         cost_breakdown: FeeCostBreakdown,
     ) -> Self {
         Self {
             transaction_hash,
             logs,
+            events,
             execution_results: Vec::new(),
             result,
             cost_breakdown: Some(cost_breakdown),
@@ -110,6 +114,7 @@ impl FinalizeResult {
         Self {
             transaction_hash,
             logs: vec![],
+            events: vec![],
             execution_results: Vec::new(),
             result: TransactionResult::Reject(reason),
             cost_breakdown: None,
