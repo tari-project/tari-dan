@@ -76,8 +76,8 @@ function Accounts() {
         setState(response);
         setError(undefined);
       })
-      .catch((reason) => {
-        setError(reason);
+      .catch((err) => {
+        setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`);
       });
   };
 
@@ -104,9 +104,9 @@ function Accounts() {
         console.log(response);
         loadAccounts();
       })
-      .catch((reason) => {
-        console.log(reason);
-        setError(reason.message);
+      .catch((err) => {
+        console.log(err);
+        setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`);
       });
     setClaimBurnFormState({ account: "", claimProof: "", fee: "" });
     setShowClaimBurnDialog(false);
@@ -124,7 +124,7 @@ function Accounts() {
     <>
       {error ? (
           <Alert severity="error">{error}</Alert>
-      ) : ( null ) }
+      ) : null }
       <BoxHeading2>
         {showAccountDialog && (
           <Fade in={showAccountDialog}>

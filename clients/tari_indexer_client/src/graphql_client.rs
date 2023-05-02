@@ -71,10 +71,7 @@ impl IndexerGraphQLClient {
         let resp = req.body(serde_json::to_string(&body)?).send().await?;
         let val = resp.json::<Value>().await?;
         let data = graphql_data(val)?;
-        match serde_json::from_value::<R>(data) {
-            Ok(r) => Ok(r),
-            Err(e) => Err(anyhow!("Failed to deserialize response: {}", e)),
-        }
+        serde_json::from_value::<R>(data).map_err(|e| anyhow!("Failed to deserialize response: {}", e))
     }
 }
 

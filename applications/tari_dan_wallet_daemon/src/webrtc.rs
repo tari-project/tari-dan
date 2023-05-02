@@ -4,9 +4,10 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use anyhow::Result;
-use axum_jrpc::{JsonRpcAnswer, JsonRpcResponse};
+use axum_jrpc::{JsonRpcAnswer, JsonRpcRequest, JsonRpcResponse};
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use tari_shutdown::ShutdownSignal;
 use webrtc::{
     api::APIBuilder,
@@ -17,6 +18,8 @@ use webrtc::{
     },
     peer_connection::{configuration::RTCConfiguration, sdp::session_description::RTCSessionDescription},
 };
+
+const LOG_TARGET: &str = "tari::dan_wallet_daemon::webrtc";
 
 #[derive(Deserialize, Debug)]
 struct Request {
@@ -32,23 +35,25 @@ struct Response {
     payload: String,
 }
 
-pub async fn handle_data(
+async fn make_request<T: Serialize>(
     address: SocketAddr,
     token: Option<String>,
     method: String,
-    params: String,
+    params: T,
 ) -> Result<serde_json::Value> {
     let url = format!("http://{}", address);
     let client = reqwest::Client::new();
-    let body = format!(
-        "{{\"method\":\"{}\", \"jsonrpc\":\"2.0\", \"id\": 1, \"params\":{}}}",
-        method, params
-    );
+    let body = JsonRpcRequest {
+        id: 0,
+        jsonrpc: "2.0".to_string(),
+        method,
+        params: serde_json::to_value(params)?,
+    };
     let mut builder = client.post(url).header(CONTENT_TYPE, "application/json");
     if let Some(token) = token {
         builder = builder.header(AUTHORIZATION, format!("Bearer {token}"));
     }
-    let resp = builder.body(body).send().await?.json::<JsonRpcResponse>().await?;
+    let resp = builder.json(&body).send().await?.json::<JsonRpcResponse>().await?;
     match resp.result {
         JsonRpcAnswer::Result(result) => Ok(result),
         JsonRpcAnswer::Error(error) => Err(anyhow::Error::msg(error.to_string())),
@@ -92,7 +97,7 @@ pub async fn webrtc_start_session(
                             id: request.id,
                         };
                     } else {
-                        let result = handle_data(address, Some(request.token), request.method, request.params)
+                        let result = make_request(address, Some(request.token), request.method, request.params)
                             .await
                             .unwrap();
                         response = Response {
@@ -114,54 +119,55 @@ pub async fn webrtc_start_session(
         if let Some(ice_candidate) = ice_candidate {
             let signaling_server_token = signaling_server_token_clone.clone();
             tokio::task::spawn(async move {
-                handle_data(
+                if let Err(err) = make_request(
                     signaling_server_address,
                     Some(signaling_server_token),
                     "add.answer_ice_candidate".to_string(),
-                    serde_json::to_string(&ice_candidate.to_json().unwrap()).unwrap(),
+                    &ice_candidate,
                 )
                 .await
-                .unwrap();
+                {
+                    log::error!(target: LOG_TARGET, "Error sending ice candidate: {}", err);
+                }
             });
         }
         Box::pin(async {})
     }));
 
-    let offer = handle_data(
+    let offer = make_request(
         signaling_server_address,
         Some(signaling_server_token.clone()),
         "get.offer".to_string(),
-        serde_json::to_string("").unwrap(),
+        json!({}),
     )
-    .await
-    .unwrap();
-    let offer: String = serde_json::from_str(offer.as_str().unwrap()).unwrap();
-    let desc = RTCSessionDescription::offer(offer)?;
+    .await?;
+
+    let desc = RTCSessionDescription::offer(offer.to_string())?;
     pc.set_remote_description(desc).await?;
 
-    let ices = handle_data(
+    let ices = make_request(
         signaling_server_address,
         Some(signaling_server_token.clone()),
         "get.offer_ice_candidates".to_string(),
-        serde_json::to_string("").unwrap(),
+        json!({}),
     )
-    .await
-    .unwrap();
-    let ices: Vec<String> = serde_json::from_str(ices.as_str().unwrap()).unwrap();
+    .await?;
+
+    let ices: Vec<String> = serde_json::from_value(ices)?;
     for ice_candidate in ices {
-        let ice_candidate: RTCIceCandidateInit = serde_json::from_str(ice_candidate.as_str()).unwrap();
+        let ice_candidate: RTCIceCandidateInit = serde_json::from_str(ice_candidate.as_str())?;
         pc.add_ice_candidate(ice_candidate).await?;
     }
     let answer = pc.create_answer(None).await?;
     pc.set_local_description(answer.clone()).await?;
-    handle_data(
+
+    make_request(
         signaling_server_address,
         Some(signaling_server_token),
         "add.answer".to_string(),
-        serde_json::to_string(&answer.sdp).unwrap(),
+        &answer.sdp,
     )
-    .await
-    .unwrap();
+    .await?;
     shutdown_signal.await;
     // pc.close().await?;
     Ok(())
