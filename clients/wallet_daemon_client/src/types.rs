@@ -214,6 +214,7 @@ pub struct AccountsListResponse {
 pub struct AccountsGetBalancesRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
+    pub refresh: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

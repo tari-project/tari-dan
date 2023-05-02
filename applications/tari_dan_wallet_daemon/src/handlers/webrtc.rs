@@ -9,6 +9,7 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
+use log::*;
 use tari_dan_wallet_sdk::apis::jwt::JrpcPermission;
 use tari_shutdown::ShutdownSignal;
 use tari_wallet_daemon_client::types::{WebRtcStartRequest, WebRtcStartResponse};
@@ -16,12 +17,14 @@ use tari_wallet_daemon_client::types::{WebRtcStartRequest, WebRtcStartResponse};
 use super::HandlerContext;
 use crate::webrtc::webrtc_start_session;
 
+const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc";
+
 pub fn handle_start(
     context: Arc<HandlerContext>,
     value: JsonRpcExtractor,
     token: Option<String>,
     shutdown_signal: Arc<ShutdownSignal>,
-    addresses: Arc<(SocketAddr, SocketAddr)>,
+    addresses: (SocketAddr, SocketAddr),
 ) -> JrpcResult {
     let answer_id = value.get_answer_id();
     context
@@ -40,9 +43,9 @@ pub fn handle_start(
         })?;
     let webrtc_start_request = value.parse_params::<WebRtcStartRequest>()?;
     let shutdown_signal = (*shutdown_signal).clone();
-    let (preferred_address, signaling_server_address) = *addresses.clone();
     tokio::spawn(async move {
-        webrtc_start_session(
+        let (preferred_address, signaling_server_address) = addresses;
+        if let Err(err) = webrtc_start_session(
             webrtc_start_request.signaling_server_token,
             webrtc_start_request.permissions_token,
             preferred_address,
@@ -50,7 +53,9 @@ pub fn handle_start(
             shutdown_signal,
         )
         .await
-        .unwrap();
+        {
+            error!(target: LOG_TARGET, "Error starting webrtc session: {}", err);
+        }
     });
     Ok(JsonRpcResponse::success(answer_id, WebRtcStartResponse {}))
 }

@@ -22,4 +22,5 @@
 
 pub mod conversions;
 pub mod proto;
+pub mod rpc_service;
 mod utils;

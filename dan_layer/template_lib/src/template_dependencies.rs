@@ -22,6 +22,6 @@
 
 //! Public types that are available to all template authors.
 pub use tari_bor::{decode, decode_exact, encode_with_len, serde};
-pub use tari_template_abi::call_debug as debug;
+pub use tari_template_abi::{call_debug as debug, wrap_ptr, ArgDef, CallInfo, FunctionDef, TemplateDef, Type};
 
 pub use crate::{args::LogLevel, engine, get_context as context};

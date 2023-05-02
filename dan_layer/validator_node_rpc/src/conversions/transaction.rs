@@ -144,6 +144,10 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                     withdraw_proof: request.claim_burn_withdraw_proof.map(TryInto::try_into).transpose()?,
                 }),
             },
+            101 => Instruction::CreateFreeTestCoins {
+                amount: request.create_free_test_coins_amount,
+                private_key: request.create_free_test_coins_private_key,
+            },
             _ => return Err(anyhow!("invalid instruction_type")),
         };
 
@@ -193,7 +197,11 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.claim_burn_public_key = claim.public_key.to_vec();
                 result.claim_burn_withdraw_proof = claim.withdraw_proof.map(Into::into);
             },
+            // TODO: debugging feature should not be the default. Perhaps a better way to create faucet coins is to mint
+            //       a faucet vault in the genesis state for dev networks and use faucet builtin template to withdraw
+            //       funds.
             Instruction::CreateFreeTestCoins { amount, private_key } => {
+                result.instruction_type = 101;
                 result.create_free_test_coins_amount = amount;
                 result.create_free_test_coins_private_key = private_key;
             },

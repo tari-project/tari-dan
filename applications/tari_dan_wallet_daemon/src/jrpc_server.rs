@@ -57,7 +57,7 @@ pub async fn listen(
         // TODO: Get these traces to work
         .layer(TraceLayer::new_for_http())
         .layer(Extension(Arc::new(context)))
-        .layer(Extension(Arc::new((preferred_address,signaling_server_address))))
+        .layer(Extension((preferred_address,signaling_server_address)))
         .layer(Extension(Arc::new(shutdown_signal.clone())))
         .layer(CorsLayer::permissive())
         .layer(axum::middleware::from_fn(extract_token));
@@ -74,7 +74,7 @@ pub async fn listen(
 
 async fn handler(
     Extension(context): Extension<Arc<HandlerContext>>,
-    Extension(addresses): Extension<Arc<(SocketAddr, SocketAddr)>>,
+    Extension(addresses): Extension<(SocketAddr, SocketAddr)>,
     Extension(shutdown_signal): Extension<Arc<ShutdownSignal>>,
     Extension(token): Extension<Option<String>>,
     value: JsonRpcExtractor,

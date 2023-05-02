@@ -310,8 +310,6 @@ dependencies = [
 name = "hello_world"
 version = "0.1.0"
 dependencies = [
- "serde",
- "tari_template_abi",
  "tari_template_lib",
 ]
 
@@ -329,15 +327,6 @@ name = "hermit-abi"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fed44880c466736ef9a5c5b5facefb5ed0785676d0c02d612db14e54f0d84286"
-
-[[package]]
-name = "hex"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "indexmap"
@@ -760,7 +749,6 @@ name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
  "ciborium",
- "hex",
  "newtype-ops",
  "serde",
  "serde-big-array",

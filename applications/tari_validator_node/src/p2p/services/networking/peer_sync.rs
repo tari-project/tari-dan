@@ -25,11 +25,9 @@ use std::convert::TryInto;
 use log::*;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerIdentityClaim, types::CommsPublicKey, PeerConnection};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_app_grpc::proto;
 use tari_dan_core::services::{DanPeer, PeerProvider};
+use tari_validator_node_rpc::{proto, rpc_service};
 use tokio_stream::StreamExt;
-
-use crate::p2p::rpc;
 
 const LOG_TARGET: &str = "tari::validator_node::networking::peer_sync";
 
@@ -54,7 +52,7 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
             "🫂 Peer sync protocol starting with {}",
             self.conn.peer_node_id()
         );
-        let mut client = self.conn.connect_rpc::<rpc::ValidatorNodeRpcClient>().await?;
+        let mut client = self.conn.connect_rpc::<rpc_service::ValidatorNodeRpcClient>().await?;
 
         // TODO: limit peer sync to current epoch
         let mut stream = client.get_peers(proto::rpc::GetPeersRequest::default()).await?;

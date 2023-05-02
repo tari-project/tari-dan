@@ -36,7 +36,7 @@ use tari_dan_app_utilities::template_manager::{
     TemplateMetadata,
     TemplateRegistration,
 };
-use tari_dan_common_types::services::template_provider::TemplateProvider;
+use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_dan_engine::{
     flow::FlowFactory,
     function_definitions::FlowFunctionDefinition,
@@ -226,13 +226,15 @@ impl TemplateProvider for TemplateManager {
     type Error = TemplateManagerError;
     type Template = LoadedTemplate;
 
-    fn get_template_module(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
+    fn get_template_module(&self, address: &TemplateAddress) -> Result<Option<Self::Template>, Self::Error> {
         if let Some(template) = self.cache.get(address) {
             debug!(target: LOG_TARGET, "CACHE HIT: Template {}", address);
-            return Ok(template);
+            return Ok(Some(template));
         }
 
-        let template = self.fetch_template(address)?;
+        let Some(template) = self.fetch_template(address).optional()? else {
+            return Ok(None);
+        };
         debug!(target: LOG_TARGET, "CACHE MISS: Template {}", address);
         let loaded = match template.executable {
             TemplateExecutable::CompiledWasm(wasm) => {
@@ -249,6 +251,6 @@ impl TemplateProvider for TemplateManager {
 
         self.cache.insert(*address, loaded.clone());
 
-        Ok(loaded)
+        Ok(Some(loaded))
     }
 }
