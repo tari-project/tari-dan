@@ -1,16 +1,16 @@
 @font-face {
-  src: url('./assets/fonts/AvenirLTStd-Book.otf');
-  font-family: 'AvenirRegular'
+  src: url('./fonts/AvenirLTStd-Book.otf');
+  font-family: 'AvenirRegular';
 }
 
 @font-face {
-  src: url('./assets/fonts/AvenirLTStd-Medium.otf');
-  font-family: 'AvenirMedium'
+  src: url('./fonts/AvenirLTStd-Medium.otf');
+  font-family: 'AvenirMedium';
 }
 
 @font-face {
-  src: url('./assets/fonts/AvenirLTStd-Heavy.otf');
-  font-family: 'AvenirHeavy'
+  src: url('./fonts/AvenirLTStd-Heavy.otf');
+  font-family: 'AvenirHeavy';
 }
 
 body {
@@ -18,11 +18,12 @@ body {
   font-family: 'AvenirMedium', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #F5F5F7;
+  background-color: #f5f5f7;
 }
 
 code {
-  font-family: source-code-pro, Menlo, Monaco, Consolas, "Courier New", monospace;
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
 }
 
 .add-confirm-form {
@@ -55,11 +56,10 @@ code {
 }
 
 @media screen and (min-width: 768px) {
-  
-.add-confirm-form {
-  flex-direction: row;
-}
-.flex-container {
-  flex-direction: row;
-}
+  .add-confirm-form {
+    flex-direction: row;
+  }
+  .flex-container {
+    flex-direction: row;
+  }
 }

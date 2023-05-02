@@ -23,7 +23,10 @@
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
-use tari_dan_wallet_sdk::models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress};
+use tari_dan_wallet_sdk::{
+    apis::jwt::JrpcPermissions,
+    models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress},
+};
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
@@ -131,9 +134,6 @@ pub struct TransactionClaimBurnResponse {
     pub inputs: Vec<ShardId>,
     pub outputs: Vec<ShardId>,
 }
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct AuthLoginRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeysListRequest {}
@@ -257,6 +257,7 @@ impl BalanceEntry {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountGetRequest {
+    #[serde(deserialize_with = "string_or_struct")]
     pub name_or_address: ComponentAddressOrName,
 }
 
@@ -400,3 +401,40 @@ pub struct AccountsCreateFreeTestCoinsResponse {
 pub struct WebRtcStart {
     pub jwt: String,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcStartRequest {
+    pub signaling_server_token: String,
+    pub permissions_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcStartResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthLoginRequest {
+    pub permissions: JrpcPermissions,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthLoginResponse {
+    pub auth_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthLoginAcceptRequest {
+    pub auth_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthLoginAcceptResponse {
+    pub permissions_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthLoginDenyRequest {
+    pub auth_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthLoginDenyResponse {}

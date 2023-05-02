@@ -8,6 +8,7 @@ pub mod error;
 pub mod keys;
 pub mod rpc;
 pub mod transaction;
+pub mod webrtc;
 
 use std::future::Future;
 
@@ -21,21 +22,31 @@ use tari_wallet_daemon_client::ComponentAddressOrName;
 pub trait Handler<'a, TReq> {
     type Response;
 
-    async fn handle(&mut self, context: &'a HandlerContext, req: TReq) -> Result<Self::Response, HandlerError>;
+    async fn handle(
+        &mut self,
+        context: &'a HandlerContext,
+        token: Option<String>,
+        req: TReq,
+    ) -> Result<Self::Response, HandlerError>;
 }
 
 #[async_trait]
 impl<'a, F, TReq, TResp, TFut, TErr> Handler<'a, TReq> for F
 where
-    F: FnMut(&'a HandlerContext, TReq) -> TFut + Sync + Send,
+    F: FnMut(&'a HandlerContext, Option<String>, TReq) -> TFut + Sync + Send,
     TFut: Future<Output = Result<TResp, TErr>> + Sync + Send,
     TReq: Send + 'static,
     TErr: Into<HandlerError>,
 {
     type Response = TResp;
 
-    async fn handle(&mut self, context: &'a HandlerContext, req: TReq) -> Result<Self::Response, HandlerError> {
-        let resp = self(context, req).await.map_err(Into::into)?;
+    async fn handle(
+        &mut self,
+        context: &'a HandlerContext,
+        token: Option<String>,
+        req: TReq,
+    ) -> Result<Self::Response, HandlerError> {
+        let resp = self(context, token, req).await.map_err(Into::into)?;
         Ok(resp)
     }
 }

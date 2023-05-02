@@ -36,6 +36,7 @@ pub enum EngineOp {
     ConsensusInvoke = 0x08,
     CallerContextInvoke = 0x09,
     GenerateRandomInvoke = 0x0A,
+    EmitEvent = 0x0B,
 }
 
 impl EngineOp {
@@ -52,6 +53,7 @@ impl EngineOp {
             0x08 => Some(EngineOp::ConsensusInvoke),
             0x09 => Some(EngineOp::CallerContextInvoke),
             0x0A => Some(EngineOp::GenerateRandomInvoke),
+            0x0B => Some(EngineOp::EmitEvent),
             _ => None,
         }
     }

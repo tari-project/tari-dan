@@ -1280,9 +1280,9 @@ dependencies = [
 [[package]]
 name = "ciborium"
 version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
 dependencies = [
- "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git)",
+ "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56)",
  "ciborium-ll",
  "serde",
 ]
@@ -1296,14 +1296,14 @@ checksum = "346de753af073cc87b52b2083a506b38ac176a44cfb05497b622e27be899b369"
 [[package]]
 name = "ciborium-io"
 version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
 
 [[package]]
 name = "ciborium-ll"
 version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
 dependencies = [
- "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git)",
+ "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56)",
  "half",
 ]
 
@@ -7616,6 +7616,7 @@ dependencies = [
  "anyhow",
  "chacha20poly1305 0.10.1",
  "digest 0.9.0",
+ "jsonwebtoken",
  "lazy_static",
  "log",
  "rand 0.7.3",
@@ -8104,6 +8105,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_dan_wallet_daemon",
+ "tari_dan_wallet_sdk",
  "tari_dan_wallet_storage_sqlite",
  "tari_engine_types",
  "tari_indexer",

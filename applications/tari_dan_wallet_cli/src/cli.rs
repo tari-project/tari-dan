@@ -31,6 +31,8 @@ use crate::command::Command;
 pub struct Cli {
     #[clap(long, alias = "endpoint", env = "JRPC_ENDPOINT")]
     pub daemon_jrpc_endpoint: Option<Multiaddr>,
+    #[clap(long, env = "TARI_WALLET_CLI_JWT")]
+    pub token: Option<String>,
     #[clap(subcommand)]
     pub command: Command,
 }

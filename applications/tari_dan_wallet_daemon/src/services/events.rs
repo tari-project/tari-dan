@@ -16,6 +16,7 @@ pub enum WalletEvent {
     TransactionFinalized(TransactionFinalizedEvent),
     TransactionInvalid(TransactionInvalidEvent),
     AccountChanged(AccountChangedEvent),
+    AuthLoginRequest(AuthLoginRequestEvent),
 }
 
 impl From<TransactionSubmittedEvent> for WalletEvent {
@@ -39,6 +40,12 @@ impl From<AccountChangedEvent> for WalletEvent {
 impl From<TransactionInvalidEvent> for WalletEvent {
     fn from(value: TransactionInvalidEvent) -> Self {
         Self::TransactionInvalid(value)
+    }
+}
+
+impl From<AuthLoginRequestEvent> for WalletEvent {
+    fn from(value: AuthLoginRequestEvent) -> Self {
+        Self::AuthLoginRequest(value)
     }
 }
 
@@ -67,4 +74,9 @@ pub struct TransactionInvalidEvent {
     pub hash: FixedHash,
     pub status: TransactionStatus,
     pub final_fee: Amount,
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthLoginRequestEvent {
+    pub auth_token: String,
 }

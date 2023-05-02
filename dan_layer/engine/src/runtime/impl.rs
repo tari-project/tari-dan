@@ -34,6 +34,7 @@ use tari_engine_types::{
     base_layer_hashing::ownership_proof_hasher,
     commit_result::FinalizeResult,
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
+    events::Event,
     fees::FeeReceipt,
     logs::LogEntry,
     resource_container::ResourceContainer,
@@ -71,6 +72,7 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
+use super::tracker::FinalizeTracker;
 use crate::{
     packager::LoadedTemplate,
     runtime::{
@@ -94,6 +96,11 @@ pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = L
     sender_public_key: RistrettoPublicKey,
     modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
     fee_loan: Amount,
+}
+
+pub struct StateFinalize {
+    pub finalized: FinalizeResult,
+    pub fee_receipt: FeeReceipt,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterfaceImpl<TTemplateProvider> {
@@ -156,6 +163,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("set_current_runtime_state")?;
         self.tracker.set_current_runtime_state(state);
+        Ok(())
+    }
+
+    fn emit_event(&self, message: String) -> Result<(), RuntimeError> {
+        self.invoke_modules_on_runtime_call("emit_event")?;
+
+        self.tracker.add_event(Event::new(message));
         Ok(())
     }
 
@@ -808,7 +822,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         self.tracker.reset_to_fee_checkpoint()
     }
 
-    fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError> {
+    fn finalize(&self) -> Result<StateFinalize, RuntimeError> {
         self.invoke_modules_on_runtime_call("finalize")?;
 
         // TODO: this should not be checked here because it will silently fail
@@ -821,16 +835,21 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let substates_to_persist = self.tracker.take_substates_to_persist();
         self.invoke_modules_on_before_finalize(&substates_to_persist)?;
 
-        let (result, fee_receipt) = self.tracker.finalize(substates_to_persist)?;
-        let logs = self.tracker.take_logs();
+        let FinalizeTracker {
+            result,
+            fee_receipt,
+            events,
+            logs,
+        } = self.tracker.finalize(substates_to_persist)?;
         let finalized = FinalizeResult::new(
             self.tracker.transaction_hash(),
             logs,
+            events,
             result,
             fee_receipt.to_cost_breakdown(),
         );
 
-        Ok((finalized, fee_receipt))
+        Ok(StateFinalize { finalized, fee_receipt })
     }
 }
 

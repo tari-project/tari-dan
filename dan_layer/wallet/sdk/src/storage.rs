@@ -164,6 +164,10 @@ pub trait WalletStoreWriter {
     fn commit(self) -> Result<(), WalletStorageError>;
     fn rollback(self) -> Result<(), WalletStorageError>;
 
+    // JWT
+    fn jwt_add_empty_token(&mut self) -> Result<u64, WalletStorageError>;
+    fn jwt_store_decision(&mut self, id: u64, permissions_token: Option<String>) -> Result<(), WalletStorageError>;
+
     // Key manager
     fn key_manager_insert(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
     fn key_manager_set_active_index(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError>;

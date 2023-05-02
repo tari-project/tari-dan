@@ -97,45 +97,64 @@ cargo run --bin tari_validator_node_cli -- templates publish
 
 Once the template is registered on the base layer and sufficiently mined, you should see it in the `templates` table of the `global_storage.sqlite` file  under `data/validator`. The `compiled_code` column should contain binary data and the `status` column should be `Active`.
 
+### Get airdropped base layer (Mino)Tari tokens to pay for fees
+
+Before the user can start submitting transactions to the network, it has to obtain base layer (Mino)Tari tokens to pay for fees. At the moment, the
+simplest way to do so is to request an airdrop of (free test) tokens from the network itself. In order to do so, the user should
+first create an account, using the tari wallet client, as follows:
+
+```
+    cargo run --bin tari_dan_wallet_cli -- accounts create --account-name <USER_ACCOUNT_NAME>
+```
+
+After the user has created an account, it can request an airdrop via the command
+
+```
+    cargo run --bin tari_dan_wallet_cli -- accounts faucet --account-name <USER_ACCOUNT_NAME> --amount <AMOUNT> --fee <FEE_AMOUNT>
+```
+
+Notice that for the DAN wallet cli to execute successfully, the user must have a wallet daemon connected to a validator node (see the
+above).
+
 ### Claiming L1 burn Tari on the DAN
 
-The user will need to claim burn tari (from the L1) before submitting transactions, otherwise, it will not be
-able to pay for network fees. To be able to claim burn tari, it is necessary to first burn L1 tari, on the base layer. After
-burning tari on the Tari base layer, the client is prompted with the following data
+L1 Minotari coins are able to be burnt and claimed, the user may convert (1:1) these to Tari coins on the layer-2 network. This process is
+fairly complex and manual at the time of writing, but is planned to improve in the future. The first step is to burn Minotari base layer
+funds making sure to include a claim public key. A private claim key must be known to claim the funds on the layer-2 Tari network. Burning
+yields the following data:
 
 ```
 {
     "transaction_id": <transaction_id>,
     "is_success": <IS_SUCCESS>,
     "failure_message": <FAILURE_MESSAGE>,
-    "commitment": <commitment>,
-    "ownership_proof": <ownership_proof>,
-    "rangeproof": <rangeproof>
+    "commitment": <COMMITMENT>,
+    "ownership_proof": <OWNERSHIP_PROOF>,
+    "rangeproof": <RANGEPROOF>
 }
 ```
 
-Now, it is possible to claim burn Tari on the DAN layer, as follows. Create a new `.json` file, with path
-`<json_file_to_retrieve_burn_tari>`
+The user must create an account on the Tari network using the `accounts create` wallet CLI command prior to claiming. See the previous
+section for details on creating an account. The public key of this account should be used as the claim public key when burning funds.
+
+the user can then claim burn Tari on the second layer, as follows: create a new `.json` file, with path
+`<JSON_FILE_TO_RETRIEVE_BURN_TARI>`
 
 ```
 {
-    "claim_public_key": <claim_public_key>,
-    "transaction_id": <transaction_id>,
-    "commitment": <commitment>,
-    "ownership_proof": <ownership_proof>,
-    "rangeproof": <rangeproof>
+    "claim_public_key": <CLAIM_PUBLIC_KEY>,
+    "transaction_id": <TRANSACTION_ID>,
+    "commitment": <COMMITMENT>,
+    "ownership_proof": <OWNERSHIP_PROOF>,
+    "rangeproof": <RANGEPROOF>
 }
 ```
 
-where `<claim_public_key>` is the claim public key that it was provided to the tari console wallet to burn base layer Tari,
-in the first place.
+then run the command
 
 ```
-cargo run --bin tari_dan_wallet_cli --claim-burn --account <account_name> --input <json_file_to_retrieve_burn_tari> --fee 1
+cargo run --bin tari_dan_wallet_cli -- accounts claim-burn --account <ACCOUNT_NAME> --json <JSON_FILE_TO_RETRIEVE_BURN_TARI> --fee <FEE>
 ```
-
-where `<account_name>` is the user account name, `<json_file_to_retrieve_burn_tari>` is the json generate previously.
-
 
 ### Calling a function
 With the templated registered we can invoke a function by using the `tari_dan_wallet_cli`.

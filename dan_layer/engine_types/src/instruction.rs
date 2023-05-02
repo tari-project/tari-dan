@@ -75,7 +75,7 @@ impl Display for Instruction {
                     claim.output_address, claim.proof_of_knowledge
                 )
             },
-            Instruction::CreateFreeTestCoins { .. } => {
+            Self::CreateFreeTestCoins { .. } => {
                 write!(f, "CreateFreeTestCoins")
             },
         }
