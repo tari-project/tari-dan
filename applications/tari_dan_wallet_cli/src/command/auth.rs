@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::time::Duration;
+
 use clap::{Args, Subcommand};
 use tari_dan_wallet_sdk::apis::jwt::JrpcPermissions;
 use tari_wallet_daemon_client::{
@@ -41,6 +43,7 @@ pub enum AuthSubcommand {
 #[derive(Debug, Args, Clone)]
 pub struct RequestArgs {
     permissions: JrpcPermissions,
+    validity_in_seconds: Option<u64>,
 }
 
 // TODO: We have to implement some wallet password for granting access. Only granting and denying access will need
@@ -68,6 +71,7 @@ impl AuthSubcommand {
                     let resp = client
                         .auth_request(AuthLoginRequest {
                             permissions: args.permissions,
+                            duration: args.validity_in_seconds.map(|value| Duration::from_secs(value)),
                         })
                         .await?;
                     println!("Auth token {}", resp.auth_token);
