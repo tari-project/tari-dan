@@ -1,7 +1,6 @@
 [workspace]
 
 members = [
-    "applications/tari_dan_app_grpc",
     "applications/tari_dan_app_utilities",
     "applications/tari_dan_wallet_cli",
     "applications/tari_dan_wallet_daemon",
@@ -25,6 +24,7 @@ members = [
     "dan_layer/template_test_tooling",
     "dan_layer/transaction_manifest",
     "dan_layer/transaction",
+    "dan_layer/validator_node_rpc",
     "dan_layer/wallet/sdk",
     "dan_layer/wallet/storage_sqlite",
 ]

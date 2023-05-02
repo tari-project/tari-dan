@@ -10,7 +10,6 @@ edition = "2021"
 tari_template_abi = { path = "../../../../template_abi", default-features = false, features = ["alloc"] }
 tari_bor = { path = "../../../../tari_bor", default-features = false }
 wee_alloc = "0.4.5"
-serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
 
 [profile.release]
 opt-level = 's'     # Optimize for size.

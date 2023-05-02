@@ -73,7 +73,7 @@ use crate::{
     comms,
     dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::{
-        create_validator_node_rpc_service,
+        create_tari_validator_node_rpc_service,
         services::{
             comms_peer_provider::CommsPeerProvider,
             epoch_manager,
@@ -313,7 +313,7 @@ fn setup_p2p_rpc(
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
         .finish()
-        .add_service(create_validator_node_rpc_service(
+        .add_service(create_tari_validator_node_rpc_service(
             peer_provider,
             shard_store_store,
             mempool,
