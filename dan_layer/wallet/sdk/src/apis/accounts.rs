@@ -130,7 +130,7 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         Ok(vault)
     }
 
-    pub fn has_vault(&self, vault_addr: &&SubstateAddress) -> Result<bool, AccountsApiError> {
+    pub fn has_vault(&self, vault_addr: &SubstateAddress) -> Result<bool, AccountsApiError> {
         let mut tx = self.store.create_read_tx()?;
         // TODO: consider optimising
         let exists = tx.vaults_get(vault_addr).optional()?.is_some();

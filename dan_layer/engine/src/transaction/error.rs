@@ -39,4 +39,6 @@ pub enum TransactionError {
     FlowEngineError(#[from] crate::flow::FlowEngineError),
     #[error("Recursion limit exceeded")]
     RecursionLimitExceeded,
+    #[error("Failed to load template '{address}': {details}")]
+    FailedToLoadTemplate { address: TemplateAddress, details: String },
 }

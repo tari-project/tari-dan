@@ -70,11 +70,11 @@ pub async fn run_tari_dan_wallet_daemon(
         .get_or_create_initial(key_manager::TRANSACTION_BRANCH)?;
     let notify = Notify::new(100);
 
-    let service_handles = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());
+    let services = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());
 
     let address = config.dan_wallet_daemon.listen_addr.unwrap();
     let signaling_server_address = config.dan_wallet_daemon.signaling_server_addr.unwrap();
-    let handlers = HandlerContext::new(wallet_sdk.clone(), notify);
+    let handlers = HandlerContext::new(wallet_sdk.clone(), notify, services.account_monitor_handle.clone());
     let listen_fut = jrpc_server::listen(address, signaling_server_address, handlers, shutdown_signal);
 
     // Wait for shutdown, or for any service to error
@@ -82,7 +82,7 @@ pub async fn run_tari_dan_wallet_daemon(
         res = listen_fut => {
             res?;
         },
-        res = service_handles => {
+        res = services.services_fut => {
             res?;
         },
     }

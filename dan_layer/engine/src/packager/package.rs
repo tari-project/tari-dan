@@ -19,12 +19,11 @@
 //  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::Infallible};
 
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_template_abi::TemplateDef;
 use tari_template_lib::models::TemplateAddress;
-use thiserror::Error;
 
 use crate::packager::template::LoadedTemplate;
 
@@ -79,17 +78,14 @@ impl PackageBuilder {
     }
 }
 
-#[derive(Debug, Clone, Error)]
-pub enum PackageError {
-    #[error("Template not found")]
-    TemplateNotFound,
-}
-
 impl TemplateProvider for Package {
-    type Error = PackageError;
+    type Error = Infallible;
     type Template = LoadedTemplate;
 
-    fn get_template_module(&self, id: &tari_engine_types::TemplateAddress) -> Result<Self::Template, Self::Error> {
-        self.templates.get(id).cloned().ok_or(PackageError::TemplateNotFound)
+    fn get_template_module(
+        &self,
+        id: &tari_engine_types::TemplateAddress,
+    ) -> Result<Option<Self::Template>, Self::Error> {
+        Ok(self.templates.get(id).cloned())
     }
 }

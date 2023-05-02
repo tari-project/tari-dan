@@ -14,7 +14,7 @@ use tari_crypto::{
 };
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{
-    apis::{jwt::JrpcPermission, key_manager},
+    apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
 };
@@ -116,8 +116,14 @@ pub async fn handle_create(
         .find(|(addr, _)| addr.is_component())
         .ok_or_else(|| anyhow!("Create account transaction accepted but no component address was returned"))?;
 
-    sdk.accounts_api()
-        .add_account(req.account_name.as_deref(), addr, key_index, req.is_default)?;
+    let is_first_account = sdk.accounts_api().count()? == 0;
+
+    sdk.accounts_api().add_account(
+        req.account_name.as_deref(),
+        addr,
+        key_index,
+        req.is_default || is_first_account,
+    )?;
 
     Ok(AccountsCreateResponse {
         address: addr.clone(),
@@ -230,6 +236,12 @@ pub async fn handle_get_balances(
     let account = get_account_or_default(req.account, sdk)?;
     sdk.jwt_api()
         .check_auth(token, &[JrpcPermission::AccountBalance(account.clone().address)])?;
+    if req.refresh {
+        context
+            .account_monitor()
+            .refresh_account(account.address.clone())
+            .await?;
+    }
     let vaults = sdk.accounts_api().get_vaults_by_account(&account.address)?;
     let outputs_api = sdk.confidential_outputs_api();
 
@@ -564,9 +576,12 @@ pub async fn handle_claim_burn(
     );
 
     // We have to unmask the commitment to allow us to reveal funds for the fee payment
-    let (_, output) = sdk
+    let ValidatorScanResult { substate: output, .. } = sdk
         .substate_api()
-        .scan_from_vn(&commitment_substate_address.address)
+        .scan_from_vn(
+            &commitment_substate_address.address,
+            Some(commitment_substate_address.version),
+        )
         .await?;
     let output = output.into_unclaimed_confidential_output().unwrap();
     let unmasked_output = sdk.confidential_crypto_api().unblind_output(

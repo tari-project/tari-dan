@@ -131,7 +131,10 @@ impl TemplateManagerService {
     }
 
     fn handle_load_template_abi(&mut self, address: TemplateAddress) -> Result<TemplateAbi, TemplateManagerError> {
-        let loaded = self.manager.get_template_module(&address)?;
+        let loaded = self
+            .manager
+            .get_template_module(&address)?
+            .ok_or(TemplateManagerError::TemplateNotFound { address })?;
         Ok(TemplateAbi {
             template_name: loaded.template_def().template_name.clone(),
             functions: loaded

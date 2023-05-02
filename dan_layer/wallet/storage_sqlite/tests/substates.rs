@@ -10,7 +10,7 @@ use tari_dan_wallet_sdk::{
     storage::{WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
-use tari_engine_types::{substate::SubstateAddress, TemplateAddress};
+use tari_engine_types::substate::SubstateAddress;
 
 #[test]
 fn get_and_insert_substates() {
@@ -27,14 +27,14 @@ fn get_and_insert_substates() {
     let address =
         SubstateAddress::from_str("component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfb66ab34d4")
             .unwrap();
-    tx.substates_insert_parent(
+    tx.substates_insert_root(
         hash,
         VersionedSubstateAddress {
             address: address.clone(),
             version: 0,
         },
-        "".to_string(),
-        TemplateAddress::default(),
+        None,
+        None,
     )
     .unwrap();
 

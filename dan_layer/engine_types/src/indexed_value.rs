@@ -11,6 +11,8 @@ use tari_template_lib::{
     Hash,
 };
 
+use crate::substate::SubstateAddress;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct IndexedValue {
     buckets: Vec<BucketId>,
@@ -35,6 +37,51 @@ impl IndexedValue {
             vault_ids: visitor.vault_ids,
             metadata: visitor.metadata,
         })
+    }
+
+    pub fn contains_substate(&self, addr: &SubstateAddress) -> bool {
+        match addr {
+            SubstateAddress::Component(addr) => self.component_addresses.contains(addr),
+            SubstateAddress::Resource(addr) => self.resource_addresses.contains(addr),
+            SubstateAddress::NonFungible(addr) => self.non_fungible_addresses.contains(addr),
+            SubstateAddress::Vault(addr) => self.vault_ids.contains(addr),
+            SubstateAddress::UnclaimedConfidentialOutput(_) => false,
+            // TODO: should we index this value?
+            SubstateAddress::NonFungibleIndex(_) => false,
+        }
+    }
+
+    pub fn owned_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.component_addresses
+            .iter()
+            .map(|a| (*a).into())
+            .chain(self.resource_addresses.iter().map(|a| (*a).into()))
+            .chain(self.non_fungible_addresses.iter().map(|a| a.clone().into()))
+            .chain(self.vault_ids.iter().map(|a| (*a).into()))
+    }
+
+    pub fn buckets(&self) -> &[BucketId] {
+        &self.buckets
+    }
+
+    pub fn component_addresses(&self) -> &[ComponentAddress] {
+        &self.component_addresses
+    }
+
+    pub fn resource_addresses(&self) -> &[ResourceAddress] {
+        &self.resource_addresses
+    }
+
+    pub fn non_fungible_addresses(&self) -> &[NonFungibleAddress] {
+        &self.non_fungible_addresses
+    }
+
+    pub fn vault_ids(&self) -> &[VaultId] {
+        &self.vault_ids
+    }
+
+    pub fn metadata(&self) -> &[Metadata] {
+        &self.metadata
     }
 }
 

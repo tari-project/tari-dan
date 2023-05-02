@@ -214,11 +214,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     .interface()
                     .set_current_runtime_state(RuntimeState { template_address })?;
 
-                let template = template_provider.get_template_module(&template_address).map_err(|_e| {
-                    TransactionError::TemplateNotFound {
+                let template = template_provider
+                    .get_template_module(&template_address)
+                    .map_err(|e| TransactionError::FailedToLoadTemplate {
                         address: template_address,
-                    }
-                })?;
+                        details: e.to_string(),
+                    })?
+                    .ok_or(TransactionError::TemplateNotFound {
+                        address: template_address,
+                    })?;
 
                 let result = Self::invoke_template(
                     template,
@@ -300,7 +304,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
         let template = template_provider
             .get_template_module(&component.template_address)
-            .map_err(|_e| TransactionError::TemplateNotFound {
+            .map_err(|e| TransactionError::FailedToLoadTemplate {
+                address: component.template_address,
+                details: e.to_string(),
+            })?
+            .ok_or(TransactionError::TemplateNotFound {
                 address: component.template_address,
             })?;
 

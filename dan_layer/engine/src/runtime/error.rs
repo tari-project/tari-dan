@@ -32,6 +32,7 @@ use tari_template_lib::models::{
     ComponentAddress,
     NonFungibleId,
     ResourceAddress,
+    TemplateAddress,
     UnclaimedConfidentialOutputAddress,
     VaultId,
 };
@@ -111,14 +112,16 @@ pub enum RuntimeError {
     ConfidentialOutputAlreadyClaimed {
         address: UnclaimedConfidentialOutputAddress,
     },
-    #[error("Template not found with name '{template_name}'")]
-    TemplateNotFound { template_name: String },
+    #[error("Template {template_address} not found")]
+    TemplateNotFound { template_address: TemplateAddress },
     #[error("Insufficient fees paid: required {required_fee}, paid {fees_paid}")]
     InsufficientFeesPaid { required_fee: Amount, fees_paid: Amount },
     #[error("No checkpoint")]
     NoCheckpoint,
     #[error("Component address must be sequential. Index before {index} was not found")]
     ComponentAddressMustBeSequential { index: u32 },
+    #[error("Failed to load template '{address}': {details}")]
+    FailedToLoadTemplate { address: TemplateAddress, details: String },
 }
 
 impl RuntimeError {
