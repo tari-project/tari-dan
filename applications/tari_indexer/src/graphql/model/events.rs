@@ -20,14 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use async_graphql::SimpleObject;
+use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tari_crypto::tari_utilities::hex::from_hex;
+use std::{convert::TryInto, sync::Arc};
+use tari_crypto::tari_utilities::message_format::MessageFormat;
 
-use crate::substate_storage_sqlite::sqlite_substate_store_factory::{
-    SqliteSubstateStoreReadTransaction, SubstateStoreReadTransaction,
-};
+use crate::substate_manager::SubstateManager;
+use crate::substate_storage_sqlite::models::events::NewEvent;
 
 #[derive(SimpleObject, Deserialize, Serialize)]
 pub struct Event {
@@ -37,30 +37,44 @@ pub struct Event {
     pub(crate) payload: HashMap<String, String>,
 }
 
-pub async fn extract_event(
-    tx: &mut SqliteSubstateStoreReadTransaction<'_>,
-    template_address: String,
-    tx_hash: String,
-) -> Result<Vec<Event>, String> {
-    let events = tx.get_events(template_address, tx_hash).map_err(|e| e.to_string())?;
-    events
-        .iter()
-        .map(|event| {
-            let mut template_address = [0u8; 32];
-            let template_address_buff = from_hex(&event.template_address).map_err(|e| e.to_string())?;
-            template_address.copy_from_slice(&template_address_buff);
+pub(crate) type EventSchema = Schema<EventQuery, EmptyMutation, EmptySubscription>;
+pub struct EventQuery {
+    pub(crate) substate_manager: Arc<SubstateManager>,
+}
 
-            let mut tx_hash = [0u8; 32];
-            let tx_hash_buffer = from_hex(&event.tx_hash).map_err(|e| e.to_string())?;
-            tx_hash.copy_from_slice(&tx_hash_buffer);
+#[Object]
+impl EventQuery {
+    pub async fn get_event(&self, template_address: String, tx_hash: String) -> Result<Vec<Event>, anyhow::Error> {
+        let events = self
+            .substate_manager
+            .get_event_from_db(template_address, tx_hash)
+            .await?;
+        panic!("FLAG: events = {:?}", events);
+        events
+            .into_iter()
+            .map(|e| e.try_into())
+            .collect::<Result<Vec<Event>, anyhow::Error>>()
+    }
 
-            let payload = serde_json::from_str(event.payload.as_str()).map_err(|e| e.to_string())?;
-            Ok(Event {
-                template_address,
-                tx_hash,
-                topic: event.topic.clone(),
-                payload,
-            })
-        })
-        .collect::<Result<Vec<Event>, String>>()
+    pub async fn save_event(
+        &self,
+        template_address: String,
+        tx_hash: String,
+        topic: String,
+        payload: HashMap<String, String>,
+    ) -> Result<String, anyhow::Error> {
+        // TODO: a more direct way to convert to string ?
+        let payload_string = payload.to_json()?.to_string();
+        let new_event = NewEvent {
+            template_address,
+            tx_hash,
+            topic,
+            payload: payload_string,
+        };
+        if let Err(e) = self.substate_manager.save_event_to_db(new_event.clone()).await {
+            return Ok(format!("error: {}", e.to_string()));
+        }
+
+        Ok("success".to_string())
+    }
 }

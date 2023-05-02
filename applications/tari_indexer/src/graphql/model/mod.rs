@@ -20,32 +20,4 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, sync::Arc};
-
-use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
-
-use crate::substate_manager::SubstateManager;
-
-use self::events::Event;
-
 pub mod events;
-
-pub(crate) type EventSchema = Schema<EventQuery, EmptyMutation, EmptySubscription>;
-
-pub struct EventQuery {
-    pub(crate) substate_manager: Arc<SubstateManager>,
-}
-
-#[Object]
-impl EventQuery {
-    pub async fn get_event(&self, template_address: String, tx_hash: String) -> Result<Vec<Event>, anyhow::Error> {
-        let events = self
-            .substate_manager
-            .get_event_from_db(template_address, tx_hash)
-            .await?;
-        events
-            .into_iter()
-            .map(|e| e.try_into())
-            .collect::<Result<Vec<Event>, anyhow::Error>>()
-    }
-}

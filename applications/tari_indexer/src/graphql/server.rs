@@ -38,7 +38,7 @@ use log::*;
 use serde::Serialize;
 
 use crate::{
-    graphql::model::{EventQuery, EventSchema},
+    graphql::model::events::{EventQuery, EventSchema},
     substate_manager::SubstateManager,
 };
 

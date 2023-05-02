@@ -32,7 +32,7 @@ use crate::{
     substate_decoder::{decode_substate_into_json, find_related_substates},
     substate_storage_sqlite::{
         models::{
-            events::EventData,
+            events::{EventData, NewEvent},
             non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
             substate::{NewSubstate, Substate as SubstateRow},
         },
@@ -273,6 +273,12 @@ impl SubstateManager {
         let mut tx = self.substate_store.create_read_tx()?;
         let events = tx.get_events(template_address, tx_hash)?;
         Ok(events)
+    }
+
+    pub async fn save_event_to_db(&self, new_event: NewEvent) -> Result<(), anyhow::Error> {
+        let mut tx = self.substate_store.create_write_tx()?;
+        tx.save_events(new_event)?;
+        Ok(())
     }
 
     pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {

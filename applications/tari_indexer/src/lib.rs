@@ -36,7 +36,7 @@ mod json_rpc;
 mod p2p;
 mod substate_decoder;
 mod substate_manager;
-mod substate_storage_sqlite;
+pub mod substate_storage_sqlite;
 
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},

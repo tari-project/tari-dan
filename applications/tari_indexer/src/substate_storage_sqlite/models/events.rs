@@ -39,7 +39,7 @@ pub struct Event {
     pub payload: String,
 }
 
-#[derive(Debug, Insertable, AsChangeset)]
+#[derive(Debug, Clone, Insertable, AsChangeset)]
 #[diesel(table_name = events)]
 pub struct NewEvent {
     pub template_address: String,

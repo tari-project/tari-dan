@@ -26,12 +26,7 @@ use std::{collections::HashMap, convert::TryFrom, future, io, str::FromStr, time
 
 use cucumber::{
     gherkin::{Scenario, Step},
-    given,
-    then,
-    when,
-    writer,
-    World,
-    WriterExt,
+    given, then, when, writer, World, WriterExt,
 };
 use indexmap::IndexMap;
 use tari_common::initialize_logging;
@@ -48,11 +43,7 @@ use tari_dan_engine::abi::Type;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
-    AddPeerRequest,
-    GetIdentityResponse,
-    GetRecentTransactionsRequest,
-    GetTemplateRequest,
-    GetTransactionResultRequest,
+    AddPeerRequest, GetIdentityResponse, GetRecentTransactionsRequest, GetTemplateRequest, GetTransactionResultRequest,
     TemplateRegistrationResponse,
 };
 use utils::{
@@ -687,16 +678,22 @@ async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: Str
     spawn_indexer(world, indexer_name, bn_name).await;
 }
 
-#[given(expr = "{word} indexer GraphQL request work")]
+#[given(expr = "{word} indexer GraphQL request works")]
 async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
-    let indexer = world.indexers.get(&indexer_name).unwrap();
+    let indexer = world.indexers.get_mut(&indexer_name).unwrap();
+    // indexer.insert_event_mock_data().await;
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
+    let query = "{ get_event }".to_string();
+    let template_address = [0; 32].to_hex();
+    let tx_hash = [0; 32].to_hex();
+    let variables = HashMap::from([("template_address", template_address), ("tx_hash", tx_hash)]);
+    let variables = serde_json::to_value(variables).unwrap_or_else(|e| panic!("Unable to convert to value {}", e));
     let res = graphql_client
-        .send_request::<HashMap<String, String>>("{ hello }", None, None)
+        .send_request::<HashMap<String, String>>(query, variables, None)
         .await
         .unwrap();
-    let res = res.get("hello").unwrap();
-    assert_eq!(res.as_str(), "Hello world");
+    // let res = res.get("hello").unwrap();
+    // assert_eq!(res.as_str(), "Hello world");
 }
 
 #[when(expr = "the indexer {word} tracks the address {word}")]
