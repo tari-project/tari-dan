@@ -34,7 +34,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let config = ApplicationConfig::load_from(&cfg)?;
 
     // Remove the file if it was left behind by a previous run
-    let _ = fs::remove_file(config.common.base_path.join("pid"));
+    let _file = fs::remove_file(config.common.base_path.join("pid"));
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
