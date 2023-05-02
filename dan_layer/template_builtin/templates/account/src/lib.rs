@@ -34,18 +34,25 @@ mod account_template {
 
     impl Account {
         pub fn create(owner_token: NonFungibleAddress) -> AccountComponent {
-            Self::create_with_withdraw_rule(AccessRule::Restricted(Require(owner_token)), None)
-        }
-
-        pub fn create_with_rules(access_rules: AccessRules) -> AccountComponent {
-            Self::internal_create(access_rules, None)
+            Self::internal_create(owner_token, None)
         }
 
         pub fn create_with_bucket(owner_token: NonFungibleAddress, bucket: Bucket) -> AccountComponent {
-            Self::create_with_withdraw_rule(AccessRule::Restricted(Require(owner_token)), Some(bucket))
+            Self::internal_create(owner_token, Some(bucket))
         }
 
-        pub fn create_with_withdraw_rule(withdraw_rule: AccessRule, bucket: Option<Bucket>) -> AccountComponent {
+        fn internal_create(owner_token: NonFungibleAddress, bucket: Option<Bucket>) -> AccountComponent {
+            // extract the public key from the token
+            // we only allow owner tokens that correspond to public keys
+            let public_key = owner_token
+                .to_public_key()
+                .unwrap_or_else(|| panic!("owner_token is not a valid public key: {}", owner_token));
+
+            // the account component will be addressed using the public key
+            let component_id = public_key.as_hash();
+
+            // only the owner of the token will be able to withdraw funds from the account
+            let withdraw_rule = AccessRule::Restricted(Require(owner_token));
             let rules = AccessRules::new()
                 .add_method_rule("balance", AccessRule::AllowAll)
                 .add_method_rule("get_balances", AccessRule::AllowAll)
@@ -53,16 +60,14 @@ mod account_template {
                 .add_method_rule("deposit_all", AccessRule::AllowAll)
                 .add_method_rule("get_non_fungible_ids", AccessRule::AllowAll)
                 .default(withdraw_rule);
-            Self::internal_create(rules, bucket)
-        }
 
-        fn internal_create(rules: AccessRules, bucket: Option<Bucket>) -> AccountComponent {
+            // add the funds from the (optional) bucket
             let mut vaults = HashMap::new();
             if let Some(b) = bucket {
                 vaults.insert(b.resource_address(), Vault::from_bucket(b));
             }
 
-            Self { vaults }.create_with_options(rules, None)
+            Self { vaults }.create_with_options(rules, Some(component_id))
         }
 
         // #[access_rule(allow_all)]
