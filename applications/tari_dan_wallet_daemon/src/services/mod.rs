@@ -13,7 +13,8 @@ mod transaction_service;
 
 use anyhow::anyhow;
 use futures::{future, future::BoxFuture, FutureExt};
-use tari_dan_wallet_sdk::{storage::WalletStore, DanWalletSdk};
+use tari_dan_common_types::optional::IsNotFoundError;
+use tari_dan_wallet_sdk::{storage::WalletStore, substate_provider::WalletNetworkInterface, DanWalletSdk};
 use tari_shutdown::ShutdownSignal;
 use tokio::{sync::oneshot, task::JoinHandle};
 use transaction_service::TransactionService;
@@ -22,13 +23,15 @@ use crate::{notify::Notify, services::account_monitor::AccountMonitor};
 
 pub(self) type Reply<T> = oneshot::Sender<T>;
 
-pub fn spawn_services<TStore>(
+pub fn spawn_services<TStore, TNetworkInterface>(
     shutdown_signal: ShutdownSignal,
     notify: Notify<WalletEvent>,
-    wallet_sdk: DanWalletSdk<TStore>,
+    wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
 ) -> Services
 where
     TStore: WalletStore + Clone + Send + Sync + 'static,
+    TNetworkInterface: WalletNetworkInterface + Clone + Send + Sync + 'static,
+    TNetworkInterface::Error: IsNotFoundError,
 {
     let transaction_service_join_handle =
         tokio::spawn(TransactionService::new(notify.clone(), wallet_sdk.clone(), shutdown_signal.clone()).run());

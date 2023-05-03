@@ -27,6 +27,7 @@ tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
+tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }

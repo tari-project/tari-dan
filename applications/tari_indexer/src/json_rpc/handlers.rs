@@ -20,17 +20,16 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
-use anyhow::Context;
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
     JrpcResult,
     JsonRpcExtractor,
     JsonRpcResponse,
 };
-use log::warn;
-use serde::{Deserialize, Serialize};
+use log::{error, warn};
+use serde::Serialize;
 use serde_json::{self as json, json, Value};
 use tari_comms::{
     multiaddr::Multiaddr,
@@ -40,14 +39,29 @@ use tari_comms::{
     NodeIdentity,
 };
 use tari_crypto::tari_utilities::hex::Hex;
+use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_core::services::BaseNodeClient;
-use tari_engine_types::substate::SubstateAddress;
+use tari_indexer_client::types::{
+    AddAddressRequest,
+    DeleteAddressRequest,
+    GetNonFungibleCountRequest,
+    GetNonFungiblesRequest,
+    GetNonFungiblesResponse,
+    GetSubstateRequest,
+    GetSubstateResponse,
+    GetTransactionResultRequest,
+    GetTransactionResultResponse,
+    NonFungibleSubstate,
+    SubmitTransactionRequest,
+    SubmitTransactionResponse,
+};
 use tari_validator_node_client::types::{AddPeerRequest, AddPeerResponse, GetIdentityResponse};
+use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
-// use tari_validator_node_client::types::GetRecentTransactionsResponse;
 use crate::{
     bootstrap::Services,
-    substate_manager::{NonFungibleResponse, SubstateManager, SubstateResponse},
+    substate_manager::SubstateManager,
+    transaction_manager::TransactionManager,
     GrpcBaseNodeClient,
 };
 
@@ -72,6 +86,7 @@ pub struct JsonRpcHandlers {
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
     substate_manager: Arc<SubstateManager>,
+    transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
 }
 
 impl JsonRpcHandlers {
@@ -79,12 +94,14 @@ impl JsonRpcHandlers {
         services: &Services,
         base_node_client: GrpcBaseNodeClient,
         substate_manager: Arc<SubstateManager>,
+        transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
     ) -> Self {
         Self {
             node_identity: services.comms.node_identity(),
             comms: services.comms.clone(),
             base_node_client,
             substate_manager,
+            transaction_manager,
         }
     }
 }
@@ -220,32 +237,36 @@ impl JsonRpcHandlers {
     pub async fn get_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: GetSubstateRequest = value.parse_params()?;
-        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
-        let version = request.version;
 
-        let res = self
+        let substate_resp = self
             .substate_manager
-            .get_substate(&substate_address, version)
+            .get_substate(&request.address, request.version)
             .await
-            .unwrap_or(None);
+            .map_err(|e| {
+                warn!(target: LOG_TARGET, "Error getting substate: {}", e);
+                Self::generic_error_response(answer_id)
+            })?
+            .ok_or_else(|| {
+                JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::ApplicationError(404),
+                        format!(
+                            "Substate {} (version:>={}) not found",
+                            request.address,
+                            request.version.unwrap_or(0)
+                        ),
+                        Value::Null,
+                    ),
+                )
+            })?;
 
-        if let Some(substate) = res {
-            if let Ok(json) = Self::build_substate_json(&substate) {
-                return Ok(JsonRpcResponse::success(answer_id, json));
-            }
-        }
-
-        Err(Self::generic_error_response(answer_id))
-    }
-
-    fn build_substate_json(substate: &SubstateResponse) -> Result<Value, anyhow::Error> {
-        let mut json_value = serde_json::to_value(substate)?;
-        let data: Value = serde_json::from_str(&substate.data)?;
-        json_value
-            .as_object_mut()
-            .context("Invalid object")?
-            .insert("data".to_owned(), data);
-        Ok(json_value)
+        Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+            address: substate_resp.address,
+            version: substate_resp.version,
+            substate: substate_resp.substate,
+            created_by_transaction: substate_resp.created_by_transaction,
+        }))
     }
 
     pub async fn get_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -265,11 +286,10 @@ impl JsonRpcHandlers {
     pub async fn add_address(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: AddAddressRequest = value.parse_params()?;
-        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
 
         match self
             .substate_manager
-            .fetch_and_add_substate_to_db(&substate_address)
+            .fetch_and_add_substate_to_db(&request.address)
             .await
         {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
@@ -283,9 +303,8 @@ impl JsonRpcHandlers {
     pub async fn delete_address(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: DeleteAddressRequest = value.parse_params()?;
-        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
 
-        match self.substate_manager.delete_substate_from_db(&substate_address).await {
+        match self.substate_manager.delete_substate_from_db(&request.address).await {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error deleting address: {}", e);
@@ -323,97 +342,81 @@ impl JsonRpcHandlers {
     pub async fn get_non_fungible_count(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: GetNonFungibleCountRequest = value.parse_params()?;
-        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
-
-        let res = self.substate_manager.get_non_fungible_count(&substate_address).await;
-
-        match res {
-            Ok(count) => Ok(JsonRpcResponse::success(answer_id, count)),
-            Err(e) => {
+        let count = self
+            .substate_manager
+            .get_non_fungible_count(&request.address)
+            .await
+            .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting non fungible count: {}", e);
-                Err(Self::generic_error_response(answer_id))
-            },
-        }
+                Self::generic_error_response(answer_id)
+            })?;
+
+        Ok(JsonRpcResponse::success(answer_id, count))
     }
 
     pub async fn get_non_fungibles(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: GetNonFungiblesRequest = value.parse_params()?;
-        let substate_address = Self::parse_substate_address(&request.address, answer_id)?;
 
         let res = self
             .substate_manager
-            .get_non_fungibles(&substate_address, request.start_index, request.end_index)
-            .await;
+            .get_non_fungibles(&request.address, request.start_index, request.end_index)
+            .await
+            .map_err(|e| Self::internal_error(answer_id, e))?;
 
-        if let Ok(non_fungibles) = res {
-            let nf_json_res = non_fungibles
-                .iter()
-                .map(Self::build_non_fungible_json)
-                .collect::<Result<Vec<_>, _>>();
-            if let Ok(nf_json) = nf_json_res {
-                return Ok(JsonRpcResponse::success(answer_id, nf_json));
-            }
-        }
-
-        Err(Self::generic_error_response(answer_id))
+        Ok(JsonRpcResponse::success(answer_id, GetNonFungiblesResponse {
+            non_fungibles: res
+                .into_iter()
+                .map(|v| NonFungibleSubstate {
+                    index: v.index,
+                    address: v.address,
+                    substate: v.substate,
+                })
+                .collect(),
+        }))
     }
 
-    fn build_non_fungible_json(nf: &NonFungibleResponse) -> Result<Value, anyhow::Error> {
-        let mut json_value = serde_json::to_value(nf)?;
-        let substate: Value = serde_json::from_str(&nf.substate)?;
-        json_value
-            .as_object_mut()
-            .context("Invalid object")?
-            .insert("substate".to_owned(), substate);
-        Ok(json_value)
+    pub async fn submit_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: SubmitTransactionRequest = value.parse_params()?;
+
+        let payload_id = self
+            .transaction_manager
+            .submit_transaction(request.transaction)
+            .await
+            .map_err(|e| Self::internal_error(answer_id, e))?;
+
+        Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+            transaction_hash: payload_id.into_array().into(),
+        }))
     }
 
-    fn parse_substate_address(address_str: &str, answer_id: i64) -> Result<SubstateAddress, JsonRpcResponse> {
-        let address = SubstateAddress::from_str(address_str).map_err(|_| Self::generic_error_response(answer_id))?;
-        Ok(address)
+    pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetTransactionResultRequest = value.parse_params()?;
+
+        let result = self
+            .transaction_manager
+            .get_transaction_result(request.transaction_hash)
+            .await
+            .map_err(|e| Self::internal_error(answer_id, e))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetTransactionResultResponse {
+            execution_result: result.into_finalized(),
+        }))
     }
 
-    fn error_response(answer_id: i64, message: &str) -> JsonRpcResponse {
-        JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::InvalidParams,
-                message.to_string(),
-                json::Value::Null,
-            ),
-        )
+    fn error_response<T: Into<String>>(answer_id: i64, reason: JsonRpcErrorReason, message: T) -> JsonRpcResponse {
+        JsonRpcResponse::error(answer_id, JsonRpcError::new(reason, message.into(), json::Value::Null))
     }
 
+    fn internal_error<T: Display>(answer_id: i64, details: T) -> JsonRpcResponse {
+        error!(target: LOG_TARGET, "Internal error: {}", details);
+        Self::error_response(answer_id, JsonRpcErrorReason::InternalError, "Something went wrong")
+    }
+
+    // TODO: pass the error in here and log it instead of "squashing" it (switch to using Self::internal_error)
     fn generic_error_response(answer_id: i64) -> JsonRpcResponse {
-        Self::error_response(answer_id, "Something went wrong")
+        Self::error_response(answer_id, JsonRpcErrorReason::InternalError, "Something went wrong")
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetSubstateRequest {
-    pub address: String,
-    pub version: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddAddressRequest {
-    pub address: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeleteAddressRequest {
-    pub address: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetNonFungibleCountRequest {
-    pub address: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetNonFungiblesRequest {
-    pub address: String,
-    pub start_index: u64,
-    pub end_index: u64,
 }

@@ -32,6 +32,8 @@ tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
+tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
+tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"
@@ -51,7 +53,9 @@ futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
 lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
+log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
 prost = "0.9"
+rand = "0.8"
 reqwest = "0.11.11"
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0.64"
@@ -62,3 +66,9 @@ tonic = "0.6.2"
 tower = "0.4"
 tower-layer = "0.3"
 tower-http = { version = "0.3.0", features = ["cors"] }
+
+[package.metadata.cargo-machete]
+ignored = [
+    # Want to enable some log4rs features
+    "log4rs",
+]

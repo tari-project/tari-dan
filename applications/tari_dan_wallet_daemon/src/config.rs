@@ -52,7 +52,7 @@ pub struct WalletDaemonConfig {
     /// The signaling server address for the webrtc
     pub signaling_server_addr: Option<SocketAddr>,
     /// The validator nodes jrpc endpoint url
-    pub validator_node_endpoint: Option<String>,
+    pub indexer_node_json_rpc_url: String,
     /// Expiration duration of the JWT token
     pub jwt_duration: Option<Duration>,
     /// Secret key for the JWT token.
@@ -65,7 +65,7 @@ impl Default for WalletDaemonConfig {
             override_from: None,
             listen_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9000))),
             signaling_server_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9100))),
-            validator_node_endpoint: Some("http://127.0.0.1:18200/json_rpc".to_string()),
+            indexer_node_json_rpc_url: "http://127.0.0.1:18300/json_rpc".to_string(),
             // TODO: Come up with a reasonable default value
             jwt_duration: Some(Duration::from_secs(500 * 60)),
             // TODO: Generate a random secret key at start if not set by hand. Otherwise anyone can generate a JWT token

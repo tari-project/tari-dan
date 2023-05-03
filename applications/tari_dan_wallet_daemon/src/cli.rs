@@ -36,8 +36,8 @@ pub struct Cli {
     pub listen_addr: Option<SocketAddr>,
     #[clap(long, alias = "signaling_server_address", env = "SIGNALING_SERVER_ADDRESS")]
     pub signaling_server_addr: Option<SocketAddr>,
-    #[clap(long, alias = "vn_url")]
-    pub validator_node_endpoint: Option<String>,
+    #[clap(long, alias = "indexer_url")]
+    pub indexer_node_json_rpc_url: Option<String>,
 }
 
 impl Cli {
@@ -58,10 +58,10 @@ impl ConfigOverrideProvider for Cli {
                 signaling_server_addr.to_string(),
             ));
         }
-        if let Some(validator_node_endpoint) = &self.validator_node_endpoint {
+        if let Some(indexer_node_json_rpc_url) = &self.indexer_node_json_rpc_url {
             overrides.push((
-                "dan_wallet_daemon.validator_node_endpoint".to_string(),
-                validator_node_endpoint.clone(),
+                "dan_wallet_daemon.indexer_node_json_rpc_url".to_string(),
+                indexer_node_json_rpc_url.clone(),
             ));
         }
         overrides

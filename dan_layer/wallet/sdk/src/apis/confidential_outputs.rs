@@ -152,7 +152,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         vault_addr: &SubstateAddress,
         outputs: Vec<&ConfidentialOutput>,
     ) -> Result<(), ConfidentialOutputsApiError> {
-        let account = self.accounts_api.get_account(account_addr)?;
+        let account = self.accounts_api.get_account_by_address(account_addr)?;
         // We do not support changing of account key at this time
         let key = self
             .key_manager_api

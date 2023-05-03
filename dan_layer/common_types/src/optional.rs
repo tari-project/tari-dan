@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::convert::Infallible;
+
 /// A type that can indicate something is not found.
 /// Implement this on `E` to get the `.optional()?` function on the `Result<T, E>` type.
 pub trait IsNotFoundError {
@@ -41,5 +43,11 @@ impl<T, E: IsNotFoundError> Optional<T> for Result<T, E> {
             Err(e) if e.is_not_found_error() => Ok(None),
             Err(e) => Err(e),
         }
+    }
+}
+
+impl IsNotFoundError for Infallible {
+    fn is_not_found_error(&self) -> bool {
+        false
     }
 }

@@ -180,8 +180,6 @@ dependencies = [
 name = "confidential_utilities"
 version = "0.1.0"
 dependencies = [
- "serde",
- "tari_template_abi",
  "tari_template_lib",
 ]
 

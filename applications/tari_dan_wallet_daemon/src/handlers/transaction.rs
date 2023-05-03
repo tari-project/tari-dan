@@ -42,7 +42,6 @@ pub async fn handle_submit(
     // TODO: Ideally the SDK should take care of signing the transaction internally
     let (_, key) = key_api.get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
 
-    // let transaction_api = sdk.transaction_api();
     let inputs = if req.override_inputs {
         req.inputs
     } else {
@@ -94,9 +93,9 @@ pub async fn handle_submit(
         transaction.hash()
     );
     let hash = if req.is_dry_run {
-        sdk.transaction_api().submit_dry_run_to_vn(transaction).await?
+        sdk.transaction_api().submit_dry_run_transaction(transaction).await?
     } else {
-        sdk.transaction_api().submit_to_vn(transaction).await?
+        sdk.transaction_api().submit_transaction(transaction).await?
     };
 
     if !req.is_dry_run {
