@@ -57,7 +57,7 @@ impl IndexerGraphQLClient {
     pub async fn send_request<R: DeserializeOwned>(
         &mut self,
         query: String,
-        variables: Value,
+        variables: Option<Value>,
         headers: Option<HeaderMap>,
     ) -> Result<R, anyhow::Error> {
         let body = json!({

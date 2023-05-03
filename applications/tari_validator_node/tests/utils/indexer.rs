@@ -27,7 +27,7 @@ use serde_json::Value;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_crypto::tari_utilities::hex::Hex;
+use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat};
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
@@ -100,19 +100,19 @@ impl IndexerProcess {
 
     pub async fn insert_event_mock_data(&mut self) {
         let mut graphql_client = self.get_graphql_indexer_client().await;
-        let query = "{ save_event }".to_string();
         let template_address = [0u8; 32].to_hex();
         let tx_hash = [0u8; 32].to_hex();
         let topic = "my_event".to_string();
-        let payload = HashMap::<String, String>::new();
-        let variables = serde_json::json!({
-                "template_address": template_address,
-                "tx_hash": tx_hash,
-                "topic": topic,
-                "payload": payload
-        });
+        let payload = HashMap::<String, String>::new().to_json().unwrap().to_string();
+        // let variables = serde_json::json!({
+        //         "template_address": template_address,
+        //         "tx_hash": tx_hash,
+        //         "topic": topic,
+        //         "payload": payload
+        // });
+        let query = format!("{{ save_event {{ {template_address} {tx_hash} {topic} {payload} }} }}");
         let res = graphql_client
-            .send_request::<()>(query, variables, None)
+            .send_request::<()>(query, None, None)
             .await
             .unwrap_or_else(|e| panic!("Failed to save event via graphql client: {}", e));
     }

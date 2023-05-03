@@ -683,13 +683,13 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     let indexer = world.indexers.get_mut(&indexer_name).unwrap();
     // indexer.insert_event_mock_data().await;
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
-    let query = "{ get_event }".to_string();
     let template_address = [0; 32].to_hex();
     let tx_hash = [0; 32].to_hex();
+    let query = format!("{{ get_event {{ template_address tx_hash }} }}");
     let variables = HashMap::from([("template_address", template_address), ("tx_hash", tx_hash)]);
     let variables = serde_json::to_value(variables).unwrap_or_else(|e| panic!("Unable to convert to value {}", e));
     let res = graphql_client
-        .send_request::<HashMap<String, String>>(query, variables, None)
+        .send_request::<HashMap<String, String>>(query, None, None)
         .await
         .unwrap();
     // let res = res.get("hello").unwrap();

@@ -48,8 +48,9 @@ pub async fn run_graphql(
     preferred_address: SocketAddr,
     substate_manager: Arc<SubstateManager>,
 ) -> Result<(), anyhow::Error> {
-    let event_query = EventQuery { substate_manager };
-    let schema = Schema::build(event_query, EmptyMutation, EmptySubscription).finish();
+    let schema = Schema::build(EventQuery, EmptyMutation, EmptySubscription)
+        .data(substate_manager)
+        .finish();
     let router = Router::new()
         .route("/", get(graphql_playground).post(graphql_handler))
         .route("/health", get(health))

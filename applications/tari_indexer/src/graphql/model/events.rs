@@ -20,10 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
+use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::{convert::TryInto, sync::Arc};
+use std::convert::TryInto;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
 
 use crate::substate_manager::SubstateManager;
@@ -38,18 +38,19 @@ pub struct Event {
 }
 
 pub(crate) type EventSchema = Schema<EventQuery, EmptyMutation, EmptySubscription>;
-pub struct EventQuery {
-    pub(crate) substate_manager: Arc<SubstateManager>,
-}
+pub struct EventQuery;
 
 #[Object]
 impl EventQuery {
-    pub async fn get_event(&self, template_address: String, tx_hash: String) -> Result<Vec<Event>, anyhow::Error> {
-        let events = self
-            .substate_manager
-            .get_event_from_db(template_address, tx_hash)
-            .await?;
-        panic!("FLAG: events = {:?}", events);
+    pub async fn get_event(
+        &self,
+        ctx: &Context<'_>,
+        template_address: String,
+        tx_hash: String,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        panic!("FLAG: WE ARE HEREEE");
+        let substate_manager = ctx.data_unchecked::<SubstateManager>();
+        let events = substate_manager.get_event_from_db(template_address, tx_hash).await?;
         events
             .into_iter()
             .map(|e| e.try_into())
@@ -58,11 +59,13 @@ impl EventQuery {
 
     pub async fn save_event(
         &self,
+        ctx: &Context<'_>,
         template_address: String,
         tx_hash: String,
         topic: String,
         payload: HashMap<String, String>,
     ) -> Result<String, anyhow::Error> {
+        let substate_manager = ctx.data_unchecked::<SubstateManager>();
         // TODO: a more direct way to convert to string ?
         let payload_string = payload.to_json()?.to_string();
         let new_event = NewEvent {
@@ -71,7 +74,7 @@ impl EventQuery {
             topic,
             payload: payload_string,
         };
-        if let Err(e) = self.substate_manager.save_event_to_db(new_event.clone()).await {
+        if let Err(e) = substate_manager.save_event_to_db(new_event.clone()).await {
             return Ok(format!("error: {}", e.to_string()));
         }
 
