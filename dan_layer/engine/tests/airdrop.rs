@@ -28,14 +28,13 @@ fn airdrop() {
     assert_eq!(total_supply, Amount(100));
 
     // Create 100 accounts
-    let (owner_proof, _) = template_test.create_owner_proof();
     let account_template_addr = template_test.get_template_address("Account");
     let result = template_test
         .execute_and_commit(
             iter::repeat_with(|| Instruction::CallFunction {
                 template_address: account_template_addr,
                 function: "create".to_string(),
-                args: args![owner_proof.clone()],
+                args: args![template_test.create_owner_proof().0], // random owner token
             })
             .take(100)
             .collect(),
