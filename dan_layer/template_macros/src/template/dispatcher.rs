@@ -188,7 +188,7 @@ fn replace_self_in_single_value(template_ident: &Ident, type_path: &TypePath) ->
     if type_ident == "Self" {
         // TODO: AccessRules - currently we allow all calls for functions that return Self.
         return Some(parse_quote! {
-            let rtn = engine().create_component(#template_name_str.to_string(), rtn, ::tari_template_lib::auth::AccessRules::with_default_allow());
+            let rtn = engine().create_component(#template_name_str.to_string(), rtn, ::tari_template_lib::auth::AccessRules::with_default_allow(), None);
         });
     }
 
@@ -210,7 +210,7 @@ fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt
                 if ident == "Self" {
                     // TODO: AccessRules - currently we allow all calls for functions that return Self.
                     parse_quote! {
-                        engine().create_component(#template_name_str.to_string(), #field_expr, ::tari_template_lib::auth::AccessRules::with_default_allow())
+                        engine().create_component(#template_name_str.to_string(), #field_expr, ::tari_template_lib::auth::AccessRules::with_default_allow(), None)
                     }
                 } else {
                     field_expr

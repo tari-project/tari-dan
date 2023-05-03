@@ -379,12 +379,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         module_name: String,
         state: Vec<u8>,
         access_rules: AccessRules,
+        component_id: Option<Hash>,
     ) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
         let template_address = runtime_state.template_address;
-
-        // TODO: allow the template code to specify the "component_id" field
-        let component_address = self.id_provider().new_component_address(template_address, None)?;
+        let component_address = self
+            .id_provider()
+            .new_component_address(template_address, component_id)?;
         debug!(target: LOG_TARGET, "New component created: {}", component_address);
 
         let component = ComponentBody { state };

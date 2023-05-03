@@ -43,6 +43,7 @@ use crate::{
     },
     prelude::{AccessRules, ConfidentialOutputProof},
     resource::ResourceType,
+    Hash,
 };
 
 // -------------------------------- LOGS -------------------------------- //
@@ -132,6 +133,7 @@ pub struct CreateComponentArg {
     pub module_name: String,
     pub encoded_state: Vec<u8>,
     pub access_rules: AccessRules,
+    pub component_id: Option<Hash>,
 }
 
 // -------------------------------- Events -------------------------------- //
