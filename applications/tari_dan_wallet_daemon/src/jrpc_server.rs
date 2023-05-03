@@ -114,6 +114,7 @@ async fn handler(
             "invoke" => call_handler(context, value, token, accounts::handle_invoke).await,
             "get" => call_handler(context, value, token, accounts::handle_get).await,
             "get_default" => call_handler(context, value, token, accounts::handle_get_default).await,
+            "transfer" => call_handler(context, value, token, accounts::handle_transfer).await,
             "confidential_transfer" => {
                 call_handler(context, value, token, accounts::handle_confidential_transfer).await
             },

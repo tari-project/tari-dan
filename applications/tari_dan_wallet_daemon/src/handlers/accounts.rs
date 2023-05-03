@@ -14,17 +14,26 @@ use tari_crypto::{
 };
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{
-    apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
+    apis::{
+        jwt::JrpcPermission,
+        key_manager,
+        substate::{SubstateApiError, ValidatorScanResult},
+    },
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
 };
-use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{
+    confidential::ConfidentialClaim,
+    hashing::{hasher, EngineHashDomainLabel},
+    instruction::Instruction,
+    substate::SubstateAddress,
+};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, NonFungibleAddress, UnclaimedConfidentialOutputAddress},
-    prelude::{ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+    prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
 };
 use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
@@ -53,6 +62,8 @@ use tari_wallet_daemon_client::{
         ConfidentialTransferResponse,
         RevealFundsRequest,
         RevealFundsResponse,
+        TransferRequest,
+        TransferResponse,
     },
     ComponentAddressOrName,
 };
@@ -755,6 +766,128 @@ pub async fn handle_create_free_test_coins(
     Ok(AccountsCreateFreeTestCoinsResponse {
         hash: tx_hash,
         amount: req.amount,
+        fee,
+        result: finalized.finalize,
+    })
+}
+
+pub async fn handle_transfer(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: TransferRequest,
+) -> Result<TransferResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk().clone();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+    let account = get_account_or_default(req.account, &sdk)?;
+
+    let account_secret_key = sdk
+        .key_manager_api()
+        .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+
+    let mut inputs = vec![];
+
+    // get source account information
+    let source_account_address = account
+        .address
+        .as_component_address()
+        .ok_or_else(|| anyhow!("Invalid account address"))?;
+    let account_substate = sdk.substate_api().get_substate(&account.address)?;
+    inputs.push(account_substate.address);
+
+    // Add all versioned account child addresses as inputs
+    let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
+    inputs.extend(child_addresses);
+
+    // get destination account information
+    // TODO: DRY with id_provider
+    let destination_account_address_hash = hasher(EngineHashDomainLabel::ComponentAddress)
+        .chain(&ACCOUNT_TEMPLATE_ADDRESS)
+        .chain(&req.destination_public_key.as_bytes())
+        .result();
+    let destination_account_address = ComponentAddress::new(destination_account_address_hash);
+    let destination_account_scan: Result<ValidatorScanResult, _> = sdk
+        .substate_api()
+        .scan_from_vn(&SubstateAddress::Component(destination_account_address), None)
+        .await;
+    let mut must_create_destination_account = false;
+    match destination_account_scan {
+        Ok(res) => inputs.push(res.address),
+        Err(err) => match err {
+            SubstateApiError::SubstateDoesNotExist { .. } => must_create_destination_account = true,
+            _ => return Err(anyhow!("Could not scan the network: {}", err)),
+        },
+    };
+
+    // calculate inputs and outputs shard ids
+    let outputs = inputs
+        .iter()
+        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
+        .collect::<Vec<_>>();
+
+    let inputs = inputs
+        .into_iter()
+        .map(|s| ShardId::from_address(&s.address, s.version))
+        .collect();
+
+    // build the transaction
+    let fee = req.fee.unwrap_or(DEFAULT_FEE);
+    let mut instructions = vec![
+        Instruction::CallMethod {
+            component_address: source_account_address,
+            method: "withdraw".to_string(),
+            args: args![req.resource_address, req.amount],
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        },
+        Instruction::CallMethod {
+            component_address: destination_account_address,
+            method: "deposit".to_string(),
+            args: args![Workspace("bucket")],
+        },
+        Instruction::CallMethod {
+            component_address: source_account_address,
+            method: "pay_fee".to_string(),
+            args: args![fee],
+        },
+    ];
+    if must_create_destination_account {
+        let owner_token = NonFungibleAddress::from_public_key(
+            RistrettoPublicKeyBytes::from_bytes(req.destination_public_key.as_bytes()).unwrap(),
+        );
+        instructions.insert(0, Instruction::CallFunction {
+            template_address: ACCOUNT_TEMPLATE_ADDRESS,
+            function: "create".to_string(),
+            args: args![owner_token],
+        });
+    }
+    let transaction = Transaction::builder()
+        .with_fee_instructions(instructions)
+        .with_inputs(inputs)
+        .with_outputs(outputs)
+        .with_new_outputs(1)
+        .sign(&account_secret_key.k)
+        .build();
+
+    // send the transaction
+    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+
+    let mut events = context.notifier().subscribe();
+    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+
+    let finalized = wait_for_result(&mut events, tx_hash).await?;
+    if let Some(reject) = finalized.finalize.result.reject() {
+        return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
+    }
+    if let Some(reason) = finalized.transaction_failure {
+        return Err(anyhow::anyhow!(
+            "Fee transaction succeeded (fees charged) however the transaction failed: {}",
+            reason
+        ));
+    }
+
+    Ok(TransferResponse {
+        hash: tx_hash,
         fee,
         result: finalized.finalize,
     })
