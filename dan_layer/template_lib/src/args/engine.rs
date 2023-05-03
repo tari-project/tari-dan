@@ -31,18 +31,12 @@ use tari_template_abi::rust::{
 
 use crate::{
     models::{
-        Amount,
-        BucketId,
-        ComponentAddress,
-        ConfidentialWithdrawProof,
-        Metadata,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        VaultRef,
+        Amount, BucketId, ComponentAddress, ConfidentialWithdrawProof, Metadata, NonFungibleAddress, NonFungibleId,
+        ResourceAddress, TemplateAddress, VaultRef,
     },
     prelude::{AccessRules, ConfidentialOutputProof},
     resource::ResourceType,
+    Hash,
 };
 
 // -------------------------------- LOGS -------------------------------- //
@@ -138,7 +132,10 @@ pub struct CreateComponentArg {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EmitEventArg {
-    pub message: String,
+    pub template_address: TemplateAddress,
+    pub tx_hash: Hash,
+    pub topic: String,
+    pub payload: HashMap<String, String>,
 }
 
 // -------------------------------- Resource -------------------------------- //

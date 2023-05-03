@@ -20,23 +20,45 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
+use crate::TemplateAddress;
 use serde::{Deserialize, Serialize};
+use tari_template_lib::Hash;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
-    pub message: String,
+    pub template_address: TemplateAddress,
+    pub tx_hash: Hash,
+    pub topic: String,
+    pub payload: HashMap<String, String>,
 }
 
 impl Event {
-    pub fn new(message: String) -> Self {
-        Self { message }
+    pub fn new(template_address: TemplateAddress, tx_hash: Hash, topic: String) -> Self {
+        Self {
+            template_address,
+            tx_hash,
+            topic,
+            payload: HashMap::new(),
+        }
+    }
+
+    pub fn add_payload(&mut self, key: String, value: String) {
+        self.payload.insert(key, value);
+    }
+
+    pub fn get_payload(&self, key: &str) -> Option<String> {
+        self.payload.get(key).cloned()
     }
 }
 
 impl Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "event: {}", self.message)
+        write!(
+            f,
+            "event: template_address {}, tx_hash {}, topic {}",
+            self.template_address, self.tx_hash, self.topic
+        )
     }
 }

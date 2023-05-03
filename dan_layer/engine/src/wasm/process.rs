@@ -26,19 +26,8 @@ use tari_engine_types::{indexed_value::IndexedValue, instruction_result::Instruc
 use tari_template_abi::{CallInfo, EngineOp};
 use tari_template_lib::{
     args::{
-        Arg,
-        BucketInvokeArg,
-        CallerContextInvokeArg,
-        ComponentInvokeArg,
-        ConsensusInvokeArg,
-        EmitEventArg,
-        EmitLogArg,
-        GenerateRandomInvokeArg,
-        LogLevel,
-        NonFungibleInvokeArg,
-        ResourceInvokeArg,
-        VaultInvokeArg,
-        WorkspaceInvokeArg,
+        Arg, BucketInvokeArg, CallerContextInvokeArg, ComponentInvokeArg, ConsensusInvokeArg, EmitEventArg, EmitLogArg,
+        GenerateRandomInvokeArg, LogLevel, NonFungibleInvokeArg, ResourceInvokeArg, VaultInvokeArg, WorkspaceInvokeArg,
     },
     AbiContext,
 };
@@ -149,7 +138,9 @@ impl WasmProcess {
                 env.state().interface().generate_random_invoke(arg.action)
             }),
             EngineOp::EmitEvent => Self::handle(env, arg, |env, arg: EmitEventArg| {
-                env.state().interface().emit_event(arg.message)
+                env.state()
+                    .interface()
+                    .emit_event(arg.template_address, arg.tx_hash, arg.topic, arg.payload)
             }),
         };
 

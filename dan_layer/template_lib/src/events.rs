@@ -20,12 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::HashMap;
+
 use tari_template_abi::{call_engine, EngineOp};
 
-use crate::args::EmitEventArg;
+use crate::{args::EmitEventArg, models::TemplateAddress, Hash};
 
-pub fn emit_event<T: Into<String>>(message: T) {
-    call_engine::<_, ()>(EngineOp::EmitEvent, &EmitEventArg {
-        message: message.into(),
-    });
+pub fn emit_event<T: Into<String>>(
+    template_address: TemplateAddress,
+    tx_hash: Hash,
+    topic: T,
+    payload: HashMap<String, String>,
+) {
+    call_engine::<_, ()>(
+        EngineOp::EmitEvent,
+        &EmitEventArg {
+            template_address,
+            tx_hash,
+            topic: topic.into(),
+            payload,
+        },
+    );
 }
