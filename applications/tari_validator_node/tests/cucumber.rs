@@ -242,9 +242,9 @@ async fn stop_validator_node(world: &mut TariWorld, vn_name: String) {
     vn_ps.stop();
 }
 
-#[given(expr = "a wallet daemon {word} connected to validator node {word}")]
-async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, vn_name: String) {
-    spawn_wallet_daemon(world, wallet_daemon_name, vn_name).await;
+#[given(expr = "a wallet daemon {word} connected to indexer {word}")]
+async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, indexer_name: String) {
+    spawn_wallet_daemon(world, wallet_daemon_name, indexer_name).await;
 }
 
 #[when(expr = "I stop wallet daemon {word}")]

@@ -50,11 +50,11 @@ pub struct DanWalletDaemonProcess {
     pub shutdown: Shutdown,
 }
 
-pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, validator_node_name: String) {
+pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, indexer_name: String) {
     let (signaling_server_port, json_rpc_port) = get_os_assigned_ports();
     let base_dir = get_base_dir();
 
-    let indexer_jrpc_port = world.validator_nodes.get(&validator_node_name).unwrap().json_rpc_port;
+    let indexer_jrpc_port = world.indexers.get(&indexer_name).unwrap().json_rpc_port;
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
 
