@@ -46,7 +46,7 @@ pub fn create_dan_wallet(world: &mut TariWorld) {
 
 pub async fn create_account(world: &mut TariWorld, account_name: String, validator_node_name: String) {
     let data_dir = get_cli_data_dir(world);
-    let key = get_key_manager(world).get_active_key().expect("No active keypair");
+    let key = get_key_manager(world).create().expect("Could not create keypair");
     let owner_token = key.to_owner_token();
     world
         .account_public_keys
