@@ -30,7 +30,7 @@ pub mod cli;
 mod comms;
 pub mod config;
 mod dan_layer_scanner;
-mod graphql;
+pub mod graphql;
 mod http_ui;
 mod json_rpc;
 mod p2p;

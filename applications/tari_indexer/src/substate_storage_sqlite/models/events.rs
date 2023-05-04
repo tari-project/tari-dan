@@ -48,7 +48,7 @@ pub struct NewEvent {
     pub payload: String,
 }
 
-#[derive(Debug, QueryableByName, Deserialize, Serialize)]
+#[derive(Clone, Debug, QueryableByName, Deserialize, Serialize)]
 pub struct EventData {
     #[diesel(sql_type = Text)]
     pub template_address: String,

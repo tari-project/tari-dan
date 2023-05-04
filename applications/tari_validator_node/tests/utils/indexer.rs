@@ -31,7 +31,10 @@ use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat};
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
-    run_indexer, AddAddressRequest, GetNonFungiblesRequest, GetSubstateRequest,
+    run_indexer,
+    AddAddressRequest,
+    GetNonFungiblesRequest,
+    GetSubstateRequest,
 };
 use tari_indexer_client::{graphql_client::IndexerGraphQLClient, json_rpc_client::IndexerJsonRpcClient};
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
@@ -103,18 +106,24 @@ impl IndexerProcess {
         let template_address = [0u8; 32].to_hex();
         let tx_hash = [0u8; 32].to_hex();
         let topic = "my_event".to_string();
-        let payload = HashMap::<String, String>::new().to_json().unwrap().to_string();
-        // let variables = serde_json::json!({
-        //         "template_address": template_address,
-        //         "tx_hash": tx_hash,
-        //         "topic": topic,
-        //         "payload": payload
-        // });
-        let query = format!("{{ save_event {{ {template_address} {tx_hash} {topic} {payload} }} }}");
+        let payload = HashMap::<String, String>::from([("my".to_string(), "event".to_string())])
+            .to_json()
+            .unwrap();
+        let query = format!(
+            "{{ saveEvent(templateAddress: {:?}, txHash: {:?}, topic: {:?}, payload: {:?}) {{ templateAddress txHash \
+             topic payload }} }}",
+            template_address,
+            tx_hash,
+            topic,
+            payload // template_address, tx_hash, topic, payload
+        );
         let res = graphql_client
-            .send_request::<()>(query, None, None)
+            .send_request::<HashMap<String, tari_indexer::graphql::model::events::Event>>(&query, None, None)
             .await
             .unwrap_or_else(|e| panic!("Failed to save event via graphql client: {}", e));
+        let res = res.get("saveEvent").unwrap();
+
+        assert_eq!(res.template_address.to_hex(), template_address);
     }
 
     pub async fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {

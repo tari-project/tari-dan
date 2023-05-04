@@ -56,7 +56,7 @@ impl IndexerGraphQLClient {
 
     pub async fn send_request<R: DeserializeOwned>(
         &mut self,
-        query: String,
+        query: &str,
         variables: Option<Value>,
         headers: Option<HeaderMap>,
     ) -> Result<R, anyhow::Error> {
@@ -64,7 +64,7 @@ impl IndexerGraphQLClient {
             "query": query,
             "variables": variables
         });
-        let mut req = self.client.post(self.endpoint.clone());
+        let mut req: reqwest::RequestBuilder = self.client.post(self.endpoint.clone());
         if let Some(headers) = headers {
             req = req.headers(headers);
         }

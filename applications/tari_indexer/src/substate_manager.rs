@@ -37,7 +37,10 @@ use crate::{
             substate::{NewSubstate, Substate as SubstateRow},
         },
         sqlite_substate_store_factory::{
-            SqliteSubstateStore, SqliteSubstateStoreWriteTransaction, SubstateStore, SubstateStoreReadTransaction,
+            SqliteSubstateStore,
+            SqliteSubstateStoreWriteTransaction,
+            SubstateStore,
+            SubstateStoreReadTransaction,
             SubstateStoreWriteTransaction,
         },
     },
@@ -278,6 +281,7 @@ impl SubstateManager {
     pub async fn save_event_to_db(&self, new_event: NewEvent) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
         tx.save_events(new_event)?;
+        tx.commit()?;
         Ok(())
     }
 

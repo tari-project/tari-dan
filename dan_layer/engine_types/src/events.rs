@@ -22,9 +22,10 @@
 
 use std::{collections::HashMap, fmt::Display};
 
-use crate::TemplateAddress;
 use serde::{Deserialize, Serialize};
 use tari_template_lib::Hash;
+
+use crate::TemplateAddress;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {

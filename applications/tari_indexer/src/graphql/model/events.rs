@@ -20,24 +20,28 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{collections::HashMap, convert::TryInto, sync::Arc};
+
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
+use log::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::convert::TryInto;
-use tari_crypto::tari_utilities::message_format::MessageFormat;
+use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat};
 
-use crate::substate_manager::SubstateManager;
-use crate::substate_storage_sqlite::models::events::NewEvent;
+use crate::{substate_manager::SubstateManager, substate_storage_sqlite::models::events::NewEvent};
 
-#[derive(SimpleObject, Deserialize, Serialize)]
+const LOG_TARGET: &str = "tari::indexer::graphql::events";
+
+#[derive(SimpleObject, Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Event {
-    pub(crate) template_address: [u8; 32],
-    pub(crate) tx_hash: [u8; 32],
-    pub(crate) topic: String,
-    pub(crate) payload: HashMap<String, String>,
+    pub template_address: [u8; 32],
+    pub tx_hash: [u8; 32],
+    pub topic: String,
+    pub payload: HashMap<String, String>,
 }
 
 pub(crate) type EventSchema = Schema<EventQuery, EmptyMutation, EmptySubscription>;
+
 pub struct EventQuery;
 
 #[Object]
@@ -48,13 +52,17 @@ impl EventQuery {
         template_address: String,
         tx_hash: String,
     ) -> Result<Vec<Event>, anyhow::Error> {
-        panic!("FLAG: WE ARE HEREEE");
-        let substate_manager = ctx.data_unchecked::<SubstateManager>();
+        info!(
+            target: LOG_TARGET,
+            "Querying events with template_address = {} and tx_hash = {}", template_address, tx_hash
+        );
+        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let events = substate_manager.get_event_from_db(template_address, tx_hash).await?;
-        events
+        let events = events
             .into_iter()
             .map(|e| e.try_into())
-            .collect::<Result<Vec<Event>, anyhow::Error>>()
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+        Ok(events)
     }
 
     pub async fn save_event(
@@ -63,21 +71,41 @@ impl EventQuery {
         template_address: String,
         tx_hash: String,
         topic: String,
-        payload: HashMap<String, String>,
-    ) -> Result<String, anyhow::Error> {
-        let substate_manager = ctx.data_unchecked::<SubstateManager>();
-        // TODO: a more direct way to convert to string ?
-        let payload_string = payload.to_json()?.to_string();
+        payload: String,
+    ) -> Result<Event, anyhow::Error> {
+        info!(
+            target: LOG_TARGET,
+            "Saving event for template_address = {}, tx_hash = {} and topic = {}", template_address, tx_hash, topic
+        );
+        let mut template_address_bytes = [0u8; 32];
+        let mut tx_hash_bytes = [0u8; 32];
+
+        template_address_bytes.copy_from_slice(&Vec::<u8>::from_hex(&template_address).unwrap());
+        tx_hash_bytes.copy_from_slice(&Vec::<u8>::from_hex(&tx_hash).unwrap());
+
+        let payload_hashmap = HashMap::<String, String>::from_json(&payload).unwrap();
+        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let new_event = NewEvent {
+            template_address: template_address.clone(),
+            tx_hash: tx_hash.clone(),
+            topic,
+            payload,
+        };
+        substate_manager.save_event_to_db(new_event.clone()).await?;
+
+        info!(
+            target: LOG_TARGET,
+            "Event with template_address = {}, tx_hash = {} and topic = {} has been saved",
             template_address,
             tx_hash,
-            topic,
-            payload: payload_string,
-        };
-        if let Err(e) = substate_manager.save_event_to_db(new_event.clone()).await {
-            return Ok(format!("error: {}", e.to_string()));
-        }
+            new_event.topic
+        );
 
-        Ok("success".to_string())
+        Ok(Event {
+            template_address: template_address_bytes,
+            tx_hash: tx_hash_bytes,
+            topic: new_event.topic,
+            payload: payload_hashmap,
+        })
     }
 }
