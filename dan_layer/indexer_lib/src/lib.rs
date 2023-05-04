@@ -1,5 +1,7 @@
+//   Copyright 2023 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
 pub mod committee_provider;
-// mod substate_manager;
 pub mod error;
 pub mod substate_scanner;
 

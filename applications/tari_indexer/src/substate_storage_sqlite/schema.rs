@@ -19,7 +19,4 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(
-    non_fungible_indexes,
-    substates,
-);
+diesel::allow_tables_to_appear_in_same_query!(non_fungible_indexes, substates,);
