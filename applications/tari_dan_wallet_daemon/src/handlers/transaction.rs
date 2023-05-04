@@ -11,6 +11,8 @@ use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{args, models::Amount, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
+    AccountGetRequest,
+    AccountGetResponse,
     CallInstructionRequest,
     TransactionGetRequest,
     TransactionGetResponse,
@@ -23,7 +25,7 @@ use tari_wallet_daemon_client::types::{
 };
 use tokio::time;
 
-use super::context::HandlerContext;
+use super::{accounts, context::HandlerContext};
 use crate::{
     handlers::HandlerError,
     services::{TransactionSubmittedEvent, WalletEvent},
@@ -41,16 +43,28 @@ pub async fn handle_submit_instruction(
         instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"bucket".to_vec(),
         });
+        let AccountGetResponse {
+            account: dump_account, ..
+        } = accounts::handle_get(context, token.clone(), AccountGetRequest {
+            name_or_address: dump_account,
+        })
+        .await?;
         instructions.push(Instruction::CallMethod {
             component_address: dump_account.address.as_component_address().unwrap(),
             method: "deposit".to_string(),
             args: args![Variable("bucket")],
         });
     }
+    let AccountGetResponse {
+        account: fee_account, ..
+    } = accounts::handle_get(context, token.clone(), AccountGetRequest {
+        name_or_address: req.fee_account,
+    })
+    .await?;
     let request = TransactionSubmitRequest {
         signing_key_index: None,
         fee_instructions: vec![Instruction::CallMethod {
-            component_address: req.fee_account.address.as_component_address().unwrap(),
+            component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
             args: args![Amount::try_from(req.fee)?],
         }],

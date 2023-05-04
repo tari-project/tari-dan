@@ -50,8 +50,8 @@ use crate::{
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CallInstructionRequest {
     pub instruction: Instruction,
-    pub fee_account: Account,
-    pub dump_outputs_into: Option<Account>,
+    pub fee_account: ComponentAddressOrName,
+    pub dump_outputs_into: Option<ComponentAddressOrName>,
     pub fee: u64,
     pub inputs: Vec<VersionedSubstateAddress>,
     pub override_inputs: Option<bool>,
