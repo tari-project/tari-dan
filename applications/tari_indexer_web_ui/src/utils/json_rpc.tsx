@@ -75,6 +75,9 @@ async function getRecentTransactions() {
 async function getSubstate(address:string, version?:number) {
   return await jsonRpc("get_substate",{address,version})
 }
+async function inspectSubstate(address:string, version?:number) {
+  return await jsonRpc("inspect_substate",{address,version})
+}
 async function getAddresses() {
   return await jsonRpc("get_addresses",)
 }
@@ -113,4 +116,5 @@ export {
   getNonFungibleCollections,
   getNonFungibles,
   getNonFungibleCount,
+  inspectSubstate,
 };

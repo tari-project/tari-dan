@@ -33,7 +33,6 @@ use crate::{
         PayloadProcessor,
         PeerProvider,
         SigningService,
-        ValidatorNodeClientFactory,
     },
     storage::DbFactory,
 };
@@ -52,6 +51,5 @@ pub trait ServiceSpecification: Default + Clone {
     type Payload: Payload;
     type PayloadProcessor: PayloadProcessor<Self::Payload>;
     type SigningService: SigningService;
-    type ValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = Self::Addr> + Clone;
     type WalletClient: WalletClient;
 }

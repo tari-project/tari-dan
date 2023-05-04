@@ -33,7 +33,6 @@ use crate::{
     p2p::services::{
         comms_peer_provider::CommsPeerProvider,
         messaging::OutboundMessaging,
-        rpc_client::TariCommsValidatorNodeClientFactory,
         template_manager::TemplateManager,
     },
     payload_processor::TariDanPayloadProcessor,
@@ -53,6 +52,5 @@ impl ServiceSpecification for DefaultServiceSpecification {
     type PayloadProcessor = TariDanPayloadProcessor<TemplateManager>;
     type PeerProvider = CommsPeerProvider;
     type SigningService = NodeIdentitySigningService;
-    type ValidatorNodeClientFactory = TariCommsValidatorNodeClientFactory;
     type WalletClient = GrpcWalletClient;
 }

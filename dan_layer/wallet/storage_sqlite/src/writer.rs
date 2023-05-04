@@ -211,12 +211,6 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError> {
         use crate::schema::transactions;
 
-        let status = if is_dry_run {
-            TransactionStatus::DryRun
-        } else {
-            TransactionStatus::New
-        };
-
         diesel::insert_into(transactions::table)
             .values((
                 transactions::hash.eq(transaction.hash().to_string()),
@@ -225,7 +219,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 transactions::sender_address.eq(transaction.sender_public_key().to_hex()),
                 transactions::signature.eq(serialize_json(transaction.signature())?),
                 transactions::meta.eq(serialize_json(transaction.meta())?),
-                transactions::status.eq(status.as_key_str()),
+                transactions::status.eq(TransactionStatus::default().as_key_str()),
                 transactions::dry_run.eq(is_dry_run),
             ))
             .execute(self.connection())

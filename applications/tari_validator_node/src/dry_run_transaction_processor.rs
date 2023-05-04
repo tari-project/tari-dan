@@ -38,7 +38,6 @@ use tari_dan_core::{
         PayloadProcessor,
         PayloadProcessorError,
         ValidatorNodeClientError,
-        ValidatorNodeClientFactory,
     },
     storage::{
         shard_store::{ShardStore, ShardStoreReadTransaction},
@@ -52,13 +51,13 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
 };
 use tari_transaction::{SubstateChange, Transaction};
-use tari_validator_node_rpc::proto::rpc::VnStateSyncResponse;
+use tari_validator_node_rpc::{
+    client::{TariCommsValidatorNodeClientFactory, ValidatorNodeClientFactory},
+    proto::rpc::VnStateSyncResponse,
+};
 use thiserror::Error;
 
-use crate::{
-    p2p::services::{rpc_client::TariCommsValidatorNodeClientFactory, template_manager::TemplateManager},
-    payload_processor::TariDanPayloadProcessor,
-};
+use crate::{p2p::services::template_manager::TemplateManager, payload_processor::TariDanPayloadProcessor};
 
 const LOG_TARGET: &str = "tari::validator_node::dry_run_transaction_processor";
 
@@ -245,7 +244,7 @@ impl DryRunTransactionProcessor {
 
             // build a client with the VN
             let mut sync_vn_client = self.validator_node_client_factory.create_client(&vn_public_key);
-            let mut sync_vn_rpc_client = match sync_vn_client.create_connection().await {
+            let mut sync_vn_rpc_client = match sync_vn_client.client_connection().await {
                 Ok(rpc_client) => rpc_client,
                 Err(e) => {
                     info!(target: LOG_TARGET, "Unable to create connection to peer: {} ", e);

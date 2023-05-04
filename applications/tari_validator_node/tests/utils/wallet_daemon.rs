@@ -45,22 +45,22 @@ use crate::{
 pub struct DanWalletDaemonProcess {
     pub name: String,
     pub json_rpc_port: u16,
-    pub validator_node_jrpc_port: u16,
+    pub indexer_jrpc_port: u16,
     pub temp_path_dir: PathBuf,
     pub shutdown: Shutdown,
 }
 
-pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, validator_node_name: String) {
+pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, indexer_name: String) {
     let (signaling_server_port, json_rpc_port) = get_os_assigned_ports();
     let base_dir = get_base_dir();
 
-    let validator_node_jrpc_port = world.validator_nodes.get(&validator_node_name).unwrap().json_rpc_port;
+    let indexer_jrpc_port = world.indexers.get(&indexer_name).unwrap().json_rpc_port;
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
 
     let listen_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), json_rpc_port);
     let signaling_server_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), signaling_server_port);
-    let validator_node_endpoint = format!("http://127.0.0.1:{}/json_rpc", validator_node_jrpc_port);
+    let indexer_url = format!("http://127.0.0.1:{}/json_rpc", indexer_jrpc_port);
 
     let mut config = ApplicationConfig {
         common: CommonConfig::default(),
@@ -70,7 +70,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
     config.common.base_path = base_dir.clone();
     config.dan_wallet_daemon.listen_addr = Some(listen_addr);
     config.dan_wallet_daemon.signaling_server_addr = Some(signaling_server_addr);
-    config.dan_wallet_daemon.validator_node_endpoint = Some(validator_node_endpoint);
+    config.dan_wallet_daemon.indexer_node_json_rpc_url = indexer_url;
 
     let handle = task::spawn(async move {
         let result = run_tari_dan_wallet_daemon(config, shutdown_signal).await;
@@ -90,7 +90,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
     let wallet_daemon_process = DanWalletDaemonProcess {
         name: wallet_daemon_name.clone(),
         json_rpc_port,
-        validator_node_jrpc_port,
+        indexer_jrpc_port,
         temp_path_dir: base_dir,
         shutdown,
     };

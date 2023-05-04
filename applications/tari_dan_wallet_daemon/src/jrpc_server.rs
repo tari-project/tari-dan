@@ -186,7 +186,7 @@ fn resolve_any_error(answer_id: i64, e: &anyhow::Error) -> JsonRpcResponse {
     if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
         return resolve_handler_error(answer_id, handler_err);
     }
-    println!("{:?}", e);
+
     if let Some(error) = e.downcast_ref::<JwtApiError>() {
         JsonRpcResponse::error(
             answer_id,

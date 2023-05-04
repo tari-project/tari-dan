@@ -3605,7 +3605,6 @@ dependencies = [
  "anyhow",
  "cargo_toml",
  "d3ne",
- "digest 0.9.0",
  "log",
  "rand 0.7.3",
  "serde",
@@ -3632,6 +3631,7 @@ version = "0.50.0-pre.0"
 dependencies = [
  "borsh",
  "digest 0.9.0",
+ "hex",
  "lazy_static",
  "rand 0.7.3",
  "serde",
@@ -3765,7 +3765,6 @@ name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
  "ciborium",
- "hex",
  "newtype-ops",
  "serde",
  "serde-big-array 0.5.1",

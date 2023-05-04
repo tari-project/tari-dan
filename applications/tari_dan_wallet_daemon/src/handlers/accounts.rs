@@ -98,7 +98,7 @@ pub async fn handle_create(
         .sign(&signing_key.k)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
@@ -139,7 +139,7 @@ pub async fn handle_set_default(
 ) -> Result<AccountSetDefaultResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account(req.account, sdk)?;
+    let account = get_account(req.account, &sdk.accounts_api())?;
     sdk.accounts_api().set_default_account(&account.address)?;
     Ok(AccountSetDefaultResponse {})
 }
@@ -180,7 +180,7 @@ pub async fn handle_invoke(
         .key_manager_api()
         .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
-    let account = get_account_or_default(req.account, sdk)?;
+    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
     let account_substate = sdk.substate_api().get_substate(&account.address)?;
 
     let vault = sdk
@@ -210,7 +210,7 @@ pub async fn handle_invoke(
         .sign(&signing_key.k)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
 
@@ -233,7 +233,7 @@ pub async fn handle_get_balances(
     req: AccountsGetBalancesRequest,
 ) -> Result<AccountsGetBalancesResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    let account = get_account_or_default(req.account, sdk)?;
+    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
     sdk.jwt_api()
         .check_auth(token, &[JrpcPermission::AccountBalance(account.clone().address)])?;
     if req.refresh {
@@ -276,7 +276,7 @@ pub async fn handle_get(
 ) -> Result<AccountGetResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account(req.name_or_address, sdk)?;
+    let account = get_account(req.name_or_address, &sdk.accounts_api())?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
     let public_key = PublicKey::from_secret_key(&key.k);
@@ -290,7 +290,7 @@ pub async fn handle_get_default(
 ) -> Result<AccountGetResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account_or_default(None, sdk)?;
+    let account = get_account_or_default(None, &sdk.accounts_api())?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
     let public_key = PublicKey::from_secret_key(&key.k);
@@ -310,7 +310,7 @@ pub async fn handle_reveal_funds(
     task::spawn(async move {
         let mut inputs = vec![];
 
-        let account = get_account_or_default(req.account, &sdk)?;
+        let account = get_account_or_default(req.account, &sdk.accounts_api())?;
         // Add the account component
         let account_substate = sdk.substate_api().get_substate(&account.address)?;
 
@@ -432,7 +432,7 @@ pub async fn handle_reveal_funds(
         sdk.confidential_outputs_api()
             .proofs_set_transaction_hash(proof_id, *transaction.hash())?;
 
-        let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+        let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
         let mut events = notifier.subscribe();
         notifier.notify(TransactionSubmittedEvent { hash: tx_hash });
@@ -521,14 +521,16 @@ pub async fn handle_claim_burn(
     if let Some(a) = account {
         match a {
             ComponentAddressOrName::ComponentAddress(addr) => {
-                requested_account = sdk.accounts_api().get_account(&addr.into())?;
+                requested_account = sdk.accounts_api().get_account_by_address(&addr.into())?;
             },
             ComponentAddressOrName::Name(name) => {
                 requested_account = sdk.accounts_api().get_account_by_name(&name)?;
             },
         }
     } else {
-        requested_account = sdk.accounts_api().get_default()?;
+        requested_account = sdk.accounts_api().get_default().optional()?.ok_or_else(|| {
+            anyhow::anyhow!("No default account set. Please specify an account to use for this transaction.")
+        })?;
     }
     let account = requested_account;
     let account_secret_key = sdk
@@ -578,7 +580,7 @@ pub async fn handle_claim_burn(
     // We have to unmask the commitment to allow us to reveal funds for the fee payment
     let ValidatorScanResult { substate: output, .. } = sdk
         .substate_api()
-        .scan_from_vn(
+        .scan_for_substate(
             &commitment_substate_address.address,
             Some(commitment_substate_address.version),
         )
@@ -646,7 +648,7 @@ pub async fn handle_claim_burn(
         .sign(&account_secret_key.k)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
@@ -676,7 +678,7 @@ pub async fn handle_create_free_test_coins(
 ) -> Result<AccountsCreateFreeTestCoinsResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account_or_default(req.account, &sdk)?;
+    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
 
     let account_secret_key = sdk
         .key_manager_api()
@@ -736,7 +738,7 @@ pub async fn handle_create_free_test_coins(
         .sign(&account_secret_key.k)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
@@ -778,7 +780,7 @@ pub async fn handle_confidential_transfer(
         let key_manager_api = sdk.key_manager_api();
 
         // -------------------------------- Load up known substates -------------------------------- //
-        let account = get_account_or_default(req.account, &sdk)?;
+        let account = get_account_or_default(req.account, &accounts_api)?;
         let account_secret = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
         let source_component_address = account
             .address
@@ -883,7 +885,7 @@ pub async fn handle_confidential_transfer(
 
         outputs_api.proofs_set_transaction_hash(proof_id, *transaction.hash())?;
 
-        let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+        let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
         let mut events = notifier.subscribe();
         notifier.notify(TransactionSubmittedEvent { hash: tx_hash });

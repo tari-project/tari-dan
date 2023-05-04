@@ -3,35 +3,39 @@
 
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::optional::{IsNotFoundError, Optional};
+use tari_dan_common_types::{
+    optional::{IsNotFoundError, Optional},
+    PayloadId,
+};
 use tari_engine_types::{
     indexed_value::{IndexedValue, ValueVisitorError},
     substate::SubstateDiff,
 };
 use tari_transaction::Transaction;
-use tari_validator_node_client::{
-    types::{GetTransactionQcsRequest, GetTransactionResultRequest, SubmitTransactionRequest},
-    ValidatorNodeClient,
-    ValidatorNodeClientError,
-};
 
 use crate::{
     models::{TransactionStatus, VersionedSubstateAddress, WalletTransaction},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
+    substate_provider::WalletNetworkInterface,
 };
 
 const LOG_TARGET: &str = "tari::dan::wallet_sdk::apis::transaction";
 
-pub struct TransactionApi<'a, TStore> {
+pub struct TransactionApi<'a, TStore, TNetworkInterface> {
     store: &'a TStore,
-    validator_node_jrpc_endpoint: &'a str,
+    network_interface: &'a TNetworkInterface,
 }
 
-impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
-    pub fn new(store: &'a TStore, validator_node_jrpc_endpoint: &'a str) -> Self {
+impl<'a, TStore, TNetworkInterface> TransactionApi<'a, TStore, TNetworkInterface>
+where
+    TStore: WalletStore,
+    TNetworkInterface: WalletNetworkInterface,
+    TNetworkInterface::Error: IsNotFoundError,
+{
+    pub fn new(store: &'a TStore, network_interface: &'a TNetworkInterface) -> Self {
         Self {
             store,
-            validator_node_jrpc_endpoint,
+            network_interface,
         }
     }
 
@@ -41,15 +45,15 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         Ok(transaction)
     }
 
-    pub async fn submit_to_vn(&self, transaction: Transaction) -> Result<FixedHash, TransactionApiError> {
-        self.submit_to_vn_internal(transaction, false).await
+    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<FixedHash, TransactionApiError> {
+        self.submit_transaction_internal(transaction, false).await
     }
 
-    pub async fn submit_dry_run_to_vn(&self, transaction: Transaction) -> Result<FixedHash, TransactionApiError> {
-        self.submit_to_vn_internal(transaction, true).await
+    pub async fn submit_dry_run_transaction(&self, transaction: Transaction) -> Result<FixedHash, TransactionApiError> {
+        self.submit_transaction_internal(transaction, true).await
     }
 
-    async fn submit_to_vn_internal(
+    async fn submit_transaction_internal(
         &self,
         transaction: Transaction,
         is_dry_run: bool,
@@ -57,26 +61,18 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         self.store
             .with_write_tx(|tx| tx.transactions_insert(&transaction, is_dry_run))?;
 
-        let mut client = self.get_validator_node_client()?;
-
-        let resp = client
-            .submit_transaction(SubmitTransactionRequest {
-                transaction,
-                wait_for_result: is_dry_run,
-                wait_for_result_timeout: None,
-                is_dry_run,
-            })
-            .await?;
+        let hash = self
+            .network_interface
+            .submit_transaction(transaction, is_dry_run)
+            .await
+            .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
         self.store.with_write_tx(|tx| {
             tx.transactions_set_result_and_status(
-                resp.hash,
-                resp.result.as_ref().map(|a| &a.finalize),
-                resp.result.as_ref().and_then(|r| r.transaction_failure.as_ref()),
-                resp.result
-                    .as_ref()
-                    .and_then(|a| a.fee_breakdown.as_ref())
-                    .map(|b| b.total_fees_charged),
+                hash,
+                None,
+                None,
+                None,
                 None,
                 if is_dry_run {
                     TransactionStatus::DryRun
@@ -86,7 +82,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
             )
         })?;
 
-        Ok(resp.hash)
+        Ok(hash)
     }
 
     pub fn fetch_all_by_status(
@@ -96,11 +92,6 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
         let mut tx = self.store.create_read_tx()?;
         let transactions = tx.transactions_fetch_all_by_status(status)?;
         Ok(transactions)
-    }
-
-    fn get_validator_node_client(&self) -> Result<ValidatorNodeClient, TransactionApiError> {
-        ValidatorNodeClient::connect(self.validator_node_jrpc_endpoint)
-            .map_err(TransactionApiError::ValidatorNodeClientError)
     }
 
     pub async fn check_and_store_finalized_transaction(
@@ -114,13 +105,12 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
             return Ok(Some(transaction));
         }
 
-        let mut client = self.get_validator_node_client()?;
-
-        let maybe_resp = client
-            .get_transaction_result(GetTransactionResultRequest { hash })
+        let maybe_resp = self
+            .network_interface
+            .query_transaction_result(PayloadId::new(hash))
             .await
             .optional()
-            .map_err(TransactionApiError::ValidatorNodeClientError)?;
+            .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
         let Some(resp) = maybe_resp else {
             warn!( target: LOG_TARGET, "Transaction result not found for transaction with hash {}. Marking transaction as invalid", hash);
@@ -147,7 +137,7 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
             }));
         };
 
-        match resp.result {
+        match resp.execution_result {
             Some(result) => {
                 let new_status = if result.finalize.result.is_accept() && result.transaction_failure.is_none() {
                     TransactionStatus::Accepted
@@ -155,10 +145,10 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                     TransactionStatus::Rejected
                 };
 
-                let qc_resp = client
-                    .get_transaction_quorum_certificates(GetTransactionQcsRequest { hash })
-                    .await
-                    .map_err(TransactionApiError::ValidatorNodeClientError)?;
+                // let qc_resp = self.network_interface
+                //     .fetch_transaction_quorum_certificates(GetTransactionQcsRequest { hash })
+                //     .await
+                //     .map_err(TransactionApiError::ValidatorNodeClientError)?;
 
                 self.store.with_write_tx(|tx| {
                     if !transaction.is_dry_run {
@@ -172,7 +162,9 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                         Some(&result.finalize),
                         result.transaction_failure.as_ref(),
                         result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
-                        Some(&qc_resp.qcs),
+                        // TODO: readd qcs
+                        None,
+                        // Some(&qc_resp.qcs),
                         new_status,
                     )?;
                     if !transaction.is_dry_run {
@@ -197,7 +189,9 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
                     finalize: Some(result.finalize),
                     transaction_failure: result.transaction_failure,
                     final_fee: result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
-                    qcs: qc_resp.qcs,
+                    // TODO: re-add QCs
+                    // qcs: qc_resp.qcs,
+                    qcs: vec![],
                     is_dry_run: transaction.is_dry_run,
                 }))
             },
@@ -270,8 +264,8 @@ impl<'a, TStore: WalletStore> TransactionApi<'a, TStore> {
 pub enum TransactionApiError {
     #[error("Store error: {0}")]
     StoreError(#[from] WalletStorageError),
-    #[error("Validator node client error: {0}")]
-    ValidatorNodeClientError(#[from] ValidatorNodeClientError),
+    #[error("Network interface error: {0}")]
+    NetworkInterfaceError(String),
     #[error("Failed to extract known type data from value: {0}")]
     ValueVisitorError(#[from] ValueVisitorError),
 }
