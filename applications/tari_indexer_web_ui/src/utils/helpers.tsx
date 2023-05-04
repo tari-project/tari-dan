@@ -38,7 +38,7 @@ const renderJson = (json: any) => {
         ],
       </>
     );
-  } else if (typeof json === 'object') {
+  } else if (typeof json === 'object' && json !== null) {
     return (
       <>
         {'{'}

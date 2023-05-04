@@ -23,7 +23,6 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
 
 use reqwest::Url;
-use serde_json::Value;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
@@ -32,11 +31,12 @@ use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
     run_indexer,
-    AddAddressRequest,
-    GetNonFungiblesRequest,
-    GetSubstateRequest,
 };
-use tari_indexer_client::{graphql_client::IndexerGraphQLClient, json_rpc_client::IndexerJsonRpcClient};
+use tari_indexer_client::{
+    graphql_client::IndexerGraphQLClient,
+    json_rpc_client::IndexerJsonRpcClient,
+    types::{GetNonFungiblesRequest, GetSubstateRequest, GetSubstateResponse, NonFungibleSubstate},
+};
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tempfile::tempdir;
@@ -60,24 +60,23 @@ pub struct IndexerProcess {
 
 impl IndexerProcess {
     pub async fn add_address(&self, world: &TariWorld, output_ref: String) {
-        let address = get_adddress_from_output(world, output_ref);
-
-        let params = AddAddressRequest { address };
+        let address = get_address_from_output(world, output_ref);
 
         let mut jrpc_client = self.get_jrpc_indexer_client().await;
-        let _: () = jrpc_client.send_request("add_address", params).await.unwrap();
+        jrpc_client.add_address(address.clone()).await.unwrap();
     }
 
-    pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> Value {
-        let address = get_adddress_from_output(world, output_ref);
-
-        let params = GetSubstateRequest {
-            address,
-            version: Some(version),
-        };
+    pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> GetSubstateResponse {
+        let address = get_address_from_output(world, output_ref);
 
         let mut jrpc_client = self.get_jrpc_indexer_client().await;
-        let resp: Value = jrpc_client.send_request("get_substate", params).await.unwrap();
+        let resp = jrpc_client
+            .get_substate(GetSubstateRequest {
+                address: address.clone(),
+                version: Some(version),
+            })
+            .await
+            .unwrap();
         resp
     }
 
@@ -87,18 +86,18 @@ impl IndexerProcess {
         output_ref: String,
         start_index: u64,
         end_index: u64,
-    ) -> Vec<Value> {
-        let address = get_adddress_from_output(world, output_ref);
+    ) -> Vec<NonFungibleSubstate> {
+        let address = get_address_from_output(world, output_ref);
 
         let params = GetNonFungiblesRequest {
-            address,
+            address: address.clone(),
             start_index,
             end_index,
         };
 
         let mut jrpc_client = self.get_jrpc_indexer_client().await;
-        let resp: Vec<Value> = jrpc_client.send_request("get_non_fungibles", params).await.unwrap();
-        resp
+        let resp = jrpc_client.get_non_fungibles(params).await.unwrap();
+        resp.non_fungibles
     }
 
     pub async fn insert_event_mock_data(&mut self) {
@@ -137,19 +136,20 @@ impl IndexerProcess {
     }
 }
 
-fn get_adddress_from_output(world: &TariWorld, output_ref: String) -> String {
-    let substate_address_map: HashMap<String, SubstateAddress> = world
+fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateAddress {
+    world
         .outputs
         .iter()
-        .flat_map(|(name, outputs)| {
+        .find_map(|(name, outputs)| {
             outputs
                 .iter()
-                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone()))
+                .find(|(child_name, _)| {
+                    let fqn = format!("{}/{}", name, child_name);
+                    fqn == output_ref
+                })
+                .map(|(_, addr)| &addr.address)
         })
-        .collect();
-
-    let address = substate_address_map.get(&output_ref).unwrap().to_string();
-    address
+        .unwrap()
 }
 
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {

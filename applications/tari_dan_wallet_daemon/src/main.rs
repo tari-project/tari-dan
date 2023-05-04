@@ -20,6 +20,8 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fs;
+
 use tari_common::{initialize_logging, load_configuration};
 use tari_dan_wallet_daemon::{cli::Cli, config::ApplicationConfig, run_tari_dan_wallet_daemon};
 use tari_shutdown::Shutdown;
@@ -30,6 +32,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli)?;
     let config = ApplicationConfig::load_from(&cfg)?;
+
+    // Remove the file if it was left behind by a previous run
+    let _file = fs::remove_file(config.common.base_path.join("pid"));
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();

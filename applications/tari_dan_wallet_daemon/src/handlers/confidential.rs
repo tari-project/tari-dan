@@ -43,7 +43,7 @@ pub async fn handle_create_transfer_proof(
         .into());
     }
 
-    let account = get_account_or_default(req.account, sdk)?;
+    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
     let vault = sdk
         .accounts_api()
         .get_vault_by_resource(&account.address, &req.resource_address)?;

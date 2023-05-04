@@ -196,6 +196,19 @@ impl NonFungibleAddress {
             NonFungibleId::U256(public_key.into_array()),
         )
     }
+
+    pub fn to_public_key(&self) -> Option<RistrettoPublicKeyBytes> {
+        if self.0 .0.resource_address != PUBLIC_IDENTITY_RESOURCE_ADDRESS {
+            return None;
+        }
+        match self.id() {
+            NonFungibleId::U256(bytes) => match RistrettoPublicKeyBytes::from_bytes(bytes) {
+                Ok(public_key) => Some(public_key),
+                Err(_) => None,
+            },
+            _ => None,
+        }
+    }
 }
 
 impl From<NonFungibleAddressContents> for NonFungibleAddress {

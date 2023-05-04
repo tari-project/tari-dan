@@ -143,9 +143,9 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 [[package]]
 name = "ciborium"
 version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
 dependencies = [
- "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git)",
+ "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56)",
  "ciborium-ll",
  "serde",
 ]
@@ -159,14 +159,14 @@ checksum = "346de753af073cc87b52b2083a506b38ac176a44cfb05497b622e27be899b369"
 [[package]]
 name = "ciborium-io"
 version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
 
 [[package]]
 name = "ciborium-ll"
 version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
 dependencies = [
- "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git)",
+ "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56)",
  "half",
 ]
 
@@ -329,15 +329,6 @@ name = "hermit-abi"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fed44880c466736ef9a5c5b5facefb5ed0785676d0c02d612db14e54f0d84286"
-
-[[package]]
-name = "hex"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "indexmap"
@@ -760,7 +751,6 @@ name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
  "ciborium",
- "hex",
  "newtype-ops",
  "serde",
  "serde-big-array",

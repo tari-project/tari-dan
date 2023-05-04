@@ -29,24 +29,21 @@ mod bootstrap;
 pub mod cli;
 mod comms;
 pub mod config;
-mod dan_layer_scanner;
 pub mod graphql;
 mod http_ui;
 mod json_rpc;
 mod p2p;
 mod substate_decoder;
 mod substate_manager;
-pub mod substate_storage_sqlite;
+mod substate_storage_sqlite;
+mod transaction_manager;
 
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
 
-use dan_layer_scanner::DanLayerScanner;
-pub use dan_layer_scanner::NonFungible;
 use http_ui::server::run_http_ui_server;
-pub use json_rpc::{AddAddressRequest, GetNonFungibleCountRequest, GetNonFungiblesRequest, GetSubstateRequest};
 use log::*;
 use substate_manager::SubstateManager;
 use tari_app_utilities::identity_management::setup_node_identity;
@@ -58,6 +55,7 @@ use tari_comms::peer_manager::PeerFeatures;
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_core::{consensus_constants::ConsensusConstants, services::BaseNodeClient, storage::DbFactory};
 use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_indexer_lib::substate_scanner::SubstateScanner;
 use tari_shutdown::ShutdownSignal;
 use tokio::{task, time};
 
@@ -66,6 +64,7 @@ use crate::{
     config::ApplicationConfig,
     graphql::server::run_graphql,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
+    transaction_manager::TransactionManager,
 };
 
 const LOG_TARGET: &str = "tari::indexer::app";
@@ -97,21 +96,27 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     )
     .await?;
 
-    let dan_layer_scanner = DanLayerScanner::new(
+    let dan_layer_scanner = SubstateScanner::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
     );
 
-    let substate_manager = Arc::new(SubstateManager::new(
-        Arc::new(dan_layer_scanner),
-        services.substate_store.clone(),
-    ));
+    let substate_manager = Arc::new(SubstateManager::new(dan_layer_scanner, services.substate_store.clone()));
+    let transaction_manager = TransactionManager::new(
+        services.epoch_manager.clone(),
+        services.validator_node_client_factory.clone(),
+    );
 
     // Run the JSON-RPC API
     let jrpc_address = config.indexer.json_rpc_address;
     if let Some(address) = jrpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
-        let handlers = JsonRpcHandlers::new(&services, base_node_client, substate_manager.clone());
+        let handlers = JsonRpcHandlers::new(
+            &services,
+            base_node_client,
+            substate_manager.clone(),
+            transaction_manager,
+        );
         task::spawn(run_json_rpc(address, handlers));
     }
     // Run the GraphQL API

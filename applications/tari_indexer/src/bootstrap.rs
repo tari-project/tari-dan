@@ -42,10 +42,11 @@ use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
+use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
 use crate::{
     comms,
-    p2p::services::{epoch_manager, rpc_client::TariCommsValidatorNodeClientFactory, template_manager},
+    p2p::services::{epoch_manager, template_manager},
     substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore,
     ApplicationConfig,
 };

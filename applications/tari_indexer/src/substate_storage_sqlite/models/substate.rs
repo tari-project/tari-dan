@@ -21,13 +21,40 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-use crate::substate_storage_sqlite::schema::*;
+use std::convert::{TryFrom, TryInto};
+
+use tari_common_types::types::FixedHash;
+
+use crate::{
+    substate_manager::SubstateResponse,
+    substate_storage_sqlite::{models::substate::Substate as SubstateRow, schema::*},
+};
+
 #[derive(Debug, Identifiable, Queryable)]
 pub struct Substate {
     pub id: i32,
     pub address: String,
     pub version: i64,
     pub data: String,
+    pub transaction_hash: Option<Vec<u8>>,
+}
+
+impl TryFrom<Substate> for SubstateResponse {
+    type Error = anyhow::Error;
+
+    fn try_from(row: SubstateRow) -> Result<Self, Self::Error> {
+        let tx_hash = if let Some(hash) = row.transaction_hash {
+            hash.try_into()?
+        } else {
+            FixedHash::zero()
+        };
+        Ok(SubstateResponse {
+            address: row.address.parse()?,
+            version: row.version.try_into()?,
+            substate: serde_json::from_str(&row.data)?,
+            created_by_transaction: tx_hash,
+        })
+    }
 }
 
 #[derive(Debug, Insertable, AsChangeset)]
