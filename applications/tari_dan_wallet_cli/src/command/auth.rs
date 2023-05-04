@@ -71,7 +71,7 @@ impl AuthSubcommand {
                     let resp = client
                         .auth_request(AuthLoginRequest {
                             permissions: args.permissions,
-                            duration: args.validity_in_seconds.map(|value| Duration::from_secs(value)),
+                            duration: args.validity_in_seconds.map(Duration::from_secs),
                         })
                         .await?;
                     println!("Auth token {}", resp.auth_token);
