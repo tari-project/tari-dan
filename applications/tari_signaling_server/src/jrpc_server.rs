@@ -2,7 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    fs,
     net::SocketAddr,
+    path::PathBuf,
+    process,
     sync::{Arc, Mutex},
 };
 
@@ -48,6 +51,7 @@ async fn extract_token<B>(mut request: Request<B>, next: Next<B>) -> Result<Resp
 }
 
 pub async fn listen(
+    base_dir: PathBuf,
     preferred_address: SocketAddr,
     data: Data,
     shutdown_signal: ShutdownSignal,
@@ -63,6 +67,7 @@ pub async fn listen(
     let server = server.serve(router.into_make_service());
     info!(target: LOG_TARGET, "🌐 JSON-RPC listening on {}", server.local_addr());
     let server = server.with_graceful_shutdown(shutdown_signal);
+    fs::write(base_dir.join("pid"), process::id().to_string())?;
     server.await?;
 
     info!(target: LOG_TARGET, "💤 Stopping JSON-RPC");

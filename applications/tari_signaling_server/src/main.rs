@@ -5,6 +5,8 @@ mod cli;
 mod data;
 mod jrpc_server;
 
+use std::fs;
+
 use cli::Cli;
 use data::Data;
 use tari_common::initialize_logging;
@@ -13,6 +15,7 @@ use tari_shutdown::Shutdown;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::init();
+    let _file = fs::remove_file(cli.base_dir().join("pid"));
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
@@ -29,6 +32,6 @@ async fn main() -> Result<(), anyhow::Error> {
     let data = Data::new();
 
     let address = cli.listen_address();
-    jrpc_server::listen(address, data, shutdown_signal).await?;
+    jrpc_server::listen(cli.base_dir(), address, data, shutdown_signal).await?;
     Ok(())
 }

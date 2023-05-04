@@ -29,7 +29,7 @@ mod notify;
 mod services;
 mod webrtc;
 
-use std::{panic, process};
+use std::{fs, panic, process};
 
 use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
@@ -85,6 +85,7 @@ pub async fn run_tari_dan_wallet_daemon(
     let handlers = HandlerContext::new(wallet_sdk.clone(), notify, services.account_monitor_handle.clone());
     let listen_fut = jrpc_server::listen(address, signaling_server_address, handlers, shutdown_signal);
 
+    fs::write(config.common.base_path.join("pid"), process::id().to_string())?;
     // Wait for shutdown, or for any service to error
     tokio::select! {
         res = listen_fut => {
