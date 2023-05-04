@@ -21,5 +21,4 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod epoch_manager;
-pub mod rpc_client;
 pub mod template_manager;

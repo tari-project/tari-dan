@@ -242,9 +242,9 @@ async fn stop_validator_node(world: &mut TariWorld, vn_name: String) {
     vn_ps.stop();
 }
 
-#[given(expr = "a wallet daemon {word} connected to validator node {word}")]
-async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, vn_name: String) {
-    spawn_wallet_daemon(world, wallet_daemon_name, vn_name).await;
+#[given(expr = "a wallet daemon {word} connected to indexer {word}")]
+async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, indexer_name: String) {
+    spawn_wallet_daemon(world, wallet_daemon_name, indexer_name).await;
 }
 
 #[when(expr = "I stop wallet daemon {word}")]
@@ -716,18 +716,31 @@ async fn assert_indexer_substate_version(
     let indexer = world.indexers.get(&indexer_name).unwrap();
     assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
     let substate = indexer.get_substate(world, output_ref, version).await;
-    eprintln!("indexer.get_substate result: {:?}", substate.to_string());
-    let substate_version = substate.as_object().unwrap().get("version").unwrap().as_u64().unwrap();
-    assert_eq!(substate_version, u64::from(version));
+    eprintln!(
+        "indexer.get_substate result: {}",
+        serde_json::to_string_pretty(&substate).unwrap()
+    );
+    assert_eq!(substate.version, version);
 }
 
 #[then(expr = "the indexer {word} returns {int} non fungibles for resource {word}")]
-async fn assert_indexer_non_fungible_list(world: &mut TariWorld, indexer_name: String, count: u32, output_ref: String) {
+async fn assert_indexer_non_fungible_list(
+    world: &mut TariWorld,
+    indexer_name: String,
+    count: usize,
+    output_ref: String,
+) {
     let indexer = world.indexers.get(&indexer_name).unwrap();
     assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
-    let nfts = indexer.get_non_fungibles(world, output_ref, 0, u64::from(count)).await;
+    let nfts = indexer.get_non_fungibles(world, output_ref, 0, count as u64).await;
     eprintln!("indexer.get_non_fungibles result: {:?}", nfts);
-    assert_eq!(nfts.len() as u32, count);
+    assert_eq!(
+        nfts.len(),
+        count,
+        "Unexpected number of NFTs returned. Expected: {}, Actual: {}",
+        count,
+        nfts.len()
+    );
 }
 
 #[when(expr = "I wait {int} seconds")]

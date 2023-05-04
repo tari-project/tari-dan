@@ -67,6 +67,7 @@ use tari_template_lib::{
     models::Metadata,
     prelude::ResourceType,
 };
+use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 use tokio::task::JoinHandle;
 
 use crate::{
@@ -84,7 +85,6 @@ use crate::{
             messaging::DanMessageReceivers,
             networking,
             networking::NetworkingHandle,
-            rpc_client::TariCommsValidatorNodeClientFactory,
             template_manager,
             template_manager::TemplateManager,
         },

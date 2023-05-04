@@ -25,7 +25,7 @@ import {
   addAddress,
   deleteAddress,
   getAddresses,
-  getSubstate,
+  inspectSubstate,
 } from '../../../utils/json_rpc';
 import { Form } from 'react-router-dom';
 import { renderJson } from '../../../utils/helpers';
@@ -102,7 +102,7 @@ function RowData({
             size="small"
             onClick={() => {
               if (data === null) {
-                getSubstate(address)
+                inspectSubstate(address)
                   .then((resp) => {
                     setData(JSON.stringify(resp));
                   })

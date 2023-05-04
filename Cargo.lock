@@ -3328,6 +3328,9 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "hex-literal"
@@ -6292,6 +6295,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_with"
+version = "2.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "331bb8c3bf9b92457ab7abecf07078c13f7d270ba490103e84e8b014490cd0b0"
+dependencies = [
+ "base64 0.13.1",
+ "chrono",
+ "hex",
+ "indexmap",
+ "serde",
+ "serde_json",
+ "serde_with_macros",
+ "time 0.3.20",
+]
+
+[[package]]
+name = "serde_with_macros"
+version = "2.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "859011bddcc11f289f07f467cc1fe01c7a941daa4d8f6c40d4d1c92eb6d9319c"
+dependencies = [
+ "darling 0.14.4",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "serde_yaml"
 version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7302,6 +7333,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
+ "tari_indexer_lib",
  "tari_shutdown",
  "tari_template_lib",
  "tari_validator_node_client",
@@ -7530,6 +7562,8 @@ dependencies = [
  "tari_dan_wallet_sdk",
  "tari_dan_wallet_storage_sqlite",
  "tari_engine_types",
+ "tari_indexer_client",
+ "tari_indexer_lib",
  "tari_shutdown",
  "tari_template_builtin",
  "tari_template_lib",
@@ -7548,6 +7582,7 @@ name = "tari_dan_wallet_sdk"
 version = "0.50.0-pre.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chacha20poly1305 0.10.1",
  "digest 0.9.0",
  "jsonwebtoken",
@@ -7597,6 +7632,7 @@ version = "0.50.0-pre.0"
 dependencies = [
  "borsh",
  "digest 0.9.0",
+ "hex",
  "lazy_static",
  "rand 0.7.3",
  "serde",
@@ -7638,13 +7674,16 @@ dependencies = [
  "include_dir",
  "lmdb-zero",
  "log",
+ "log4rs",
  "prost 0.9.0",
+ "rand 0.8.5",
  "reqwest",
  "serde",
  "serde_json",
  "tari_app_grpc",
  "tari_app_utilities",
  "tari_base_node_grpc_client",
+ "tari_bor",
  "tari_common",
  "tari_common_types",
  "tari_comms",
@@ -7658,6 +7697,8 @@ dependencies = [
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
+ "tari_indexer_client",
+ "tari_indexer_lib",
  "tari_p2p",
  "tari_shutdown",
  "tari_storage",
@@ -7684,10 +7725,29 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "serde_with",
  "tari_common_types",
  "tari_comms_logging",
  "tari_dan_common_types",
  "tari_engine_types",
+ "tari_transaction",
+ "thiserror",
+]
+
+[[package]]
+name = "tari_indexer_lib"
+version = "0.50.0-pre.0"
+dependencies = [
+ "async-trait",
+ "log",
+ "serde",
+ "tari_dan_common_types",
+ "tari_dan_core",
+ "tari_engine_types",
+ "tari_template_lib",
+ "tari_transaction",
+ "tari_validator_node_rpc",
+ "thiserror",
 ]
 
 [[package]]
@@ -8114,8 +8174,11 @@ name = "tari_validator_node_rpc"
 version = "0.50.0-pre.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
  "prost 0.9.0",
+ "serde",
+ "tari_bor",
  "tari_common",
  "tari_common_types",
  "tari_comms",
@@ -8126,6 +8189,7 @@ dependencies = [
  "tari_engine_types",
  "tari_template_lib",
  "tari_transaction",
+ "tokio-stream",
  "tonic 0.6.2",
 ]
 

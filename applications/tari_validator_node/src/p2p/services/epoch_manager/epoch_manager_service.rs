@@ -32,15 +32,13 @@ use tari_dan_core::{consensus_constants::ConsensusConstants, services::epoch_man
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
+use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 use tokio::{
     sync::{broadcast, mpsc::Receiver, oneshot},
     task::JoinHandle,
 };
 
-use crate::p2p::services::{
-    epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager,
-    rpc_client::TariCommsValidatorNodeClientFactory,
-};
+use crate::p2p::services::epoch_manager::base_layer_epoch_manager::BaseLayerEpochManager;
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
 

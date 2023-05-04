@@ -30,6 +30,7 @@ use tari_dan_core::{
     models::{Committee, ValidatorNode},
     services::epoch_manager::{EpochManager, EpochManagerError, ShardCommitteeAllocation},
 };
+use tari_indexer_lib::committee_provider::CommitteeProvider;
 use tokio::sync::{broadcast, mpsc::Sender, oneshot};
 
 use crate::epoch_manager::{EpochManagerEvent, EpochManagerRequest};
@@ -281,5 +282,16 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
             .map_err(|_| EpochManagerError::SendError)?;
 
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+}
+
+#[async_trait]
+impl CommitteeProvider for EpochManagerHandle {
+    type Addr = CommsPublicKey;
+    type Error = EpochManagerError;
+
+    async fn get_committee(&self, shard_id: ShardId) -> Result<Committee<Self::Addr>, Self::Error> {
+        let epoch = self.current_epoch().await?;
+        EpochManager::get_committee(self, epoch, shard_id).await
     }
 }

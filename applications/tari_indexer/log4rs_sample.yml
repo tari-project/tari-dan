@@ -120,6 +120,13 @@ loggers:
       - stdout
     additive: false
 
+  tari::indexer:
+    level: info
+    appenders:
+      - dan_layer
+      - stdout
+    additive: false
+
   # Route log events sent to the "comms" logger to the "network" appender
   comms:
     level: debug

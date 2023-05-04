@@ -4,7 +4,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use log::*;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_dan_wallet_sdk::{
     apis::{
         accounts::AccountsApiError,
@@ -13,6 +13,7 @@ use tari_dan_wallet_sdk::{
         transaction::TransactionApiError,
     },
     storage::WalletStore,
+    substate_provider::WalletNetworkInterface,
     DanWalletSdk,
 };
 use tari_engine_types::{
@@ -35,19 +36,22 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::account_monitor";
 
-pub struct AccountMonitor<TStore> {
+pub struct AccountMonitor<TStore, TNetworkInterface> {
     notify: Notify<WalletEvent>,
-    wallet_sdk: DanWalletSdk<TStore>,
+    wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
     request_rx: mpsc::Receiver<AccountMonitorRequest>,
     shutdown_signal: ShutdownSignal,
 }
 
-impl<TStore> AccountMonitor<TStore>
-where TStore: WalletStore + Clone + Send + Sync + 'static
+impl<TStore, TNetworkInterface> AccountMonitor<TStore, TNetworkInterface>
+where
+    TStore: WalletStore,
+    TNetworkInterface: WalletNetworkInterface,
+    TNetworkInterface::Error: IsNotFoundError,
 {
     pub fn new(
         notify: Notify<WalletEvent>,
-        wallet_sdk: DanWalletSdk<TStore>,
+        wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
         shutdown_signal: ShutdownSignal,
     ) -> (Self, AccountMonitorHandle) {
         let (request_tx, request_rx) = mpsc::channel(1);
@@ -140,7 +144,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
             substate: account_value,
             created_by_tx,
         } = substate_api
-            .scan_from_vn(
+            .scan_for_substate(
                 &account_substate.address.address,
                 Some(account_substate.address.version),
             )
@@ -159,7 +163,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
             let vault_addr = SubstateAddress::Vault(*vault);
             let maybe_vault_version = known_child_vaults.get(&vault_addr).copied();
             let scan_result = substate_api
-                .scan_from_vn(&vault_addr, maybe_vault_version)
+                .scan_for_substate(&vault_addr, maybe_vault_version)
                 .await
                 .optional()?;
             let Some(ValidatorScanResult { address: versioned_addr, substate, created_by_tx}) = scan_result else {
@@ -255,7 +259,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
             if self
                 .wallet_sdk
                 .accounts_api()
-                .get_account(&account_addr)
+                .get_account_by_address(&account_addr)
                 .optional()?
                 .is_none()
             {
@@ -275,7 +279,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
                     .optional()?
                     .map(|s| s.address.version)
                     .unwrap_or(0);
-                let scan_result = substate_api.scan_from_vn(&resx_addr, Some(version)).await;
+                let scan_result = substate_api.scan_for_substate(&resx_addr, Some(version)).await;
                 let maybe_resource = match scan_result {
                     Ok(ValidatorScanResult { substate: resource, .. }) => {
                         let resx = resource.into_resource().ok_or_else(|| {

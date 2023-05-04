@@ -12,6 +12,7 @@ members = [
     "clients/validator_node_client",
     "clients/wallet_daemon_client",
     "dan_layer/core",
+    "dan_layer/indexer_lib",
     "dan_layer/integration_tests",
     "dan_layer/storage_lmdb",
     "dan_layer/storage_sqlite",

@@ -274,7 +274,6 @@ impl WalletStoreReader for ReadTransaction<'_> {
 
         let row = accounts::table
             .filter(accounts::is_default.eq(true))
-            .order_by(accounts::name.asc()) // order by name if there are multiples somehow
             .first::<models::Account>(self.connection())
             .optional()
             .map_err(|e| WalletStorageError::general("accounts_get_default", e))?

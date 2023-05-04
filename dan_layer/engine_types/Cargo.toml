@@ -15,6 +15,7 @@ tari_utilities = "0.4.10"
 borsh = "0.9.3"
 rand = "0.7"
 digest = "0.9.0"
+hex = { version = "0.4", features = ["serde"] }
 lazy_static = "1.4.0"
 serde = "1.0.126"
 thiserror = "1"

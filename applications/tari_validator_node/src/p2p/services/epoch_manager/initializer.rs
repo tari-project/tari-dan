@@ -28,12 +28,10 @@ use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_shutdown::ShutdownSignal;
+use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::p2p::services::{
-    epoch_manager::epoch_manager_service::EpochManagerService,
-    rpc_client::TariCommsValidatorNodeClientFactory,
-};
+use crate::p2p::services::epoch_manager::epoch_manager_service::EpochManagerService;
 
 pub fn spawn(
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
