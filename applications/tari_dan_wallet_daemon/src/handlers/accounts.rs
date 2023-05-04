@@ -84,9 +84,7 @@ pub async fn handle_create(
     let (key_index, signing_key) = sdk
         .key_manager_api()
         .get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
-    let owner_pk = sdk
-        .key_manager_api()
-        .get_public_key(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
+    let owner_pk = PublicKey::from_secret_key(&signing_key.k);
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
@@ -94,7 +92,6 @@ pub async fn handle_create(
 
     let transaction = Transaction::builder()
         .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
-        .with_new_outputs(1)
         .sign(&signing_key.k)
         .build();
 
@@ -617,34 +614,31 @@ pub async fn handle_claim_burn(
     let transaction = Transaction::builder()
         .with_fee_instructions(vec![
             Instruction::ClaimBurn {
-                claim: Box::new(
-                    ConfidentialClaim {
-                        public_key: reciprocal_claim_public_key,
-                        output_address: commitment_substate_address.address.as_unclaimed_confidential_output_address().unwrap(),
-                        range_proof,
-                        proof_of_knowledge: RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v),
-                        withdraw_proof: Some(reveal_proof),
-                    }
-                )
+                claim: Box::new(ConfidentialClaim {
+                    public_key: reciprocal_claim_public_key,
+                    output_address: commitment_substate_address
+                        .address
+                        .as_unclaimed_confidential_output_address()
+                        .unwrap(),
+                    range_proof,
+                    proof_of_knowledge: RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v),
+                    withdraw_proof: Some(reveal_proof),
+                }),
             },
-            Instruction::PutLastInstructionOutputOnWorkspace {key: b"burn".to_vec()},
+            Instruction::PutLastInstructionOutputOnWorkspace { key: b"burn".to_vec() },
             Instruction::CallMethod {
                 component_address: account.address.clone().as_component_address().unwrap(),
                 method: "deposit".to_string(),
-                args: args![Workspace("burn")]
+                args: args![Workspace("burn")],
             },
             Instruction::CallMethod {
                 component_address: account.address.clone().as_component_address().unwrap(),
                 method: "pay_fee".to_string(),
-                args: args![fee]
-            }
+                args: args![fee],
+            },
         ])
         .with_inputs(inputs)
         .with_outputs(outputs)
-        // transaction should have one output, corresponding to the same shard
-        // as the account substate address
-        // TODO: on a second claim burn, we shouldn't have any new outputs being created.
-        .with_new_outputs(1)
         .sign(&account_secret_key.k)
         .build();
 
@@ -734,7 +728,6 @@ pub async fn handle_create_free_test_coins(
         ])
         .with_inputs(inputs)
         .with_outputs(outputs)
-        .with_new_outputs(1)
         .sign(&account_secret_key.k)
         .build();
 
@@ -878,8 +871,6 @@ pub async fn handle_confidential_transfer(
             .call_method(req.destination_account, "deposit", args![Variable("bucket")])
             .with_inputs(shard_inputs)
             .with_outputs(shard_outputs)
-            // Possible new dest vault
-            .with_new_outputs(1)
             .sign(&account_secret.k)
             .build();
 
