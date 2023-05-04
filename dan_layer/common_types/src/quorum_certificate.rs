@@ -3,12 +3,13 @@
 
 use std::{borrow::Borrow, io};
 
-use digest::Digest;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_core::ValidatorNodeBmtHasherBlake256;
-use tari_crypto::hash::blake2::Blake256;
-use tari_engine_types::commit_result::RejectReason;
+use tari_engine_types::{
+    commit_result::RejectReason,
+    hashing::{hasher, EngineHashDomainLabel},
+};
 use tari_mmr::{Hash, MergedBalancedBinaryMerkleProof};
 
 use crate::{
@@ -217,20 +218,23 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
     }
 
     pub fn to_hash(&self) -> FixedHash {
-        let result = Blake256::new()
-            .chain(self.local_node_hash.as_bytes())
-            .chain(self.local_node_height.to_le_bytes())
-            .chain(self.shard.as_bytes())
-            .chain((self.validators_metadata.len() as u64).to_le_bytes())
-            .chain(bincode::serialize(&self.merged_proof).unwrap())
-            .chain(bincode::serialize(&self.leaves_hashes).unwrap());
+        hasher(EngineHashDomainLabel::QuorumCertificate)
+            .chain(&self.local_node_hash)
+            .chain(&self.local_node_height)
+            .chain(&self.shard)
+            .chain(&(self.validators_metadata.len() as u64))
+            .chain(&self.merged_proof)
+            .chain(&self.leaves_hashes)
+            .result()
+            .into_array()
+            .into()
+
         // TODO: add all fields
 
         // result = result.chain((self.involved_shards.len() as u32).to_le_bytes());
         // for shard in &self.involved_shards {
         //     result = result.chain((*shard).to_le_bytes());
         // }
-        result.finalize().into()
     }
 
     pub fn payload_id(&self) -> PayloadId {
