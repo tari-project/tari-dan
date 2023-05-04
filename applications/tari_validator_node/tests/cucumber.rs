@@ -724,12 +724,23 @@ async fn assert_indexer_substate_version(
 }
 
 #[then(expr = "the indexer {word} returns {int} non fungibles for resource {word}")]
-async fn assert_indexer_non_fungible_list(world: &mut TariWorld, indexer_name: String, count: u32, output_ref: String) {
+async fn assert_indexer_non_fungible_list(
+    world: &mut TariWorld,
+    indexer_name: String,
+    count: usize,
+    output_ref: String,
+) {
     let indexer = world.indexers.get(&indexer_name).unwrap();
     assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
-    let nfts = indexer.get_non_fungibles(world, output_ref, 0, u64::from(count)).await;
+    let nfts = indexer.get_non_fungibles(world, output_ref, 0, count as u64).await;
     eprintln!("indexer.get_non_fungibles result: {:?}", nfts);
-    assert_eq!(nfts.len() as u32, count);
+    assert_eq!(
+        nfts.len(),
+        count,
+        "Unexpected number of NFTs returned. Expected: {}, Actual: {}",
+        count,
+        nfts.len()
+    );
 }
 
 #[when(expr = "I wait {int} seconds")]

@@ -32,7 +32,7 @@ use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::{
-    substate_decoder::{decode_substate_into_json, find_related_substates},
+    substate_decoder::find_related_substates,
     substate_storage_sqlite::{
         models::{non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
         sqlite_substate_store_factory::{
@@ -268,19 +268,14 @@ fn store_substate_in_db(
     address: &SubstateAddress,
     substate: &Substate,
 ) -> Result<(), anyhow::Error> {
-    let substate_row = map_substate_to_db_row(address, substate)?;
-    tx.set_substate(substate_row)?;
-
-    Ok(())
-}
-
-fn map_substate_to_db_row(address: &SubstateAddress, substate: &Substate) -> Result<NewSubstate, anyhow::Error> {
-    let row = NewSubstate {
+    let substate_row = NewSubstate {
         address: address.to_address_string(),
         version: i64::from(substate.version()),
         data: encode_substate(substate)?,
     };
-    Ok(row)
+    tx.set_substate(substate_row)?;
+
+    Ok(())
 }
 
 fn map_nft_index_to_db_row(
@@ -295,7 +290,8 @@ fn map_nft_index_to_db_row(
 }
 
 fn encode_substate(substate: &Substate) -> Result<String, anyhow::Error> {
-    let decoded_data = decode_substate_into_json(substate)?;
-    let pretty_json = serde_json::to_string_pretty(&decoded_data)?;
+    // let decoded_data = encode_substate_into_json(substate)?;
+    // let value = IndexedValue::from_raw(&tari_bor::encode(substate.substate_value())?)?;
+    let pretty_json = serde_json::to_string_pretty(&substate)?;
     Ok(pretty_json)
 }

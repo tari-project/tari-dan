@@ -30,6 +30,25 @@ pub struct GetSubstateResponse {
     pub created_by_transaction: FixedHash,
 }
 
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InspectSubstateRequest {
+    #[serde_as(as = "DisplayFromStr")]
+    pub address: SubstateAddress,
+    pub version: Option<u32>,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InspectSubstateResponse {
+    #[serde_as(as = "DisplayFromStr")]
+    pub address: SubstateAddress,
+    pub version: u32,
+    pub substate_contents: serde_json::Value,
+    #[serde(with = "serde_tools::hex")]
+    pub created_by_transaction: FixedHash,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionRequest {
     pub transaction: Transaction,

@@ -51,6 +51,8 @@ use tari_indexer_client::types::{
     GetSubstateResponse,
     GetTransactionResultRequest,
     GetTransactionResultResponse,
+    InspectSubstateRequest,
+    InspectSubstateResponse,
     NonFungibleSubstate,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
@@ -60,6 +62,7 @@ use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
 use crate::{
     bootstrap::Services,
+    substate_decoder::encode_substate_into_json,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
     GrpcBaseNodeClient,
@@ -266,6 +269,42 @@ impl JsonRpcHandlers {
             version: substate_resp.version,
             substate: substate_resp.substate,
             created_by_transaction: substate_resp.created_by_transaction,
+        }))
+    }
+
+    pub async fn inspect_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: InspectSubstateRequest = value.parse_params()?;
+
+        let resp = self
+            .substate_manager
+            .get_substate(&request.address, request.version)
+            .await
+            .map_err(|e| {
+                warn!(target: LOG_TARGET, "Error getting substate: {}", e);
+                Self::generic_error_response(answer_id)
+            })?
+            .ok_or_else(|| {
+                JsonRpcResponse::error(
+                    answer_id,
+                    JsonRpcError::new(
+                        JsonRpcErrorReason::ApplicationError(404),
+                        format!(
+                            "Substate {} (version:>={}) not found",
+                            request.address,
+                            request.version.unwrap_or(0)
+                        ),
+                        Value::Null,
+                    ),
+                )
+            })?;
+
+        Ok(JsonRpcResponse::success(answer_id, InspectSubstateResponse {
+            address: resp.address,
+            version: resp.version,
+            substate_contents: encode_substate_into_json(&resp.substate)
+                .map_err(|e| Self::internal_error(answer_id, e))?,
+            created_by_transaction: resp.created_by_transaction,
         }))
     }
 
