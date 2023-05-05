@@ -23,8 +23,8 @@ use tari_dan_wallet_sdk::{
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
 };
 use tari_engine_types::{
+    component::new_component_address_from_parts,
     confidential::ConfidentialClaim,
-    hashing::{hasher, EngineHashDomainLabel},
     instruction::Instruction,
     substate::SubstateAddress,
 };
@@ -33,7 +33,8 @@ use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, NonFungibleAddress, UnclaimedConfidentialOutputAddress},
-    prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+    prelude::{ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+    Hash,
 };
 use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
@@ -820,12 +821,8 @@ pub async fn handle_transfer(
     inputs.push(resource_substate.address);
 
     // get destination account information
-    // TODO: DRY with id_provider
-    let destination_account_address_hash = hasher(EngineHashDomainLabel::ComponentAddress)
-        .chain(&ACCOUNT_TEMPLATE_ADDRESS)
-        .chain(&req.destination_public_key.as_bytes())
-        .result();
-    let destination_account_address = ComponentAddress::new(destination_account_address_hash);
+    let component_id = Hash::try_from(req.destination_public_key.as_bytes())?;
+    let destination_account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
     let destination_account_scan: Result<ValidatorScanResult, _> = sdk
         .substate_api()
         .scan_from_vn(&SubstateAddress::Component(destination_account_address), None)
