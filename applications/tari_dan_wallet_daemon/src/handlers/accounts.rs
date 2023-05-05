@@ -780,6 +780,10 @@ pub async fn handle_transfer(
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let account = get_account_or_default(req.account, &sdk)?;
+    context
+        .account_monitor()
+        .refresh_account(account.address.clone())
+        .await?;
 
     let account_secret_key = sdk
         .key_manager_api()
@@ -862,6 +866,11 @@ pub async fn handle_transfer(
             method: "deposit".to_string(),
             args: args![Workspace("bucket")],
         },
+        Instruction::CallMethod {
+            component_address: source_account_address,
+            method: "pay_fee".to_string(),
+            args: args![fee],
+        },
     ];
     if must_create_destination_account {
         let owner_token = NonFungibleAddress::from_public_key(
@@ -874,12 +883,10 @@ pub async fn handle_transfer(
         });
     }
     let transaction = Transaction::builder()
-        // TODO 
-        //.fee_transaction_pay_from_component(source_account_address, req.fee.unwrap_or(DEFAULT_FEE))
-        .with_instructions(instructions)
+        .with_fee_instructions(instructions)
         .with_inputs(inputs)
         .with_outputs(outputs)
-        // potentially the destination account creation with its vault
+        // potentially we can create new outputs for the destination account with its vault
         .with_new_outputs(2)
         .sign(&account_secret_key.k)
         .build();

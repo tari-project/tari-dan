@@ -34,9 +34,21 @@ Feature: Account transfers
     # Create a new Faucet component
     When I call function "mint" on template "faucet" on VN with args "amount_10000" and 3 outputs named "FAUCET" with new resource "test"
 
-    # Create and fund the sender account
+    # Create the sender account
     When I create an account ACC_1 via the wallet daemon WALLET_D
-    When I submit a transaction manifest on VN with inputs "FAUCET, ACC_1" and 3 outputs named "TX1"
+
+    # Burn some tari in the base layer to have funds for fees in the sender account
+    When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACC_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
+    When miner MINER mines 13 new blocks
+    When I convert commitment COMMITMENT into COMM_ADDRESS address
+    Then validator node VN has state at COMM_ADDRESS
+    When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
+
+    # Wait for the wallet daemon account monitor to update the sender account information
+    When I wait 10 seconds
+
+    # Fund the sender account with faucet tokens
+    When I submit a transaction manifest on VN with inputs "FAUCET, ACC_1" and 5 outputs named "TX1"
         ```
             let faucet = global!["FAUCET/components/TestFaucet"];
             let mut acc1 = global!["ACC_1/components/Account"];
