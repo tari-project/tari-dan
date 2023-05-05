@@ -2,7 +2,10 @@
 name = "tari_indexer_client"
 version = "0.50.0-pre.0"
 edition = "2021"
-
+authors = ["The Tari Development Community"]
+description = "Tari indexer client library"
+repository = "https://github.com/tari-project/tari-dan"
+license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
