@@ -76,7 +76,6 @@ pub enum TransactionSubcommand {
     Submit(SubmitArgs),
     SubmitManifest(SubmitManifestArgs),
     Send(SendArgs),
-    Transfer(TransferArgs),
     ConfidentialTransfer(ConfidentialTransferArgs),
 }
 
@@ -139,16 +138,6 @@ pub struct SubmitManifestArgs {
 pub struct SendArgs {
     amount: u32,
     resource_address: ResourceAddress,
-    dest_address: ComponentAddress,
-    #[clap(flatten)]
-    common: CommonSubmitArgs,
-    source_account_name: Option<ComponentAddressOrName>,
-}
-
-#[derive(Debug, Args, Clone)]
-pub struct TransferArgs {
-    amount: u32,
-    resource_address: ResourceAddress,
     destination_public_key: FromHex<Vec<u8>>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
@@ -197,9 +186,6 @@ impl TransactionSubcommand {
             TransactionSubcommand::Get(args) => handle_get(args, &mut client).await?,
             TransactionSubcommand::Send(args) => {
                 handle_send(args, &mut client).await?;
-            },
-            TransactionSubcommand::Transfer(args) => {
-                handle_transfer(args, &mut client).await?;
             },
             TransactionSubcommand::ConfidentialTransfer(args) => {
                 handle_confidential_transfer(args, &mut client).await?;
@@ -373,93 +359,8 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
         source_account_name,
         amount,
         resource_address,
-        dest_address,
-        common,
-    } = args;
-
-    let account;
-    if let Some(source_account_name) = source_account_name.clone() {
-        let AccountGetResponse { account: account2, .. } = client.accounts_get(source_account_name).await?;
-        account = account2;
-    } else {
-        account = client.accounts_get_default().await?.account;
-    }
-    let source_component_address = account
-        .address
-        .as_component_address()
-        .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
-
-    let fee_account = if let Some(fee_account_name) = common.fee_account.clone() {
-        let AccountGetResponse {
-            account: fee_account, ..
-        } = client.accounts_get(fee_account_name).await?;
-        fee_account.address.as_component_address().unwrap()
-    } else {
-        source_component_address
-    };
-
-    let instructions = vec![
-        Instruction::CallMethod {
-            component_address: source_component_address,
-            method: String::from("withdraw"),
-            args: args![resource_address, Amount::from(amount)], // amount is u32
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"bucket".to_vec(),
-        },
-        Instruction::CallMethod {
-            component_address: dest_address,
-            method: String::from("deposit"),
-            args: args![Variable("bucket")],
-        },
-    ];
-
-    let request = TransactionSubmitRequest {
-        signing_key_index: Some(account.key_index),
-        fee_instructions: vec![Instruction::CallMethod {
-            component_address: fee_account,
-            method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
-        }],
-        instructions,
-        inputs: common.inputs,
-        override_inputs: common.override_inputs.unwrap_or_default(),
-        new_outputs: common.num_outputs.unwrap_or(0),
-        specific_non_fungible_outputs: common
-            .non_fungible_mint_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.non_fungible_id))
-            .collect(),
-        new_resources: common
-            .new_resources
-            .into_iter()
-            .map(|r| (r.template_address, r.token_symbol))
-            .collect(),
-        new_non_fungible_outputs: common
-            .new_non_fungible_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.count))
-            .collect(),
-        new_non_fungible_index_outputs: common
-            .new_non_fungible_index_outputs
-            .into_iter()
-            .map(|i| (i.parent_address, i.index))
-            .collect(),
-        is_dry_run: common.dry_run,
-        proof_ids: vec![],
-    };
-
-    submit_transaction(request, client).await?;
-    Ok(())
-}
-
-pub async fn handle_transfer(args: TransferArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
-    let TransferArgs {
-        resource_address,
-        amount,
         destination_public_key,
         common,
-        source_account_name,
     } = args;
 
     let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
