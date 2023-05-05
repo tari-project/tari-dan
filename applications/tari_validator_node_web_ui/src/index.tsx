@@ -22,7 +22,7 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import './index.css';
+import './theme/theme.css';
 import reportWebVitals from './reportWebVitals';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import ValidatorNode from './routes/VN/ValidatorNode';
@@ -32,6 +32,7 @@ import Transaction, {
 import App from './App';
 import Committees from './routes/Committees/Committees';
 import Connections from './routes/Connections/Connections';
+import Fees from './routes/Fees/Fees';
 import Mempool from './routes/Mempool/Mempool';
 import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
 import Templates from './routes/Templates/Templates';
@@ -48,6 +49,10 @@ const router = createBrowserRouter([
       {
         path: 'connections',
         element: <Connections />,
+      },
+      {
+        path: 'fees',
+        element: <Fees />,
       },
       {
         path: 'transactions',

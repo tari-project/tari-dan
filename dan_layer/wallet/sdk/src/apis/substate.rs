@@ -1,29 +1,34 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::collections::HashMap;
+
+use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
-use tari_engine_types::substate::{SubstateAddress, SubstateValue};
-use tari_validator_node_client::{
-    types::{GetSubstateRequest, SubstateStatus},
-    ValidatorNodeClient,
-    ValidatorNodeClientError,
+use tari_engine_types::{
+    indexed_value::{IndexedValue, ValueVisitorError},
+    substate::{SubstateAddress, SubstateValue},
 };
 
 use crate::{
     models::{SubstateModel, VersionedSubstateAddress},
-    storage::{WalletStorageError, WalletStore, WalletStoreReader},
+    storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
+    substate_provider::WalletNetworkInterface,
 };
 
-pub struct SubstatesApi<'a, TStore> {
+const LOG_TARGET: &str = "tari::dan::wallet_sdk::apis::substate";
+
+pub struct SubstatesApi<'a, TStore, TNetworkInterface> {
     store: &'a TStore,
-    validator_node_jrpc_endpoint: &'a str,
+    network_interface: &'a TNetworkInterface,
 }
 
-impl<'a, TStore: WalletStore> SubstatesApi<'a, TStore> {
-    pub fn new(store: &'a TStore, validator_node_jrpc_endpoint: &'a str) -> Self {
+impl<'a, TStore: WalletStore, TNetworkInterface: WalletNetworkInterface> SubstatesApi<'a, TStore, TNetworkInterface> {
+    pub fn new(store: &'a TStore, network_interface: &'a TNetworkInterface) -> Self {
         Self {
             store,
-            validator_node_jrpc_endpoint,
+            network_interface,
         }
     }
 
@@ -35,7 +40,7 @@ impl<'a, TStore: WalletStore> SubstatesApi<'a, TStore> {
 
     pub fn load_dependent_substates(
         &self,
-        parents: &[SubstateAddress],
+        parents: &[&SubstateAddress],
     ) -> Result<Vec<VersionedSubstateAddress>, SubstateApiError> {
         let mut substate_addresses = Vec::with_capacity(parents.len());
         let mut tx = self.store.create_read_tx()?;
@@ -49,54 +54,133 @@ impl<'a, TStore: WalletStore> SubstatesApi<'a, TStore> {
         Ok(substate_addresses)
     }
 
-    pub async fn scan_from_vn(
+    pub async fn locate_dependent_substates(
         &self,
-        address: &SubstateAddress,
-    ) -> Result<(VersionedSubstateAddress, SubstateValue), SubstateApiError> {
-        let mut client = self.connect_validator_node()?;
-        let existing = self.store.with_read_tx(|tx| tx.substates_get(address)).optional()?;
-        let mut version = existing.map(|s| s.address.version).unwrap_or(0);
+        parents: &[&SubstateAddress],
+    ) -> Result<Vec<VersionedSubstateAddress>, SubstateApiError> {
+        let mut substate_addresses = HashMap::with_capacity(parents.len());
 
-        loop {
-            let resp = client
-                .get_substate(GetSubstateRequest {
-                    address: address.clone(),
-                    version,
-                })
-                .await?;
+        for parent_addr in parents {
+            match self.store.with_read_tx(|tx| tx.substates_get(parent_addr)).optional()? {
+                Some(parent) => {
+                    substate_addresses.insert(parent.address.address, parent.address.version);
+                    let children = self.store.with_read_tx(|tx| tx.substates_get_children(parent_addr))?;
+                    substate_addresses.extend(children.into_iter().map(|s| (s.address.address, s.address.version)));
+                },
+                None => {
+                    let ValidatorScanResult { address, substate, .. } =
+                        self.scan_for_substate(parent_addr, None).await?;
+                    substate_addresses.insert(address.address.clone(), address.version);
 
-            let status = resp.status;
-            if let Some(value) = resp.value {
-                return Ok((
-                    VersionedSubstateAddress {
-                        address: address.clone(),
-                        version,
-                    },
-                    value,
-                ));
-            }
-            match status {
-                SubstateStatus::Up => {
-                    // No value, but the substate is up? That can't be right.
-                    return Err(SubstateApiError::InvalidValidatorNodeResponse(
-                        "Substate is up but no value was returned".to_string(),
-                    ));
-                },
-                SubstateStatus::Down => {
-                    version += 1;
-                },
-                SubstateStatus::DoesNotExist => {
-                    return Err(SubstateApiError::SubstateDoesNotExist {
-                        address: address.clone(),
-                    })
+                    if substate_addresses.contains_key(&address.address) {
+                        continue;
+                    }
+
+                    match substate {
+                        SubstateValue::Component(data) => {
+                            let value = IndexedValue::from_raw(&data.state.state)?;
+                            for addr in value.owned_substates() {
+                                if substate_addresses.contains_key(&addr) {
+                                    continue;
+                                }
+
+                                let ValidatorScanResult { address: addr, .. } =
+                                    self.scan_for_substate(&addr, None).await?;
+                                substate_addresses.insert(addr.address, addr.version);
+                            }
+                        },
+                        SubstateValue::Resource(_) => {},
+                        SubstateValue::Vault(vault) => {
+                            let resx_addr = SubstateAddress::Resource(*vault.resource_address());
+                            if substate_addresses.contains_key(&resx_addr) {
+                                continue;
+                            }
+                            let ValidatorScanResult { address: addr, .. } =
+                                self.scan_for_substate(&resx_addr, None).await?;
+                            substate_addresses.insert(addr.address, addr.version);
+                        },
+                        SubstateValue::NonFungible(_) => {},
+                        SubstateValue::NonFungibleIndex(addr) => {
+                            let resx_addr = SubstateAddress::Resource(*addr.referenced_address().resource_address());
+                            if substate_addresses.contains_key(&resx_addr) {
+                                continue;
+                            }
+                            let ValidatorScanResult { address: addr, .. } =
+                                self.scan_for_substate(&resx_addr, None).await?;
+                            substate_addresses.insert(addr.address, addr.version);
+                        },
+                        SubstateValue::UnclaimedConfidentialOutput(_) => {},
+                    }
                 },
             }
         }
+
+        Ok(substate_addresses
+            .into_iter()
+            .map(|(address, version)| VersionedSubstateAddress { address, version })
+            .collect())
     }
 
-    fn connect_validator_node(&self) -> Result<ValidatorNodeClient, SubstateApiError> {
-        let client = ValidatorNodeClient::connect(self.validator_node_jrpc_endpoint)?;
-        Ok(client)
+    pub async fn scan_for_substate(
+        &self,
+        address: &SubstateAddress,
+        version_hint: Option<u32>,
+    ) -> Result<ValidatorScanResult, SubstateApiError> {
+        debug!(
+            target: LOG_TARGET,
+            "Scanning for substate {} at version {}",
+            address,
+            version_hint.unwrap_or(0)
+        );
+
+        let resp = self
+            .network_interface
+            .query_substate(address, version_hint)
+            .await
+            .map_err(|e| SubstateApiError::NetworkIndexerError(e.into()))?;
+
+        debug!(
+            target: LOG_TARGET,
+            "Found substate {} at version {}", address, resp.version
+        );
+        Ok(ValidatorScanResult {
+            address: VersionedSubstateAddress {
+                address: address.clone(),
+                version: resp.version,
+            },
+            created_by_tx: resp.created_by_transaction,
+            substate: resp.substate.into_substate_value(),
+        })
+    }
+
+    pub fn save_root(
+        &self,
+        created_by_tx: FixedHash,
+        address: VersionedSubstateAddress,
+    ) -> Result<(), SubstateApiError> {
+        self.store.with_write_tx(|tx| {
+            let maybe_removed = tx.substates_remove(&address.address).optional()?;
+            tx.substates_insert_root(
+                created_by_tx,
+                address,
+                maybe_removed.as_ref().and_then(|s| s.module_name.clone()),
+                maybe_removed.and_then(|s| s.template_address),
+            )
+        })?;
+        Ok(())
+    }
+
+    pub fn save_child(
+        &self,
+        created_by_tx: FixedHash,
+        parent: SubstateAddress,
+        child: VersionedSubstateAddress,
+    ) -> Result<(), SubstateApiError> {
+        self.store.with_write_tx(|tx| {
+            tx.substates_remove(&child.address).optional()?;
+            tx.substates_insert_child(created_by_tx, parent, child)
+        })?;
+        Ok(())
     }
 }
 
@@ -104,18 +188,25 @@ impl<'a, TStore: WalletStore> SubstatesApi<'a, TStore> {
 pub enum SubstateApiError {
     #[error("Store error: {0}")]
     StoreError(#[from] WalletStorageError),
-    #[error("Validator node client error: {0}")]
-    ValidatorNodeClientError(#[from] ValidatorNodeClientError),
+    #[error("Network network_interface error: {0}")]
+    NetworkIndexerError(anyhow::Error),
     #[error("Invalid validator node response: {0}")]
     InvalidValidatorNodeResponse(String),
     #[error("Substate {address} does not exist")]
     SubstateDoesNotExist { address: SubstateAddress },
+    #[error("ValueVisitorError: {0}")]
+    ValueVisitorError(#[from] ValueVisitorError),
 }
 
 impl IsNotFoundError for SubstateApiError {
     fn is_not_found_error(&self) -> bool {
         matches!(self, Self::SubstateDoesNotExist { .. }) ||
-            matches!(self, Self::StoreError(e) if e.is_not_found_error()) ||
-            matches!(self, Self::ValidatorNodeClientError(e) if e.is_not_found_error())
+            matches!(self, Self::StoreError(e) if e.is_not_found_error())
     }
+}
+
+pub struct ValidatorScanResult {
+    pub address: VersionedSubstateAddress,
+    pub created_by_tx: FixedHash,
+    pub substate: SubstateValue,
 }

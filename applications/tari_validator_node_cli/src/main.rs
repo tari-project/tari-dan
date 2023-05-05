@@ -20,7 +20,7 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{error::Error, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::anyhow;
 use multiaddr::{Multiaddr, Protocol};
@@ -29,7 +29,7 @@ use tari_validator_node_cli::{cli::Cli, command::Command, key_manager::KeyManage
 use tari_validator_node_client::ValidatorNodeClient;
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::init();
 
     let endpoint = cli
@@ -51,6 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     if let Err(err) = handle_command(cli.command, base_dir, client).await {
         eprintln!("👮 Command failed with error \"{}\"", err);
+        return Err(err);
     }
 
     Ok(())

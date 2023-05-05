@@ -2,27 +2,26 @@
 name = "tari_indexer"
 authors = ["The Tari Development Community"]
 description = "The Tari DAN indexer implementation"
-repository = "https://github.com/tari-project/tari"
+repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 version = "0.50.0-pre.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
-tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_app_grpc" }
-tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_app_utilities" }
-tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", version = "0.1.0", package = "tari_base_node_grpc_client" }
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_common" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_common_types" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_comms" }
+tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_app_grpc" }
+tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_app_utilities" }
+tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", version = "0.1.0", package = "tari_base_node_grpc_client" }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_common" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_common_types" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_comms" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_comms_rpc_macros" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_core", default-features = false, features = ["transactions"] }
-tari_crypto = { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8" }
-tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_p2p" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_shutdown" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_storage" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_core", default-features = false, features = ["transactions"] }
+tari_crypto = { version="0.16.10" }
+tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_p2p" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_shutdown" }
+tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_storage" }
 
-tari_dan_app_grpc = { path = "../tari_dan_app_grpc" }
+tari_bor = { path = "../../dan_layer/tari_bor" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_dan_core = { path = "../../dan_layer/core" }
@@ -30,16 +29,23 @@ tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
+tari_indexer_client = { path = "../../clients/tari_indexer_client" }
+tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
-tari_validator_node = { path = "../tari_validator_node" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
+tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"
 axum = "0.6.0"
+async-graphql = "5.0.7"
+async-graphql-axum = "5.0.7"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
 chrono = "0.4.22"
+#ciborium = { version = "0.2.0" }
+ciborium = { git = "https://github.com/enarx/ciborium.git", rev = "ac38b3dddeadf81f93cc8e58689ea92dc46a8e56", default-features = false }
+ciborium-io = { version = "0.2.0" }
 clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"
 diesel = { version = "2", default-features = false, features = ["sqlite", "chrono"] }
@@ -48,7 +54,9 @@ futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
 lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
+log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
 prost = "0.9"
+rand = "0.8"
 reqwest = "0.11.11"
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0.64"
@@ -59,3 +67,9 @@ tonic = "0.6.2"
 tower = "0.4"
 tower-layer = "0.3"
 tower-http = { version = "0.3.0", features = ["cors"] }
+
+[package.metadata.cargo-machete]
+ignored = [
+    # Want to enable some log4rs features
+    "log4rs",
+]

@@ -8,7 +8,7 @@ fi
 
 function update_versions {
     packages=${@:-'
-   applications/tari_dan_app_grpc
+   applications/validator_node_rpc
    applications/tari_dan_app_utilities
    applications/tari_dan_wallet_cli
    applications/tari_dan_wallet_daemon

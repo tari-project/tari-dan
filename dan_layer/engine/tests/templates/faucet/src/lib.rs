@@ -32,8 +32,7 @@ mod faucet_template {
 
     impl TestFaucet {
         pub fn mint(initial_supply: Amount) -> Self {
-            let coins = ResourceBuilder::fungible()
-                .with_token_symbol("🪙")
+            let coins = ResourceBuilder::fungible("faucets")
                 .initial_supply(initial_supply)
                 .build_bucket();
 
@@ -44,7 +43,7 @@ mod faucet_template {
 
         pub fn take_free_coins(&mut self) -> Bucket {
             debug("Withdrawing 1000 coins from faucet");
-            self.vault.withdraw(Amount::new(1000))
+            self.vault.withdraw(Amount(1000))
         }
 
         // TODO: we can make a fungible utility template with these common operations

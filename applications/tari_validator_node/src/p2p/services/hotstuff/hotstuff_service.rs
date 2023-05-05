@@ -58,6 +58,11 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::validator_node::hotstuff_service";
+pub(crate) type HotstuffServiceSpawnOutput = (
+    EventSubscription<HotStuffEvent<CommsPublicKey>>,
+    JoinHandle<anyhow::Result<()>>,
+    JoinHandle<anyhow::Result<()>>,
+);
 
 pub struct HotstuffService {
     node_public_key: CommsPublicKey,
@@ -90,11 +95,7 @@ impl HotstuffService {
         rx_recovery_messages: Receiver<(CommsPublicKey, RecoveryMessage)>,
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
-    ) -> (
-        EventSubscription<HotStuffEvent>,
-        JoinHandle<anyhow::Result<()>>,
-        JoinHandle<anyhow::Result<()>>,
-    ) {
+    ) -> HotstuffServiceSpawnOutput {
         dbg!("Hotstuff starting");
         let (tx_new, rx_new) = channel(100);
         let (tx_leader, rx_leader) = channel(100);

@@ -1,30 +1,31 @@
 [package]
 name = "tari_dan_engine"
 version = "0.50.0-pre.0"
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+edition = "2021"
+authors = ["The Tari Development Community"]
+description = "Tari template runtime engine"
+repository = "https://github.com/tari-project/tari-dan"
+license = "BSD-3-Clause"
 
 [dependencies]
 tari_bor = { path = "../tari_bor" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_common_types" }
-tari_crypto =  { git = "https://github.com/tari-project/tari-crypto.git", tag = "v0.16.8" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_common_types" }
+tari_crypto = { version = "0.16.10" }
 tari_dan_common_types = { path = "../common_types" }
 tari_engine_types = { path = "../engine_types" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1", package = "tari_mmr" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_mmr" }
 tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib" }
-tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
+tari_utilities = "0.4.10"
 tari_transaction = { path = "../transaction" }
 
 anyhow = "1.0.53"
 cargo_toml = "0.11.5"
-digest = "0.9.0"
-#d3ne = { git = "https://github.com/stringhandler/d3ne-rs.git", branch = "st-fixes2" }
+d3ne = { git = "https://github.com/stringhandler/d3ne-rs.git", tag = "v0.8.0-pre.3" }
 log = { version = "0.4.8", features = ["std"] }
 rand = "0.7"
-serde = "1.0.126"
-serde_json = "1.0.81"
+serde = "1.0.150"
+serde_json = "1"
 thiserror = "^1.0.20"
 tempfile = "3.3.0"
 wasmer = "2.3.0"

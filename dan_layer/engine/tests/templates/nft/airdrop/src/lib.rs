@@ -35,8 +35,7 @@ mod airdrop_template {
 
     impl Airdrop {
         pub fn new() -> Self {
-            let bucket = ResourceBuilder::non_fungible()
-                .with_token_symbol("AIR")
+            let bucket = ResourceBuilder::non_fungible("AIR")
                 .mint_many_with(1..=100, |n| (NonFungibleId::from_u32(n), (Vec::new(), Vec::new())))
                 .build_bucket();
 
@@ -70,7 +69,7 @@ mod airdrop_template {
             );
 
             self.claimed_count += 1;
-            self.vault.withdraw(Amount::new(1))
+            self.vault.withdraw(Amount(1))
         }
 
         pub fn claim_specific(&mut self, address: ComponentAddress, id: NonFungibleId) -> Bucket {

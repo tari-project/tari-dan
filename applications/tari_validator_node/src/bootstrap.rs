@@ -36,6 +36,7 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
+use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_app_utilities::{
     base_layer_scanner,
@@ -43,7 +44,7 @@ use tari_dan_app_utilities::{
     epoch_manager::EpochManagerHandle,
     template_manager::TemplateManagerHandle,
 };
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PayloadId, QuorumCertificate, ShardId, TreeNodeHash};
+use tari_dan_common_types::{NodeAddressable, NodeHeight, PayloadId, ShardId, TreeNodeHash};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     models::{Payload, SubstateShardData},
@@ -65,15 +66,15 @@ use tari_template_lib::{
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     models::Metadata,
     prelude::ResourceType,
-    resource::TOKEN_SYMBOL,
 };
+use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 use tokio::task::JoinHandle;
 
 use crate::{
     comms,
     dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::{
-        create_validator_node_rpc_service,
+        create_tari_validator_node_rpc_service,
         services::{
             comms_peer_provider::CommsPeerProvider,
             epoch_manager,
@@ -84,7 +85,6 @@ use crate::{
             messaging::DanMessageReceivers,
             networking,
             networking::NetworkingHandle,
-            rpc_client::TariCommsValidatorNodeClientFactory,
             template_manager,
             template_manager::TemplateManager,
         },
@@ -170,6 +170,23 @@ pub async fn spawn_services(
     let (template_manager_service, join_handle) = template_manager::spawn(template_manager.clone(), shutdown.clone());
     handles.push(join_handle);
 
+    // Payload processor
+    let fee_table = if config.validator_node.no_fees {
+        FeeTable::zero_rated()
+    } else {
+        FeeTable::new(1, 1, DEFAULT_FEE_LOAN)
+    };
+    let payload_processor = TariDanPayloadProcessor::new(template_manager.clone(), fee_table);
+
+    // Dry run transaction processor
+    let dry_run_transaction_processor = DryRunTransactionProcessor::new(
+        epoch_manager.clone(),
+        payload_processor.clone(),
+        shard_store.clone(),
+        validator_node_client_factory,
+        node_identity.clone(),
+    );
+
     // Mempool
     let mut validator = TemplateExistsValidator::new(template_manager.clone()).boxed();
     if !config.validator_node.no_fees {
@@ -181,6 +198,7 @@ pub async fn spawn_services(
         epoch_manager.clone(),
         node_identity.clone(),
         validator,
+        dry_run_transaction_processor.clone(),
     );
     handles.push(join_handle);
 
@@ -198,14 +216,6 @@ pub async fn spawn_services(
     );
     handles.push(join_handle);
 
-    // Payload processor
-    let fee_table = if config.validator_node.no_fees {
-        FeeTable::zero_rated()
-    } else {
-        FeeTable::new(1, 1, 1, DEFAULT_FEE_LOAN)
-    };
-    let payload_processor = TariDanPayloadProcessor::new(template_manager, fee_table);
-
     // Consensus
     let (hotstuff_events, waiter_join_handle, service_join_handle) = hotstuff::try_spawn(
         node_identity.clone(),
@@ -221,14 +231,6 @@ pub async fn spawn_services(
     );
     handles.push(waiter_join_handle);
     handles.push(service_join_handle);
-
-    let dry_run_transaction_processor = DryRunTransactionProcessor::new(
-        epoch_manager.clone(),
-        payload_processor,
-        shard_store.clone(),
-        validator_node_client_factory,
-        node_identity.clone(),
-    );
 
     let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store.clone(), mempool.clone());
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
@@ -283,7 +285,7 @@ pub struct Services {
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
     pub template_manager: TemplateManagerHandle,
-    pub hotstuff_events: EventSubscription<HotStuffEvent>,
+    pub hotstuff_events: EventSubscription<HotStuffEvent<PublicKey>>,
     pub shard_store: SqliteShardStore,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
@@ -311,7 +313,7 @@ fn setup_p2p_rpc(
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
         .finish()
-        .add_service(create_validator_node_rpc_service(
+        .add_service(create_tari_validator_node_rpc_service(
             peer_provider,
             shard_store_store,
             mempool,
@@ -338,15 +340,20 @@ where
             shard_id,
             address,
             0,
-            Substate::new(0, Resource::new(ResourceType::NonFungible, Default::default())),
+            Substate::new(
+                0,
+                Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()),
+            ),
             NodeHeight(0),
             None,
             TreeNodeHash::zero(),
             None,
             genesis_payload,
             None,
-            QuorumCertificate::genesis(Epoch(0), genesis_payload, shard_id),
             None,
+            None,
+            0,
+            0,
         ))?;
     }
 
@@ -354,23 +361,28 @@ where
     let shard_id = ShardId::from_address(&address, 0);
     if tx.get_substate_states(&[shard_id])?.is_empty() {
         // Create the second layer tari resource
-        let mut metadata = Metadata::new();
+        let metadata = Metadata::new();
         // TODO: decide on symbol for L2 tari
-        metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
+        // metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
 
         tx.insert_substates(SubstateShardData::new(
             shard_id,
             address,
             0,
-            Substate::new(0, Resource::new(ResourceType::Confidential, metadata)),
+            Substate::new(
+                0,
+                Resource::new(ResourceType::Confidential, "tXTR2".to_string(), metadata),
+            ),
             NodeHeight(0),
             None,
             TreeNodeHash::zero(),
             None,
             genesis_payload,
             None,
-            QuorumCertificate::genesis(Epoch(0), genesis_payload, shard_id),
             None,
+            None,
+            0,
+            0,
         ))?;
     }
 

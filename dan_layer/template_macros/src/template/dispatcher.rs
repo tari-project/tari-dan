@@ -34,8 +34,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
     let output = quote! {
         #[no_mangle]
         pub unsafe extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
-            use ::tari_template_abi::{CallInfo, wrap_ptr};
-            use ::tari_template_lib::{template_dependencies::{decode_exact, encode_with_len},init_context, panic_hook::register_panic_hook};
+            use ::tari_template_lib::{template_dependencies::{decode_exact, encode_with_len, CallInfo, wrap_ptr},init_context, panic_hook::register_panic_hook};
 
             register_panic_hook();
 
@@ -110,10 +109,10 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                 ]
             },
             // non-self argument
-            TypeAst::Typed(type_ident) => {
+            TypeAst::Typed { type_path, .. } => {
                 args.push(parse_quote! { #arg_ident });
                 vec![parse_quote! {
-                    let #arg_ident = decode_exact::<#type_ident>(&call_info.args[#i])
+                    let #arg_ident = decode_exact::<#type_path>(&call_info.args[#i])
                         .unwrap_or_else(|e| panic!("failed to decode argument at position {} for function '{}': {}", #i, #func_name, e));
                 }]
             },
@@ -166,7 +165,7 @@ fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt
     let mut stmts: Vec<Stmt> = vec![];
     match &ast.output_type {
         Some(output_type) => match output_type {
-            TypeAst::Typed(type_path) => {
+            TypeAst::Typed { type_path, .. } => {
                 if let Some(stmt) = replace_self_in_single_value(template_ident, type_path) {
                     stmts.push(stmt);
                 }
@@ -189,7 +188,7 @@ fn replace_self_in_single_value(template_ident: &Ident, type_path: &TypePath) ->
     if type_ident == "Self" {
         // TODO: AccessRules - currently we allow all calls for functions that return Self.
         return Some(parse_quote! {
-            let rtn = engine().create_component(#template_name_str.to_string(), rtn, ::tari_template_lib::auth::AccessRules::with_default_allow());
+            let rtn = engine().create_component(#template_name_str.to_string(), rtn, ::tari_template_lib::auth::AccessRules::with_default_allow(), None);
         });
     }
 
@@ -209,9 +208,9 @@ fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt
                 let ident = path.path.segments[0].ident.clone();
                 let field_expr = build_tuple_field_expr("rtn".to_string(), i as u32);
                 if ident == "Self" {
-                    // TODO: AccessRules - currently we allow all calls for functions that return Self. 
+                    // TODO: AccessRules - currently we allow all calls for functions that return Self.
                     parse_quote! {
-                        engine().create_component(#template_name_str.to_string(), #field_expr, ::tari_template_lib::auth::AccessRules::with_default_allow())
+                        engine().create_component(#template_name_str.to_string(), #field_expr, ::tari_template_lib::auth::AccessRules::with_default_allow(), None)
                     }
                 } else {
                     field_expr

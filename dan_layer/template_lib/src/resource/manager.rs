@@ -78,6 +78,7 @@ impl ResourceManager {
     pub fn create(
         &mut self,
         resource_type: ResourceType,
+        token_symbol: String,
         metadata: Metadata,
         mint_arg: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
@@ -86,13 +87,14 @@ impl ResourceManager {
             action: ResourceAction::Create,
             args: invoke_args![CreateResourceArg {
                 resource_type,
+                token_symbol,
                 metadata,
                 mint_arg
             }],
         });
 
         resp.decode()
-            .expect("[register_non_fungible] Failed to decode ResourceAddress")
+            .expect("[register_non_fungible] Failed to decode ResourceAddress, Option<Bucket> tuple")
     }
 
     pub fn mint_non_fungible<T: Serialize, U: Serialize>(

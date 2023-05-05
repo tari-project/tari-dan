@@ -14,7 +14,7 @@ fn basic_faucet_transfer() {
 
     let faucet_template = template_test.get_template_address("TestFaucet");
 
-    let initial_supply = Amount::new(1_000_000_000_000);
+    let initial_supply = Amount(1_000_000_000_000);
     let result = template_test
         .execute_and_commit(
             vec![Instruction::CallFunction {
@@ -65,7 +65,7 @@ fn basic_faucet_transfer() {
                 Instruction::CallMethod {
                     component_address: sender_address,
                     method: "withdraw".to_string(),
-                    args: args![faucet_resource, Amount::new(100)],
+                    args: args![faucet_resource, Amount(100)],
                 },
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"foo_bucket".to_vec(),
@@ -101,7 +101,7 @@ fn withdraw_from_account_prevented() {
 
     let faucet_template = template_test.get_template_address("TestFaucet");
 
-    let initial_supply = Amount::new(1_000_000_000_000);
+    let initial_supply = Amount(1_000_000_000_000);
     let result = template_test
         .execute_and_commit(
             vec![Instruction::CallFunction {
@@ -181,6 +181,6 @@ fn withdraw_from_account_prevented() {
         .unwrap();
     assert_eq!(
         result.finalize.execution_results[0].decode::<Amount>().unwrap(),
-        Amount::new(0)
+        Amount(0)
     );
 }

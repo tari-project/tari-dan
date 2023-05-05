@@ -19,7 +19,6 @@ use crate::{
     Hash,
 };
 
-const TAG: u64 = BinaryTag::NonFungibleAddress as u64;
 const DELIM: char = ':';
 
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
@@ -166,19 +165,21 @@ impl Display for NonFungibleId {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct NonFungibleAddress(Required<NonFungibleAddressInner, TAG>);
+const TAG: u64 = BinaryTag::NonFungibleAddress.as_u64();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-struct NonFungibleAddressInner {
+pub struct NonFungibleAddress(Required<NonFungibleAddressContents, TAG>);
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct NonFungibleAddressContents {
     resource_address: ResourceAddress,
     id: NonFungibleId,
 }
 
 impl NonFungibleAddress {
     pub fn new(resource_address: ResourceAddress, id: NonFungibleId) -> Self {
-        let inner = NonFungibleAddressInner { resource_address, id };
-        Self(Required::<NonFungibleAddressInner, TAG>(inner))
+        let inner = NonFungibleAddressContents { resource_address, id };
+        Self(Required(inner))
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {
@@ -194,6 +195,25 @@ impl NonFungibleAddress {
             PUBLIC_IDENTITY_RESOURCE_ADDRESS,
             NonFungibleId::U256(public_key.into_array()),
         )
+    }
+
+    pub fn to_public_key(&self) -> Option<RistrettoPublicKeyBytes> {
+        if self.0 .0.resource_address != PUBLIC_IDENTITY_RESOURCE_ADDRESS {
+            return None;
+        }
+        match self.id() {
+            NonFungibleId::U256(bytes) => match RistrettoPublicKeyBytes::from_bytes(bytes) {
+                Ok(public_key) => Some(public_key),
+                Err(_) => None,
+            },
+            _ => None,
+        }
+    }
+}
+
+impl From<NonFungibleAddressContents> for NonFungibleAddress {
+    fn from(contents: NonFungibleAddressContents) -> Self {
+        Self(Required(contents))
     }
 }
 

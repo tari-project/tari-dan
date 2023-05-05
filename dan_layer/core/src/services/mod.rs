@@ -33,14 +33,12 @@ pub use events_publisher::{EventsPublisher, LoggingEventsPublisher};
 pub use payload_processor::{PayloadProcessor, PayloadProcessorError};
 pub use peer_service::{DanPeer, PeerProvider};
 pub use signing_service::{NodeIdentitySigningService, SigningService};
-pub use template_provider::TemplateProvider;
 pub mod base_node_error;
 pub mod epoch_manager;
 pub mod leader_strategy;
 mod service_specification;
-mod template_provider;
 mod validator_node_rpc_client;
 
 pub use service_specification::ServiceSpecification;
-pub use validator_node_rpc_client::{ValidatorNodeClientError, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+pub use validator_node_rpc_client::ValidatorNodeClientError;
 pub use wallet_client::WalletClient;

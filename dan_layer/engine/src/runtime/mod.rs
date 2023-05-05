@@ -24,7 +24,7 @@ mod auth;
 pub use auth::{AuthParams, AuthorizationScope};
 
 mod r#impl;
-pub use r#impl::RuntimeInterfaceImpl;
+pub use r#impl::{RuntimeInterfaceImpl, StateFinalize};
 
 mod consensus;
 pub use consensus::ConsensusContext;
@@ -45,20 +45,20 @@ mod fee_state;
 mod tracker;
 mod working_state;
 
-#[cfg(test)]
-mod tests;
-
 use std::{fmt::Debug, sync::Arc};
 
-use tari_engine_types::{commit_result::FinalizeResult, confidential::ConfidentialClaim, fees::FeeReceipt};
+use tari_crypto::ristretto::RistrettoSecretKey;
+use tari_engine_types::confidential::ConfidentialClaim;
 use tari_template_lib::{
     args::{
         Arg,
         BucketAction,
         BucketRef,
+        CallerContextAction,
         ComponentAction,
         ComponentRef,
         ConsensusAction,
+        GenerateRandomAction,
         InvokeResult,
         LogLevel,
         NonFungibleAction,
@@ -74,6 +74,8 @@ pub use tracker::{RuntimeState, StateTracker};
 
 pub trait RuntimeInterface: Send + Sync {
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError>;
+
+    fn emit_event(&self, message: String) -> Result<(), RuntimeError>;
 
     fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError>;
 
@@ -118,15 +120,20 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError>;
 
+    fn generate_random_invoke(&self, action: GenerateRandomAction) -> Result<InvokeResult, RuntimeError>;
+
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
 
     fn claim_burn(&self, claim: ConfidentialClaim) -> Result<(), RuntimeError>;
 
+    fn create_free_test_coins(&self, amount: u64, private_key: RistrettoSecretKey) -> Result<(), RuntimeError>;
     fn fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
-    fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError>;
+    fn finalize(&self) -> Result<StateFinalize, RuntimeError>;
+
+    fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError>;
 }
 
 #[derive(Clone)]

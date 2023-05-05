@@ -43,6 +43,7 @@ use crate::{
     },
     prelude::{AccessRules, ConfidentialOutputProof},
     resource::ResourceType,
+    Hash,
 };
 
 // -------------------------------- LOGS -------------------------------- //
@@ -132,6 +133,14 @@ pub struct CreateComponentArg {
     pub module_name: String,
     pub encoded_state: Vec<u8>,
     pub access_rules: AccessRules,
+    pub component_id: Option<Hash>,
+}
+
+// -------------------------------- Events -------------------------------- //
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct EmitEventArg {
+    pub message: String,
 }
 
 // -------------------------------- Resource -------------------------------- //
@@ -189,6 +198,7 @@ pub enum MintArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateResourceArg {
     pub resource_type: ResourceType,
+    pub token_symbol: String,
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
 }
@@ -336,4 +346,26 @@ pub struct ConsensusInvokeArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ConsensusAction {
     GetCurrentEpoch,
+}
+
+// -------------------------------- GenerateRandom -------------------------------- //
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GenerateRandomInvokeArg {
+    pub action: GenerateRandomAction,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GenerateRandomAction {
+    GetRandomBytes { len: u32 },
+}
+
+// -------------------------------- CallerContext -------------------------------- //
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CallerContextInvokeArg {
+    pub action: CallerContextAction,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum CallerContextAction {
+    GetCallerPublicKey,
 }

@@ -8,6 +8,7 @@ use tari_dan_wallet_sdk::{
     models::{SubstateModel, VersionedSubstateAddress},
     storage::WalletStorageError,
 };
+use tari_template_lib::Hash;
 use tari_utilities::hex::Hex;
 
 use crate::schema::substates;
@@ -36,11 +37,21 @@ impl Substate {
             parent_address: self.parent_address.as_ref().map(|s| s.parse().unwrap()),
             transaction_hash: FixedHash::from_hex(&self.transaction_hash).map_err(|e| {
                 WalletStorageError::DecodingError {
-                    operation: "substate_get",
+                    operation: "try_to_record",
                     item: "transaction_hash",
                     details: e.to_string(),
                 }
             })?,
+            template_address: self
+                .template_address
+                .as_ref()
+                .map(|s| Hash::from_hex(s))
+                .transpose()
+                .map_err(|e| WalletStorageError::DecodingError {
+                    operation: "try_to_record",
+                    item: "template_address",
+                    details: e.to_string(),
+                })?,
         })
     }
 }

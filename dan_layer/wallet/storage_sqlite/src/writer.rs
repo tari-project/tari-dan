@@ -10,7 +10,7 @@ use std::{
 use chrono::NaiveDateTime;
 use diesel::{
     sql_query,
-    sql_types::{BigInt, Bool, Integer, Nullable, Text},
+    sql_types::{BigInt, Bool, Text},
     OptionalExtension,
     QueryDsl,
     RunQueryDsl,
@@ -41,7 +41,13 @@ use tari_template_lib::{models::Amount, Hash};
 use tari_transaction::Transaction;
 use tari_utilities::hex::Hex;
 
-use crate::{diesel::ExpressionMethods, models, reader::ReadTransaction, serialization::serialize_json};
+use crate::{
+    diesel::ExpressionMethods,
+    models,
+    reader::ReadTransaction,
+    schema::auth_status,
+    serialization::serialize_json,
+};
 
 const LOG_TARGET: &str = "auth::tari::dan::wallet_sdk::storage_sqlite::writer";
 
@@ -67,6 +73,34 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     fn rollback(mut self) -> Result<(), WalletStorageError> {
         self.transaction.rollback()?;
+        Ok(())
+    }
+
+    fn jwt_add_empty_token(&mut self) -> Result<u64, WalletStorageError> {
+        diesel::insert_into(auth_status::table)
+            .values((auth_status::user_decided.eq(false), auth_status::granted.eq(false)))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("jwt_add_empty_token", e))?;
+        let last_inserted_id: i32 =
+            diesel::select(diesel::dsl::sql::<diesel::sql_types::Integer>("last_insert_rowid()"))
+                .get_result(self.connection())
+                .unwrap();
+        Ok(last_inserted_id as u64)
+    }
+
+    fn jwt_store_decision(&mut self, id: u64, permissions_token: Option<String>) -> Result<(), WalletStorageError> {
+        // let values = match token {
+        //     Some(token) => (auth_status::user_decided.eq(true),auth_status::granted.eq(true),auth_status::token)
+        // }
+        diesel::update(auth_status::table)
+            .set((
+                auth_status::user_decided.eq(true),
+                auth_status::granted.eq(permissions_token.is_some()),
+                permissions_token.map(|token| auth_status::token.eq(token)),
+            ))
+            .filter(auth_status::id.eq(id as i32))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("jwt_store_decision", e))?;
         Ok(())
     }
 
@@ -177,12 +211,6 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError> {
         use crate::schema::transactions;
 
-        let status = if is_dry_run {
-            TransactionStatus::DryRun
-        } else {
-            TransactionStatus::New
-        };
-
         diesel::insert_into(transactions::table)
             .values((
                 transactions::hash.eq(transaction.hash().to_string()),
@@ -191,7 +219,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 transactions::sender_address.eq(transaction.sender_public_key().to_hex()),
                 transactions::signature.eq(serialize_json(transaction.signature())?),
                 transactions::meta.eq(serialize_json(transaction.meta())?),
-                transactions::status.eq(status.as_key_str()),
+                transactions::status.eq(TransactionStatus::default().as_key_str()),
                 transactions::dry_run.eq(is_dry_run),
             ))
             .execute(self.connection())
@@ -206,7 +234,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         result: Option<&FinalizeResult>,
         transaction_failure: Option<&RejectReason>,
         final_fee: Option<Amount>,
-        qcs: Option<&[QuorumCertificate]>,
+        qcs: Option<&[QuorumCertificate<PublicKey>]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError> {
         use crate::schema::transactions;
@@ -236,26 +264,25 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Substates -------------------------------- //
-
-    fn substates_insert_parent(
+    fn substates_insert_root(
         &mut self,
         tx_hash: FixedHash,
-        substate: VersionedSubstateAddress,
-        module_name: String,
-        template_addr: TemplateAddress,
+        address: VersionedSubstateAddress,
+        module_name: Option<String>,
+        template_addr: Option<TemplateAddress>,
     ) -> Result<(), WalletStorageError> {
-        sql_query(
-            "INSERT INTO substates (module_name, address, parent_address, transaction_hash, template_address, \
-             version) VALUES (?, ?, ?, ?, ?, ?)",
-        )
-        .bind::<Nullable<Text>, _>(Some(module_name))
-        .bind::<Text, _>(substate.address.to_string())
-        .bind::<Nullable<Text>, _>(None::<String>)
-        .bind::<Text, _>(tx_hash.to_string())
-        .bind::<Nullable<Text>, _>(Some(template_addr.to_string()))
-        .bind::<Integer, _>(substate.version as i32)
-        .execute(self.connection())
-        .map_err(|e| WalletStorageError::general("substates_insert", e))?;
+        use crate::schema::substates;
+
+        diesel::insert_into(substates::table)
+            .values((
+                substates::address.eq(address.address.to_string()),
+                substates::transaction_hash.eq(tx_hash.to_string()),
+                substates::module_name.eq(module_name),
+                substates::template_address.eq(template_addr.map(|a| a.to_string())),
+                substates::version.eq(address.version as i32),
+            ))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("substates_insert_root", e))?;
 
         Ok(())
     }
@@ -266,24 +293,27 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         parent: SubstateAddress,
         child: VersionedSubstateAddress,
     ) -> Result<(), WalletStorageError> {
-        sql_query("INSERT INTO substates (transaction_hash, address, parent_address, version) VALUES (?, ?, ?, ?)")
-            .bind::<Text, _>(tx_hash.to_string())
-            .bind::<Text, _>(child.address.to_string())
-            .bind::<Nullable<Text>, _>(Some(parent.to_string()))
-            .bind::<Integer, _>(child.version as i32)
+        use crate::schema::substates;
+
+        diesel::insert_into(substates::table)
+            .values((
+                substates::address.eq(child.address.to_string()),
+                substates::transaction_hash.eq(tx_hash.to_string()),
+                substates::parent_address.eq(Some(parent.to_string())),
+                substates::version.eq(child.version as i32),
+            ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("substates_insert", e))?;
+            .map_err(|e| WalletStorageError::general("substates_insert_child", e))?;
+
         Ok(())
     }
 
-    fn substates_remove(
-        &mut self,
-        substate_addr: &VersionedSubstateAddress,
-    ) -> Result<SubstateModel, WalletStorageError> {
-        let substate = self.transaction.substates_get(&substate_addr.address)?;
-        let num_rows = sql_query("DELETE FROM substates WHERE address = ? AND version = ?")
-            .bind::<Text, _>(substate_addr.address.to_string())
-            .bind::<Integer, _>(substate_addr.version as i32)
+    fn substates_remove(&mut self, substate_addr: &SubstateAddress) -> Result<SubstateModel, WalletStorageError> {
+        use crate::schema::substates;
+
+        let substate = self.transaction.substates_get(substate_addr)?;
+        let num_rows = diesel::delete(substates::table)
+            .filter(substates::address.eq(substate_addr.to_string()))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("substates_remove", e))?;
 
@@ -300,16 +330,50 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     // -------------------------------- Accounts -------------------------------- //
 
+    fn accounts_set_default(&mut self, address: &SubstateAddress) -> Result<(), WalletStorageError> {
+        use crate::schema::accounts;
+
+        diesel::update(accounts::table)
+            .set(accounts::is_default.eq(false))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("accounts_set_default clear previous default", e))?;
+
+        let num_rows = diesel::update(accounts::table)
+            .set(accounts::is_default.eq(true))
+            .filter(accounts::address.eq(address.to_string()))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("accounts_set_default", e))?;
+
+        if num_rows == 0 {
+            return Err(WalletStorageError::NotFound {
+                operation: "accounts_set_default",
+                entity: "account".to_string(),
+                key: address.to_string(),
+            });
+        }
+
+        Ok(())
+    }
+
     fn accounts_insert(
         &mut self,
         account_name: &str,
         address: &SubstateAddress,
         owner_key_index: u64,
+        is_default: bool,
     ) -> Result<(), WalletStorageError> {
-        sql_query("INSERT INTO accounts (name, address, owner_key_index) VALUES (?, ?, ?)")
+        if is_default {
+            diesel::update(crate::schema::accounts::table)
+                .set(crate::schema::accounts::is_default.eq(false))
+                .execute(self.connection())
+                .map_err(|e| WalletStorageError::general("accounts_insert clear previous default", e))?;
+        }
+
+        sql_query("INSERT INTO accounts (name, address, owner_key_index, is_default) VALUES (?, ?, ?, ?)")
             .bind::<Text, _>(account_name)
             .bind::<Text, _>(address.to_string())
             .bind::<BigInt, _>(owner_key_index as i64)
+            .bind::<Bool, _>(is_default)
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("accounts_insert", e))?;
 

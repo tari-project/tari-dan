@@ -20,21 +20,30 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryFrom, fs};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    fs,
+};
 
+use chrono::Utc;
 use log::*;
+use tari_core::transactions::transaction_components::TemplateType;
 use tari_dan_app_utilities::template_manager::{
     Template,
+    TemplateExecutable,
     TemplateManagerError,
     TemplateMetadata,
     TemplateRegistration,
 };
-use tari_dan_core::services::TemplateProvider;
+use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_dan_engine::{
+    flow::FlowFactory,
+    function_definitions::FlowFunctionDefinition,
     packager::{LoadedTemplate, TemplateModuleLoader},
     wasm::WasmModule,
 };
-use tari_dan_storage::global::{DbTemplate, DbTemplateUpdate, GlobalDb, TemplateStatus};
+use tari_dan_storage::global::{DbTemplate, DbTemplateType, DbTemplateUpdate, GlobalDb, TemplateStatus};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_engine_types::calculate_template_binary_hash;
 use tari_template_builtin::get_template_builtin;
@@ -99,7 +108,7 @@ impl TemplateManager {
                 binary_sha: binary_sha.to_vec(),
                 height: 0,
             },
-            compiled_code,
+            executable: TemplateExecutable::CompiledWasm(compiled_code),
         }
     }
 
@@ -134,8 +143,17 @@ impl TemplateManager {
         // first check debug
         if let Some(dbg_replacement) = self.config.debug_replacements().get(address) {
             let mut result: Template = template.into();
-            let binary = fs::read(dbg_replacement).expect("Could not read debug file");
-            result.compiled_code = binary;
+            match &mut result.executable {
+                TemplateExecutable::CompiledWasm(wasm) => {
+                    let binary = fs::read(dbg_replacement).expect("Could not read debug file");
+                    *wasm = binary;
+                },
+                TemplateExecutable::Flow(_) => {
+                    todo!("debug replacements for flow templates not implemented");
+                },
+                _ => return Err(TemplateManagerError::TemplateUnavailable),
+            }
+
             Ok(result)
         } else {
             Ok(template.into())
@@ -158,11 +176,19 @@ impl TemplateManager {
         let template = DbTemplate {
             template_name: template.template_name,
             template_address: template.template_address.into_array().into(),
+            expected_hash: template.registration.binary_sha.into_vec().try_into()?,
             url: template.registration.binary_url.into_string(),
             height: template.mined_height,
             status: TemplateStatus::New,
-            compiled_code: vec![],
-            added_at: time::OffsetDateTime::now_utc(),
+            compiled_code: None,
+            added_at: Utc::now().naive_utc(),
+            template_type: match template.registration.template_type {
+                TemplateType::Wasm { .. } => DbTemplateType::Wasm,
+                TemplateType::Flow { .. } => DbTemplateType::Flow,
+                TemplateType::Manifest { .. } => DbTemplateType::Manifest,
+            },
+            flow_json: None,
+            manifest: None,
         };
 
         let mut tx = self.global_db.create_transaction()?;
@@ -188,24 +214,43 @@ impl TemplateManager {
 
         Ok(())
     }
+
+    pub(super) fn fetch_pending_templates(&self) -> Result<Vec<DbTemplate>, TemplateManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let templates = self.global_db.templates(&mut tx).get_pending_templates(1000)?;
+        Ok(templates)
+    }
 }
 
 impl TemplateProvider for TemplateManager {
     type Error = TemplateManagerError;
     type Template = LoadedTemplate;
 
-    fn get_template_module(&self, address: &TemplateAddress) -> Result<Self::Template, Self::Error> {
+    fn get_template_module(&self, address: &TemplateAddress) -> Result<Option<Self::Template>, Self::Error> {
         if let Some(template) = self.cache.get(address) {
             debug!(target: LOG_TARGET, "CACHE HIT: Template {}", address);
-            return Ok(template);
+            return Ok(Some(template));
         }
 
-        let template = self.fetch_template(address)?;
+        let Some(template) = self.fetch_template(address).optional()? else {
+            return Ok(None);
+        };
         debug!(target: LOG_TARGET, "CACHE MISS: Template {}", address);
-        let module = WasmModule::from_code(template.compiled_code);
-        let loaded = module.load_template()?;
+        let loaded = match template.executable {
+            TemplateExecutable::CompiledWasm(wasm) => {
+                let module = WasmModule::from_code(wasm);
+                module.load_template()?
+            },
+            TemplateExecutable::Manifest(_) => return Err(TemplateManagerError::UnsupportedTemplateType),
+            TemplateExecutable::Flow(flow_json) => {
+                let definition: FlowFunctionDefinition = serde_json::from_str(&flow_json)?;
+                let factory = FlowFactory::try_create::<Self>(definition)?;
+                LoadedTemplate::Flow(factory)
+            },
+        };
+
         self.cache.insert(*address, loaded.clone());
 
-        Ok(loaded)
+        Ok(Some(loaded))
     }
 }

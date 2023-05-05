@@ -50,12 +50,12 @@ pub struct HotStuffTreeNode<TAddr, TPayload> {
     leader_round: u32,
     local_pledge: Option<ObjectPledge>,
     epoch: Epoch,
-    justify: QuorumCertificate,
     // Mostly used for debugging
     proposed_by: TAddr,
+    justify: QuorumCertificate<TAddr>,
 }
 
-impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload> {
+impl<TAddr: Clone + NodeAddressable + Serialize, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload> {
     pub fn new(
         parent: TreeNodeHash,
         shard: ShardId,
@@ -67,7 +67,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
         local_pledge: Option<ObjectPledge>,
         epoch: Epoch,
         proposed_by: TAddr,
-        justify: QuorumCertificate,
+        justify: QuorumCertificate<TAddr>,
     ) -> Self {
         let mut s = HotStuffTreeNode {
             hash: TreeNodeHash::zero(),
@@ -80,8 +80,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             leader_round,
             justify,
             payload_height,
-            local_pledge,
             proposed_by,
+            local_pledge,
         };
         s.hash = s.calculate_hash();
         s
@@ -106,8 +106,8 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             leader_round: 0,
             local_pledge,
             epoch,
-            justify: QuorumCertificate::genesis(epoch, payload_id, shard_id),
-            proposed_by,
+            proposed_by: proposed_by.clone(),
+            justify: QuorumCertificate::genesis(epoch, payload_id, shard_id, proposed_by),
         }
     }
 
@@ -124,7 +124,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
             .chain(&self.shard)
             .chain(&self.payload_id)
             .chain(&self.payload_height)
-            .chain(&self.proposed_by.as_bytes())
+            .chain(&self.proposed_by)
             .chain(&self.local_pledge)
             .result()
             .into_array()
@@ -132,7 +132,7 @@ impl<TAddr: NodeAddressable, TPayload: Payload> HotStuffTreeNode<TAddr, TPayload
     }
 }
 
-impl<TAddr, TPayload> HotStuffTreeNode<TAddr, TPayload> {
+impl<TAddr: NodeAddressable, TPayload> HotStuffTreeNode<TAddr, TPayload> {
     pub fn hash(&self) -> &TreeNodeHash {
         &self.hash
     }
@@ -170,7 +170,7 @@ impl<TAddr, TPayload> HotStuffTreeNode<TAddr, TPayload> {
     }
 
     /// The quorum certificate for this node
-    pub fn justify(&self) -> &QuorumCertificate {
+    pub fn justify(&self) -> &QuorumCertificate<TAddr> {
         &self.justify
     }
 

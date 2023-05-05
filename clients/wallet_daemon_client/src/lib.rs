@@ -20,15 +20,34 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 pub mod error;
+pub mod serialize;
 pub mod types;
 
-use std::borrow::Borrow;
+use std::{
+    borrow::Borrow,
+    fmt::{Display, Formatter},
+    str::FromStr,
+};
 
-use reqwest::{header, header::HeaderMap, IntoUrl, Url};
-use serde::{de::DeserializeOwned, Serialize};
+use json::Value;
+use reqwest::{
+    header::{self, HeaderMap, AUTHORIZATION},
+    IntoUrl,
+    Url,
+};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
+use tari_template_lib::models::ComponentAddress;
 use types::{
+    AccountsCreateFreeTestCoinsRequest,
+    AccountsCreateFreeTestCoinsResponse,
+    AuthLoginAcceptRequest,
+    AuthLoginAcceptResponse,
+    AuthLoginDenyRequest,
+    AuthLoginDenyResponse,
+    AuthLoginRequest,
+    AuthLoginResponse,
     ClaimBurnRequest,
     ClaimBurnResponse,
     ProofsCancelRequest,
@@ -37,13 +56,18 @@ use types::{
     ProofsFinalizeResponse,
     ProofsGenerateRequest,
     ProofsGenerateResponse,
+    WebRtcStartRequest,
+    WebRtcStartResponse,
 };
 
 use crate::{
     error::WalletDaemonClientError,
     types::{
-        AccountByNameRequest,
-        AccountByNameResponse,
+        AccountGetDefaultRequest,
+        AccountGetRequest,
+        AccountGetResponse,
+        AccountSetDefaultRequest,
+        AccountSetDefaultResponse,
         AccountsCreateRequest,
         AccountsCreateResponse,
         AccountsGetBalancesRequest,
@@ -75,15 +99,43 @@ use crate::{
     },
 };
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ComponentAddressOrName {
+    ComponentAddress(ComponentAddress),
+    Name(String),
+}
+
+impl Display for ComponentAddressOrName {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::ComponentAddress(address) => write!(f, "{}", address),
+            Self::Name(name) => write!(f, "{}", name),
+        }
+    }
+}
+
+impl FromStr for ComponentAddressOrName {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(address) = ComponentAddress::from_str(s) {
+            Ok(Self::ComponentAddress(address))
+        } else {
+            Ok(Self::Name(s.to_string()))
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct WalletDaemonClient {
     client: reqwest::Client,
     endpoint: Url,
     request_id: i64,
+    pub token: Option<String>,
 }
 
 impl WalletDaemonClient {
-    pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, WalletDaemonClientError> {
+    pub fn connect<T: IntoUrl>(endpoint: T, token: Option<String>) -> Result<Self, WalletDaemonClientError> {
         let client = reqwest::Client::builder()
             .default_headers({
                 let mut headers = HeaderMap::with_capacity(1);
@@ -96,6 +148,7 @@ impl WalletDaemonClient {
             client,
             endpoint: endpoint.into_url()?,
             request_id: 0,
+            token,
         })
     }
 
@@ -188,8 +241,24 @@ impl WalletDaemonClient {
             .await
     }
 
-    pub async fn accounts_get_by_name(&mut self, name: &str) -> Result<AccountByNameResponse, WalletDaemonClientError> {
-        self.send_request("accounts.get_by_name", &AccountByNameRequest { name: name.to_string() })
+    pub async fn accounts_get(
+        &mut self,
+        name_or_address: ComponentAddressOrName,
+    ) -> Result<AccountGetResponse, WalletDaemonClientError> {
+        self.send_request("accounts.get", &AccountGetRequest { name_or_address })
+            .await
+    }
+
+    pub async fn accounts_get_default(&mut self) -> Result<AccountGetResponse, WalletDaemonClientError> {
+        self.send_request("accounts.get_default", &AccountGetDefaultRequest {})
+            .await
+    }
+
+    pub async fn accounts_set_default(
+        &mut self,
+        account: ComponentAddressOrName,
+    ) -> Result<AccountSetDefaultResponse, WalletDaemonClientError> {
+        self.send_request("accounts.set_default", &AccountSetDefaultRequest { account })
             .await
     }
 
@@ -244,9 +313,64 @@ impl WalletDaemonClient {
             .await
     }
 
+    pub async fn create_free_test_coins<T: Borrow<AccountsCreateFreeTestCoinsRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AccountsCreateFreeTestCoinsResponse, WalletDaemonClientError> {
+        self.send_request("accounts.create_free_test_coins", req.borrow()).await
+    }
+
+    pub async fn auth_request<T: Borrow<AuthLoginRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AuthLoginResponse, WalletDaemonClientError> {
+        dbg!();
+        self.send_request("auth.request", req.borrow()).await
+    }
+
+    pub async fn auth_accept<T: Borrow<AuthLoginAcceptRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AuthLoginAcceptResponse, WalletDaemonClientError> {
+        self.send_request("auth.accept", req.borrow()).await
+    }
+
+    pub async fn auth_deny<T: Borrow<AuthLoginDenyRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AuthLoginDenyResponse, WalletDaemonClientError> {
+        self.send_request("auth.deny", req.borrow()).await
+    }
+
+    pub async fn webrtc_start<T: Borrow<WebRtcStartRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<WebRtcStartResponse, WalletDaemonClientError> {
+        self.send_request("webrtc.start", req.borrow()).await
+    }
+
     fn next_request_id(&mut self) -> i64 {
         self.request_id += 1;
         self.request_id
+    }
+
+    async fn jrpc_call<T: Serialize>(&mut self, method: &str, params: &T) -> Result<Value, WalletDaemonClientError> {
+        let request_json = json!(
+            {
+                "jsonrpc": "2.0",
+                "id": self.next_request_id(),
+                "method": method,
+                "params": params,
+            }
+        );
+        let mut builder = self.client.post(self.endpoint.clone());
+        if let Some(token) = &self.token {
+            // If we don't have the token and the method is anything else than "auth.login" it will fail.
+            builder = builder.header(AUTHORIZATION, format!("Bearer {}", token));
+        }
+        let resp = builder.body(request_json.to_string()).send().await?;
+        let val = resp.json().await?;
+        jsonrpc_result(val)
     }
 
     async fn send_request<T: Serialize, R: DeserializeOwned>(
@@ -258,23 +382,7 @@ impl WalletDaemonClient {
             source: e,
             method: method.to_string(),
         })?;
-        let request_json = json!(
-            {
-                "jsonrpc": "2.0",
-                "id": self.next_request_id(),
-                "method": method,
-                "params": params,
-            }
-        );
-        let resp = self
-            .client
-            .post(self.endpoint.clone())
-            .body(request_json.to_string())
-            .send()
-            .await?;
-        let val = resp.json().await?;
-        let resp = jsonrpc_result(val)?;
-
+        let resp = self.jrpc_call(method, &params).await?;
         match serde_json::from_value(resp) {
             Ok(r) => Ok(r),
             Err(e) => Err(WalletDaemonClientError::DeserializeResponse {

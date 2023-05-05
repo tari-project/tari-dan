@@ -62,13 +62,17 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "add_peer" => handlers.add_peer(value).await,
         "get_comms_stats" => handlers.get_comms_stats(value).await,
         "get_substate" => handlers.get_substate(value).await,
+        "inspect_substate" => handlers.inspect_substate(value).await,
         "get_addresses" => handlers.get_addresses(value).await,
         "add_address" => handlers.add_address(value).await,
         "delete_address" => handlers.delete_address(value).await,
         "clear_addresses" => handlers.clear_addresses(value).await,
         "get_connections" => handlers.get_connections(value).await,
+        "get_non_fungible_collections" => handlers.get_non_fungible_collections(value).await,
         "get_non_fungible_count" => handlers.get_non_fungible_count(value).await,
         "get_non_fungibles" => handlers.get_non_fungibles(value).await,
+        "submit_transaction" => handlers.submit_transaction(value).await,
+        "get_transaction_result" => handlers.get_transaction_result(value).await,
         method => Ok(value.method_not_found(method)),
     }
 }

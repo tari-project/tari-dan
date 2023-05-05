@@ -8,15 +8,14 @@ edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.49.0-pre.1" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_dan_common_types = { path = "../../common_types" }
 tari_dan_wallet_sdk = { path = "../sdk" }
 tari_engine_types = { path = "../../engine_types" }
 tari_template_lib = { path = "../../template_lib" }
 tari_transaction = { path = "../../transaction" }
-tari_utilities = { git = "https://github.com/tari-project/tari_utilities.git", tag = "v0.4.10" }
+tari_utilities = "0.4.10"
 
-anyhow = "1.0"
 serde = "1.0.126"
 serde_json = "1.0.92"
 diesel = { version = "2", features = ["sqlite", "chrono"] }
@@ -30,3 +29,9 @@ libsqlite3-sys = { version = "0.25", features = ["bundled"] }
 
 [dev-dependencies]
 tari_dan_common_types = { path = "../../common_types" }
+
+[package.metadata.cargo-machete]
+ignored = [
+    # We want to bundle this lib
+    "libsqlite3-sys",
+]

@@ -34,7 +34,6 @@ use tari_common::{
     DefaultConfigLoader,
     SubConfigPath,
 };
-use tari_comms::multiaddr::Multiaddr;
 use tari_engine_types::substate::SubstateAddress;
 use tari_p2p::{P2pConfig, PeerSeedsConfig};
 
@@ -68,8 +67,6 @@ pub struct IndexerConfig {
     pub identity_file: PathBuf,
     /// A path to the file that stores the tor hidden service private key, if using the tor transport
     pub tor_identity_file: PathBuf,
-    /// The node's publicly-accessible hostname
-    pub public_address: Option<Multiaddr>,
     /// The Tari base node's GRPC address
     pub base_node_grpc_address: Option<SocketAddr>,
     /// How often do we want to scan the base layer for changes
@@ -81,6 +78,8 @@ pub struct IndexerConfig {
     pub p2p: P2pConfig,
     /// JSON-RPC address of the indexer application
     pub json_rpc_address: Option<SocketAddr>,
+    /// GraphQL port of the indexer application
+    pub graphql_address: Option<SocketAddr>,
     /// The address of the HTTP UI
     pub http_ui_address: Option<SocketAddr>,
     /// Substate addresses to keep watching
@@ -120,12 +119,12 @@ impl Default for IndexerConfig {
             override_from: None,
             identity_file: PathBuf::from("indexer_id.json"),
             tor_identity_file: PathBuf::from("indexer_tor_id.json"),
-            public_address: None,
             base_node_grpc_address: None,
             base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/indexer"),
             p2p,
             json_rpc_address: Some("127.0.0.1:18300".parse().unwrap()),
+            graphql_address: Some("127.0.0.1:18301".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:15000".parse().unwrap()),
             address_watchlist: vec![],
             dan_layer_scanning_internal: Duration::from_secs(10),

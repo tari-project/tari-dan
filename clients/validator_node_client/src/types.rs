@@ -55,6 +55,7 @@ pub struct TemplateRegistrationRequest {
     #[serde(with = "serde_with::base64")]
     pub binary_sha: Vec<u8>,
     pub binary_url: String,
+    pub template_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,9 +85,15 @@ pub struct TemplateAbi {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FunctionDef {
     pub name: String,
-    pub arguments: Vec<String>,
+    pub arguments: Vec<ArgDef>,
     pub output: String,
     pub is_mut: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArgDef {
+    pub name: String,
+    pub arg_type: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,18 +156,29 @@ pub struct SubmitTransactionResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetClaimableFeesResponse {
+    pub total_accrued_fees: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionFinalizeResult {
     // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
     pub decision: QuorumDecision,
     pub finalize: FinalizeResult,
     pub transaction_failure: Option<RejectReason>,
     pub fee_breakdown: Option<FeeCostBreakdown>,
-    pub qc: QuorumCertificate,
+    pub qc: QuorumCertificate<PublicKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionRequest {
     pub payload_id: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetClaimableFeesRequest {
+    pub claim_leader_public_key: PublicKey,
+    pub epoch: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,7 +206,7 @@ pub struct GetTransactionQcsRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionQcsResponse {
-    pub qcs: Vec<QuorumCertificate>,
+    pub qcs: Vec<QuorumCertificate<PublicKey>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -245,6 +263,7 @@ pub struct GetSubstateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateResponse {
     pub value: Option<SubstateValue>,
+    pub created_by_tx: Option<FixedHash>,
     pub status: SubstateStatus,
 }
 

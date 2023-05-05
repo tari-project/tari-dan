@@ -20,11 +20,31 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#[derive(Clone, Copy)]
+#[repr(u8)]
 pub enum BinaryTag {
-    Amount = 0,
-    ComponentAddress = 1,
-    Metadata = 2,
-    NonFungibleAddress = 3,
-    ResourceAddress = 4,
-    VaultId = 5,
+    ComponentAddress = 0,
+    Metadata = 1,
+    NonFungibleAddress = 2,
+    ResourceAddress = 3,
+    VaultId = 4,
+    BucketId = 5,
+}
+
+impl BinaryTag {
+    pub fn from_u64(value: u64) -> Option<Self> {
+        match value {
+            0 => Some(Self::ComponentAddress),
+            1 => Some(Self::Metadata),
+            2 => Some(Self::NonFungibleAddress),
+            3 => Some(Self::ResourceAddress),
+            4 => Some(Self::VaultId),
+            5 => Some(Self::BucketId),
+            _ => None,
+        }
+    }
+
+    pub const fn as_u64(&self) -> u64 {
+        *self as u64
+    }
 }

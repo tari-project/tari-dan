@@ -26,5 +26,4 @@ pub mod hotstuff;
 pub mod mempool;
 pub mod messaging;
 pub mod networking;
-pub mod rpc_client;
 pub mod template_manager;

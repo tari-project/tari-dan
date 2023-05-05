@@ -22,7 +22,7 @@
 
 mod steps;
 mod utils;
-use std::{convert::TryFrom, future, io, str::FromStr, time::Duration};
+use std::{collections::HashMap, convert::TryFrom, future, io, str::FromStr, time::Duration};
 
 use cucumber::{
     gherkin::{Scenario, Step},
@@ -244,9 +244,9 @@ async fn stop_validator_node(world: &mut TariWorld, vn_name: String) {
     vn_ps.stop();
 }
 
-#[given(expr = "a wallet daemon {word} connected to validator node {word}")]
-async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, vn_name: String) {
-    spawn_wallet_daemon(world, wallet_daemon_name, vn_name).await;
+#[given(expr = "a wallet daemon {word} connected to indexer {word}")]
+async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, indexer_name: String) {
+    spawn_wallet_daemon(world, wallet_daemon_name, indexer_name).await;
 }
 
 #[when(expr = "I stop wallet daemon {word}")]
@@ -429,6 +429,7 @@ async fn call_template_constructor(
         function_call,
         args,
         num_outputs,
+        vec![],
     )
     .await;
 
@@ -436,7 +437,39 @@ async fn call_template_constructor(
     tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(expr = r#"I call function "{word}" on template "{word}" on {word} with {int} outputs named "{word}""#)]
+#[when(
+    expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" and {int} outputs named "{word}" with new resource "{word}""#
+)]
+async fn call_template_constructor_resource(
+    world: &mut TariWorld,
+    function_call: String,
+    template_name: String,
+    vn_name: String,
+    args: String,
+    num_outputs: u64,
+    outputs_name: String,
+    new_resource_token: String,
+) {
+    let args = args.split(',').map(|a| a.trim().to_string()).collect();
+    validator_node_cli::create_component(
+        world,
+        outputs_name,
+        template_name,
+        vn_name,
+        function_call,
+        args,
+        num_outputs,
+        vec![new_resource_token],
+    )
+    .await;
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(
+    expr = r#"I call function "{word}" on template "{word}" on {word} with {int} outputs named "{word}" with new resource "{word}""#
+)]
 async fn call_template_constructor_with_no_args(
     world: &mut TariWorld,
     function_call: String,
@@ -444,6 +477,7 @@ async fn call_template_constructor_with_no_args(
     vn_name: String,
     num_outputs: u64,
     outputs_name: String,
+    new_resource_token_symbol: String,
 ) {
     validator_node_cli::create_component(
         world,
@@ -453,6 +487,7 @@ async fn call_template_constructor_with_no_args(
         function_call,
         vec![],
         num_outputs,
+        vec![new_resource_token_symbol],
     )
     .await;
 
@@ -468,7 +503,42 @@ async fn call_template_constructor_without_args(
     vn_name: String,
     function_call: String,
 ) {
-    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call, vec![], 1).await;
+    validator_node_cli::create_component(
+        world,
+        component_name,
+        template_name,
+        vn_name,
+        function_call,
+        vec![],
+        1,
+        vec![],
+    )
+    .await;
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
+}
+
+#[when(expr = r#"I create a component {word} of template "{word}" on {word} using "{word}" and new resource "{word}"#)]
+async fn call_template_constructor_without_args_and_resource(
+    world: &mut TariWorld,
+    component_name: String,
+    template_name: String,
+    vn_name: String,
+    function_call: String,
+    new_resource_token_symbol: String,
+) {
+    validator_node_cli::create_component(
+        world,
+        component_name,
+        template_name,
+        vn_name,
+        function_call,
+        vec![],
+        1,
+        vec![new_resource_token_symbol],
+    )
+    .await;
 
     // give it some time between transactions
     tokio::time::sleep(Duration::from_secs(4)).await;
@@ -664,6 +734,18 @@ async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: Str
     spawn_indexer(world, indexer_name, bn_name).await;
 }
 
+#[given(expr = "{word} indexer GraphQL request work")]
+async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
+    let indexer = world.indexers.get(&indexer_name).unwrap();
+    let mut graphql_client = indexer.get_graphql_indexer_client().await;
+    let res = graphql_client
+        .send_request::<HashMap<String, String>>("{ hello }", None, None)
+        .await
+        .unwrap();
+    let res = res.get("hello").unwrap();
+    assert_eq!(res.as_str(), "Hello world");
+}
+
 #[when(expr = "the indexer {word} tracks the address {word}")]
 async fn track_addresss_in_indexer(world: &mut TariWorld, indexer_name: String, output_ref: String) {
     let indexer = world.indexers.get(&indexer_name).unwrap();
@@ -681,17 +763,31 @@ async fn assert_indexer_substate_version(
     let indexer = world.indexers.get(&indexer_name).unwrap();
     assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
     let substate = indexer.get_substate(world, output_ref, version).await;
-    eprintln!("indexer.get_substate result: {:?}", substate);
-    assert_eq!(substate.version(), version);
+    eprintln!(
+        "indexer.get_substate result: {}",
+        serde_json::to_string_pretty(&substate).unwrap()
+    );
+    assert_eq!(substate.version, version);
 }
 
 #[then(expr = "the indexer {word} returns {int} non fungibles for resource {word}")]
-async fn assert_indexer_non_fungible_list(world: &mut TariWorld, indexer_name: String, count: u32, output_ref: String) {
+async fn assert_indexer_non_fungible_list(
+    world: &mut TariWorld,
+    indexer_name: String,
+    count: usize,
+    output_ref: String,
+) {
     let indexer = world.indexers.get(&indexer_name).unwrap();
     assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
-    let nfts = indexer.get_non_fungibles(world, output_ref, 0, u64::from(count)).await;
+    let nfts = indexer.get_non_fungibles(world, output_ref, 0, count as u64).await;
     eprintln!("indexer.get_non_fungibles result: {:?}", nfts);
-    assert_eq!(nfts.len() as u32, count);
+    assert_eq!(
+        nfts.len(),
+        count,
+        "Unexpected number of NFTs returned. Expected: {}, Actual: {}",
+        count,
+        nfts.len()
+    );
 }
 
 #[when(expr = "I wait {int} seconds")]
@@ -760,8 +856,8 @@ async fn print_world(world: &mut TariWorld) {
     // indexes
     for (name, node) in world.indexers.iter() {
         eprintln!(
-            "Indexer \"{}\": json rpc port \"{}\", temp dir path \"{}\"",
-            name, node.json_rpc_port, node.temp_dir_path
+            "Indexer \"{}\": json rpc port \"{}\", http ui port  \"{}\", temp dir path \"{}\"",
+            name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
         );
     }
 

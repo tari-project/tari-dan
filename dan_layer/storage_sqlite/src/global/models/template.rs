@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use chrono::NaiveDateTime;
+
 use crate::global::schema::*;
 
 #[derive(Debug, Identifiable, Queryable)]
@@ -27,32 +29,40 @@ use crate::global::schema::*;
 pub struct TemplateModel {
     pub id: i32,
     pub template_name: String,
+    pub expected_hash: Vec<u8>,
     pub template_address: Vec<u8>,
     pub url: String,
-    pub height: i32,
-    pub compiled_code: Vec<u8>,
+    pub height: i64,
+    pub template_type: String,
+    pub compiled_code: Option<Vec<u8>>,
+    pub flow_json: Option<String>,
     pub status: String,
     pub wasm_path: Option<String>,
-    pub added_at: i64,
+    pub manifest: Option<String>,
+    pub added_at: NaiveDateTime,
 }
 
 #[derive(Debug, Insertable)]
 #[diesel(table_name = templates)]
 pub struct NewTemplateModel {
     pub template_name: String,
+    pub expected_hash: Vec<u8>,
     pub template_address: Vec<u8>,
     pub url: String,
-    pub height: i32,
-    pub compiled_code: Vec<u8>,
+    pub height: i64,
+    pub template_type: String,
+    pub compiled_code: Option<Vec<u8>>,
+    pub flow_json: Option<String>,
     pub status: String,
     pub wasm_path: Option<String>,
-    pub added_at: i64,
+    pub manifest: Option<String>,
 }
 
 #[derive(Debug, AsChangeset)]
 #[diesel(table_name = templates)]
 pub struct TemplateUpdateModel {
     pub compiled_code: Option<Vec<u8>>,
+    pub flow_json: Option<String>,
+    pub manifest: Option<String>,
     pub status: Option<String>,
-    pub wasm_path: Option<String>,
 }

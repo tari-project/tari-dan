@@ -5,12 +5,16 @@
 use std::{
     collections::{HashMap, HashSet},
     path::Path,
+    sync::Arc,
 };
 
 use anyhow::anyhow;
 use serde::de::DeserializeOwned;
 use tari_bor::encode;
-use tari_crypto::{ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
+use tari_crypto::{
+    ristretto::RistrettoSecretKey,
+    tari_utilities::{hex::Hex, ByteArray},
+};
 use tari_dan_common_types::crypto::create_key_pair;
 use tari_dan_engine::{
     bootstrap_state,
@@ -49,10 +53,12 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
 use crate::track_calls::TrackCallsModule;
 
-pub const TEST_FAUCET_COMPONENT: ComponentAddress = ComponentAddress::new(Hash::from_array([0xfau8; 32]));
+pub fn test_faucet_component() -> ComponentAddress {
+    ComponentAddress::new(Hash::from_array([0xfau8; 32]))
+}
 
 pub struct TemplateTest {
-    package: Package,
+    package: Arc<Package>,
     track_calls: TrackCallsModule,
     secret_key: RistrettoSecretKey,
     last_outputs: HashSet<SubstateAddress>,
@@ -66,7 +72,8 @@ pub struct TemplateTest {
 
 impl TemplateTest {
     pub fn new<I: IntoIterator<Item = P>, P: AsRef<Path>>(template_paths: I) -> Self {
-        let (secret_key, _pk) = create_key_pair();
+        let secret_key =
+            RistrettoSecretKey::from_hex("7e100429f979d37999f051e65b94734e206925e9346759fd73caafb2f3232578").unwrap();
 
         let mut name_to_template = HashMap::new();
         let mut builder = Package::builder();
@@ -103,7 +110,7 @@ impl TemplateTest {
         }
 
         Self {
-            package,
+            package: Arc::new(package),
             track_calls: TrackCallsModule::new(),
             secret_key,
             name_to_template,
@@ -112,7 +119,7 @@ impl TemplateTest {
             // TODO: cleanup
             consensus_context: ConsensusContext { current_epoch: 0 },
             enable_fees: false,
-            fee_table: FeeTable::new(10, 1, 1, 250),
+            fee_table: FeeTable::new(1, 1, 250),
         }
     }
 
@@ -141,7 +148,7 @@ impl TemplateTest {
         })
         .unwrap();
         tx.set_state(
-            &SubstateAddress::Component(TEST_FAUCET_COMPONENT),
+            &SubstateAddress::Component(test_faucet_component()),
             Substate::new(0, ComponentHeader {
                 template_address: test_faucet_template_address,
                 module_name: "TestFaucet".to_string(),
@@ -223,6 +230,9 @@ impl TemplateTest {
         let addr = self.name_to_template.get(module_name).unwrap();
         match self.package.get_template_by_address(addr).unwrap() {
             LoadedTemplate::Wasm(wasm) => wasm,
+            LoadedTemplate::Flow(_) => {
+                panic!("Not supported")
+            },
         }
     }
 
@@ -304,7 +314,7 @@ impl TemplateTest {
         let result = self
             .try_execute_and_commit(
                 Transaction::builder()
-                    .call_method(TEST_FAUCET_COMPONENT, "take_free_coins", args![])
+                    .call_method(test_faucet_component(), "take_free_coins", args![])
                     .put_last_instruction_output_on_workspace("bucket")
                     .call_function(self.get_template_address("Account"), "create_with_bucket", args![
                         &owner_proof,
@@ -353,7 +363,7 @@ impl TemplateTest {
         transaction: Transaction,
         proofs: Vec<NonFungibleAddress>,
     ) -> Result<ExecuteResult, TransactionError> {
-        let mut modules: Vec<Box<dyn RuntimeModule>> = vec![Box::new(self.track_calls.clone())];
+        let mut modules: Vec<Box<dyn RuntimeModule<Package>>> = vec![Box::new(self.track_calls.clone())];
 
         if self.enable_fees {
             modules.push(Box::new(FeeModule::new(self.fee_table.loan(), self.fee_table.clone())));

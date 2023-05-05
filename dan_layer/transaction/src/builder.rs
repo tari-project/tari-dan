@@ -8,6 +8,7 @@ use tari_crypto::{keys::PublicKey as PublicKeyTrait, ristretto::RistrettoPublicK
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{
     confidential::ConfidentialClaim,
+    hashing::{hasher, EngineHashDomainLabel},
     instruction::Instruction,
     substate::SubstateAddress,
     TemplateAddress,
@@ -27,13 +28,7 @@ use tari_template_lib::{
 };
 
 use super::Transaction;
-use crate::{
-    change::SubstateChange,
-    id_provider::IdProvider,
-    transaction::TransactionMeta,
-    InstructionSignature,
-    ObjectClaim,
-};
+use crate::{change::SubstateChange, id_provider::IdProvider, transaction::TransactionMeta, InstructionSignature};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
@@ -43,6 +38,7 @@ pub struct TransactionBuilder {
     signature: Option<InstructionSignature>,
     sender_public_key: Option<RistrettoPublicKey>,
     new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
+    new_resources: Vec<(TemplateAddress, String)>,
     new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
 }
 
@@ -54,6 +50,7 @@ impl TransactionBuilder {
             signature: None,
             sender_public_key: None,
             meta: TransactionMeta::default(),
+            new_resources: Vec::new(),
             new_non_fungible_outputs: vec![],
             new_non_fungible_index_outputs: vec![],
         }
@@ -152,7 +149,7 @@ impl TransactionBuilder {
     pub fn add_input(mut self, input_object: ShardId) -> Self {
         self.meta
             .involved_objects_mut()
-            .insert(input_object, (SubstateChange::Destroy, ObjectClaim {}));
+            .insert(input_object, SubstateChange::Destroy);
         self
     }
 
@@ -173,7 +170,7 @@ impl TransactionBuilder {
     pub fn add_output(mut self, output_object: ShardId) -> Self {
         self.meta
             .involved_objects_mut()
-            .insert(output_object, (SubstateChange::Create, ObjectClaim {}));
+            .insert(output_object, SubstateChange::Create);
         self
     }
 
@@ -184,6 +181,11 @@ impl TransactionBuilder {
 
     pub fn with_new_non_fungible_outputs(mut self, new_non_fungible_outputs: Vec<(ResourceAddress, u8)>) -> Self {
         self.new_non_fungible_outputs = new_non_fungible_outputs;
+        self
+    }
+
+    pub fn with_new_resources(mut self, new_resources: Vec<(TemplateAddress, String)>) -> Self {
+        self.new_resources = new_resources;
         self
     }
 
@@ -219,10 +221,7 @@ impl TransactionBuilder {
                 let new_hash = id_provider
                     .new_address_hash()
                     .expect("id provider provides num_outputs IDs");
-                (
-                    ShardId::from_hash(&new_hash, 0),
-                    (SubstateChange::Create, ObjectClaim {}),
-                )
+                (ShardId::from_hash(&new_hash, 0), SubstateChange::Create)
             }));
 
         let mut new_nft_outputs =
@@ -235,7 +234,7 @@ impl TransactionBuilder {
                     let new_addr = SubstateAddress::NonFungible(address);
                     (
                         ShardId::from_hash(&new_addr.to_canonical_hash(), 0),
-                        (SubstateChange::Create, ObjectClaim {}),
+                        SubstateChange::Create,
                     )
                 }
             }));
@@ -243,8 +242,21 @@ impl TransactionBuilder {
 
         transaction.meta_mut().involved_objects_mut().extend(new_nft_outputs);
 
+        for (template_address, token_symbol) in self.new_resources {
+            let address: ResourceAddress = hasher(EngineHashDomainLabel::ResourceAddress)
+                .chain(&template_address)
+                .chain(&token_symbol)
+                .result()
+                .into();
+            let new_addr = SubstateAddress::Resource(address);
+            transaction.meta_mut().involved_objects_mut().insert(
+                ShardId::from_hash(&new_addr.to_canonical_hash(), 0),
+                SubstateChange::Create,
+            );
+        }
+
         // add the involved objects for NFT indexes
-        let new_nft_index_outputs: Vec<(ShardId, (SubstateChange, ObjectClaim))> = self
+        let new_nft_index_outputs: Vec<(ShardId, SubstateChange)> = self
             .new_non_fungible_index_outputs
             .iter()
             .map(|(res_addr, index)| {
@@ -252,7 +264,7 @@ impl TransactionBuilder {
                 let substate_addr = SubstateAddress::NonFungibleIndex(index_addr);
                 let shard_id = ShardId::from_hash(&substate_addr.to_canonical_hash(), 0);
 
-                (shard_id, (SubstateChange::Create, ObjectClaim {}))
+                (shard_id, SubstateChange::Create)
             })
             .collect();
         transaction

@@ -8,7 +8,7 @@ use log::*;
 use serde_json::json;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_dan_wallet_sdk::{
-    apis::key_manager,
+    apis::{jwt::JrpcPermission, key_manager},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus},
 };
@@ -22,15 +22,17 @@ use tari_wallet_daemon_client::types::{
     ProofsGenerateResponse,
 };
 
-use crate::handlers::HandlerContext;
+use crate::handlers::{get_account_or_default, HandlerContext};
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc::confidential";
 
 pub async fn handle_create_transfer_proof(
     context: &HandlerContext,
+    token: Option<String>,
     req: ProofsGenerateRequest,
 ) -> Result<ProofsGenerateResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
     if req.amount.is_negative() {
         return Err(JsonRpcError::new(
@@ -41,7 +43,7 @@ pub async fn handle_create_transfer_proof(
         .into());
     }
 
-    let account = sdk.accounts_api().get_account_by_name(&req.source_account_name)?;
+    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
     let vault = sdk
         .accounts_api()
         .get_vault_by_resource(&account.address, &req.resource_address)?;
@@ -116,9 +118,11 @@ pub async fn handle_create_transfer_proof(
 
 pub async fn handle_finalize_transfer(
     context: &HandlerContext,
+    token: Option<String>,
     req: ProofsCancelRequest,
 ) -> Result<ProofsCancelResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     sdk.confidential_outputs_api()
         .finalize_outputs_for_proof(req.proof_id)?;
     Ok(ProofsCancelResponse {})
@@ -126,18 +130,22 @@ pub async fn handle_finalize_transfer(
 
 pub async fn handle_cancel_transfer(
     context: &HandlerContext,
+    token: Option<String>,
     req: ProofsCancelRequest,
 ) -> Result<ProofsCancelResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     sdk.confidential_outputs_api().release_proof_outputs(req.proof_id)?;
     Ok(ProofsCancelResponse {})
 }
 
 pub async fn handle_create_output_proof(
     context: &HandlerContext,
+    token: Option<String>,
     req: ConfidentialCreateOutputProofRequest,
 ) -> Result<ConfidentialCreateOutputProofResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
     let statement = ConfidentialProofStatement {
         amount: req.amount,

@@ -26,12 +26,14 @@ pub use tari_template_macros::template;
 
 pub use crate::{
     auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
+    caller_context::CallerContext,
     component::{
         interface::{ComponentInstanceInterface, ComponentInterface},
         ComponentManager,
     },
     consensus::Consensus,
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
+    events::emit_event,
     models::{
         Amount,
         Bucket,
@@ -46,5 +48,6 @@ pub use crate::{
         ResourceAddress,
         Vault,
     },
+    rand,
     resource::{ResourceBuilder, ResourceManager, ResourceType},
 };

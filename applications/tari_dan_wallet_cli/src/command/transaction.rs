@@ -55,7 +55,7 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
     types::{
-        AccountByNameResponse,
+        AccountGetResponse,
         ConfidentialTransferRequest,
         TransactionGetResultRequest,
         TransactionSubmitRequest,
@@ -63,6 +63,7 @@ use tari_wallet_daemon_client::{
         TransactionWaitResultRequest,
         TransactionWaitResultResponse,
     },
+    ComponentAddressOrName,
     WalletDaemonClient,
 };
 
@@ -104,19 +105,23 @@ pub struct CommonSubmitArgs {
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
-    pub dump_outputs_into: Option<String>,
+    pub dump_outputs_into: Option<ComponentAddressOrName>,
     #[clap(long)]
     pub dry_run: bool,
+    #[clap(long, short = 'r', alias = "resource")]
+    pub new_resources: Vec<NewResourceOutput>,
     #[clap(long, short = 'm', alias = "mint-specific")]
     pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
+    /// New non-fungible outputs to mint in the format <resource_address>,<num>
     #[clap(long, alias = "mint-new")]
     pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
+    /// New non-fungible index outputs to mint in the format <resource_address>,<index>
     #[clap(long, alias = "new-nft-index")]
     pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
-    #[clap(long, default_value_t = 1000)]
-    pub fee: u64,
+    #[clap(long)]
+    pub fee: Option<u64>,
     #[clap(long, short = 'f', alias = "fee-account")]
-    pub fee_account_name: Option<String>,
+    pub fee_account: Option<ComponentAddressOrName>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -130,25 +135,26 @@ pub struct SubmitManifestArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct SendArgs {
-    source_account_name: String,
     amount: u32,
     resource_address: ResourceAddress,
     dest_address: ComponentAddress,
     #[clap(flatten)]
     common: CommonSubmitArgs,
+    source_account_name: Option<ComponentAddressOrName>,
 }
 
 #[derive(Debug, Args, Clone)]
 pub struct ConfidentialTransferArgs {
-    source_account_name: String,
     amount: u32,
     destination_account: ComponentAddress,
     destination_public_key: FromHex<Vec<u8>>,
-    /// The address of the resource to send. If not provided, use the default Tari confidential resource
-    #[clap(long, short = 'r')]
-    resource_address: Option<ResourceAddress>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
+    #[clap(long, short = 'a', alias = "account")]
+    source_account: Option<ComponentAddressOrName>,
+    /// The address of the resource to send. If not provided, use the default Tari confidential resource
+    #[clap(long)]
+    resource_address: Option<ResourceAddress>,
 }
 
 #[derive(Debug, Subcommand, Clone)]
@@ -231,22 +237,37 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         },
     };
 
-    let fee_account_name = common
-        .fee_account_name
-        .as_ref()
-        .ok_or_else(|| anyhow!("No fee account name provided"))?;
-    let AccountByNameResponse {
-        account: fee_account, ..
-    } = client.accounts_get_by_name(fee_account_name).await?;
+    let fee_account;
+    if let Some(fee_account_name) = common.fee_account.clone() {
+        fee_account = client.accounts_get(fee_account_name).await?.account;
+    } else {
+        fee_account = client.accounts_get_default().await?.account;
+    }
+
+    let mut instructions = vec![instruction];
+    if let Some(dump_account) = common.dump_outputs_into {
+        instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        });
+        let AccountGetResponse {
+            account: dump_account2, ..
+        } = client.accounts_get(dump_account).await?;
+
+        instructions.push(Instruction::CallMethod {
+            component_address: dump_account2.address.as_component_address().unwrap(),
+            method: "deposit".to_string(),
+            args: args![Variable("bucket")],
+        });
+    }
 
     let request = TransactionSubmitRequest {
         signing_key_index: None,
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee)?],
+            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
         }],
-        instructions: vec![instruction],
+        instructions,
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
         new_outputs: common.num_outputs.unwrap_or(0),
@@ -254,6 +275,11 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
             .non_fungible_mint_outputs
             .into_iter()
             .map(|m| (m.resource_address, m.non_fungible_id))
+            .collect(),
+        new_resources: common
+            .new_resources
+            .into_iter()
+            .map(|r| (r.template_address, r.token_symbol))
             .collect(),
         new_non_fungible_outputs: common
             .new_non_fungible_outputs
@@ -281,20 +307,19 @@ async fn handle_submit_manifest(
     let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?)?;
     let common = args.common;
 
-    let fee_account_name = common
-        .fee_account_name
-        .as_ref()
-        .ok_or_else(|| anyhow!("No fee account name provided"))?;
-    let AccountByNameResponse {
-        account: fee_account, ..
-    } = client.accounts_get_by_name(fee_account_name).await?;
+    let fee_account;
+    if let Some(fee_account_name) = common.fee_account.clone() {
+        fee_account = client.accounts_get(fee_account_name).await?.account;
+    } else {
+        fee_account = client.accounts_get_default().await?.account;
+    }
 
     let request = TransactionSubmitRequest {
         signing_key_index: None,
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee)?],
+            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
         }],
         instructions,
         inputs: common.inputs,
@@ -304,6 +329,11 @@ async fn handle_submit_manifest(
             .non_fungible_mint_outputs
             .into_iter()
             .map(|m| (m.resource_address, m.non_fungible_id))
+            .collect(),
+        new_resources: common
+            .new_resources
+            .into_iter()
+            .map(|r| (r.template_address, r.token_symbol))
             .collect(),
         new_non_fungible_outputs: common
             .new_non_fungible_outputs
@@ -332,16 +362,22 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
         common,
     } = args;
 
-    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
+    let account;
+    if let Some(source_account_name) = source_account_name.clone() {
+        let AccountGetResponse { account: account2, .. } = client.accounts_get(source_account_name).await?;
+        account = account2;
+    } else {
+        account = client.accounts_get_default().await?.account;
+    }
     let source_component_address = account
         .address
         .as_component_address()
         .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
 
-    let fee_account = if let Some(fee_account_name) = common.fee_account_name.as_ref() {
-        let AccountByNameResponse {
+    let fee_account = if let Some(fee_account_name) = common.fee_account.clone() {
+        let AccountGetResponse {
             account: fee_account, ..
-        } = client.accounts_get_by_name(fee_account_name).await?;
+        } = client.accounts_get(fee_account_name).await?;
         fee_account.address.as_component_address().unwrap()
     } else {
         source_component_address
@@ -368,7 +404,7 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account,
             method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee)?],
+            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
         }],
         instructions,
         inputs: common.inputs,
@@ -378,6 +414,11 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
             .non_fungible_mint_outputs
             .into_iter()
             .map(|m| (m.resource_address, m.non_fungible_id))
+            .collect(),
+        new_resources: common
+            .new_resources
+            .into_iter()
+            .map(|r| (r.template_address, r.token_symbol))
             .collect(),
         new_non_fungible_outputs: common
             .new_non_fungible_outputs
@@ -402,7 +443,7 @@ pub async fn handle_confidential_transfer(
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
     let ConfidentialTransferArgs {
-        source_account_name,
+        source_account,
         resource_address,
         amount,
         destination_account,
@@ -410,16 +451,16 @@ pub async fn handle_confidential_transfer(
         common,
     } = args;
 
-    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
+    // let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
     let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
     let resp = client
         .accounts_confidential_transfer(ConfidentialTransferRequest {
-            account: account.address.as_component_address().unwrap(),
+            account: source_account,
             amount: Amount::from(amount),
             resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
             destination_account,
             destination_public_key,
-            fee: common.fee.try_into()?,
+            fee: common.fee.map(|f| f.try_into()).transpose()?,
         })
         .await?;
 
@@ -444,6 +485,7 @@ pub async fn submit_transaction(
     let has_no_outputs = request.new_outputs == 0 &&
         request.specific_non_fungible_outputs.is_empty() &&
         request.new_non_fungible_outputs.is_empty() &&
+        request.new_resources.is_empty() &&
         request.new_non_fungible_index_outputs.is_empty();
 
     if has_no_outputs {
@@ -842,6 +884,27 @@ impl CliArg {
             CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
             CliArg::NonFungibleId(v) => arg!(v),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct NewResourceOutput {
+    pub template_address: TemplateAddress,
+    pub token_symbol: String,
+}
+
+impl FromStr for NewResourceOutput {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (template_address, token_symbol) = s
+            .split_once(':')
+            .ok_or_else(|| anyhow!("Expected template address and token symbol"))?;
+        let template_address = TemplateAddress::from_hex(template_address)?;
+        Ok(NewResourceOutput {
+            template_address,
+            token_symbol: token_symbol.to_string(),
+        })
     }
 }
 

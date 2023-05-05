@@ -46,7 +46,7 @@ pub fn create_dan_wallet(world: &mut TariWorld) {
 
 pub async fn create_account(world: &mut TariWorld, account_name: String, validator_node_name: String) {
     let data_dir = get_cli_data_dir(world);
-    let key = get_key_manager(world).get_active_key().expect("No active keypair");
+    let key = get_key_manager(world).create().expect("Could not create keypair");
     let owner_token = key.to_owner_token();
     world
         .account_public_keys
@@ -67,6 +67,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
+        new_resources: vec![],
         non_fungible_mint_outputs: vec![],
         new_non_fungible_outputs: vec![],
         new_non_fungible_index_outputs: vec![],
@@ -92,6 +93,7 @@ pub async fn create_component(
     function_call: String,
     args: Vec<String>,
     num_outputs: u64,
+    new_resource_token_symbols: Vec<String>,
 ) {
     let data_dir = get_cli_data_dir(world);
 
@@ -124,11 +126,16 @@ pub async fn create_component(
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
+            new_resources: new_resource_token_symbols
+                .iter()
+                .map(|s| format!("{}:{}", template_address, s).parse().unwrap())
+                .collect(),
             non_fungible_mint_outputs: vec![],
             new_non_fungible_outputs: vec![],
             new_non_fungible_index_outputs: vec![],
         },
     };
+    dbg!(args.clone());
     let mut client = get_validator_node_client(world, vn_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
@@ -246,6 +253,7 @@ pub async fn call_method(
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
+            new_resources: vec![],
             non_fungible_mint_outputs: vec![],
             new_non_fungible_outputs: vec![],
             new_non_fungible_index_outputs: vec![],
@@ -284,6 +292,8 @@ pub async fn submit_manifest(
         })
         .collect();
 
+    // dbg!(globals.clone());
+
     // parse the minting outputs (if any) specified in the manifest as comments
     let new_non_fungible_outputs: Vec<NewNonFungibleMintOutput> = manifest_content
         .lines()
@@ -299,6 +309,8 @@ pub async fn submit_manifest(
             }
         })
         .collect();
+
+    dbg!(new_non_fungible_outputs.clone());
 
     // parse the minting specific outputs (if any) specified in the manifest as comments
     let non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput> = manifest_content
@@ -363,6 +375,7 @@ pub async fn submit_manifest(
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
+        new_resources: vec![],
         non_fungible_mint_outputs,
         new_non_fungible_outputs,
         new_non_fungible_index_outputs,

@@ -39,8 +39,7 @@ use tari_dan_core::{
 };
 use tari_dan_storage::global::{DbEpoch, DbValidatorNode, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
-
-use crate::p2p::services::rpc_client::TariCommsValidatorNodeClientFactory;
+use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
 const LOG_TARGET: &str = "tari::indexer::epoch_manager::base_layer_epoch_manager";
 

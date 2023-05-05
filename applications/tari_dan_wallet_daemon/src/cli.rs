@@ -20,74 +20,50 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{net::SocketAddr, path::PathBuf};
+use std::net::SocketAddr;
 
-use anyhow::anyhow;
 use clap::Parser;
-use multiaddr::{Multiaddr, Protocol};
+use tari_app_utilities::common_cli_args::CommonCliArgs;
+use tari_common::configuration::{ConfigOverrideProvider, Network};
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
 pub struct Cli {
+    #[clap(flatten)]
+    pub common: CommonCliArgs,
     #[clap(long, alias = "endpoint", env = "JRPC_ENDPOINT")]
     pub listen_addr: Option<SocketAddr>,
-    #[clap(long, short = 'b', alias = "basedir")]
-    pub base_dir: Option<PathBuf>,
-    #[clap(long, alias = "vn_url")]
-    pub validator_node_endpoint: Option<Multiaddr>,
+    #[clap(long, alias = "signaling_server_address", env = "SIGNALING_SERVER_ADDRESS")]
+    pub signaling_server_addr: Option<SocketAddr>,
+    #[clap(long, alias = "indexer_url")]
+    pub indexer_node_json_rpc_url: Option<String>,
 }
 
 impl Cli {
     pub fn init() -> Self {
         Self::parse()
     }
-
-    pub fn listen_address(&self) -> SocketAddr {
-        self.listen_addr
-            .unwrap_or_else(|| SocketAddr::from(([127u8, 0, 0, 1], 9000)))
-    }
-
-    pub fn base_dir(&self) -> PathBuf {
-        self.base_dir
-            .clone()
-            .unwrap_or_else(|| dirs::home_dir().unwrap().join(".tari/walletd"))
-    }
-
-    pub fn validator_node_endpoint(&self) -> String {
-        self.validator_node_endpoint
-            .as_ref()
-            .map(multiaddr_to_http_url)
-            .transpose()
-            .unwrap()
-            .unwrap_or_else(|| "http://127.0.0.1:18200/json_rpc".to_string())
-    }
 }
 
-fn multiaddr_to_http_url(multiaddr: &Multiaddr) -> anyhow::Result<String> {
-    let mut iter = multiaddr.iter();
-    let ip = iter.next().ok_or_else(|| anyhow!("Invalid multiaddr"))?;
-    let port = iter.next().ok_or_else(|| anyhow!("Invalid multiaddr"))?;
-    let scheme = iter.next();
-
-    let ip = match ip {
-        Protocol::Ip4(ip) => ip.to_string(),
-        Protocol::Ip6(ip) => ip.to_string(),
-        Protocol::Dns4(ip) | Protocol::Dns(ip) | Protocol::Dnsaddr(ip) | Protocol::Dns6(ip) => ip.to_string(),
-        _ => return Err(anyhow!("Invalid multiaddr")),
-    };
-
-    let port = match port {
-        Protocol::Tcp(port) => port,
-        _ => return Err(anyhow!("Invalid multiaddr")),
-    };
-
-    let scheme = match scheme {
-        Some(Protocol::Http) => "http",
-        Some(Protocol::Https) => "https",
-        None => "http",
-        _ => return Err(anyhow!("Invalid multiaddr")),
-    };
-
-    Ok(format!("{}://{}:{}", scheme, ip, port))
+impl ConfigOverrideProvider for Cli {
+    fn get_config_property_overrides(&self, default_network: Network) -> Vec<(String, String)> {
+        let mut overrides = self.common.get_config_property_overrides(default_network);
+        if let Some(listen_addr) = self.listen_addr {
+            overrides.push(("dan_wallet_daemon.listen_addr".to_string(), listen_addr.to_string()));
+        }
+        if let Some(signaling_server_addr) = self.signaling_server_addr {
+            overrides.push((
+                "dan_wallet_daemon.signaling_server_addr".to_string(),
+                signaling_server_addr.to_string(),
+            ));
+        }
+        if let Some(indexer_node_json_rpc_url) = &self.indexer_node_json_rpc_url {
+            overrides.push((
+                "dan_wallet_daemon.indexer_node_json_rpc_url".to_string(),
+                indexer_node_json_rpc_url.clone(),
+            ));
+        }
+        overrides
+    }
 }

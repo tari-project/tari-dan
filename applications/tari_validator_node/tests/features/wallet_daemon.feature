@@ -22,8 +22,11 @@ Feature: Wallet Daemon
         When miner MINER mines 16 new blocks
         Then the validator node VAL_1 is listed as registered
 
+        # Initialize an indexer
+        Given an indexer IDX connected to base node BASE
+
         # Initialize the wallet daemon
-        Given a wallet daemon WALLET_D connected to validator node VAL_1
+        Given a wallet daemon WALLET_D connected to indexer IDX
 
         # Register the "faucet" template
         When validator node VAL_1 registers the template "faucet"

@@ -1,19 +1,24 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::Commitment;
+use std::{convert::Infallible, time::Duration};
+
+use async_trait::async_trait;
+use tari_common_types::types::{Commitment, FixedHash};
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, PayloadId};
 use tari_dan_wallet_sdk::{
     confidential::get_commitment_factory,
     models::{ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
     storage::{WalletStore, WalletStoreReader},
+    substate_provider::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface},
     DanWalletSdk,
     WalletSdkConfig,
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::{constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS, resource::ResourceType};
+use tari_transaction::Transaction;
 
 #[test]
 fn outputs_locked_and_released() {
@@ -120,7 +125,7 @@ fn outputs_locked_and_finalized() {
 
 struct Test {
     store: SqliteWalletStore,
-    sdk: DanWalletSdk<SqliteWalletStore>,
+    sdk: DanWalletSdk<SqliteWalletStore, PanicIndexer>,
     _temp: tempfile::TempDir,
 }
 
@@ -130,14 +135,16 @@ impl Test {
         let store = SqliteWalletStore::try_open(temp.path().join("data/wallet.sqlite")).unwrap();
         store.run_migrations().unwrap();
 
-        let sdk = DanWalletSdk::initialize(store.clone(), WalletSdkConfig {
+        let sdk = DanWalletSdk::initialize(store.clone(), PanicIndexer, WalletSdkConfig {
             password: None,
-            validator_node_jrpc_endpoint: "".to_string(),
+            indexer_jrpc_endpoint: "".to_string(),
+            jwt_duration: Duration::from_secs(60),
+            jwt_secret_key: "secret_key".to_string(),
         })
         .unwrap();
         let accounts_api = sdk.accounts_api();
         accounts_api
-            .add_account(Some("test"), &Test::test_account_address(), 0)
+            .add_account(Some("test"), &Test::test_account_address(), 0, true)
             .unwrap();
         accounts_api
             .add_vault(
@@ -201,11 +208,36 @@ impl Test {
             .unwrap_or(0)
     }
 
-    pub fn sdk(&self) -> &DanWalletSdk<SqliteWalletStore> {
+    pub fn sdk(&self) -> &DanWalletSdk<SqliteWalletStore, PanicIndexer> {
         &self.sdk
     }
 
     pub fn store(&self) -> &SqliteWalletStore {
         &self.store
+    }
+}
+
+#[derive(Debug, Clone)]
+struct PanicIndexer;
+
+// TODO: test the substate scanning in the SDK
+#[async_trait]
+impl WalletNetworkInterface for PanicIndexer {
+    type Error = Infallible;
+
+    async fn query_substate(
+        &self,
+        _address: &SubstateAddress,
+        _version: Option<u32>,
+    ) -> Result<SubstateQueryResult, Self::Error> {
+        unimplemented!()
+    }
+
+    async fn submit_transaction(&self, _transaction: Transaction, _is_dry_run: bool) -> Result<FixedHash, Self::Error> {
+        todo!()
+    }
+
+    async fn query_transaction_result(&self, _hash: PayloadId) -> Result<TransactionQueryResult, Self::Error> {
+        todo!()
     }
 }

@@ -25,13 +25,16 @@ use std::collections::{BTreeSet, HashMap};
 use log::warn;
 use tari_bor::encode;
 use tari_crypto::{
+    commitment::HomomorphicCommitmentFactory,
     range_proof::RangeProofService,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
+use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{
     base_layer_hashing::ownership_proof_hasher,
     commit_result::FinalizeResult,
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
+    events::Event,
     fees::FeeReceipt,
     logs::LogEntry,
     resource_container::ResourceContainer,
@@ -42,12 +45,14 @@ use tari_template_lib::{
     args::{
         BucketAction,
         BucketRef,
+        CallerContextAction,
         ComponentAction,
         ComponentRef,
         ConfidentialRevealArg,
         ConsensusAction,
         CreateComponentArg,
         CreateResourceArg,
+        GenerateRandomAction,
         InvokeResult,
         LogLevel,
         MintResourceArg,
@@ -67,35 +72,44 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-use crate::runtime::{
-    engine_args::EngineArgs,
-    tracker::StateTracker,
-    AuthParams,
-    ConsensusContext,
-    RuntimeError,
-    RuntimeInterface,
-    RuntimeModule,
-    RuntimeState,
+use super::tracker::FinalizeTracker;
+use crate::{
+    packager::LoadedTemplate,
+    runtime::{
+        engine_args::EngineArgs,
+        tracker::StateTracker,
+        AuthParams,
+        ConsensusContext,
+        RuntimeError,
+        RuntimeInterface,
+        RuntimeModule,
+        RuntimeState,
+    },
 };
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
-pub struct RuntimeInterfaceImpl {
-    tracker: StateTracker,
+pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
+    tracker: StateTracker<TTemplateProvider>,
     _auth_params: AuthParams,
     consensus: ConsensusContext,
     sender_public_key: RistrettoPublicKey,
-    modules: Vec<Box<dyn RuntimeModule>>,
+    modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
     fee_loan: Amount,
 }
 
-impl RuntimeInterfaceImpl {
+pub struct StateFinalize {
+    pub finalized: FinalizeResult,
+    pub fee_receipt: FeeReceipt,
+}
+
+impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterfaceImpl<TTemplateProvider> {
     pub fn initialize(
-        tracker: StateTracker,
+        tracker: StateTracker<TTemplateProvider>,
         auth_params: AuthParams,
         consensus: ConsensusContext,
         sender_public_key: RistrettoPublicKey,
-        modules: Vec<Box<dyn RuntimeModule>>,
+        modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
         fee_loan: Amount,
     ) -> Result<Self, RuntimeError> {
         let runtime = Self {
@@ -143,10 +157,19 @@ impl RuntimeInterfaceImpl {
     }
 }
 
-impl RuntimeInterface for RuntimeInterfaceImpl {
+impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterface
+    for RuntimeInterfaceImpl<TTemplateProvider>
+{
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("set_current_runtime_state")?;
         self.tracker.set_current_runtime_state(state);
+        Ok(())
+    }
+
+    fn emit_event(&self, message: String) -> Result<(), RuntimeError> {
+        self.invoke_modules_on_runtime_call("emit_event")?;
+
+        self.tracker.add_event(Event::new(message));
         Ok(())
     }
 
@@ -171,6 +194,14 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         self.tracker.get_component(address)
     }
 
+    fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_modules_on_runtime_call("caller_context_invoke")?;
+
+        match action {
+            CallerContextAction::GetCallerPublicKey => Ok(InvokeResult::encode(&self.sender_public_key)?),
+        }
+    }
+
     fn component_invoke(
         &self,
         component_ref: ComponentRef,
@@ -183,10 +214,13 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             ComponentAction::Create => {
                 let arg: CreateComponentArg = args.get(0)?;
                 let template_def = self.tracker.get_template_def()?;
-                validate_access_rules(&arg.access_rules, template_def)?;
-                let component_address =
-                    self.tracker
-                        .new_component(arg.module_name, arg.encoded_state, arg.access_rules)?;
+                validate_access_rules(&arg.access_rules, &template_def)?;
+                let component_address = self.tracker.new_component(
+                    arg.module_name,
+                    arg.encoded_state,
+                    arg.access_rules,
+                    arg.component_id,
+                )?;
                 Ok(InvokeResult::encode(&component_address)?)
             },
 
@@ -244,7 +278,9 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
             ResourceAction::Create => {
                 let arg: CreateResourceArg = args.get(0)?;
 
-                let resource_address = self.tracker.new_resource(arg.resource_type, arg.metadata)?;
+                let resource_address =
+                    self.tracker
+                        .new_resource(arg.resource_type, arg.token_symbol.clone(), arg.metadata)?;
 
                 let mut output_bucket = None;
                 if let Some(mint_arg) = arg.mint_arg {
@@ -610,6 +646,8 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
                 Ok(InvokeResult::encode(&bucket_ids)?)
             },
             WorkspaceAction::Put => todo!(),
+            // Basically names an output on the workspace so that you can refer to it as an
+            // Arg::Variable
             WorkspaceAction::PutLastInstructionOutput => {
                 let key = args.get(0)?;
                 let last_output = self
@@ -671,6 +709,16 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         }
     }
 
+    fn generate_random_invoke(&self, action: GenerateRandomAction) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_modules_on_runtime_call("generate_random_invoke")?;
+        match action {
+            GenerateRandomAction::GetRandomBytes { len } => {
+                let random = self.tracker.id_provider().get_random_bytes(len)?;
+                Ok(InvokeResult::encode(&random)?)
+            },
+        }
+    }
+
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
         self.invoke_modules_on_runtime_call("generate_uuid")?;
         let uuid = self.tracker.id_provider().new_uuid()?;
@@ -694,7 +742,6 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         // 1. Must exist
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
-        // TODO: Probably want a better challenge
         let challenge = ownership_proof_hasher()
             .chain(proof_of_knowledge.public_nonce())
             .chain(&unclaimed_output.commitment)
@@ -744,6 +791,25 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         Ok(())
     }
 
+    fn create_free_test_coins(&self, amount: u64, private_key: RistrettoSecretKey) -> Result<(), RuntimeError> {
+        let commitment = get_commitment_factory().commit(&private_key, &RistrettoSecretKey::from(amount));
+        let resource = ResourceContainer::confidential(
+            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            Some((commitment.as_public_key().clone(), ConfidentialOutput {
+                commitment,
+                stealth_public_nonce: None,
+                encrypted_value: None,
+                minimum_value_promise: 0,
+            })),
+            Amount::new(amount as i64),
+        );
+
+        let bucket_id = self.tracker.new_bucket(resource)?;
+        self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
+
+        Ok(())
+    }
+
     fn fee_checkpoint(&self) -> Result<(), RuntimeError> {
         if self.tracker.total_payments() < self.tracker.total_charges() - self.fee_loan {
             return Err(RuntimeError::InsufficientFeesPaid {
@@ -759,9 +825,12 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         self.tracker.reset_to_fee_checkpoint()
     }
 
-    fn finalize(&self) -> Result<(FinalizeResult, FeeReceipt), RuntimeError> {
+    fn finalize(&self) -> Result<StateFinalize, RuntimeError> {
         self.invoke_modules_on_runtime_call("finalize")?;
 
+        // TODO: this should not be checked here because it will silently fail
+        // and the transaction will think it succeeds. Rather move this check to the transaction
+        // processor and reset to fee checkpoint there.
         if !self.tracker.are_fees_paid_in_full() && self.tracker.total_charges() > self.fee_loan {
             self.reset_to_fee_checkpoint()?;
         }
@@ -769,16 +838,21 @@ impl RuntimeInterface for RuntimeInterfaceImpl {
         let substates_to_persist = self.tracker.take_substates_to_persist();
         self.invoke_modules_on_before_finalize(&substates_to_persist)?;
 
-        let (result, fee_receipt) = self.tracker.finalize(substates_to_persist)?;
-        let logs = self.tracker.take_logs();
+        let FinalizeTracker {
+            result,
+            fee_receipt,
+            events,
+            logs,
+        } = self.tracker.finalize(substates_to_persist)?;
         let finalized = FinalizeResult::new(
             self.tracker.transaction_hash(),
             logs,
+            events,
             result,
             fee_receipt.to_cost_breakdown(),
         );
 
-        Ok((finalized, fee_receipt))
+        Ok(StateFinalize { finalized, fee_receipt })
     }
 }
 

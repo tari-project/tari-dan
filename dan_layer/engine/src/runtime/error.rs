@@ -32,10 +32,11 @@ use tari_template_lib::models::{
     ComponentAddress,
     NonFungibleId,
     ResourceAddress,
+    TemplateAddress,
     UnclaimedConfidentialOutputAddress,
     VaultId,
 };
-use tari_transaction::id_provider::MaxIdsExceeded;
+use tari_transaction::id_provider::IdProviderError;
 
 use crate::{
     runtime::{FunctionIdent, RuntimeModuleError},
@@ -92,7 +93,7 @@ pub enum RuntimeError {
     #[error(transparent)]
     TransactionCommitError(#[from] TransactionCommitError),
     #[error("Transaction generated too many outputs: {0}")]
-    TooManyOutputs(#[from] MaxIdsExceeded),
+    TooManyOutputs(#[from] IdProviderError),
     #[error("Duplicate NFT token id: {token_id}")]
     DuplicateNonFungibleId { token_id: NonFungibleId },
     #[error("Access Denied: {fn_ident}")]
@@ -111,10 +112,16 @@ pub enum RuntimeError {
     ConfidentialOutputAlreadyClaimed {
         address: UnclaimedConfidentialOutputAddress,
     },
+    #[error("Template {template_address} not found")]
+    TemplateNotFound { template_address: TemplateAddress },
     #[error("Insufficient fees paid: required {required_fee}, paid {fees_paid}")]
     InsufficientFeesPaid { required_fee: Amount, fees_paid: Amount },
     #[error("No checkpoint")]
     NoCheckpoint,
+    #[error("Component address must be sequential. Index before {index} was not found")]
+    ComponentAddressMustBeSequential { index: u32 },
+    #[error("Failed to load template '{address}': {details}")]
+    FailedToLoadTemplate { address: TemplateAddress, details: String },
 }
 
 impl RuntimeError {
@@ -147,7 +154,7 @@ pub enum TransactionCommitError {
     #[error("Failed to obtain a state store transaction: {0}")]
     StateStoreTransactionError(anyhow::Error),
     #[error(transparent)]
-    MaxIdsExceeded(#[from] MaxIdsExceeded),
+    IdProviderError(#[from] IdProviderError),
     #[error("trying to mutate non fungible index of resource {resource_address} at index {index}")]
     NonFungibleIndexMutation {
         resource_address: ResourceAddress,

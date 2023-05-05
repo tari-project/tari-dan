@@ -31,14 +31,14 @@ use tari_template_abi::rust::{
 use super::BinaryTag;
 use crate::{hash::HashParseError, Hash};
 
-const TAG: u64 = BinaryTag::ResourceAddress as u64;
+const TAG: u64 = BinaryTag::ResourceAddress.as_u64();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ResourceAddress(Required<Hash, TAG>);
 
 impl ResourceAddress {
     pub const fn new(address: Hash) -> Self {
-        Self(Required::<Hash, TAG>(address))
+        Self(Required(address))
     }
 
     pub fn hash(&self) -> &Hash {

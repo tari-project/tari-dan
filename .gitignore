@@ -53,3 +53,4 @@ buildtools/Output/
 .lh
 
 clients/validator_node_grpc_client/package-lock.json
+/dan_layer/wallet/storage_sqlite/temp.sqlite

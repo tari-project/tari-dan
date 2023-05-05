@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use tari_template_abi::rust::string::String;
 
+use crate::Hash;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RistrettoPublicKeyBytes(
@@ -37,6 +39,10 @@ impl RistrettoPublicKeyBytes {
 
     pub fn into_array(self) -> [u8; Self::length()] {
         self.0
+    }
+
+    pub fn as_hash(&self) -> Hash {
+        Hash::from_array(self.0)
     }
 }
 

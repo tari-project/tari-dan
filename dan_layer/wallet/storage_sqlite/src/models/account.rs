@@ -4,7 +4,6 @@
 use chrono::NaiveDateTime;
 use diesel::{Identifiable, Queryable};
 use tari_engine_types::substate::InvalidSubstateAddressFormat;
-use tari_template_lib::models::Amount;
 
 use crate::schema::accounts;
 
@@ -15,9 +14,9 @@ pub struct Account {
     pub name: String,
     pub address: String,
     pub owner_key_index: i64,
-    pub balance: i64,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub is_default: bool,
 }
 
 impl TryFrom<Account> for tari_dan_wallet_sdk::models::Account {
@@ -27,8 +26,8 @@ impl TryFrom<Account> for tari_dan_wallet_sdk::models::Account {
         Ok(Self {
             name: account.name,
             address: account.address.parse()?,
-            balance: Amount::new(account.balance),
             key_index: account.owner_key_index as u64,
+            is_default: account.is_default,
         })
     }
 }

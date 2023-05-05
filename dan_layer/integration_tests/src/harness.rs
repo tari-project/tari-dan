@@ -65,6 +65,7 @@ impl PayloadProcessor<TariDanPayload> for PayloadProcessorListener {
             finalize: FinalizeResult::new(
                 Hash::default(),
                 vec![],
+                vec![],
                 TransactionResult::Accept(SubstateDiff::new()),
                 FeeCostBreakdown {
                     total_fees_charged: Amount::zero(),

@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_template_lib::models::TemplateAddress;
+use tari_utilities::ByteArrayError;
 
 use crate::{runtime::RuntimeError, wasm::WasmExecutionError};
 
@@ -32,4 +33,12 @@ pub enum TransactionError {
     TemplateNotFound { address: TemplateAddress },
     #[error(transparent)]
     RuntimeError(#[from] RuntimeError),
+    #[error(transparent)]
+    ByteArrayError(#[from] ByteArrayError),
+    #[error(transparent)]
+    FlowEngineError(#[from] crate::flow::FlowEngineError),
+    #[error("Recursion limit exceeded")]
+    RecursionLimitExceeded,
+    #[error("Failed to load template '{address}': {details}")]
+    FailedToLoadTemplate { address: TemplateAddress, details: String },
 }

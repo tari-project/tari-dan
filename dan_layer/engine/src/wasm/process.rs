@@ -22,15 +22,18 @@
 
 use serde::{de::DeserializeOwned, Serialize};
 use tari_bor::{decode_exact, encode, encode_into, encode_with_len};
-use tari_engine_types::instruction_result::InstructionResult;
+use tari_engine_types::{indexed_value::IndexedValue, instruction_result::InstructionResult};
 use tari_template_abi::{CallInfo, EngineOp};
 use tari_template_lib::{
     args::{
         Arg,
         BucketInvokeArg,
+        CallerContextInvokeArg,
         ComponentInvokeArg,
         ConsensusInvokeArg,
+        EmitEventArg,
         EmitLogArg,
+        GenerateRandomInvokeArg,
         LogLevel,
         NonFungibleInvokeArg,
         ResourceInvokeArg,
@@ -139,6 +142,15 @@ impl WasmProcess {
             EngineOp::ConsensusInvoke => Self::handle(env, arg, |env, arg: ConsensusInvokeArg| {
                 env.state().interface().consensus_invoke(arg.action)
             }),
+            EngineOp::CallerContextInvoke => Self::handle(env, arg, |env, arg: CallerContextInvokeArg| {
+                env.state().interface().caller_context_invoke(arg.action)
+            }),
+            EngineOp::GenerateRandomInvoke => Self::handle(env, arg, |env, arg: GenerateRandomInvokeArg| {
+                env.state().interface().generate_random_invoke(arg.action)
+            }),
+            EngineOp::EmitEvent => Self::handle(env, arg, |env, arg: EmitEventArg| {
+                env.state().interface().emit_event(arg.message)
+            }),
         };
 
         result.unwrap_or_else(|err| {
@@ -233,8 +245,11 @@ impl Invokable for WasmProcess {
                 .set_last_instruction_output(Some(raw.clone()))?;
         }
 
+        let value = IndexedValue::from_raw(&raw)?;
+
         Ok(InstructionResult {
             raw,
+            value,
             return_type: func_def.output.clone(),
         })
     }

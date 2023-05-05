@@ -28,6 +28,7 @@ use std::{
 };
 
 use diesel::{
+    dsl::count,
     prelude::*,
     sql_query,
     sql_types::{Integer, Text},
@@ -37,6 +38,7 @@ use diesel_migrations::EmbeddedMigrations;
 use log::warn;
 use tari_dan_core::storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
+use tari_engine_types::substate::SubstateAddress;
 use thiserror::Error;
 
 use super::models::non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex};
@@ -167,9 +169,10 @@ impl<'a> SqliteSubstateStoreReadTransaction<'a> {
 }
 
 pub trait SubstateStoreReadTransaction {
-    fn get_substate(&mut self, address: String) -> Result<Option<Substate>, StorageError>;
+    fn get_substate(&mut self, address: &SubstateAddress) -> Result<Option<Substate>, StorageError>;
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError>;
+    fn get_non_fungible_collections(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_non_fungible_count(&mut self, resource_address: String) -> Result<i64, StorageError>;
     fn get_non_fungibles(
         &mut self,
@@ -180,11 +183,11 @@ pub trait SubstateStoreReadTransaction {
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
-    fn get_substate(&mut self, address: String) -> Result<Option<Substate>, StorageError> {
+    fn get_substate(&mut self, address: &SubstateAddress) -> Result<Option<Substate>, StorageError> {
         use crate::substate_storage_sqlite::schema::substates;
 
         let substate = substates::table
-            .filter(substates::address.eq(address))
+            .filter(substates::address.eq(address.to_string()))
             .first(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
@@ -223,6 +226,24 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 
         match substates {
             Some(substates_vec) => Ok(substates_vec),
+            None => Ok(vec![]),
+        }
+    }
+
+    fn get_non_fungible_collections(&mut self) -> Result<Vec<(String, i64)>, StorageError> {
+        use crate::substate_storage_sqlite::schema::non_fungible_indexes as nfts;
+
+        let collections = nfts::table
+            .group_by(nfts::resource_address)
+            .select((nfts::resource_address, count(nfts::id)))
+            .get_results(self.connection())
+            .optional()
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_all_addresses: {}", e),
+            })?;
+
+        match collections {
+            Some(collections_vec) => Ok(collections_vec),
             None => Ok(vec![]),
         }
     }
@@ -371,7 +392,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
     fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError> {
         use crate::substate_storage_sqlite::schema::non_fungible_indexes;
 
-        diesel::insert_into(non_fungible_indexes::table)
+        diesel::insert_or_ignore_into(non_fungible_indexes::table)
             .values(&new_nft_index)
             .execute(&mut *self.connection())
             .map_err(|e| StorageError::QueryError {

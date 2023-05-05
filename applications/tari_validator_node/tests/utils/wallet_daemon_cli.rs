@@ -33,25 +33,22 @@ use tari_crypto::{
     signatures::CommitmentSignature,
     tari_utilities::ByteArray,
 };
+use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_engine_types::{
     instruction::Instruction,
     substate::{SubstateAddress, SubstateDiff},
 };
-use tari_template_lib::{args, constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS, models::Amount, prelude::NonFungibleId};
+use tari_template_lib::models::Amount;
+use tari_template_lib::{args, constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS, prelude::NonFungibleId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{command::transaction::CliArg, versioned_substate_address::VersionedSubstateAddress};
 use tari_wallet_daemon_client::{
     types::{
-        AccountByNameResponse,
-        AccountsCreateRequest,
-        AccountsGetBalancesRequest,
-        ClaimBurnRequest,
-        ClaimBurnResponse,
-        ProofsGenerateRequest,
-        TransactionSubmitRequest,
+        AccountGetResponse, AccountsCreateRequest, AccountsGetBalancesRequest, AuthLoginAcceptRequest,
+        AuthLoginRequest, ClaimBurnRequest, ClaimBurnResponse, ProofsGenerateRequest, TransactionSubmitRequest,
         TransactionWaitResultRequest,
     },
-    WalletDaemonClient,
+    ComponentAddressOrName, WalletDaemonClient,
 };
 
 use super::{validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
@@ -68,11 +65,8 @@ pub async fn claim_burn(
 ) -> ClaimBurnResponse {
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
 
-    let account = client.accounts_get_by_name(account_name.as_str()).await.unwrap();
-    let account_address = account.account.address.as_component_address().unwrap();
-
     let claim_burn_request = ClaimBurnRequest {
-        account: account_address,
+        account: Some(ComponentAddressOrName::Name(account_name)),
         claim_proof: json!({
             "commitment": BASE64.encode(commitment.as_bytes()),
             "ownership_proof": {
@@ -83,9 +77,22 @@ pub async fn claim_burn(
             "reciprocal_claim_public_key": BASE64.encode(reciprocal_claim_public_key.as_bytes()),
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
-        fee: Amount::new(1),
+        fee: Some(Amount(1)),
     };
 
+    let auth_response = client
+        .auth_request(AuthLoginRequest {
+            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+        })
+        .await
+        .unwrap();
+    let auth_response = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token: auth_response.auth_token,
+        })
+        .await
+        .unwrap();
+    client.token = Some(auth_response.permissions_token);
     client.claim_burn(claim_burn_request).await.unwrap()
 }
 
@@ -99,14 +106,16 @@ pub async fn create_transfer_proof(
 ) -> tari_wallet_daemon_client::types::TransactionSubmitResponse {
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
 
-    let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await.unwrap();
+    let account_name = ComponentAddressOrName::Name(source_account_name);
+    let AccountGetResponse { account, .. } = client.accounts_get(account_name.clone()).await.unwrap();
     let source_component_address = account
         .address
         .as_component_address()
         .expect("Invalid component address for source address");
 
+    let dest_account_name = ComponentAddressOrName::Name(dest_account_name);
     let destination_account_resp = client
-        .accounts_get_by_name(&dest_account_name)
+        .accounts_get(dest_account_name)
         .await
         .expect("Failed to retrieve destination account address from its name");
 
@@ -120,9 +129,9 @@ pub async fn create_transfer_proof(
     let resource_address = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
 
     let create_transfer_proof_req = ProofsGenerateRequest {
+        account: Some(account_name),
         amount: Amount::new(amount.try_into().unwrap()),
         reveal_amount: Amount::new(0_i64),
-        source_account_name: source_account_name.clone(),
         resource_address,
         destination_public_key,
     };
@@ -154,6 +163,7 @@ pub async fn create_transfer_proof(
             args: args![Amount::try_from(0).unwrap()],
         }],
         proof_ids: vec![proof_id],
+        new_resources: vec![],
         new_non_fungible_index_outputs: vec![],
         new_non_fungible_outputs: vec![],
         specific_non_fungible_outputs: vec![],
@@ -195,6 +205,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         account_name: Some(account_name.clone()),
         signing_key_index: None,
         custom_access_rules: None,
+        is_default: true,
         fee: None,
     };
 
@@ -209,7 +220,11 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
 }
 
 pub async fn get_balance(world: &mut TariWorld, account_name: String, wallet_daemon_name: String) -> i64 {
-    let get_balance_req = AccountsGetBalancesRequest { account_name };
+    let account_name = ComponentAddressOrName::Name(account_name);
+    let get_balance_req = AccountsGetBalancesRequest {
+        account: Some(account_name),
+        refresh: false,
+    };
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
     let resp = client
         .get_account_balances(get_balance_req)
@@ -302,6 +317,7 @@ pub async fn submit_manifest(
         override_inputs: false,
         is_dry_run: false,
         proof_ids: vec![],
+        new_resources: vec![],
         new_outputs: num_outputs as u8,
         specific_non_fungible_outputs,
         inputs,
@@ -333,7 +349,7 @@ pub async fn create_component(
     world: &mut TariWorld,
     outputs_name: String,
     template_name: String,
-    _account_name: String,
+    account_name: String,
     wallet_daemon_name: String,
     function_call: String,
     args: Vec<String>,
@@ -358,6 +374,7 @@ pub async fn create_component(
         override_inputs: false,
         is_dry_run: false,
         proof_ids: vec![],
+        new_resources: vec![],
         new_outputs: num_outputs as u8,
         specific_non_fungible_outputs: vec![],
         inputs: vec![],
@@ -383,11 +400,32 @@ pub async fn create_component(
             .result
             .expect("Failed to obtain substate diffs"),
     );
+    let auth_reponse = client
+        .auth_request(AuthLoginRequest {
+            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+        })
+        .await
+        .unwrap();
+    let auth_response = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token: auth_reponse.auth_token,
+        })
+        .await
+        .unwrap();
+
+    client.token = Some(auth_response.permissions_token);
+    let request = AccountsCreateRequest {
+        account_name: Some(account_name),
+        fee: Some(Amount(1)),
+        is_default: true,
+        custom_access_rules: None,
+        signing_key_index: None,
+    };
+    let _resp = client.create_account(request).await.unwrap();
 }
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
     let port = world.wallet_daemons.get(&wallet_daemon_name).unwrap().json_rpc_port;
-    eprintln!("FLAG: CUCUMBER");
     get_walletd_client(port).await
 }
 
@@ -408,24 +446,33 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                 counters[0] += 1;
             },
             SubstateAddress::Resource(_) => {
-                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: data.version(),
-                });
+                outputs.insert(
+                    format!("resources/{}", counters[1]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
                 counters[1] += 1;
             },
             SubstateAddress::Vault(_) => {
-                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: data.version(),
-                });
+                outputs.insert(
+                    format!("vaults/{}", counters[2]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
                 counters[2] += 1;
             },
             SubstateAddress::NonFungible(_) => {
-                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: data.version(),
-                });
+                outputs.insert(
+                    format!("nfts/{}", counters[3]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
                 counters[3] += 1;
             },
             SubstateAddress::UnclaimedConfidentialOutput(_) => {
@@ -439,10 +486,13 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                 counters[4] += 1;
             },
             SubstateAddress::NonFungibleIndex(_) => {
-                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: data.version(),
-                });
+                outputs.insert(
+                    format!("nft_indexes/{}", counters[5]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
                 counters[5] += 1;
             },
         }

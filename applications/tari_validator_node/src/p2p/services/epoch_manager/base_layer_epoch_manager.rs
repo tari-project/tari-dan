@@ -43,9 +43,10 @@ use tari_dan_core::{
 };
 use tari_dan_storage::global::{DbEpoch, DbValidatorNode, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
+use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 use tokio::sync::broadcast;
 
-use crate::p2p::services::{epoch_manager::PeerSyncManagerService, rpc_client::TariCommsValidatorNodeClientFactory};
+use crate::p2p::services::epoch_manager::PeerSyncManagerService;
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager::base_layer_epoch_manager";
 

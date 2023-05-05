@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::ShardId;
 use tari_engine_types::commit_result::ExecuteResult;
-use tari_transaction::{ObjectClaim, SubstateChange, Transaction};
+use tari_transaction::{SubstateChange, Transaction};
 
 use crate::models::{ConsensusHash, Payload};
 
@@ -79,8 +79,8 @@ impl Payload for TariDanPayload {
         self.transaction.meta().involved_shards()
     }
 
-    fn objects_for_shard(&self, shard: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
-        self.transaction.meta().objects_for_shard(shard)
+    fn change_for_shard(&self, shard: ShardId) -> Option<SubstateChange> {
+        self.transaction.meta().change_for_shard(shard)
     }
 
     fn max_outputs(&self) -> u32 {

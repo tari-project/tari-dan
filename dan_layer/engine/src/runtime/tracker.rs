@@ -29,11 +29,12 @@ use std::{
 };
 
 use log::debug;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_engine_types::{
     bucket::Bucket,
     commit_result::{RejectReason, TransactionResult},
     confidential::UnclaimedConfidentialOutput,
+    events::Event,
     fees::{FeeReceipt, FeeSource},
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -68,18 +69,26 @@ use tari_template_lib::{
 use tari_transaction::id_provider::IdProvider;
 
 use crate::{
+    packager::LoadedTemplate,
     runtime::{fee_state::FeeState, working_state::WorkingState, RuntimeError, TransactionCommitError},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::state_tracker";
 
+pub struct FinalizeTracker {
+    pub result: TransactionResult,
+    pub events: Vec<Event>,
+    pub fee_receipt: FeeReceipt,
+    pub logs: Vec<LogEntry>,
+}
+
 #[derive(Debug, Clone)]
-pub struct StateTracker {
+pub struct StateTracker<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
     working_state: Arc<RwLock<WorkingState>>,
     fee_state: Arc<RwLock<FeeState>>,
     id_provider: IdProvider,
-    template_defs: HashMap<TemplateAddress, TemplateDef>,
+    template_provider: Arc<TTemplateProvider>,
     fee_checkpoint: Arc<Mutex<Option<WorkingState>>>,
 }
 
@@ -88,35 +97,51 @@ pub struct RuntimeState {
     pub template_address: TemplateAddress,
 }
 
-impl StateTracker {
+impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracker<TTemplateProvider> {
     pub fn new(
         state_store: MemoryStateStore,
         id_provider: IdProvider,
-        template_defs: HashMap<TemplateAddress, TemplateDef>,
+        template_provider: Arc<TTemplateProvider>,
     ) -> Self {
         Self {
             working_state: Arc::new(RwLock::new(WorkingState::new(state_store))),
             fee_state: Arc::new(RwLock::new(FeeState::new())),
             id_provider,
-            template_defs,
+            template_provider,
             fee_checkpoint: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn add_event(&self, event: Event) {
+        self.write_with(|state| state.events.push(event))
     }
 
     pub fn add_log(&self, log: LogEntry) {
         self.write_with(|state| state.logs.push(log));
     }
 
+    pub fn take_events(&self) -> Vec<Event> {
+        self.write_with(|state| mem::take(&mut state.events))
+    }
+
     pub fn take_logs(&self) -> Vec<LogEntry> {
         self.write_with(|state| mem::take(&mut state.logs))
     }
 
-    pub fn get_template_def(&self) -> Result<&TemplateDef, RuntimeError> {
+    pub fn get_template_def(&self) -> Result<TemplateDef, RuntimeError> {
         let runtime_state = self.runtime_state()?;
         Ok(self
-            .template_defs
-            .get(&runtime_state.template_address)
-            .expect("Template def not found for current template"))
+            .template_provider
+            .get_template_module(&runtime_state.template_address)
+            .map_err(|e| RuntimeError::FailedToLoadTemplate {
+                address: runtime_state.template_address,
+                details: e.to_string(),
+            })?
+            .ok_or(RuntimeError::TemplateNotFound {
+                template_address: runtime_state.template_address,
+            })?
+            .template_def()
+            .clone())
     }
 
     fn check_amount(&self, amount: Amount) -> Result<(), RuntimeError> {
@@ -132,10 +157,13 @@ impl StateTracker {
     pub fn new_resource(
         &self,
         resource_type: ResourceType,
+        token_symbol: String,
         metadata: Metadata,
     ) -> Result<ResourceAddress, RuntimeError> {
-        let resource_address = self.id_provider.new_resource_address()?;
-        let resource = Resource::new(resource_type, metadata);
+        let resource_address = self
+            .id_provider
+            .new_resource_address(&self.runtime_state()?.template_address, &token_symbol)?;
+        let resource = Resource::new(resource_type, token_symbol, metadata);
         self.write_with(|state| {
             state.new_resources.insert(resource_address, resource);
         });
@@ -351,11 +379,16 @@ impl StateTracker {
         module_name: String,
         state: Vec<u8>,
         access_rules: AccessRules,
+        component_id: Option<Hash>,
     ) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
-        let component = ComponentBody { state };
-        let component_address = self.id_provider().new_component_address()?;
+        let template_address = runtime_state.template_address;
+        let component_address = self
+            .id_provider()
+            .new_component_address(template_address, component_id)?;
         debug!(target: LOG_TARGET, "New component created: {}", component_address);
+
+        let component = ComponentBody { state };
         let component = ComponentHeader {
             template_address: runtime_state.template_address,
             module_name,
@@ -467,9 +500,13 @@ impl StateTracker {
     pub fn finalize(
         &self,
         mut substates_to_persist: HashMap<SubstateAddress, SubstateValue>,
-    ) -> Result<(TransactionResult, FeeReceipt), RuntimeError> {
+    ) -> Result<FinalizeTracker, RuntimeError> {
         // Resolve the transfers to the fee pool resource and vault refunds
         let finalized_fee = self.finalize_fees(&mut substates_to_persist)?;
+        // events and logs
+        let events = self.take_events();
+        let logs = self.take_logs();
+
         // Finalise will always reset the state
         let state = self.take_working_state();
 
@@ -482,7 +519,12 @@ impl StateTracker {
             Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
         };
 
-        Ok((result, finalized_fee))
+        Ok(FinalizeTracker {
+            result,
+            events,
+            fee_receipt: finalized_fee,
+            logs,
+        })
     }
 
     fn generate_substate_diff(

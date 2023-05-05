@@ -1,0 +1,30 @@
+[package]
+name = "tari_signaling_server"
+version = "0.1.0"
+edition = "2021"
+authors = ["The Tari Development Community"]
+description = "WebRTC signaling server implementation"
+repository = "https://github.com/tari-project/tari-dan"
+license = "BSD-3-Clause"
+
+[dependencies]
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
+
+anyhow = "1.0.69"
+axum = { version = "0.6", features = ["headers"] }
+axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
+clap = { version = "4.1.4", features = ["derive", "env"] }
+diesel = { version = "2", features = ["sqlite", "chrono"] }
+diesel_migrations = "2"
+dirs = "4.0.0"
+log = "0.4.17"
+multiaddr = "0.17.0"
+serde = "1.0.152"
+serde_json = "1.0.92"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
+tower-http = { version = "0.3.5", default-features = false, features = ["cors", "trace"] }
+jsonwebtoken = "8.3.0"
+chrono = "0.4.24"
+regex = "1.7.3"

@@ -27,6 +27,7 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         account_name: Option<&str>,
         account_address: &SubstateAddress,
         owner_key_index: u64,
+        is_default: bool,
     ) -> Result<(), AccountsApiError> {
         let mut tx = self.store.create_write_tx()?;
         let account_name = account_name
@@ -36,7 +37,7 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
             tx.rollback()?;
             return Err(AccountsApiError::AccountNameAlreadyExists { name: account_name });
         }
-        tx.accounts_insert(&account_name, account_address, owner_key_index)?;
+        tx.accounts_insert(&account_name, account_address, owner_key_index, is_default)?;
         tx.commit()?;
         Ok(())
     }
@@ -51,6 +52,21 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         let mut tx = self.store.create_read_tx()?;
         let count = tx.accounts_count()?;
         Ok(count)
+    }
+
+    // pub fn get_account_by_name_or_default(&self, name: Option<&str>) -> Result<Account, AccountsApiError> {
+    //     let mut tx = self.store.create_read_tx()?;
+    //     let account = match name {
+    //         Some(name) => tx.accounts_get_by_name(name)?,
+    //         None => tx.accounts_get_default()?,
+    //     };
+    //     Ok(account)
+    // }
+
+    pub fn get_default(&self) -> Result<Account, AccountsApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let account = tx.accounts_get_default()?;
+        Ok(account)
     }
 
     pub fn get_account_by_name(&self, name: &str) -> Result<Account, AccountsApiError> {
@@ -70,9 +86,19 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         Ok(())
     }
 
-    pub fn get_account(&self, address: &SubstateAddress) -> Result<Account, AccountsApiError> {
+    pub fn get_account_by_address(&self, address: &SubstateAddress) -> Result<Account, AccountsApiError> {
         let mut tx = self.store.create_read_tx()?;
         let account = tx.accounts_get(address)?;
+        Ok(account)
+    }
+
+    pub fn get_account_or_default(&self, address: Option<&SubstateAddress>) -> Result<Account, AccountsApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        if let Some(address) = address {
+            let account = tx.accounts_get(address)?;
+            return Ok(account);
+        }
+        let account = tx.accounts_get_default()?;
         Ok(account)
     }
 
@@ -98,11 +124,18 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         Ok(vault)
     }
 
-    pub fn has_vault(&self, vault_addr: &&SubstateAddress) -> Result<bool, AccountsApiError> {
+    pub fn has_vault(&self, vault_addr: &SubstateAddress) -> Result<bool, AccountsApiError> {
         let mut tx = self.store.create_read_tx()?;
         // TODO: consider optimising
         let exists = tx.vaults_get(vault_addr).optional()?.is_some();
         Ok(exists)
+    }
+
+    pub fn set_default_account(&self, account_addr: &SubstateAddress) -> Result<(), AccountsApiError> {
+        let mut tx = self.store.create_write_tx()?;
+        tx.accounts_set_default(account_addr)?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn add_vault(

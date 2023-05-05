@@ -42,6 +42,7 @@ pub use object_pledge::{ObjectPledge, ObjectPledgeInfo};
 mod node_addressable;
 pub use node_addressable::NodeAddressable;
 
+pub mod services;
 mod shard_id;
 pub use shard_id::ShardId;
 
@@ -52,9 +53,11 @@ pub enum SubstateState {
         created_by: PayloadId,
         address: SubstateAddress,
         data: Substate,
+        fees_accrued: u64,
     },
     Down {
         deleted_by: PayloadId,
+        fees_accrued: u64,
     },
 }
 

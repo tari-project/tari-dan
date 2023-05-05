@@ -1,16 +1,19 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, convert::TryFrom, time::Duration};
 
 use anyhow::anyhow;
 use futures::{future, future::Either};
 use log::*;
 use tari_dan_common_types::{optional::Optional, ShardId};
-use tari_dan_wallet_sdk::apis::key_manager;
+use tari_dan_wallet_sdk::apis::{jwt::JrpcPermission, key_manager};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
-use tari_template_lib::{models::Amount, prelude::NonFungibleAddress};
+use tari_template_lib::{args, models::Amount, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
+    AccountGetRequest,
+    AccountGetResponse,
+    CallInstructionRequest,
     TransactionGetRequest,
     TransactionGetResponse,
     TransactionGetResultRequest,
@@ -22,7 +25,7 @@ use tari_wallet_daemon_client::types::{
 };
 use tokio::time;
 
-use super::context::HandlerContext;
+use super::{accounts, context::HandlerContext};
 use crate::{
     handlers::HandlerError,
     services::{TransactionSubmittedEvent, WalletEvent},
@@ -30,26 +33,75 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
 
+pub async fn handle_submit_instruction(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: CallInstructionRequest,
+) -> Result<TransactionSubmitResponse, anyhow::Error> {
+    let mut instructions = vec![req.instruction];
+    if let Some(dump_account) = req.dump_outputs_into {
+        instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        });
+        let AccountGetResponse {
+            account: dump_account, ..
+        } = accounts::handle_get(context, token.clone(), AccountGetRequest {
+            name_or_address: dump_account,
+        })
+        .await?;
+        instructions.push(Instruction::CallMethod {
+            component_address: dump_account.address.as_component_address().unwrap(),
+            method: "deposit".to_string(),
+            args: args![Variable("bucket")],
+        });
+    }
+    let AccountGetResponse {
+        account: fee_account, ..
+    } = accounts::handle_get(context, token.clone(), AccountGetRequest {
+        name_or_address: req.fee_account,
+    })
+    .await?;
+    let request = TransactionSubmitRequest {
+        signing_key_index: None,
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: fee_account.address.as_component_address().unwrap(),
+            method: "pay_fee".to_string(),
+            args: args![Amount::try_from(req.fee)?],
+        }],
+        instructions,
+        inputs: req.inputs,
+        override_inputs: req.override_inputs.unwrap_or_default(),
+        new_outputs: req.new_outputs.unwrap_or(0),
+        specific_non_fungible_outputs: req.specific_non_fungible_outputs,
+        new_resources: req.new_resources,
+        new_non_fungible_outputs: req.new_non_fungible_outputs,
+        new_non_fungible_index_outputs: req.new_non_fungible_index_outputs,
+        is_dry_run: req.is_dry_run,
+        proof_ids: vec![],
+    };
+    handle_submit(context, token, request).await
+}
+
 pub async fn handle_submit(
     context: &HandlerContext,
+    token: Option<String>,
     req: TransactionSubmitRequest,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let key_api = sdk.key_manager_api();
     // Fetch the key to sign the transaction
     // TODO: Ideally the SDK should take care of signing the transaction internally
     let (_, key) = key_api.get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
 
-    // let transaction_api = sdk.transaction_api();
     let inputs = if req.override_inputs {
         req.inputs
     } else {
         // If we are not overriding inputs, we will use inputs that we know about in the local substate address db
         let mut substates = get_referenced_component_addresses(&req.instructions);
         substates.extend(get_referenced_component_addresses(&req.fee_instructions));
-        let loaded_dependent_substates = sdk
-            .substate_api()
-            .load_dependent_substates(&substates.into_iter().collect::<Vec<_>>())?;
+        let substates = substates.iter().collect::<Vec<_>>();
+        let loaded_dependent_substates = sdk.substate_api().locate_dependent_substates(&substates).await?;
         vec![req.inputs, loaded_dependent_substates].concat()
     };
 
@@ -74,6 +126,7 @@ pub async fn handle_submit(
         .with_fee_instructions(req.fee_instructions)
         .with_inputs(inputs.clone())
         .with_outputs(outputs.clone())
+        .with_new_resources(req.new_resources)
         .with_new_outputs(req.new_outputs)
         .with_new_non_fungible_outputs(req.new_non_fungible_outputs)
         .with_new_non_fungible_index_outputs(req.new_non_fungible_index_outputs)
@@ -92,9 +145,9 @@ pub async fn handle_submit(
         transaction.hash()
     );
     let hash = if req.is_dry_run {
-        sdk.transaction_api().submit_dry_run_to_vn(transaction).await?
+        sdk.transaction_api().submit_dry_run_transaction(transaction).await?
     } else {
-        sdk.transaction_api().submit_to_vn(transaction).await?
+        sdk.transaction_api().submit_transaction(transaction).await?
     };
 
     if !req.is_dry_run {
@@ -106,8 +159,13 @@ pub async fn handle_submit(
 
 pub async fn handle_get(
     context: &HandlerContext,
+    token: Option<String>,
     req: TransactionGetRequest,
 ) -> Result<TransactionGetResponse, anyhow::Error> {
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Admin])?;
     let transaction = context
         .wallet_sdk()
         .transaction_api()
@@ -125,8 +183,13 @@ pub async fn handle_get(
 
 pub async fn handle_get_result(
     context: &HandlerContext,
+    token: Option<String>,
     req: TransactionGetResultRequest,
 ) -> Result<TransactionGetResultResponse, anyhow::Error> {
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Admin])?;
     let transaction = context
         .wallet_sdk()
         .transaction_api()
@@ -145,8 +208,13 @@ pub async fn handle_get_result(
 
 pub async fn handle_wait_result(
     context: &HandlerContext,
+    token: Option<String>,
     req: TransactionWaitResultRequest,
 ) -> Result<TransactionWaitResultResponse, anyhow::Error> {
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Admin])?;
     let mut events = context.notifier().subscribe();
     let transaction = context
         .wallet_sdk()

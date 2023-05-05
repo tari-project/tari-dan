@@ -15,7 +15,7 @@ use tari_template_lib::{
     Hash,
 };
 
-use crate::{change::SubstateChange, InstructionSignature, ObjectClaim, TransactionBuilder};
+use crate::{change::SubstateChange, InstructionSignature, TransactionBuilder};
 
 #[derive(Debug, Clone)]
 pub struct BalanceProof {}
@@ -146,19 +146,19 @@ impl Eq for Transaction {}
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct TransactionMeta {
-    involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>,
+    involved_objects: HashMap<ShardId, SubstateChange>,
     max_outputs: u32,
 }
 
 impl TransactionMeta {
-    pub fn new(involved_objects: HashMap<ShardId, (SubstateChange, ObjectClaim)>, max_outputs: u32) -> Self {
+    pub fn new(involved_objects: HashMap<ShardId, SubstateChange>, max_outputs: u32) -> Self {
         Self {
             involved_objects,
             max_outputs,
         }
     }
 
-    pub fn involved_objects_iter(&self) -> impl Iterator<Item = (&ShardId, &(SubstateChange, ObjectClaim))> + '_ {
+    pub fn involved_objects_iter(&self) -> impl Iterator<Item = (&ShardId, &SubstateChange)> + '_ {
         self.involved_objects.iter()
     }
 
@@ -166,12 +166,12 @@ impl TransactionMeta {
         self.involved_objects.keys().copied().collect()
     }
 
-    pub(crate) fn involved_objects_mut(&mut self) -> &mut HashMap<ShardId, (SubstateChange, ObjectClaim)> {
+    pub fn involved_objects_mut(&mut self) -> &mut HashMap<ShardId, SubstateChange> {
         &mut self.involved_objects
     }
 
-    pub fn objects_for_shard(&self, shard_id: ShardId) -> Option<(SubstateChange, ObjectClaim)> {
-        self.involved_objects.get(&shard_id).cloned()
+    pub fn change_for_shard(&self, shard_id: ShardId) -> Option<SubstateChange> {
+        self.involved_objects.get(&shard_id).copied()
     }
 
     pub fn set_max_outputs(&mut self, max_outputs: u32) -> &mut Self {

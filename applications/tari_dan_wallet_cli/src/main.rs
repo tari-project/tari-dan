@@ -20,8 +20,6 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::error::Error;
-
 use anyhow::anyhow;
 use multiaddr::{Multiaddr, Protocol};
 use reqwest::Url;
@@ -29,7 +27,7 @@ use tari_dan_wallet_cli::{cli::Cli, command::Command};
 use tari_wallet_daemon_client::WalletDaemonClient;
 
 #[tokio::main(flavor = "current_thread")]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::init();
 
     let endpoint = cli
@@ -38,10 +36,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let endpoint = multiaddr_to_http_url(endpoint)?;
 
     log::info!("🌍️ Connecting to {}", endpoint);
-    let client = WalletDaemonClient::connect(endpoint)?;
+    let client = WalletDaemonClient::connect(endpoint, cli.token)?;
 
     if let Err(err) = handle_command(cli.command, client).await {
         eprintln!("👮 Command failed with error \"{}\"", err);
+        return Err(err);
     }
 
     Ok(())
@@ -54,6 +53,8 @@ async fn handle_command(command: Command, client: WalletDaemonClient) -> anyhow:
         Command::Transactions(cmd) => cmd.handle(client).await?,
         Command::Accounts(cmd) => cmd.handle(client).await?,
         Command::Proofs(cmd) => cmd.handle(client).await?,
+        Command::WebRtc(cmd) => cmd.handle(client).await?,
+        Command::Auth(cmd) => cmd.handle(client).await?,
         // Command::Manifests(cmd) => cmd.handle()?,
         // Command::Debug(cmd) => cmd.handle(client).await?,
     }

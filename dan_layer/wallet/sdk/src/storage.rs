@@ -3,7 +3,7 @@
 
 use std::ops::{Deref, DerefMut};
 
-use tari_common_types::types::{Commitment, FixedHash};
+use tari_common_types::types::{Commitment, FixedHash, PublicKey};
 use tari_dan_common_types::{optional::IsNotFoundError, QuorumCertificate};
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
@@ -76,7 +76,7 @@ pub enum WalletStorageError {
         item: &'static str,
         details: String,
     },
-    #[error("{entity} not found with key {key}")]
+    #[error("[{operation}] {entity} not found with key {key}")]
     NotFound {
         operation: &'static str,
         entity: String,
@@ -122,6 +122,7 @@ pub trait WalletStoreReader {
     // Accounts
     fn accounts_get(&mut self, address: &SubstateAddress) -> Result<Account, WalletStorageError>;
     fn accounts_get_many(&mut self, offset: u64, limit: u64) -> Result<Vec<Account>, WalletStorageError>;
+    fn accounts_get_default(&mut self) -> Result<Account, WalletStorageError>;
     fn accounts_count(&mut self) -> Result<u64, WalletStorageError>;
     fn accounts_get_by_name(&mut self, name: &str) -> Result<Account, WalletStorageError>;
     fn accounts_get_by_vault(&mut self, vault_address: &SubstateAddress) -> Result<Account, WalletStorageError>;
@@ -163,6 +164,10 @@ pub trait WalletStoreWriter {
     fn commit(self) -> Result<(), WalletStorageError>;
     fn rollback(self) -> Result<(), WalletStorageError>;
 
+    // JWT
+    fn jwt_add_empty_token(&mut self) -> Result<u64, WalletStorageError>;
+    fn jwt_store_decision(&mut self, id: u64, permissions_token: Option<String>) -> Result<(), WalletStorageError>;
+
     // Key manager
     fn key_manager_insert(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
     fn key_manager_set_active_index(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
@@ -183,17 +188,17 @@ pub trait WalletStoreWriter {
         result: Option<&FinalizeResult>,
         transaction_failure: Option<&RejectReason>,
         final_fee: Option<Amount>,
-        qcs: Option<&[QuorumCertificate]>,
+        qcs: Option<&[QuorumCertificate<PublicKey>]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError>;
 
     // Substates
-    fn substates_insert_parent(
+    fn substates_insert_root(
         &mut self,
         tx_hash: FixedHash,
         address: VersionedSubstateAddress,
-        module_name: String,
-        template_addr: TemplateAddress,
+        module_name: Option<String>,
+        template_addr: Option<TemplateAddress>,
     ) -> Result<(), WalletStorageError>;
     fn substates_insert_child(
         &mut self,
@@ -201,15 +206,16 @@ pub trait WalletStoreWriter {
         parent: SubstateAddress,
         address: VersionedSubstateAddress,
     ) -> Result<(), WalletStorageError>;
-
-    fn substates_remove(&mut self, substate: &VersionedSubstateAddress) -> Result<SubstateModel, WalletStorageError>;
+    fn substates_remove(&mut self, substate: &SubstateAddress) -> Result<SubstateModel, WalletStorageError>;
 
     // Accounts
+    fn accounts_set_default(&mut self, address: &SubstateAddress) -> Result<(), WalletStorageError>;
     fn accounts_insert(
         &mut self,
         account_name: &str,
         address: &SubstateAddress,
         owner_key_index: u64,
+        is_default: bool,
     ) -> Result<(), WalletStorageError>;
 
     fn accounts_update(&mut self, address: &SubstateAddress, new_name: Option<&str>) -> Result<(), WalletStorageError>;

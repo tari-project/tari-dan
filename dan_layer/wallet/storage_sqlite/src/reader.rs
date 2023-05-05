@@ -71,6 +71,8 @@ impl<'a> ReadTransaction<'a> {
 }
 
 impl WalletStoreReader for ReadTransaction<'_> {
+    // -------------------------------- JWT -------------------------------- //
+
     // -------------------------------- KeyManager -------------------------------- //
 
     fn key_manager_get_all(&mut self, branch: &str) -> Result<Vec<(u64, bool)>, WalletStorageError> {
@@ -265,6 +267,28 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .map_err(|e| WalletStorageError::general("account_count", e))?;
 
         Ok(count as u64)
+    }
+
+    fn accounts_get_default(&mut self) -> Result<Account, WalletStorageError> {
+        use crate::schema::accounts;
+
+        let row = accounts::table
+            .filter(accounts::is_default.eq(true))
+            .first::<models::Account>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("accounts_get_default", e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: "accounts_get_default",
+                entity: "account".to_string(),
+                key: "default".to_string(),
+            })?;
+
+        let account = row.try_into().map_err(|e| WalletStorageError::DecodingError {
+            operation: "accounts_get_default",
+            item: "account",
+            details: format!("Failed to convert SQL record to Account: {}", e),
+        })?;
+        Ok(account)
     }
 
     fn accounts_get_by_name(&mut self, name: &str) -> Result<Account, WalletStorageError> {

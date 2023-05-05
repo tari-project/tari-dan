@@ -20,21 +20,22 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, str::FromStr, time::Duration};
+use std::{str::FromStr, time::Duration};
 
 use reqwest::Url;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
     run_indexer,
-    AddAddressRequest,
-    GetNonFungiblesRequest,
-    GetSubstateRequest,
 };
-use tari_indexer_client::IndexerClient;
+use tari_indexer_client::{
+    graphql_client::IndexerGraphQLClient,
+    json_rpc_client::IndexerJsonRpcClient,
+    types::{GetNonFungiblesRequest, GetSubstateRequest, GetSubstateResponse, NonFungibleSubstate},
+};
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tempfile::tempdir;
@@ -47,7 +48,9 @@ pub struct IndexerProcess {
     pub name: String,
     pub port: u16,
     pub json_rpc_port: u16,
+    pub graphql_port: u16,
     pub base_node_grpc_port: u16,
+    pub http_ui_port: u16,
     pub handle: task::JoinHandle<()>,
     pub temp_dir_path: String,
     pub shutdown: Shutdown,
@@ -55,24 +58,23 @@ pub struct IndexerProcess {
 
 impl IndexerProcess {
     pub async fn add_address(&self, world: &TariWorld, output_ref: String) {
-        let address = get_adddress_from_output(world, output_ref);
+        let address = get_address_from_output(world, output_ref);
 
-        let params = AddAddressRequest { address };
-
-        let mut client = self.get_indexer_client().await;
-        let _: () = client.send_request("add_address", params).await.unwrap();
+        let mut jrpc_client = self.get_jrpc_indexer_client().await;
+        jrpc_client.add_address(address.clone()).await.unwrap();
     }
 
-    pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> Substate {
-        let address = get_adddress_from_output(world, output_ref);
+    pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> GetSubstateResponse {
+        let address = get_address_from_output(world, output_ref);
 
-        let params = GetSubstateRequest {
-            address,
-            version: Some(version),
-        };
-
-        let mut client = self.get_indexer_client().await;
-        let resp: Substate = client.send_request("get_substate", params).await.unwrap();
+        let mut jrpc_client = self.get_jrpc_indexer_client().await;
+        let resp = jrpc_client
+            .get_substate(GetSubstateRequest {
+                address: address.clone(),
+                version: Some(version),
+            })
+            .await
+            .unwrap();
         resp
     }
 
@@ -82,45 +84,52 @@ impl IndexerProcess {
         output_ref: String,
         start_index: u64,
         end_index: u64,
-    ) -> Vec<tari_indexer::NonFungible> {
-        let address = get_adddress_from_output(world, output_ref);
+    ) -> Vec<NonFungibleSubstate> {
+        let address = get_address_from_output(world, output_ref);
 
         let params = GetNonFungiblesRequest {
-            address,
+            address: address.clone(),
             start_index,
             end_index,
         };
 
-        let mut client = self.get_indexer_client().await;
-        let resp: Vec<tari_indexer::NonFungible> = client.send_request("get_non_fungibles", params).await.unwrap();
-        resp
+        let mut jrpc_client = self.get_jrpc_indexer_client().await;
+        let resp = jrpc_client.get_non_fungibles(params).await.unwrap();
+        resp.non_fungibles
     }
 
-    pub async fn get_indexer_client(&self) -> IndexerClient {
+    pub async fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {
         let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.json_rpc_port)).unwrap();
-        IndexerClient::connect(endpoint).unwrap()
+        IndexerJsonRpcClient::connect(endpoint).unwrap()
+    }
+
+    pub async fn get_graphql_indexer_client(&self) -> IndexerGraphQLClient {
+        let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.graphql_port)).unwrap();
+        IndexerGraphQLClient::connect(endpoint).unwrap()
     }
 }
 
-fn get_adddress_from_output(world: &TariWorld, output_ref: String) -> String {
-    let substate_address_map: HashMap<String, SubstateAddress> = world
+fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateAddress {
+    world
         .outputs
         .iter()
-        .flat_map(|(name, outputs)| {
+        .find_map(|(name, outputs)| {
             outputs
                 .iter()
-                .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone()))
+                .find(|(child_name, _)| {
+                    let fqn = format!("{}/{}", name, child_name);
+                    fqn == output_ref
+                })
+                .map(|(_, addr)| &addr.address)
         })
-        .collect();
-
-    let address = substate_address_map.get(&output_ref).unwrap().to_string();
-    address
+        .unwrap()
 }
 
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
     // each spawned indexer will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
-
+    let (graphql_port, _) = get_os_assigned_ports();
+    let (http_ui_port, _) = get_os_assigned_ports();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let name = indexer_name.clone();
 
@@ -152,13 +161,12 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.identity_file = temp_dir.join("indexer_id.json");
         config.indexer.tor_identity_file = temp_dir.join("indexer_tor_id.json");
         config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
-        config.indexer.dan_layer_scanning_internal = Duration::from_secs(2);
+        config.indexer.dan_layer_scanning_internal = Duration::from_secs(60);
 
         config.indexer.p2p.transport.transport_type = TransportType::Tcp;
         config.indexer.p2p.transport.tcp.listener_address =
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
         config.indexer.p2p.public_addresses = vec![config.indexer.p2p.transport.tcp.listener_address.clone()];
-        config.indexer.public_address = Some(config.indexer.p2p.transport.tcp.listener_address.clone());
         config.indexer.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
         config.indexer.p2p.dht = DhtConfig {
             // Not all platforms support sqlite memory connection urls
@@ -166,6 +174,8 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
             ..DhtConfig::default_local_test()
         };
         config.indexer.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
+        config.indexer.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
+        config.indexer.graphql_address = Some(format!("127.0.0.1:{}", graphql_port).parse().unwrap());
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
@@ -189,8 +199,10 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         name: name.clone(),
         port,
         base_node_grpc_port,
+        http_ui_port,
         handle,
         json_rpc_port,
+        graphql_port,
         temp_dir_path,
         shutdown,
     };

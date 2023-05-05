@@ -20,33 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use async_trait::async_trait;
 use tari_comms::{
     connectivity::ConnectivityError,
     protocol::rpc::{RpcError, RpcStatus},
     types::CommsPublicKey,
 };
-use tari_comms_dht::DhtActorError;
-use tari_dan_common_types::NodeAddressable;
-use tari_transaction::Transaction;
-
-use crate::services::DanPeer;
-
-pub trait ValidatorNodeClientFactory: Send + Sync {
-    type Addr: NodeAddressable;
-    type Client: ValidatorNodeRpcClient;
-    fn create_client(&self, address: &Self::Addr) -> Self::Client;
-}
-
-#[async_trait]
-pub trait ValidatorNodeRpcClient: Send + Sync {
-    async fn submit_transaction(
-        &mut self,
-        transaction: Transaction,
-    ) -> Result<Option<Vec<u8>>, ValidatorNodeClientError>;
-
-    async fn get_peers(&mut self) -> Result<Vec<DanPeer<CommsPublicKey>>, ValidatorNodeClientError>;
-}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ValidatorNodeClientError {
@@ -60,8 +38,6 @@ pub enum ValidatorNodeClientError {
     RpcError(#[from] RpcError),
     #[error("Remote node returned error: {0}")]
     RpcStatusError(#[from] RpcStatus),
-    #[error("Dht error: {0}")]
-    DhtError(#[from] DhtActorError),
     #[error("Node sent invalid response: {0}")]
     InvalidResponse(anyhow::Error),
 }
