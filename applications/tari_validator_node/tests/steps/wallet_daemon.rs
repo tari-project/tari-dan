@@ -136,7 +136,7 @@ async fn when_i_burn_funds_with_wallet_daemon(
 
 #[when(
     expr = "I transfer {int} tokens of resource {word} from account {word} to public key {word} via the wallet daemon \
-            {word}"
+            {word} named {word}"
 )]
 async fn when_transfer_via_wallet_daemon(
     world: &mut TariWorld,
@@ -145,6 +145,7 @@ async fn when_transfer_via_wallet_daemon(
     account_name: String,
     destination_public_key: String,
     wallet_daemon_name: String,
+    outputs_name: String,
 ) {
     let (_, destination_public_key) = world.account_public_keys.get(&destination_public_key).unwrap().clone();
     let amount = Amount::new(amount.into());
@@ -174,6 +175,7 @@ async fn when_transfer_via_wallet_daemon(
         resource_address,
         amount,
         wallet_daemon_name,
+        outputs_name,
     )
     .await;
 }

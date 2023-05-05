@@ -37,7 +37,6 @@ use tari_wallet_daemon_client::{
         ClaimBurnRequest,
         ClaimBurnResponse,
         TransferRequest,
-        TransferResponse,
     },
     ComponentAddressOrName,
     WalletDaemonClient,
@@ -130,7 +129,8 @@ pub async fn transfer(
     resource_address: ResourceAddress,
     amount: Amount,
     wallet_daemon_name: String,
-) -> TransferResponse {
+    outputs_name: String,
+) {
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
 
     let account = Some(ComponentAddressOrName::Name(account_name));
@@ -158,7 +158,8 @@ pub async fn transfer(
         .unwrap();
     client.token = Some(auth_response.permissions_token);
 
-    client.accounts_transfer(request).await.unwrap()
+    let resp = client.accounts_transfer(request).await.unwrap();
+    add_substate_addresses(world, outputs_name, resp.result.result.accept().unwrap());
 }
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {

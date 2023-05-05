@@ -121,7 +121,7 @@ pub async fn handle_create(
     if let Some(reason) = finalized.transaction_failure {
         return Err(anyhow!("Create account transaction failed: {}", reason));
     }
-    let diff = finalized.finalize.result.accept().unwrap();
+    let diff: &tari_engine_types::substate::SubstateDiff = finalized.finalize.result.accept().unwrap();
     let (addr, _) = diff
         .up_iter()
         .find(|(addr, _)| addr.is_component())
@@ -771,6 +771,7 @@ pub async fn handle_create_free_test_coins(
     })
 }
 
+#[allow(clippy::too_many_lines)]
 pub async fn handle_transfer(
     context: &HandlerContext,
     token: Option<String>,
@@ -786,17 +787,33 @@ pub async fn handle_transfer(
 
     let mut inputs = vec![];
 
-    // get source account information
+    // get the source account component address
     let source_account_address = account
         .address
         .as_component_address()
         .ok_or_else(|| anyhow!("Invalid account address"))?;
+
+    // add the input for the source account component substate
     let account_substate = sdk.substate_api().get_substate(&account.address)?;
     inputs.push(account_substate.address);
 
     // Add all versioned account child addresses as inputs
     let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
     inputs.extend(child_addresses);
+
+    // add the input for the source account vault substate
+    let src_vault = sdk
+        .accounts_api()
+        .get_vault_by_resource(&account.address, &req.resource_address)?;
+    let src_vault_substate = sdk.substate_api().get_substate(&src_vault.address)?;
+    inputs.push(src_vault_substate.address);
+
+    // add the input for the resource address to be transfered
+    let resource_substate = sdk
+        .substate_api()
+        .scan_from_vn(&SubstateAddress::Resource(req.resource_address), None)
+        .await?;
+    inputs.push(resource_substate.address);
 
     // get destination account information
     // TODO: DRY with id_provider
@@ -845,11 +862,6 @@ pub async fn handle_transfer(
             method: "deposit".to_string(),
             args: args![Workspace("bucket")],
         },
-        Instruction::CallMethod {
-            component_address: source_account_address,
-            method: "pay_fee".to_string(),
-            args: args![fee],
-        },
     ];
     if must_create_destination_account {
         let owner_token = NonFungibleAddress::from_public_key(
@@ -862,10 +874,13 @@ pub async fn handle_transfer(
         });
     }
     let transaction = Transaction::builder()
-        .with_fee_instructions(instructions)
+        // TODO 
+        //.fee_transaction_pay_from_component(source_account_address, req.fee.unwrap_or(DEFAULT_FEE))
+        .with_instructions(instructions)
         .with_inputs(inputs)
         .with_outputs(outputs)
-        .with_new_outputs(1)
+        // potentially the destination account creation with its vault
+        .with_new_outputs(2)
         .sign(&account_secret_key.k)
         .build();
 
