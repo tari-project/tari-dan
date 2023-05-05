@@ -47,6 +47,7 @@ impl CommsPeerProvider {
 impl PeerProvider for CommsPeerProvider {
     type Addr = CommsPublicKey;
     type Error = CommsPeerProviderError;
+    type NodeId = NodeId;
 
     async fn get_peer(&self, addr: &Self::Addr) -> Result<DanPeer<Self::Addr>, Self::Error> {
         match self.peer_manager.find_by_public_key(addr).await? {
@@ -149,6 +150,31 @@ impl PeerProvider for CommsPeerProvider {
         let query = PeerQuery::new().select_where(|p| p.is_seed());
         let peers = self.peer_manager.perform_query(query).await?;
         Ok(peers.into_iter().map(Into::into).collect())
+    }
+
+    async fn get_peer_by_node_id(&self, node_id: &Self::NodeId) -> Result<DanPeer<Self::Addr>, Self::Error> {
+        match self.peer_manager.find_by_node_id(node_id).await? {
+            Some(peer) => Ok(DanPeer {
+                identity: peer.public_key,
+                addresses: peer
+                    .addresses
+                    .addresses()
+                    .iter()
+                    .filter_map(|a| {
+                        let claim = a.source.peer_identity_claim().cloned();
+                        claim.map(|claim| (a.address().clone(), claim))
+                    })
+                    .collect(),
+            }),
+            None => Err(CommsPeerProviderError::PeerNotFound),
+        }
+    }
+
+    async fn is_protocol_supported(&self, addr: &Self::Addr, protocol: &[u8]) -> Result<bool, Self::Error> {
+        match self.peer_manager.find_by_public_key(addr).await? {
+            Some(peer) => Ok(peer.supported_protocols().iter().any(|p| p == protocol)),
+            None => Err(CommsPeerProviderError::PeerNotFound),
+        }
     }
 }
 

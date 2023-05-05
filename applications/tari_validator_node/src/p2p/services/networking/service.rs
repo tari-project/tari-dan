@@ -26,6 +26,7 @@ use log::*;
 use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
     peer_manager::{NodeId, PeerFeatures, PeerIdentityClaim},
+    protocol::rpc::NamedProtocolService,
     types::CommsPublicKey,
     NodeIdentity,
     PeerConnection,
@@ -44,7 +45,7 @@ use tokio::{
 use crate::p2p::services::{
     comms_peer_provider::CommsPeerProvider,
     messaging::OutboundMessaging,
-    networking::{handle::NetworkingRequest, peer_sync::PeerSyncProtocol, NetworkingError},
+    networking::{handle::NetworkingRequest, NetworkingError},
 };
 
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::networking";
@@ -124,7 +125,9 @@ impl Networking {
         match event {
             ConnectivityEvent::PeerConnected(conn) => {
                 debug!(target: LOG_TARGET, "📡 Peer connected: {}", conn);
-                self.initiate_sync_protocol(conn.as_ref().clone());
+                if self.is_vn_protocol_supported(&conn).await? {
+                    self.initiate_sync_protocol(*conn);
+                }
             },
             evt => {
                 debug!(target: LOG_TARGET, "ℹ️  Network event: {}", evt);
@@ -206,6 +209,18 @@ impl Networking {
         }
 
         Ok(())
+    }
+
+    async fn is_vn_protocol_supported(&self, conn: &PeerConnection) -> Result<bool, NetworkingError> {
+        let peer = self.peer_provider.get_peer_by_node_id(conn.peer_node_id()).await?;
+        let is_supported = self
+            .peer_provider
+            .is_protocol_supported(
+                &peer.identity,
+                tari_validator_node_rpc::rpc_service::ValidatorNodeRpcClient::PROTOCOL_NAME,
+            )
+            .await?;
+        Ok(is_supported)
     }
 
     fn initiate_sync_protocol(&self, conn: PeerConnection) {
