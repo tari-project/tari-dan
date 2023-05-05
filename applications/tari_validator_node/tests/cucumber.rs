@@ -26,12 +26,7 @@ use std::{collections::HashMap, convert::TryFrom, future, io, str::FromStr, time
 
 use cucumber::{
     gherkin::{Scenario, Step},
-    given,
-    then,
-    when,
-    writer,
-    World,
-    WriterExt,
+    given, then, when, writer, World, WriterExt,
 };
 use indexmap::IndexMap;
 use tari_common::initialize_logging;
@@ -48,11 +43,7 @@ use tari_dan_engine::abi::Type;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
-    AddPeerRequest,
-    GetIdentityResponse,
-    GetRecentTransactionsRequest,
-    GetTemplateRequest,
-    GetTransactionResultRequest,
+    AddPeerRequest, GetIdentityResponse, GetRecentTransactionsRequest, GetTemplateRequest, GetTransactionResultRequest,
     TemplateRegistrationResponse,
 };
 use utils::{
@@ -741,6 +732,45 @@ async fn assert_indexer_non_fungible_list(
         count,
         nfts.len()
     );
+}
+
+#[given(expr = "all validator nodes are connected to each other")]
+async fn given_all_validator_connects_to_other_vns(world: &mut TariWorld) {
+    let details = world
+        .validator_nodes
+        .values()
+        .map(|vn| {
+            (
+                PublicKey::from_hex(&vn.public_key).unwrap(),
+                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    for vn in world.validator_nodes.values() {
+        if vn.handle.is_finished() {
+            log::warn!(
+                target: LOG_TARGET,
+                "Skipping validator node {} that is not running",
+                vn.name
+            );
+            continue;
+        }
+        let mut cli = vn.create_client().await;
+        let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
+        for (pk, addr) in details.iter().cloned() {
+            if pk == this_pk {
+                continue;
+            }
+            cli.add_peer(AddPeerRequest {
+                public_key: pk,
+                addresses: vec![addr],
+                wait_for_dial: true,
+            })
+            .await
+            .unwrap();
+        }
+    }
 }
 
 #[when(expr = "I wait {int} seconds")]
