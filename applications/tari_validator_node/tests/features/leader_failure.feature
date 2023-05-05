@@ -87,7 +87,7 @@ Feature: Leader failure scenarios
 
     # Need to wait a few seconds, so that all VNs get properly
     # registered
-    #    When I wait 5 seconds
+    When I wait 5 seconds
 
     # Send transactions, VAL_4 is offline, but should be the leader in 1 of 4
     # transactions, so we send 10 transactions. All should succeed

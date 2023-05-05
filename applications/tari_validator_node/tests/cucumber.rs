@@ -749,11 +749,7 @@ async fn given_all_validator_connects_to_other_vns(world: &mut TariWorld) {
 
     for vn in world.validator_nodes.values() {
         if vn.handle.is_finished() {
-            log::warn!(
-                target: LOG_TARGET,
-                "Skipping validator node {} that is not running",
-                vn.name
-            );
+            eprintln!("Skipping validator node {} that is not running", vn.name);
             continue;
         }
         let mut cli = vn.create_client().await;
