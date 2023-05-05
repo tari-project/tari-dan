@@ -24,16 +24,27 @@ use std::convert::{TryFrom, TryInto};
 
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
-use tari_dan_common_types::{NodeAddressable, ShardId};
+use tari_dan_common_types::{optional::Optional, NodeAddressable, PayloadId, ShardId};
 use tari_dan_core::{
     services::PeerProvider,
     storage::shard_store::{ShardStore, ShardStoreReadTransaction},
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
+use tari_engine_types::substate::SubstateAddress;
+use tari_template_lib::encode;
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::{
     proto,
-    proto::rpc::{VnStateSyncRequest, VnStateSyncResponse},
+    proto::rpc::{
+        GetSubstateRequest,
+        GetSubstateResponse,
+        GetTransactionResultRequest,
+        GetTransactionResultResponse,
+        PayloadResultStatus,
+        SubstateStatus,
+        VnStateSyncRequest,
+        VnStateSyncResponse,
+    },
     rpc_service::ValidatorNodeRpcService,
 };
 use tokio::{sync::mpsc, task};
@@ -66,32 +77,25 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         &self,
         request: Request<proto::rpc::SubmitTransactionRequest>,
     ) -> Result<Response<proto::rpc::SubmitTransactionResponse>, RpcStatus> {
-        // let peer = request.context().fetch_peer().await?;
         let request = request.into_message();
-        let transaction: Transaction = match request
+        let transaction: Transaction = request
             .transaction
             .ok_or_else(|| RpcStatus::bad_request("Missing transaction"))?
             .try_into()
-        {
-            Ok(value) => value,
-            Err(e) => {
-                return Err(RpcStatus::not_found(&format!("Could not convert transaction: {}", e)));
-            },
-        };
+            .map_err(|e| RpcStatus::bad_request(&format!("Malformed transaction: {}", e)))?;
 
-        match self.mempool.submit_transaction(transaction).await {
-            Ok(_) => {
-                debug!(target: LOG_TARGET, "Accepted instruction into mempool");
-                Ok(Response::new(proto::rpc::SubmitTransactionResponse {
-                    result: vec![],
-                    status: "Accepted".to_string(),
-                }))
-            },
-            Err(err) => Ok(Response::new(proto::rpc::SubmitTransactionResponse {
-                result: vec![],
-                status: format!("Failed to submit transaction to mempool: {}", err),
-            })),
-        }
+        let transaction_hash = *transaction.hash();
+
+        self.mempool
+            .submit_transaction(transaction)
+            .await
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid transaction: {}", e)))?;
+
+        debug!(target: LOG_TARGET, "Accepted instruction into mempool");
+
+        Ok(Response::new(proto::rpc::SubmitTransactionResponse {
+            transaction_hash: transaction_hash.to_vec(),
+        }))
     }
 
     async fn get_peers(
@@ -144,11 +148,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         let excluded_shards = msg
             .inventory
             .iter()
-            .map(|s| {
-                ShardId::try_from(s.bytes.as_slice())
-                    .expect("Invalid gRPC request: failed to parse shard id's request data")
-            })
-            .collect::<Vec<ShardId>>();
+            .map(|s| ShardId::try_from(s.bytes.as_slice()).map_err(|_| RpcStatus::bad_request("invalid shard_id")))
+            .collect::<Result<Vec<_>, RpcStatus>>()?;
 
         let shard_db = self.shard_state_store.clone();
 
@@ -190,5 +191,85 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             }
         });
         Ok(Streaming::new(rx))
+    }
+
+    async fn get_substate(&self, req: Request<GetSubstateRequest>) -> Result<Response<GetSubstateResponse>, RpcStatus> {
+        let req = req.into_message();
+        let mut tx = self
+            .shard_state_store
+            .create_read_tx()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        let address = SubstateAddress::from_bytes(&req.address)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate address: {}", e)))?;
+        let shard_id = ShardId::from_address(&address, req.version);
+
+        let substates = tx
+            .get_substate_states(&[shard_id])
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+
+        let Some(substate) = substates.first() else {
+            return Ok(Response::new(GetSubstateResponse {
+                status: SubstateStatus::DoesNotExist as i32,
+                ..Default::default()
+            }));
+        };
+
+        let resp = if let Some(tx_hash) = substate.destroyed_payload_id() {
+            let qcs = tx
+                .get_high_qcs(tx_hash)
+                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+            GetSubstateResponse {
+                status: SubstateStatus::Down as i32,
+                version: substate.version(),
+                transaction_hash: tx_hash.into_array().to_vec(),
+                quorum_certificates: qcs.into_iter().map(Into::into).collect(),
+                ..Default::default()
+            }
+        } else {
+            let tx_hash = substate.created_payload_id();
+            let qcs = tx
+                .get_high_qcs(tx_hash)
+                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+            GetSubstateResponse {
+                status: SubstateStatus::Up as i32,
+                version: substate.version(),
+                substate: substate.substate().to_bytes(),
+                transaction_hash: substate.created_payload_id().into_array().to_vec(),
+                quorum_certificates: qcs.into_iter().map(Into::into).collect(),
+            }
+        };
+
+        Ok(Response::new(resp))
+    }
+
+    async fn get_transaction_result(
+        &self,
+        req: Request<GetTransactionResultRequest>,
+    ) -> Result<Response<GetTransactionResultResponse>, RpcStatus> {
+        let req = req.into_message();
+        let mut tx = self
+            .shard_state_store
+            .create_read_tx()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+        let payload_id =
+            PayloadId::try_from(req.payload_id).map_err(|_| RpcStatus::bad_request("Invalid payload id"))?;
+        let payload = tx
+            .get_payload(&payload_id)
+            .optional()
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+            .ok_or_else(|| RpcStatus::not_found("Transaction not found"))?;
+
+        if let Some(result) = payload.result() {
+            Ok(Response::new(GetTransactionResultResponse {
+                status: PayloadResultStatus::Finalized.into(),
+                // For simplicity, we simply encode the whole result as a CBOR blob.
+                execution_result: encode(result).map_err(RpcStatus::log_internal_error(LOG_TARGET))?,
+            }))
+        } else {
+            Ok(Response::new(GetTransactionResultResponse {
+                status: PayloadResultStatus::Pending.into(),
+                ..Default::default()
+            }))
+        }
     }
 }

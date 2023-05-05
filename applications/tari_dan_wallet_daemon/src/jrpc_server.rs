@@ -99,6 +99,7 @@ async fn handler(
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("transactions", method)) => match method {
+            "submit_instruction" => call_handler(context, value, token, transaction::handle_submit_instruction).await,
             "submit" => call_handler(context, value, token, transaction::handle_submit).await,
             "get" => call_handler(context, value, token, transaction::handle_get).await,
             "get_result" => call_handler(context, value, token, transaction::handle_get_result).await,
@@ -187,7 +188,7 @@ fn resolve_any_error(answer_id: i64, e: &anyhow::Error) -> JsonRpcResponse {
     if let Some(handler_err) = e.downcast_ref::<HandlerError>() {
         return resolve_handler_error(answer_id, handler_err);
     }
-    println!("{:?}", e);
+
     if let Some(error) = e.downcast_ref::<JwtApiError>() {
         JsonRpcResponse::error(
             answer_id,

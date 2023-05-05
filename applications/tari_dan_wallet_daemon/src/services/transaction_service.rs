@@ -4,10 +4,12 @@
 use std::{sync::Arc, time::Duration};
 
 use log::*;
+use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_wallet_sdk::{
     apis::transaction::TransactionApiError,
     models::TransactionStatus,
     storage::WalletStore,
+    substate_provider::WalletNetworkInterface,
     DanWalletSdk,
 };
 use tari_shutdown::ShutdownSignal;
@@ -24,19 +26,26 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::transaction_service";
 
-pub struct TransactionService<TStore> {
+pub struct TransactionService<TStore, TNetworkInterface> {
     notify: Notify<WalletEvent>,
-    wallet_sdk: DanWalletSdk<TStore>,
+    wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
     trigger_poll: watch::Sender<()>,
     rx_trigger: watch::Receiver<()>,
     poll_semaphore: Arc<Semaphore>,
     shutdown_signal: ShutdownSignal,
 }
 
-impl<TStore> TransactionService<TStore>
-where TStore: WalletStore + Clone + Send + Sync + 'static
+impl<TStore, TNetworkInterface> TransactionService<TStore, TNetworkInterface>
+where
+    TStore: WalletStore + Clone + Send + Sync + 'static,
+    TNetworkInterface: WalletNetworkInterface + Clone + Send + Sync + 'static,
+    TNetworkInterface::Error: IsNotFoundError,
 {
-    pub fn new(notify: Notify<WalletEvent>, wallet_sdk: DanWalletSdk<TStore>, shutdown_signal: ShutdownSignal) -> Self {
+    pub fn new(
+        notify: Notify<WalletEvent>,
+        wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
+        shutdown_signal: ShutdownSignal,
+    ) -> Self {
         let (trigger, rx_trigger) = watch::channel(());
         Self {
             notify,
@@ -99,7 +108,7 @@ where TStore: WalletStore + Clone + Send + Sync + 'static
     }
 
     async fn check_pending_transactions(
-        wallet_sdk: DanWalletSdk<TStore>,
+        wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
         notify: Notify<WalletEvent>,
     ) -> Result<(), TransactionServiceError> {
         let transaction_api = wallet_sdk.transaction_api();

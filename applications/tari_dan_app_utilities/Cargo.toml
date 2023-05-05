@@ -2,7 +2,7 @@
 name = "tari_dan_app_utilities"
 version = "0.50.0-pre.0"
 authors = ["The Tari Development Community"]
-edition = "2018"
+edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
@@ -22,6 +22,7 @@ tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
+tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"

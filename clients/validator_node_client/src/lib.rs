@@ -206,7 +206,7 @@ impl ValidatorNodeClient {
         method: &str,
         params: T,
     ) -> Result<R, ValidatorNodeClientError> {
-        let params = json::to_value(params).map_err(|e| ValidatorNodeClientError::DeserializeResponse {
+        let params = json::to_value(params).map_err(|e| ValidatorNodeClientError::SerializeRequest {
             source: e,
             method: method.to_string(),
         })?;

@@ -1,6 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-use std::{collections::HashSet, time::Duration};
+use std::{collections::HashSet, convert::TryFrom, time::Duration};
 
 use anyhow::anyhow;
 use futures::{future, future::Either};
@@ -8,9 +8,12 @@ use log::*;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::apis::{jwt::JrpcPermission, key_manager};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
-use tari_template_lib::{models::Amount, prelude::NonFungibleAddress};
+use tari_template_lib::{args, models::Amount, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
+    AccountGetRequest,
+    AccountGetResponse,
+    CallInstructionRequest,
     TransactionGetRequest,
     TransactionGetResponse,
     TransactionGetResultRequest,
@@ -22,13 +25,62 @@ use tari_wallet_daemon_client::types::{
 };
 use tokio::time;
 
-use super::context::HandlerContext;
+use super::{accounts, context::HandlerContext};
 use crate::{
     handlers::HandlerError,
     services::{TransactionSubmittedEvent, WalletEvent},
 };
 
 const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
+
+pub async fn handle_submit_instruction(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: CallInstructionRequest,
+) -> Result<TransactionSubmitResponse, anyhow::Error> {
+    let mut instructions = vec![req.instruction];
+    if let Some(dump_account) = req.dump_outputs_into {
+        instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        });
+        let AccountGetResponse {
+            account: dump_account, ..
+        } = accounts::handle_get(context, token.clone(), AccountGetRequest {
+            name_or_address: dump_account,
+        })
+        .await?;
+        instructions.push(Instruction::CallMethod {
+            component_address: dump_account.address.as_component_address().unwrap(),
+            method: "deposit".to_string(),
+            args: args![Variable("bucket")],
+        });
+    }
+    let AccountGetResponse {
+        account: fee_account, ..
+    } = accounts::handle_get(context, token.clone(), AccountGetRequest {
+        name_or_address: req.fee_account,
+    })
+    .await?;
+    let request = TransactionSubmitRequest {
+        signing_key_index: None,
+        fee_instructions: vec![Instruction::CallMethod {
+            component_address: fee_account.address.as_component_address().unwrap(),
+            method: "pay_fee".to_string(),
+            args: args![Amount::try_from(req.fee)?],
+        }],
+        instructions,
+        inputs: req.inputs,
+        override_inputs: req.override_inputs.unwrap_or_default(),
+        new_outputs: req.new_outputs.unwrap_or(0),
+        specific_non_fungible_outputs: req.specific_non_fungible_outputs,
+        new_resources: req.new_resources,
+        new_non_fungible_outputs: req.new_non_fungible_outputs,
+        new_non_fungible_index_outputs: req.new_non_fungible_index_outputs,
+        is_dry_run: req.is_dry_run,
+        proof_ids: vec![],
+    };
+    handle_submit(context, token, request).await
+}
 
 pub async fn handle_submit(
     context: &HandlerContext,
@@ -42,7 +94,6 @@ pub async fn handle_submit(
     // TODO: Ideally the SDK should take care of signing the transaction internally
     let (_, key) = key_api.get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
 
-    // let transaction_api = sdk.transaction_api();
     let inputs = if req.override_inputs {
         req.inputs
     } else {
@@ -94,9 +145,9 @@ pub async fn handle_submit(
         transaction.hash()
     );
     let hash = if req.is_dry_run {
-        sdk.transaction_api().submit_dry_run_to_vn(transaction).await?
+        sdk.transaction_api().submit_dry_run_transaction(transaction).await?
     } else {
-        sdk.transaction_api().submit_to_vn(transaction).await?
+        sdk.transaction_api().submit_transaction(transaction).await?
     };
 
     if !req.is_dry_run {

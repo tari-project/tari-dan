@@ -213,7 +213,7 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
         payload_id: PayloadId,
         height: NodeHeight,
     ) -> Result<(), StorageError>;
-    fn save_substate_changes(
+    fn commit_substate_changes(
         &mut self,
         node: HotStuffTreeNode<TAddr, TPayload>,
         changes: &[SubstateState],
@@ -245,6 +245,8 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
 
     /// Updates the result for an existing payload
     fn update_payload_result(&mut self, payload_id: &PayloadId, result: PayloadResult) -> Result<(), StorageError>;
+
+    fn mark_payload_finalized(&mut self, payload_id: &PayloadId) -> Result<(), StorageError>;
 
     // -------------------------------- Pledges -------------------------------- //
     fn pledge_object(

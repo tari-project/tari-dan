@@ -21,9 +21,11 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
+use std::convert::TryFrom;
+
 use diesel::sql_types::{Integer, Text};
 
-use crate::substate_storage_sqlite::schema::*;
+use crate::{substate_manager::NonFungibleResponse, substate_storage_sqlite::schema::*};
 #[derive(Debug, Identifiable, Queryable)]
 #[diesel(table_name = non_fungible_indexes)]
 pub struct NonFungibleIndex {
@@ -51,4 +53,16 @@ pub struct IndexedNftSubstate {
     pub data: String,
     #[diesel(sql_type = Integer)]
     pub idx: i32,
+}
+
+impl TryFrom<IndexedNftSubstate> for NonFungibleResponse {
+    type Error = anyhow::Error;
+
+    fn try_from(row: IndexedNftSubstate) -> Result<Self, Self::Error> {
+        Ok(NonFungibleResponse {
+            index: row.idx as u64,
+            address: row.address.parse()?,
+            substate: serde_json::from_str(&row.data)?,
+        })
+    }
 }

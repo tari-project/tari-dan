@@ -28,11 +28,10 @@ use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{SubstateShardData, ValidatorNode},
-    services::{epoch_manager::EpochManagerError, ValidatorNodeClientFactory},
+    services::epoch_manager::EpochManagerError,
     storage::shard_store::{ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction},
 };
-
-use crate::p2p::services::rpc_client::TariCommsValidatorNodeClientFactory;
+use tari_validator_node_rpc::client::{TariCommsValidatorNodeClientFactory, ValidatorNodeClientFactory};
 
 const LOG_TARGET: &str = "tari::validator_node::state_sync";
 
@@ -79,7 +78,7 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
             info!(target: LOG_TARGET, "🌍 Connecting to sync peer: {}", sync_vn.public_key);
             let mut sync_vn_client = self.validator_node_client_factory.create_client(&sync_vn.public_key);
             let mut sync_vn_rpc_client = sync_vn_client
-                .create_connection()
+                .client_connection()
                 .await
                 .map_err(EpochManagerError::ValidatorNodeClientError)?;
             let request = tari_validator_node_rpc::proto::rpc::VnStateSyncRequest {

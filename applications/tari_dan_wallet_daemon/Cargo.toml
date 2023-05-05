@@ -2,10 +2,10 @@
 name = "tari_dan_wallet_daemon"
 authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet daemon"
-repository = "https://github.com/tari-project/tari"
+repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 version = "0.50.0-pre.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_app_utilities" }
@@ -24,6 +24,8 @@ tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 # TODO: Ideally we should not have to include the WASM template lib, we should perhaps extract the address types into a separate crate (e.g. template_types)
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_bor = { path = "../../dan_layer/tari_bor" }
+tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
+tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 
 anyhow = "1.0.69"
 base64 = "0.20.0-alpha.1"

@@ -1,7 +1,7 @@
 [package]
 name = "tari_dan_tests"
 version = "0.50.0-pre.0"
-edition = "2018"
+edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]

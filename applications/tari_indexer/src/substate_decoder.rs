@@ -34,7 +34,7 @@ pub type JsonValue = serde_json::Value;
 pub type JsonObject = serde_json::Map<String, JsonValue>;
 pub type CborValue = ciborium::value::Value;
 
-pub fn decode_substate_into_json(substate: &Substate) -> Result<JsonValue, anyhow::Error> {
+pub fn encode_substate_into_json(substate: &Substate) -> Result<JsonValue, anyhow::Error> {
     let substate_cbor = decode_into_cbor(&substate.to_bytes())?;
     let substate_cbor = fix_invalid_object_keys(&substate_cbor);
     let mut result = serde_json::to_value(substate_cbor)?;
@@ -42,10 +42,10 @@ pub fn decode_substate_into_json(substate: &Substate) -> Result<JsonValue, anyho
     let substate_field = get_mut_json_field(&mut result, "substate")?;
     match substate.substate_value() {
         SubstateValue::NonFungible(nf_container) => {
-            decode_non_fungible_into_json(nf_container, substate_field)?;
+            encode_non_fungible_into_json(nf_container, substate_field)?;
         },
         SubstateValue::Component(header) => {
-            decode_component_into_json(header, substate_field)?;
+            encode_component_into_json(header, substate_field)?;
         },
         _ => {},
     }
@@ -53,7 +53,7 @@ pub fn decode_substate_into_json(substate: &Substate) -> Result<JsonValue, anyho
     Ok(result)
 }
 
-fn decode_non_fungible_into_json(
+fn encode_non_fungible_into_json(
     nf_container: &NonFungibleContainer,
     substate_json_field: &mut JsonValue,
 ) -> Result<(), anyhow::Error> {
@@ -68,7 +68,7 @@ fn decode_non_fungible_into_json(
     Ok(())
 }
 
-fn decode_component_into_json(
+fn encode_component_into_json(
     header: &ComponentHeader,
     substate_json_field: &mut JsonValue,
 ) -> Result<(), anyhow::Error> {
@@ -260,7 +260,7 @@ mod tests {
         Hash,
     };
 
-    use crate::substate_decoder::decode_substate_into_json;
+    use crate::substate_decoder::encode_substate_into_json;
 
     #[test]
     fn it_decodes_confidential_vaults() {
@@ -284,6 +284,6 @@ mod tests {
         let substate_value = SubstateValue::Vault(vault);
         let substate = Substate::new(0, substate_value);
 
-        assert!(decode_substate_into_json(&substate).is_ok());
+        assert!(encode_substate_into_json(&substate).is_ok());
     }
 }

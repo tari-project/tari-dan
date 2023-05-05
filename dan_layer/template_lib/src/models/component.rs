@@ -90,6 +90,12 @@ impl Display for ComponentAddress {
     }
 }
 
+impl AsRef<[u8]> for ComponentAddress {
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentHeader {
     pub template_address: TemplateAddress,

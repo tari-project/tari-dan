@@ -27,7 +27,7 @@ async function jsonRpc(method: string, params: any = null) {
   id += 1;
   let address = 'localhost:18200';
   try {
-    let text = await (await fetch('json_rpc_address')).text();
+    let text = await (await fetch('/json_rpc_address')).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }

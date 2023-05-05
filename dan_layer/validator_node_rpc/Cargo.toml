@@ -2,10 +2,10 @@
 name = "tari_validator_node_rpc"
 authors = ["The Tari Development Community"]
 description = "This crate is to provide a single source for all cross application grpc files and conversions to and from tari-dan applications"
-repository = "https://github.com/tari-project/tari"
+repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 version = "0.50.0-pre.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
@@ -18,11 +18,15 @@ tari_dan_core = { path = "../../dan_layer/core" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
+tari_bor = { path = "../../dan_layer/tari_bor" }
 
 anyhow = "1.0.53"
+async-trait = "0.1"
 chrono = "0.4.22"
 prost = "0.9"
+serde = "1.0"
 tonic = "0.6.2"
+tokio-stream = "0.1"
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_common", features = ["build"] }
