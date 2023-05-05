@@ -48,6 +48,23 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CallInstructionRequest {
+    pub instruction: Instruction,
+    pub fee_account: ComponentAddressOrName,
+    pub dump_outputs_into: Option<ComponentAddressOrName>,
+    pub fee: u64,
+    pub inputs: Vec<VersionedSubstateAddress>,
+    pub override_inputs: Option<bool>,
+    pub new_outputs: Option<u8>,
+    pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
+    pub new_resources: Vec<(TemplateAddress, String)>,
+    pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
+    pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
+    pub is_dry_run: bool,
+    pub proof_ids: Vec<ConfidentialProofId>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionSubmitRequest {
     pub signing_key_index: Option<u64>,
     pub fee_instructions: Vec<Instruction>,
