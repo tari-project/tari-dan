@@ -99,6 +99,7 @@ async fn handler(
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("transactions", method)) => match method {
+            "submit_instruction" => call_handler(context, value, token, transaction::handle_submit_instruction).await,
             "submit" => call_handler(context, value, token, transaction::handle_submit).await,
             "get" => call_handler(context, value, token, transaction::handle_get).await,
             "get_result" => call_handler(context, value, token, transaction::handle_get_result).await,

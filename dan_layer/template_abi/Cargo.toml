@@ -2,6 +2,10 @@
 name = "tari_template_abi"
 version = "0.50.0-pre.0"
 edition = "2021"
+authors = ["The Tari Development Community"]
+description = "Defines the low-level Tari engine ABI for WASM targets"
+repository = "https://github.com/tari-project/tari-dan"
+license = "BSD-3-Clause"
 
 [dependencies]
 tari_bor = { path = "../tari_bor", default-features = false }
