@@ -21,7 +21,9 @@ use tari_dan_wallet_sdk::{
     },
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
+    DanWalletSdk,
 };
+use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::{
     component::new_component_address_from_parts,
     confidential::ConfidentialClaim,
@@ -33,7 +35,7 @@ use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, NonFungibleAddress, UnclaimedConfidentialOutputAddress},
-    prelude::{ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+    prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
 use tari_transaction::Transaction;
@@ -790,6 +792,7 @@ pub async fn handle_transfer(
         .key_manager_api()
         .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
 
+    let mut instructions = vec![];
     let mut inputs = vec![];
 
     // get the source account component address
@@ -821,20 +824,8 @@ pub async fn handle_transfer(
     inputs.push(resource_substate.address);
 
     // get destination account information
-    let component_id = Hash::try_from(req.destination_public_key.as_bytes())?;
-    let destination_account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
-    let destination_account_scan: Result<ValidatorScanResult, _> = sdk
-        .substate_api()
-        .scan_from_vn(&SubstateAddress::Component(destination_account_address), None)
-        .await;
-    let mut must_create_destination_account = false;
-    match destination_account_scan {
-        Ok(res) => inputs.push(res.address),
-        Err(err) => match err {
-            SubstateApiError::SubstateDoesNotExist { .. } => must_create_destination_account = true,
-            _ => return Err(anyhow!("Could not scan the network: {}", err)),
-        },
-    };
+    let destination_account_address =
+        get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
     // calculate inputs and outputs shard ids
     let outputs = inputs
@@ -849,7 +840,7 @@ pub async fn handle_transfer(
 
     // build the transaction
     let fee = req.fee.unwrap_or(DEFAULT_FEE);
-    let mut instructions = vec![
+    instructions.append(&mut vec![
         Instruction::CallMethod {
             component_address: source_account_address,
             method: "withdraw".to_string(),
@@ -868,17 +859,7 @@ pub async fn handle_transfer(
             method: "pay_fee".to_string(),
             args: args![fee],
         },
-    ];
-    if must_create_destination_account {
-        let owner_token = NonFungibleAddress::from_public_key(
-            RistrettoPublicKeyBytes::from_bytes(req.destination_public_key.as_bytes()).unwrap(),
-        );
-        instructions.insert(0, Instruction::CallFunction {
-            template_address: ACCOUNT_TEMPLATE_ADDRESS,
-            function: "create".to_string(),
-            args: args![owner_token],
-        });
-    }
+    ]);
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
@@ -910,6 +891,45 @@ pub async fn handle_transfer(
         fee,
         result: finalized.finalize,
     })
+}
+
+async fn get_or_create_account_address(
+    sdk: &DanWalletSdk<SqliteWalletStore>,
+    public_key: &PublicKey,
+    inputs: &mut Vec<VersionedSubstateAddress>,
+    instructions: &mut Vec<Instruction>,
+) -> Result<ComponentAddress, anyhow::Error> {
+    // calculate the account component address from the public key
+    let component_id = Hash::try_from(public_key.as_bytes())?;
+    let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
+
+    let account_scan: Result<ValidatorScanResult, _> = sdk
+        .substate_api()
+        .scan_from_vn(&SubstateAddress::Component(account_address), None)
+        .await;
+
+    match account_scan {
+        Ok(res) => {
+            // the account already exists in the network, so we must add the substate address to the inputs
+            inputs.push(res.address);
+        },
+        Err(err) => match err {
+            SubstateApiError::SubstateDoesNotExist { .. } => {
+                // the account does not exists, so we must add a instruction to create it, matching the public key
+                let owner_token = NonFungibleAddress::from_public_key(
+                    RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
+                );
+                instructions.insert(0, Instruction::CallFunction {
+                    template_address: ACCOUNT_TEMPLATE_ADDRESS,
+                    function: "create".to_string(),
+                    args: args![owner_token],
+                });
+            },
+            _ => return Err(anyhow!("Could not scan the network: {}", err)),
+        },
+    };
+
+    Ok(account_address)
 }
 
 #[allow(clippy::too_many_lines)]
