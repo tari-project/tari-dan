@@ -2,6 +2,10 @@
 name = "tari_validator_node_client"
 version = "0.50.0-pre.0"
 edition = "2021"
+authors = ["The Tari Development Community"]
+description = "Tari validator node client library"
+repository = "https://github.com/tari-project/tari-dan"
+license = "BSD-3-Clause"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

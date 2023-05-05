@@ -2,8 +2,10 @@
 name = "tari_wallet_daemon_client"
 version = "0.50.0-pre.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+authors = ["The Tari Development Community"]
+description = "Tari wallet daemon client library"
+repository = "https://github.com/tari-project/tari-dan"
+license = "BSD-3-Clause"
 
 [dependencies]
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
