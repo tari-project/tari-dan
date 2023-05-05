@@ -17,7 +17,7 @@ use tari_dan_wallet_sdk::{
     apis::{
         jwt::JrpcPermission,
         key_manager,
-        substate::{SubstateApiError, ValidatorScanResult},
+        substate::{ValidatorScanResult},
     },
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
@@ -75,6 +75,7 @@ use tokio::{sync::broadcast, task};
 use super::context::HandlerContext;
 use crate::{
     handlers::{get_account, get_account_or_default},
+    indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
     services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
     DEFAULT_FEE,
 };
@@ -784,7 +785,7 @@ pub async fn handle_transfer(
 ) -> Result<TransferResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account_or_default(req.account, &sdk)?;
+    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
     context
         .account_monitor()
         .refresh_account(account.address.clone())
@@ -821,7 +822,7 @@ pub async fn handle_transfer(
     // add the input for the resource address to be transfered
     let resource_substate = sdk
         .substate_api()
-        .scan_from_vn(&SubstateAddress::Resource(req.resource_address), None)
+        .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
         .await?;
     inputs.push(resource_substate.address);
 
@@ -872,7 +873,7 @@ pub async fn handle_transfer(
         .build();
 
     // send the transaction
-    let tx_hash = sdk.transaction_api().submit_to_vn(transaction).await?;
+    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
@@ -896,7 +897,7 @@ pub async fn handle_transfer(
 }
 
 async fn get_or_create_account_address(
-    sdk: &DanWalletSdk<SqliteWalletStore>,
+    sdk: &DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
     public_key: &PublicKey,
     inputs: &mut Vec<VersionedSubstateAddress>,
     instructions: &mut Vec<Instruction>,
@@ -907,7 +908,7 @@ async fn get_or_create_account_address(
 
     let account_scan: Result<ValidatorScanResult, _> = sdk
         .substate_api()
-        .scan_from_vn(&SubstateAddress::Component(account_address), None)
+        .scan_for_substate(&SubstateAddress::Component(account_address), None)
         .await;
 
     match account_scan {
@@ -915,19 +916,16 @@ async fn get_or_create_account_address(
             // the account already exists in the network, so we must add the substate address to the inputs
             inputs.push(res.address);
         },
-        Err(err) => match err {
-            SubstateApiError::SubstateDoesNotExist { .. } => {
-                // the account does not exists, so we must add a instruction to create it, matching the public key
-                let owner_token = NonFungibleAddress::from_public_key(
-                    RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
-                );
-                instructions.insert(0, Instruction::CallFunction {
-                    template_address: ACCOUNT_TEMPLATE_ADDRESS,
-                    function: "create".to_string(),
-                    args: args![owner_token],
-                });
-            },
-            _ => return Err(anyhow!("Could not scan the network: {}", err)),
+        Err(_) => {
+            // the account does not exists, so we must add a instruction to create it, matching the public key
+            let owner_token = NonFungibleAddress::from_public_key(
+                RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
+            );
+            instructions.insert(0, Instruction::CallFunction {
+                template_address: ACCOUNT_TEMPLATE_ADDRESS,
+                function: "create".to_string(),
+                args: args![owner_token],
+            });
         },
     };
 

@@ -17,8 +17,11 @@ Feature: Account transfers
     When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
 
+    # Initialize an indexer
+    Given an indexer IDX connected to base node BASE
+
     # Initialize the wallet daemon
-    Given a wallet daemon WALLET_D connected to validator node VN
+    Given a wallet daemon WALLET_D connected to indexer IDX
 
     # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
