@@ -56,6 +56,8 @@ use types::{
     ProofsFinalizeResponse,
     ProofsGenerateRequest,
     ProofsGenerateResponse,
+    TransferRequest,
+    TransferResponse,
     WebRtcStartRequest,
     WebRtcStartResponse,
 };
@@ -260,6 +262,13 @@ impl WalletDaemonClient {
     ) -> Result<AccountSetDefaultResponse, WalletDaemonClientError> {
         self.send_request("accounts.set_default", &AccountSetDefaultRequest { account })
             .await
+    }
+
+    pub async fn accounts_transfer<T: Borrow<TransferRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<TransferResponse, WalletDaemonClientError> {
+        self.send_request("accounts.transfer", req.borrow()).await
     }
 
     pub async fn accounts_confidential_transfer<T: Borrow<ConfidentialTransferRequest>>(

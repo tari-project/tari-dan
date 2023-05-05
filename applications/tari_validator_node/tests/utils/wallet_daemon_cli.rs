@@ -28,14 +28,22 @@ use tari_crypto::{
     tari_utilities::ByteArray,
 };
 use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
-use tari_template_lib::models::Amount;
+use tari_template_lib::{models::Amount, prelude::ResourceAddress};
 use tari_wallet_daemon_client::{
-    types::{AccountsCreateRequest, AuthLoginAcceptRequest, AuthLoginRequest, ClaimBurnRequest, ClaimBurnResponse},
+    types::{
+        AccountsCreateRequest,
+        AuthLoginAcceptRequest,
+        AuthLoginRequest,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
+        TransferRequest,
+        TransferResponse,
+    },
     ComponentAddressOrName,
     WalletDaemonClient,
 };
 
-use super::{validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
+use super::{helpers::add_substate_addresses, validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
 use crate::TariWorld;
 
 pub async fn claim_burn(
@@ -109,7 +117,48 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         .unwrap();
 
     client.token = Some(auth_response.permissions_token);
-    let _resp = client.create_account(request).await.unwrap();
+    let resp = client.create_account(request).await.unwrap();
+
+    // store the account component address and other substate addresses for later reference
+    add_substate_addresses(world, account_name, resp.result.result.accept().unwrap());
+}
+
+pub async fn transfer(
+    world: &mut TariWorld,
+    account_name: String,
+    destination_public_key: RistrettoPublicKey,
+    resource_address: ResourceAddress,
+    amount: Amount,
+    wallet_daemon_name: String,
+) -> TransferResponse {
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
+
+    let account = Some(ComponentAddressOrName::Name(account_name));
+    let fee = Some(Amount(1));
+
+    let request = TransferRequest {
+        account,
+        amount,
+        resource_address,
+        destination_public_key,
+        fee,
+    };
+
+    let auth_response = client
+        .auth_request(AuthLoginRequest {
+            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+        })
+        .await
+        .unwrap();
+    let auth_response = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token: auth_response.auth_token,
+        })
+        .await
+        .unwrap();
+    client.token = Some(auth_response.permissions_token);
+
+    client.accounts_transfer(request).await.unwrap()
 }
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {

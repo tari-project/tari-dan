@@ -62,6 +62,7 @@ use tari_wallet_daemon_client::{
         TransactionSubmitResponse,
         TransactionWaitResultRequest,
         TransactionWaitResultResponse,
+        TransferRequest,
     },
     ComponentAddressOrName,
     WalletDaemonClient,
@@ -75,6 +76,7 @@ pub enum TransactionSubcommand {
     Submit(SubmitArgs),
     SubmitManifest(SubmitManifestArgs),
     Send(SendArgs),
+    Transfer(TransferArgs),
     ConfidentialTransfer(ConfidentialTransferArgs),
 }
 
@@ -144,6 +146,16 @@ pub struct SendArgs {
 }
 
 #[derive(Debug, Args, Clone)]
+pub struct TransferArgs {
+    amount: u32,
+    resource_address: ResourceAddress,
+    destination_public_key: FromHex<Vec<u8>>,
+    #[clap(flatten)]
+    common: CommonSubmitArgs,
+    source_account_name: Option<ComponentAddressOrName>,
+}
+
+#[derive(Debug, Args, Clone)]
 pub struct ConfidentialTransferArgs {
     amount: u32,
     destination_account: ComponentAddress,
@@ -185,6 +197,9 @@ impl TransactionSubcommand {
             TransactionSubcommand::Get(args) => handle_get(args, &mut client).await?,
             TransactionSubcommand::Send(args) => {
                 handle_send(args, &mut client).await?;
+            },
+            TransactionSubcommand::Transfer(args) => {
+                handle_transfer(args, &mut client).await?;
             },
             TransactionSubcommand::ConfidentialTransfer(args) => {
                 handle_confidential_transfer(args, &mut client).await?;
@@ -435,6 +450,35 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
     };
 
     submit_transaction(request, client).await?;
+    Ok(())
+}
+
+pub async fn handle_transfer(args: TransferArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
+    let TransferArgs {
+        resource_address,
+        amount,
+        destination_public_key,
+        common,
+        source_account_name,
+    } = args;
+
+    let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
+
+    let resp = client
+        .accounts_transfer(TransferRequest {
+            account: source_account_name,
+            amount: Amount::from(amount),
+            resource_address,
+            destination_public_key,
+            fee: common.fee.map(|f| f.try_into()).transpose()?,
+        })
+        .await?;
+
+    println!("Transaction: {}", resp.hash);
+    println!("Fee: {}", resp.fee);
+    println!();
+    summarize_finalize_result(&resp.result);
+
     Ok(())
 }
 
