@@ -2,7 +2,7 @@
 name = "tari_web_extension_wasm"
 authors = ["The Tari Development Community"]
 description = "The Tari web extension wasm"
-repository = "https://github.com/tari-project/tari"
+repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 version = "0.50.0-pre.0"
 edition = "2021"
