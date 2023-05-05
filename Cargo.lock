@@ -8176,6 +8176,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "chrono",
+ "log",
  "prost 0.9.0",
  "serde",
  "tari_bor",

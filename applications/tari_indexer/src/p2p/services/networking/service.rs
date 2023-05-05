@@ -25,35 +25,20 @@ use std::sync::Arc;
 use log::*;
 use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
-    peer_manager::{NodeId, PeerFeatures, PeerIdentityClaim},
-    types::CommsPublicKey,
+    peer_manager::NodeId,
     NodeIdentity,
     PeerConnection,
 };
-use tari_dan_common_types::optional::Optional;
-use tari_dan_core::{
-    message::{DanMessage, NetworkAnnounce},
-    services::{infrastructure_services::OutboundService, DanPeer, PeerProvider},
-};
+use tari_dan_core::services::PeerProvider;
 use tari_validator_node_rpc::peer_sync::PeerSyncProtocol;
-use tokio::{
-    sync::{mpsc, Semaphore},
-    task,
-};
+use tokio::{sync::Semaphore, task};
 
-use crate::p2p::services::{
-    comms_peer_provider::CommsPeerProvider,
-    messaging::OutboundMessaging,
-    networking::{handle::NetworkingRequest, peer_sync::PeerSyncProtocol, NetworkingError},
-};
+use crate::p2p::services::{comms_peer_provider::CommsPeerProvider, networking::NetworkingError};
 
-const LOG_TARGET: &str = "tari::validator_node::p2p::services::networking";
+const LOG_TARGET: &str = "tari::dan::indexer::p2p::services::networking";
 
 pub struct Networking {
-    rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
-    rx_request: mpsc::Receiver<NetworkingRequest>,
     node_identity: Arc<NodeIdentity>,
-    outbound: OutboundMessaging,
     peer_provider: CommsPeerProvider,
     connectivity: ConnectivityRequester,
     peer_sync_permit: Arc<Semaphore>,
@@ -61,46 +46,28 @@ pub struct Networking {
 
 impl Networking {
     pub fn new(
-        rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
-        rx_request: mpsc::Receiver<NetworkingRequest>,
         node_identity: Arc<NodeIdentity>,
-        outbound: OutboundMessaging,
         peer_provider: CommsPeerProvider,
         connectivity: ConnectivityRequester,
     ) -> Self {
         Self {
-            rx_network_announce,
-            rx_request,
             node_identity,
-            outbound,
             peer_provider,
             connectivity,
             peer_sync_permit: Arc::new(Semaphore::new(1)),
         }
     }
 
-    pub async fn run(mut self) -> anyhow::Result<()> {
+    pub async fn run(self) -> anyhow::Result<()> {
         let mut events = self.connectivity.get_event_subscription();
         if let Err(err) = self.dial_seed_peers().await {
             error!(target: LOG_TARGET, "🚨 Failed to dial seed peers: {}", err);
         }
         loop {
             tokio::select! {
-                Some((_sender, announce)) = self.rx_network_announce.recv() => {
-                    if let Err(e) = self.handle_announce(announce).await {
-                        error!(target: LOG_TARGET, "Error handling network announce: {}", e);
-                    }
-                },
-
                 Ok(event) = events.recv() => {
                     if let Err(e) = self.handle_connectivity_event(event).await {
                         error!(target: LOG_TARGET, "Error handling connectivity event: {}", e);
-                    }
-                },
-
-                Some(request) = self.rx_request.recv() => {
-                    if let Err(e) = self.handle_request(request).await {
-                        error!(target: LOG_TARGET, "Error handling networking request: {}", e);
                     }
                 },
 
@@ -130,81 +97,6 @@ impl Networking {
                 debug!(target: LOG_TARGET, "ℹ️  Network event: {}", evt);
             },
         }
-        Ok(())
-    }
-
-    async fn handle_request(&mut self, request: NetworkingRequest) -> Result<(), NetworkingError> {
-        match request {
-            NetworkingRequest::Announce(reply) => {
-                info!(target: LOG_TARGET, "📢 Announcing presence to network");
-                // TODO: Identity signature can never be empty, but handle the case properly anyway
-                let identity_signature = self.node_identity.identity_signature_read().clone().unwrap();
-
-                let res = self
-                    .outbound
-                    .flood(
-                        Default::default(),
-                        DanMessage::NetworkAnnounce(Box::new(NetworkAnnounce {
-                            identity: self.node_identity.public_key().clone(),
-                            addresses: self.node_identity.public_addresses(),
-                            identity_signature,
-                        })),
-                    )
-                    .await;
-                let _ignore = reply.send(res.map_err(Into::into));
-            },
-        }
-
-        Ok(())
-    }
-
-    async fn handle_announce(&mut self, announce: NetworkAnnounce<CommsPublicKey>) -> Result<(), NetworkingError> {
-        debug!("Received network announce from {}", announce.identity);
-        if self.node_identity.public_key() == &announce.identity {
-            debug!("Ignoring network announce from self");
-            return Ok(());
-        }
-
-        info!(target: LOG_TARGET, "👋 Received announce from {}", announce.identity);
-
-        let identity_signature = announce.identity_signature.clone();
-        let peer = DanPeer {
-            identity: announce.identity.clone(),
-            addresses: announce
-                .addresses
-                .iter()
-                .map(|a| {
-                    let claim = PeerIdentityClaim {
-                        addresses: vec![a.clone()],
-                        features: PeerFeatures::COMMUNICATION_NODE,
-                        signature: identity_signature.clone(),
-                        unverified_data: None,
-                    };
-                    (a.clone(), claim)
-                })
-                .collect(),
-        };
-
-        if !peer.is_valid() {
-            return Err(anyhow::anyhow!(
-                "Invalid announce: peer {} has an invalid signature",
-                peer.identity,
-            ));
-        }
-
-        if self
-            .peer_provider
-            .get_peer(&announce.identity)
-            .await
-            .optional()?
-            .is_none()
-        {
-            self.peer_provider.add_peer(peer).await?;
-            self.outbound
-                .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
-                .await?;
-        }
-
         Ok(())
     }
 
