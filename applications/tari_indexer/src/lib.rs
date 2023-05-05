@@ -39,6 +39,7 @@ mod substate_storage_sqlite;
 mod transaction_manager;
 
 use std::{
+    fs,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
@@ -73,7 +74,7 @@ pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let node_identity = setup_node_identity(
         &config.indexer.identity_file,
-        config.indexer.p2p.public_addresses.clone(),
+        config.indexer.p2p.public_addresses.to_vec(),
         true,
         DAN_PEER_FEATURES,
     )?;
@@ -129,6 +130,11 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     if let Some(address) = config.indexer.http_ui_address {
         task::spawn(run_http_ui_server(address, jrpc_address));
     }
+
+    // Create pid to allow watchers to know that the process has started
+    fs::write(config.common.base_path.join("pid"), std::process::id().to_string())
+        .map_err(|e| ExitError::new(ExitCode::IOError, e))?;
+
     // keep scanning the dan layer for new versions of the stored substates
     loop {
         tokio::select! {

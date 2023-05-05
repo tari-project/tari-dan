@@ -91,6 +91,10 @@ where
         committee.members.shuffle(&mut OsRng);
 
         let committee_size = committee.members.len();
+        if committee_size == 0 {
+            return Err(TransactionManagerError::NoCommitteeMembers);
+        }
+
         for validator in committee.members {
             let client = self.client_provider.create_client(&validator);
             match callback(client).await {

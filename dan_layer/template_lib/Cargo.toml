@@ -11,7 +11,7 @@ license = "BSD-3-Clause"
 tari_template_abi = { path = "../template_abi" }
 tari_template_macros = { path = "../template_macros", optional = true }
 tari_bor = { path = "../tari_bor" }
-tari_crypto = "0.16.10"
+tari_crypto = "0.16"
 
 ciborium = { git = "https://github.com/enarx/ciborium.git", rev = "ac38b3dddeadf81f93cc8e58689ea92dc46a8e56", default-features = false }
 #ciborium = { version = "0.2.0", default-features = false }

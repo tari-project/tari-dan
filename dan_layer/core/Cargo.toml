@@ -9,7 +9,7 @@ license = "BSD-3-Clause"
 [dependencies]
 tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_comms" }
 tari_comms_dht = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_comms_dht" }
-tari_crypto = { version = "0.16.10" }
+tari_crypto = { version = "0.16" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_mmr" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_shutdown" }
 tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_storage" }

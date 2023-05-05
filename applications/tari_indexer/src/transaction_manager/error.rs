@@ -7,4 +7,6 @@ pub enum TransactionManagerError {
     CommitteeProviderError(String),
     #[error("Rpc call failed for all ({committee_size}) validators")]
     AllValidatorsFailed { committee_size: usize },
+    #[error("No committee at present. Try again later")]
+    NoCommitteeMembers,
 }

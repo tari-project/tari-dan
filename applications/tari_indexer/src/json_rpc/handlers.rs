@@ -127,7 +127,12 @@ impl JsonRpcHandlers {
         let response = GetIdentityResponse {
             node_id: self.node_identity.node_id().to_hex(),
             public_key: self.node_identity.public_key().to_hex(),
-            public_address: self.node_identity.public_addresses().first().unwrap().to_string(),
+            public_address: self
+                .node_identity
+                .public_addresses()
+                .first()
+                .map(|s| s.to_string())
+                .unwrap_or("No public address".to_string()),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
