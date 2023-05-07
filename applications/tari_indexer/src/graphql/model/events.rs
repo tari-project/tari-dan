@@ -25,9 +25,11 @@ use std::{collections::HashMap, convert::TryInto, sync::Arc};
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
 use serde::{Deserialize, Serialize};
-use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat};
+use tari_crypto::tari_utilities::hex::Hex;
+use tari_dan_common_types::PayloadId;
+use tari_engine_types::TemplateAddress;
 
-use crate::{substate_manager::SubstateManager, substate_storage_sqlite::models::events::NewEvent};
+use crate::substate_manager::SubstateManager;
 
 const LOG_TARGET: &str = "tari::indexer::graphql::events";
 
@@ -49,14 +51,18 @@ impl EventQuery {
     pub async fn get_event(
         &self,
         ctx: &Context<'_>,
-        template_address: String,
-        tx_hash: String,
+        template_address: [u8; 32],
+        tx_hash: [u8; 32],
     ) -> Result<Vec<Event>, anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "Querying events with template_address = {} and tx_hash = {}", template_address, tx_hash
+            "Querying events with template_address = {} and tx_hash = {}",
+            template_address.to_hex(),
+            tx_hash.to_hex()
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
+        let template_address = TemplateAddress::from_array(template_address);
+        let tx_hash = PayloadId::new(&tx_hash);
         let events = substate_manager.get_event_from_db(template_address, tx_hash).await?;
         let events = events
             .into_iter()
@@ -68,44 +74,30 @@ impl EventQuery {
     pub async fn save_event(
         &self,
         ctx: &Context<'_>,
-        template_address: String,
-        tx_hash: String,
+        template_address: [u8; 32],
+        tx_hash: [u8; 32],
         topic: String,
-        payload: String,
+        payload: HashMap<String, String>,
     ) -> Result<Event, anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "Saving event for template_address = {}, tx_hash = {} and topic = {}", template_address, tx_hash, topic
+            "Saving event for template_address = {:?}, tx_hash = {:?} and topic = {}", template_address, tx_hash, topic
         );
-        let mut template_address_bytes = [0u8; 32];
-        let mut tx_hash_bytes = [0u8; 32];
-
-        template_address_bytes.copy_from_slice(&Vec::<u8>::from_hex(&template_address).unwrap());
-        tx_hash_bytes.copy_from_slice(&Vec::<u8>::from_hex(&tx_hash).unwrap());
-
-        let payload_hashmap = HashMap::<String, String>::from_json(&payload).unwrap();
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let new_event = NewEvent {
-            template_address: template_address.clone(),
-            tx_hash: tx_hash.clone(),
-            topic,
-            payload,
-        };
-        substate_manager.save_event_to_db(new_event.clone()).await?;
-
-        info!(
-            target: LOG_TARGET,
-            "Event with template_address = {}, tx_hash = {} and topic = {} has been saved",
-            template_address,
-            tx_hash,
-            new_event.topic
-        );
+        substate_manager
+            .save_event_to_db(
+                TemplateAddress::from_array(template_address),
+                PayloadId::new(&tx_hash),
+                topic.clone(),
+                payload.clone(),
+            )
+            .await?;
 
         Ok(Event {
-            template_address: template_address_bytes,
-            tx_hash: tx_hash_bytes,
-            topic: new_event.topic,
-            payload: payload_hashmap,
+            template_address,
+            tx_hash,
+            topic,
+            payload,
         })
     }
 }
