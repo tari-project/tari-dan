@@ -43,6 +43,7 @@ pub async fn handle_create_transfer_proof(
         .into());
     }
 
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER 1.2");
     let account = get_account_or_default(req.account, &sdk.accounts_api())?;
     let vault = sdk
         .accounts_api()
@@ -54,6 +55,7 @@ pub async fn handle_create_transfer_proof(
         req.amount.value() as u64 + req.reveal_amount.value() as u64,
         proof_id,
     )?;
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER 1.3");
 
     info!(
         target: LOG_TARGET,

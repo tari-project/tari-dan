@@ -306,7 +306,7 @@ pub struct ProofsGenerateRequest {
     pub reveal_amount: Amount,
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
-    #[serde(deserialize_with = "string_or_struct")]
+    // #[serde(deserialize_with = "string_or_struct")]
     pub resource_address: ResourceAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
     pub destination_public_key: PublicKey,

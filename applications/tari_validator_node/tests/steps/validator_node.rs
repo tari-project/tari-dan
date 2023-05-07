@@ -102,6 +102,7 @@ async fn when_i_claim_burn(
     };
 
     let mut client = vn.create_client().await;
+
     let resp = client.submit_transaction(request).await?;
     let result = resp.result.ok_or_else(|| anyhow::anyhow!("Transaction failed"))?;
 
