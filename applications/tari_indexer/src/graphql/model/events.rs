@@ -77,12 +77,14 @@ impl EventQuery {
         template_address: [u8; 32],
         tx_hash: [u8; 32],
         topic: String,
-        payload: HashMap<String, String>,
+        payload: String,
     ) -> Result<Event, anyhow::Error> {
         info!(
             target: LOG_TARGET,
             "Saving event for template_address = {:?}, tx_hash = {:?} and topic = {}", template_address, tx_hash, topic
         );
+
+        let payload: HashMap<String, String> = serde_json::from_str(&payload)?;
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         substate_manager
             .save_event_to_db(

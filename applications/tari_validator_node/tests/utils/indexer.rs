@@ -26,7 +26,7 @@ use reqwest::Url;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat};
+use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
@@ -102,8 +102,8 @@ impl IndexerProcess {
 
     pub async fn insert_event_mock_data(&mut self) {
         let mut graphql_client = self.get_graphql_indexer_client().await;
-        let template_address = [0u8; 32].to_hex();
-        let tx_hash = [0u8; 32].to_hex();
+        let template_address = [0u8; 32];
+        let tx_hash = [0u8; 32];
         let topic = "my_event".to_string();
         let payload = HashMap::<String, String>::from([("my".to_string(), "event".to_string())])
             .to_json()
@@ -122,7 +122,7 @@ impl IndexerProcess {
             .unwrap_or_else(|e| panic!("Failed to save event via graphql client: {}", e));
         let res = res.get("saveEvent").unwrap();
 
-        assert_eq!(res.template_address.to_hex(), template_address);
+        assert_eq!(res.template_address, template_address);
     }
 
     pub async fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {
