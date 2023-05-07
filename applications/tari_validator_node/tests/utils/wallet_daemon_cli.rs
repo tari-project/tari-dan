@@ -196,20 +196,37 @@ pub async fn create_transfer_proof(
 }
 
 pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_daemon_name: String) {
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
+    // authentication
+    let auth_response = client
+        .auth_request(AuthLoginRequest {
+            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+        })
+        .await
+        .unwrap();
+    let auth_reponse = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token: auth_response.auth_token,
+        })
+        .await
+        .unwrap();
+    client.token = Some(auth_reponse.permissions_token);
+
     let key = get_key_manager(world).get_active_key().expect("No active keypair");
+    let key_resp = client.create_key().await.unwrap();
+    let key_id = key_resp.id;
     world
         .account_public_keys
         .insert(account_name.clone(), (key.secret_key.clone(), key.public_key.clone()));
 
     let request = AccountsCreateRequest {
         account_name: Some(account_name.clone()),
-        signing_key_index: None,
+        signing_key_index: Some(key_id),
         custom_access_rules: None,
         is_default: true,
-        fee: None,
+        fee: Some(Amount(1)),
     };
 
-    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
     let resp = client.create_account(request).await.unwrap();
 
     add_substate_addresses_from_wallet_daemon(
@@ -355,6 +372,22 @@ pub async fn create_component(
     args: Vec<String>,
     num_outputs: u64,
 ) {
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
+    // authentication
+    let auth_response = client
+        .auth_request(AuthLoginRequest {
+            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+        })
+        .await
+        .unwrap();
+    let auth_reponse = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token: auth_response.auth_token,
+        })
+        .await
+        .unwrap();
+    client.token = Some(auth_reponse.permissions_token);
+
     let template_address = world
         .templates
         .get(&template_name)
@@ -366,6 +399,19 @@ pub async fn create_component(
         function: function_call,
         args,
     };
+
+    // // Supply the inputs explicitly. If this is empty, the internal component manager
+    // // will attempt to supply the correct inputs
+    // let inputs = world
+    //     .wallet_daemon_outputs
+    //     .get(&account_name)
+    //     .unwrap_or_else(|| panic!("No account_name {}", account_name))
+    //     .iter()
+    //     .map(|(_, addr)| tari_dan_wallet_sdk::models::VersionedSubstateAddress {
+    //         address: addr.address.clone(),
+    //         version: addr.version,
+    //     })
+    //     .collect::<Vec<_>>();
 
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
@@ -382,7 +428,6 @@ pub async fn create_component(
         new_non_fungible_index_outputs: vec![],
     };
 
-    let mut client = get_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
