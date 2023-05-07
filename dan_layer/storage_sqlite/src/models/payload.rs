@@ -36,6 +36,7 @@ pub struct Payload {
     pub meta: String,
     pub result: Option<String>,
     pub timestamp: NaiveDateTime,
+    pub is_finalized: bool,
 }
 
 #[derive(Debug, Insertable)]

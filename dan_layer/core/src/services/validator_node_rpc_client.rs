@@ -25,6 +25,7 @@ use tari_comms::{
     protocol::rpc::{RpcError, RpcStatus},
     types::CommsPublicKey,
 };
+use tari_dan_common_types::optional::IsNotFoundError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ValidatorNodeClientError {
@@ -40,4 +41,13 @@ pub enum ValidatorNodeClientError {
     RpcStatusError(#[from] RpcStatus),
     #[error("Node sent invalid response: {0}")]
     InvalidResponse(anyhow::Error),
+}
+
+impl IsNotFoundError for ValidatorNodeClientError {
+    fn is_not_found_error(&self) -> bool {
+        match self {
+            ValidatorNodeClientError::RpcStatusError(status) => status.is_not_found(),
+            _ => false,
+        }
+    }
 }

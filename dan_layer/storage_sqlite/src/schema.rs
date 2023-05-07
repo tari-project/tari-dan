@@ -110,6 +110,7 @@ diesel::table! {
         meta -> Text,
         result -> Nullable<Text>,
         timestamp -> Timestamp,
+        is_finalized -> Bool,
     }
 }
 
