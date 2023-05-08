@@ -14,8 +14,12 @@ use tari_dan_wallet_sdk::{
 };
 use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::types::{
-    ConfidentialCreateOutputProofRequest, ConfidentialCreateOutputProofResponse, ProofsCancelRequest,
-    ProofsCancelResponse, ProofsGenerateRequest, ProofsGenerateResponse,
+    ConfidentialCreateOutputProofRequest,
+    ConfidentialCreateOutputProofResponse,
+    ProofsCancelRequest,
+    ProofsCancelResponse,
+    ProofsGenerateRequest,
+    ProofsGenerateResponse,
 };
 
 use crate::handlers::{get_account_or_default, HandlerContext};
@@ -108,8 +112,6 @@ pub async fn handle_create_transfer_proof(
         &output_statement,
         maybe_change_statement.as_ref(),
     )?;
-
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER WE ARE HERE");
 
     Ok(ProofsGenerateResponse { proof_id, proof })
 }

@@ -706,6 +706,11 @@ async fn submit_manifest_with_inputs(
     validator_node_cli::submit_manifest(world, vn_name, outputs_name, manifest, inputs, num_outputs).await;
 }
 
+#[when(expr = "account {word} reveals {int} burned tokens via wallet daemon {word}")]
+async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, amount: u64, wallet_daemon_name: String) {
+    wallet_daemon_cli::reveal_burned_funds(world, account_name, amount, wallet_daemon_name).await;
+}
+
 #[when(
     regex = r#"^I submit a transaction manifest via wallet daemon (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)"$"#
 )]
@@ -719,6 +724,31 @@ async fn submit_transaction_manifest_via_wallet_daemon(
 ) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
     wallet_daemon_cli::submit_manifest(world, wallet_daemon_name, manifest, inputs, num_outputs, outputs_name).await;
+}
+
+#[when(
+    regex = r#"^I submit a transaction manifest via wallet daemon (\w+) signed by the key of (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)"$"#
+)]
+async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
+    world: &mut TariWorld,
+    step: &Step,
+    wallet_daemon_name: String,
+    account_signing_key: String,
+    inputs: String,
+    num_outputs: u64,
+    outputs_name: String,
+) {
+    let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
+    wallet_daemon_cli::submit_manifest_with_signing_keys(
+        world,
+        wallet_daemon_name,
+        account_signing_key,
+        manifest,
+        inputs,
+        num_outputs,
+        outputs_name,
+    )
+    .await;
 }
 
 fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {

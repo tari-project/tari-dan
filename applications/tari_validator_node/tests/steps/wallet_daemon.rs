@@ -4,9 +4,7 @@
 use cucumber::{then, when};
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
-use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_template_lib::prelude::Amount;
-use tari_wallet_daemon_client::types::{AuthLoginAcceptRequest, AuthLoginRequest};
 
 use crate::{utils::wallet_daemon_cli, TariWorld};
 
@@ -66,7 +64,7 @@ async fn when_i_create_transfer_proof_via_wallet_daemon(
     outputs_name: String,
     wallet_daemon_name: String,
 ) {
-    wallet_daemon_cli::create_transfer_proof(
+    wallet_daemon_cli::transfer_confidential(
         world,
         source_account_name,
         dest_account_name,
@@ -101,20 +99,8 @@ async fn when_i_burn_funds_with_wallet_daemon(
     rangeproof_name: String,
     claim_pubkey_name: String,
 ) {
-    let mut wallet_daemon_client = wallet_daemon_cli::get_wallet_daemon_client(world, wallet_daemon_name).await;
-    let auth_response = wallet_daemon_client
-        .auth_request(AuthLoginRequest {
-            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
-        })
-        .await
-        .unwrap();
-    let auth_reponse = wallet_daemon_client
-        .auth_accept(AuthLoginAcceptRequest {
-            auth_token: auth_response.auth_token,
-        })
-        .await
-        .unwrap();
-    wallet_daemon_client.token = Some(auth_reponse.permissions_token);
+    let mut wallet_daemon_client = wallet_daemon_cli::get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
+
     let account = wallet_daemon_client
         .accounts_get(account_name.parse().unwrap())
         .await

@@ -59,7 +59,7 @@ Feature: Wallet Daemon
         When I print the cucumber world
 
         # Submit a transaction manifest
-        When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, TX1, ACC_2" and 1 output named "TX2"
+        When I submit a transaction manifest via wallet daemon WALLET_D signed by the key of ACC_1 with inputs "FAUCET, TX1, ACC_2" and 1 output named "TX2"
         ```
         let mut acc1 = global!["TX1/components/Account"];
         let mut acc2 = global!["ACC_2/components/Account"];
@@ -103,7 +103,7 @@ Feature: Wallet Daemon
         When I create an account ACC_1 via the wallet daemon WALLET_D
         When I create an account ACC_2 via the wallet daemon WALLET_D
 
-        When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACC_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
+        When I burn 1000T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACC_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
 
         # unfortunately have to wait for this to get into the mempool....
         Then there is 1 transaction in the mempool of BASE within 10 seconds
@@ -115,4 +115,5 @@ Feature: Wallet Daemon
 
         When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
         When I print the cucumber world
+        # When account ACC_1 reveals 100 burned tokens via wallet daemon WALLET_D
         Then I make a confidential transfer with amount 5 from ACC_1 to ACC_2 creating output OUTPUT_TX1 via the wallet_daemon WALLET_D
