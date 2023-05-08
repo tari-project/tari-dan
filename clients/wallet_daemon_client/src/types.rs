@@ -301,6 +301,24 @@ pub struct AccountSetDefaultRequest {
 pub struct AccountSetDefaultResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransferRequest {
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub account: Option<ComponentAddressOrName>,
+    pub amount: Amount,
+    pub resource_address: ResourceAddress,
+    pub destination_public_key: PublicKey,
+    pub fee: Option<Amount>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransferResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub fee: Amount,
+    pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsGenerateRequest {
     pub amount: Amount,
     pub reveal_amount: Amount,

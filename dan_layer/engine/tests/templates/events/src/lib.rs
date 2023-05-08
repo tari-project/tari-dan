@@ -19,6 +19,9 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+use std::collections::HashMap;
+
 use tari_template_lib::prelude::*;
 
 #[template]
@@ -30,7 +33,11 @@ mod event {
     impl EventEmitter {
         pub fn test_function() {
             println!("Emitting a new event");
-            emit_event("Hello world !");
+            let template_hash = tari_template_lib::Hash::from_array([0u8; 32]);
+            let tx_hash = tari_template_lib::Hash::from_array([0u8; 32]);
+            let topic = "Hello world !";
+            let payload: HashMap<String, String> = HashMap::from([("my".to_string(), "event".to_string())]);
+            emit_event(template_hash, tx_hash, topic, payload);
         }
     }
 }

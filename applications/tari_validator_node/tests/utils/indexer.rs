@@ -20,12 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{str::FromStr, time::Duration};
+use std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
 
 use reqwest::Url;
 use tari_common::configuration::{CommonConfig, StringList};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
+use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},
@@ -54,6 +55,7 @@ pub struct IndexerProcess {
     pub handle: task::JoinHandle<()>,
     pub temp_dir_path: String,
     pub shutdown: Shutdown,
+    pub db_path: PathBuf,
 }
 
 impl IndexerProcess {
@@ -96,6 +98,31 @@ impl IndexerProcess {
         let mut jrpc_client = self.get_jrpc_indexer_client().await;
         let resp = jrpc_client.get_non_fungibles(params).await.unwrap();
         resp.non_fungibles
+    }
+
+    pub async fn insert_event_mock_data(&mut self) {
+        let mut graphql_client = self.get_graphql_indexer_client().await;
+        let template_address = [0u8; 32];
+        let tx_hash = [0u8; 32];
+        let topic = "my_event".to_string();
+        let payload = HashMap::<String, String>::from([("my".to_string(), "event".to_string())])
+            .to_json()
+            .unwrap();
+        let query = format!(
+            "{{ saveEvent(templateAddress: {:?}, txHash: {:?}, topic: {:?}, payload: {:?}) {{ templateAddress txHash \
+             topic payload }} }}",
+            template_address,
+            tx_hash,
+            topic,
+            payload // template_address, tx_hash, topic, payload
+        );
+        let res = graphql_client
+            .send_request::<HashMap<String, tari_indexer::graphql::model::events::Event>>(&query, None, None)
+            .await
+            .unwrap_or_else(|e| panic!("Failed to save event via graphql client: {}", e));
+        let res = res.get("saveEvent").unwrap();
+
+        assert_eq!(res.template_address, template_address);
     }
 
     pub async fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {
@@ -186,6 +213,8 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         }
     });
 
+    let db_path = temp_dir.to_path_buf().join("state.db");
+
     // We need to give it time for the indexer to startup
     // TODO: it would be better to check the indexer ports to detect when it has started
     tokio::time::sleep(Duration::from_secs(5)).await;
@@ -205,6 +234,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         graphql_port,
         temp_dir_path,
         shutdown,
+        db_path,
     };
     world.indexers.insert(name, indexer_process);
 }

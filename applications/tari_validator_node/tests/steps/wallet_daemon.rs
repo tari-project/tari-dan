@@ -5,6 +5,7 @@ use cucumber::{then, when};
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
+use tari_template_lib::prelude::Amount;
 use tari_wallet_daemon_client::types::{AuthLoginAcceptRequest, AuthLoginRequest};
 
 use crate::{utils::wallet_daemon_cli, TariWorld};
@@ -176,4 +177,50 @@ async fn check_account_balance_is_at_most_daemon(
 ) {
     let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
     assert!(current_balance <= amount);
+}
+
+#[when(
+    expr = "I transfer {int} tokens of resource {word} from account {word} to public key {word} via the wallet daemon \
+            {word} named {word}"
+)]
+async fn when_transfer_via_wallet_daemon(
+    world: &mut TariWorld,
+    amount: i32,
+    resource_address: String,
+    account_name: String,
+    destination_public_key: String,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    let (_, destination_public_key) = world.account_public_keys.get(&destination_public_key).unwrap().clone();
+    let amount = Amount::new(amount.into());
+
+    let (resource_input_group, resource_name) = resource_address.split_once('/').unwrap_or_else(|| {
+        panic!(
+            "Resource address must be in the format '{{group}}/resources/{{index}}', got {}",
+            resource_address
+        )
+    });
+    let resource_address = world
+        .outputs
+        .get(resource_input_group)
+        .unwrap_or_else(|| panic!("No outputs found with name {}", resource_input_group))
+        .iter()
+        .find(|(name, _)| **name == resource_name)
+        .map(|(_, data)| data.clone())
+        .unwrap_or_else(|| panic!("No resource named {}", resource_name))
+        .address
+        .as_resource_address()
+        .unwrap_or_else(|| panic!("{} is not a resource", resource_name));
+
+    wallet_daemon_cli::transfer(
+        world,
+        account_name,
+        destination_public_key,
+        resource_address,
+        amount,
+        wallet_daemon_name,
+        outputs_name,
+    )
+    .await;
 }

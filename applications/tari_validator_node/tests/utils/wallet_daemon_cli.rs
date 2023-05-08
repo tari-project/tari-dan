@@ -38,19 +38,24 @@ use tari_engine_types::{
     instruction::Instruction,
     substate::{SubstateAddress, SubstateDiff},
 };
-use tari_template_lib::{args, constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS, models::Amount, prelude::NonFungibleId};
+use tari_template_lib::{
+    args,
+    constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+    models::Amount,
+    prelude::{NonFungibleId, ResourceAddress},
+};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{command::transaction::CliArg, versioned_substate_address::VersionedSubstateAddress};
 use tari_wallet_daemon_client::{
     types::{
         AccountGetResponse, AccountsCreateRequest, AccountsGetBalancesRequest, AuthLoginAcceptRequest,
         AuthLoginRequest, ClaimBurnRequest, ClaimBurnResponse, ProofsGenerateRequest, TransactionSubmitRequest,
-        TransactionWaitResultRequest,
+        TransactionWaitResultRequest, TransferRequest,
     },
     ComponentAddressOrName, WalletDaemonClient,
 };
 
-use super::{validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
+use super::{helpers::add_substate_addresses, validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
 use crate::TariWorld;
 
 pub async fn claim_burn(
@@ -453,11 +458,7 @@ pub async fn create_component(
     //     .get(&account_name)
     //     .unwrap_or_else(|| panic!("No account_name {}", account_name))
     //     .iter()
-    //     .map(|(_, addr)| tari_dan_wallet_sdk::models::VersionedSubstateAddress {
     //         address: addr.address.clone(),
-    //         version: addr.version,
-    //     })
-    //     .collect::<Vec<_>>();
 
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
@@ -467,9 +468,9 @@ pub async fn create_component(
         is_dry_run: false,
         proof_ids: vec![],
         new_resources: vec![],
-        new_outputs: num_outputs as u8,
         specific_non_fungible_outputs: vec![],
         inputs: vec![],
+        new_outputs: 0,
         new_non_fungible_outputs: vec![],
         new_non_fungible_index_outputs: vec![],
     };
@@ -491,6 +492,46 @@ pub async fn create_component(
             .result
             .expect("Failed to obtain substate diffs"),
     );
+}
+
+pub async fn transfer(
+    world: &mut TariWorld,
+    account_name: String,
+    destination_public_key: RistrettoPublicKey,
+    resource_address: ResourceAddress,
+    amount: Amount,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
+
+    let account = Some(ComponentAddressOrName::Name(account_name));
+    let fee = Some(Amount(1));
+
+    let request = TransferRequest {
+        account,
+        amount,
+        resource_address,
+        destination_public_key,
+        fee,
+    };
+
+    let auth_response = client
+        .auth_request(AuthLoginRequest {
+            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+        })
+        .await
+        .unwrap();
+    let auth_response = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token: auth_response.auth_token,
+        })
+        .await
+        .unwrap();
+    client.token = Some(auth_response.permissions_token);
+
+    let resp = client.accounts_transfer(request).await.unwrap();
+    add_substate_addresses(world, outputs_name, resp.result.result.accept().unwrap());
 }
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
@@ -522,7 +563,7 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                         version: data.version(),
                     },
                 );
-                counters[1] += 1;
+                counters[2] += 1;
             },
             SubstateAddress::Vault(_) => {
                 outputs.insert(
@@ -532,7 +573,7 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                         version: data.version(),
                     },
                 );
-                counters[2] += 1;
+                counters[3] += 1;
             },
             SubstateAddress::NonFungible(_) => {
                 outputs.insert(
@@ -542,7 +583,7 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                         version: data.version(),
                     },
                 );
-                counters[3] += 1;
+                counters[4] += 1;
             },
             SubstateAddress::UnclaimedConfidentialOutput(_) => {
                 outputs.insert(
@@ -552,7 +593,7 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                         version: data.version(),
                     },
                 );
-                counters[4] += 1;
+                counters[5] += 1;
             },
             SubstateAddress::NonFungibleIndex(_) => {
                 outputs.insert(
@@ -562,7 +603,7 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                         version: data.version(),
                     },
                 );
-                counters[5] += 1;
+                counters[6] += 1;
             },
         }
     }

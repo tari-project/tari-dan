@@ -12,10 +12,10 @@ Feature: Fungible tokens
 
     # Initialize a VN
     Given a validator node VN connected to base node BASE and wallet WALLET
-
-    # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 15000 T
+    When miner MINER mines 4 new blocks
+    When validator node VN sends a registration transaction
+    When miner MINER mines 16 new blocks
+    Then the validator node VN is listed as registered
 
     # VN registration
     When validator node VN sends a registration transaction
