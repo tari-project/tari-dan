@@ -452,17 +452,19 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         let transaction = Transaction::new(fee_instructions, instructions, signature, sender_public_key, meta);
         let mut tari_dan_payload = TariDanPayload::new(transaction);
 
-        // deserialize the transaction result
-        let result_field: Option<PayloadResult> = match payload.result {
-            Some(result_json) => {
-                let result: PayloadResult =
-                    serde_json::from_str(&result_json).map_err(|_| StorageError::DecodingError)?;
-                Some(result)
-            },
-            None => None,
-        };
-        if let Some(result) = result_field {
-            tari_dan_payload.set_result(result.exec_result);
+        if payload.is_finalized {
+            // deserialize the transaction result
+            let result_field: Option<PayloadResult> = match payload.result {
+                Some(result_json) => {
+                    let result: PayloadResult =
+                        serde_json::from_str(&result_json).map_err(|_| StorageError::DecodingError)?;
+                    Some(result)
+                },
+                None => None,
+            };
+            if let Some(result) = result_field {
+                tari_dan_payload.set_result(result.exec_result);
+            }
         }
 
         Ok(tari_dan_payload)
@@ -1272,7 +1274,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         Ok(())
     }
 
-    fn save_substate_changes(
+    fn commit_substate_changes(
         &mut self,
         node: HotStuffTreeNode<PublicKey, TariDanPayload>,
         changes: &[SubstateState],
@@ -1536,6 +1538,27 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
                 source,
                 operation: "update_payload_result".to_string(),
             })?;
+
+        Ok(())
+    }
+
+    fn mark_payload_finalized(&mut self, payload_id: &PayloadId) -> Result<(), StorageError> {
+        use crate::schema::payloads;
+
+        let num_rows = diesel::update(payloads::table)
+            .filter(payloads::payload_id.eq(payload_id.as_bytes()))
+            .set(payloads::is_finalized.eq(true))
+            .execute(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("Update payload: {}", e),
+            })?;
+
+        if num_rows == 0 {
+            return Err(StorageError::NotFound {
+                item: "payload".to_string(),
+                key: payload_id.to_string(),
+            });
+        }
 
         Ok(())
     }

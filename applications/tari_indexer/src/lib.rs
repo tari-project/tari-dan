@@ -29,7 +29,7 @@ mod bootstrap;
 pub mod cli;
 mod comms;
 pub mod config;
-mod graphql;
+pub mod graphql;
 mod http_ui;
 mod json_rpc;
 mod p2p;
@@ -123,7 +123,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let graphql_address = config.indexer.graphql_address;
     if let Some(address) = graphql_address {
         info!(target: LOG_TARGET, "🌐 Started GraphQL server on {}", address);
-        task::spawn(run_graphql(address));
+        task::spawn(run_graphql(address, substate_manager.clone()));
     }
     // Run the http ui
     if let Some(address) = config.indexer.http_ui_address {

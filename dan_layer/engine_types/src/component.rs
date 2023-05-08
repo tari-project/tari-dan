@@ -1,4 +1,4 @@
-//   Copyright 2022. The Tari Project
+//   Copyright 2023. The Tari Project
 //
 //   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //   following conditions are met:
@@ -20,46 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, fmt::Display};
+use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 
-use serde::{Deserialize, Serialize};
-use tari_template_lib::Hash;
+use crate::hashing::{hasher, EngineHashDomainLabel};
 
-use crate::TemplateAddress;
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Event {
-    pub template_address: TemplateAddress,
-    pub tx_hash: Hash,
-    pub topic: String,
-    pub payload: HashMap<String, String>,
-}
-
-impl Event {
-    pub fn new(template_address: TemplateAddress, tx_hash: Hash, topic: String) -> Self {
-        Self {
-            template_address,
-            tx_hash,
-            topic,
-            payload: HashMap::new(),
-        }
-    }
-
-    pub fn add_payload(&mut self, key: String, value: String) {
-        self.payload.insert(key, value);
-    }
-
-    pub fn get_payload(&self, key: &str) -> Option<String> {
-        self.payload.get(key).cloned()
-    }
-}
-
-impl Display for Event {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "event: template_address {}, tx_hash {}, topic {}",
-            self.template_address, self.tx_hash, self.topic
-        )
-    }
+pub fn new_component_address_from_parts(template_address: &TemplateAddress, component_id: &Hash) -> ComponentAddress {
+    let address = hasher(EngineHashDomainLabel::ComponentAddress)
+        .chain(template_address)
+        .chain(component_id)
+        .result();
+    ComponentAddress::new(address)
 }

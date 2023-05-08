@@ -40,6 +40,7 @@ use tari_comms::{
 };
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
+use tari_dan_common_types::optional::Optional;
 use tari_dan_core::services::BaseNodeClient;
 use tari_indexer_client::types::{
     AddAddressRequest,
@@ -434,19 +435,29 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetTransactionResultRequest = value.parse_params()?;
 
-        let result = self
+        let maybe_result = self
             .transaction_manager
             .get_transaction_result(request.transaction_hash)
             .await
+            .optional()
             .map_err(|e| Self::internal_error(answer_id, e))?;
+
+        let result = maybe_result.ok_or_else(|| Self::not_found(answer_id, "Transaction not found"))?;
 
         Ok(JsonRpcResponse::success(answer_id, GetTransactionResultResponse {
             execution_result: result.into_finalized(),
         }))
     }
 
-    fn error_response<T: Into<String>>(answer_id: i64, reason: JsonRpcErrorReason, message: T) -> JsonRpcResponse {
-        JsonRpcResponse::error(answer_id, JsonRpcError::new(reason, message.into(), json::Value::Null))
+    fn error_response<T: Display>(answer_id: i64, reason: JsonRpcErrorReason, message: T) -> JsonRpcResponse {
+        JsonRpcResponse::error(
+            answer_id,
+            JsonRpcError::new(reason, message.to_string(), json::Value::Null),
+        )
+    }
+
+    fn not_found<T: Display>(answer_id: i64, details: T) -> JsonRpcResponse {
+        Self::error_response(answer_id, JsonRpcErrorReason::ApplicationError(404), details)
     }
 
     fn internal_error<T: Display>(answer_id: i64, details: T) -> JsonRpcResponse {

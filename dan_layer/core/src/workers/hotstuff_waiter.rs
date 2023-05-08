@@ -82,7 +82,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan::hotstuff_waiter";
-pub const NETWORK_LATENCY: Duration = Duration::from_secs(10);
+pub const NETWORK_LATENCY: Duration = Duration::from_secs(30);
 
 // This is the value that we wait over in the pacemaker. So when it trigger we know what triggered it.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -146,7 +146,6 @@ pub struct HotStuffWaiter<
     /// NEWVIEW message counts - TODO: this will bloat memory maybe moving to the db is better
     newview_message_counts: HashMap<(ShardId, PayloadId), HashSet<TAddr>>,
     /// Network latency
-    #[allow(dead_code)]
     network_latency: Duration,
     /// We store what round is for next leader selection, default is 0.
     current_leader_round: HashMap<(ShardId, PayloadId), u32>,
@@ -851,6 +850,8 @@ where
         if resolved_pledges.len() == involved_shards.len() {
             let payload_result = tx.get_payload_result(&node.payload_id())?;
 
+            tx.mark_payload_finalized(&node.payload_id())?;
+
             match &payload_result.exec_result.finalize.result {
                 TransactionResult::Accept(diff) => {
                     if resolved_pledges
@@ -881,7 +882,7 @@ where
                                 .completed_by_tree_node_hash
                                 .expect("[finalize_payload] Pledge MUST be completed");
                             let node = tx.get_node(&node_hash)?;
-                            tx.save_substate_changes(node, changes)?;
+                            tx.commit_substate_changes(node, changes)?;
                         }
                     }
 
@@ -951,6 +952,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn decide_and_vote_on_all_nodes(
         &self,
         payload: TPayload,
@@ -1064,7 +1066,10 @@ where
         }
 
         if is_all_rejected {
-            let payload_result = self.shard_store.with_read_tx(|tx| tx.get_payload_result(&payload_id))?;
+            let payload_result = self.shard_store.with_write_tx(|tx| {
+                tx.mark_payload_finalized(&payload_id)?;
+                tx.get_payload_result(&payload_id)
+            })?;
             return Err(HotStuffError::AllShardsRejected {
                 payload_id,
                 reason: payload_result

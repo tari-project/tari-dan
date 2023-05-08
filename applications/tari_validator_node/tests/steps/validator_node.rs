@@ -11,7 +11,7 @@ use tari_template_lib::{args, prelude::ComponentAddress};
 use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest, TransactionFinalizeResult};
 
-use crate::TariWorld;
+use crate::{utils::validator_node_cli::create_key, TariWorld};
 
 #[then(expr = "validator node {word} has state at {word}")]
 async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String, state_address_name: String) {
@@ -172,4 +172,9 @@ async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_
 
     let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
     assert_eq!(stats.current_block_height, block_height);
+}
+
+#[when(expr = "I create a new key pair {word}")]
+async fn when_i_create_new_key_pair(world: &mut TariWorld, key_name: String) {
+    create_key(world, key_name).await;
 }
