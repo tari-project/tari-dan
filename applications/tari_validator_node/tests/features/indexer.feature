@@ -120,4 +120,4 @@ Feature: Indexer node
     Given an indexer IDX connected to base node BASE
 
     # Check GraphQL request
-    Given IDX indexer GraphQL request work
+    Given IDX indexer GraphQL request works

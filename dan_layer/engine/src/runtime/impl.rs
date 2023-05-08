@@ -39,6 +39,7 @@ use tari_engine_types::{
     logs::LogEntry,
     resource_container::ResourceContainer,
     substate::{SubstateAddress, SubstateValue},
+    TemplateAddress,
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
@@ -69,6 +70,7 @@ use tari_template_lib::{
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{Amount, BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    Hash,
 };
 use tari_utilities::ByteArray;
 
@@ -166,10 +168,21 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         Ok(())
     }
 
-    fn emit_event(&self, message: String) -> Result<(), RuntimeError> {
+    fn emit_event(
+        &self,
+        template_address: TemplateAddress,
+        tx_hash: Hash,
+        topic: String,
+        payload: HashMap<String, String>,
+    ) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
-        self.tracker.add_event(Event::new(message));
+        let mut event = Event::new(template_address, tx_hash, topic);
+        payload
+            .into_iter()
+            .for_each(|(key, value)| event.add_payload(key, value));
+
+        self.tracker.add_event(event);
         Ok(())
     }
 
