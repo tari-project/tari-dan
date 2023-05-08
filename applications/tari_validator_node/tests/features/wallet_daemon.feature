@@ -115,4 +115,4 @@ Feature: Wallet Daemon
 
         When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
         When I print the cucumber world
-        Then I make a confidential transfer with amount 5T from ACC_1 to ACC_2 creating output OUTPUT_TX1 via the wallet_daemon WALLET_D
+        Then I make a confidential transfer with amount 5 from ACC_1 to ACC_2 creating output OUTPUT_TX1 via the wallet_daemon WALLET_D

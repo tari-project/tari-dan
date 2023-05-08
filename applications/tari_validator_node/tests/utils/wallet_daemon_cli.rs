@@ -43,19 +43,11 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{command::transaction::CliArg, versioned_substate_address::VersionedSubstateAddress};
 use tari_wallet_daemon_client::{
     types::{
-        AccountGetResponse,
-        AccountsCreateRequest,
-        AccountsGetBalancesRequest,
-        AuthLoginAcceptRequest,
-        AuthLoginRequest,
-        ClaimBurnRequest,
-        ClaimBurnResponse,
-        ProofsGenerateRequest,
-        TransactionSubmitRequest,
+        AccountGetResponse, AccountsCreateRequest, AccountsGetBalancesRequest, AuthLoginAcceptRequest,
+        AuthLoginRequest, ClaimBurnRequest, ClaimBurnResponse, ProofsGenerateRequest, TransactionSubmitRequest,
         TransactionWaitResultRequest,
     },
-    ComponentAddressOrName,
-    WalletDaemonClient,
+    ComponentAddressOrName, WalletDaemonClient,
 };
 
 use super::{validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
@@ -128,8 +120,8 @@ pub async fn create_transfer_proof(
         .unwrap();
     client.token = Some(auth_reponse.permissions_token);
 
-    let account_name = ComponentAddressOrName::Name(source_account_name);
-    let AccountGetResponse { account, .. } = client.accounts_get(account_name.clone()).await.unwrap();
+    let source_account_name = ComponentAddressOrName::Name(source_account_name);
+    let AccountGetResponse { account, .. } = client.accounts_get(source_account_name.clone()).await.unwrap();
     let source_component_address = account
         .address
         .as_component_address()
@@ -151,7 +143,7 @@ pub async fn create_transfer_proof(
     let resource_address = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
 
     let create_transfer_proof_req = ProofsGenerateRequest {
-        account: Some(account_name),
+        account: Some(source_account_name),
         amount: Amount::new(amount.try_into().unwrap()),
         reveal_amount: Amount::new(0_i64),
         resource_address,
@@ -523,24 +515,33 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                 counters[0] += 1;
             },
             SubstateAddress::Resource(_) => {
-                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: data.version(),
-                });
+                outputs.insert(
+                    format!("resources/{}", counters[1]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
                 counters[1] += 1;
             },
             SubstateAddress::Vault(_) => {
-                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: data.version(),
-                });
+                outputs.insert(
+                    format!("vaults/{}", counters[2]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
                 counters[2] += 1;
             },
             SubstateAddress::NonFungible(_) => {
-                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: data.version(),
-                });
+                outputs.insert(
+                    format!("nfts/{}", counters[3]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
                 counters[3] += 1;
             },
             SubstateAddress::UnclaimedConfidentialOutput(_) => {
@@ -554,10 +555,13 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                 counters[4] += 1;
             },
             SubstateAddress::NonFungibleIndex(_) => {
-                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateAddress {
-                    address: addr.clone(),
-                    version: data.version(),
-                });
+                outputs.insert(
+                    format!("nft_indexes/{}", counters[5]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
                 counters[5] += 1;
             },
         }

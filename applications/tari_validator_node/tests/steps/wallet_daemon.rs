@@ -54,7 +54,7 @@ async fn when_i_claim_burn_via_wallet_daemon(
 }
 
 #[then(
-    expr = "I make a confidential transfer with amount {int}T from {word} to {word} creating output {word} via the \
+    expr = "I make a confidential transfer with amount {int} from {word} to {word} creating output {word} via the \
             wallet_daemon {word}"
 )]
 async fn when_i_create_transfer_proof_via_wallet_daemon(
@@ -164,7 +164,6 @@ async fn check_account_balance_is_at_least_via_daemon(
     amount: i64,
 ) {
     let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
-    eprintln!("FLAG: current_balance = {}", current_balance);
     assert!(current_balance >= amount);
 }
 
@@ -176,6 +175,5 @@ async fn check_account_balance_is_at_most_daemon(
     amount: i64,
 ) {
     let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
-    eprintln!("FLAG: current_balance = {}", current_balance);
-    // assert!(current_balance <= amount);
+    assert!(current_balance <= amount);
 }

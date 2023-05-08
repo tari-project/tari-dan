@@ -14,12 +14,8 @@ use tari_dan_wallet_sdk::{
 };
 use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::types::{
-    ConfidentialCreateOutputProofRequest,
-    ConfidentialCreateOutputProofResponse,
-    ProofsCancelRequest,
-    ProofsCancelResponse,
-    ProofsGenerateRequest,
-    ProofsGenerateResponse,
+    ConfidentialCreateOutputProofRequest, ConfidentialCreateOutputProofResponse, ProofsCancelRequest,
+    ProofsCancelResponse, ProofsGenerateRequest, ProofsGenerateResponse,
 };
 
 use crate::handlers::{get_account_or_default, HandlerContext};
@@ -43,7 +39,6 @@ pub async fn handle_create_transfer_proof(
         .into());
     }
 
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER 1.2");
     let account = get_account_or_default(req.account, &sdk.accounts_api())?;
     let vault = sdk
         .accounts_api()
@@ -55,7 +50,6 @@ pub async fn handle_create_transfer_proof(
         req.amount.value() as u64 + req.reveal_amount.value() as u64,
         proof_id,
     )?;
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER 1.3");
 
     info!(
         target: LOG_TARGET,
@@ -114,6 +108,8 @@ pub async fn handle_create_transfer_proof(
         &output_statement,
         maybe_change_statement.as_ref(),
     )?;
+
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER WE ARE HERE");
 
     Ok(ProofsGenerateResponse { proof_id, proof })
 }
