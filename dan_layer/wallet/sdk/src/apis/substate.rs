@@ -133,9 +133,10 @@ impl<'a, TStore: WalletStore, TNetworkInterface: WalletNetworkInterface> Substat
             version_hint.unwrap_or(0)
         );
 
+        // TODO: make configuration option to not do network requests
         let resp = self
             .network_interface
-            .query_substate(address, version_hint)
+            .query_substate(address, version_hint, true)
             .await
             .map_err(|e| SubstateApiError::NetworkIndexerError(e.into()))?;
 

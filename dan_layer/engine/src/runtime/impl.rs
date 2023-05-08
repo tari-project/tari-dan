@@ -765,7 +765,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         // 4. Create the confidential resource
         let mut resource = ResourceContainer::confidential(
-            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             Some((
                 unclaimed_output.commitment.as_public_key().clone(),
                 ConfidentialOutput {
@@ -794,7 +794,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn create_free_test_coins(&self, amount: u64, private_key: RistrettoSecretKey) -> Result<(), RuntimeError> {
         let commitment = get_commitment_factory().commit(&private_key, &RistrettoSecretKey::from(amount));
         let resource = ResourceContainer::confidential(
-            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             Some((commitment.as_public_key().clone(), ConfidentialOutput {
                 commitment,
                 stealth_public_nonce: None,

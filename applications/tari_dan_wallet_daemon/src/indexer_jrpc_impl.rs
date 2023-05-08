@@ -42,12 +42,14 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
         &self,
         address: &SubstateAddress,
         version: Option<u32>,
+        local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         let mut client = self.get_client()?;
         let result = client
             .get_substate(GetSubstateRequest {
                 address: address.clone(),
                 version,
+                local_search_only,
             })
             .await?;
         Ok(SubstateQueryResult {

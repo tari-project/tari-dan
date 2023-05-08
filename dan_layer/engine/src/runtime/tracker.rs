@@ -594,7 +594,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             .sum::<Amount>();
 
         let mut fee_resource =
-            ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount::zero());
+            ResourceContainer::confidential(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount::zero());
 
         // Collect the fee
         let mut remaining_fees = total_fees;

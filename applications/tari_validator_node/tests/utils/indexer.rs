@@ -72,6 +72,7 @@ impl IndexerProcess {
             .get_substate(GetSubstateRequest {
                 address: address.clone(),
                 version: Some(version),
+                local_search_only: true,
             })
             .await
             .unwrap();

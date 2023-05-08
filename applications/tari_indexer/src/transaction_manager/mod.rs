@@ -22,14 +22,20 @@
 
 mod error;
 
-use std::{fmt::Display, future::Future};
+use std::{fmt::Display, future::Future, sync::Arc};
 
 use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
 use tari_dan_common_types::{PayloadId, ShardId};
+use tari_engine_types::substate::SubstateAddress;
 use tari_indexer_lib::committee_provider::CommitteeProvider;
 use tari_transaction::Transaction;
-use tari_validator_node_rpc::client::{TransactionResultStatus, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+use tari_validator_node_rpc::client::{
+    SubstateResult,
+    TransactionResultStatus,
+    ValidatorNodeClientFactory,
+    ValidatorNodeRpcClient,
+};
 
 use crate::transaction_manager::error::TransactionManagerError;
 
@@ -65,6 +71,25 @@ where
     ) -> Result<TransactionResultStatus, TransactionManagerError> {
         self.try_with_committee(payload_id.into_array().into(), |mut client| async move {
             client.get_finalized_transaction_result(payload_id).await
+        })
+        .await
+    }
+
+    pub async fn get_substate(
+        &self,
+        substate_address: SubstateAddress,
+        version: u32,
+    ) -> Result<SubstateResult, TransactionManagerError> {
+        let shard = ShardId::from_address(&substate_address, version);
+
+        self.try_with_committee(shard, |mut client| {
+            // This double clone looks strange, but it's needed because this function is called in a loop
+            // and each iteration needs its own copy of the address (because of the move).
+            let substate_address = substate_address.clone();
+            async move {
+                let substate_address = substate_address.clone();
+                client.get_substate(&substate_address, version).await
+            }
         })
         .await
     }

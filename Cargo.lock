@@ -3127,6 +3127,7 @@ version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
+ "serde",
  "typenum",
  "version_check 0.9.4",
 ]
@@ -7778,6 +7779,7 @@ dependencies = [
  "lazy_static",
  "rand 0.7.3",
  "serde",
+ "serde_bytes",
  "tari_bor",
  "tari_common_types",
  "tari_crypto",
@@ -8078,6 +8080,7 @@ dependencies = [
 name = "tari_template_builtin"
 version = "0.50.0-pre.0"
 dependencies = [
+ "lazy_static",
  "tari_engine_types",
 ]
 
@@ -8085,10 +8088,14 @@ dependencies = [
 name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
+ "base64 0.13.1",
  "ciborium",
+ "generic-array",
+ "lazy_static",
  "newtype-ops",
  "serde",
  "serde-big-array 0.5.1",
+ "serde_bytes",
  "serde_json",
  "tari_bor",
  "tari_crypto",
@@ -8213,6 +8220,7 @@ dependencies = [
  "include_dir",
  "indexmap",
  "json5 0.2.8",
+ "lazy_static",
  "libsqlite3-sys",
  "lmdb-zero",
  "log",

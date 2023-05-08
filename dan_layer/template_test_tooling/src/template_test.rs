@@ -79,10 +79,10 @@ impl TemplateTest {
         let mut builder = Package::builder();
 
         // Add Account template builtin
-        let wasm = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
+        let wasm = get_template_builtin(*ACCOUNT_TEMPLATE_ADDRESS);
         let template = WasmModule::from_code(wasm.to_vec()).load_template().unwrap();
-        builder.add_template(ACCOUNT_TEMPLATE_ADDRESS, template);
-        name_to_template.insert("Account".to_string(), ACCOUNT_TEMPLATE_ADDRESS);
+        builder.add_template(*ACCOUNT_TEMPLATE_ADDRESS, template);
+        name_to_template.insert("Account".to_string(), *ACCOUNT_TEMPLATE_ADDRESS);
         // Add test Faucet
         let wasm = compile_template(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/faucet"), &[]).unwrap();
         let test_faucet_template_address = template_hasher().chain(wasm.code()).result();
@@ -131,7 +131,7 @@ impl TemplateTest {
         let id_provider = IdProvider::new(Hash::default(), 10);
         let vault_id = id_provider.new_vault_id().unwrap();
         let vault = Vault::new(vault_id, ResourceContainer::Confidential {
-            address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            address: *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             commitments: Default::default(),
             revealed_amount: initial_supply,
         });

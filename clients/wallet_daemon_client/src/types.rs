@@ -50,17 +50,28 @@ use crate::{
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CallInstructionRequest {
     pub instruction: Instruction,
+    #[serde(deserialize_with = "string_or_struct")]
     pub fee_account: ComponentAddressOrName,
+    #[serde(deserialize_with = "opt_string_or_struct")]
     pub dump_outputs_into: Option<ComponentAddressOrName>,
     pub fee: u64,
+    #[serde(default)]
     pub inputs: Vec<VersionedSubstateAddress>,
+    #[serde(default)]
     pub override_inputs: Option<bool>,
+    #[serde(default)]
     pub new_outputs: Option<u8>,
+    #[serde(default)]
     pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
+    #[serde(default)]
     pub new_resources: Vec<(TemplateAddress, String)>,
+    #[serde(default)]
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
+    #[serde(default)]
     pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
+    #[serde(default)]
     pub is_dry_run: bool,
+    #[serde(default)]
     pub proof_ids: Vec<ConfidentialProofId>,
 }
 
@@ -107,6 +118,7 @@ pub struct TransactionGetResponse {
     pub transaction: Transaction,
     pub result: Option<FinalizeResult>,
     pub status: TransactionStatus,
+    pub transaction_failure: Option<RejectReason>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -58,7 +58,7 @@ use tari_indexer_client::types::{
     SubmitTransactionResponse,
 };
 use tari_validator_node_client::types::{AddPeerRequest, AddPeerResponse, GetIdentityResponse};
-use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
+use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::{
     bootstrap::Services,
@@ -246,35 +246,91 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetSubstateRequest = value.parse_params()?;
 
-        let substate_resp = self
+        match self
             .substate_manager
             .get_substate(&request.address, request.version)
             .await
             .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting substate: {}", e);
                 Self::generic_error_response(answer_id)
-            })?
-            .ok_or_else(|| {
-                JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::ApplicationError(404),
-                        format!(
-                            "Substate {} (version:>={}) not found",
-                            request.address,
-                            request.version.unwrap_or(0)
+            })? {
+            Some(substate_resp) => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+                address: substate_resp.address,
+                version: substate_resp.version,
+                substate: substate_resp.substate,
+                created_by_transaction: substate_resp.created_by_transaction,
+            })),
+            None => {
+                if request.local_search_only {
+                    Err(JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            JsonRpcErrorReason::ApplicationError(404),
+                            format!(
+                                "Substate {} (version:>={}) not found",
+                                request.address,
+                                request.version.unwrap_or(0)
+                            ),
+                            Value::Null,
                         ),
-                        Value::Null,
-                    ),
-                )
-            })?;
-
-        Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-            address: substate_resp.address,
-            version: substate_resp.version,
-            substate: substate_resp.substate,
-            created_by_transaction: substate_resp.created_by_transaction,
-        }))
+                    ))
+                } else {
+                    // Ask network
+                    let substate = self
+                        .transaction_manager
+                        .get_substate(request.address.clone(), request.version.unwrap_or_default())
+                        .await
+                        .map_err(|e| {
+                            warn!(target: LOG_TARGET, "Error asking network for substate: {}", e);
+                            JsonRpcResponse::error(
+                                answer_id,
+                                JsonRpcError::new(
+                                    JsonRpcErrorReason::ApplicationError(501),
+                                    format!("Error asking network for substate:{}", e),
+                                    Value::Null,
+                                ),
+                            )
+                        })?;
+                    match substate {
+                        SubstateResult::DoesNotExist => Err(JsonRpcResponse::error(
+                            answer_id,
+                            JsonRpcError::new(
+                                JsonRpcErrorReason::ApplicationError(404),
+                                format!(
+                                    "Substate {} (version:>={}) not found, and not found on network",
+                                    request.address,
+                                    request.version.unwrap_or(0)
+                                ),
+                                Value::Null,
+                            ),
+                        )),
+                        SubstateResult::Up {
+                            substate,
+                            created_by_tx,
+                        } => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+                            address: request.address,
+                            version: request.version.unwrap_or_default(),
+                            substate,
+                            created_by_transaction: created_by_tx,
+                        })),
+                        SubstateResult::Down { version } => Err(JsonRpcResponse::error(
+                            answer_id,
+                            JsonRpcError::new(
+                                JsonRpcErrorReason::ApplicationError(301),
+                                format!(
+                                    "Substate {} (version:>={}) not found, but found in a down state on network at \
+                                     version {}",
+                                    request.address,
+                                    request.version.unwrap_or(0) + 1,
+                                    version
+                                ),
+                                Value::Null,
+                            ),
+                        )),
+                    }
+                }
+            },
+        }
     }
 
     pub async fn inspect_substate(&self, value: JsonRpcExtractor) -> JrpcResult {

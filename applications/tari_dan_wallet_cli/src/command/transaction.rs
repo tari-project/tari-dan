@@ -457,7 +457,7 @@ pub async fn handle_confidential_transfer(
         .accounts_confidential_transfer(ConfidentialTransferRequest {
             account: source_account,
             amount: Amount::from(amount),
-            resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
+            resource_address: resource_address.unwrap_or(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
             destination_account,
             destination_public_key,
             fee: common.fee.map(|f| f.try_into()).transpose()?,

@@ -93,7 +93,7 @@ pub async fn handle_create(
     info!(target: LOG_TARGET, "Creating account with owner token {}", owner_pk);
 
     let transaction = Transaction::builder()
-        .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
+        .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
         .with_new_outputs(1)
         .sign(&signing_key.k)
         .build();
@@ -377,7 +377,7 @@ pub async fn handle_reveal_funds(
                 Instruction::CallMethod {
                     component_address: account_address,
                     method: "withdraw_confidential".to_string(),
-                    args: args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
+                    args: args![*CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
                 },
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"revealed".to_vec(),
@@ -397,7 +397,7 @@ pub async fn handle_reveal_funds(
             builder = builder
                 .fee_transaction_pay_from_component(account_address, fee)
                 .call_method(account_address, "withdraw_confidential", args![
-                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                    *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                     reveal_proof
                 ])
                 .put_last_instruction_output_on_workspace("revealed")

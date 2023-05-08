@@ -54,7 +54,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     // create an account component
     let instruction = Instruction::CallFunction {
         // The "account" template is builtin in the validator nodes with a constant address
-        template_address: ACCOUNT_TEMPLATE_ADDRESS,
+        template_address: *ACCOUNT_TEMPLATE_ADDRESS,
         function: "create".to_string(),
         args: args!(owner_token),
     };

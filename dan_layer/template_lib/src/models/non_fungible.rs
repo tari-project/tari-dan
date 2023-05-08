@@ -192,13 +192,13 @@ impl NonFungibleAddress {
 
     pub fn from_public_key(public_key: RistrettoPublicKeyBytes) -> Self {
         Self::new(
-            PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+            *PUBLIC_IDENTITY_RESOURCE_ADDRESS,
             NonFungibleId::U256(public_key.into_array()),
         )
     }
 
     pub fn to_public_key(&self) -> Option<RistrettoPublicKeyBytes> {
-        if self.0 .0.resource_address != PUBLIC_IDENTITY_RESOURCE_ADDRESS {
+        if self.0 .0.resource_address != *PUBLIC_IDENTITY_RESOURCE_ADDRESS {
             return None;
         }
         match self.id() {
