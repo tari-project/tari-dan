@@ -14,11 +14,7 @@ use tari_crypto::{
 };
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{
-    apis::{
-        jwt::JrpcPermission,
-        key_manager,
-        substate::{ValidatorScanResult},
-    },
+    apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
     DanWalletSdk,
