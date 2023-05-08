@@ -62,7 +62,7 @@ impl EventQuery {
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let template_address = TemplateAddress::from_array(template_address);
-        let tx_hash = PayloadId::new(&tx_hash);
+        let tx_hash = PayloadId::new(tx_hash);
         let events = substate_manager.get_event_from_db(template_address, tx_hash).await?;
         let events = events
             .into_iter()
@@ -89,7 +89,7 @@ impl EventQuery {
         substate_manager
             .save_event_to_db(
                 TemplateAddress::from_array(template_address),
-                PayloadId::new(&tx_hash),
+                PayloadId::new(tx_hash),
                 topic.clone(),
                 payload.clone(),
             )
