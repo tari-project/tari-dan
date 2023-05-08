@@ -51,7 +51,7 @@ Feature: Account transfers
     When I wait 10 seconds
 
     # Fund the sender account with faucet tokens
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT" and 5 outputs named "TX1"
+    When I submit a transaction manifest on VN with inputs "FAUCET, ACCOUNT" and 5 outputs named "TX1"
     ```
     let faucet = global!["FAUCET/components/TestFaucet"];
     let mut acc1 = global!["ACCOUNT/components/Account"];
@@ -68,7 +68,7 @@ Feature: Account transfers
     When I transfer 50 tokens of resource FAUCET/resources/0 from account ACCOUNT to public key KEY_ACC_2 via the wallet daemon WALLET_D named TRANSFER
 
     # Check that ACC_2 component was created and has funds
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs  "FAUCET, TRANSFER" and 1 output named "TX2"
+    When I submit a transaction manifest on VN with inputs "FAUCET, TRANSFER" and 1 output named "TX2"
     ```
     let mut acc2 = global!["TRANSFER/components/Account"];
     let faucet_resource = global!["FAUCET/resources/0"];

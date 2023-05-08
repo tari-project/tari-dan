@@ -94,9 +94,9 @@ Feature: Claim Burn
     When I create a DAN wallet
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
     When I wait 3 seconds
-    When I create an account ACC_1 via the wallet daemon WALLET_D
+    When I create an account ACC via the wallet daemon WALLET_D
 
-    When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACCCOUNT, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
+    When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACC, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
 
     # unfortunately have to wait for this to get into the mempool....
     Then there is 1 transaction in the mempool of BASE within 10 seconds
@@ -106,5 +106,5 @@ Feature: Claim Burn
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
 
-    When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACCOUNT via the wallet daemon WALLET_D
-# Then account ACCOUNT has one confidential bucket in it
+    When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC via the wallet daemon WALLET_D
+# Then account ACC has one confidential bucket in it
