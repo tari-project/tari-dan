@@ -36,12 +36,16 @@ use diesel::{
 };
 use diesel_migrations::EmbeddedMigrations;
 use log::warn;
+use tari_dan_common_types::PayloadId;
 use tari_dan_core::storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::{substate::SubstateAddress, TemplateAddress};
 use thiserror::Error;
 
-use super::models::non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex};
+use super::models::{
+    events::{EventData, NewEvent},
+    non_fungible_index::{IndexedNftSubstate, NewNonFungibleIndex},
+};
 use crate::{
     diesel_migrations::MigrationHarness,
     substate_storage_sqlite::models::substate::{NewSubstate, Substate},
@@ -180,6 +184,11 @@ pub trait SubstateStoreReadTransaction {
         start_idx: i32,
         end_idx: i32,
     ) -> Result<Vec<IndexedNftSubstate>, StorageError>;
+    fn get_events(
+        &mut self,
+        template_address: TemplateAddress,
+        topic: PayloadId,
+    ) -> Result<Vec<EventData>, StorageError>;
 }
 
 impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
@@ -283,6 +292,24 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 
         Ok(res)
     }
+
+    fn get_events(
+        &mut self,
+        template_address: TemplateAddress,
+        tx_hash: PayloadId,
+    ) -> Result<Vec<EventData>, StorageError> {
+        let res = sql_query(
+            "SELECT template_address, tx_hash, topic, payload FROM events WHERE template_address = ? AND tx_hash = ?",
+        )
+        .bind::<Text, _>(template_address.to_string())
+        .bind::<Text, _>(tx_hash.to_string())
+        .get_results::<EventData>(self.connection())
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("get_events: {}", e),
+        })?;
+
+        Ok(res)
+    }
 }
 
 pub struct SqliteSubstateStoreWriteTransaction<'a> {
@@ -309,6 +336,7 @@ pub trait SubstateStoreWriteTransaction {
     fn delete_substate(&mut self, address: String) -> Result<(), StorageError>;
     fn clear_substates(&mut self) -> Result<(), StorageError>;
     fn add_non_fungible_index(&mut self, new_nft_index: NewNonFungibleIndex) -> Result<(), StorageError>;
+    fn save_events(&mut self, new_event: NewEvent) -> Result<(), StorageError>;
 }
 
 impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
@@ -404,6 +432,26 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
             "Added new NFT index for resource {} with index {}",
             new_nft_index.resource_address,
             new_nft_index.idx
+        );
+
+        Ok(())
+    }
+
+    fn save_events(&mut self, new_event: NewEvent) -> Result<(), StorageError> {
+        use crate::substate_storage_sqlite::schema::events;
+
+        diesel::insert_into(events::table)
+            .values(&new_event)
+            .execute(&mut *self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("events: {}", e),
+            })?;
+
+        log::info!(
+            target: LOG_TARGET,
+            "Added a new event with template_address = {} and tx_hash = {}",
+            new_event.template_address,
+            new_event.tx_hash
         );
 
         Ok(())

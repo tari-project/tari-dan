@@ -20,15 +20,4 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema};
-
-pub(crate) type ServiceSchema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
-
-pub(crate) struct QueryRoot;
-
-#[Object]
-impl QueryRoot {
-    async fn hello(&self, _ctx: &Context<'_>) -> &'static str {
-        "Hello world"
-    }
-}
+pub mod events;
