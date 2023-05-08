@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryFrom, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, ObjectPledge, ShardId, SubstateState};
@@ -37,7 +37,7 @@ use tari_dan_engine::{
     transaction::TransactionProcessor,
 };
 use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
-use tari_template_lib::{crypto::RistrettoPublicKeyBytes, models::Amount, prelude::NonFungibleAddress};
+use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone)]
@@ -84,7 +84,6 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             auth_params,
             consensus,
             modules,
-            Amount::try_from(self.fee_table.loan()).expect("Fee loan too large"),
         );
         let tx_hash = *transaction.hash();
         match processor.execute(transaction) {

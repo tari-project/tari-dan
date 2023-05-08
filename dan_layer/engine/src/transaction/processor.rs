@@ -34,7 +34,7 @@ use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
     invoke_args,
-    models::{Amount, ComponentAddress},
+    models::ComponentAddress,
 };
 use tari_transaction::{id_provider::IdProvider, Transaction};
 use tari_utilities::ByteArray;
@@ -68,7 +68,6 @@ pub struct TransactionProcessor<TTemplateProvider> {
     auth_params: AuthParams,
     consensus: ConsensusContext,
     modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
-    fee_loan: Amount,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> TransactionProcessor<TTemplateProvider> {
@@ -78,7 +77,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         auth_params: AuthParams,
         consensus: ConsensusContext,
         modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
-        fee_loan: Amount,
     ) -> Self {
         Self {
             template_provider,
@@ -86,7 +84,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             auth_params,
             consensus,
             modules,
-            fee_loan,
         }
     }
 
@@ -102,7 +99,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             self.consensus,
             transaction.sender_public_key().clone(),
             self.modules,
-            self.fee_loan,
         )?;
 
         let auth_scope = AuthorizationScope::new(Arc::new(initial_proofs));
@@ -157,7 +153,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     fee_receipt,
                 } = runtime.interface().finalize()?;
 
-                if !fee_receipt.is_paid_in_full() && fee_receipt.total_fees_charged() > self.fee_loan {
+                if !fee_receipt.is_paid_in_full() {
                     return Ok(ExecuteResult {
                         finalize: finalized,
                         transaction_failure: Some(RejectReason::FeesNotPaid(format!(
