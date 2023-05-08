@@ -34,7 +34,7 @@ base64 = "0.20.0-alpha.1"
 clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"
 dirs = "4.0.0"
-duration-str = "0.5.0"
+humantime-serde = "1.1.1"
 futures = "0.3.26"
 jsonwebtoken = "8.3.0"
 log = "0.4.17"

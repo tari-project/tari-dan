@@ -54,7 +54,7 @@ pub struct WalletDaemonConfig {
     /// The validator nodes jrpc endpoint url
     pub indexer_node_json_rpc_url: String,
     /// Expiration duration of the JWT token
-    #[serde(deserialize_with = "duration_str::deserialize_option_duration")]
+    #[serde(with = "humantime_serde::option")]
     pub jwt_expiry: Option<Duration>,
     /// Secret key for the JWT token.
     pub jwt_secret_key: Option<String>,

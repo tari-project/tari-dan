@@ -171,10 +171,6 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
     }
 
     pub fn grant(&mut self, auth_token: String) -> Result<String, JwtApiError> {
-        self.grant_with_expiry(auth_token, self.default_expiry)
-    }
-
-    pub fn grant_with_expiry(&mut self, auth_token: String, expiry: Duration) -> Result<String, JwtApiError> {
         let auth_claims = self.check_auth_token(auth_token.as_ref())?;
         let my_claims = Claims {
             id: auth_claims.id,

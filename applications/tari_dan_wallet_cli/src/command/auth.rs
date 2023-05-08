@@ -49,7 +49,7 @@ pub struct RequestArgs {
 #[derive(Debug, Args, Clone)]
 pub struct GrantArgs {
     auth_token: String,
-    #[clap(long, short = 'e', value_parser = duration_str::parse)]
+    #[clap(long, short = 'e', value_parser = humantime::parse_duration)]
     token_expiry: Option<Duration>,
 }
 
