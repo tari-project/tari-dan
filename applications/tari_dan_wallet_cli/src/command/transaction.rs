@@ -49,7 +49,7 @@ use tari_template_lib::{
     args::Arg,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{Amount, NonFungibleAddress, NonFungibleId},
-    prelude::{ComponentAddress, ResourceAddress},
+    prelude::ResourceAddress,
 };
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_utilities::{hex::to_hex, ByteArray};
@@ -147,7 +147,6 @@ pub struct SendArgs {
 #[derive(Debug, Args, Clone)]
 pub struct ConfidentialTransferArgs {
     amount: u32,
-    destination_account: ComponentAddress,
     destination_public_key: FromHex<Vec<u8>>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
@@ -391,7 +390,6 @@ pub async fn handle_confidential_transfer(
         source_account,
         resource_address,
         amount,
-        destination_account,
         destination_public_key,
         common,
     } = args;
@@ -403,7 +401,6 @@ pub async fn handle_confidential_transfer(
             account: source_account,
             amount: Amount::from(amount),
             resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
-            destination_account,
             destination_public_key,
             fee: common.fee.map(|f| f.try_into()).transpose()?,
         })

@@ -28,7 +28,10 @@ use tari_crypto::{
     tari_utilities::ByteArray,
 };
 use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
-use tari_template_lib::{models::Amount, prelude::ResourceAddress};
+use tari_template_lib::{
+    models::Amount,
+    prelude::{ResourceAddress, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+};
 use tari_wallet_daemon_client::{
     types::{
         AccountsCreateRequest,
@@ -36,6 +39,7 @@ use tari_wallet_daemon_client::{
         AuthLoginRequest,
         ClaimBurnRequest,
         ClaimBurnResponse,
+        ConfidentialTransferRequest,
         TransferRequest,
     },
     ComponentAddressOrName,
@@ -159,6 +163,45 @@ pub async fn transfer(
     client.token = Some(auth_response.permissions_token);
 
     let resp = client.accounts_transfer(request).await.unwrap();
+    add_substate_addresses(world, outputs_name, resp.result.result.accept().unwrap());
+}
+
+pub async fn confidential_transfer(
+    world: &mut TariWorld,
+    account_name: String,
+    destination_public_key: RistrettoPublicKey,
+    amount: Amount,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
+
+    let account = Some(ComponentAddressOrName::Name(account_name));
+    let fee = Some(Amount(1));
+
+    let request = ConfidentialTransferRequest {
+        account,
+        amount,
+        destination_public_key,
+        fee,
+        resource_address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+    };
+
+    let auth_response = client
+        .auth_request(AuthLoginRequest {
+            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+        })
+        .await
+        .unwrap();
+    let auth_response = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token: auth_response.auth_token,
+        })
+        .await
+        .unwrap();
+    client.token = Some(auth_response.permissions_token);
+
+    let resp = client.accounts_confidential_transfer(request).await.unwrap();
     add_substate_addresses(world, outputs_name, resp.result.result.accept().unwrap());
 }
 

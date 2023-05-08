@@ -179,3 +179,29 @@ async fn when_transfer_via_wallet_daemon(
     )
     .await;
 }
+
+#[when(
+    expr = "I do a confidential transfer of {int}T from account {word} to public key {word} via the wallet daemon \
+            {word} named {word}"
+)]
+async fn when_confidential_transfer_via_wallet_daemon(
+    world: &mut TariWorld,
+    amount: i32,
+    account_name: String,
+    destination_public_key: String,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    let (_, destination_public_key) = world.account_public_keys.get(&destination_public_key).unwrap().clone();
+    let amount = Amount::new(amount.into());
+
+    wallet_daemon_cli::confidential_transfer(
+        world,
+        account_name,
+        destination_public_key,
+        amount,
+        wallet_daemon_name,
+        outputs_name,
+    )
+    .await;
+}

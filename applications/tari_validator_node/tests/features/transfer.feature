@@ -76,3 +76,46 @@ Feature: Account transfers
       ```
     When I print the cucumber world
 
+
+  @serial
+  Scenario: Confidential transfer to unexisting account
+    # Initialize a base node, wallet, miner and VN
+    Given a base node BASE
+    Given a wallet WALLET connected to base node BASE
+    Given a miner MINER connected to base node BASE and wallet WALLET
+
+    # Initialize a VN
+    Given a validator node VN connected to base node BASE and wallet WALLET
+    When miner MINER mines 4 new blocks
+    When validator node VN sends a registration transaction
+    When miner MINER mines 16 new blocks
+    Then the validator node VN is listed as registered
+
+    # Initialize an indexer
+    Given an indexer IDX connected to base node BASE
+
+    # Initialize the wallet daemon
+    Given a wallet daemon WALLET_D connected to indexer IDX
+
+    # A file-base CLI account must be created to sign future calls
+    When I create a DAN wallet
+    When I wait 3 seconds
+
+    # Create the sender account
+    When I create an account ACC_1 via the wallet daemon WALLET_D
+
+    # Burn some tari in the base layer to have funds for fees in the sender account
+    When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACC_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
+    When miner MINER mines 13 new blocks
+    When I convert commitment COMMITMENT into COMM_ADDRESS address
+    Then validator node VN has state at COMM_ADDRESS
+    When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
+
+    # Wait for the wallet daemon account monitor to update the sender account information
+    When I wait 10 seconds
+    
+    # Do the transfer from ACC_1 to the second account (which does not exist yet in the network)
+    When I create a new key pair KEY_ACC_2
+    When I do a confidential transfer of 50T from account ACC_1 to public key KEY_ACC_2 via the wallet daemon WALLET_D named TRANSFER
+
+    When I print the cucumber world
