@@ -366,7 +366,7 @@ impl TemplateTest {
         let mut modules: Vec<Box<dyn RuntimeModule<Package>>> = vec![Box::new(self.track_calls.clone())];
 
         if self.enable_fees {
-            modules.push(Box::new(FeeModule::new(1, self.fee_table.clone())));
+            modules.push(Box::new(FeeModule::new(0, self.fee_table.clone())));
         }
 
         let auth_params = AuthParams {
