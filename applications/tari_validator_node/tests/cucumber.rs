@@ -258,7 +258,10 @@ async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
     let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
     let mut client = get_vn_client(jrpc_port).await;
 
-    let _resp = client.register_validator_node().await.unwrap();
+    if let Err(e) = client.register_validator_node().await {
+        eprintln!("register_validator_node error = {}", e);
+        panic!("register_validator_node error = {}", e);
+    }
 
     // give it some time for the registration tx to be processed by the wallet and base node
     tokio::time::sleep(Duration::from_secs(4)).await;
@@ -798,7 +801,9 @@ async fn print_world(world: &mut TariWorld) {
     for (name, node) in world.base_nodes.iter() {
         eprintln!(
             "Base node \"{}\": grpc port \"{}\", temp dir path \"{}\"",
-            name, node.grpc_port, node.temp_dir_path
+            name,
+            node.grpc_port,
+            node.temp_dir_path.display()
         );
     }
 
@@ -806,7 +811,9 @@ async fn print_world(world: &mut TariWorld) {
     for (name, node) in world.wallets.iter() {
         eprintln!(
             "Wallet \"{}\": grpc port \"{}\", temp dir path \"{}\"",
-            name, node.grpc_port, node.temp_dir_path
+            name,
+            node.grpc_port,
+            node.temp_dir_path.display()
         );
     }
 

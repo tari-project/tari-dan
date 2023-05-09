@@ -42,7 +42,10 @@ use tari_shutdown::Shutdown;
 use tempfile::tempdir;
 use tokio::task;
 
-use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
+use crate::{
+    utils::{helpers::get_os_assigned_ports, logging::get_base_dir_for_scenario},
+    TariWorld,
+};
 
 #[derive(Debug)]
 pub struct IndexerProcess {
@@ -160,7 +163,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let name = indexer_name.clone();
 
-    let temp_dir = tempdir().unwrap().path().join(indexer_name.clone());
+    let temp_dir = get_base_dir_for_scenario("indexer", world.current_scenario_name.as_ref().unwrap(), &indexer_name);
     let temp_dir_path = temp_dir.display().to_string();
 
     // we need to add all the validator nodes as seed peers

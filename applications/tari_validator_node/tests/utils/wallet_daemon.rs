@@ -37,7 +37,7 @@ use tari_wallet_daemon_client::WalletDaemonClient;
 use tokio::task;
 
 use crate::{
-    utils::{helpers::get_os_assigned_ports, logging::get_base_dir},
+    utils::{helpers::get_os_assigned_ports, logging::get_base_dir_for_scenario},
     TariWorld,
 };
 
@@ -52,7 +52,11 @@ pub struct DanWalletDaemonProcess {
 
 pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, indexer_name: String) {
     let (signaling_server_port, json_rpc_port) = get_os_assigned_ports();
-    let base_dir = get_base_dir();
+    let base_dir = get_base_dir_for_scenario(
+        "wallet_daemon",
+        world.current_scenario_name.as_ref().unwrap(),
+        &wallet_daemon_name,
+    );
 
     let indexer_jrpc_port = world.indexers.get(&indexer_name).unwrap().json_rpc_port;
     let shutdown = Shutdown::new();
