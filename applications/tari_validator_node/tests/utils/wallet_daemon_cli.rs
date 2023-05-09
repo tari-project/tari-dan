@@ -618,7 +618,7 @@ pub async fn transfer(
     };
 
     let resp = client.accounts_transfer(request).await.unwrap();
-    add_substate_addresses(world, outputs_name, resp.result.result.accept().unwrap());
+    add_substate_addresses_from_wallet_daemon(world, outputs_name, resp.result.result.accept().unwrap());
 }
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {

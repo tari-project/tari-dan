@@ -188,7 +188,7 @@ async fn when_transfer_via_wallet_daemon(
         )
     });
     let resource_address = world
-        .outputs
+        .wallet_daemon_outputs
         .get(resource_input_group)
         .unwrap_or_else(|| panic!("No outputs found with name {}", resource_input_group))
         .iter()

@@ -34,11 +34,12 @@ Feature: Account transfers
     Then the validator node VN is listed as registered
     Then the template "faucet" is listed as registered by the validator node VN
 
-    # Create a new Faucet component
-    When I call function "mint" on template "faucet" on VN with args "amount_10000" and 3 outputs named "FAUCET" with new resource "test"
-
     # Create the sender account
     When I create an account ACCOUNT via the wallet daemon WALLET_D
+
+    # Create a new Faucet component
+    # When I call function "mint" on template "faucet" on VN with args "amount_10000" and 3 outputs named "FAUCET" with new resource "test"
+    When I call function "mint" on template "faucet" using account ACCOUNT to pay fees via wallet daemon WALLET_D with args "amount_10000" and 3 outputs named "FAUCET"
 
     # Burn some tari in the base layer to have funds for fees in the sender account
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACCOUNT, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
@@ -51,7 +52,7 @@ Feature: Account transfers
     When I wait 10 seconds
 
     # Fund the sender account with faucet tokens
-    When I submit a transaction manifest on VN with inputs "FAUCET, ACCOUNT" and 5 outputs named "TX1"
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT" and 5 outputs named "TX1"
     ```
     let faucet = global!["FAUCET/components/TestFaucet"];
     let mut acc1 = global!["ACCOUNT/components/Account"];
@@ -68,11 +69,10 @@ Feature: Account transfers
     When I transfer 50 tokens of resource FAUCET/resources/0 from account ACCOUNT to public key KEY_ACC_2 via the wallet daemon WALLET_D named TRANSFER
 
     # Check that ACC_2 component was created and has funds
-    When I submit a transaction manifest on VN with inputs "FAUCET, TRANSFER" and 1 output named "TX2"
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, TRANSFER" and 1 output named "TX2"
     ```
     let mut acc2 = global!["TRANSFER/components/Account"];
     let faucet_resource = global!["FAUCET/resources/0"];
     acc2.balance(faucet_resource);
     ```
     When I print the cucumber world
-

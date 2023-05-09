@@ -703,6 +703,8 @@ async fn submit_manifest_with_inputs(
     outputs_name: String,
 ) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
+    eprintln!("FLAG: CUCUMBER vn outputs = {:?}", world.outputs);
+    eprintln!("FLAG: CUCUMBER wallet daemons = {:?}", world.wallet_daemon_outputs);
     validator_node_cli::submit_manifest(world, vn_name, outputs_name, manifest, inputs, num_outputs).await;
 }
 
