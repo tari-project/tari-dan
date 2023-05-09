@@ -52,8 +52,8 @@ mod tariswap {
 
             // create the vaults to store the funds
             let mut pool_vaults = HashMap::new();
-            pool_vaults.insert(a.resource_address(), Vault::new_empty(a.resource_address()));
-            pool_vaults.insert(b.resource_address(), Vault::new_empty(b.resource_address()));
+            pool_vaults.insert(a.resource_address(), Vault::from_bucket(a));
+            pool_vaults.insert(b.resource_address(), Vault::from_bucket(b));
 
             Self {
                 pool_vaults,
