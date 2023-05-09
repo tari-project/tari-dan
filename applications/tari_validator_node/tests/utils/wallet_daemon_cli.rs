@@ -62,7 +62,7 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
-use super::{helpers::add_substate_addresses, validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
+use super::{validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
 use crate::TariWorld;
 
 pub async fn claim_burn(
