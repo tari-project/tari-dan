@@ -27,7 +27,7 @@ Feature: Account transfers
     When I create a DAN wallet
     When I wait 3 seconds
 
-    # Register the "faucet" template
+    Register the "faucet" template
     When validator node VN registers the template "faucet"
     # Mine some blocks until the UTXOs are scanned
     When miner MINER mines 15 new blocks
