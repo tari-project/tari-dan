@@ -6,10 +6,13 @@ use std::fmt::{Display, Formatter};
 use serde::{Deserialize, Serialize};
 use tari_template_lib::{
     args::{Arg, LogLevel},
-    models::{ComponentAddress, TemplateAddress},
+    models::{Amount, ComponentAddress, TemplateAddress},
 };
 
-use crate::{confidential::ConfidentialClaim, serde_with};
+use crate::{
+    confidential::{ConfidentialClaim, ConfidentialOutput},
+    serde_with,
+};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub enum Instruction {
@@ -39,8 +42,8 @@ pub enum Instruction {
     },
     #[cfg(feature = "debugging")]
     CreateFreeTestCoins {
-        amount: u64,
-        private_key: Vec<u8>,
+        revealed_amount: Amount,
+        output: Option<ConfidentialOutput>,
     },
 }
 

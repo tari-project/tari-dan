@@ -198,21 +198,12 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         vault_address: &SubstateAddress,
         output: &ConfidentialOutput,
     ) -> Result<ConfidentialOutputModel, ConfidentialOutputsApiError> {
-        // TODO: We assumed that the wallet would know the mask and value if it produced a change output. However a
-        //       wallet may be recovering funds or using a different wallet for the same accounts, so we need to
-        //       provide output mask recovery and encrypted value in all cases. For now this case will error.
-        let public_nonce = output
-            .stealth_public_nonce
-            .as_ref()
-            .ok_or_else(|| ConfidentialOutputsApiError::FixMe("Missing nonce".to_string()))?;
-        let encrypted_value = output
-            .encrypted_value
-            .as_ref()
-            .ok_or_else(|| ConfidentialOutputsApiError::FixMe("Missing encrypted value".to_string()))?;
-
-        let unblinded_result =
-            self.crypto_api
-                .unblind_output(&output.commitment, encrypted_value, &key.k, public_nonce);
+        let unblinded_result = self.crypto_api.unblind_output(
+            &output.commitment,
+            &output.encrypted_value,
+            &key.k,
+            &output.stealth_public_nonce,
+        );
         let (value, status) = match unblinded_result {
             Ok(output) => (output.value, OutputStatus::Unspent),
             Err(e) => {
@@ -231,7 +222,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             vault_address: vault_address.clone(),
             commitment: output.commitment.clone(),
             value,
-            sender_public_nonce: Some(public_nonce.clone()),
+            sender_public_nonce: Some(output.stealth_public_nonce.clone()),
             secret_key_index: account.key_index,
             public_asset_tag: None,
             status,
@@ -263,8 +254,6 @@ pub enum ConfidentialOutputsApiError {
     KeyManager(#[from] KeyManagerApiError),
     #[error("Accounts API error: {0}")]
     Accounts(#[from] AccountsApiError),
-    #[error("FIXME: {0}")]
-    FixMe(String),
 }
 
 impl IsNotFoundError for ConfidentialOutputsApiError {
