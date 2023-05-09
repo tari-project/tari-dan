@@ -20,8 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#![feature(map_many_mut)]
-
 use tari_template_abi::rust::collections::HashMap;
 use tari_template_lib::prelude::*;
 
@@ -64,25 +62,25 @@ mod tariswap {
 
         // swap A tokens for B tokens or viceversa
         pub fn swap(&mut self, input_bucket: Bucket, output_resource: ResourceAddress) -> Bucket {
-            // get the corresponding vaults for the input and output resources
+            // get the data needed to calculate the pool rebalancing
             let input_resource = input_bucket.resource_address();
             assert!(input_resource != output_resource, "The resource addresses are the same");
-            let [input_vault, output_vault] = self.pool_vaults.get_many_mut([&input_resource, &output_resource])
-                .unwrap_or_else(|| panic!("Could not retrieve the associated resource vaults"));
+            let input_balance = self.get_pool_balance(input_resource);
+            let output_balance = self.get_pool_balance(output_resource);
 
             // recalculate the new vault balances for the swap
             // constant product AMM formula is "k = a * b"
             // so the new output vault balance should be "b = k / a"
-            let k = input_vault.balance() * output_vault.balance();
-            let new_input_vault_balance = input_vault.balance() + input_bucket.amount();
-            let new_output_vault_balance = k / new_input_vault_balance;
+            let k = input_balance * output_balance;
+            let new_input_balance = input_balance + input_bucket.amount();
+            let new_output_balance = k / new_input_balance;
 
             // calculate the amount of output tokens to return to the user
-            let output_bucket_amount = output_vault.balance() - new_output_vault_balance;
+            let output_bucket_amount = output_balance - new_output_balance;
 
             // perform the swap
-            input_vault.deposit(input_bucket);
-            output_vault.withdraw(output_bucket_amount)
+            self.pool_vaults.get_mut(&input_resource).unwrap().deposit(input_bucket);
+            self.pool_vaults.get_mut(&output_resource).unwrap().withdraw(output_bucket_amount)
         }
 
         // TODO: add liquidity
@@ -91,7 +89,7 @@ mod tariswap {
 
 
         // public utility methods
-        pub fn pool_balances(&self) -> HashMap<ResourceAddress, Amount> {
+        pub fn get_pool_balances(&self) -> HashMap<ResourceAddress, Amount> {
             let mut balances = HashMap::new();
 
             for (resource, vault) in &self.pool_vaults {
@@ -100,6 +98,14 @@ mod tariswap {
 
             balances
         }
+
+        
+        pub fn get_pool_balance(&self, resource_address: ResourceAddress) -> Amount {
+            let vault = self.pool_vaults.get(&resource_address)
+                .unwrap_or_else(|| panic!("Resource {} is not in the pool", resource_address));
+            vault.balance()
+        }
+         
 
         // TODO: get LP token address and supply
 
