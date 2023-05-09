@@ -30,6 +30,7 @@ Feature: Wallet Daemon
 
         # Register the "faucet" template
         When validator node VAL_1 registers the template "faucet"
+        When I wait 5 seconds
 
         # Mine some blocks until the UTXOs are scanned
         When miner MINER mines 5 new blocks
