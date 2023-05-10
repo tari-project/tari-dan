@@ -201,7 +201,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate<PublicKe
             value
                 .leaves_hashes
                 .into_iter()
-                .map(|hash| FixedHash::try_from(hash))
+                .map(FixedHash::try_from)
                 .collect::<Result<_, _>>()?,
         ))
     }

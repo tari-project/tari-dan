@@ -182,6 +182,6 @@ impl VoteMessage {
     }
 
     pub fn node_hash(&self) -> FixedHash {
-        self.node_hash.clone()
+        self.node_hash
     }
 }
