@@ -104,6 +104,32 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
+    fn jwt_is_revoked(&mut self, token: &str) -> Result<bool, WalletStorageError> {
+        let revoked = auth_status::table
+            .select(auth_status::revoked)
+            .filter(auth_status::token.eq(token))
+            .first(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("jwt_is_revoked", e))?;
+        match revoked {
+            Some(revoked) => Ok(revoked),
+            None => {
+                // We don't know this token. Store it as not revoked. Weirdly if the token is used with different daemon
+                // it will work even if it's revoked in this one. But since the user will need to confirm any actions
+                // there should be no security issue.
+                diesel::insert_into(auth_status::table)
+                    .values((
+                        auth_status::granted.eq(true),
+                        auth_status::user_decided.eq(true),
+                        auth_status::token.eq(token),
+                    ))
+                    .execute(self.connection())
+                    .map_err(|e| WalletStorageError::general("jwt_is_revoked", e))?;
+                Ok(false)
+            },
+        }
+    }
+
     // -------------------------------- KeyManager -------------------------------- //
 
     fn key_manager_insert(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError> {

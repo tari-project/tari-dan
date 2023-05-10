@@ -199,8 +199,19 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         Ok(())
     }
 
+    fn is_token_revoked(&self, token: &str) -> Result<bool, JwtApiError> {
+        let mut tx = self.store.create_write_tx()?;
+        let revoked = tx.jwt_is_revoked(token)?;
+        tx.commit()?;
+        Ok(revoked)
+    }
+
     pub fn check_auth(&self, token: Option<String>, req_permissions: &[JrpcPermission]) -> Result<(), JwtApiError> {
-        let permissions = self.get_permissions(token.ok_or(JwtApiError::TokenMissing)?.as_str())?;
+        let token = token.ok_or(JwtApiError::TokenMissing)?;
+        if self.is_token_revoked(&token)? {
+            return Err(JwtApiError::TokenRevoked {});
+        }
+        let permissions = self.get_permissions(&token)?;
         for permission in req_permissions {
             permissions.check_permission(permission)?;
         }
@@ -218,4 +229,6 @@ pub enum JwtApiError {
     TokenMissing,
     #[error("Insufficient permissions. Required '{required:?}'")]
     InsufficientPermissions { required: JrpcPermission },
+    #[error("Token revoked")]
+    TokenRevoked,
 }

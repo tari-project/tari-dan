@@ -158,4 +158,4 @@ export const confidentialFinalize = (proofId: number) => jsonRpc("confidential.f
 export const confidentialCancel = (proofId: number) => jsonRpc("confidential.cancel", [proofId]);
 export const confidentialCreateOutputProof = (amount: number) => jsonRpc("confidential.create_output_proof", [amount]);
 
-export const webrtc = (session: string) => jsonRpc("webrtc.start", [session]);
+export const webrtc = (signalingServerToken: string, permissions: string) => jsonRpc("webrtc.start", [signalingServerToken, permissions]);

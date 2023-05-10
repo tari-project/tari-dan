@@ -7,12 +7,13 @@ use anyhow::Result;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use serde::{Deserialize, Serialize};
+use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 
 pub struct Data {
     pub offers: HashMap<u64, String>,
     pub answers: HashMap<u64, String>,
-    pub offer_ice_candidates: HashMap<u64, Vec<String>>,
-    pub answer_ice_candidates: HashMap<u64, Vec<String>>,
+    pub offer_ice_candidates: HashMap<u64, Vec<RTCIceCandidateInit>>,
+    pub answer_ice_candidates: HashMap<u64, Vec<RTCIceCandidateInit>>,
     pub expiration: Duration,
     pub secret_key: String,
     // The lowest still probably alive id. They will be cleaned up after expiration, which goes in order.
@@ -79,27 +80,27 @@ impl Data {
         self.answers.get(&id).ok_or_else(|| anyhow::Error::msg("Invalid id"))
     }
 
-    pub fn add_offer_ice_candidate(&mut self, id: u64, ice_candidate: String) {
+    pub fn add_offer_ice_candidate(&mut self, id: u64, ice_candidate: RTCIceCandidateInit) {
         self.offer_ice_candidates
             .entry(id)
             .or_insert_with(Vec::new)
             .push(ice_candidate);
     }
 
-    pub fn get_offer_ice_candidates(&self, id: u64) -> Result<&Vec<String>> {
+    pub fn get_offer_ice_candidates(&self, id: u64) -> Result<&Vec<RTCIceCandidateInit>> {
         self.offer_ice_candidates
             .get(&id)
             .ok_or_else(|| anyhow::Error::msg("Invalid id"))
     }
 
-    pub fn add_answer_ice_candidate(&mut self, id: u64, ice_candidate: String) {
+    pub fn add_answer_ice_candidate(&mut self, id: u64, ice_candidate: RTCIceCandidateInit) {
         self.answer_ice_candidates
             .entry(id)
             .or_insert_with(Vec::new)
             .push(ice_candidate);
     }
 
-    pub fn get_answer_ice_candidates(&self, id: u64) -> Result<&Vec<String>> {
+    pub fn get_answer_ice_candidates(&self, id: u64) -> Result<&Vec<RTCIceCandidateInit>> {
         self.answer_ice_candidates
             .get(&id)
             .ok_or_else(|| anyhow::Error::msg("Invalid id"))

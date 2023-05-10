@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, pin::Pin, sync::Arc};
 
 use anyhow::Result;
 use axum_jrpc::{JsonRpcAnswer, JsonRpcRequest, JsonRpcResponse};
@@ -70,6 +70,94 @@ fn get_rtc_configuration() -> RTCConfiguration {
     }
 }
 
+pub fn on_ice_candidate(
+    ice_candidate: Option<RTCIceCandidate>,
+    signaling_server_token_clone: String,
+    signaling_server_address: SocketAddr,
+) -> Pin<Box<impl futures::Future<Output = ()>>> {
+    if let Some(ice_candidate) = ice_candidate {
+        tokio::task::spawn(async move {
+            match &ice_candidate.to_json() {
+                Ok(ice_candidate) => {
+                    if let Err(err) = make_request(
+                        signaling_server_address,
+                        Some(signaling_server_token_clone),
+                        "add.answer_ice_candidate".to_string(),
+                        ice_candidate,
+                    )
+                    .await
+                    {
+                        log::error!(target: LOG_TARGET, "Error sending ice candidate: {}", err);
+                    }
+                },
+                Err(e) => {
+                    log::error!(target: LOG_TARGET, "Error sending ice candidate: {}", e);
+                },
+            };
+        });
+    }
+    Box::pin(async {})
+}
+
+pub fn on_message(
+    msg: DataChannelMessage,
+    d_on_message: Arc<RTCDataChannel>,
+    permissions_token: String,
+    address: SocketAddr,
+) -> Pin<Box<impl futures::Future<Output = ()>>> {
+    Box::pin(async move {
+        match String::from_utf8(msg.data.to_vec()) {
+            Ok(msg_str) => match serde_json::from_str::<Request>(&msg_str) {
+                Ok(request) => {
+                    let response;
+                    if request.method == "get.token" {
+                        response = Response {
+                            payload: serde_json::to_string(&permissions_token)?,
+                            id: request.id,
+                        };
+                    } else {
+                        let result = match serde_json::from_str::<serde_json::Value>(&request.params) {
+                            Ok(params) => {
+                                match make_request(address, Some(request.token), request.method, params).await {
+                                    Ok(response) => response.to_string(),
+                                    Err(e) => e.to_string(),
+                                }
+                            },
+                            Err(e) => e.to_string(),
+                        };
+                        response = Response {
+                            payload: result,
+                            id: request.id,
+                        };
+                    }
+                    let text = match serde_json::to_string(&response) {
+                        Ok(response) => response,
+                        Err(e) => e.to_string(),
+                    };
+                    if let Err(e) = d_on_message.send_text(text).await {
+                        log::error!(target: LOG_TARGET, "{}", e.to_string())
+                    };
+                },
+                Err(e) => log::error!(target: LOG_TARGET, "{}", e.to_string()),
+            },
+            Err(e) => log::error!(target: LOG_TARGET, "{}", e.to_string()),
+        };
+    })
+}
+
+pub fn on_data_channel(
+    d: Arc<RTCDataChannel>,
+    permissions_token: String,
+    address: SocketAddr,
+) -> Pin<Box<impl futures::Future<Output = ()>>> {
+    Box::pin(async move {
+        let d_on_message = d.clone();
+        d.on_message(Box::new(move |msg: DataChannelMessage| {
+            on_message(msg, d_on_message.clone(), permissions_token.clone(), address)
+        }))
+    })
+}
+
 pub async fn webrtc_start_session(
     signaling_server_token: String,
     permissions_token: String,
@@ -81,57 +169,16 @@ pub async fn webrtc_start_session(
 
     let pc = api.new_peer_connection(get_rtc_configuration()).await?;
     pc.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
-        let permissions_token = permissions_token.clone();
-        Box::pin(async move {
-            let d_on_message = d.clone();
-            d.on_message(Box::new(move |msg: DataChannelMessage| {
-                let d_on_message = d_on_message.clone();
-                let permissions_token = permissions_token.clone();
-                Box::pin(async move {
-                    let msg_str = String::from_utf8(msg.data.to_vec()).unwrap();
-                    let request = serde_json::from_str::<Request>(&msg_str).unwrap();
-                    let response;
-                    if request.method == "get.token" {
-                        response = Response {
-                            payload: serde_json::to_string(&permissions_token).unwrap(),
-                            id: request.id,
-                        };
-                    } else {
-                        let result = make_request(address, Some(request.token), request.method, request.params)
-                            .await
-                            .unwrap();
-                        response = Response {
-                            payload: result.to_string(),
-                            id: request.id,
-                        };
-                    }
-                    d_on_message
-                        .send_text(serde_json::to_string(&response).unwrap())
-                        .await
-                        .unwrap();
-                })
-            }))
-        })
+        on_data_channel(d, permissions_token.clone(), address)
     }));
 
     let signaling_server_token_clone = signaling_server_token.clone();
     pc.on_ice_candidate(Box::new(move |ice_candidate: Option<RTCIceCandidate>| {
-        if let Some(ice_candidate) = ice_candidate {
-            let signaling_server_token = signaling_server_token_clone.clone();
-            tokio::task::spawn(async move {
-                if let Err(err) = make_request(
-                    signaling_server_address,
-                    Some(signaling_server_token),
-                    "add.answer_ice_candidate".to_string(),
-                    &ice_candidate,
-                )
-                .await
-                {
-                    log::error!(target: LOG_TARGET, "Error sending ice candidate: {}", err);
-                }
-            });
-        }
-        Box::pin(async {})
+        on_ice_candidate(
+            ice_candidate,
+            signaling_server_token_clone.clone(),
+            signaling_server_address,
+        )
     }));
 
     let offer = make_request(
@@ -142,7 +189,7 @@ pub async fn webrtc_start_session(
     )
     .await?;
 
-    let desc = RTCSessionDescription::offer(offer.to_string())?;
+    let desc = RTCSessionDescription::offer(offer.as_str().ok_or(anyhow::anyhow!("RTC Offer error"))?.to_string())?;
     pc.set_remote_description(desc).await?;
 
     let ices = make_request(
@@ -153,9 +200,11 @@ pub async fn webrtc_start_session(
     )
     .await?;
 
-    let ices: Vec<String> = serde_json::from_value(ices)?;
+    let ices: Vec<RTCIceCandidateInit> =
+        serde_json::from_str(ices.as_str().ok_or(anyhow::anyhow!("RTC Ice candidate error"))?)?;
     for ice_candidate in ices {
-        let ice_candidate: RTCIceCandidateInit = serde_json::from_str(ice_candidate.as_str())?;
+        println!("ice_candidate {:?}", ice_candidate);
+        // let ice_candidate: RTCIceCandidateInit = serde_json::from_str(ice_candidate.as_str())?;
         pc.add_ice_candidate(ice_candidate).await?;
     }
     let answer = pc.create_answer(None).await?;
