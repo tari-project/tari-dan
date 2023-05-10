@@ -11,13 +11,14 @@ use tari_template_lib::{
     Hash,
 };
 
-use crate::substate::SubstateAddress;
+use crate::{commit_result::ExecuteResultAddress, substate::SubstateAddress};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct IndexedValue {
     buckets: Vec<BucketId>,
     component_addresses: Vec<ComponentAddress>,
     resource_addresses: Vec<ResourceAddress>,
+    execute_result_addresses: Vec<ExecuteResultAddress>,
     non_fungible_addresses: Vec<NonFungibleAddress>,
     vault_ids: Vec<VaultId>,
     metadata: Vec<Metadata>,
@@ -33,6 +34,7 @@ impl IndexedValue {
             buckets: visitor.buckets,
             resource_addresses: visitor.resource_addresses,
             component_addresses: visitor.component_addresses,
+            execute_result_addresses: visitor.execute_result_addresses,
             non_fungible_addresses: visitor.non_fungible_addresses,
             vault_ids: visitor.vault_ids,
             metadata: visitor.metadata,
@@ -43,6 +45,7 @@ impl IndexedValue {
         match addr {
             SubstateAddress::Component(addr) => self.component_addresses.contains(addr),
             SubstateAddress::Resource(addr) => self.resource_addresses.contains(addr),
+            SubstateAddress::ExecuteResult(addr) => self.execute_result_addresses.contains(addr),
             SubstateAddress::NonFungible(addr) => self.non_fungible_addresses.contains(addr),
             SubstateAddress::Vault(addr) => self.vault_ids.contains(addr),
             SubstateAddress::UnclaimedConfidentialOutput(_) => false,
@@ -88,6 +91,7 @@ impl IndexedValue {
 pub enum TariValue {
     ComponentAddress(ComponentAddress),
     ResourceAddress(ResourceAddress),
+    ExecuteResultAddress(ExecuteResultAddress),
     NonFungibleAddress(NonFungibleAddress),
     BucketId(BucketId),
     Metadata(Metadata),
@@ -98,7 +102,9 @@ impl FromTagAndValue for TariValue {
     type Error = ValueVisitorError;
 
     fn try_from_tag_and_value(tag: u64, value: &tari_bor::Value) -> Result<Self, Self::Error>
-    where Self: Sized {
+    where
+        Self: Sized,
+    {
         let tag = BinaryTag::from_u64(tag).ok_or(ValueVisitorError::InvalidTag(tag))?;
         match tag {
             BinaryTag::ComponentAddress => {
@@ -112,6 +118,10 @@ impl FromTagAndValue for TariValue {
             BinaryTag::ResourceAddress => {
                 let resource_address: Hash = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::ResourceAddress(resource_address.into()))
+            },
+            BinaryTag::ExecuteResultAddress => {
+                let execute_resource_address: Hash = value.deserialized().map_err(BorError::from)?;
+                Ok(Self::ExecuteResultAddress(execute_resource_address.into()))
             },
             BinaryTag::NonFungibleAddress => {
                 let non_fungible_address: NonFungibleAddressContents = value.deserialized().map_err(BorError::from)?;
@@ -134,6 +144,7 @@ pub struct IndexedValueVisitor {
     buckets: Vec<BucketId>,
     component_addresses: Vec<ComponentAddress>,
     resource_addresses: Vec<ResourceAddress>,
+    execute_result_addresses: Vec<ExecuteResultAddress>,
     non_fungible_addresses: Vec<NonFungibleAddress>,
     vault_ids: Vec<VaultId>,
     metadata: Vec<Metadata>,
@@ -145,6 +156,7 @@ impl IndexedValueVisitor {
             buckets: vec![],
             component_addresses: vec![],
             resource_addresses: vec![],
+            execute_result_addresses: vec![],
             non_fungible_addresses: vec![],
             vault_ids: vec![],
             metadata: vec![],
@@ -162,6 +174,9 @@ impl ValueVisitor<TariValue> for IndexedValueVisitor {
             },
             TariValue::ResourceAddress(address) => {
                 self.resource_addresses.push(address);
+            },
+            TariValue::ExecuteResultAddress(address) => {
+                self.execute_result_addresses.push(address);
             },
             TariValue::BucketId(bucket_id) => {
                 self.buckets.push(bucket_id);

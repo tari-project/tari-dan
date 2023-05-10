@@ -20,9 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::{self, Display, Formatter};
+
 use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{models::BinaryTag, Hash};
+use tari_template_lib::{models::BinaryTag, Hash, HashParseError};
 
 use crate::{
     events::Event,
@@ -36,6 +38,33 @@ const TAG: u64 = BinaryTag::ExecuteResultAddress.as_u64();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ExecuteResultAddress(Required<Hash, TAG>);
+
+impl ExecuteResultAddress {
+    pub const fn new(address: Hash) -> Self {
+        Self(Required(address))
+    }
+
+    pub fn hash(&self) -> &Hash {
+        &self.0 .0
+    }
+
+    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
+        let hash = Hash::from_hex(hex)?;
+        Ok(Self::new(hash))
+    }
+}
+
+impl<T: Into<Hash>> From<T> for ExecuteResultAddress {
+    fn from(address: T) -> Self {
+        Self::new(address.into())
+    }
+}
+
+impl Display for ExecuteResultAddress {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "resource_{}", self.0 .0)
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecuteResult {

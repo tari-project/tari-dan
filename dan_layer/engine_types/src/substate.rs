@@ -135,6 +135,7 @@ impl SubstateAddress {
                 .chain(address.resource_address().hash())
                 .chain(&address.index())
                 .result(),
+            SubstateAddress::ExecuteResult(address) => *address.hash(),
         }
     }
 
@@ -235,6 +236,7 @@ impl Display for SubstateAddress {
             SubstateAddress::NonFungible(addr) => write!(f, "{}", addr),
             SubstateAddress::NonFungibleIndex(addr) => write!(f, "{}", addr),
             SubstateAddress::UnclaimedConfidentialOutput(commitment_address) => write!(f, "{}", commitment_address),
+            SubstateAddress::ExecuteResult(addr) => write!(f, "{}", addr),
         }
     }
 }
