@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Hash(/* #[cfg_attr(feature = "hex", serde(with = "hex"))] */ [u8; 32]);
+pub struct Hash([u8; 32]);
 
 impl Hash {
     pub const fn from_array(bytes: [u8; 32]) -> Self {
@@ -90,6 +90,7 @@ impl TryFrom<&[u8]> for Hash {
         Ok(Hash(hash))
     }
 }
+
 impl TryFrom<Vec<u8>> for Hash {
     type Error = HashParseError;
 
@@ -105,6 +106,7 @@ impl Deref for Hash {
         &self.0
     }
 }
+
 impl DerefMut for Hash {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0

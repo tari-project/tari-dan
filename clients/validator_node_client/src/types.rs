@@ -25,7 +25,6 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{
     quorum_certificate::{QuorumCertificate, QuorumDecision},
-    serde_with,
     Epoch,
     ShardId,
 };
@@ -33,6 +32,7 @@ use tari_dan_core::models::RecentTransaction;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     fees::FeeCostBreakdown,
+    serde_with,
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };

@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{
@@ -68,6 +70,31 @@ impl From<Hash> for VaultId {
 impl Display for VaultId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "vault_{}", *self.0)
+    }
+}
+
+impl AsRef<[u8]> for VaultId {
+    fn as_ref(&self) -> &[u8] {
+        self.hash()
+    }
+}
+
+impl FromStr for VaultId {
+    type Err = HashParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.strip_prefix("vault_").ok_or(HashParseError)?;
+        let hash = Hash::from_hex(s)?;
+        Ok(Self::new(hash))
+    }
+}
+
+impl TryFrom<Vec<u8>> for VaultId {
+    type Error = HashParseError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let hash = Hash::try_from(value)?;
+        Ok(Self::new(hash))
     }
 }
 

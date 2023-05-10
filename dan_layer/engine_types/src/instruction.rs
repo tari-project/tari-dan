@@ -9,18 +9,19 @@ use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
 };
 
-use crate::confidential::ConfidentialClaim;
+use crate::{confidential::ConfidentialClaim, serde_with};
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
-//#[serde(tag = "type")]
 pub enum Instruction {
     CallFunction {
+        #[serde(with = "serde_with::hex")]
         template_address: TemplateAddress,
         function: String,
         #[serde(deserialize_with = "crate::argument_parser::json_deserialize")]
         args: Vec<Arg>,
     },
     CallMethod {
+        #[serde(with = "serde_with::string")]
         component_address: ComponentAddress,
         method: String,
         #[serde(deserialize_with = "crate::argument_parser::json_deserialize")]

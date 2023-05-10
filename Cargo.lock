@@ -1279,31 +1279,28 @@ dependencies = [
 
 [[package]]
 name = "ciborium"
-version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "effd91f6c78e5a4ace8a5d3c0b6bfaec9e2baaef55f3efc00e45fb2e477ee926"
 dependencies = [
- "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56)",
+ "ciborium-io",
  "ciborium-ll",
  "serde",
 ]
 
 [[package]]
 name = "ciborium-io"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "346de753af073cc87b52b2083a506b38ac176a44cfb05497b622e27be899b369"
-
-[[package]]
-name = "ciborium-io"
-version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+checksum = "cdf919175532b369853f5d5e20b26b43112613fd6fe7aee757e35f7a44642656"
 
 [[package]]
 name = "ciborium-ll"
-version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "defaa24ecc093c77630e6c15e17c51f5e187bf35ee514f4e2d67baaa96dae22b"
 dependencies = [
- "ciborium-io 0.2.0 (git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56)",
+ "ciborium-io",
  "half",
 ]
 
@@ -6243,9 +6240,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d721eca97ac802aa7777b701877c8004d950fc142651367300d21c1cc0194744"
+checksum = "057d394a50403bcac12672b2b18fb387ab6d289d957dab67dd201875391e52f1"
 dependencies = [
  "itoa",
  "ryu",
@@ -6940,8 +6937,8 @@ name = "tari_bor"
 version = "0.50.0-pre.0"
 dependencies = [
  "ciborium",
- "ciborium-io 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -7319,7 +7316,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "log",
- "serde",
  "serde_json",
  "tari_app_grpc",
  "tari_base_node_grpc_client",
@@ -7347,7 +7343,6 @@ name = "tari_dan_common_types"
 version = "0.50.0-pre.0"
 dependencies = [
  "anyhow",
- "base64 0.20.0",
  "bincode",
  "digest 0.9.0",
  "newtype-ops",
@@ -7630,12 +7625,14 @@ dependencies = [
 name = "tari_engine_types"
 version = "0.50.0-pre.0"
 dependencies = [
+ "base64 0.21.0",
  "borsh",
  "digest 0.9.0",
  "hex",
  "lazy_static",
  "rand 0.7.3",
  "serde",
+ "serde_json",
  "tari_bor",
  "tari_common_types",
  "tari_crypto",
@@ -7665,7 +7662,7 @@ dependencies = [
  "axum-jrpc",
  "chrono",
  "ciborium",
- "ciborium-io 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciborium-io",
  "clap 3.2.23",
  "config",
  "diesel",
@@ -7897,17 +7894,12 @@ dependencies = [
  "axum-jrpc",
  "chrono",
  "clap 4.1.11",
- "diesel",
- "diesel_migrations",
  "dirs",
  "jsonwebtoken",
  "log",
- "multiaddr 0.17.1",
- "regex",
  "serde",
  "serde_json",
  "tari_common",
- "tari_dan_wallet_storage_sqlite",
  "tari_shutdown",
  "tokio",
  "tower-http",
@@ -7945,7 +7937,6 @@ dependencies = [
 name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
- "ciborium",
  "newtype-ops",
  "serde",
  "serde-big-array 0.5.1",

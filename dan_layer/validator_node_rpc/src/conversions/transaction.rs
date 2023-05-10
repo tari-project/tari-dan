@@ -216,7 +216,7 @@ impl TryFrom<proto::transaction::Arg> for Arg {
     type Error = anyhow::Error;
 
     fn try_from(request: proto::transaction::Arg) -> Result<Self, Self::Error> {
-        let data = request.data.clone();
+        let data = request.data;
         let arg = match request.arg_type {
             0 => Arg::Literal(data),
             1 => Arg::Workspace(data),
