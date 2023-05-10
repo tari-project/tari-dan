@@ -17,11 +17,13 @@ pub enum Instruction {
     CallFunction {
         template_address: TemplateAddress,
         function: String,
+        #[serde(deserialize_with = "crate::argument_parser::json_deserialize")]
         args: Vec<Arg>,
     },
     CallMethod {
         component_address: ComponentAddress,
         method: String,
+        #[serde(deserialize_with = "crate::argument_parser::json_deserialize")]
         args: Vec<Arg>,
     },
     PutLastInstructionOutputOnWorkspace {
