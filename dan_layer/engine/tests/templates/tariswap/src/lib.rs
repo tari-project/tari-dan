@@ -68,6 +68,10 @@ mod tariswap {
             let input_balance = self.get_pool_balance(input_resource);
             let output_balance = self.get_pool_balance(output_resource);
 
+            // check that the pools are not empty, to prevent division by 0 errors later
+            assert!(!input_balance.is_zero(), "The pool for resource '{}' is empty", input_resource);
+            assert!(!output_balance.is_zero(), "The pool for resource '{}' is empty", output_resource);
+
             // recalculate the new vault balances for the swap
             // constant product AMM formula is "k = a * b"
             // so the new output vault balance should be "b = k / a"
@@ -98,7 +102,6 @@ mod tariswap {
 
             balances
         }
-
         
         pub fn get_pool_balance(&self, resource_address: ResourceAddress) -> Amount {
             let vault = self.pool_vaults.get(&resource_address)
