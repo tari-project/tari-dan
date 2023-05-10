@@ -61,6 +61,7 @@ use utils::{
     validator_node::spawn_validator_node,
     validator_node_cli,
     wallet::spawn_wallet,
+    wallet_daemon_cli,
 };
 
 use crate::utils::{
@@ -96,6 +97,7 @@ pub struct TariWorld {
     pub account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
+    pub wallet_daemon_outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
 }
 
 impl TariWorld {
@@ -150,6 +152,10 @@ impl TariWorld {
             // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
             p.shutdown.trigger();
         }
+        println!("Removing validator node outputs");
+        self.outputs.clear();
+        println!("Removing wallet daemon outputs");
+        self.wallet_daemon_outputs.clear();
         self.miners.clear();
     }
 }
@@ -374,6 +380,36 @@ async fn assert_template_is_registered_by_all(world: &mut TariWorld, template_na
         // check that the template is indeed in the response
         assert_eq!(resp.registration_metadata.address, template_address);
     }
+}
+
+#[when(
+    expr = r#"I call function "{word}" on template "{word}" using account {word} to pay fees via wallet daemon {word} with args "{word}" and {int} outputs named "{word}""#
+)]
+async fn call_template_constructor_via_wallet_daemon(
+    world: &mut TariWorld,
+    function_call: String,
+    template_name: String,
+    account_name: String,
+    wallet_daemon_name: String,
+    args: String,
+    num_outputs: u64,
+    outputs_name: String,
+) {
+    let args = args.split(',').map(|a| a.trim().to_string()).collect();
+    wallet_daemon_cli::create_component(
+        world,
+        outputs_name,
+        template_name,
+        account_name,
+        wallet_daemon_name,
+        function_call,
+        args,
+        num_outputs,
+    )
+    .await;
+
+    // give it some time between transactions
+    tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(
@@ -674,6 +710,51 @@ async fn submit_manifest_with_inputs(
     validator_node_cli::submit_manifest(world, vn_name, outputs_name, manifest, inputs, num_outputs).await;
 }
 
+#[when(expr = "account {word} reveals {int} burned tokens via wallet daemon {word}")]
+async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, amount: u64, wallet_daemon_name: String) {
+    wallet_daemon_cli::reveal_burned_funds(world, account_name, amount, wallet_daemon_name).await;
+}
+
+#[when(
+    regex = r#"^I submit a transaction manifest via wallet daemon (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)"$"#
+)]
+async fn submit_transaction_manifest_via_wallet_daemon(
+    world: &mut TariWorld,
+    step: &Step,
+    wallet_daemon_name: String,
+    inputs: String,
+    num_outputs: u64,
+    outputs_name: String,
+) {
+    let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
+    wallet_daemon_cli::submit_manifest(world, wallet_daemon_name, manifest, inputs, num_outputs, outputs_name).await;
+}
+
+#[when(
+    regex = r#"^I submit a transaction manifest via wallet daemon (\w+) signed by the key of (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)"$"#
+)]
+async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
+    world: &mut TariWorld,
+    step: &Step,
+    wallet_daemon_name: String,
+    account_signing_key: String,
+    inputs: String,
+    num_outputs: u64,
+    outputs_name: String,
+) {
+    let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
+    wallet_daemon_cli::submit_manifest_with_signing_keys(
+        world,
+        wallet_daemon_name,
+        account_signing_key,
+        manifest,
+        inputs,
+        num_outputs,
+        outputs_name,
+    )
+    .await;
+}
+
 fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
     // define all templates
     let template_defs = world.templates.iter().fold(String::new(), |acc, (name, template)| {
@@ -833,6 +914,20 @@ async fn print_world(world: &mut TariWorld) {
 
     // templates
     for (name, outputs) in world.outputs.iter() {
+        eprintln!("Outputs \"{}\"", name);
+        for (name, addr) in outputs {
+            eprintln!("  - {}: {}", name, addr);
+        }
+    }
+
+    // wallet daemons
+    for (name, daemon) in world.wallet_daemons.iter() {
+        eprintln!("Wallet daemons \"{}\"", name);
+        eprintln!("  - {}: {}", name, daemon.name);
+    }
+
+    // wallet daemon substate addresses
+    for (name, outputs) in world.wallet_daemon_outputs.iter() {
         eprintln!("Outputs \"{}\"", name);
         for (name, addr) in outputs {
             eprintln!("  - {}: {}", name, addr);
