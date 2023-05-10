@@ -25,8 +25,8 @@ use std::{
     str::FromStr,
 };
 
-use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
+use tari_bor::BorTag;
 
 use super::BinaryTag;
 use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
@@ -34,19 +34,19 @@ use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules,
 const TAG: u64 = BinaryTag::ComponentAddress.as_u64();
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ComponentAddress(Required<Hash, TAG>);
+pub struct ComponentAddress(BorTag<Hash, TAG>);
 
 impl ComponentAddress {
     pub const fn new(address: Hash) -> Self {
-        Self(Required(address))
+        Self(BorTag::new(address))
     }
 
     pub fn hash(&self) -> &Hash {
-        &self.0 .0
+        &self.0
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0 .0
+        &self.0
     }
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
@@ -86,7 +86,7 @@ impl TryFrom<Vec<u8>> for ComponentAddress {
 
 impl Display for ComponentAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "component_{}", self.0 .0)
+        write!(f, "component_{}", *self.0)
     }
 }
 
