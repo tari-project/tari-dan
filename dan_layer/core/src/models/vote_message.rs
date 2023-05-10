@@ -50,7 +50,7 @@ pub struct VoteMessage {
     all_shard_pledges: ShardPledgeCollection,
     validator_metadata: Option<ValidatorMetadata>,
     merkle_proof: Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
-    node_hash: Vec<u8>,
+    node_hash: FixedHash,
 }
 
 impl VoteMessage {
@@ -61,7 +61,7 @@ impl VoteMessage {
             all_shard_pledges: shard_pledges,
             validator_metadata: None,
             merkle_proof: None,
-            node_hash: vec![],
+            node_hash: FixedHash::zero(),
         }
     }
 
@@ -84,7 +84,7 @@ impl VoteMessage {
         all_shard_pledges: ShardPledgeCollection,
         validator_metadata: ValidatorMetadata,
         merkle_proof: Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
-        node_hash: Vec<u8>,
+        node_hash: FixedHash,
     ) -> Self {
         Self {
             local_node_hash,
@@ -106,7 +106,7 @@ impl VoteMessage {
         let challenge = self.construct_challenge();
         let signature = signing_service.sign(&*challenge).ok_or(HotStuffError::FailedToSignQc)?;
         // construct the merkle proof for the inclusion of the VN's public key in the epoch
-        let node_hash = vn_bmt_node_hash(signing_service.public_key(), &shard_id).to_vec();
+        let node_hash = vn_bmt_node_hash(signing_service.public_key(), &shard_id);
         debug!(
             target: LOG_TARGET,
             "[sign_vote] bmt_node_hash={}, public_key={}, shard_id={}",
@@ -115,17 +115,17 @@ impl VoteMessage {
             shard_id,
         );
         let leaf_index = vn_bmt
-            .find_leaf_index_for_hash(&node_hash)
+            .find_leaf_index_for_hash(&node_hash.to_vec())
             .map_err(|_| HotStuffError::ValidatorNodeNotIncludedInBMT)?;
         let merkle_proof = BalancedBinaryMerkleProof::generate_proof(vn_bmt, leaf_index as usize)
             .map_err(|_| HotStuffError::FailedToGenerateMerkleProof)?;
 
         let root = vn_bmt.get_merkle_root();
         let idx = vn_bmt
-            .find_leaf_index_for_hash(&node_hash)
+            .find_leaf_index_for_hash(&node_hash.to_vec())
             .map_err(|_| HotStuffError::ValidatorNodeNotIncludedInBMT)?;
         // TODO: remove
-        if !merkle_proof.verify(&root, node_hash.clone()) {
+        if !merkle_proof.verify(&root, node_hash.to_vec()) {
             log::warn!(
                 target: "tari::dan_layer::votemessage",
                 "Merkle proof verification failed for validator node {} at index {:?}",
@@ -170,12 +170,10 @@ impl VoteMessage {
         self.merkle_proof.clone()
     }
 
-    // TODO: impl CBOR for merged merkle proof
     pub fn encode_merkle_proof(&self) -> Vec<u8> {
         bincode::serialize(&self.merkle_proof).unwrap()
     }
 
-    // TODO: impl CBOR for merkle proof
     pub fn decode_merkle_proof(
         bytes: &[u8],
     ) -> Result<Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>, io::Error> {
@@ -183,7 +181,7 @@ impl VoteMessage {
         bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    pub fn node_hash(&self) -> Vec<u8> {
+    pub fn node_hash(&self) -> FixedHash {
         self.node_hash.clone()
     }
 }

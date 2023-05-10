@@ -1504,9 +1504,11 @@ where
             // Check the proof only for non-genesis blocks
             let res = qc
                 .merged_proof()
-                .unwrap()
-                .verify_consume(&validator_node_root, qc.leave_hashes());
-            let res = res.unwrap();
+                .ok_or(HotStuffError::MerkleProofMissing)?
+                .verify_consume(
+                    &validator_node_root,
+                    qc.leave_hashes().iter().map(|hash| hash.to_vec()).collect(),
+                )?;
             if !res {
                 return Err(HotStuffError::InvalidQuorumCertificate(
                     "invalid merkle proof".to_string(),

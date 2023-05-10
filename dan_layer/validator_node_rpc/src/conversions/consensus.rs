@@ -23,7 +23,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{
@@ -50,7 +50,7 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
             all_shard_pledges: msg.all_shard_pledges().iter().map(|n| n.clone().into()).collect(),
             validator_metadata: Some(msg.validator_metadata().clone().into()),
             merkle_proof: msg.encode_merkle_proof(),
-            node_hash: msg.node_hash(),
+            node_hash: msg.node_hash().to_vec(),
         }
     }
 }
@@ -72,7 +72,7 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
                 .collect::<Result<_, _>>()?,
             metadata.try_into()?,
             VoteMessage::decode_merkle_proof(&value.merkle_proof)?,
-            value.node_hash,
+            FixedHash::try_from(value.node_hash)?,
         ))
     }
 }
@@ -169,7 +169,7 @@ impl From<QuorumCertificate<PublicKey>> for proto::consensus::QuorumCertificate 
             all_shard_pledges: source.all_shard_pledges().iter().map(|p| p.clone().into()).collect(),
             validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),
             merged_merkle_proof,
-            leaves_hashes: source.leave_hashes(),
+            leaves_hashes: source.leave_hashes().iter().map(|hash| hash.to_vec()).collect(),
         }
     }
 }
@@ -198,7 +198,11 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate<PublicKe
                 .map(|v| v.clone().try_into())
                 .collect::<Result<_, _>>()?,
             QuorumCertificate::<PublicKey>::decode_merged_merkle_proof(&value.merged_merkle_proof)?,
-            value.leaves_hashes,
+            value
+                .leaves_hashes
+                .into_iter()
+                .map(|hash| FixedHash::try_from(hash))
+                .collect::<Result<_, _>>()?,
         ))
     }
 }

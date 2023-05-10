@@ -10,7 +10,7 @@ use tari_engine_types::{
     commit_result::RejectReason,
     hashing::{hasher, EngineHashDomainLabel},
 };
-use tari_mmr::{Hash, MergedBalancedBinaryMerkleProof};
+use tari_mmr::MergedBalancedBinaryMerkleProof;
 
 use crate::{
     Epoch,
@@ -113,7 +113,7 @@ pub struct QuorumCertificate<TAddr> {
     all_shard_pledges: ShardPledgeCollection,
     validators_metadata: Vec<ValidatorMetadata>,
     merged_proof: Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
-    leaves_hashes: Vec<Hash>,
+    leaves_hashes: Vec<FixedHash>,
 }
 
 impl<TAddr: Clone> QuorumCertificate<TAddr> {
@@ -137,7 +137,7 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
         all_shard_pledges: ShardPledgeCollection,
         validators_metadata: Vec<ValidatorMetadata>,
         merged_proof: Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
-        leaves_hashes: Vec<Hash>,
+        leaves_hashes: Vec<FixedHash>,
     ) -> Self {
         Self {
             payload_id: payload,
@@ -205,7 +205,7 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
         bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    pub fn leave_hashes(&self) -> Vec<Hash> {
+    pub fn leave_hashes(&self) -> Vec<FixedHash> {
         self.leaves_hashes.clone()
     }
 
