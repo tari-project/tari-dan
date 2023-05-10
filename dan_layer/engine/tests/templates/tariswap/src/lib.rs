@@ -28,18 +28,16 @@ mod tariswap {
     use super::*;
 
     // Constant product AMM
-    // TODO: liquidity providing
-    // TODO: pay market fee to LP holders (market fee as a constructor param)
-    // TODO: lp resource minting/burning security
     pub struct TariSwapPool {
         pools: HashMap<ResourceAddress, Vault>,
         lp_resource: ResourceAddress,
+        fee: f64,
     }
 
     impl TariSwapPool {
 
         // Initialises a new pool component for for the pool A - B
-        pub fn new(a_addr: ResourceAddress, b_addr: ResourceAddress) -> Self {
+        pub fn new(a_addr: ResourceAddress, b_addr: ResourceAddress, fee: f64) -> Self {
             // check the the resource pair is correct
             assert!(a_addr != b_addr, "The resources of the pair must be different");
             assert!(
@@ -51,17 +49,23 @@ mod tariswap {
                 "Resource 'b' is not fungible"
             );
 
+            // the fee represents a percentage, so it must be between 0 and 100
+            let valid_fee_range = 0.0..100.0;
+            assert!(valid_fee_range.contains(&fee), "Invalid fee {}", fee);
+
             // create the vaults to store the funds
             let mut pools = HashMap::new();
             pools.insert(a_addr, Vault::new_empty(a_addr));
             pools.insert(b_addr, Vault::new_empty(b_addr));
 
             // create the lp resource
+            // TODO: lp resource minting/burning security, only this component should be allowed
             let lp_resource = ResourceBuilder::fungible("LP").build();
 
             Self {
                 pools,
                 lp_resource,
+                fee,
             }
         }
 
@@ -72,23 +76,30 @@ mod tariswap {
             self.check_pool_resources(input_resource, output_resource);
 
             // get the data needed to calculate the pool rebalancing
-            let input_balance = self.get_pool_balance(input_resource);
-            let output_balance = self.get_pool_balance(output_resource);
+            let input_pool_balance = self.get_pool_balance(input_resource);
+            let output_pool_balance = self.get_pool_balance(output_resource);
 
             // check that the pools are not empty, to prevent division by 0 errors later
-            assert!(!input_balance.is_zero(), "The pool for resource '{}' is empty", input_resource);
-            assert!(!output_balance.is_zero(), "The pool for resource '{}' is empty", output_resource);
+            assert!(!input_pool_balance.is_zero(), "The pool for resource '{}' is empty", input_resource);
+            assert!(!output_pool_balance.is_zero(), "The pool for resource '{}' is empty", output_resource);
+
+            // apply the fee to the input bucket
+            // so the user will get a lesser amout of tokens than the theoritical (for the gain of the LP holders)
+            let input_bucket_balance = input_bucket.amount().value() as f64;
+            let input_bucket_balance = input_bucket_balance - (input_bucket_balance * self.fee) / 100.0;
+            let input_bucket_balance = input_bucket_balance.ceil() as i64;
+            let input_bucket_balance = Amount::new(input_bucket_balance);
 
             // recalculate the new vault balances for the swap
             // constant product AMM formula is "k = a * b"
             // so the new output vault balance should be "b = k / a"
-            let k = input_balance * output_balance;
-            let new_input_balance = input_balance + input_bucket.amount();
-            let new_output_balance = k / new_input_balance;
+            let k = input_pool_balance * output_pool_balance;
+            let new_input_pool_balance = input_pool_balance + input_bucket_balance;
+            let new_output_pool_balance = k / new_input_pool_balance;
 
             // calculate the amount of output tokens to return to the user
-            let output_bucket_amount = output_balance - new_output_balance;
-
+            let output_bucket_amount = output_pool_balance - new_output_pool_balance;
+            
             // perform the swap
             self.pools.get_mut(&input_resource).unwrap().deposit(input_bucket);
             self.pools.get_mut(&output_resource).unwrap().withdraw(output_bucket_amount)
@@ -156,6 +167,10 @@ mod tariswap {
 
         pub fn lp_total_supply(&self) -> Amount {
             ResourceManager::get(self.lp_resource).total_supply()
+        }
+
+        pub fn fee(&self) -> f64 {
+            self.fee
         }
 
         fn check_pool_resources(&self, a_resource: ResourceAddress, b_resource: ResourceAddress) {

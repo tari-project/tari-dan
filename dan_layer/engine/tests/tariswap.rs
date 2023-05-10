@@ -22,14 +22,14 @@ struct TariSwapTest {
     account_proof: NonFungibleAddress,
 }
 
-fn setup() -> TariSwapTest {
+fn setup(fee: f64) -> TariSwapTest {
     let mut template_test = TemplateTest::new(vec!["tests/templates/tariswap", "tests/templates/faucet"]);
 
     // create the token pair for the swap pool
     let (a_faucet, a_resource) = create_faucet_component(&mut template_test, "A".to_string());
     let (b_faucet, b_resource) = create_faucet_component(&mut template_test, "B".to_string());
 
-    let (tariswap, lp_resource) = create_tariswap_component(&mut template_test, a_resource, b_resource);
+    let (tariswap, lp_resource) = create_tariswap_component(&mut template_test, a_resource, b_resource, fee);
 
     let (account_address, account_proof, _) = template_test.create_owned_account();
     fund_account(&mut template_test, account_address, a_faucet);
@@ -63,6 +63,7 @@ fn create_tariswap_component(
     template_test: &mut TemplateTest,
     a_resource: ResourceAddress,
     b_resource: ResourceAddress,
+    fee: f64,
 ) -> (ComponentAddress, ResourceAddress) {
     let module_name = "TariSwapPool";
     let tariswap_template = template_test.get_template_address(module_name);
@@ -73,7 +74,7 @@ fn create_tariswap_component(
                 Instruction::CallFunction {
                     template_address: tariswap_template,
                     function: "new".to_string(),
-                    args: args![a_resource, b_resource],
+                    args: args![a_resource, b_resource, fee],
                 },
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"lp_bucket".to_vec(),
@@ -216,7 +217,8 @@ fn get_account_balance(test: &mut TariSwapTest, resource_address: ResourceAddres
 #[test]
 fn add_liquidity_and_swap() {
     // init the test
-    let mut test = setup();
+    let fee = 5.0; // 5% market fee
+    let mut test = setup(fee);
     let a_resource = test.a_resource;
     let b_resource = test.b_resource;
     let lp_resource = test.lp_resource;
@@ -255,7 +257,7 @@ fn add_liquidity_and_swap() {
     // ------- FIRST SWAP -------
     // do a swap, giving "A" tokens for "B" tokens
     let input_amount = Amount::new(50);
-    let expected_output_amount = Amount::new(46); // following the constant product formula: b = k / a
+    let expected_output_amount = Amount::new(44); // applyng market fees and the constant product formula: b = k / a
     swap(&mut test, &a_resource, &b_resource, input_amount);
 
     // check that the new pool balances are expected
@@ -278,7 +280,7 @@ fn add_liquidity_and_swap() {
     // do another swap
     // this time we are providing "B" tokens which are more scarce now, so we receive a more of "A" tokens in return
     let input_amount = Amount::new(50);
-    let expected_output_amount = Amount::new(55); // following the constant product formula: b = k / a
+    let expected_output_amount = Amount::new(53); // applyng market fees and the constant product formula: b = k / a
     swap(&mut test, &b_resource, &a_resource, input_amount);
     assert_eq!(
         get_pool_balance(&mut test, a_resource),
