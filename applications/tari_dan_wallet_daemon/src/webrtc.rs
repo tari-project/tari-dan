@@ -111,10 +111,18 @@ pub fn on_message(
                 Ok(request) => {
                     let response;
                     if request.method == "get.token" {
-                        response = Response {
-                            payload: serde_json::to_string(&permissions_token)?,
-                            id: request.id,
-                        };
+                        match serde_json::to_string(&permissions_token) {
+                            Ok(token) => {
+                                response = Response {
+                                    payload: token,
+                                    id: request.id,
+                                }
+                            },
+                            Err(e) => {
+                                log::error!(target: LOG_TARGET, "{}", e.to_string());
+                                return;
+                            },
+                        }
                     } else {
                         let result = match serde_json::from_str::<serde_json::Value>(&request.params) {
                             Ok(params) => {
@@ -189,7 +197,12 @@ pub async fn webrtc_start_session(
     )
     .await?;
 
-    let desc = RTCSessionDescription::offer(offer.as_str().ok_or(anyhow::anyhow!("RTC Offer error"))?.to_string())?;
+    let desc = RTCSessionDescription::offer(
+        offer
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("RTC Offer error"))?
+            .to_string(),
+    )?;
     pc.set_remote_description(desc).await?;
 
     let ices = make_request(
@@ -200,8 +213,10 @@ pub async fn webrtc_start_session(
     )
     .await?;
 
-    let ices: Vec<RTCIceCandidateInit> =
-        serde_json::from_str(ices.as_str().ok_or(anyhow::anyhow!("RTC Ice candidate error"))?)?;
+    let ices: Vec<RTCIceCandidateInit> = serde_json::from_str(
+        ices.as_str()
+            .ok_or_else(|| anyhow::anyhow!("RTC Ice candidate error"))?,
+    )?;
     for ice_candidate in ices {
         println!("ice_candidate {:?}", ice_candidate);
         // let ice_candidate: RTCIceCandidateInit = serde_json::from_str(ice_candidate.as_str())?;
