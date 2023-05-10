@@ -29,6 +29,7 @@ pub enum BinaryTag {
     ResourceAddress = 3,
     VaultId = 4,
     BucketId = 5,
+    ExecuteResultAddress = 6,
 }
 
 impl BinaryTag {

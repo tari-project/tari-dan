@@ -7631,6 +7631,7 @@ name = "tari_engine_types"
 version = "0.50.0-pre.0"
 dependencies = [
  "borsh",
+ "ciborium",
  "digest 0.9.0",
  "hex",
  "lazy_static",

@@ -20,8 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
-use tari_template_lib::Hash;
+use tari_template_lib::{models::BinaryTag, Hash};
 
 use crate::{
     events::Event,
@@ -30,6 +31,11 @@ use crate::{
     logs::LogEntry,
     substate::SubstateDiff,
 };
+
+const TAG: u64 = BinaryTag::ExecuteResultAddress.as_u64();
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ExecuteResultAddress(Required<Hash, TAG>);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecuteResult {

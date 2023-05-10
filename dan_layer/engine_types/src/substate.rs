@@ -29,19 +29,14 @@ use serde::{Deserialize, Serialize};
 use tari_bor::{decode, decode_exact, encode, BorError};
 use tari_template_lib::{
     models::{
-        ComponentAddress,
-        ComponentHeader,
-        NonFungibleAddress,
-        NonFungibleId,
-        NonFungibleIndexAddress,
-        ResourceAddress,
-        UnclaimedConfidentialOutputAddress,
-        VaultId,
+        ComponentAddress, ComponentHeader, NonFungibleAddress, NonFungibleId, NonFungibleIndexAddress, ResourceAddress,
+        UnclaimedConfidentialOutputAddress, VaultId,
     },
     Hash,
 };
 
 use crate::{
+    commit_result::{ExecuteResult, ExecuteResultAddress},
     confidential::UnclaimedConfidentialOutput,
     hashing::{hasher, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
@@ -94,6 +89,7 @@ pub enum SubstateAddress {
     UnclaimedConfidentialOutput(UnclaimedConfidentialOutputAddress),
     NonFungible(NonFungibleAddress),
     NonFungibleIndex(NonFungibleIndexAddress),
+    ExecuteResult(ExecuteResultAddress),
 }
 
 impl SubstateAddress {
@@ -333,6 +329,7 @@ pub enum SubstateValue {
     NonFungible(NonFungibleContainer),
     NonFungibleIndex(NonFungibleIndex),
     UnclaimedConfidentialOutput(UnclaimedConfidentialOutput),
+    ExecuteResult(ExecuteResult),
 }
 
 impl SubstateValue {
