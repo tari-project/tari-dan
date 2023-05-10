@@ -12,8 +12,15 @@ use tari_template_lib::{args, prelude::NonFungibleId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
     command::transaction::{
-        handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, NewNonFungibleIndexOutput,
-        NewNonFungibleMintOutput, SpecificNonFungibleMintOutput, SubmitArgs,
+        handle_submit,
+        submit_transaction,
+        CliArg,
+        CliInstruction,
+        CommonSubmitArgs,
+        NewNonFungibleIndexOutput,
+        NewNonFungibleMintOutput,
+        SpecificNonFungibleMintOutput,
+        SubmitArgs,
     },
     from_hex::FromHex,
     key_manager::KeyManager,
@@ -166,33 +173,24 @@ pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String
                 counters[0] += 1;
             },
             SubstateAddress::Resource(_) => {
-                outputs.insert(
-                    format!("resources/{}", counters[1]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
                 counters[1] += 1;
             },
             SubstateAddress::Vault(_) => {
-                outputs.insert(
-                    format!("vaults/{}", counters[2]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
                 counters[2] += 1;
             },
             SubstateAddress::NonFungible(_) => {
-                outputs.insert(
-                    format!("nfts/{}", counters[3]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
                 counters[3] += 1;
             },
             SubstateAddress::UnclaimedConfidentialOutput(_) => {
@@ -206,13 +204,10 @@ pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String
                 counters[4] += 1;
             },
             SubstateAddress::NonFungibleIndex(_) => {
-                outputs.insert(
-                    format!("nft_indexes/{}", counters[5]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
                 counters[5] += 1;
             },
         }
