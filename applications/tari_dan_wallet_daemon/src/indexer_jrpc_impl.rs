@@ -4,7 +4,10 @@
 use axum::async_trait;
 use reqwest::{IntoUrl, Url};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{optional::IsNotFoundError, PayloadId};
+use tari_dan_common_types::{
+    optional::{IsNotFoundError, Optional},
+    PayloadId,
+};
 use tari_dan_wallet_sdk::substate_provider::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface};
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer_client::{
@@ -74,9 +77,16 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
         transaction_hash: PayloadId,
     ) -> Result<TransactionQueryResult, Self::Error> {
         let mut client = self.get_client()?;
-        let result = client
+        let maybe_result = client
             .get_transaction_result(GetTransactionResultRequest { transaction_hash })
-            .await?;
+            .await
+            .optional()?;
+
+        let Some(result) = maybe_result else {
+            return Ok(TransactionQueryResult {
+                execution_result: None,
+            });
+        };
 
         Ok(TransactionQueryResult {
             execution_result: result.execution_result,

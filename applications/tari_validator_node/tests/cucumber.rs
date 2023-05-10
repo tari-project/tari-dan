@@ -687,16 +687,28 @@ async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: Str
     spawn_indexer(world, indexer_name, bn_name).await;
 }
 
-#[given(expr = "{word} indexer GraphQL request work")]
+#[given(expr = "{word} indexer GraphQL request works")]
 async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
-    let indexer = world.indexers.get(&indexer_name).unwrap();
+    let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
+    // insert event mock data in the substate manager database
+    indexer.insert_event_mock_data().await;
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
+    let template_address = [0u8; 32];
+    let tx_hash = [0u8; 32];
+    let query = format!(
+        "{{ getEvent(templateAddress: {:?}, txHash: {:?}) {{ templateAddress, txHash, topic, payload }} }}",
+        template_address, tx_hash
+    );
     let res = graphql_client
-        .send_request::<HashMap<String, String>>("{ hello }", None, None)
+        .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
         .await
         .unwrap();
-    let res = res.get("hello").unwrap();
-    assert_eq!(res.as_str(), "Hello world");
+    let res = res.get("getEvent").unwrap();
+    assert_eq!(res.len(), 1);
+    assert_eq!(res[0].template_address, [0u8; 32]);
+    assert_eq!(res[0].tx_hash, [0u8; 32]);
+    assert_eq!(res[0].topic, "my_event");
+    assert_eq!(res[0].payload, HashMap::from([("my".to_string(), "event".to_string())]));
 }
 
 #[when(expr = "the indexer {word} tracks the address {word}")]

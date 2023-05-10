@@ -64,7 +64,7 @@ impl IndexerGraphQLClient {
             "query": query,
             "variables": variables
         });
-        let mut req = self.client.post(self.endpoint.clone());
+        let mut req: reqwest::RequestBuilder = self.client.post(self.endpoint.clone());
         if let Some(headers) = headers {
             req = req.headers(headers);
         }
