@@ -34,6 +34,7 @@ Feature: Wallet Daemon
 
         # Mine some blocks until the UTXOs are scanned
         When miner MINER mines 5 new blocks
+        When I wait 10 seconds
         Then the template "faucet" is listed as registered by the validator node VAL_1
 
         # A file-base CLI account must be created to sign future calls

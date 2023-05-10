@@ -26,12 +26,7 @@ use std::{collections::HashMap, convert::TryFrom, future, io, str::FromStr, time
 
 use cucumber::{
     gherkin::{Scenario, Step},
-    given,
-    then,
-    when,
-    writer,
-    World,
-    WriterExt,
+    given, then, when, writer, World, WriterExt,
 };
 use indexmap::IndexMap;
 use tari_common::initialize_logging;
@@ -48,11 +43,7 @@ use tari_dan_engine::abi::Type;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
-    AddPeerRequest,
-    GetIdentityResponse,
-    GetRecentTransactionsRequest,
-    GetTemplateRequest,
-    GetTransactionResultRequest,
+    AddPeerRequest, GetIdentityResponse, GetRecentTransactionsRequest, GetTemplateRequest, GetTransactionResultRequest,
     TemplateRegistrationResponse,
 };
 use utils::{
@@ -152,6 +143,10 @@ impl TariWorld {
             // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
             p.shutdown.trigger();
         }
+        println!("Removing validator node outputs");
+        self.outputs.clear();
+        println!("Removing wallet daemon outputs");
+        self.wallet_daemon_outputs.clear();
         self.miners.clear();
     }
 }
@@ -703,8 +698,6 @@ async fn submit_manifest_with_inputs(
     outputs_name: String,
 ) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
-    eprintln!("FLAG: CUCUMBER vn outputs = {:?}", world.outputs);
-    eprintln!("FLAG: CUCUMBER wallet daemons = {:?}", world.wallet_daemon_outputs);
     validator_node_cli::submit_manifest(world, vn_name, outputs_name, manifest, inputs, num_outputs).await;
 }
 
