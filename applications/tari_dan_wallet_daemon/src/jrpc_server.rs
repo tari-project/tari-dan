@@ -159,7 +159,7 @@ where
             value.parse_params().map_err(|e| {
                 match &e.result {
                     JsonRpcAnswer::Result(_) => {
-                        unreachable!("parse_params should not return a result")
+                        unreachable!("parse_params() error should not return a result")
                     },
                     JsonRpcAnswer::Error(e) => {
                         warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);

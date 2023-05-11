@@ -11,14 +11,18 @@ use tari_template_lib::{
     Hash,
 };
 
-use crate::substate::SubstateAddress;
+use crate::{serde_with, substate::SubstateAddress};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct IndexedValue {
     buckets: Vec<BucketId>,
+    #[serde(with = "serde_with::hex::vec")]
     component_addresses: Vec<ComponentAddress>,
+    #[serde(with = "serde_with::hex::vec")]
     resource_addresses: Vec<ResourceAddress>,
+    // #[serde(with = "serde_with::hex::vec")]
     non_fungible_addresses: Vec<NonFungibleAddress>,
+    #[serde(with = "serde_with::hex::vec")]
     vault_ids: Vec<VaultId>,
     metadata: Vec<Metadata>,
 }

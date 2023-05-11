@@ -19,7 +19,6 @@ pub use epoch::Epoch;
 
 pub mod hashing;
 pub mod optional;
-pub mod serde_with;
 
 pub mod quorum_certificate;
 pub use quorum_certificate::{QuorumCertificate, QuorumDecision, QuorumRejectReason};
@@ -74,7 +73,7 @@ impl SubstateState {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct PayloadId {
-    #[serde(with = "serde_with::hex")]
+    #[serde(with = "tari_engine_types::serde_with::hex")]
     id: [u8; 32],
 }
 
