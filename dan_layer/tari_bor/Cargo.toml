@@ -8,12 +8,13 @@ repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 
 [dependencies]
-# Remove once https://github.com/enarx/ciborium/pull/77 is released
-ciborium = { git = "https://github.com/enarx/ciborium.git", rev = "ac38b3dddeadf81f93cc8e58689ea92dc46a8e56", default-features = false }
-#ciborium = { version = "0.2.0", default-features = false }
-ciborium-io = { version = "0.2.0", default-features = false }
+ciborium = { version = "0.2.1", default-features = false }
 serde = { version = "1.0.143", default-features = false, features = ["alloc", "derive"] }
+
+[dev-dependencies]
+serde_json = "1.0.96"
 
 [features]
 default = ["std"]
 std = ["ciborium/std", "serde/std"]
+
