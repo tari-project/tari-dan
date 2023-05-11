@@ -24,8 +24,8 @@ Feature: Account transfers
     Given a wallet daemon WALLET_D connected to indexer IDX
 
     # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
-    When I wait 3 seconds
+    When I use an account key named K1
+#    When I wait 3 seconds
 
     # Register the "faucet" template
     When validator node VN registers the template "faucet"
@@ -49,7 +49,7 @@ Feature: Account transfers
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACCOUNT via the wallet daemon WALLET_D
 
     # Wait for the wallet daemon account monitor to update the sender account information
-    When I wait 10 seconds
+#    When I wait 10 seconds
 
     # Fund the sender account with faucet tokens
     When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT" and 5 outputs named "TX1"

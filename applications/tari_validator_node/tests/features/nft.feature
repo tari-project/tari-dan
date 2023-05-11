@@ -28,7 +28,7 @@ Feature: NFTs
     Then the template "basic_nft" is listed as registered by the validator node VN
 
     # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
+    When I use an account key named K1
 
     # Create a new BasicNft component
     When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT" with new resource "SPKL"
@@ -38,7 +38,7 @@ Feature: NFTs
     When I create an account ACC2 on VN
 
     # Submit a transaction with NFT operations
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" and 6 outputs named "TX1"
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" and 6 outputs named "TX1" signed with key ACC1
         ```
             // $mint NFT/resources/0 1
             // $mint_specific NFT/resources/0 str:SpecialNft
@@ -52,11 +52,11 @@ Feature: NFTs
             let mut acc2 = global!["ACC2/components/Account"];
 
             // mint a new nft with random id
-            let nft_bucket = sparkle_nft.mint();
+            let nft_bucket = sparkle_nft.mint("NFT1", "http://example.com");
             acc1.deposit(nft_bucket);
 
             // mint a new nft with specific id
-            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"));
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("SpecialNft"), "NFT2", "http://example.com");
             acc1.deposit(nft_bucket);
 
             // transfer nft between accounts
@@ -67,7 +67,7 @@ Feature: NFTs
             sparkle_nft.inc_brightness(NonFungibleId("SpecialNft"), 10u32);
 
             // burn a nft
-            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"));
+            let nft_bucket = sparkle_nft.mint_specific(NonFungibleId("Burn!"), "NFT3", "http://example.com");
             acc1.deposit(nft_bucket);
             let acc_bucket = acc1.withdraw_non_fungible(sparkle_res, NonFungibleId("Burn!"));
             sparkle_nft.burn(acc_bucket);

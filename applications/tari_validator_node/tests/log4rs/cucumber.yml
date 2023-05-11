@@ -119,58 +119,15 @@ loggers:
       - dan_layer
     additive: false
 
-  tari::dan_wallet_daemon:
-    level: debug
+  tari::dan:
+    level: info
     appenders:
-      - stdout
       - dan_layer
+      - stdout
     additive: false
 
-  tari::dan::wallet_sdk:
-    level: debug
-    appenders:
-      - stdout
-      - dan_layer
-    additive: false
-  
   tari::indexer:
     level: debug
-    appenders:
-      - stdout
-      - dan_layer
-    additive: false
-
-  tari::dan::base_layer_scanner:
-    level: info
-    appenders:
-      - stdout
-      - dan_layer
-    additive: false
-
-  tari::dan::hotstuff_waiter:
-    level: info
-    appenders:
-      # Hotstuff waiter is a little noisy, only show warn, errors
-      - stdout_warn
-      - dan_layer
-    additive: false
-
-  tari::dan::template_manager:
-      level: info
-      appenders:
-        - stdout
-        - dan_layer
-      additive: false
-
-  tari::dan::epoch_manager:
-      level: info
-      appenders:
-        - stdout
-        - dan_layer
-      additive: false
-
-  tari::dan::storage:
-    level: info
     appenders:
       - stdout
       - dan_layer

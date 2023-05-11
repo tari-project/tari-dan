@@ -22,7 +22,7 @@
 
 mod steps;
 mod utils;
-use std::{collections::HashMap, convert::TryFrom, future, io, str::FromStr, time::Duration};
+use std::{collections::HashMap, convert::TryFrom, future, io, panic, str::FromStr, time::Duration};
 
 use cucumber::{
     gherkin::{Scenario, Step},
@@ -87,14 +87,13 @@ pub struct TariWorld {
     pub templates: IndexMap<String, RegisteredTemplate>,
     pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
     pub http_server: Option<MockHttpServer>,
-    pub cli_data_dir: Option<String>,
     pub current_scenario_name: Option<String>,
     pub commitments: IndexMap<String, Vec<u8>>,
     pub commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
     pub rangeproofs: IndexMap<String, Vec<u8>>,
     pub addresses: IndexMap<String, String>,
     pub num_databases_saved: usize,
-    pub account_public_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
+    pub account_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
     pub wallet_daemon_outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
@@ -675,9 +674,9 @@ async fn call_component_method_on_all_vns_and_check_result(
     tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(expr = "I create a DAN wallet")]
-async fn create_dan_wallet(world: &mut TariWorld) {
-    validator_node_cli::create_dan_wallet(world);
+#[when(expr = "I use an account key named {word}")]
+async fn create_transaction_signing_key(world: &mut TariWorld, name: String) {
+    validator_node_cli::create_or_use_key(world, name);
 }
 
 #[when(expr = "I create an account {word} on {word}")]
@@ -694,13 +693,31 @@ async fn create_multiple_accounts(world: &mut TariWorld, num_accounts: u64, vn_n
     }
 }
 
-#[when(expr = r#"I submit a transaction manifest on {word} with {int} outputs named "{word}""#)]
-async fn submit_manifest(world: &mut TariWorld, step: &Step, vn_name: String, num_outputs: u64, output_name: String) {
+#[when(expr = r#"I submit a transaction manifest on {word} with {int} outputs named "{word}" signed with key {word}"#)]
+async fn submit_manifest(
+    world: &mut TariWorld,
+    step: &Step,
+    vn_name: String,
+    num_outputs: u64,
+    output_name: String,
+    key_name: String,
+) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
-    validator_node_cli::submit_manifest(world, vn_name, output_name, manifest, String::new(), num_outputs).await;
+    validator_node_cli::submit_manifest(
+        world,
+        vn_name,
+        output_name,
+        manifest,
+        String::new(),
+        num_outputs,
+        key_name,
+    )
+    .await;
 }
 
-#[when(regex = r#"^I submit a transaction manifest on (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)"$"#)]
+#[when(
+    regex = r#"^I submit a transaction manifest on (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)" signed with key (\w+)$"#
+)]
 async fn submit_manifest_with_inputs(
     world: &mut TariWorld,
     step: &Step,
@@ -708,9 +725,10 @@ async fn submit_manifest_with_inputs(
     inputs: String,
     num_outputs: u64,
     outputs_name: String,
+    key_name: String,
 ) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
-    validator_node_cli::submit_manifest(world, vn_name, outputs_name, manifest, inputs, num_outputs).await;
+    validator_node_cli::submit_manifest(world, vn_name, outputs_name, manifest, inputs, num_outputs, key_name).await;
 }
 
 #[when(expr = "account {word} reveals {int} burned tokens via wallet daemon {word}")]
@@ -841,7 +859,8 @@ async fn assert_indexer_non_fungible_list(
 
 #[when(expr = "I wait {int} seconds")]
 async fn wait_seconds(_world: &mut TariWorld, seconds: u64) {
-    tokio::time::sleep(Duration::from_secs(seconds)).await;
+    println!("NOT Waiting {} seconds", seconds);
+    // tokio::time::sleep(Duration::from_secs(seconds)).await;
 }
 
 #[then(expr = "all transactions succeed on all validator nodes")]

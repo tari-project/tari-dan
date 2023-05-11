@@ -28,7 +28,7 @@ Feature: Counter template
     Then the template "counter" is listed as registered by the validator node VAL_1
 
     # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
+    When I use an account key named K1
 
     # Create a new Counter component
     When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"

@@ -39,7 +39,6 @@ use tari_indexer_client::{
 };
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
-use tempfile::tempdir;
 use tokio::task;
 
 use crate::{
@@ -163,8 +162,8 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let name = indexer_name.clone();
 
-    let temp_dir = get_base_dir_for_scenario("indexer", world.current_scenario_name.as_ref().unwrap(), &indexer_name);
-    let temp_dir_path = temp_dir.display().to_string();
+    let base_dir = get_base_dir_for_scenario("indexer", world.current_scenario_name.as_ref().unwrap(), &indexer_name);
+    let base_dir_path = base_dir.display().to_string();
 
     // we need to add all the validator nodes as seed peers
     let peer_seeds: Vec<String> = world
@@ -175,6 +174,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
+    let db_path = base_dir.to_path_buf().join("state.db");
 
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
@@ -185,11 +185,10 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         };
 
         // temporal folder for the VN files (e.g. sqlite file, json files, etc.)
-        let temp_dir = tempdir().unwrap().path().join(indexer_name.clone());
-        println!("Using indexer temp_dir: {}", temp_dir.display());
-        config.indexer.data_dir = temp_dir.to_path_buf();
-        config.indexer.identity_file = temp_dir.join("indexer_id.json");
-        config.indexer.tor_identity_file = temp_dir.join("indexer_tor_id.json");
+        println!("Using indexer temp_dir: {}", base_dir.display());
+        config.indexer.data_dir = base_dir.to_path_buf();
+        config.indexer.identity_file = base_dir.join("indexer_id.json");
+        config.indexer.tor_identity_file = base_dir.join("indexer_tor_id.json");
         config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
         config.indexer.dan_layer_scanning_internal = Duration::from_secs(60);
 
@@ -197,10 +196,10 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.p2p.transport.tcp.listener_address =
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
         config.indexer.p2p.public_addresses = vec![config.indexer.p2p.transport.tcp.listener_address.clone()];
-        config.indexer.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
+        config.indexer.p2p.datastore_path = base_dir.to_path_buf().join("peer_db/vn");
         config.indexer.p2p.dht = DhtConfig {
             // Not all platforms support sqlite memory connection urls
-            database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
+            database_url: DbConnectionUrl::File(base_dir.join("dht.sqlite")),
             ..DhtConfig::default_local_test()
         };
         config.indexer.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
@@ -215,8 +214,6 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
             panic!("{:?}", e);
         }
     });
-
-    let db_path = temp_dir.to_path_buf().join("state.db");
 
     // We need to give it time for the indexer to startup
     // TODO: it would be better to check the indexer ports to detect when it has started
@@ -235,7 +232,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         handle,
         json_rpc_port,
         graphql_port,
-        temp_dir_path,
+        temp_dir_path: base_dir_path,
         shutdown,
         db_path,
     };

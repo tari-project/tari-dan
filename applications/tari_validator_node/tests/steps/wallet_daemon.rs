@@ -151,7 +151,10 @@ async fn check_account_balance_is_at_least_via_daemon(
     amount: i64,
 ) {
     let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
-    assert!(current_balance >= amount);
+    if current_balance < amount {
+        println!("Expected balance to be at least {} but was {}", amount, current_balance);
+        panic!("Expected balance to be at least {} but was {}", amount, current_balance);
+    }
 }
 
 #[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is at most {int}")]
@@ -178,7 +181,7 @@ async fn when_transfer_via_wallet_daemon(
     wallet_daemon_name: String,
     outputs_name: String,
 ) {
-    let (_, destination_public_key) = world.account_public_keys.get(&destination_public_key).unwrap().clone();
+    let (_, destination_public_key) = world.account_keys.get(&destination_public_key).unwrap().clone();
     let amount = Amount::new(amount.into());
 
     let (resource_input_group, resource_name) = resource_address.split_once('/').unwrap_or_else(|| {

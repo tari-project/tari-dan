@@ -63,7 +63,7 @@ async fn when_i_claim_burn(
     );
 
     let (account_secret, _) = world
-        .account_public_keys
+        .account_keys
         .get(&account_name)
         .unwrap_or_else(|| panic!("Account {} not found", account_name));
 
@@ -178,5 +178,5 @@ async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_
 
 #[when(expr = "I create a new key pair {word}")]
 async fn when_i_create_new_key_pair(world: &mut TariWorld, key_name: String) {
-    create_key(world, key_name).await;
+    create_key(world, key_name);
 }

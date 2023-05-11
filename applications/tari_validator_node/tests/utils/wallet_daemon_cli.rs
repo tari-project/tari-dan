@@ -50,6 +50,7 @@ use tari_wallet_daemon_client::{
         AccountsGetBalancesRequest,
         AuthLoginAcceptRequest,
         AuthLoginRequest,
+        AuthLoginResponse,
         ClaimBurnRequest,
         ClaimBurnResponse,
         ProofsGenerateRequest,
@@ -258,7 +259,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
     let key_resp = client.create_key().await.unwrap();
     let key_id = key_resp.id;
     world
-        .account_public_keys
+        .account_keys
         .insert(account_name.clone(), (key.secret_key.clone(), key.public_key.clone()));
 
     let request = AccountsCreateRequest {
@@ -629,19 +630,14 @@ pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_na
 pub(crate) async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
     // authentication
-    let auth_response = client
+    let AuthLoginResponse { auth_token } = client
         .auth_request(AuthLoginRequest {
             permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
         })
         .await
         .unwrap();
-    let auth_reponse = client
-        .auth_accept(AuthLoginAcceptRequest {
-            auth_token: auth_response.auth_token,
-        })
-        .await
-        .unwrap();
-    client.token = Some(auth_reponse.permissions_token);
+    let auth_response = client.auth_accept(AuthLoginAcceptRequest { auth_token }).await.unwrap();
+    client.set_auth_token(auth_response.permissions_token);
     client
 }
 
