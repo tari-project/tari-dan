@@ -155,7 +155,6 @@ mod tariswap {
             *self.pools.keys().nth(1).unwrap()
         }
 
-        // public utility methods
         pub fn get_pool_balances(&self) -> HashMap<ResourceAddress, Amount> {
             let mut balances = HashMap::new();
 
