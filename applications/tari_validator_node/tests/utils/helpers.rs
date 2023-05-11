@@ -3,11 +3,6 @@
 
 use std::net::TcpListener;
 
-use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
-use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
-
-use crate::TariWorld;
-
 pub fn get_os_assigned_ports() -> (u16, u16) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port1 = listener.local_addr().unwrap().port();
@@ -16,6 +11,7 @@ pub fn get_os_assigned_ports() -> (u16, u16) {
     let port2 = listener.local_addr().unwrap().port();
     (port1, port2)
 }
+<<<<<<< HEAD
 
 pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
     let outputs = world.outputs.entry(outputs_name).or_default();
@@ -96,3 +92,5 @@ pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String
         }
     }
 }
+=======
+>>>>>>> development
