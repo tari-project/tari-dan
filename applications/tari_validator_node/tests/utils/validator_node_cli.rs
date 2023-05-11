@@ -3,7 +3,10 @@
 
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use tari_engine_types::instruction::Instruction;
+use tari_engine_types::{
+    instruction::Instruction,
+    substate::{SubstateAddress, SubstateDiff},
+};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{args, prelude::NonFungibleId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -21,12 +24,13 @@ use tari_validator_node_cli::{
     },
     from_hex::FromHex,
     key_manager::KeyManager,
+    versioned_substate_address::VersionedSubstateAddress,
 };
 use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
 use tempfile::tempdir;
 
 use super::validator_node::get_vn_client;
-use crate::{utils::helpers::add_substate_addresses, TariWorld};
+use crate::TariWorld;
 
 pub fn get_key_manager(world: &mut TariWorld) -> KeyManager {
     let data_dir = get_cli_data_dir(world);
@@ -124,7 +128,7 @@ pub async fn create_component(
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
-            wait_for_result_timeout: Some(60),
+            wait_for_result_timeout: Some(300),
             num_outputs,
             inputs: vec![],
             version: None,
@@ -150,6 +154,64 @@ pub async fn create_component(
         outputs_name,
         resp.result.unwrap().finalize.result.accept().unwrap(),
     );
+}
+
+pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
+    let outputs = world.outputs.entry(outputs_name).or_default();
+    let mut counters = [0usize, 0, 0, 0, 0, 0, 0];
+    for (addr, data) in diff.up_iter() {
+        match addr {
+            SubstateAddress::Component(_) => {
+                let component = data.substate_value().component().unwrap();
+                outputs.insert(
+                    format!("components/{}", component.module_name),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
+                counters[0] += 1;
+            },
+            SubstateAddress::Resource(_) => {
+                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[1] += 1;
+            },
+            SubstateAddress::Vault(_) => {
+                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[2] += 1;
+            },
+            SubstateAddress::NonFungible(_) => {
+                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[3] += 1;
+            },
+            SubstateAddress::UnclaimedConfidentialOutput(_) => {
+                outputs.insert(
+                    format!("layer_one_commitments/{}", counters[4]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
+                counters[4] += 1;
+            },
+            SubstateAddress::NonFungibleIndex(_) => {
+                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[5] += 1;
+            },
+        }
+    }
 }
 
 pub async fn call_method(
