@@ -38,14 +38,11 @@ impl ComponentManager {
     pub fn init<P: AsRef<Path>>(base_path: P) -> anyhow::Result<Self> {
         let path = base_path.as_ref().join("components");
         fs::create_dir_all(&path).map_err(|e| anyhow!("Failed to create component store dir: {}", e))?;
-        let store = jfs::Store::new_with_cfg(
-            path,
-            Config {
-                pretty: true,
-                indent: 2,
-                single: false,
-            },
-        )
+        let store = jfs::Store::new_with_cfg(path, Config {
+            pretty: true,
+            indent: 2,
+            single: false,
+        })
         .map_err(|e| anyhow!("Failed to create component store: {}", e))?;
         Ok(Self { store })
     }
@@ -88,11 +85,11 @@ impl ComponentManager {
 
                     component = Some((addr, substate.version()));
                 },
-                addr @ SubstateAddress::Resource(_)
-                | addr @ SubstateAddress::ExecuteResult(_)
-                | addr @ SubstateAddress::Vault(_)
-                | addr @ SubstateAddress::NonFungible(_)
-                | addr @ SubstateAddress::NonFungibleIndex(_) => {
+                addr @ SubstateAddress::Resource(_) |
+                addr @ SubstateAddress::ExecuteResult(_) |
+                addr @ SubstateAddress::Vault(_) |
+                addr @ SubstateAddress::NonFungible(_) |
+                addr @ SubstateAddress::NonFungibleIndex(_) => {
                     children.push(VersionedSubstateAddress {
                         address: addr.clone(),
                         version: substate.version(),
