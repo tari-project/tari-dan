@@ -129,14 +129,14 @@ mod tariswap {
 
             // get the pool information
             let a_resource = self.get_a_resource();
-            let a_balance = self.get_pool_balance(a_resource);
+            let a_balance = self.get_pool_balance(a_resource).value() as f64;
             let b_resource = self.get_b_resource();
-            let b_balance = self.get_pool_balance(b_resource);
+            let b_balance = self.get_pool_balance(b_resource).value() as f64;
 
             // calculate the amount of tokens to take from each pool
-            let lp_ratio = lp_bucket.amount() / self.lp_total_supply();
-            let a_amount = lp_ratio * a_balance;
-            let b_amount = lp_ratio * b_balance;
+            let lp_ratio = lp_bucket.amount().value() as f64 / self.lp_total_supply().value() as f64;
+            let a_amount = Amount::new((lp_ratio * a_balance).ceil() as i64);
+            let b_amount = Amount::new((lp_ratio * b_balance).ceil() as i64);
 
             // burn the LP tokens
             lp_bucket.burn();

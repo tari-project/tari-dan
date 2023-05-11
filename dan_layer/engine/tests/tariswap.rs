@@ -164,7 +164,7 @@ fn swap(test: &mut TariSwapTest, input_resource: &ResourceAddress, output_resour
         .unwrap();
 }
 
-fn add_liduidity(test: &mut TariSwapTest, a_amount: Amount, b_amount: Amount) {
+fn add_liquidity(test: &mut TariSwapTest, a_amount: Amount, b_amount: Amount) {
     test.template_test
         .execute_and_commit(
             vec![
@@ -196,6 +196,43 @@ fn add_liduidity(test: &mut TariSwapTest, a_amount: Amount, b_amount: Amount) {
                     component_address: test.account_address,
                     method: "deposit".to_string(),
                     args: args![Variable("lp_bucket"),],
+                },
+            ],
+            // proof needed to withdraw
+            vec![test.account_proof.clone()],
+        )
+        .unwrap();
+}
+
+fn remove_liquidity(test: &mut TariSwapTest, lp_amount: Amount) {
+    test.template_test
+        .execute_and_commit(
+            vec![
+                Instruction::CallMethod {
+                    component_address: test.account_address,
+                    method: "withdraw".to_string(),
+                    args: args![test.lp_resource, lp_amount],
+                },
+                Instruction::PutLastInstructionOutputOnWorkspace {
+                    key: b"lp_bucket".to_vec(),
+                },
+                Instruction::CallMethod {
+                    component_address: test.tariswap,
+                    method: "remove_liquidity".to_string(),
+                    args: args![Variable("lp_bucket")],
+                },
+                Instruction::PutLastInstructionOutputOnWorkspace {
+                    key: b"pool_buckets".to_vec(),
+                },
+                Instruction::CallMethod {
+                    component_address: test.account_address,
+                    method: "deposit".to_string(),
+                    args: args![Variable("pool_buckets.0"),],
+                },
+                Instruction::CallMethod {
+                    component_address: test.account_address,
+                    method: "deposit".to_string(),
+                    args: args![Variable("pool_buckets.1"),],
                 },
             ],
             // proof needed to withdraw
@@ -236,7 +273,7 @@ fn add_liquidity_and_swap() {
 
     // ------- ADD LIQUIDITY -------
     let liquidity_amount = Amount::new(500);
-    add_liduidity(&mut test, liquidity_amount, liquidity_amount);
+    add_liquidity(&mut test, liquidity_amount, liquidity_amount);
 
     // check account balances
     account_a_balance = get_account_balance(&mut test, a_resource);
@@ -261,16 +298,16 @@ fn add_liquidity_and_swap() {
     swap(&mut test, &a_resource, &b_resource, input_amount);
 
     // check that the new pool balances are expected
-    let new_pool_a_balance = get_pool_balance(&mut test, a_resource);
-    let new_pool_b_balance = get_pool_balance(&mut test, b_resource);
+    let mut new_pool_a_balance = get_pool_balance(&mut test, a_resource);
+    let mut new_pool_b_balance = get_pool_balance(&mut test, b_resource);
     assert_eq!(new_pool_a_balance, pool_a_balance + input_amount);
     assert_eq!(new_pool_b_balance, pool_b_balance - expected_output_amount);
     pool_a_balance = new_pool_a_balance;
     pool_b_balance = new_pool_b_balance;
 
     // check that the new account balances are expected
-    let new_account_a_balance = get_account_balance(&mut test, a_resource);
-    let new_account_b_balance = get_account_balance(&mut test, b_resource);
+    let mut new_account_a_balance = get_account_balance(&mut test, a_resource);
+    let mut new_account_b_balance = get_account_balance(&mut test, b_resource);
     assert_eq!(new_account_a_balance, account_a_balance - input_amount);
     assert_eq!(new_account_b_balance, account_b_balance + expected_output_amount);
     account_a_balance = new_account_a_balance;
@@ -282,17 +319,35 @@ fn add_liquidity_and_swap() {
     let input_amount = Amount::new(50);
     let expected_output_amount = Amount::new(53); // applyng market fees and the constant product formula: b = k / a
     swap(&mut test, &b_resource, &a_resource, input_amount);
+
+    // check that the new pool balances are expected
+    new_pool_a_balance = get_pool_balance(&mut test, a_resource);
+    new_pool_b_balance = get_pool_balance(&mut test, b_resource);
+    assert_eq!(new_pool_a_balance, pool_a_balance - expected_output_amount);
+    assert_eq!(new_pool_b_balance, pool_b_balance + input_amount);
+
+    // check that the new account balances are expected
+    new_account_a_balance = get_account_balance(&mut test, a_resource);
+    new_account_b_balance = get_account_balance(&mut test, b_resource);
+    assert_eq!(new_account_a_balance, account_a_balance + expected_output_amount);
+    assert_eq!(new_account_b_balance, account_b_balance - input_amount);
+    account_a_balance = new_account_a_balance;
+    account_b_balance = new_account_b_balance;
+
+    // ------- REMOVE LIQUIDITY -------
+    let lp_in_account = get_account_balance(&mut test, lp_resource);
+    let lp_amount_to_remove = Amount::new(100);
+    remove_liquidity(&mut test, lp_amount_to_remove);
+
+    // check the lp tokens in account
     assert_eq!(
-        get_pool_balance(&mut test, a_resource),
-        pool_a_balance - expected_output_amount
+        get_account_balance(&mut test, lp_resource),
+        lp_in_account - lp_amount_to_remove
     );
-    assert_eq!(get_pool_balance(&mut test, b_resource), pool_b_balance + input_amount);
-    assert_eq!(
-        get_account_balance(&mut test, a_resource),
-        account_a_balance + expected_output_amount
-    );
-    assert_eq!(
-        get_account_balance(&mut test, b_resource),
-        account_b_balance - input_amount
-    );
+
+    // check the account balances
+    new_account_a_balance = get_account_balance(&mut test, a_resource);
+    new_account_b_balance = get_account_balance(&mut test, b_resource);
+    assert_eq!(new_account_a_balance, account_a_balance + 50);
+    assert_eq!(new_account_b_balance, account_b_balance + 51);
 }
