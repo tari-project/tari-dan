@@ -44,28 +44,10 @@ use tari_engine_types::{
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
-        BucketAction,
-        BucketRef,
-        CallerContextAction,
-        ComponentAction,
-        ComponentRef,
-        ConfidentialRevealArg,
-        ConsensusAction,
-        CreateComponentArg,
-        CreateResourceArg,
-        GenerateRandomAction,
-        InvokeResult,
-        LogLevel,
-        MintResourceArg,
-        NonFungibleAction,
-        PayFeeArg,
-        ResourceAction,
-        ResourceGetNonFungibleArg,
-        ResourceRef,
-        ResourceUpdateNonFungibleDataArg,
-        VaultAction,
-        VaultWithdrawArg,
-        WorkspaceAction,
+        BucketAction, BucketRef, CallerContextAction, ComponentAction, ComponentRef, ConfidentialRevealArg,
+        ConsensusAction, CreateComponentArg, CreateResourceArg, GenerateRandomAction, InvokeResult, LogLevel,
+        MintResourceArg, NonFungibleAction, PayFeeArg, ResourceAction, ResourceGetNonFungibleArg, ResourceRef,
+        ResourceUpdateNonFungibleDataArg, VaultAction, VaultWithdrawArg, WorkspaceAction,
     },
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
@@ -78,14 +60,8 @@ use super::tracker::FinalizeTracker;
 use crate::{
     packager::LoadedTemplate,
     runtime::{
-        engine_args::EngineArgs,
-        tracker::StateTracker,
-        AuthParams,
-        ConsensusContext,
-        RuntimeError,
-        RuntimeInterface,
-        RuntimeModule,
-        RuntimeState,
+        engine_args::EngineArgs, tracker::StateTracker, AuthParams, ConsensusContext, RuntimeError, RuntimeInterface,
+        RuntimeModule, RuntimeState,
     },
 };
 
@@ -808,12 +784,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let commitment = get_commitment_factory().commit(&private_key, &RistrettoSecretKey::from(amount));
         let resource = ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            Some((commitment.as_public_key().clone(), ConfidentialOutput {
-                commitment,
-                stealth_public_nonce: None,
-                encrypted_value: None,
-                minimum_value_promise: 0,
-            })),
+            Some((
+                commitment.as_public_key().clone(),
+                ConfidentialOutput {
+                    commitment,
+                    stealth_public_nonce: None,
+                    encrypted_value: None,
+                    minimum_value_promise: 0,
+                },
+            )),
             Amount::new(amount as i64),
         );
 

@@ -32,7 +32,7 @@ use log::debug;
 use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_engine_types::{
     bucket::Bucket,
-    commit_result::{RejectReason, TransactionResult},
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     confidential::UnclaimedConfidentialOutput,
     events::Event,
     fees::{FeeReceipt, FeeSource},
@@ -51,17 +51,8 @@ use tari_template_lib::{
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{
-        Amount,
-        BucketId,
-        ComponentAddress,
-        ComponentBody,
-        ComponentHeader,
-        Metadata,
-        NonFungibleAddress,
-        NonFungibleIndexAddress,
-        ResourceAddress,
-        UnclaimedConfidentialOutputAddress,
-        VaultId,
+        Amount, BucketId, ComponentAddress, ComponentBody, ComponentHeader, Metadata, NonFungibleAddress,
+        NonFungibleIndexAddress, ResourceAddress, UnclaimedConfidentialOutputAddress, VaultId,
     },
     resource::ResourceType,
     Hash,
@@ -512,12 +503,49 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
         let result = state
             .validate_finalized()
-            .and_then(|_| self.generate_substate_diff(state, substates_to_persist));
+            .and_then(|_| self.generate_substate_diff(state, substates_to_persist.clone()));
 
         let result = match result {
             Ok(substate_diff) => TransactionResult::Accept(substate_diff),
             Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
         };
+
+        let substate_tx_address = SubstateAddress::ExecuteResult(self.transaction_hash().into());
+        // if transaction fails, we don't store it in substates
+        if substates_to_persist.get(&substate_tx_address).is_none() && result.is_accept() {
+            let finalize_result = FinalizeResult::new(
+                self.transaction_hash(),
+                logs.clone(),
+                events.clone(),
+                result.clone(),
+                finalized_fee.to_cost_breakdown(),
+            );
+            let execute_result = ExecuteResult {
+                finalize: finalize_result,
+                transaction_failure: None,
+                fee_receipt: Some(finalized_fee.clone()),
+            };
+
+            substates_to_persist.insert(substate_tx_address, SubstateValue::ExecuteResult(execute_result));
+            // Finalise will always reset the state
+            let state = self.take_working_state();
+
+            let result = state
+                .validate_finalized()
+                .and_then(|_| self.generate_substate_diff(state, substates_to_persist.clone()));
+
+            let result = match result {
+                Ok(substate_diff) => TransactionResult::Accept(substate_diff),
+                Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
+            };
+
+            return Ok(FinalizeTracker {
+                result,
+                events,
+                fee_receipt: finalized_fee,
+                logs,
+            });
+        }
 
         Ok(FinalizeTracker {
             result,
@@ -636,11 +664,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn take_substates_to_persist(&self) -> HashMap<SubstateAddress, SubstateValue> {
         self.write_with(|state| {
-            let total_items = state.new_resources.len() +
-                state.new_components.len() +
-                state.new_vaults.len() +
-                state.new_non_fungibles.len() +
-                state.new_non_fungible_indexes.len();
+            let total_items = state.new_resources.len()
+                + state.new_components.len()
+                + state.new_vaults.len()
+                + state.new_non_fungibles.len()
+                + state.new_non_fungible_indexes.len();
             let mut up_states = HashMap::with_capacity(total_items);
 
             for (component_addr, substate) in state.new_components.drain() {
@@ -666,6 +694,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             for (address, substate) in state.new_non_fungible_indexes.drain() {
                 let addr = SubstateAddress::NonFungibleIndex(address.clone());
                 up_states.insert(addr, substate.into());
+            }
+
+            if let Some(ref execute_result) = state.execute_result_output {
+                let tx_hash = SubstateAddress::ExecuteResult(execute_result.finalize.transaction_hash.into());
+                up_states.insert(tx_hash, SubstateValue::ExecuteResult(execute_result.clone()));
             }
 
             up_states

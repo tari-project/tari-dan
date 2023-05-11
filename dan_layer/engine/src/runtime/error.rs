@@ -25,16 +25,12 @@ use std::fmt::Display;
 use anyhow::anyhow;
 use tari_bor::BorError;
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
+use tari_engine_types::{
+    commit_result::ExecuteResultAddress, resource_container::ResourceError, substate::SubstateAddress,
+};
 use tari_template_lib::models::{
-    Amount,
-    BucketId,
-    ComponentAddress,
-    NonFungibleId,
-    ResourceAddress,
-    TemplateAddress,
-    UnclaimedConfidentialOutputAddress,
-    VaultId,
+    Amount, BucketId, ComponentAddress, NonFungibleId, ResourceAddress, TemplateAddress,
+    UnclaimedConfidentialOutputAddress, VaultId,
 };
 use tari_transaction::id_provider::IdProviderError;
 
@@ -122,6 +118,10 @@ pub enum RuntimeError {
     ComponentAddressMustBeSequential { index: u32 },
     #[error("Failed to load template '{address}': {details}")]
     FailedToLoadTemplate { address: TemplateAddress, details: String },
+    #[error("Execute Result already exists {address}")]
+    ExecuteResultAlreadyExists { address: ExecuteResultAddress },
+    #[error("Execute Result does not exist")]
+    ExecuteResultDoesNotExist,
 }
 
 impl RuntimeError {
@@ -134,11 +134,11 @@ impl IsNotFoundError for RuntimeError {
     fn is_not_found_error(&self) -> bool {
         matches!(
             self,
-            RuntimeError::ComponentNotFound { .. } |
-                RuntimeError::VaultNotFound { .. } |
-                RuntimeError::BucketNotFound { .. } |
-                RuntimeError::ResourceNotFound { .. } |
-                RuntimeError::NonFungibleNotFound { .. }
+            RuntimeError::ComponentNotFound { .. }
+                | RuntimeError::VaultNotFound { .. }
+                | RuntimeError::BucketNotFound { .. }
+                | RuntimeError::ResourceNotFound { .. }
+                | RuntimeError::NonFungibleNotFound { .. }
         )
     }
 }
