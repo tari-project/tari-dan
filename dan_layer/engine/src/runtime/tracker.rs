@@ -481,7 +481,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn put_in_workspace(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), RuntimeError> {
         self.write_with(|state| {
-            state.workspace.insert(key.clone(), value);
+            state.workspace.insert(key.clone(), value)?;
             Ok(())
         })
     }

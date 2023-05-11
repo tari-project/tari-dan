@@ -44,6 +44,7 @@ pub use module::{RuntimeModule, RuntimeModuleError};
 mod fee_state;
 mod tracker;
 mod working_state;
+mod workspace;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
