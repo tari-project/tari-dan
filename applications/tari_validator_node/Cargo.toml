@@ -80,6 +80,7 @@ tari_base_node = { git = "https://github.com/tari-project/tari.git", tag = "v0.5
 tari_console_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_console_wallet" }
 tari_comms_dht = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_comms_dht" }
 tari_dan_wallet_daemon = { path = "../tari_dan_wallet_daemon" }
+tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
 tari_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_wallet" }
 tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
