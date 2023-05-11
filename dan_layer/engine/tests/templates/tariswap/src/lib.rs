@@ -86,15 +86,15 @@ mod tariswap {
             // apply the fee to the input bucket
             // so the user will get a lesser amout of tokens than the theoritical (for the gain of the LP holders)
             let input_bucket_balance = input_bucket.amount().value() as f64;
-            let input_bucket_balance = input_bucket_balance - (input_bucket_balance * self.fee) / 100.0;
-            let input_bucket_balance = input_bucket_balance.ceil() as i64;
-            let input_bucket_balance = Amount::new(input_bucket_balance);
+            let effective_input_balance = input_bucket_balance - (input_bucket_balance * self.fee) / 100.0;
+            let effective_input_balance = effective_input_balance.ceil() as i64;
+            let effective_input_balance = Amount::new(effective_input_balance);
 
             // recalculate the new vault balances for the swap
             // constant product AMM formula is "k = a * b"
             // so the new output vault balance should be "b = k / a"
             let k = input_pool_balance * output_pool_balance;
-            let new_input_pool_balance = input_pool_balance + input_bucket_balance;
+            let new_input_pool_balance = input_pool_balance + effective_input_balance;
             let new_output_pool_balance = k / new_input_pool_balance;
 
             // calculate the amount of output tokens to return to the user
