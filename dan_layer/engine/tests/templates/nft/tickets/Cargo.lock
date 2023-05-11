@@ -651,7 +651,6 @@ name = "tari_bor"
 version = "0.50.0-pre.0"
 dependencies = [
  "ciborium",
- "ciborium-io",
  "serde",
 ]
 

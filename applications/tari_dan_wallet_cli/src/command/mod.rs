@@ -24,7 +24,10 @@ use clap::Subcommand;
 
 use self::{auth::AuthSubcommand, webrtc::WebRtcSubcommand};
 use crate::command::{
-    account::AccountsSubcommand, key::KeysSubcommand, proof::ProofsSubcommand, transaction::TransactionSubcommand,
+    account::AccountsSubcommand,
+    key::KeysSubcommand,
+    proof::ProofsSubcommand,
+    transaction::TransactionSubcommand,
 };
 
 mod account;

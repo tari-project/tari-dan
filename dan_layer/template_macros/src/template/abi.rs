@@ -219,61 +219,58 @@ mod tests {
 
         let output = generate_abi(&ast).unwrap();
 
-        assert_code_eq(
-            output,
-            quote! {
-                #[no_mangle]
-                pub unsafe extern "C" fn Foo_abi() -> *mut u8 {
-                    use ::tari_template_lib::template_dependencies::{encode_with_len, ArgDef, FunctionDef, TemplateDef, Type, wrap_ptr};
+        assert_code_eq(output, quote! {
+            #[no_mangle]
+            pub unsafe extern "C" fn Foo_abi() -> *mut u8 {
+                use ::tari_template_lib::template_dependencies::{encode_with_len, ArgDef, FunctionDef, TemplateDef, Type, wrap_ptr};
 
-                    let template = TemplateDef {
-                        template_name: "Foo".to_string(),
-                        functions: vec![
-                            FunctionDef {
-                                name: "no_args_function".to_string(),
-                                arguments: vec![],
-                                output: Type::String,
-                                is_mut: false,
-                            },
-                            FunctionDef {
-                                name: "some_args_function".to_string(),
-                                arguments: vec![ArgDef{ name: "a".to_string(), arg_type: Type::I8, },
-                                    ArgDef{ name: "b".to_string(), arg_type: Type::String, }],
-                                output: Type::U32,
-                                is_mut: false,
-                            },
-                            FunctionDef {
-                                name: "no_return_function".to_string(),
-                                arguments: vec![],
-                                output: Type::Unit,
-                                is_mut: false,
-                            },
-                            FunctionDef {
-                                name: "constructor".to_string(),
-                                arguments: vec![],
-                                output: Type::Other { name: "FooComponent".to_string() },
-                                is_mut: false,
-                            },
-                            FunctionDef {
-                                name: "method".to_string(),
-                                arguments: vec![ArgDef{ name: "self".to_string(), arg_type: Type::Other { name: "&self".to_string() }}],
-                                output: Type::Unit,
-                                is_mut: false,
-                            },
-                             FunctionDef {
-                                name: "method_mut".to_string(),
-                                arguments: vec![ArgDef{ name: "self".to_string(), arg_type: Type::Other { name: "&mut self".to_string() }}],
-                                output: Type::Unit,
-                                is_mut: true,
-                            }
-                        ],
-                    };
+                let template = TemplateDef {
+                    template_name: "Foo".to_string(),
+                    functions: vec![
+                        FunctionDef {
+                            name: "no_args_function".to_string(),
+                            arguments: vec![],
+                            output: Type::String,
+                            is_mut: false,
+                        },
+                        FunctionDef {
+                            name: "some_args_function".to_string(),
+                            arguments: vec![ArgDef{ name: "a".to_string(), arg_type: Type::I8, },
+                                ArgDef{ name: "b".to_string(), arg_type: Type::String, }],
+                            output: Type::U32,
+                            is_mut: false,
+                        },
+                        FunctionDef {
+                            name: "no_return_function".to_string(),
+                            arguments: vec![],
+                            output: Type::Unit,
+                            is_mut: false,
+                        },
+                        FunctionDef {
+                            name: "constructor".to_string(),
+                            arguments: vec![],
+                            output: Type::Other { name: "FooComponent".to_string() },
+                            is_mut: false,
+                        },
+                        FunctionDef {
+                            name: "method".to_string(),
+                            arguments: vec![ArgDef{ name: "self".to_string(), arg_type: Type::Other { name: "&self".to_string() }}],
+                            output: Type::Unit,
+                            is_mut: false,
+                        },
+                         FunctionDef {
+                            name: "method_mut".to_string(),
+                            arguments: vec![ArgDef{ name: "self".to_string(), arg_type: Type::Other { name: "&mut self".to_string() }}],
+                            output: Type::Unit,
+                            is_mut: true,
+                        }
+                    ],
+                };
 
-                    let buf = encode_with_len(&template);
-                    wrap_ptr(buf)
-                }
-            },
-        );
+                let buf = encode_with_len(&template);
+                wrap_ptr(buf)
+            }
+        });
     }
 
     fn assert_code_eq(a: TokenStream, b: TokenStream) {

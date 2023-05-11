@@ -37,15 +37,15 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
     let validated_proof = validate_confidential_proof(&withdraw_proof.output_proof)?;
 
     // We expect the revealed amount to be excluded from the output commitment.
-    let revealed_amount = withdraw_proof.output_proof.output_statement.revealed_amount
-        + withdraw_proof
+    let revealed_amount = withdraw_proof.output_proof.output_statement.revealed_amount +
+        withdraw_proof
             .output_proof
             .change_statement
             .as_ref()
             .map(|s| s.revealed_amount)
             .unwrap_or_default();
-    let output_commitment_with_revealed = validated_proof.output.commitment.as_public_key()
-        + get_commitment_factory()
+    let output_commitment_with_revealed = validated_proof.output.commitment.as_public_key() +
+        get_commitment_factory()
             .commit_value(&PrivateKey::default(), revealed_amount.value() as u64)
             .as_public_key();
 
@@ -54,9 +54,9 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
             details: "Malformed balance proof".to_string(),
         })?;
 
-    let public_excess = inputs.into_iter().fold(PublicKey::default(), |sum, pk| sum + pk)
-        - output_commitment_with_revealed
-        - validated_proof
+    let public_excess = inputs.into_iter().fold(PublicKey::default(), |sum, pk| sum + pk) -
+        output_commitment_with_revealed -
+        validated_proof
             .change_output
             .as_ref()
             .map(|output| output.commitment.as_public_key())

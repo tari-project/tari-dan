@@ -21,7 +21,8 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fs, io,
+    fs,
+    io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
@@ -33,7 +34,9 @@ use tari_common::{
 };
 use tari_comms::{CommsNode, NodeIdentity};
 use tari_dan_app_utilities::{
-    base_layer_scanner, base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerHandle,
+    base_layer_scanner,
+    base_node_client::GrpcBaseNodeClient,
+    epoch_manager::EpochManagerHandle,
 };
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;

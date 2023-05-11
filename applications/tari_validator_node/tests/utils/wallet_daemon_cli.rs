@@ -45,11 +45,21 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{command::transaction::CliArg, versioned_substate_address::VersionedSubstateAddress};
 use tari_wallet_daemon_client::{
     types::{
-        AccountGetResponse, AccountsCreateRequest, AccountsGetBalancesRequest, AuthLoginAcceptRequest,
-        AuthLoginRequest, ClaimBurnRequest, ClaimBurnResponse, ProofsGenerateRequest, RevealFundsRequest,
-        TransactionSubmitRequest, TransactionWaitResultRequest, TransferRequest,
+        AccountGetResponse,
+        AccountsCreateRequest,
+        AccountsGetBalancesRequest,
+        AuthLoginAcceptRequest,
+        AuthLoginRequest,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
+        ProofsGenerateRequest,
+        RevealFundsRequest,
+        TransactionSubmitRequest,
+        TransactionWaitResultRequest,
+        TransferRequest,
     },
-    ComponentAddressOrName, WalletDaemonClient,
+    ComponentAddressOrName,
+    WalletDaemonClient,
 };
 
 use super::{validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
@@ -652,33 +662,24 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                 counters[0] += 1;
             },
             SubstateAddress::Resource(_) => {
-                outputs.insert(
-                    format!("resources/{}", counters[1]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
                 counters[1] += 1;
             },
             SubstateAddress::Vault(_) => {
-                outputs.insert(
-                    format!("vaults/{}", counters[2]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
                 counters[2] += 1;
             },
             SubstateAddress::NonFungible(_) => {
-                outputs.insert(
-                    format!("nfts/{}", counters[3]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
                 counters[3] += 1;
             },
             SubstateAddress::UnclaimedConfidentialOutput(_) => {
@@ -692,23 +693,17 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                 counters[4] += 1;
             },
             SubstateAddress::NonFungibleIndex(_) => {
-                outputs.insert(
-                    format!("nft_indexes/{}", counters[5]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
                 counters[5] += 1;
             },
             SubstateAddress::ExecuteResult(_) => {
-                outputs.insert(
-                    format!("execute_results/{}", counters[6]),
-                    VersionedSubstateAddress {
-                        address: addr.clone(),
-                        version: data.version(),
-                    },
-                );
+                outputs.insert(format!("execute_results/{}", counters[6]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
                 counters[6] += 1;
             },
         }

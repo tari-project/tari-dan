@@ -12,7 +12,8 @@ use tari_template_lib::args::Arg;
 use crate::{
     flow::{
         workers::{ArgWorker, CallMethodWorker},
-        FlowContext, FlowEngineError,
+        FlowContext,
+        FlowEngineError,
     },
     function_definitions::FunctionArgDefinition,
     packager::LoadedTemplate,

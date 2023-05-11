@@ -27,7 +27,11 @@ use super::WalletClient;
 use crate::{
     models::{domain_events::ConsensusWorkerDomainEvent, Payload},
     services::{
-        infrastructure_services::OutboundService, BaseNodeClient, EventsPublisher, PayloadProcessor, PeerProvider,
+        infrastructure_services::OutboundService,
+        BaseNodeClient,
+        EventsPublisher,
+        PayloadProcessor,
+        PeerProvider,
         SigningService,
     },
     storage::DbFactory,

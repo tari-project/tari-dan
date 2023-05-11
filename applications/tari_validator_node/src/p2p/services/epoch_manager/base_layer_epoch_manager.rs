@@ -26,7 +26,9 @@ use log::*;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_core::{
-    blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT,
+    blocks::BlockHeader,
+    transactions::transaction_components::ValidatorNodeRegistration,
+    ValidatorNodeBMT,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_utilities::{base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerEvent};

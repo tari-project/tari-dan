@@ -11,9 +11,17 @@ use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{args, models::Amount, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
-    AccountGetRequest, AccountGetResponse, CallInstructionRequest, TransactionGetRequest, TransactionGetResponse,
-    TransactionGetResultRequest, TransactionGetResultResponse, TransactionSubmitRequest, TransactionSubmitResponse,
-    TransactionWaitResultRequest, TransactionWaitResultResponse,
+    AccountGetRequest,
+    AccountGetResponse,
+    CallInstructionRequest,
+    TransactionGetRequest,
+    TransactionGetResponse,
+    TransactionGetResultRequest,
+    TransactionGetResultResponse,
+    TransactionSubmitRequest,
+    TransactionSubmitResponse,
+    TransactionWaitResultRequest,
+    TransactionWaitResultResponse,
 };
 use tokio::time;
 
@@ -37,13 +45,9 @@ pub async fn handle_submit_instruction(
         });
         let AccountGetResponse {
             account: dump_account, ..
-        } = accounts::handle_get(
-            context,
-            token.clone(),
-            AccountGetRequest {
-                name_or_address: dump_account,
-            },
-        )
+        } = accounts::handle_get(context, token.clone(), AccountGetRequest {
+            name_or_address: dump_account,
+        })
         .await?;
         instructions.push(Instruction::CallMethod {
             component_address: dump_account.address.as_component_address().unwrap(),
@@ -53,13 +57,9 @@ pub async fn handle_submit_instruction(
     }
     let AccountGetResponse {
         account: fee_account, ..
-    } = accounts::handle_get(
-        context,
-        token.clone(),
-        AccountGetRequest {
-            name_or_address: req.fee_account,
-        },
-    )
+    } = accounts::handle_get(context, token.clone(), AccountGetRequest {
+        name_or_address: req.fee_account,
+    })
     .await?;
     let request = TransactionSubmitRequest {
         signing_key_index: None,

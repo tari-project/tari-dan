@@ -64,9 +64,7 @@ impl From<TreeNodeHash> for Vec<u8> {
 
 impl Hex for TreeNodeHash {
     fn from_hex(hex: &str) -> Result<Self, HexError>
-    where
-        Self: Sized,
-    {
+    where Self: Sized {
         let hash = FixedHash::from_hex(hex)?;
         Ok(Self(hash))
     }

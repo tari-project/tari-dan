@@ -41,14 +41,11 @@ impl ComponentManager {
 
     /// Get the component state
     pub fn get_state<T: DeserializeOwned>(&self) -> T {
-        let result = call_engine::<_, InvokeResult>(
-            EngineOp::ComponentInvoke,
-            &ComponentInvokeArg {
-                component_ref: ComponentRef::Ref(self.address),
-                action: ComponentAction::Get,
-                args: invoke_args![],
-            },
-        );
+        let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
+            component_ref: ComponentRef::Ref(self.address),
+            action: ComponentAction::Get,
+            args: invoke_args![],
+        });
 
         let component: Vec<u8> = result.decode().expect("failed to decode component state from engine");
         decode_exact(&component).expect("Failed to decode component state")
@@ -56,24 +53,18 @@ impl ComponentManager {
 
     pub fn set_state<T: Serialize>(&self, state: T) {
         let state = encode(&state).expect("Failed to encode component state");
-        let _result = call_engine::<_, InvokeResult>(
-            EngineOp::ComponentInvoke,
-            &ComponentInvokeArg {
-                component_ref: ComponentRef::Ref(self.address),
-                action: ComponentAction::SetState,
-                args: invoke_args![state],
-            },
-        );
+        let _result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
+            component_ref: ComponentRef::Ref(self.address),
+            action: ComponentAction::SetState,
+            args: invoke_args![state],
+        });
     }
 
     pub fn set_access_rules(&self, access_rules: AccessRules) {
-        call_engine::<_, InvokeResult>(
-            EngineOp::ComponentInvoke,
-            &ComponentInvokeArg {
-                component_ref: ComponentRef::Ref(self.address),
-                action: ComponentAction::SetAccessRules,
-                args: invoke_args![access_rules],
-            },
-        );
+        call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
+            component_ref: ComponentRef::Ref(self.address),
+            action: ComponentAction::SetAccessRules,
+            args: invoke_args![access_rules],
+        });
     }
 }

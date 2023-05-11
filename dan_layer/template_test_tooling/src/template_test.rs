@@ -23,7 +23,10 @@ use tari_dan_engine::{
     runtime::{AuthParams, ConsensusContext, RuntimeModule},
     state_store::{
         memory::{MemoryStateStore, MemoryWriteTransaction},
-        AtomicDb, StateReader, StateStoreError, StateWriter,
+        AtomicDb,
+        StateReader,
+        StateStoreError,
+        StateWriter,
     },
     transaction::{TransactionError, TransactionProcessor},
     wasm::{compile::compile_template, LoadedWasmTemplate, WasmModule},
@@ -128,14 +131,11 @@ impl TemplateTest {
     ) {
         let id_provider = IdProvider::new(Hash::default(), 10);
         let vault_id = id_provider.new_vault_id().unwrap();
-        let vault = Vault::new(
-            vault_id,
-            ResourceContainer::Confidential {
-                address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-                commitments: Default::default(),
-                revealed_amount: initial_supply,
-            },
-        );
+        let vault = Vault::new(vault_id, ResourceContainer::Confidential {
+            address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            commitments: Default::default(),
+            revealed_amount: initial_supply,
+        });
         tx.set_state(&SubstateAddress::Vault(vault_id), Substate::new(0, vault))
             .unwrap();
 
@@ -150,15 +150,12 @@ impl TemplateTest {
         .unwrap();
         tx.set_state(
             &SubstateAddress::Component(test_faucet_component()),
-            Substate::new(
-                0,
-                ComponentHeader {
-                    template_address: test_faucet_template_address,
-                    module_name: "TestFaucet".to_string(),
-                    access_rules: AccessRules::with_default_allow(),
-                    state: ComponentBody { state },
-                },
-            ),
+            Substate::new(0, ComponentHeader {
+                template_address: test_faucet_template_address,
+                module_name: "TestFaucet".to_string(),
+                access_rules: AccessRules::with_default_allow(),
+                state: ComponentBody { state },
+            }),
         )
         .unwrap();
     }
@@ -320,11 +317,10 @@ impl TemplateTest {
                 Transaction::builder()
                     .call_method(test_faucet_component(), "take_free_coins", args![])
                     .put_last_instruction_output_on_workspace("bucket")
-                    .call_function(
-                        self.get_template_address("Account"),
-                        "create_with_bucket",
-                        args![&owner_proof, Workspace("bucket")],
-                    )
+                    .call_function(self.get_template_address("Account"), "create_with_bucket", args![
+                        &owner_proof,
+                        Workspace("bucket")
+                    ])
                     .sign(&secret_key)
                     .build(),
                 vec![owner_proof.clone()],

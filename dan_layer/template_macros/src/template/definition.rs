@@ -103,40 +103,37 @@ mod tests {
 
         let output = generate_definition(&ast);
 
-        assert_code_eq(
-            output,
-            quote! {
-                       # [allow (non_snake_case)]
-            pub mod Foo_template {
-                use :: tari_template_lib :: template_dependencies :: * ;
-                # [derive (Debug ,  serde :: Serialize , serde :: Deserialize)] # [serde (crate = "self::serde")] struct Foo { }
-                impl Foo { pub fn no_args_function () -> String { "Hello World!" . to_string () }
-                    pub fn some_args_function (a : i8 , b : String) -> u32 { 1_u32 }
-                    pub fn no_return_function () { }
-                    pub fn constructor () -> Self { Self { } }
-                    pub fn method (& self) { }
-                    fn private_function () { }
-                }
-                impl :: tari_template_lib :: component :: interface :: ComponentInterface for Foo {
-                    type Component = FooComponent ;
-                    fn create_with_options (self , access_rules : :: tari_template_lib :: auth :: AccessRules , component_id : Option < :: tari_template_lib :: Hash > ) -> Self :: Component {
-                        let address = engine () . create_component ("Foo" . to_string () , self , access_rules, component_id) ;
-                        FooComponent { address }
-                    }
-                }
-                # [derive (serde :: Serialize , serde :: Deserialize)] # [serde (transparent , crate = "self::serde")]
-                pub struct FooComponent {
-                    address : tari_template_lib :: models :: ComponentAddress ,
-                }
-                impl :: tari_template_lib :: component :: interface :: ComponentInstanceInterface for FooComponent {
-                    fn set_access_rules (self , rules : tari_template_lib :: auth :: AccessRules) -> Self {
-                        engine () . component_manager (self . address) . set_access_rules (rules) ;
-                        self
-                    }
+        assert_code_eq(output, quote! {
+                   # [allow (non_snake_case)]
+        pub mod Foo_template {
+            use :: tari_template_lib :: template_dependencies :: * ;
+            # [derive (Debug ,  serde :: Serialize , serde :: Deserialize)] # [serde (crate = "self::serde")] struct Foo { }
+            impl Foo { pub fn no_args_function () -> String { "Hello World!" . to_string () }
+                pub fn some_args_function (a : i8 , b : String) -> u32 { 1_u32 }
+                pub fn no_return_function () { }
+                pub fn constructor () -> Self { Self { } }
+                pub fn method (& self) { }
+                fn private_function () { }
+            }
+            impl :: tari_template_lib :: component :: interface :: ComponentInterface for Foo {
+                type Component = FooComponent ;
+                fn create_with_options (self , access_rules : :: tari_template_lib :: auth :: AccessRules , component_id : Option < :: tari_template_lib :: Hash > ) -> Self :: Component {
+                    let address = engine () . create_component ("Foo" . to_string () , self , access_rules, component_id) ;
+                    FooComponent { address }
                 }
             }
-                    },
-        );
+            # [derive (serde :: Serialize , serde :: Deserialize)] # [serde (transparent , crate = "self::serde")]
+            pub struct FooComponent {
+                address : tari_template_lib :: models :: ComponentAddress ,
+            }
+            impl :: tari_template_lib :: component :: interface :: ComponentInstanceInterface for FooComponent {
+                fn set_access_rules (self , rules : tari_template_lib :: auth :: AccessRules) -> Self {
+                    engine () . component_manager (self . address) . set_access_rules (rules) ;
+                    self
+                }
+            }
+        }
+                });
     }
 
     fn assert_code_eq(a: TokenStream, b: TokenStream) {

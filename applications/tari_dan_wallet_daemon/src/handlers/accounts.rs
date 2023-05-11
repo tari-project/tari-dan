@@ -21,7 +21,9 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::{
-    component::new_component_address_from_parts, confidential::ConfidentialClaim, instruction::Instruction,
+    component::new_component_address_from_parts,
+    confidential::ConfidentialClaim,
+    instruction::Instruction,
     substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
@@ -36,12 +38,31 @@ use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
-        AccountGetDefaultRequest, AccountGetRequest, AccountGetResponse, AccountInfo, AccountSetDefaultRequest,
-        AccountSetDefaultResponse, AccountsCreateFreeTestCoinsRequest, AccountsCreateFreeTestCoinsResponse,
-        AccountsCreateRequest, AccountsCreateResponse, AccountsGetBalancesRequest, AccountsGetBalancesResponse,
-        AccountsInvokeRequest, AccountsInvokeResponse, AccountsListRequest, AccountsListResponse, BalanceEntry,
-        ClaimBurnRequest, ClaimBurnResponse, ConfidentialTransferRequest, ConfidentialTransferResponse,
-        RevealFundsRequest, RevealFundsResponse, TransferRequest, TransferResponse,
+        AccountGetDefaultRequest,
+        AccountGetRequest,
+        AccountGetResponse,
+        AccountInfo,
+        AccountSetDefaultRequest,
+        AccountSetDefaultResponse,
+        AccountsCreateFreeTestCoinsRequest,
+        AccountsCreateFreeTestCoinsResponse,
+        AccountsCreateRequest,
+        AccountsCreateResponse,
+        AccountsGetBalancesRequest,
+        AccountsGetBalancesResponse,
+        AccountsInvokeRequest,
+        AccountsInvokeResponse,
+        AccountsListRequest,
+        AccountsListResponse,
+        BalanceEntry,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
+        ConfidentialTransferRequest,
+        ConfidentialTransferResponse,
+        RevealFundsRequest,
+        RevealFundsResponse,
+        TransferRequest,
+        TransferResponse,
     },
     ComponentAddressOrName,
 };
@@ -386,11 +407,10 @@ pub async fn handle_reveal_funds(
         } else {
             builder = builder
                 .fee_transaction_pay_from_component(account_address, fee)
-                .call_method(
-                    account_address,
-                    "withdraw_confidential",
-                    args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
-                )
+                .call_method(account_address, "withdraw_confidential", args![
+                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                    reveal_proof
+                ])
                 .put_last_instruction_output_on_workspace("revealed")
                 .call_method(account_address, "deposit", args![Workspace("revealed")]);
         }
@@ -897,14 +917,11 @@ async fn get_or_create_account_address(
             let owner_token = NonFungibleAddress::from_public_key(
                 RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
             );
-            instructions.insert(
-                0,
-                Instruction::CallFunction {
-                    template_address: ACCOUNT_TEMPLATE_ADDRESS,
-                    function: "create".to_string(),
-                    args: args![owner_token],
-                },
-            );
+            instructions.insert(0, Instruction::CallFunction {
+                template_address: ACCOUNT_TEMPLATE_ADDRESS,
+                function: "create".to_string(),
+                args: args![owner_token],
+            });
         },
     };
 

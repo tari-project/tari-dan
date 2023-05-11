@@ -32,13 +32,10 @@ pub fn emit_event<T: Into<String>>(
     topic: T,
     payload: HashMap<String, String>,
 ) {
-    call_engine::<_, ()>(
-        EngineOp::EmitEvent,
-        &EmitEventArg {
-            template_address,
-            tx_hash,
-            topic: topic.into(),
-            payload,
-        },
-    );
+    call_engine::<_, ()>(EngineOp::EmitEvent, &EmitEventArg {
+        template_address,
+        tx_hash,
+        topic: topic.into(),
+        payload,
+    });
 }

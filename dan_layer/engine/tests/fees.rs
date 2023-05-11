@@ -359,11 +359,10 @@ fn success_pay_fee_in_main_instructions() {
     let result = test
         .try_execute_and_commit(
             Transaction::builder()
-                .call_method(
-                    account2,
-                    "withdraw",
-                    args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, Amount(500)],
-                )
+                .call_method(account2, "withdraw", args![
+                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                    Amount(500)
+                ])
                 .put_last_instruction_output_on_workspace("bucket")
                 .call_method(account, "deposit", args![Workspace("bucket")])
                 .call_method(account, "pay_fee", args![Amount(1000)])

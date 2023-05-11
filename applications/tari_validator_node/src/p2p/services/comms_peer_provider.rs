@@ -96,13 +96,10 @@ impl PeerProvider for CommsPeerProvider {
                     peer.addresses
                         .iter()
                         .map(|(addr, claim)| {
-                            MultiaddrWithStats::new(
-                                addr.clone(),
-                                PeerAddressSource::FromAnotherPeer {
-                                    peer_identity_claim: claim.clone(),
-                                    source_peer: peer.identity.clone(),
-                                },
-                            )
+                            MultiaddrWithStats::new(addr.clone(), PeerAddressSource::FromAnotherPeer {
+                                peer_identity_claim: claim.clone(),
+                                source_peer: peer.identity.clone(),
+                            })
                         })
                         .collect(),
                 ),

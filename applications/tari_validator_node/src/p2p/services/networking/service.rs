@@ -27,7 +27,8 @@ use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
     peer_manager::{NodeId, PeerFeatures, PeerIdentityClaim},
     types::CommsPublicKey,
-    NodeIdentity, PeerConnection,
+    NodeIdentity,
+    PeerConnection,
 };
 use tari_dan_common_types::optional::Optional;
 use tari_dan_core::{

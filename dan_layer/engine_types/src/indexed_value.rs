@@ -106,9 +106,7 @@ impl FromTagAndValue for TariValue {
     type Error = ValueVisitorError;
 
     fn try_from_tag_and_value(tag: u64, value: &tari_bor::Value) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
+    where Self: Sized {
         let tag = BinaryTag::from_u64(tag).ok_or(ValueVisitorError::InvalidTag(tag))?;
         match tag {
             BinaryTag::ComponentAddress => {

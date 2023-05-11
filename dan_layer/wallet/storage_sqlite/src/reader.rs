@@ -10,8 +10,15 @@ use serde::de::DeserializeOwned;
 use tari_common_types::types::{Commitment, FixedHash};
 use tari_dan_wallet_sdk::{
     models::{
-        Account, ConfidentialOutputModel, ConfidentialProofId, Config, OutputStatus, SubstateModel, TransactionStatus,
-        VaultModel, WalletTransaction,
+        Account,
+        ConfidentialOutputModel,
+        ConfidentialProofId,
+        Config,
+        OutputStatus,
+        SubstateModel,
+        TransactionStatus,
+        VaultModel,
+        WalletTransaction,
     },
     storage::{WalletStorageError, WalletStoreReader},
 };

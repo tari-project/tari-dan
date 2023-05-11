@@ -25,8 +25,16 @@ use std::time::Duration;
 use tari_app_grpc::{
     authentication::ClientAuthenticationInterceptor,
     tari_rpc::{
-        pow_algo::PowAlgos, wallet_client::WalletClient, GetCoinbaseRequest, GetCoinbaseResponse, NewBlockTemplate,
-        NewBlockTemplateRequest, NewBlockTemplateResponse, PowAlgo, TransactionKernel, TransactionOutput,
+        pow_algo::PowAlgos,
+        wallet_client::WalletClient,
+        GetCoinbaseRequest,
+        GetCoinbaseResponse,
+        NewBlockTemplate,
+        NewBlockTemplateRequest,
+        NewBlockTemplateResponse,
+        PowAlgo,
+        TransactionKernel,
+        TransactionOutput,
     },
 };
 use tari_base_node_grpc_client::BaseNodeGrpcClient;
