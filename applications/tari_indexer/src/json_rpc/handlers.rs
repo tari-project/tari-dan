@@ -133,7 +133,7 @@ impl JsonRpcHandlers {
                 .public_addresses()
                 .first()
                 .map(|s| s.to_string())
-                .unwrap_or("No public address".to_string()),
+                .unwrap_or_else(|| "No public address".to_string()),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))

@@ -15,7 +15,7 @@ use crate::{confidential::ConfidentialClaim, string_or_struct};
 // #[serde(tag = "type")]
 pub enum Instruction {
     CallFunction {
-        #[serde(deserialize_with = "string_or_struct", serialize_with = "")]
+        #[serde(deserialize_with = "string_or_struct")]
         template_address: TemplateAddress,
         function: String,
         args: Vec<Arg>,

@@ -918,7 +918,7 @@ async fn get_or_create_account_address(
                 RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
             );
             instructions.insert(0, Instruction::CallFunction {
-                template_address: ACCOUNT_TEMPLATE_ADDRESS,
+                template_address: *ACCOUNT_TEMPLATE_ADDRESS,
                 function: "create".to_string(),
                 args: args![owner_token],
             });

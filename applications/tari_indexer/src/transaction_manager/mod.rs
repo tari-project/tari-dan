@@ -22,7 +22,7 @@
 
 mod error;
 
-use std::{fmt::Display, future::Future, sync::Arc};
+use std::{fmt::Display, future::Future};
 
 use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
