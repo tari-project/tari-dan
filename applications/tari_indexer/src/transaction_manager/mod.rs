@@ -26,7 +26,11 @@ use std::{fmt::Display, future::Future, sync::Arc};
 
 use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
-use tari_dan_common_types::{PayloadId, ShardId};
+use tari_dan_common_types::{
+    optional::{IsNotFoundError, Optional},
+    PayloadId,
+    ShardId,
+};
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer_lib::committee_provider::CommitteeProvider;
 use tari_transaction::Transaction;
@@ -51,6 +55,7 @@ where
     TCommitteeProvider: CommitteeProvider,
     TCommitteeProvider::Addr: Display,
     TClientFactory: ValidatorNodeClientFactory<Addr = TCommitteeProvider::Addr>,
+    <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
 {
     pub fn new(store: TCommitteeProvider, client_provider: TClientFactory) -> Self {
         Self { store, client_provider }
@@ -70,9 +75,13 @@ where
         payload_id: PayloadId,
     ) -> Result<TransactionResultStatus, TransactionManagerError> {
         self.try_with_committee(payload_id.into_array().into(), |mut client| async move {
-            client.get_finalized_transaction_result(payload_id).await
+            client.get_finalized_transaction_result(payload_id).await.optional()
         })
-        .await
+        .await?
+        .ok_or_else(|| TransactionManagerError::NotFound {
+            entity: "Transaction result",
+            key: payload_id.to_string(),
+        })
     }
 
     pub async fn get_substate(
@@ -123,8 +132,8 @@ where
         for validator in committee.members {
             let client = self.client_provider.create_client(&validator);
             match callback(client).await {
-                Ok(payload_id) => {
-                    return Ok(payload_id);
+                Ok(ret) => {
+                    return Ok(ret);
                 },
                 Err(err) => {
                     warn!(

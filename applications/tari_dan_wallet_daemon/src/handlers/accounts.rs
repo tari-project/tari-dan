@@ -17,14 +17,22 @@ use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
     models::{ConfidentialOutputModel, OutputStatus, VersionedSubstateAddress},
+    DanWalletSdk,
 };
-use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
+use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
+use tari_engine_types::{
+    component::new_component_address_from_parts,
+    confidential::ConfidentialClaim,
+    instruction::Instruction,
+    substate::SubstateAddress,
+};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, NonFungibleAddress, UnclaimedConfidentialOutputAddress},
-    prelude::{ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+    prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+    Hash,
 };
 use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
@@ -53,6 +61,8 @@ use tari_wallet_daemon_client::{
         ConfidentialTransferResponse,
         RevealFundsRequest,
         RevealFundsResponse,
+        TransferRequest,
+        TransferResponse,
     },
     ComponentAddressOrName,
 };
@@ -61,6 +71,7 @@ use tokio::{sync::broadcast, task};
 use super::context::HandlerContext;
 use crate::{
     handlers::{get_account, get_account_or_default},
+    indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
     services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
     DEFAULT_FEE,
 };
@@ -110,7 +121,7 @@ pub async fn handle_create(
     if let Some(reason) = finalized.transaction_failure {
         return Err(anyhow!("Create account transaction failed: {}", reason));
     }
-    let diff = finalized.finalize.result.accept().unwrap();
+    let diff: &tari_engine_types::substate::SubstateDiff = finalized.finalize.result.accept().unwrap();
     let (addr, _) = diff
         .up_iter()
         .find(|(addr, _)| addr.is_component())
@@ -760,6 +771,161 @@ pub async fn handle_create_free_test_coins(
         fee,
         result: finalized.finalize,
     })
+}
+
+#[allow(clippy::too_many_lines)]
+pub async fn handle_transfer(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: TransferRequest,
+) -> Result<TransferResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk().clone();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
+    context
+        .account_monitor()
+        .refresh_account(account.address.clone())
+        .await?;
+
+    let account_secret_key = sdk
+        .key_manager_api()
+        .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+
+    let mut instructions = vec![];
+    let mut inputs = vec![];
+
+    // get the source account component address
+    let source_account_address = account
+        .address
+        .as_component_address()
+        .ok_or_else(|| anyhow!("Invalid account address"))?;
+
+    // add the input for the source account component substate
+    let account_substate = sdk.substate_api().get_substate(&account.address)?;
+    inputs.push(account_substate.address);
+
+    // Add all versioned account child addresses as inputs
+    let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
+    inputs.extend(child_addresses);
+
+    // add the input for the source account vault substate
+    let src_vault = sdk
+        .accounts_api()
+        .get_vault_by_resource(&account.address, &req.resource_address)?;
+    let src_vault_substate = sdk.substate_api().get_substate(&src_vault.address)?;
+    inputs.push(src_vault_substate.address);
+
+    // add the input for the resource address to be transfered
+    let resource_substate = sdk
+        .substate_api()
+        .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
+        .await?;
+    inputs.push(resource_substate.address);
+
+    // get destination account information
+    let destination_account_address =
+        get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
+
+    // calculate inputs and outputs shard ids
+    let outputs = inputs
+        .iter()
+        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
+        .collect::<Vec<_>>();
+
+    let inputs = inputs
+        .into_iter()
+        .map(|s| ShardId::from_address(&s.address, s.version))
+        .collect();
+
+    // build the transaction
+    let fee = req.fee.unwrap_or(DEFAULT_FEE);
+    instructions.append(&mut vec![
+        Instruction::CallMethod {
+            component_address: source_account_address,
+            method: "withdraw".to_string(),
+            args: args![req.resource_address, req.amount],
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket".to_vec(),
+        },
+        Instruction::CallMethod {
+            component_address: destination_account_address,
+            method: "deposit".to_string(),
+            args: args![Workspace("bucket")],
+        },
+        Instruction::CallMethod {
+            component_address: source_account_address,
+            method: "pay_fee".to_string(),
+            args: args![fee],
+        },
+    ]);
+    let transaction = Transaction::builder()
+        .with_fee_instructions(instructions)
+        .with_inputs(inputs)
+        .with_outputs(outputs)
+        // potentially we can create new outputs for the destination account with its vault
+        .with_new_outputs(2)
+        .sign(&account_secret_key.k)
+        .build();
+
+    // send the transaction
+    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+
+    let mut events = context.notifier().subscribe();
+    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+
+    let finalized = wait_for_result(&mut events, tx_hash).await?;
+    if let Some(reject) = finalized.finalize.result.reject() {
+        return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
+    }
+    if let Some(reason) = finalized.transaction_failure {
+        return Err(anyhow::anyhow!(
+            "Fee transaction succeeded (fees charged) however the transaction failed: {}",
+            reason
+        ));
+    }
+
+    Ok(TransferResponse {
+        hash: tx_hash,
+        fee,
+        result: finalized.finalize,
+    })
+}
+
+async fn get_or_create_account_address(
+    sdk: &DanWalletSdk<SqliteWalletStore, IndexerJsonRpcNetworkInterface>,
+    public_key: &PublicKey,
+    inputs: &mut Vec<VersionedSubstateAddress>,
+    instructions: &mut Vec<Instruction>,
+) -> Result<ComponentAddress, anyhow::Error> {
+    // calculate the account component address from the public key
+    let component_id = Hash::try_from(public_key.as_bytes())?;
+    let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
+
+    let account_scan: Result<ValidatorScanResult, _> = sdk
+        .substate_api()
+        .scan_for_substate(&SubstateAddress::Component(account_address), None)
+        .await;
+
+    match account_scan {
+        Ok(res) => {
+            // the account already exists in the network, so we must add the substate address to the inputs
+            inputs.push(res.address);
+        },
+        Err(_) => {
+            // the account does not exists, so we must add a instruction to create it, matching the public key
+            let owner_token = NonFungibleAddress::from_public_key(
+                RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
+            );
+            instructions.insert(0, Instruction::CallFunction {
+                template_address: ACCOUNT_TEMPLATE_ADDRESS,
+                function: "create".to_string(),
+                args: args![owner_token],
+            });
+        },
+    };
+
+    Ok(account_address)
 }
 
 #[allow(clippy::too_many_lines)]

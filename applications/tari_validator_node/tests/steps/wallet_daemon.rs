@@ -1,11 +1,10 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use cucumber::when;
+use cucumber::{then, when};
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
-use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
-use tari_wallet_daemon_client::types::{AuthLoginAcceptRequest, AuthLoginRequest};
+use tari_template_lib::prelude::Amount;
 
 use crate::{utils::wallet_daemon_cli, TariWorld};
 
@@ -53,6 +52,29 @@ async fn when_i_claim_burn_via_wallet_daemon(
     assert!(claim_burn_resp.result.is_accept());
 }
 
+#[then(
+    expr = "I make a confidential transfer with amount {int} from {word} to {word} creating output {word} via the \
+            wallet_daemon {word}"
+)]
+async fn when_i_create_transfer_proof_via_wallet_daemon(
+    world: &mut TariWorld,
+    amount: u64,
+    source_account_name: String,
+    dest_account_name: String,
+    outputs_name: String,
+    wallet_daemon_name: String,
+) {
+    wallet_daemon_cli::transfer_confidential(
+        world,
+        source_account_name,
+        dest_account_name,
+        amount,
+        wallet_daemon_name,
+        outputs_name,
+    )
+    .await;
+}
+
 #[when(expr = "I create an account {word} via the wallet daemon {word}")]
 async fn when_i_create_account_via_wallet_daemon(
     world: &mut TariWorld,
@@ -77,20 +99,8 @@ async fn when_i_burn_funds_with_wallet_daemon(
     rangeproof_name: String,
     claim_pubkey_name: String,
 ) {
-    let mut wallet_daemon_client = wallet_daemon_cli::get_wallet_daemon_client(world, wallet_daemon_name).await;
-    let auth_response = wallet_daemon_client
-        .auth_request(AuthLoginRequest {
-            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
-        })
-        .await
-        .unwrap();
-    let auth_reponse = wallet_daemon_client
-        .auth_accept(AuthLoginAcceptRequest {
-            auth_token: auth_response.auth_token,
-        })
-        .await
-        .unwrap();
-    wallet_daemon_client.token = Some(auth_reponse.permissions_token);
+    let mut wallet_daemon_client = wallet_daemon_cli::get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
+
     let account = wallet_daemon_client
         .accounts_get(account_name.parse().unwrap())
         .await
@@ -131,4 +141,72 @@ async fn when_i_burn_funds_with_wallet_daemon(
         claim_pubkey_name,
         PublicKey::from_bytes(&resp.reciprocal_claim_public_key).unwrap(),
     );
+}
+
+#[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is at least {int}")]
+async fn check_account_balance_is_at_least_via_daemon(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    amount: i64,
+) {
+    let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
+    assert!(current_balance >= amount);
+}
+
+#[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is at most {int}")]
+async fn check_account_balance_is_at_most_daemon(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    amount: i64,
+) {
+    let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
+    assert!(current_balance <= amount);
+}
+
+#[when(
+    expr = "I transfer {int} tokens of resource {word} from account {word} to public key {word} via the wallet daemon \
+            {word} named {word}"
+)]
+async fn when_transfer_via_wallet_daemon(
+    world: &mut TariWorld,
+    amount: i32,
+    resource_address: String,
+    account_name: String,
+    destination_public_key: String,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    let (_, destination_public_key) = world.account_public_keys.get(&destination_public_key).unwrap().clone();
+    let amount = Amount::new(amount.into());
+
+    let (resource_input_group, resource_name) = resource_address.split_once('/').unwrap_or_else(|| {
+        panic!(
+            "Resource address must be in the format '{{group}}/resources/{{index}}', got {}",
+            resource_address
+        )
+    });
+    let resource_address = world
+        .wallet_daemon_outputs
+        .get(resource_input_group)
+        .unwrap_or_else(|| panic!("No outputs found with name {}", resource_input_group))
+        .iter()
+        .find(|(name, _)| **name == resource_name)
+        .map(|(_, data)| data.clone())
+        .unwrap_or_else(|| panic!("No resource named {}", resource_name))
+        .address
+        .as_resource_address()
+        .unwrap_or_else(|| panic!("{} is not a resource", resource_name));
+
+    wallet_daemon_cli::transfer(
+        world,
+        account_name,
+        destination_public_key,
+        resource_address,
+        amount,
+        wallet_daemon_name,
+        outputs_name,
+    )
+    .await;
 }

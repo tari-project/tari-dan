@@ -40,6 +40,15 @@ pub fn get_key_manager(world: &mut TariWorld) -> KeyManager {
     KeyManager::init(path).unwrap()
 }
 
+pub async fn create_key(world: &mut TariWorld, key_name: String) {
+    let key = get_key_manager(world)
+        .create()
+        .expect("Could not create a new key pair");
+    world
+        .account_public_keys
+        .insert(key_name, (key.secret_key, key.public_key));
+}
+
 pub fn create_dan_wallet(world: &mut TariWorld) {
     get_key_manager(world).create().unwrap();
 }
@@ -119,7 +128,7 @@ pub async fn create_component(
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
-            wait_for_result_timeout: Some(60),
+            wait_for_result_timeout: Some(300),
             num_outputs,
             inputs: vec![],
             version: None,

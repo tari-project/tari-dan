@@ -149,7 +149,9 @@ impl WasmProcess {
                 env.state().interface().generate_random_invoke(arg.action)
             }),
             EngineOp::EmitEvent => Self::handle(env, arg, |env, arg: EmitEventArg| {
-                env.state().interface().emit_event(arg.message)
+                env.state()
+                    .interface()
+                    .emit_event(arg.template_address, arg.tx_hash, arg.topic, arg.payload)
             }),
         };
 

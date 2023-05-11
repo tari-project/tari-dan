@@ -26,15 +26,24 @@ use anyhow::anyhow;
 use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
+use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
-use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_dan_common_types::PayloadId;
+use tari_engine_types::{
+    substate::{Substate, SubstateAddress},
+    TemplateAddress,
+};
 use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::{
     substate_decoder::find_related_substates,
     substate_storage_sqlite::{
-        models::{non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
+        models::{
+            events::{EventData, NewEvent},
+            non_fungible_index::NewNonFungibleIndex,
+            substate::NewSubstate,
+        },
         sqlite_substate_store_factory::{
             SqliteSubstateStore,
             SqliteSubstateStoreWriteTransaction,
@@ -249,6 +258,35 @@ impl SubstateManager {
             nfts.push(row.try_into()?);
         }
         Ok(nfts)
+    }
+
+    pub async fn get_event_from_db(
+        &self,
+        template_address: TemplateAddress,
+        tx_hash: PayloadId,
+    ) -> Result<Vec<EventData>, anyhow::Error> {
+        let mut tx = self.substate_store.create_read_tx()?;
+        let events = tx.get_events(template_address, tx_hash)?;
+        Ok(events)
+    }
+
+    pub async fn save_event_to_db(
+        &self,
+        template_address: TemplateAddress,
+        tx_hash: PayloadId,
+        topic: String,
+        payload: HashMap<String, String>,
+    ) -> Result<(), anyhow::Error> {
+        let mut tx = self.substate_store.create_write_tx()?;
+        let new_event = NewEvent {
+            template_address: template_address.to_string(),
+            tx_hash: tx_hash.to_string(),
+            topic,
+            payload: payload.to_json().expect("Failed to convert to JSON"),
+        };
+        tx.save_events(new_event)?;
+        tx.commit()?;
+        Ok(())
     }
 
     pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {
