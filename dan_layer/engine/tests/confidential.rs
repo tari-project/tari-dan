@@ -74,7 +74,7 @@ fn transfer_confidential_amounts_between_accounts() {
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == faucet).count(), 1);
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == faucet).count(), 1);
-    assert_eq!(diff.up_iter().count(), 4);
+    assert_eq!(diff.up_iter().count(), 5);
     assert_eq!(diff.down_iter().count(), 3);
 
     let withdraw_proof = generate_withdraw_proof(&proof.output_mask, Amount(100), Some(Amount(900)), Amount(0));
@@ -115,7 +115,7 @@ fn transfer_confidential_amounts_between_accounts() {
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account1).count(), 1);
     assert_eq!(diff.up_iter().filter(|(addr, _)| *addr == account2).count(), 1);
     assert_eq!(diff.down_iter().filter(|(addr, _)| *addr == account2).count(), 1);
-    assert_eq!(diff.up_iter().count(), 4);
+    assert_eq!(diff.up_iter().count(), 5);
     assert_eq!(diff.down_iter().count(), 3);
 }
 
