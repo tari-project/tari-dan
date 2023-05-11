@@ -22,11 +22,12 @@
 
 use anyhow::Context;
 use tari_engine_types::{
+    component::ComponentHeader,
     non_fungible::NonFungibleContainer,
     substate::{Substate, SubstateAddress, SubstateValue},
 };
 use tari_template_lib::{
-    models::{BinaryTag, ComponentHeader, VaultId},
+    models::{BinaryTag, VaultId},
     prelude::{ComponentAddress, NonFungibleAddress, ResourceAddress},
 };
 

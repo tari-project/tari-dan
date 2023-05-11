@@ -48,27 +48,15 @@ mod working_state;
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
 use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_engine_types::{confidential::ConfidentialClaim, TemplateAddress};
+use tari_engine_types::{component::ComponentHeader, confidential::ConfidentialClaim, TemplateAddress};
 use tari_template_lib::{
     args::{
-        Arg,
-        BucketAction,
-        BucketRef,
-        CallerContextAction,
-        ComponentAction,
-        ComponentRef,
-        ConsensusAction,
-        GenerateRandomAction,
-        InvokeResult,
-        LogLevel,
-        NonFungibleAction,
-        ResourceAction,
-        ResourceRef,
-        VaultAction,
+        Arg, BucketAction, BucketRef, CallerContextAction, ComponentAction, ComponentRef, ConsensusAction,
+        GenerateRandomAction, InvokeResult, LogLevel, NonFungibleAction, ResourceAction, ResourceRef, VaultAction,
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    models::{ComponentAddress, NonFungibleAddress, VaultRef},
     Hash,
 };
 pub use tracker::{RuntimeState, StateTracker};

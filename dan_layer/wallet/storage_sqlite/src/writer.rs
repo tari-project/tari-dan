@@ -11,10 +11,7 @@ use chrono::NaiveDateTime;
 use diesel::{
     sql_query,
     sql_types::{BigInt, Bool, Text},
-    OptionalExtension,
-    QueryDsl,
-    RunQueryDsl,
-    SqliteConnection,
+    OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection,
 };
 use log::*;
 use serde::Serialize;
@@ -22,12 +19,7 @@ use tari_common_types::types::{Commitment, FixedHash, PublicKey};
 use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::{
     models::{
-        ConfidentialOutputModel,
-        ConfidentialProofId,
-        OutputStatus,
-        SubstateModel,
-        TransactionStatus,
-        VaultModel,
+        ConfidentialOutputModel, ConfidentialProofId, OutputStatus, SubstateModel, TransactionStatus, VaultModel,
         VersionedSubstateAddress,
     },
     storage::{WalletStorageError, WalletStoreReader, WalletStoreWriter},
@@ -42,11 +34,7 @@ use tari_transaction::Transaction;
 use tari_utilities::hex::Hex;
 
 use crate::{
-    diesel::ExpressionMethods,
-    models,
-    reader::ReadTransaction,
-    schema::auth_status,
-    serialization::serialize_json,
+    diesel::ExpressionMethods, models, reader::ReadTransaction, schema::auth_status, serialization::serialize_json,
 };
 
 const LOG_TARGET: &str = "auth::tari::dan::wallet_sdk::storage_sqlite::writer";

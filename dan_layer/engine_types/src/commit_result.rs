@@ -31,6 +31,7 @@ use crate::{
     fees::{FeeCostBreakdown, FeeReceipt},
     instruction_result::InstructionResult,
     logs::LogEntry,
+    serde_with,
     substate::SubstateDiff,
 };
 
@@ -118,10 +119,10 @@ impl ExecuteResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FinalizeResult {
+    #[serde(with = "serde_with::hex")]
     pub transaction_hash: Hash,
     pub events: Vec<Event>,
     pub logs: Vec<LogEntry>,
-    // TOOD: Remove from FinalizeResult
     pub execution_results: Vec<InstructionResult>,
     pub result: TransactionResult,
     pub cost_breakdown: Option<FeeCostBreakdown>,

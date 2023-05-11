@@ -236,10 +236,14 @@ where
             for owned_addr in value.owned_substates() {
                 if let Some(pos) = rest.iter().position(|(addr, _)| addr == &owned_addr) {
                     let (_, s) = rest.swap_remove(pos);
-                    tx.substates_insert_child(tx_hash, component_addr.clone(), VersionedSubstateAddress {
-                        address: owned_addr,
-                        version: s.version(),
-                    })?;
+                    tx.substates_insert_child(
+                        tx_hash,
+                        component_addr.clone(),
+                        VersionedSubstateAddress {
+                            address: owned_addr,
+                            version: s.version(),
+                        },
+                    )?;
                 }
             }
         }

@@ -31,18 +31,8 @@ use serde::Serialize;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_core::ValidatorNodeBMT;
 use tari_dan_common_types::{
-    optional::Optional,
-    Epoch,
-    NodeAddressable,
-    NodeHeight,
-    ObjectPledge,
-    PayloadId,
-    QuorumCertificate,
-    ShardId,
-    ShardPledge,
-    ShardPledgeCollection,
-    SubstateState,
-    TreeNodeHash,
+    optional::Optional, Epoch, NodeAddressable, NodeHeight, ObjectPledge, PayloadId, QuorumCertificate, ShardId,
+    ShardPledge, ShardPledgeCollection, SubstateState, TreeNodeHash,
 };
 use tari_dan_engine::runtime::ConsensusContext;
 use tari_engine_types::{
@@ -64,14 +54,8 @@ use super::pacemaker_worker::PacemakerHandle;
 use crate::{
     consensus_constants::ConsensusConstants,
     models::{
-        vote_message::VoteMessage,
-        Committee,
-        HotStuffMessage,
-        HotStuffMessageType,
-        HotStuffTreeNode,
-        HotstuffPhase,
-        Payload,
-        PayloadResult,
+        vote_message::VoteMessage, Committee, HotStuffMessage, HotStuffMessageType, HotStuffTreeNode, HotstuffPhase,
+        Payload, PayloadResult,
     },
     services::{epoch_manager::EpochManager, leader_strategy::LeaderStrategy, PayloadProcessor, SigningService},
     storage::shard_store::{ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction},
@@ -524,10 +508,10 @@ where
         let involved_shards = payload.involved_shards();
         // If we have not previously voted on this payload and the node extends the current locked node, then we vote
         // Or if we already voted for this height but there was an election
-        if (last_vote_height == NodeHeight(0) ||
-            node.height() > last_vote_height ||
-            (node.height() == last_vote_height && node.leader_round() > last_leader_round)) &&
-            (*node.parent() == locked_node || node.height() > locked_height)
+        if (last_vote_height == NodeHeight(0)
+            || node.height() > last_vote_height
+            || (node.height() == last_vote_height && node.leader_round() > last_leader_round))
+            && (*node.parent() == locked_node || node.height() > locked_height)
         {
             let proposed_nodes = self.shard_store.with_write_tx(|tx| {
                 tx.save_node(node.clone())?;
@@ -734,10 +718,11 @@ where
             return Ok(());
         }
 
-        let leader_proposals =
-            self.shard_store
-                .create_write_tx()?
-                .get_leader_proposals(payload_id, last_height + NodeHeight(1), &[shard_id]);
+        let leader_proposals = self.shard_store.create_write_tx()?.get_leader_proposals(
+            payload_id,
+            last_height + NodeHeight(1),
+            &[shard_id],
+        );
         // We know the last payload, so we check if we have a higher height
         if let Ok(result) = leader_proposals {
             assert!(
@@ -997,8 +982,8 @@ where
         for node in proposed_nodes {
             // Check that this node is a node we need to vote on
             if !local_shards.contains(&node.shard()) {
-                if node.payload_phase() != HotstuffPhase::Decide &&
-                    !(is_all_rejected && node.payload_phase() == HotstuffPhase::PreCommit)
+                if node.payload_phase() != HotstuffPhase::Decide
+                    && !(is_all_rejected && node.payload_phase() == HotstuffPhase::PreCommit)
                 {
                     // If we are not in decide phase, we are going to send a vote, we expect that the vote will be
                     // propagated to foreign committees and that we will get a proposal from respective foreing leaders.
@@ -1122,14 +1107,17 @@ where
                     payload_id
                 );
 
-                tx.update_payload_result(payload_id, PayloadResult {
-                    exec_result: ExecuteResult {
-                        finalize: finalize_result,
-                        transaction_failure: None,
-                        fee_receipt: None,
+                tx.update_payload_result(
+                    payload_id,
+                    PayloadResult {
+                        exec_result: ExecuteResult {
+                            finalize: finalize_result,
+                            transaction_failure: None,
+                            fee_receipt: None,
+                        },
+                        pledge_hash,
                     },
-                    pledge_hash,
-                })?;
+                )?;
             }
             tx.commit()?;
         }
@@ -1161,14 +1149,17 @@ where
                 );
 
                 self.shard_store.with_write_tx(|tx| {
-                    tx.update_payload_result(&node.payload_id(), PayloadResult {
-                        exec_result: ExecuteResult {
-                            finalize: finalize_result.clone(),
-                            transaction_failure: None,
-                            fee_receipt: None,
+                    tx.update_payload_result(
+                        &node.payload_id(),
+                        PayloadResult {
+                            exec_result: ExecuteResult {
+                                finalize: finalize_result.clone(),
+                                transaction_failure: None,
+                                fee_receipt: None,
+                            },
+                            pledge_hash,
                         },
-                        pledge_hash,
-                    })
+                    )
                 })?;
 
                 return Ok(finalize_result);
@@ -1198,14 +1189,17 @@ where
                         )),
                     );
                     self.shard_store.with_write_tx(|tx| {
-                        tx.update_payload_result(&node.payload_id(), PayloadResult {
-                            exec_result: ExecuteResult {
-                                finalize: finalize_result.clone(),
-                                transaction_failure: None,
-                                fee_receipt: None,
+                        tx.update_payload_result(
+                            &node.payload_id(),
+                            PayloadResult {
+                                exec_result: ExecuteResult {
+                                    finalize: finalize_result.clone(),
+                                    transaction_failure: None,
+                                    fee_receipt: None,
+                                },
+                                pledge_hash,
                             },
-                            pledge_hash,
-                        })
+                        )
                     })?;
 
                     return Ok(finalize_result);
@@ -1224,14 +1218,17 @@ where
                     match Self::validate_pledges(shard_pledges, diff) {
                         Ok(_) => self.shard_store.with_write_tx(|tx| {
                             let finalize = exec_result.finalize.clone();
-                            tx.update_payload_result(&node.payload_id(), PayloadResult {
-                                exec_result: ExecuteResult {
-                                    finalize: exec_result.finalize,
-                                    transaction_failure: exec_result.transaction_failure,
-                                    fee_receipt: exec_result.fee_receipt,
+                            tx.update_payload_result(
+                                &node.payload_id(),
+                                PayloadResult {
+                                    exec_result: ExecuteResult {
+                                        finalize: exec_result.finalize,
+                                        transaction_failure: exec_result.transaction_failure,
+                                        fee_receipt: exec_result.fee_receipt,
+                                    },
+                                    pledge_hash,
                                 },
-                                pledge_hash,
-                            })?;
+                            )?;
                             Ok(finalize)
                         }),
                         Err(e @ HotStuffError::MissingPledges(_)) => {
@@ -1240,14 +1237,17 @@ where
                                 RejectReason::ShardsNotPledged(e.to_string()),
                             );
                             self.shard_store.with_write_tx(|tx| {
-                                tx.update_payload_result(&node.payload_id(), PayloadResult {
-                                    exec_result: ExecuteResult {
-                                        finalize: finalize_result.clone(),
-                                        transaction_failure: exec_result.transaction_failure,
-                                        fee_receipt: exec_result.fee_receipt,
+                                tx.update_payload_result(
+                                    &node.payload_id(),
+                                    PayloadResult {
+                                        exec_result: ExecuteResult {
+                                            finalize: finalize_result.clone(),
+                                            transaction_failure: exec_result.transaction_failure,
+                                            fee_receipt: exec_result.fee_receipt,
+                                        },
+                                        pledge_hash,
                                     },
-                                    pledge_hash,
-                                })
+                                )
                             })?;
 
                             Ok(finalize_result)
@@ -1257,14 +1257,17 @@ where
                 } else {
                     self.shard_store.with_write_tx(|tx| {
                         let finalize = exec_result.finalize.clone();
-                        tx.update_payload_result(&node.payload_id(), PayloadResult {
-                            exec_result: ExecuteResult {
-                                finalize: exec_result.finalize,
-                                transaction_failure: exec_result.transaction_failure,
-                                fee_receipt: exec_result.fee_receipt,
+                        tx.update_payload_result(
+                            &node.payload_id(),
+                            PayloadResult {
+                                exec_result: ExecuteResult {
+                                    finalize: exec_result.finalize,
+                                    transaction_failure: exec_result.transaction_failure,
+                                    fee_receipt: exec_result.fee_receipt,
+                                },
+                                pledge_hash,
                             },
-                            pledge_hash,
-                        })?;
+                        )?;
                         Ok(finalize)
                     })
                 }

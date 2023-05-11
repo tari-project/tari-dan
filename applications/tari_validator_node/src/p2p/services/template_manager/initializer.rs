@@ -25,9 +25,7 @@ use tari_shutdown::ShutdownSignal;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::p2p::services::template_manager::{
-    downloader::TemplateDownloadWorker,
-    service::TemplateManagerService,
-    TemplateManager,
+    downloader::TemplateDownloadWorker, service::TemplateManagerService, TemplateManager,
 };
 
 pub fn spawn(

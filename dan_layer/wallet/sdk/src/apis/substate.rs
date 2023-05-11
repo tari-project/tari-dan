@@ -212,8 +212,8 @@ pub enum SubstateApiError {
 
 impl IsNotFoundError for SubstateApiError {
     fn is_not_found_error(&self) -> bool {
-        matches!(self, Self::SubstateDoesNotExist { .. }) ||
-            matches!(self, Self::StoreError(e) if e.is_not_found_error())
+        matches!(self, Self::SubstateDoesNotExist { .. })
+            || matches!(self, Self::StoreError(e) if e.is_not_found_error())
     }
 }
 

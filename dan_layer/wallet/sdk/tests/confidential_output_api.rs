@@ -12,8 +12,7 @@ use tari_dan_wallet_sdk::{
     models::{ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
     storage::{WalletStore, WalletStoreReader},
     substate_provider::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface},
-    DanWalletSdk,
-    WalletSdkConfig,
+    DanWalletSdk, WalletSdkConfig,
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::substate::SubstateAddress;
@@ -135,12 +134,16 @@ impl Test {
         let store = SqliteWalletStore::try_open(temp.path().join("data/wallet.sqlite")).unwrap();
         store.run_migrations().unwrap();
 
-        let sdk = DanWalletSdk::initialize(store.clone(), PanicIndexer, WalletSdkConfig {
-            password: None,
-            indexer_jrpc_endpoint: "".to_string(),
-            jwt_duration: Duration::from_secs(60),
-            jwt_secret_key: "secret_key".to_string(),
-        })
+        let sdk = DanWalletSdk::initialize(
+            store.clone(),
+            PanicIndexer,
+            WalletSdkConfig {
+                password: None,
+                indexer_jrpc_endpoint: "".to_string(),
+                jwt_duration: Duration::from_secs(60),
+                jwt_secret_key: "secret_key".to_string(),
+            },
+        )
         .unwrap();
         let accounts_api = sdk.accounts_api();
         accounts_api

@@ -26,12 +26,7 @@ use std::{collections::HashMap, convert::TryFrom, future, io, str::FromStr, time
 
 use cucumber::{
     gherkin::{Scenario, Step},
-    given,
-    then,
-    when,
-    writer,
-    World,
-    WriterExt,
+    given, then, when, writer, World, WriterExt,
 };
 use indexmap::IndexMap;
 use tari_common::initialize_logging;
@@ -48,11 +43,7 @@ use tari_dan_engine::abi::Type;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
-    AddPeerRequest,
-    GetIdentityResponse,
-    GetRecentTransactionsRequest,
-    GetTemplateRequest,
-    GetTransactionResultRequest,
+    AddPeerRequest, GetIdentityResponse, GetRecentTransactionsRequest, GetTemplateRequest, GetTransactionResultRequest,
     TemplateRegistrationResponse,
 };
 use utils::{

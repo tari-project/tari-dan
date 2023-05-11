@@ -652,8 +652,8 @@ mod basic_nft {
         assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u64:456").count(), 1);
         assert_eq!(
             nfts.iter()
-                .filter(|n| n.to_canonical_string() ==
-                    "uuid:746869732077696c6c20626520696e7465727072657465642061732075756964")
+                .filter(|n| n.to_canonical_string()
+                    == "uuid:746869732077696c6c20626520696e7465727072657465642061732075756964")
                 .count(),
             1
         );

@@ -17,13 +17,8 @@ use tari_template_lib::{
     args,
     args::Arg,
     models::{
-        Amount,
-        ComponentAddress,
-        ConfidentialWithdrawProof,
-        NonFungibleAddress,
-        NonFungibleId,
-        NonFungibleIndexAddress,
-        ResourceAddress,
+        Amount, ComponentAddress, ConfidentialWithdrawProof, NonFungibleAddress, NonFungibleId,
+        NonFungibleIndexAddress, ResourceAddress,
     },
 };
 

@@ -9,9 +9,8 @@ use std::{
 use digest::{consts::U32, generic_array};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_engine_types::serde_with;
 use tari_utilities::hex::{Hex, HexError};
-
-use crate::serde_with;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct TreeNodeHash(#[serde(with = "serde_with::hex")] FixedHash);
@@ -65,7 +64,9 @@ impl From<TreeNodeHash> for Vec<u8> {
 
 impl Hex for TreeNodeHash {
     fn from_hex(hex: &str) -> Result<Self, HexError>
-    where Self: Sized {
+    where
+        Self: Sized,
+    {
         let hash = FixedHash::from_hex(hex)?;
         Ok(Self(hash))
     }

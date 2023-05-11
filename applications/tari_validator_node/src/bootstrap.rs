@@ -21,8 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fs,
-    io,
+    fs, io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     ops::DerefMut,
     sync::Arc,
@@ -39,9 +38,7 @@ use tari_common::{
 use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_dan_app_utilities::{
-    base_layer_scanner,
-    base_node_client::GrpcBaseNodeClient,
-    epoch_manager::EpochManagerHandle,
+    base_layer_scanner, base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerHandle,
     template_manager::TemplateManagerHandle,
 };
 use tari_dan_common_types::{NodeAddressable, NodeHeight, PayloadId, ShardId, TreeNodeHash};
@@ -77,9 +74,7 @@ use crate::{
         create_tari_validator_node_rpc_service,
         services::{
             comms_peer_provider::CommsPeerProvider,
-            epoch_manager,
-            hotstuff,
-            mempool,
+            epoch_manager, hotstuff, mempool,
             mempool::{FeeTransactionValidator, MempoolHandle, TemplateExistsValidator, Validator},
             messaging,
             messaging::DanMessageReceivers,
@@ -90,8 +85,7 @@ use crate::{
         },
     },
     payload_processor::TariDanPayloadProcessor,
-    registration,
-    ApplicationConfig,
+    registration, ApplicationConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::bootstrap";

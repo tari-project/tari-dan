@@ -3,16 +3,19 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-mod walker;
-pub use walker::*;
-
 extern crate alloc;
+
+mod tag;
+pub use tag::*;
+
+mod walker;
 use alloc::collections::BTreeMap;
 
 pub use ciborium::value::Value;
 use ciborium::{de::from_reader, ser::into_writer};
 pub use serde;
 use serde::{de::DeserializeOwned, Serialize};
+pub use walker::*;
 
 #[derive(Debug, Clone)]
 pub struct BorError(String);
@@ -62,7 +65,7 @@ pub fn encode_into<T: Serialize + ?Sized, W: ciborium_io::Write>(val: &T, writer
 
 #[cfg(feature = "std")]
 pub fn encode_into<T: Serialize + ?Sized, W: std::io::Write>(val: &T, writer: &mut W) -> Result<(), BorError> {
-    into_writer(&val, writer).map_err(|e| BorError(format!("{:?}", e)))
+    into_writer(&val, writer).map_err(to_bor_error)
 }
 
 #[cfg(not(feature = "std"))]
@@ -84,7 +87,7 @@ pub fn decode<T: DeserializeOwned>(mut input: &[u8]) -> Result<T, BorError> {
 }
 
 fn decode_inner<T: DeserializeOwned>(input: &mut &[u8]) -> Result<T, BorError> {
-    let result = from_reader::<T, _>(input).map_err(to_bor_error)?;
+    let result = from_reader(input).map_err(to_bor_error)?;
     Ok(result)
 }
 
@@ -111,7 +114,9 @@ pub fn decode_len(input: &[u8]) -> Result<usize, BorError> {
 }
 
 fn to_bor_error<E>(e: E) -> BorError
-where E: core::fmt::Display {
+where
+    E: core::fmt::Display,
+{
     BorError(e.to_string())
 }
 

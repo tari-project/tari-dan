@@ -24,9 +24,7 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::{error, warn};
 use serde::Serialize;
@@ -35,38 +33,24 @@ use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
     types::CommsPublicKey,
-    CommsNode,
-    NodeIdentity,
+    CommsNode, NodeIdentity,
 };
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::optional::Optional;
 use tari_dan_core::services::BaseNodeClient;
 use tari_indexer_client::types::{
-    AddAddressRequest,
-    DeleteAddressRequest,
-    GetNonFungibleCountRequest,
-    GetNonFungiblesRequest,
-    GetNonFungiblesResponse,
-    GetSubstateRequest,
-    GetSubstateResponse,
-    GetTransactionResultRequest,
-    GetTransactionResultResponse,
-    InspectSubstateRequest,
-    InspectSubstateResponse,
-    NonFungibleSubstate,
-    SubmitTransactionRequest,
-    SubmitTransactionResponse,
+    AddAddressRequest, DeleteAddressRequest, GetNonFungibleCountRequest, GetNonFungiblesRequest,
+    GetNonFungiblesResponse, GetSubstateRequest, GetSubstateResponse, GetTransactionResultRequest,
+    GetTransactionResultResponse, InspectSubstateRequest, InspectSubstateResponse, NonFungibleSubstate,
+    SubmitTransactionRequest, SubmitTransactionResponse,
 };
 use tari_validator_node_client::types::{AddPeerRequest, AddPeerResponse, GetIdentityResponse};
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
 use crate::{
-    bootstrap::Services,
-    substate_decoder::encode_substate_into_json,
-    substate_manager::SubstateManager,
-    transaction_manager::TransactionManager,
-    GrpcBaseNodeClient,
+    bootstrap::Services, substate_decoder::encode_substate_into_json, substate_manager::SubstateManager,
+    transaction_manager::TransactionManager, GrpcBaseNodeClient,
 };
 
 const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
@@ -265,12 +249,15 @@ impl JsonRpcHandlers {
                 )
             })?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-            address: substate_resp.address,
-            version: substate_resp.version,
-            substate: substate_resp.substate,
-            created_by_transaction: substate_resp.created_by_transaction,
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            GetSubstateResponse {
+                address: substate_resp.address,
+                version: substate_resp.version,
+                substate: substate_resp.substate,
+                created_by_transaction: substate_resp.created_by_transaction,
+            },
+        ))
     }
 
     pub async fn inspect_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -300,13 +287,16 @@ impl JsonRpcHandlers {
                 )
             })?;
 
-        Ok(JsonRpcResponse::success(answer_id, InspectSubstateResponse {
-            address: resp.address,
-            version: resp.version,
-            substate_contents: encode_substate_into_json(&resp.substate)
-                .map_err(|e| Self::internal_error(answer_id, e))?,
-            created_by_transaction: resp.created_by_transaction,
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            InspectSubstateResponse {
+                address: resp.address,
+                version: resp.version,
+                substate_contents: encode_substate_into_json(&resp.substate)
+                    .map_err(|e| Self::internal_error(answer_id, e))?,
+                created_by_transaction: resp.created_by_transaction,
+            },
+        ))
     }
 
     pub async fn get_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -404,16 +394,19 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| Self::internal_error(answer_id, e))?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetNonFungiblesResponse {
-            non_fungibles: res
-                .into_iter()
-                .map(|v| NonFungibleSubstate {
-                    index: v.index,
-                    address: v.address,
-                    substate: v.substate,
-                })
-                .collect(),
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            GetNonFungiblesResponse {
+                non_fungibles: res
+                    .into_iter()
+                    .map(|v| NonFungibleSubstate {
+                        index: v.index,
+                        address: v.address,
+                        substate: v.substate,
+                    })
+                    .collect(),
+            },
+        ))
     }
 
     pub async fn submit_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -426,9 +419,12 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| Self::internal_error(answer_id, e))?;
 
-        Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-            transaction_hash: payload_id.into_array().into(),
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            SubmitTransactionResponse {
+                transaction_hash: payload_id.into_array().into(),
+            },
+        ))
     }
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -444,9 +440,12 @@ impl JsonRpcHandlers {
 
         let result = maybe_result.ok_or_else(|| Self::not_found(answer_id, "Transaction not found"))?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetTransactionResultResponse {
-            execution_result: result.into_finalized(),
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            GetTransactionResultResponse {
+                execution_result: result.into_finalized(),
+            },
+        ))
     }
 
     fn error_response<T: Display>(answer_id: i64, reason: JsonRpcErrorReason, message: T) -> JsonRpcResponse {

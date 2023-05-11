@@ -28,8 +28,7 @@ use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
-    PayloadId,
-    ShardId,
+    PayloadId, ShardId,
 };
 use tari_indexer_lib::committee_provider::CommitteeProvider;
 use tari_transaction::Transaction;

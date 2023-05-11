@@ -2,11 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_wallet_daemon_client::types::{
-    AuthLoginAcceptRequest,
-    AuthLoginAcceptResponse,
-    AuthLoginDenyRequest,
-    AuthLoginDenyResponse,
-    AuthLoginRequest,
+    AuthLoginAcceptRequest, AuthLoginAcceptResponse, AuthLoginDenyRequest, AuthLoginDenyResponse, AuthLoginRequest,
     AuthLoginResponse,
 };
 

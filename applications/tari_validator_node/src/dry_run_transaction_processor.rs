@@ -35,9 +35,7 @@ use tari_dan_core::{
     models::{Payload, TariDanPayload},
     services::{
         epoch_manager::{EpochManager, EpochManagerError},
-        PayloadProcessor,
-        PayloadProcessorError,
-        ValidatorNodeClientError,
+        PayloadProcessor, PayloadProcessorError, ValidatorNodeClientError,
     },
     storage::{
         shard_store::{ShardStore, ShardStoreReadTransaction},

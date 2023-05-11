@@ -31,8 +31,7 @@ use tari_dan_core::{
     message::DanMessage,
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{
-        infrastructure_services::OutboundService,
-        leader_strategy::PayloadSpecificLeaderStrategy,
+        infrastructure_services::OutboundService, leader_strategy::PayloadSpecificLeaderStrategy,
         NodeIdentitySigningService,
     },
     workers::{

@@ -24,17 +24,9 @@ use std::net::SocketAddr;
 
 use async_trait::async_trait;
 use tari_app_grpc::tari_rpc::{
-    BuildInfo,
-    CreateTemplateRegistrationRequest,
-    CreateTemplateRegistrationResponse,
-    FlowInfo,
-    GetBalanceRequest,
-    GetBalanceResponse,
-    RegisterValidatorNodeRequest,
-    RegisterValidatorNodeResponse,
-    TemplateRegistration,
-    TemplateType,
-    WasmInfo,
+    BuildInfo, CreateTemplateRegistrationRequest, CreateTemplateRegistrationResponse, FlowInfo, GetBalanceRequest,
+    GetBalanceResponse, RegisterValidatorNodeRequest, RegisterValidatorNodeResponse, TemplateRegistration,
+    TemplateType, WasmInfo,
 };
 use tari_comms::NodeIdentity;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;

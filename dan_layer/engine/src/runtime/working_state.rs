@@ -7,6 +7,7 @@ use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
     commit_result::ExecuteResult,
+    component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     events::Event,
     logs::LogEntry,
@@ -17,14 +18,8 @@ use tari_engine_types::{
     vault::Vault,
 };
 use tari_template_lib::models::{
-    BucketId,
-    ComponentAddress,
-    ComponentHeader,
-    NonFungibleAddress,
-    NonFungibleIndexAddress,
-    ResourceAddress,
-    UnclaimedConfidentialOutputAddress,
-    VaultId,
+    BucketId, ComponentAddress, NonFungibleAddress, NonFungibleIndexAddress, ResourceAddress,
+    UnclaimedConfidentialOutputAddress, VaultId,
 };
 
 use crate::{

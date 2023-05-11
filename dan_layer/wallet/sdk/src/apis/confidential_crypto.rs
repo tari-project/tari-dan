@@ -14,11 +14,7 @@ use tari_utilities::ByteArray;
 use crate::{
     byte_utils::copy_fixed,
     confidential::{
-        decrypt_value,
-        generate_confidential_proof,
-        get_commitment_factory,
-        kdfs,
-        ConfidentialProofError,
+        decrypt_value, generate_confidential_proof, get_commitment_factory, kdfs, ConfidentialProofError,
         ConfidentialProofStatement,
     },
     models::ConfidentialOutputWithMask,
@@ -71,8 +67,8 @@ impl ConfidentialCryptoApi {
             .iter()
             .fold(PrivateKey::default(), |acc, output| acc + &output.mask);
 
-        let revealed_amount = output_proof.output_statement.revealed_amount +
-            output_proof
+        let revealed_amount = output_proof.output_statement.revealed_amount
+            + output_proof
                 .change_statement
                 .as_ref()
                 .map(|st| st.revealed_amount)

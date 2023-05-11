@@ -33,6 +33,7 @@ use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{
     base_layer_hashing::ownership_proof_hasher,
     commit_result::FinalizeResult,
+    component::ComponentHeader,
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
     events::Event,
     fees::FeeReceipt,
@@ -44,32 +45,14 @@ use tari_engine_types::{
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
-        BucketAction,
-        BucketRef,
-        CallerContextAction,
-        ComponentAction,
-        ComponentRef,
-        ConfidentialRevealArg,
-        ConsensusAction,
-        CreateComponentArg,
-        CreateResourceArg,
-        GenerateRandomAction,
-        InvokeResult,
-        LogLevel,
-        MintResourceArg,
-        NonFungibleAction,
-        PayFeeArg,
-        ResourceAction,
-        ResourceGetNonFungibleArg,
-        ResourceRef,
-        ResourceUpdateNonFungibleDataArg,
-        VaultAction,
-        VaultWithdrawArg,
-        WorkspaceAction,
+        BucketAction, BucketRef, CallerContextAction, ComponentAction, ComponentRef, ConfidentialRevealArg,
+        ConsensusAction, CreateComponentArg, CreateResourceArg, GenerateRandomAction, InvokeResult, LogLevel,
+        MintResourceArg, NonFungibleAction, PayFeeArg, ResourceAction, ResourceGetNonFungibleArg, ResourceRef,
+        ResourceUpdateNonFungibleDataArg, VaultAction, VaultWithdrawArg, WorkspaceAction,
     },
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-    models::{Amount, BucketId, ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    models::{Amount, BucketId, ComponentAddress, NonFungibleAddress, VaultRef},
     Hash,
 };
 use tari_utilities::ByteArray;
@@ -78,14 +61,8 @@ use super::tracker::FinalizeTracker;
 use crate::{
     packager::LoadedTemplate,
     runtime::{
-        engine_args::EngineArgs,
-        tracker::StateTracker,
-        AuthParams,
-        ConsensusContext,
-        RuntimeError,
-        RuntimeInterface,
-        RuntimeModule,
-        RuntimeState,
+        engine_args::EngineArgs, tracker::StateTracker, AuthParams, ConsensusContext, RuntimeError, RuntimeInterface,
+        RuntimeModule, RuntimeState,
     },
 };
 
@@ -245,7 +222,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         reason: "Get component action requires a component address".to_string(),
                     })?;
                 let component = self.tracker.get_component(&address)?;
-                Ok(InvokeResult::encode(&component)?)
+                Ok(InvokeResult::encode(&component.state.state)?)
             },
             ComponentAction::SetState => {
                 let address = component_ref
@@ -808,12 +785,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let commitment = get_commitment_factory().commit(&private_key, &RistrettoSecretKey::from(amount));
         let resource = ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            Some((commitment.as_public_key().clone(), ConfidentialOutput {
-                commitment,
-                stealth_public_nonce: None,
-                encrypted_value: None,
-                minimum_value_promise: 0,
-            })),
+            Some((
+                commitment.as_public_key().clone(),
+                ConfidentialOutput {
+                    commitment,
+                    stealth_public_nonce: None,
+                    encrypted_value: None,
+                    minimum_value_promise: 0,
+                },
+            )),
             Amount::new(amount as i64),
         );
 

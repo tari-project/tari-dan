@@ -56,7 +56,8 @@ impl<TTemplateProvider> TariDanPayloadProcessor<TTemplateProvider> {
 }
 
 impl<TTemplateProvider> PayloadProcessor<TariDanPayload> for TariDanPayloadProcessor<TTemplateProvider>
-where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
+where
+    TTemplateProvider: TemplateProvider<Template = LoadedTemplate>,
 {
     fn process_payload(
         &self,

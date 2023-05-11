@@ -4,12 +4,7 @@
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
-    quorum_certificate::QuorumCertificate,
-    NodeHeight,
-    PayloadId,
-    ShardId,
-    SubstateState,
-    TreeNodeHash,
+    quorum_certificate::QuorumCertificate, NodeHeight, PayloadId, ShardId, SubstateState, TreeNodeHash,
 };
 use tari_engine_types::substate::{Substate, SubstateAddress};
 
