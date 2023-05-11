@@ -38,16 +38,10 @@ mod tariswap {
 
         // Initialises a new pool component for for the pool A - B
         pub fn new(a_addr: ResourceAddress, b_addr: ResourceAddress, fee: f64) -> Self {
-            // check the the resource pair is correct
+            // check that the the resource pair is correct
             assert!(a_addr != b_addr, "The resources of the pair must be different");
-            assert!(
-                ResourceManager::get(a_addr).resource_type() == ResourceType::Fungible,
-                "Resource 'a' is not fungible"
-            );
-            assert!(
-                ResourceManager::get(a_addr).resource_type() == ResourceType::Fungible,
-                "Resource 'b' is not fungible"
-            );
+            Self::check_resource_is_fungible(a_addr);
+            Self::check_resource_is_fungible(b_addr);
 
             // the fee represents a percentage, so it must be between 0 and 100
             let valid_fee_range = 0.0..100.0;
@@ -59,7 +53,7 @@ mod tariswap {
             pools.insert(b_addr, Vault::new_empty(b_addr));
 
             // create the lp resource
-            // TODO: lp resource minting/burning security, only this component should be allowed
+            // TODO: add lp resource minting/burning security, only this component should be allowed
             let lp_resource = ResourceBuilder::fungible("LP").build();
 
             Self {
@@ -130,9 +124,36 @@ mod tariswap {
             ResourceManager::get(self.lp_resource).mint_fungible(new_lp_amount)
         }
 
-        // TODO: remove liquidity.
-        // Right now we cannot implement it as we need to process tuple variables in the workspace
-        // pub fn remove_liquidity(&mut self, lp_bucket: Bucket) -> (Bucket, Bucket)
+        pub fn remove_liquidity(&mut self, mut lp_bucket: Bucket) -> (Bucket, Bucket) {
+            assert!(lp_bucket.resource_address() == self.lp_resource, "Invalid LP resource");
+
+            // get the pool information
+            let a_resource = self.get_a_resource();
+            let a_balance = self.get_pool_balance(a_resource);
+            let b_resource = self.get_b_resource();
+            let b_balance = self.get_pool_balance(b_resource);
+
+            // calculate the amount of tokens to take from each pool
+            let lp_ratio = lp_bucket.amount() / self.lp_total_supply();
+            let a_amount = lp_ratio * a_balance;
+            let b_amount = lp_ratio * b_balance;
+
+            // burn the LP tokens
+            lp_bucket.burn();
+
+            // return the pool tokens
+            let a_bucket = self.pools.get_mut(&a_resource).unwrap().withdraw(a_amount);
+            let b_bucket = self.pools.get_mut(&b_resource).unwrap().withdraw(b_amount);
+            (a_bucket, b_bucket)
+        }
+
+        pub fn get_a_resource(&self) -> ResourceAddress {
+            *self.pools.keys().nth(0).unwrap()
+        }
+
+        pub fn get_b_resource(&self) -> ResourceAddress {
+            *self.pools.keys().nth(1).unwrap()
+        }
 
         // public utility methods
         pub fn get_pool_balances(&self) -> HashMap<ResourceAddress, Amount> {
@@ -177,6 +198,13 @@ mod tariswap {
             assert!(a_resource != b_resource, "The resource addresses are the same");
             assert!(self.pools.contains_key(&a_resource), "The resource {} is not in the pool", a_resource);
             assert!(self.pools.contains_key(&b_resource), "The resource {} is not in the pool", b_resource);
+        }
+
+        fn check_resource_is_fungible(resource: ResourceAddress) {
+            assert!(
+                ResourceManager::get(resource).resource_type() == ResourceType::Fungible,
+                "Resource {} is not fungible", resource
+            );
         }
     }
 }
