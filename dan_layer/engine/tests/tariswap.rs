@@ -9,9 +9,6 @@ use tari_template_lib::{
 };
 use tari_template_test_tooling::{SubstateType, TemplateTest};
 
-// comes from the faucet template code
-const INITIAL_BALANCE: Amount = Amount::new(1000);
-
 struct TariSwapTest {
     template_test: TemplateTest,
     a_resource: ResourceAddress,
@@ -70,16 +67,11 @@ fn create_tariswap_component(
 
     let res = template_test
         .execute_and_commit(
-            vec![
-                Instruction::CallFunction {
-                    template_address: tariswap_template,
-                    function: "new".to_string(),
-                    args: args![a_resource, b_resource, fee],
-                },
-                Instruction::PutLastInstructionOutputOnWorkspace {
-                    key: b"lp_bucket".to_vec(),
-                },
-            ],
+            vec![Instruction::CallFunction {
+                template_address: tariswap_template,
+                function: "new".to_string(),
+                args: args![a_resource, b_resource, fee],
+            }],
             vec![],
         )
         .unwrap();
@@ -251,103 +243,124 @@ fn get_account_balance(test: &mut TariSwapTest, resource_address: ResourceAddres
         .call_method(test.account_address, "balance", args![resource_address], vec![])
 }
 
-#[test]
-fn add_liquidity_and_swap() {
-    // init the test
-    let fee = 5.0; // 5% market fee
-    let mut test = setup(fee);
+fn assert_swap(
+    test: &mut TariSwapTest,
+    input_resource: &ResourceAddress,
+    input_amount: i64,
+    output_resource: &ResourceAddress,
+    expected_output_amount: i64,
+) {
+    // create the amount objects
+    let input_amount = Amount::new(input_amount);
+    let expected_output_amount = Amount::new(expected_output_amount);
+
+    // save the current pool balances for later comparison
+    let input_pool_balance = get_pool_balance(test, *input_resource);
+    let output_pool_balance = get_pool_balance(test, *output_resource);
+
+    // call the component
+    swap(test, input_resource, output_resource, input_amount);
+
+    // check that the new pool balances are expected
+    let new_input_pool_balance = get_pool_balance(test, *input_resource);
+    let new_output_pool_balance = get_pool_balance(test, *output_resource);
+    assert_eq!(new_input_pool_balance, input_pool_balance + input_amount);
+    assert_eq!(new_output_pool_balance, output_pool_balance - expected_output_amount);
+}
+
+fn assert_add_liquidity(test: &mut TariSwapTest, a_amount: i64, b_amount: i64, expected_lp_amount: i64) {
+    // create the amount objects
+    let a_amount = Amount::new(a_amount);
+    let b_amount = Amount::new(b_amount);
+    let expected_lp_amount = Amount::new(expected_lp_amount);
+
+    // save the resource addreses to keep the compiler happy
     let a_resource = test.a_resource;
     let b_resource = test.b_resource;
     let lp_resource = test.lp_resource;
 
-    // check initial balances
-    let mut account_a_balance = get_account_balance(&mut test, a_resource);
-    let mut account_b_balance = get_account_balance(&mut test, a_resource);
-    assert_eq!(account_a_balance, INITIAL_BALANCE);
-    assert_eq!(account_b_balance, INITIAL_BALANCE);
+    // save the current balances for later comparison
+    let pool_a_balance = get_pool_balance(test, a_resource);
+    let pool_b_balance = get_pool_balance(test, b_resource);
+    let account_lp_balance = get_account_balance(test, lp_resource);
 
-    let mut pool_a_balance = get_pool_balance(&mut test, a_resource);
-    let mut pool_b_balance = get_pool_balance(&mut test, b_resource);
-    assert_eq!(pool_a_balance, 0);
-    assert_eq!(pool_b_balance, 0);
+    // call the component
+    add_liquidity(test, a_amount, b_amount);
 
-    // ------- ADD LIQUIDITY -------
-    let liquidity_amount = Amount::new(500);
-    add_liquidity(&mut test, liquidity_amount, liquidity_amount);
-
-    // check account balances
-    account_a_balance = get_account_balance(&mut test, a_resource);
-    account_b_balance = get_account_balance(&mut test, a_resource);
-    assert_eq!(account_a_balance, INITIAL_BALANCE - liquidity_amount);
-    assert_eq!(account_b_balance, INITIAL_BALANCE - liquidity_amount);
-
-    // the account should have now LP tokens
-    let account_lp_balance = get_account_balance(&mut test, lp_resource);
-    assert_eq!(account_lp_balance, liquidity_amount * 2); // we provided both "a" and "b" tokens
+    // the account should have now more LP tokens
+    let new_account_lp_balance = get_account_balance(test, lp_resource);
+    assert_eq!(new_account_lp_balance, account_lp_balance + expected_lp_amount);
 
     // check pool balances
-    pool_a_balance = get_pool_balance(&mut test, a_resource);
-    pool_b_balance = get_pool_balance(&mut test, b_resource);
-    assert_eq!(pool_a_balance, liquidity_amount);
-    assert_eq!(pool_b_balance, liquidity_amount);
+    let new_pool_a_balance = get_pool_balance(test, a_resource);
+    let new_pool_b_balance = get_pool_balance(test, b_resource);
+    assert_eq!(new_pool_a_balance, pool_a_balance + a_amount);
+    assert_eq!(new_pool_b_balance, pool_b_balance + b_amount);
+}
 
-    // ------- FIRST SWAP -------
-    // do a swap, giving "A" tokens for "B" tokens
-    let input_amount = Amount::new(50);
-    let expected_output_amount = Amount::new(44); // applyng market fees and the constant product formula: b = k / a
-    swap(&mut test, &a_resource, &b_resource, input_amount);
+fn assert_remove_liquidity(
+    test: &mut TariSwapTest,
+    lp_amount_to_remove: i64,
+    expected_a_amount: i64,
+    expected_b_amount: i64,
+) {
+    // create the amount objects
+    let lp_amount_to_remove = Amount::new(lp_amount_to_remove);
+    let expected_a_amount = Amount::new(expected_a_amount);
+    let expected_b_amount = Amount::new(expected_b_amount);
 
-    // check that the new pool balances are expected
-    let mut new_pool_a_balance = get_pool_balance(&mut test, a_resource);
-    let mut new_pool_b_balance = get_pool_balance(&mut test, b_resource);
-    assert_eq!(new_pool_a_balance, pool_a_balance + input_amount);
-    assert_eq!(new_pool_b_balance, pool_b_balance - expected_output_amount);
-    pool_a_balance = new_pool_a_balance;
-    pool_b_balance = new_pool_b_balance;
+    // save the resource addreses to keep the compiler happy
+    let a_resource = test.a_resource;
+    let b_resource = test.b_resource;
+    let lp_resource = test.lp_resource;
 
-    // check that the new account balances are expected
-    let mut new_account_a_balance = get_account_balance(&mut test, a_resource);
-    let mut new_account_b_balance = get_account_balance(&mut test, b_resource);
-    assert_eq!(new_account_a_balance, account_a_balance - input_amount);
-    assert_eq!(new_account_b_balance, account_b_balance + expected_output_amount);
-    account_a_balance = new_account_a_balance;
-    account_b_balance = new_account_b_balance;
+    // save the current balances for later comparison
+    let lp_balance = get_account_balance(test, lp_resource);
+    let account_a_balance = get_account_balance(test, a_resource);
+    let account_b_balance = get_account_balance(test, b_resource);
 
-    // ------- SECOND SWAP -------
-    // do another swap
-    // this time we are providing "B" tokens which are more scarce now, so we receive a more of "A" tokens in return
-    let input_amount = Amount::new(50);
-    let expected_output_amount = Amount::new(53); // applyng market fees and the constant product formula: b = k / a
-    swap(&mut test, &b_resource, &a_resource, input_amount);
-
-    // check that the new pool balances are expected
-    new_pool_a_balance = get_pool_balance(&mut test, a_resource);
-    new_pool_b_balance = get_pool_balance(&mut test, b_resource);
-    assert_eq!(new_pool_a_balance, pool_a_balance - expected_output_amount);
-    assert_eq!(new_pool_b_balance, pool_b_balance + input_amount);
-
-    // check that the new account balances are expected
-    new_account_a_balance = get_account_balance(&mut test, a_resource);
-    new_account_b_balance = get_account_balance(&mut test, b_resource);
-    assert_eq!(new_account_a_balance, account_a_balance + expected_output_amount);
-    assert_eq!(new_account_b_balance, account_b_balance - input_amount);
-    account_a_balance = new_account_a_balance;
-    account_b_balance = new_account_b_balance;
-
-    // ------- REMOVE LIQUIDITY -------
-    let lp_in_account = get_account_balance(&mut test, lp_resource);
-    let lp_amount_to_remove = Amount::new(100);
-    remove_liquidity(&mut test, lp_amount_to_remove);
+    // call the component
+    remove_liquidity(test, lp_amount_to_remove);
 
     // check the lp tokens in account
-    assert_eq!(
-        get_account_balance(&mut test, lp_resource),
-        lp_in_account - lp_amount_to_remove
-    );
+    assert_eq!(get_account_balance(test, lp_resource), lp_balance - lp_amount_to_remove);
 
     // check the account balances
-    new_account_a_balance = get_account_balance(&mut test, a_resource);
-    new_account_b_balance = get_account_balance(&mut test, b_resource);
-    assert_eq!(new_account_a_balance, account_a_balance + 50);
-    assert_eq!(new_account_b_balance, account_b_balance + 51);
+    let new_account_a_balance = get_account_balance(test, a_resource);
+    let new_account_b_balance = get_account_balance(test, b_resource);
+    assert_eq!(new_account_a_balance, account_a_balance + expected_a_amount);
+    assert_eq!(new_account_b_balance, account_b_balance + expected_b_amount);
+}
+
+#[test]
+fn tariswap() {
+    // init the test
+    let fee = 5.0; // 5% market fee
+    let mut test = setup(fee);
+
+    // save the resource addreses to keep the compiler happy
+    let a_resource = test.a_resource;
+    let b_resource = test.b_resource;
+
+    // add some liquidity
+    let liquidity_amount = 500;
+    let expected_lp_amount = liquidity_amount * 2; // we provided both "a" and "b" tokens
+    assert_add_liquidity(&mut test, liquidity_amount, liquidity_amount, expected_lp_amount);
+
+    // let's do a swap, giving "A" tokens for "B" tokens
+    let a_amount = 50;
+    let expected_b_amount = 44; // applyng market fees and the constant product formula: b = k / a
+    assert_swap(&mut test, &a_resource, a_amount, &b_resource, expected_b_amount);
+
+    // let's do another swap
+    // this time we are providing "B" tokens which are more scarce now, so we receive a more of "A" tokens in return
+    let b_amount = 50;
+    let expected_a_amount = 53; // applyng market fees and the constant product formula: b = k / a
+    assert_swap(&mut test, &b_resource, b_amount, &a_resource, expected_a_amount);
+
+    // remove liquidity
+    let lp_amount_to_remove = 100;
+    let expected_a_amount = 50;
+    let expected_b_amount = 51;
+    assert_remove_liquidity(&mut test, lp_amount_to_remove, expected_a_amount, expected_b_amount);
 }
