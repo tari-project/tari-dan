@@ -690,8 +690,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             }
 
             if state.transaction_receipt.is_none() {
-                let events = self.take_events();
-                let logs = self.take_logs();
+                let events = state.events.clone();
+                let logs = state.logs.clone();
 
                 let transaction_receipt = TransactionReceipt {
                     transaction_hash: self.transaction_hash(),
