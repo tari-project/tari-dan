@@ -502,21 +502,31 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     ) -> Result<FinalizeTracker, RuntimeError> {
         // Resolve the transfers to the fee pool resource and vault refunds
         let finalized_fee = self.finalize_fees(&mut substates_to_persist)?;
+
+        let transaction_receipt = substates_to_persist
+            .entry(SubstateAddress::TransactionReceipt(self.transaction_hash().into()))
+            .and_modify(|x| {
+                x.into_transaction_receipt().and_then(|x| {
+                    Some(TransactionReceipt {
+                        transaction_hash: x.transaction_hash,
+                        events: x.events.clone(),
+                        logs: x.logs.clone(),
+                        fee_receipt: Some(finalized_fee.clone()),
+                    })
+                });
+            })
+            .or_insert_with(|| panic!("Failed to get transaction receipt"));
         // events and logs
-        let events = self.take_events();
-        let logs = self.take_logs();
-
-        let transaction_receipt = TransactionReceipt {
-            transaction_hash: self.transaction_hash(),
-            events: events.clone(),
-            logs: logs.clone(),
-            fee_receipt: finalized_fee.clone(),
-        };
-
-        substates_to_persist.insert(
-            SubstateAddress::TransactionReceipt(transaction_receipt.transaction_hash.into()),
-            SubstateValue::TransactionReceipt(transaction_receipt),
-        );
+        let events = transaction_receipt
+            .into_transaction_receipt()
+            .expect("Failed to get transaction receipt")
+            .events
+            .clone();
+        let logs = transaction_receipt
+            .into_transaction_receipt()
+            .expect("Failed to get transaction receipt")
+            .logs
+            .clone();
 
         // Finalise will always reset the state
         let state = self.take_working_state();
@@ -677,6 +687,23 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             for (address, substate) in state.new_non_fungible_indexes.drain() {
                 let addr = SubstateAddress::NonFungibleIndex(address.clone());
                 up_states.insert(addr, substate.into());
+            }
+
+            if state.transaction_receipt.is_none() {
+                let events = self.take_events();
+                let logs = self.take_logs();
+
+                let transaction_receipt = TransactionReceipt {
+                    transaction_hash: self.transaction_hash(),
+                    events,
+                    logs,
+                    fee_receipt: None,
+                };
+
+                up_states.insert(
+                    SubstateAddress::TransactionReceipt(transaction_receipt.transaction_hash.into()),
+                    SubstateValue::TransactionReceipt(transaction_receipt),
+                );
             }
 
             up_states

@@ -412,6 +412,13 @@ impl SubstateValue {
             _ => None,
         }
     }
+
+    pub fn into_transaction_receipt(&self) -> Option<&TransactionReceipt> {
+        match self {
+            SubstateValue::TransactionReceipt(tx_receipt) => Some(tx_receipt),
+            _ => None,
+        }
+    }
 }
 
 impl From<ComponentHeader> for SubstateValue {

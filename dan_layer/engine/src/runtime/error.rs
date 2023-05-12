@@ -130,6 +130,8 @@ pub enum RuntimeError {
     TransactionReceiptAlreadyExists { address: TransactionReceiptAddress },
     #[error("Execute Result does not exist")]
     ExecuteResultDoesNotExist,
+    #[error("Transaction Receipt not found")]
+    TransactionReceiptNotFound,
 }
 
 impl RuntimeError {

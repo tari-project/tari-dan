@@ -72,7 +72,7 @@ pub struct TransactionReceipt {
     pub transaction_hash: Hash,
     pub events: Vec<Event>,
     pub logs: Vec<LogEntry>,
-    pub fee_receipt: FeeReceipt,
+    pub fee_receipt: Option<FeeReceipt>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
