@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import Button from '@mui/material/Button';
 import TableCell from '@mui/material/TableCell';
 import TableRow from '@mui/material/TableRow';
@@ -35,6 +36,7 @@ import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
 import IconButton from '@mui/material/IconButton';
 import Collapse from '@mui/material/Collapse';
 import { Typography } from '@mui/material';
+import ManageSearchOutlinedIcon from '@mui/icons-material/ManageSearchOutlined';
 
 function Committee({
   begin,
@@ -90,7 +92,7 @@ function Committee({
             {openMembers ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
           </AccordionIconButton>
         </TableCell>
-        {/* <TableCell
+        <TableCell
           style={{
             verticalAlign: 'top',
             borderBottom: 'none',
@@ -98,10 +100,15 @@ function Committee({
           }}
           width="120px"
         >
-          <IconButton color="primary">
-            <KeyboardArrowRightIcon />
+          <IconButton
+            color="primary"
+            component={Link}
+            to={`/committees/${begin},${end}`}
+            state={{ begin, end, members, publicKey }}
+          >
+            <ManageSearchOutlinedIcon />
           </IconButton>
-        </TableCell> */}
+        </TableCell>
       </TableRow>
       <TableRow>
         <DataTableCell

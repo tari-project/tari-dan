@@ -20,19 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
+import { useContext } from 'react';
 import AllVNs from './Components/AllVNs';
 import Committees from './Components/Committees';
 import Connections from './Components/Connections';
 import Fees from './Components/Fees';
 import Info from './Components/Info';
-import { IEpoch, IIdentity } from '../../utils/interfaces';
-import {
-  getEpochManagerStats,
-  getIdentity,
-  getRecentTransactions,
-  getShardKey,
-} from '../../utils/json_rpc';
 import Mempool from './Components/Mempool';
 import RecentTransactions from './Components/RecentTransactions';
 import Templates from './Components/Templates';
@@ -40,65 +33,29 @@ import './ValidatorNode.css';
 import { StyledPaper } from '../../Components/StyledComponents';
 import Grid from '@mui/material/Grid';
 import SecondaryHeading from '../../Components/SecondaryHeading';
+import { VNContext } from '../../App';
 
 function ValidatorNode() {
-  const [epoch, setEpoch] = useState<IEpoch | undefined>(undefined);
-  const [identity, setIdentity] = useState<IIdentity | undefined>(undefined);
-  const [shardKey, setShardKey] = useState<string | null>(null);
-  const [error, setError] = useState('');
-  // Refresh every 2 minutes
-  const refreshEpoch = (epoch: IEpoch | undefined) => {
-    getEpochManagerStats()
-      .then((response) => {
-        if (response.current_epoch !== epoch?.current_epoch) {
-          setEpoch(response);
-        }
-      })
-      .catch((reason) => {
-        console.error(reason);
-        setError('Json RPC error, please check console');
-      });
-  };
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      refreshEpoch(epoch);
-    }, 2 * 60 * 1000);
-    return () => {
-      window.clearInterval(id);
-    };
-  }, [epoch]);
-  // Initial fetch
-  useEffect(() => {
-    refreshEpoch(undefined);
-    getIdentity()
-      .then((response) => {
-        setIdentity(response);
-      })
-      .catch((reason) => {
-        console.log(reason);
-        setError('Json RPC error, please check console');
-      });
-  }, []);
-  // Get shard key.
-  useEffect(() => {
-    if (epoch !== undefined && identity !== undefined) {
-      // The *10 is from the hardcoded constant in VN.
-      getShardKey(epoch.current_epoch * 10, identity.public_key).then(
-        (response) => {
-          setShardKey(response.shard_key);
-        }
-      );
-    }
-  }, [epoch, identity]);
-  useEffect(() => {
-    getRecentTransactions();
-  }, []);
+  const { epoch, identity, shardKey, error } = useContext(VNContext);
+
   if (error !== '') {
     return <div className="error">{error}</div>;
   }
   if (epoch === undefined || identity === undefined) return <div>Loading</div>;
+
   return (
     <Grid container spacing={5}>
+      {/* <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          {shardKey ? (
+            <CommitteesCharts
+              currentEpoch={epoch.current_epoch}
+              shardKey={shardKey}
+              publicKey={identity.public_key}
+            />
+          ) : null}
+        </StyledPaper>
+      </Grid> */}
       <SecondaryHeading>Info</SecondaryHeading>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>

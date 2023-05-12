@@ -39,6 +39,7 @@ import Templates from './routes/Templates/Templates';
 import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
 import ErrorPage from './routes/ErrorPage';
 import TemplateFunctions from './routes/VN/Components/TemplateFunctions';
+import CommitteeMembers from './routes/VN/Components/CommitteeMembers';
 
 const router = createBrowserRouter([
   {
@@ -86,6 +87,10 @@ const router = createBrowserRouter([
       {
         path: 'template/:address',
         element: <TemplateFunctions />,
+      },
+      {
+        path: 'committees/:address',
+        element: <CommitteeMembers />,
       },
     ],
   },

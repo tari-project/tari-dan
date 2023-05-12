@@ -24,15 +24,34 @@ import PageHeading from '../../Components/PageHeading';
 import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Grid';
 import { StyledPaper } from '../../Components/StyledComponents';
+import { useContext } from 'react';
+import { VNContext } from '../../App';
+// import CommitteesCharts from '../VN/Components/CommitteesCharts';
+import Committees from '../VN/Components/Committees';
 
 function CommitteesLayout() {
+  const { epoch, shardKey, identity, error } = useContext(VNContext);
+
+  if (error !== '') {
+    return <div className="error">{error}</div>;
+  }
+  if (epoch === undefined || identity === undefined) return <div>Loading</div>;
+
   return (
     <div>
       <Grid container spacing={5}>
         <PageHeading>Committees</PageHeading>
         <Grid item xs={12} md={12} lg={12}>
           <StyledPaper>
-            <Typography>Info goes in here</Typography>
+            <Typography>
+              {shardKey ? (
+                <Committees
+                  currentEpoch={epoch.current_epoch}
+                  shardKey={shardKey}
+                  publicKey={identity.public_key}
+                />
+              ) : null}
+            </Typography>
           </StyledPaper>
         </Grid>
       </Grid>

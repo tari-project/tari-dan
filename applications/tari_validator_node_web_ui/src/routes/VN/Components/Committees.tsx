@@ -23,7 +23,7 @@
 import { useEffect, useState } from 'react';
 import { getCommittee, getShardKey } from '../../../utils/json_rpc';
 import Committee from './Committee';
-import { U256 } from './helpers';
+import { U256, fromHexString } from './helpers';
 import Table from '@mui/material/Table';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
@@ -32,6 +32,7 @@ import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TablePagination from '@mui/material/TablePagination';
 import { Typography } from '@mui/material';
+import ECharts from './CommitteesChart';
 
 async function get_all_committees(
   currentEpoch: number,
@@ -112,13 +113,14 @@ function Committees({
 
   return (
     <>
+      <ECharts chartData={committees} />
       <TableContainer>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell>Range</TableCell>
               <TableCell style={{ textAlign: 'center' }}>Members</TableCell>
-              {/* <TableCell style={{ textAlign: 'center' }}>Details</TableCell> */}
+              <TableCell style={{ textAlign: 'center' }}>Details</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
