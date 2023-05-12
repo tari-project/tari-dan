@@ -506,6 +506,18 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         let events = self.take_events();
         let logs = self.take_logs();
 
+        let transaction_receipt = TransactionReceipt {
+            transaction_hash: self.transaction_hash(),
+            events: events.clone(),
+            logs: logs.clone(),
+            fee_receipt: finalized_fee.clone(),
+        };
+
+        substates_to_persist.insert(
+            SubstateAddress::TransactionReceipt(transaction_receipt.transaction_hash.into()),
+            SubstateValue::TransactionReceipt(transaction_receipt),
+        );
+
         // Finalise will always reset the state
         let state = self.take_working_state();
 
@@ -517,40 +529,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             Ok(substate_diff) => TransactionResult::Accept(substate_diff),
             Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
         };
-
-        let substate_tx_address = SubstateAddress::TransactionReceipt(self.transaction_hash().into());
-        // if transaction fails, we don't store it in substates
-        if substates_to_persist.get(&substate_tx_address).is_none() && result.is_accept() {
-            let transaction_receipt = TransactionReceipt {
-                transaction_hash: self.transaction_hash(),
-                logs: logs.clone(),
-                events: events.clone(),
-                fee_receipt: finalized_fee.clone(),
-            };
-
-            substates_to_persist.insert(
-                substate_tx_address,
-                SubstateValue::TransactionReceipt(transaction_receipt),
-            );
-            // Finalise will always reset the state
-            let state = self.take_working_state();
-
-            let result = state
-                .validate_finalized()
-                .and_then(|_| self.generate_substate_diff(state, substates_to_persist.clone()));
-
-            let result = match result {
-                Ok(substate_diff) => TransactionResult::Accept(substate_diff),
-                Err(err) => TransactionResult::Reject(RejectReason::ExecutionFailure(err.to_string())),
-            };
-
-            return Ok(FinalizeTracker {
-                result,
-                events,
-                fee_receipt: finalized_fee,
-                logs,
-            });
-        }
 
         Ok(FinalizeTracker {
             result,
@@ -699,11 +677,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             for (address, substate) in state.new_non_fungible_indexes.drain() {
                 let addr = SubstateAddress::NonFungibleIndex(address.clone());
                 up_states.insert(addr, substate.into());
-            }
-
-            if let Some(ref tx_receipt) = state.transaction_receipt {
-                let tx_hash = SubstateAddress::TransactionReceipt(tx_receipt.transaction_hash.into());
-                up_states.insert(tx_hash, SubstateValue::TransactionReceipt(tx_receipt.clone()));
             }
 
             up_states
