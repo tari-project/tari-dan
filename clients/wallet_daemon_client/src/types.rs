@@ -245,6 +245,7 @@ pub struct AccountsGetBalancesResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BalanceEntry {
     pub vault_address: SubstateAddress,
+    #[serde(with = "serde_with::string")]
     pub resource_address: ResourceAddress,
     pub balance: Amount,
     pub resource_type: ResourceType,
