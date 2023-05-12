@@ -138,7 +138,7 @@ impl ManifestInstructionGenerator {
                                 SubstateAddress::Component(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::Resource(addr) => Ok(arg!(*addr)),
                                 // TODO: should execute result addresses be allowed to be reference ?
-                                SubstateAddress::ExecuteResult(addr) => Ok(arg!(*addr)),
+                                SubstateAddress::TransactionReceipt(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::Vault(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::NonFungible(addr) => Ok(arg!(addr)),
                                 SubstateAddress::UnclaimedConfidentialOutput(addr) => Ok(arg!(*addr)),

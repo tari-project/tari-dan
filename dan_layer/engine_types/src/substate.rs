@@ -29,19 +29,14 @@ use serde::{Deserialize, Serialize};
 use tari_bor::{decode, decode_exact, encode, BorError};
 use tari_template_lib::{
     models::{
-        ComponentAddress,
-        NonFungibleAddress,
-        NonFungibleId,
-        NonFungibleIndexAddress,
-        ResourceAddress,
-        UnclaimedConfidentialOutputAddress,
-        VaultId,
+        ComponentAddress, NonFungibleAddress, NonFungibleId, NonFungibleIndexAddress, ResourceAddress,
+        UnclaimedConfidentialOutputAddress, VaultId,
     },
     Hash,
 };
 
 use crate::{
-    commit_result::{ExecuteResult, ExecuteResultAddress},
+    commit_result::{TransactionReceipt, TransactionReceiptAddress},
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     hashing::{hasher, EngineHashDomainLabel},
@@ -96,7 +91,7 @@ pub enum SubstateAddress {
     UnclaimedConfidentialOutput(UnclaimedConfidentialOutputAddress),
     NonFungible(NonFungibleAddress),
     NonFungibleIndex(NonFungibleIndexAddress),
-    ExecuteResult(ExecuteResultAddress),
+    TransactionReceipt(TransactionReceiptAddress),
 }
 
 impl SubstateAddress {
@@ -142,7 +137,7 @@ impl SubstateAddress {
                 .chain(address.resource_address().hash())
                 .chain(&address.index())
                 .result(),
-            SubstateAddress::ExecuteResult(address) => *address.hash(),
+            SubstateAddress::TransactionReceipt(address) => *address.hash(),
         }
     }
 
@@ -243,7 +238,7 @@ impl Display for SubstateAddress {
             SubstateAddress::NonFungible(addr) => write!(f, "{}", addr),
             SubstateAddress::NonFungibleIndex(addr) => write!(f, "{}", addr),
             SubstateAddress::UnclaimedConfidentialOutput(commitment_address) => write!(f, "{}", commitment_address),
-            SubstateAddress::ExecuteResult(addr) => write!(f, "{}", addr),
+            SubstateAddress::TransactionReceipt(addr) => write!(f, "{}", addr),
         }
     }
 }
@@ -329,6 +324,7 @@ impl_partial_eq!(ResourceAddress, Resource);
 impl_partial_eq!(VaultId, Vault);
 impl_partial_eq!(UnclaimedConfidentialOutputAddress, UnclaimedConfidentialOutput);
 impl_partial_eq!(NonFungibleAddress, NonFungible);
+impl_partial_eq!(TransactionReceiptAddress, TransactionReceipt);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SubstateValue {
@@ -338,7 +334,7 @@ pub enum SubstateValue {
     NonFungible(NonFungibleContainer),
     NonFungibleIndex(NonFungibleIndex),
     UnclaimedConfidentialOutput(UnclaimedConfidentialOutput),
-    ExecuteResult(ExecuteResult),
+    TransactionReceipt(TransactionReceipt),
 }
 
 impl SubstateValue {

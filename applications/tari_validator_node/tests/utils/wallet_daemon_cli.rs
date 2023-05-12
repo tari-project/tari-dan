@@ -699,7 +699,7 @@ fn add_substate_addresses_from_wallet_daemon(world: &mut TariWorld, outputs_name
                 });
                 counters[5] += 1;
             },
-            SubstateAddress::ExecuteResult(_) => {
+            SubstateAddress::TransactionReceipt(_) => {
                 outputs.insert(format!("execute_results/{}", counters[6]), VersionedSubstateAddress {
                     address: addr.clone(),
                     version: data.version(),

@@ -38,9 +38,9 @@ use crate::{
 const TAG: u64 = BinaryTag::ExecuteResultAddress.as_u64();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct ExecuteResultAddress(Required<Hash, TAG>);
+pub struct TransactionReceiptAddress(Required<Hash, TAG>);
 
-impl ExecuteResultAddress {
+impl TransactionReceiptAddress {
     pub const fn new(address: Hash) -> Self {
         Self(Required(address))
     }
@@ -55,16 +55,24 @@ impl ExecuteResultAddress {
     }
 }
 
-impl<T: Into<Hash>> From<T> for ExecuteResultAddress {
+impl<T: Into<Hash>> From<T> for TransactionReceiptAddress {
     fn from(address: T) -> Self {
         Self::new(address.into())
     }
 }
 
-impl Display for ExecuteResultAddress {
+impl Display for TransactionReceiptAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "resource_{}", self.0 .0)
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionReceipt {
+    pub transaction_hash: Hash,
+    pub events: Vec<Event>,
+    pub logs: Vec<LogEntry>,
+    pub fee_receipt: FeeReceipt,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

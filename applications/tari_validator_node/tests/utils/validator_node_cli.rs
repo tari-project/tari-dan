@@ -210,7 +210,7 @@ pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String
                 });
                 counters[5] += 1;
             },
-            SubstateAddress::ExecuteResult(_) => {
+            SubstateAddress::TransactionReceipt(_) => {
                 outputs.insert(format!("execute_results/{}", counters[6]), VersionedSubstateAddress {
                     address: addr.clone(),
                     version: data.version(),

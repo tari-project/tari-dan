@@ -7,7 +7,7 @@ use log::*;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
-    commit_result::ExecuteResultAddress,
+    commit_result::TransactionReceiptAddress,
     indexed_value::{IndexedValue, ValueVisitorError},
     substate::{SubstateAddress, SubstateValue},
 };
@@ -91,9 +91,9 @@ impl<'a, TStore: WalletStore, TNetworkInterface: WalletNetworkInterface> Substat
                             }
                         },
                         SubstateValue::Resource(_) => {},
-                        SubstateValue::ExecuteResult(execute_result) => {
-                            let execute_res_addr = SubstateAddress::ExecuteResult(ExecuteResultAddress::new(
-                                execute_result.finalize.transaction_hash,
+                        SubstateValue::TransactionReceipt(tx_receipt) => {
+                            let execute_res_addr = SubstateAddress::TransactionReceipt(TransactionReceiptAddress::new(
+                                tx_receipt.transaction_hash,
                             ));
                             if substate_addresses.contains_key(&execute_res_addr) {
                                 continue;
@@ -212,8 +212,8 @@ pub enum SubstateApiError {
 
 impl IsNotFoundError for SubstateApiError {
     fn is_not_found_error(&self) -> bool {
-        matches!(self, Self::SubstateDoesNotExist { .. }) ||
-            matches!(self, Self::StoreError(e) if e.is_not_found_error())
+        matches!(self, Self::SubstateDoesNotExist { .. })
+            || matches!(self, Self::StoreError(e) if e.is_not_found_error())
     }
 }
 
