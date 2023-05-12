@@ -25,28 +25,28 @@ use std::{
     str::FromStr,
 };
 
-use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
+use tari_bor::BorTag;
 
 use super::BinaryTag;
-use crate::{hash::HashParseError, models::TemplateAddress, prelude::AccessRules, Hash};
+use crate::{hash::HashParseError, Hash};
 
 const TAG: u64 = BinaryTag::ComponentAddress.as_u64();
 
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct ComponentAddress(Required<Hash, TAG>);
+pub struct ComponentAddress(BorTag<Hash, TAG>);
 
 impl ComponentAddress {
     pub const fn new(address: Hash) -> Self {
-        Self(Required(address))
+        Self(BorTag::new(address))
     }
 
     pub fn hash(&self) -> &Hash {
-        &self.0 .0
+        &self.0
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        &self.0 .0
+        &self.0
     }
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
@@ -86,7 +86,7 @@ impl TryFrom<Vec<u8>> for ComponentAddress {
 
 impl Display for ComponentAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "component_{}", self.0 .0)
+        write!(f, "component_{}", *self.0)
     }
 }
 
@@ -95,35 +95,34 @@ impl AsRef<[u8]> for ComponentAddress {
         self.as_bytes()
     }
 }
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComponentHeader {
-    pub template_address: TemplateAddress,
-    pub module_name: String,
-    // TODO: Access rules should be a separate substate?
-    pub access_rules: AccessRules,
-    // TODO: Split the state from the header
-    pub state: ComponentBody,
-}
-
-impl ComponentHeader {
-    pub fn into_component(self) -> ComponentBody {
-        self.state
-    }
-
-    pub fn state(&self) -> &[u8] {
-        &self.state.state
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComponentBody {
-    pub state: Vec<u8>,
-}
-
-impl ComponentBody {
-    pub fn set(&mut self, state: Vec<u8>) -> &mut Self {
-        self.state = state;
-        self
-    }
-}
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct ComponentHeader {
+//     pub template_address: TemplateAddress,
+//     pub module_name: String,
+//     // TODO: Access rules should be a separate substate?
+//     pub access_rules: AccessRules,
+//     // TODO: Split the state from the header
+//     pub state: ComponentBody,
+// }
+//
+// impl ComponentHeader {
+//     pub fn into_component(self) -> ComponentBody {
+//         self.state
+//     }
+//
+//     pub fn state(&self) -> &[u8] {
+//         &self.state.state
+//     }
+// }
+//
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub struct ComponentBody {
+//     pub state: Vec<u8>,
+// }
+//
+// impl ComponentBody {
+//     pub fn set(&mut self, state: Vec<u8>) -> &mut Self {
+//         self.state = state;
+//         self
+//     }
+// }

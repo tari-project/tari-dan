@@ -52,7 +52,6 @@ pub struct DanWalletDaemonProcess {
 
 pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, indexer_name: String) {
     let (signaling_server_port, json_rpc_port) = get_os_assigned_ports();
-    let base_dir = get_base_dir();
 
     let indexer_jrpc_port = world.indexers.get(&indexer_name).unwrap().json_rpc_port;
     let shutdown = Shutdown::new();
@@ -67,7 +66,22 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
         dan_wallet_daemon: WalletDaemonConfig::default(),
     };
 
-    config.common.base_path = base_dir.clone();
+    let scenario_slug = world
+        .current_scenario_name
+        .as_ref()
+        .unwrap()
+        .chars()
+        .map(|x| match x {
+            'A'..='Z' | 'a'..='z' | '0'..='9' => x,
+            _ => '-',
+        })
+        .collect::<String>();
+    let temp_dir = get_base_dir()
+        .join("wallet_daemons")
+        .join(scenario_slug)
+        .join(wallet_daemon_name.clone());
+
+    config.common.base_path = temp_dir.clone();
     config.dan_wallet_daemon.listen_addr = Some(listen_addr);
     config.dan_wallet_daemon.signaling_server_addr = Some(signaling_server_addr);
     config.dan_wallet_daemon.indexer_node_json_rpc_url = indexer_url;
@@ -91,7 +105,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
         name: wallet_daemon_name.clone(),
         json_rpc_port,
         indexer_jrpc_port,
-        temp_path_dir: base_dir,
+        temp_path_dir: temp_dir,
         shutdown,
     };
 

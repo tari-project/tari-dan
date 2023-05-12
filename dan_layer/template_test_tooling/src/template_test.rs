@@ -33,6 +33,7 @@ use tari_dan_engine::{
 };
 use tari_engine_types::{
     commit_result::ExecuteResult,
+    component::{ComponentBody, ComponentHeader},
     hashing::template_hasher,
     instruction::Instruction,
     resource_container::ResourceContainer,
@@ -44,7 +45,7 @@ use tari_template_lib::{
     args,
     args::Arg,
     crypto::RistrettoPublicKeyBytes,
-    models::{Amount, ComponentAddress, ComponentBody, ComponentHeader, NonFungibleAddress, TemplateAddress},
+    models::{Amount, ComponentAddress, NonFungibleAddress, TemplateAddress},
     prelude::{AccessRules, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };

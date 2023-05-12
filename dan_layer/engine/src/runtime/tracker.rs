@@ -33,6 +33,7 @@ use tari_dan_common_types::{optional::Optional, services::template_provider::Tem
 use tari_engine_types::{
     bucket::Bucket,
     commit_result::{RejectReason, TransactionResult},
+    component::{ComponentBody, ComponentHeader},
     confidential::UnclaimedConfidentialOutput,
     events::Event,
     fees::{FeeReceipt, FeeSource},
@@ -54,8 +55,6 @@ use tari_template_lib::{
         Amount,
         BucketId,
         ComponentAddress,
-        ComponentBody,
-        ComponentHeader,
         Metadata,
         NonFungibleAddress,
         NonFungibleIndexAddress,
