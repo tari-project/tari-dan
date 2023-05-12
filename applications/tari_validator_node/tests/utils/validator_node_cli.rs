@@ -424,7 +424,7 @@ pub async fn submit_manifest(
 
 async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {
     let port = world.validator_nodes.get(&validator_node_name).unwrap().json_rpc_port;
-    get_vn_client(port).await
+    get_vn_client(port)
 }
 
 pub(crate) fn get_cli_data_dir(world: &mut TariWorld) -> PathBuf {

@@ -15,7 +15,7 @@ appenders:
   stdout:
     kind: console
     encoder:
-      pattern: "{d(%H:%M)} {h({l}):5} {m} [{f}:{L}]{n}"
+      pattern: "{d(%H:%M)} [{t}] {h({l}):5} {m} [{f}:{L}]{n}"
     filters:
       - kind: threshold
         level: info
@@ -101,7 +101,7 @@ appenders:
 root:
   level: warn
   appenders:
-    - stdout
+    - stdout_warn
     - other
 
 loggers:

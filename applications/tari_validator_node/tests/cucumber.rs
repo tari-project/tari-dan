@@ -22,7 +22,15 @@
 
 mod steps;
 mod utils;
-use std::{collections::HashMap, convert::TryFrom, future, io, panic, str::FromStr, time::Duration};
+use std::{
+    collections::HashMap,
+    convert::TryFrom,
+    future,
+    io,
+    panic,
+    str::FromStr,
+    time::{Duration, Instant},
+};
 
 use cucumber::{
     gherkin::{Scenario, Step},
@@ -45,6 +53,7 @@ use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
 use tari_dan_core::services::BaseNodeClient;
 use tari_dan_engine::abi::Type;
+use tari_shutdown::Shutdown;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
@@ -53,7 +62,6 @@ use tari_validator_node_client::types::{
     GetRecentTransactionsRequest,
     GetTemplateRequest,
     GetTransactionResultRequest,
-    TemplateRegistrationResponse,
 };
 use utils::{
     indexer::spawn_indexer,
@@ -66,7 +74,7 @@ use utils::{
 
 use crate::utils::{
     base_node::{get_base_node_client, spawn_base_node, BaseNodeProcess},
-    http_server::MockHttpServer,
+    http_server::{spawn_template_http_server, MockHttpServer},
     indexer::IndexerProcess,
     logging::{create_log_config_file, get_base_dir},
     miner::MinerProcess,
@@ -87,6 +95,7 @@ pub struct TariWorld {
     pub templates: IndexMap<String, RegisteredTemplate>,
     pub outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
     pub http_server: Option<MockHttpServer>,
+    pub template_mock_server_port: Option<u16>,
     pub current_scenario_name: Option<String>,
     pub commitments: IndexMap<String, Vec<u8>>,
     pub commitment_ownership_proofs: IndexMap<String, RistrettoComSig>,
@@ -100,6 +109,10 @@ pub struct TariWorld {
 }
 
 impl TariWorld {
+    pub fn get_mock_server(&self) -> &MockHttpServer {
+        self.http_server.as_ref().unwrap()
+    }
+
     pub fn get_miner(&self, name: &str) -> &MinerProcess {
         self.miners
             .get(name)
@@ -127,6 +140,8 @@ impl TariWorld {
     }
 
     pub fn after(&mut self, _scenario: &Scenario) {
+        let _drop = self.http_server.take();
+
         for (name, mut p) in self.indexers.drain(..) {
             println!("Shutting down indexer {}", name);
             p.shutdown.trigger();
@@ -157,6 +172,39 @@ impl TariWorld {
         self.wallet_daemon_outputs.clear();
         self.miners.clear();
     }
+
+    pub async fn wait_until_base_nodes_have_transaction_in_mempool(&self, min_tx_count: usize, timeout: Duration) {
+        let timer = Instant::now();
+        'outer: loop {
+            for bn in self.base_nodes.values() {
+                let mut client = bn.create_client();
+                let tx_count = client.get_mempool_transaction_count().await.unwrap();
+
+                if tx_count < min_tx_count {
+                    println!(
+                        "Waiting for {} to have {} transaction(s) in mempool (currently has {})",
+                        bn.name, min_tx_count, tx_count
+                    );
+                    if timer.elapsed() > timeout {
+                        println!(
+                            "Timed out waiting for base node {} to have {} transactions in mempool",
+                            bn.name, min_tx_count
+                        );
+                        panic!(
+                            "Timed out waiting for base node {} to have {} transactions in mempool",
+                            bn.name, min_tx_count
+                        );
+                    }
+                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    continue 'outer;
+                }
+
+                println!("{} has {} transaction(s) in mempool", bn.name, tx_count);
+            }
+
+            break;
+        }
+    }
 }
 
 #[tokio::main]
@@ -164,6 +212,10 @@ async fn main() {
     let log_path = create_log_config_file();
     let base_path = get_base_dir();
     initialize_logging(log_path.as_path(), &base_path, include_str!("./log4rs/cucumber.yml")).unwrap();
+
+    // Start the mock server that continues to run for the duration of the tests
+    let mut shutdown = Shutdown::new();
+    let mock_port = spawn_template_http_server(shutdown.to_signal()).await;
 
     TariWorld::cucumber()
         .max_concurrent_scenarios(1)
@@ -175,7 +227,11 @@ async fn main() {
         )
         .before(move |_feature, _rule, scenario, world| {
             world.current_scenario_name = Some(scenario.name.clone());
-            Box::pin(future::ready(()))
+            Box::pin(async move {
+                // Each scenario gets a mock connection. As each connection is dropped after the scenario, all the mock
+                // urls are deregistered
+                world.http_server = Some(MockHttpServer::connect(mock_port).await);
+            })
         })
         .after(move |_feature, _rule, scenario, _finished, maybe_world| {
             if let Some(world) = maybe_world {
@@ -186,6 +242,8 @@ async fn main() {
         .fail_on_skipped()
         .run_and_exit("tests/features/")
         .await;
+
+    shutdown.trigger();
 }
 
 #[given(expr = "a base node {word}")]
@@ -220,7 +278,7 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, vn: String
         .collect::<Vec<_>>();
 
     let vn = world.validator_nodes.get_mut(&vn).unwrap();
-    let mut cli = vn.create_client().await;
+    let mut cli = vn.create_client();
     let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
     for (pk, addr) in details.iter().cloned() {
         if pk == this_pk {
@@ -261,34 +319,41 @@ async fn stop_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String) {
 #[when(expr = "validator node {word} sends a registration transaction")]
 async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
     let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
-    let mut client = get_vn_client(jrpc_port).await;
+    let mut client = get_vn_client(jrpc_port);
 
     if let Err(e) = client.register_validator_node().await {
-        eprintln!("register_validator_node error = {}", e);
+        println!("register_validator_node error = {}", e);
         panic!("register_validator_node error = {}", e);
     }
 
-    // give it some time for the registration tx to be processed by the wallet and base node
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    world
+        .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
+        .await;
 }
 
 #[when(expr = "all validator nodes send registration transactions")]
 async fn all_vns_send_registration(world: &mut TariWorld) {
     for vn_ps in world.validator_nodes.values() {
         let jrpc_port = vn_ps.json_rpc_port;
-        let mut client = get_vn_client(jrpc_port).await;
+        let mut client = get_vn_client(jrpc_port);
         let _resp = client.register_validator_node().await.unwrap();
     }
 
-    eprintln!("WAITING AND GETS HERE");
-    // give it some time for the registration tx to be processed by the wallet and the base node
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    world
+        .wait_until_base_nodes_have_transaction_in_mempool(world.validator_nodes.len(), Duration::from_secs(10))
+        .await;
 }
 
 #[when(expr = "validator node {word} registers the template \"{word}\"")]
 async fn register_template(world: &mut TariWorld, vn_name: String, template_name: String) {
-    let resp: TemplateRegistrationResponse = send_template_registration(world, template_name.clone(), vn_name).await;
-    assert!(resp.transaction_id != 0);
+    let resp = match send_template_registration(world, template_name.clone(), vn_name).await {
+        Ok(resp) => resp,
+        Err(e) => {
+            println!("register_template error = {}", e);
+            panic!("register_template error = {}", e);
+        },
+    };
+    assert_ne!(resp.transaction_id, 0);
     assert!(!resp.template_address.is_empty());
 
     // store the template address for future reference
@@ -298,8 +363,9 @@ async fn register_template(world: &mut TariWorld, vn_name: String, template_name
     };
     world.templates.insert(template_name, registered_template);
 
-    // give it some time for the registration tx to be processed by the wallet and base node
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    world
+        .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
+        .await;
 }
 
 #[then(expr = "all validator nodes are listed as registered")]
@@ -307,7 +373,7 @@ async fn assert_all_vns_are_registered(world: &mut TariWorld) {
     for vn_ps in world.validator_nodes.values() {
         // create a base node client
         let base_node_grpc_port = vn_ps.base_node_grpc_port;
-        let mut base_node_client: GrpcBaseNodeClient = get_base_node_client(base_node_grpc_port).await;
+        let mut base_node_client: GrpcBaseNodeClient = get_base_node_client(base_node_grpc_port);
 
         // get the list of registered vns from the base node
         let height = base_node_client.get_tip_info().await.unwrap().height_of_longest_chain;
@@ -316,7 +382,7 @@ async fn assert_all_vns_are_registered(world: &mut TariWorld) {
 
         // retrieve the VN's public key
         let jrpc_port = vn_ps.json_rpc_port;
-        let mut client = get_vn_client(jrpc_port).await;
+        let mut client = get_vn_client(jrpc_port);
         let identity: GetIdentityResponse = client.get_identity().await.unwrap();
         let public_key: PublicKey = PublicKey::from_hex(&identity.public_key).unwrap();
 
@@ -329,7 +395,7 @@ async fn assert_all_vns_are_registered(world: &mut TariWorld) {
 async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
     // create a base node client
     let base_node_grpc_port = world.validator_nodes.get(&vn_name).unwrap().base_node_grpc_port;
-    let mut base_node_client: GrpcBaseNodeClient = get_base_node_client(base_node_grpc_port).await;
+    let mut base_node_client: GrpcBaseNodeClient = get_base_node_client(base_node_grpc_port);
 
     // get the list of registered vns from the base node
     let height = base_node_client.get_tip_info().await.unwrap().height_of_longest_chain;
@@ -338,7 +404,7 @@ async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
 
     // retrieve the VN's public key
     let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
-    let mut client = get_vn_client(jrpc_port).await;
+    let mut client = get_vn_client(jrpc_port);
     let identity: GetIdentityResponse = client.get_identity().await.unwrap();
     let public_key: PublicKey = PublicKey::from_hex(&identity.public_key).unwrap();
 
@@ -349,38 +415,64 @@ async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
 #[then(expr = "the template \"{word}\" is listed as registered by the validator node {word}")]
 async fn assert_template_is_registered(world: &mut TariWorld, template_name: String, vn_name: String) {
     // give it some time for the template tx to be picked up by the VNs
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 
     // retrieve the template address
     let template_address = world.templates.get(&template_name).unwrap().address;
 
     // try to get the template from the VN
+    let timer = Instant::now();
     let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
-    let mut client = get_vn_client(jrpc_port).await;
-    let req = GetTemplateRequest { template_address };
-    let resp = client.get_template(req).await.unwrap();
+    let mut client = get_vn_client(jrpc_port);
+    loop {
+        let req = GetTemplateRequest { template_address };
+        let resp = client.get_template(req).await.ok();
 
-    // check that the template is indeed in the response
-    assert_eq!(resp.registration_metadata.address, template_address);
+        if resp.is_none() {
+            if timer.elapsed() > Duration::from_secs(10) {
+                panic!("Timed out waiting for template to be registered by all VNs");
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            continue;
+        }
+
+        // check that the template is indeed in the response
+        assert_eq!(resp.unwrap().registration_metadata.address, template_address);
+        break;
+    }
 }
 
 #[then(expr = "the template \"{word}\" is listed as registered by all validator nodes")]
 async fn assert_template_is_registered_by_all(world: &mut TariWorld, template_name: String) {
     // give it some time for the template tx to be picked up by the VNs
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 
     // retrieve the template address
     let template_address = world.templates.get(&template_name).unwrap().address;
 
     // try to get the template for each VN
-    for vn_ps in world.validator_nodes.values() {
-        let jrpc_port = vn_ps.json_rpc_port;
-        let mut client = get_vn_client(jrpc_port).await;
-        let req = GetTemplateRequest { template_address };
-        let resp = client.get_template(req).await.unwrap();
+    let timer = Instant::now();
+    'outer: loop {
+        for vn_ps in world.validator_nodes.values() {
+            let jrpc_port = vn_ps.json_rpc_port;
+            let mut client = get_vn_client(jrpc_port);
+            let req = GetTemplateRequest { template_address };
+            let resp = client.get_template(req).await.ok();
 
-        // check that the template is indeed in the response
-        assert_eq!(resp.registration_metadata.address, template_address);
+            if resp.is_none() {
+                if timer.elapsed() > Duration::from_secs(10) {
+                    panic!("Timed out waiting for template to be registered by all VNs");
+                }
+
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                continue 'outer;
+            }
+            let resp = resp.unwrap();
+            // check that the template is indeed in the response
+            assert_eq!(resp.registration_metadata.address, template_address);
+        }
+        break;
     }
 }
 
@@ -411,7 +503,7 @@ async fn call_template_constructor_via_wallet_daemon(
     .await;
 
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(
@@ -440,7 +532,7 @@ async fn call_template_constructor(
     .await;
 
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(
@@ -470,7 +562,7 @@ async fn call_template_constructor_resource(
     .await;
 
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(
@@ -498,7 +590,7 @@ async fn call_template_constructor_with_no_args(
     .await;
 
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(expr = r#"I create a component {word} of template "{word}" on {word} using "{word}""#)]
@@ -522,7 +614,7 @@ async fn call_template_constructor_without_args(
     .await;
 
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(expr = r#"I create a component {word} of template "{word}" on {word} using "{word}" and new resource "{word}"#)]
@@ -547,7 +639,7 @@ async fn call_template_constructor_without_args_and_resource(
     .await;
 
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(expr = r#"I invoke on {word} on component {word} the method call "{word}" with {int} outputs named "{word}""#)]
@@ -564,7 +656,7 @@ async fn call_component_method(
     assert_eq!(resp.result.unwrap().decision, QuorumDecision::Accept);
 
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(
@@ -591,7 +683,7 @@ async fn call_component_method_on_all_vns(
         assert_eq!(resp.result.unwrap().decision, QuorumDecision::Accept);
     }
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(
@@ -630,7 +722,7 @@ async fn call_component_method_and_check_result(
     };
 
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(
@@ -671,7 +763,7 @@ async fn call_component_method_on_all_vns_and_check_result(
     }
 
     // give it some time between transactions
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
 #[when(expr = "I use an account key named {word}")]
@@ -869,7 +961,7 @@ async fn successful_transaction(world: &mut TariWorld) {
     // was accepted by each
     for vn_ps in world.validator_nodes.values() {
         let jrpc_port = vn_ps.json_rpc_port;
-        let mut client = get_vn_client(jrpc_port).await;
+        let mut client = get_vn_client(jrpc_port);
 
         let request = GetRecentTransactionsRequest {};
         let recent_transactions_res = client.get_recent_transactions(request).await.unwrap();

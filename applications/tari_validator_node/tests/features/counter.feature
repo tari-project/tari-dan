@@ -15,7 +15,7 @@ Feature: Counter template
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 20000000 uT
+    When wallet WALLET has at least 20 T
 
     # VN registration
     When validator node VAL_1 sends a registration transaction

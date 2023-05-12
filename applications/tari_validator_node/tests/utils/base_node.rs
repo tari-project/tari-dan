@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use rand::rngs::OsRng;
 use tari_base_node::{run_base_node, BaseNodeConfig, MetricsConfig};
@@ -33,7 +33,10 @@ use tari_shutdown::Shutdown;
 use tokio::task;
 
 use crate::{
-    utils::{helpers::get_os_assigned_ports, logging::get_base_dir_for_scenario},
+    utils::{
+        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
     TariWorld,
 };
 
@@ -49,8 +52,8 @@ pub struct BaseNodeProcess {
 }
 
 impl BaseNodeProcess {
-    pub async fn create_client(&self) -> GrpcBaseNodeClient {
-        get_base_node_client(self.grpc_port).await
+    pub fn create_client(&self) -> GrpcBaseNodeClient {
+        get_base_node_client(self.grpc_port)
     }
 }
 
@@ -128,12 +131,11 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     };
     world.base_nodes.insert(bn_name, node_process);
 
-    // We need to give it time for the base node to startup
-    // TODO: it would be better to scan the base node to detect when it has started
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Wait for node to start up
+    wait_listener_on_local_port(grpc_port).await;
 }
 
-pub async fn get_base_node_client(port: u16) -> GrpcBaseNodeClient {
+pub fn get_base_node_client(port: u16) -> GrpcBaseNodeClient {
     let endpoint: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
     GrpcBaseNodeClient::new(endpoint)
 }

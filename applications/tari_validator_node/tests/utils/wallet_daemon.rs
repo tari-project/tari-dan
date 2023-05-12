@@ -23,7 +23,6 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
-    time::Duration,
 };
 
 use reqwest::Url;
@@ -37,7 +36,10 @@ use tari_wallet_daemon_client::WalletDaemonClient;
 use tokio::task;
 
 use crate::{
-    utils::{helpers::get_os_assigned_ports, logging::get_base_dir_for_scenario},
+    utils::{
+        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
     TariWorld,
 };
 
@@ -83,8 +85,8 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
         }
     });
 
-    // give it some time for the wallet daemon to start
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    // Wait for node to start up
+    wait_listener_on_local_port(json_rpc_port).await;
 
     if handle.is_finished() {
         handle.await.unwrap();

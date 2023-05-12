@@ -19,7 +19,7 @@ use webrtc::{
     peer_connection::{configuration::RTCConfiguration, sdp::session_description::RTCSessionDescription},
 };
 
-const LOG_TARGET: &str = "tari::dan_wallet_daemon::webrtc";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::webrtc";
 
 #[derive(Deserialize, Debug)]
 struct Request {

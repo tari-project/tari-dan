@@ -143,29 +143,73 @@ async fn when_i_burn_funds_with_wallet_daemon(
     );
 }
 
-#[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is at least {int}")]
-async fn check_account_balance_is_at_least_via_daemon(
+#[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is at {word} {int}")]
+async fn check_account_balance_via_daemon(
     world: &mut TariWorld,
     account_name: String,
     wallet_daemon_name: String,
+    least_or_most: String,
     amount: i64,
 ) {
+    // This also refreshes the wallet vaults
     let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
-    if current_balance < amount {
-        println!("Expected balance to be at least {} but was {}", amount, current_balance);
-        panic!("Expected balance to be at least {} but was {}", amount, current_balance);
+    match least_or_most.to_lowercase().as_str() {
+        "least" => {
+            if current_balance < amount {
+                println!("Expected balance to be at least {} but was {}", amount, current_balance);
+                panic!("Expected balance to be at least {} but was {}", amount, current_balance);
+            }
+        },
+        "most" => {
+            if current_balance > amount {
+                println!("Expected balance to be at most {} but was {}", amount, current_balance);
+                panic!("Expected balance to be at most {} but was {}", amount, current_balance);
+            }
+        },
+        _ => panic!("Expected least or most, got {}", least_or_most),
     }
 }
 
-#[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is at most {int}")]
-async fn check_account_balance_is_at_most_daemon(
+#[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is exactly {int}")]
+async fn check_account_balance_is_exactly_via_daemon(
     world: &mut TariWorld,
     account_name: String,
     wallet_daemon_name: String,
     amount: i64,
 ) {
+    // THis refreshes
     let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
-    assert!(current_balance <= amount);
+    if current_balance != amount {
+        println!("Expected balance to be {} but was {}", amount, current_balance);
+        panic!("Expected balance to be {} but was {}", amount, current_balance);
+    }
+}
+
+#[when(expr = "I check the confidential balance of {word} on wallet daemon {word} the amount is at {word} {int}")]
+async fn check_account_confidential_balance_is_via_daemon(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    least_or_most: String,
+    amount: i64,
+) {
+    // This also refreshes the wallet vaults
+    let current_balance = wallet_daemon_cli::get_confidential_balance(world, account_name, wallet_daemon_name).await;
+    match least_or_most.to_lowercase().as_str() {
+        "least" => {
+            if current_balance.value() < amount {
+                println!("Expected balance to be at least {} but was {}", amount, current_balance);
+                panic!("Expected balance to be at least {} but was {}", amount, current_balance);
+            }
+        },
+        "most" => {
+            if current_balance.value() > amount {
+                println!("Expected balance to be at most {} but was {}", amount, current_balance);
+                panic!("Expected balance to be at most {} but was {}", amount, current_balance);
+            }
+        },
+        _ => panic!("Expected least or most, got {}", least_or_most),
+    }
 }
 
 #[when(

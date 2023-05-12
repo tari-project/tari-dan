@@ -92,7 +92,13 @@ pub async fn claim_burn(
         fee: Some(Amount(1)),
     };
 
-    let claim_burn_resp = client.claim_burn(claim_burn_request).await.unwrap();
+    let claim_burn_resp = match client.claim_burn(claim_burn_request).await {
+        Ok(resp) => resp,
+        Err(err) => {
+            println!("Failed to claim burn: {}", err);
+            panic!("Failed to claim burn: {}", err);
+        },
+    };
 
     let wait_req = TransactionWaitResultRequest {
         hash: claim_burn_resp.hash,
@@ -297,8 +303,28 @@ pub async fn get_balance(world: &mut TariWorld, account_name: String, wallet_dae
         .get_account_balances(get_balance_req)
         .await
         .expect("Failed to get balance from account");
-    let balances = resp.balances;
-    balances.iter().map(|e| e.balance.value()).sum()
+    eprintln!("resp = {}", serde_json::to_string_pretty(&resp).unwrap());
+    resp.balances.iter().map(|e| e.balance.value()).sum()
+}
+
+pub async fn get_confidential_balance(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+) -> Amount {
+    let account_name = ComponentAddressOrName::Name(account_name);
+    let get_balance_req = AccountsGetBalancesRequest {
+        account: Some(account_name),
+        refresh: true,
+    };
+    let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
+
+    let resp = client
+        .get_account_balances(get_balance_req)
+        .await
+        .expect("Failed to get balance from account");
+    eprintln!("resp = {}", serde_json::to_string_pretty(&resp).unwrap());
+    resp.balances.iter().map(|e| e.confidential_balance).sum()
 }
 
 pub async fn submit_manifest_with_signing_keys(
@@ -605,8 +631,10 @@ pub async fn transfer(
     wallet_daemon_name: String,
     outputs_name: String,
 ) {
+    println!("🔒️️HERE1");
     let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
 
+    println!("🔒️️HERE2");
     let account = Some(ComponentAddressOrName::Name(account_name));
     let fee = Some(Amount(1));
 
@@ -619,7 +647,9 @@ pub async fn transfer(
     };
 
     let resp = client.accounts_transfer(request).await.unwrap();
+    println!("🔒️️HERE3");
     add_substate_addresses_from_wallet_daemon(world, outputs_name, resp.result.result.accept().unwrap());
+    println!("🔒️️HERE4");
 }
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {

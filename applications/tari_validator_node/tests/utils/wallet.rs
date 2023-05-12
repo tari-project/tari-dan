@@ -51,7 +51,10 @@ use tonic::{
 
 type WalletGrpcClient = WalletClient<InterceptedService<Channel, ClientAuthenticationInterceptor>>;
 use crate::{
-    utils::{helpers::get_os_assigned_ports, logging::get_base_dir_for_scenario},
+    utils::{
+        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
     TariWorld,
 };
 
@@ -181,7 +184,9 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         "Wallet {} GRPC listening on port {}",
         wallet_name, wallet_process.grpc_port
     );
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // Wait for node to start up
+    wait_listener_on_local_port(grpc_port).await;
+
     let mut wallet_client = wallet_process.create_client().await;
 
     let identity = wallet_client

@@ -24,7 +24,6 @@ use std::{
     fs,
     path::{Path, PathBuf},
     str::FromStr,
-    time::Duration,
 };
 
 use reqwest::Url;
@@ -38,7 +37,10 @@ use tari_validator_node_client::ValidatorNodeClient;
 use tokio::task;
 
 use crate::{
-    utils::{helpers::get_os_assigned_ports, logging::get_base_dir_for_scenario},
+    utils::{
+        helpers::{get_os_assigned_port, get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
     TariWorld,
 };
 
@@ -56,8 +58,8 @@ pub struct ValidatorNodeProcess {
 }
 
 impl ValidatorNodeProcess {
-    pub async fn create_client(&self) -> ValidatorNodeClient {
-        get_vn_client(self.json_rpc_port).await
+    pub fn create_client(&self) -> ValidatorNodeClient {
+        get_vn_client(self.json_rpc_port)
     }
 
     pub async fn save_database(&self, database_name: String, to: &Path) {
@@ -78,7 +80,7 @@ pub async fn spawn_validator_node(
 ) {
     // each spawned VN will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
-    let (http_ui_port, _) = get_os_assigned_ports();
+    let http_ui_port = get_os_assigned_port();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
     let name = validator_node_name.clone();
@@ -144,9 +146,8 @@ pub async fn spawn_validator_node(
         }
     });
 
-    // We need to give it time for the VN to startup
-    // TODO: it would be better to scan the VN to detect when it has started
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Wait for node to start up
+    wait_listener_on_local_port(json_rpc_port).await;
 
     // Check if the inner thread panicked
     if handle.is_finished() {
@@ -176,14 +177,14 @@ pub async fn spawn_validator_node(
     }
 }
 
-pub async fn get_vn_client(port: u16) -> ValidatorNodeClient {
+pub fn get_vn_client(port: u16) -> ValidatorNodeClient {
     let endpoint: Url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
     ValidatorNodeClient::connect(endpoint).unwrap()
 }
 
 async fn get_vn_identity(jrpc_port: u16) -> String {
     // send the JSON RPC "get_identity" request to the VN
-    let mut client = get_vn_client(jrpc_port).await;
+    let mut client = get_vn_client(jrpc_port);
     let resp = client.get_identity().await.unwrap();
 
     assert!(!resp.public_key.is_empty());

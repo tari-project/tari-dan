@@ -42,7 +42,10 @@ use tari_shutdown::Shutdown;
 use tokio::task;
 
 use crate::{
-    utils::{helpers::get_os_assigned_ports, logging::get_base_dir_for_scenario},
+    utils::{
+        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
     TariWorld,
 };
 
@@ -157,8 +160,7 @@ fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateAd
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
     // each spawned indexer will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
-    let (graphql_port, _) = get_os_assigned_ports();
-    let (http_ui_port, _) = get_os_assigned_ports();
+    let (graphql_port, http_ui_port) = get_os_assigned_ports();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let name = indexer_name.clone();
 
@@ -215,9 +217,8 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         }
     });
 
-    // We need to give it time for the indexer to startup
-    // TODO: it would be better to check the indexer ports to detect when it has started
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Wait for node to start up
+    wait_listener_on_local_port(json_rpc_port).await;
     if handle.is_finished() {
         handle.await.unwrap();
         return;
