@@ -3406,8 +3406,7 @@ checksum = "c4a1e36c821dbe04574f602848a19f742f4fb3c98d40449f11bcad18d6b17421"
 [[package]]
 name = "httpmock"
 version = "0.6.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6b56b6265f15908780cbee987912c1e98dbca675361f748291605a8a3a1df09"
+source = "git+https://github.com/sdbondi/httpmock.git?branch=remove-signal-handling#8474781cc0e643318ed13ffe9bdcafab466ee35a"
 dependencies = [
  "assert-json-diff",
  "async-object-pool",
