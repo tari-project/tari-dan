@@ -20,9 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
+use serde::{Deserialize, Serialize};
+use tari_template_lib::{auth::AccessRules, models::TemplateAddress, prelude::ComponentAddress, Hash};
 
-use crate::hashing::{hasher, EngineHashDomainLabel};
+use crate::{
+    hashing::{hasher, EngineHashDomainLabel},
+    serde_with,
+};
 
 pub fn new_component_address_from_parts(template_address: &TemplateAddress, component_id: &Hash) -> ComponentAddress {
     let address = hasher(EngineHashDomainLabel::ComponentAddress)
@@ -30,4 +34,38 @@ pub fn new_component_address_from_parts(template_address: &TemplateAddress, comp
         .chain(component_id)
         .result();
     ComponentAddress::new(address)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentHeader {
+    #[serde(with = "serde_with::hex")]
+    pub template_address: TemplateAddress,
+    pub module_name: String,
+    // TODO: Access rules should be a separate substate?
+    pub access_rules: AccessRules,
+    // TODO: Split the state from the header
+    pub state: ComponentBody,
+}
+
+impl ComponentHeader {
+    pub fn into_component(self) -> ComponentBody {
+        self.state
+    }
+
+    pub fn state(&self) -> &[u8] {
+        &self.state.state
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentBody {
+    #[serde(with = "serde_with::hex")]
+    pub state: Vec<u8>,
+}
+
+impl ComponentBody {
+    pub fn set(&mut self, state: Vec<u8>) -> &mut Self {
+        self.state = state;
+        self
+    }
 }
