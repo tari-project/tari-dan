@@ -567,7 +567,7 @@ pub fn summarize_finalize_result(finalize: &FinalizeResult) {
                         println!("      ▶ resource: {}", address);
                     },
                     SubstateValue::TransactionReceipt(_) => {
-                        println!("      ▶ execute_result: {}", address);
+                        println!("      ▶ transaction_receipt: {}", address);
                     },
                     SubstateValue::Vault(vault) => {
                         println!("      ▶ vault: {} {}", address, vault.resource_address());

@@ -128,8 +128,6 @@ pub enum RuntimeError {
     FailedToLoadTemplate { address: TemplateAddress, details: String },
     #[error("Execute Result already exists {address}")]
     TransactionReceiptAlreadyExists { address: TransactionReceiptAddress },
-    #[error("Execute Result does not exist")]
-    ExecuteResultDoesNotExist,
     #[error("Transaction Receipt not found")]
     TransactionReceiptNotFound,
 }

@@ -20,7 +20,7 @@ pub struct IndexedValue {
     component_addresses: Vec<ComponentAddress>,
     #[serde(with = "serde_with::hex::vec")]
     resource_addresses: Vec<ResourceAddress>,
-    execute_result_addresses: Vec<TransactionReceiptAddress>,
+    transaction_receipt_addresses: Vec<TransactionReceiptAddress>,
     // #[serde(with = "serde_with::hex::vec")]
     non_fungible_addresses: Vec<NonFungibleAddress>,
     #[serde(with = "serde_with::hex::vec")]
@@ -38,7 +38,7 @@ impl IndexedValue {
             buckets: visitor.buckets,
             resource_addresses: visitor.resource_addresses,
             component_addresses: visitor.component_addresses,
-            execute_result_addresses: visitor.execute_result_addresses,
+            transaction_receipt_addresses: visitor.transaction_receipt_addresses,
             non_fungible_addresses: visitor.non_fungible_addresses,
             vault_ids: visitor.vault_ids,
             metadata: visitor.metadata,
@@ -49,7 +49,7 @@ impl IndexedValue {
         match addr {
             SubstateAddress::Component(addr) => self.component_addresses.contains(addr),
             SubstateAddress::Resource(addr) => self.resource_addresses.contains(addr),
-            SubstateAddress::TransactionReceipt(addr) => self.execute_result_addresses.contains(addr),
+            SubstateAddress::TransactionReceipt(addr) => self.transaction_receipt_addresses.contains(addr),
             SubstateAddress::NonFungible(addr) => self.non_fungible_addresses.contains(addr),
             SubstateAddress::Vault(addr) => self.vault_ids.contains(addr),
             SubstateAddress::UnclaimedConfidentialOutput(_) => false,
@@ -146,7 +146,7 @@ pub struct IndexedValueVisitor {
     buckets: Vec<BucketId>,
     component_addresses: Vec<ComponentAddress>,
     resource_addresses: Vec<ResourceAddress>,
-    execute_result_addresses: Vec<TransactionReceiptAddress>,
+    transaction_receipt_addresses: Vec<TransactionReceiptAddress>,
     non_fungible_addresses: Vec<NonFungibleAddress>,
     vault_ids: Vec<VaultId>,
     metadata: Vec<Metadata>,
@@ -158,7 +158,7 @@ impl IndexedValueVisitor {
             buckets: vec![],
             component_addresses: vec![],
             resource_addresses: vec![],
-            execute_result_addresses: vec![],
+            transaction_receipt_addresses: vec![],
             non_fungible_addresses: vec![],
             vault_ids: vec![],
             metadata: vec![],
@@ -178,7 +178,7 @@ impl ValueVisitor<TariValue> for IndexedValueVisitor {
                 self.resource_addresses.push(address);
             },
             TariValue::TransactionReceiptAddress(address) => {
-                self.execute_result_addresses.push(address);
+                self.transaction_receipt_addresses.push(address);
             },
             TariValue::BucketId(bucket_id) => {
                 self.buckets.push(bucket_id);
