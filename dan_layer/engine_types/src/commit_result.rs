@@ -35,7 +35,7 @@ use crate::{
     substate::SubstateDiff,
 };
 
-const TAG: u64 = BinaryTag::ExecuteResultAddress.as_u64();
+const TAG: u64 = BinaryTag::TransactionReceipt.as_u64();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TransactionReceiptAddress(Required<Hash, TAG>);

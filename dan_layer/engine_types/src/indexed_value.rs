@@ -121,7 +121,7 @@ impl FromTagAndValue for TariValue {
                 let resource_address: Hash = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::ResourceAddress(resource_address.into()))
             },
-            BinaryTag::ExecuteResultAddress => {
+            BinaryTag::TransactionReceipt => {
                 let execute_resource_address: Hash = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::TransactionReceiptAddress(execute_resource_address.into()))
             },
