@@ -177,6 +177,7 @@ pub async fn handle_get(
         transaction: transaction.transaction,
         result: transaction.finalize,
         status: transaction.status,
+        transaction_failure: transaction.transaction_failure,
     })
 }
 

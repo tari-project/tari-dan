@@ -87,7 +87,7 @@ impl ManifestParser {
     pub fn parse(&self, input: ParseStream) -> Result<Vec<ManifestIntent>, syn::Error> {
         let mut statements = vec![];
         statements.push(ManifestIntent::DefineTemplate {
-            template_address: ACCOUNT_TEMPLATE_ADDRESS,
+            template_address: *ACCOUNT_TEMPLATE_ADDRESS,
             alias: Ident::new("Account", proc_macro2::Span::call_site()),
         });
         for stmt in Block::parse_within(input)? {

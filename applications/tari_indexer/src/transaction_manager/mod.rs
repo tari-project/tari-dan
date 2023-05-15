@@ -31,9 +31,15 @@ use tari_dan_common_types::{
     PayloadId,
     ShardId,
 };
+use tari_engine_types::substate::SubstateAddress;
 use tari_indexer_lib::committee_provider::CommitteeProvider;
 use tari_transaction::Transaction;
-use tari_validator_node_rpc::client::{TransactionResultStatus, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+use tari_validator_node_rpc::client::{
+    SubstateResult,
+    TransactionResultStatus,
+    ValidatorNodeClientFactory,
+    ValidatorNodeRpcClient,
+};
 
 use crate::transaction_manager::error::TransactionManagerError;
 
@@ -78,6 +84,25 @@ where
         })
     }
 
+    pub async fn get_substate(
+        &self,
+        substate_address: SubstateAddress,
+        version: u32,
+    ) -> Result<SubstateResult, TransactionManagerError> {
+        let shard = ShardId::from_address(&substate_address, version);
+
+        self.try_with_committee(shard, |mut client| {
+            // This double clone looks strange, but it's needed because this function is called in a loop
+            // and each iteration needs its own copy of the address (because of the move).
+            let substate_address = substate_address.clone();
+            async move {
+                let substate_address = substate_address.clone();
+                client.get_substate(&substate_address, version).await
+            }
+        })
+        .await
+    }
+
     /// Fetches the committee members for the given shard and calls the given callback with each member until
     /// the callback returns a `Ok` result. If the callback returns an `Err` result, the next committee member is
     /// called.
@@ -100,6 +125,10 @@ where
         committee.members.shuffle(&mut OsRng);
 
         let committee_size = committee.members.len();
+        if committee_size == 0 {
+            return Err(TransactionManagerError::NoCommitteeMembers);
+        }
+
         for validator in committee.members {
             let client = self.client_provider.create_client(&validator);
             match callback(client).await {

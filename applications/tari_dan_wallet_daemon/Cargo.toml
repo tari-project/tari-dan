@@ -10,7 +10,7 @@ edition = "2021"
 [dependencies]
 tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_app_utilities" }
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
-tari_crypto ={ version = "0.16.10" }
+tari_crypto ={ version = "0.16" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
