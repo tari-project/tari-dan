@@ -111,6 +111,8 @@ fn create_test_qc(
         *qc.decision(),
         qc.all_shard_pledges().clone(),
         validators_metadata,
+        None,
+        vec![],
     )
 }
 

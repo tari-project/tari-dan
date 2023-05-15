@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{QuorumCertificate, ShardId};
@@ -453,6 +455,7 @@ pub struct WebRtcStartResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginRequest {
     pub permissions: JrpcPermissions,
+    pub duration: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::time::SystemTime;
+
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::models::TransactionStatus;
@@ -79,4 +81,5 @@ pub struct TransactionInvalidEvent {
 #[derive(Debug, Clone)]
 pub struct AuthLoginRequestEvent {
     pub auth_token: String,
+    pub valid_till: SystemTime,
 }
