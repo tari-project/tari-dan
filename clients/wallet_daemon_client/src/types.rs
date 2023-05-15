@@ -458,7 +458,7 @@ pub struct WebRtcStart {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WebRtcStartRequest {
     pub signaling_server_token: String,
-    pub permissions_token: String,
+    pub permissions: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
