@@ -72,7 +72,7 @@ pub async fn handle_create(
     let owner_token = key.to_owner_token();
 
     let instruction = Instruction::CallFunction {
-        template_address: ACCOUNT_TEMPLATE_ADDRESS,
+        template_address: *ACCOUNT_TEMPLATE_ADDRESS,
         function: "create".to_string(),
         args: args![owner_token],
     };
