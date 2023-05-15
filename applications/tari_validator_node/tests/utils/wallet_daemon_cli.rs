@@ -519,6 +519,7 @@ pub async fn submit_manifest(
         .collect::<Vec<_>>();
 
     let instructions = parse_manifest(&manifest_content, globals).unwrap();
+
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
         instructions,
@@ -535,7 +536,6 @@ pub async fn submit_manifest(
     };
 
     let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
-
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
