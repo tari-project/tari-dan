@@ -30,7 +30,7 @@ interface IChartProps {
   2: string[];
 }
 
-interface IChartProps2 {
+interface IChartPropsArray {
   chartData: IChartProps[];
 }
 
@@ -50,7 +50,7 @@ interface IChartData {
   6: string;
 }
 
-const MyChartComponent = ({ chartData }: IChartProps2) => {
+const MyChartComponent = ({ chartData }: IChartPropsArray) => {
   const [chartInfo, setChartInfo] = useState<IChartData[]>([]);
 
   // The chart needs an array with the following info:
