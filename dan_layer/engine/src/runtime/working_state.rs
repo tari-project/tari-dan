@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
+    component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     events::Event,
     logs::LogEntry,
@@ -18,7 +19,6 @@ use tari_engine_types::{
 use tari_template_lib::models::{
     BucketId,
     ComponentAddress,
-    ComponentHeader,
     NonFungibleAddress,
     NonFungibleIndexAddress,
     ResourceAddress,

@@ -24,7 +24,7 @@ use tari_wallet_daemon_client::types::{
 
 use crate::handlers::{get_account_or_default, HandlerContext};
 
-const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc::confidential";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc::confidential";
 
 pub async fn handle_create_transfer_proof(
     context: &HandlerContext,

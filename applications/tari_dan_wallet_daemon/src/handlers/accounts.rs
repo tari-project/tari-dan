@@ -76,7 +76,7 @@ use crate::{
     DEFAULT_FEE,
 };
 
-const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::handlers::transaction";
 
 pub async fn handle_create(
     context: &HandlerContext,
@@ -562,12 +562,12 @@ pub async fn handle_claim_burn(
     let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
     inputs.extend(child_addresses);
 
-    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
-    //       object is mutated
-    let outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
+    // // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when
+    // the //       object is mutated
+    // let outputs = inputs
+    //     .iter()
+    //     .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
+    //     .collect::<Vec<_>>();
 
     // add the commitment substate address as input to the claim burn transaction
     let commitment_substate_address = VersionedSubstateAddress {

@@ -28,7 +28,7 @@ use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use super::handlers::HandlerContext;
 use crate::handlers::{accounts, confidential, error::HandlerError, keys, rpc, transaction, webrtc, Handler};
 
-const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc";
 
 // We need to extract the token, because the first call is without any token. So we don't have to have two handlers.
 async fn extract_token<B>(mut request: Request<B>, next: Next<B>) -> Result<Response, StatusCode> {
@@ -159,7 +159,7 @@ where
             value.parse_params().map_err(|e| {
                 match &e.result {
                     JsonRpcAnswer::Result(_) => {
-                        unreachable!("parse_params should not return a result")
+                        unreachable!("parse_params() error should not return a result")
                     },
                     JsonRpcAnswer::Error(e) => {
                         warn!(target: LOG_TARGET, "🌐 JSON-RPC params error: {}", e);

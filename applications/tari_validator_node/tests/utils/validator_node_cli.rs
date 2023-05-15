@@ -3,7 +3,10 @@
 
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
-use tari_engine_types::instruction::Instruction;
+use tari_engine_types::{
+    instruction::Instruction,
+    substate::{SubstateAddress, SubstateDiff},
+};
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{args, prelude::NonFungibleId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -21,32 +24,35 @@ use tari_validator_node_cli::{
     },
     from_hex::FromHex,
     key_manager::KeyManager,
+    versioned_substate_address::VersionedSubstateAddress,
 };
 use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
-use tempfile::tempdir;
 
 use super::validator_node::get_vn_client;
-use crate::{utils::helpers::add_substate_addresses, TariWorld};
+use crate::{utils::logging::get_base_dir_for_scenario, TariWorld};
 
-pub fn get_key_manager(world: &mut TariWorld) -> KeyManager {
-    let data_dir = get_cli_data_dir(world);
+pub(super) fn get_key_manager(world: &mut TariWorld) -> KeyManager {
+    let path = get_cli_data_dir(world);
 
     // initialize the account public/private keys
-    let path = PathBuf::from(data_dir);
     KeyManager::init(path).unwrap()
 }
-
-pub async fn create_key(world: &mut TariWorld, key_name: String) {
+pub fn create_or_use_key(world: &mut TariWorld, key_name: String) {
+    let km = get_key_manager(world);
+    if let Some((_, k)) = world.account_keys.get(&key_name) {
+        km.set_active_key(&k.to_string()).unwrap();
+    } else {
+        let key = km.create().expect("Could not create a new key pair");
+        km.set_active_key(&key.public_key.to_string()).unwrap();
+        world.account_keys.insert(key_name, (key.secret_key, key.public_key));
+    }
+}
+pub fn create_key(world: &mut TariWorld, key_name: String) {
     let key = get_key_manager(world)
         .create()
         .expect("Could not create a new key pair");
-    world
-        .account_public_keys
-        .insert(key_name, (key.secret_key, key.public_key));
-}
 
-pub fn create_dan_wallet(world: &mut TariWorld) {
-    get_key_manager(world).create().unwrap();
+    world.account_keys.insert(key_name, (key.secret_key, key.public_key));
 }
 
 pub async fn create_account(world: &mut TariWorld, account_name: String, validator_node_name: String) {
@@ -54,7 +60,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     let key = get_key_manager(world).create().expect("Could not create keypair");
     let owner_token = key.to_owner_token();
     world
-        .account_public_keys
+        .account_keys
         .insert(account_name.clone(), (key.secret_key.clone(), key.public_key.clone()));
     // create an account component
     let instruction = Instruction::CallFunction {
@@ -81,6 +87,10 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
         .await
         .unwrap();
+
+    if let Some(ref failure) = resp.result.as_ref().unwrap().transaction_failure {
+        panic!("Transaction failed: {:?}", failure);
+    }
 
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
@@ -124,7 +134,7 @@ pub async fn create_component(
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
-            wait_for_result_timeout: Some(60),
+            wait_for_result_timeout: Some(300),
             num_outputs,
             inputs: vec![],
             version: None,
@@ -144,12 +154,73 @@ pub async fn create_component(
     let mut client = get_validator_node_client(world, vn_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
+    if let Some(ref failure) = resp.result.as_ref().unwrap().transaction_failure {
+        panic!("Transaction failed: {:?}", failure);
+    }
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
         world,
         outputs_name,
         resp.result.unwrap().finalize.result.accept().unwrap(),
     );
+}
+
+pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
+    let outputs = world.outputs.entry(outputs_name).or_default();
+    let mut counters = [0usize, 0, 0, 0, 0, 0, 0];
+    for (addr, data) in diff.up_iter() {
+        match addr {
+            SubstateAddress::Component(_) => {
+                let component = data.substate_value().component().unwrap();
+                outputs.insert(
+                    format!("components/{}", component.module_name),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
+                counters[0] += 1;
+            },
+            SubstateAddress::Resource(_) => {
+                outputs.insert(format!("resources/{}", counters[1]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[1] += 1;
+            },
+            SubstateAddress::Vault(_) => {
+                outputs.insert(format!("vaults/{}", counters[2]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[2] += 1;
+            },
+            SubstateAddress::NonFungible(_) => {
+                outputs.insert(format!("nfts/{}", counters[3]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[3] += 1;
+            },
+            SubstateAddress::UnclaimedConfidentialOutput(_) => {
+                outputs.insert(
+                    format!("layer_one_commitments/{}", counters[4]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
+                counters[4] += 1;
+            },
+            SubstateAddress::NonFungibleIndex(_) => {
+                outputs.insert(format!("nft_indexes/{}", counters[5]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[5] += 1;
+            },
+        }
+    }
 }
 
 pub async fn call_method(
@@ -209,6 +280,9 @@ pub async fn call_method(
     let mut client = get_validator_node_client(world, vn_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
+    if let Some(ref failure) = resp.result.as_ref().unwrap().transaction_failure {
+        panic!("Transaction failed: {:?}", failure);
+    }
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
         world,
@@ -225,7 +299,13 @@ pub async fn submit_manifest(
     manifest_content: String,
     inputs: String,
     num_outputs: u64,
+    signing_key_name: String,
 ) {
+    // HACKY: Sets the active key so that submit_transaction will use it.
+    let (_, key) = world.account_keys.get(&signing_key_name).unwrap();
+    let key_str = key.to_string();
+    get_key_manager(world).set_active_key(&key_str).unwrap();
+
     let input_groups = inputs.split(',').map(|s| s.trim()).collect::<Vec<_>>();
     // generate globals for components addresses
     let globals: HashMap<String, ManifestValue> = world
@@ -331,6 +411,10 @@ pub async fn submit_manifest(
         .await
         .unwrap();
 
+    if let Some(ref failure) = resp.result.as_ref().unwrap().transaction_failure {
+        panic!("Transaction failed: {:?}", failure);
+    }
+
     add_substate_addresses(
         world,
         outputs_name,
@@ -340,16 +424,9 @@ pub async fn submit_manifest(
 
 async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {
     let port = world.validator_nodes.get(&validator_node_name).unwrap().json_rpc_port;
-    get_vn_client(port).await
+    get_vn_client(port)
 }
 
-pub(crate) fn get_cli_data_dir(world: &mut TariWorld) -> String {
-    if let Some(dir) = &world.cli_data_dir {
-        return dir.to_string();
-    }
-
-    let temp_dir = tempdir().unwrap().path().join("cli_data_dir");
-    let temp_dir_path = temp_dir.display().to_string();
-    world.cli_data_dir = Some(temp_dir_path.clone());
-    temp_dir_path
+pub(crate) fn get_cli_data_dir(world: &mut TariWorld) -> PathBuf {
+    get_base_dir_for_scenario("vn_cli", world.current_scenario_name.as_ref().unwrap(), "SHARED")
 }
