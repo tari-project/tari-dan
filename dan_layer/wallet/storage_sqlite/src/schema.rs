@@ -11,6 +11,16 @@ table! {
 }
 
 table! {
+    auth_status(id) {
+        id -> Integer,
+        user_decided -> Bool,
+        granted -> Bool,
+        token -> Text,
+        revoked -> Bool,
+    }
+}
+
+table! {
     config (id) {
         id -> Integer,
         key -> Text,
@@ -18,15 +28,6 @@ table! {
         is_encrypted -> Bool,
         created_at -> Timestamp,
         updated_at -> Timestamp,
-    }
-}
-
-table! {
-    auth_status(id) {
-        id -> Integer,
-        user_decided -> Bool,
-        granted -> Bool,
-        token -> Text,
     }
 }
 
