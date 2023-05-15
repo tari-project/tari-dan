@@ -302,6 +302,11 @@ impl FromStr for SubstateAddress {
                     .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::UnclaimedConfidentialOutput(commitment_address))
             },
+            Some(("transaction_receipt", addr)) => {
+                let tx_receipt_addr = TransactionReceiptAddress::from_hex(addr)
+                    .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+                Ok(SubstateAddress::TransactionReceipt(tx_receipt_addr))
+            },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
     }
