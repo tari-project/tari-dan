@@ -132,23 +132,24 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         Ok(index)
     }
 
-    pub fn generate_auth_token(&self, permissions: JrpcPermissions) -> Result<String, JwtApiError> {
+    pub fn generate_auth_token(
+        &self,
+        permissions: JrpcPermissions,
+        duration: Option<Duration>,
+    ) -> Result<(String, SystemTime), JwtApiError> {
         let id = self.get_index()?;
-
+        let valid_till = SystemTime::now() + duration.unwrap_or(self.duration);
         let my_claims = AuthClaims {
             id,
             permissions,
-            exp: (SystemTime::now() + self.duration)
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as usize,
+            exp: valid_till.duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
         };
         let auth_token = encode(
             &Header::default(),
             &my_claims,
             &EncodingKey::from_secret(self.auth_secret_key.as_ref()),
         )?;
-        Ok(auth_token)
+        Ok((auth_token, valid_till))
     }
 
     fn check_auth_token(&self, auth_token: &str) -> Result<AuthClaims, JwtApiError> {
@@ -174,10 +175,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         let my_claims = Claims {
             id: auth_claims.id,
             permissions: auth_claims.permissions,
-            exp: (SystemTime::now() + self.duration)
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as usize,
+            exp: auth_claims.exp,
         };
         let permissions_token = encode(
             &Header::default(),

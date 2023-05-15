@@ -38,7 +38,7 @@ Feature: Leader failure scenarios
     When I stop validator node VAL_4
 
     # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
+    When I use an account key named K1
 
     # Need to wait a few seconds, so that all VNs get properly
     # registered

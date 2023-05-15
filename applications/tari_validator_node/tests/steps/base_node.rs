@@ -13,7 +13,7 @@ async fn then_there_is_transaction_in_the_mempool_of(
     seconds: usize,
 ) {
     let node = world.get_base_node(&node);
-    let mut client = node.create_client().await;
+    let mut client = node.create_client();
     for _ in 0..seconds {
         let mempool_count = client
             .get_mempool_transaction_count()

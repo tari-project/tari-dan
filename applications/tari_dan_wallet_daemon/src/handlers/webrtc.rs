@@ -17,7 +17,7 @@ use tari_wallet_daemon_client::types::{WebRtcStartRequest, WebRtcStartResponse};
 use super::HandlerContext;
 use crate::webrtc::webrtc_start_session;
 
-const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc";
 
 pub fn handle_start(
     context: Arc<HandlerContext>,
