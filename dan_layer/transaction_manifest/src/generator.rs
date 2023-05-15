@@ -137,7 +137,7 @@ impl ManifestInstructionGenerator {
                             ManifestValue::SubstateAddress(addr) => match addr {
                                 SubstateAddress::Component(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::Resource(addr) => Ok(arg!(*addr)),
-                                // TODO: should execute result addresses be allowed to be reference ?
+                                // TODO: should tx receipt addresses be allowed to be reference ?
                                 SubstateAddress::TransactionReceipt(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::Vault(addr) => Ok(arg!(*addr)),
                                 SubstateAddress::NonFungible(addr) => Ok(arg!(addr)),

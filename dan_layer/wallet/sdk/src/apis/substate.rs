@@ -92,14 +92,14 @@ impl<'a, TStore: WalletStore, TNetworkInterface: WalletNetworkInterface> Substat
                         },
                         SubstateValue::Resource(_) => {},
                         SubstateValue::TransactionReceipt(tx_receipt) => {
-                            let execute_res_addr = SubstateAddress::TransactionReceipt(TransactionReceiptAddress::new(
+                            let tx_receipt_addr = SubstateAddress::TransactionReceipt(TransactionReceiptAddress::new(
                                 tx_receipt.transaction_hash,
                             ));
-                            if substate_addresses.contains_key(&execute_res_addr) {
+                            if substate_addresses.contains_key(&tx_receipt_addr) {
                                 continue;
                             }
                             let ValidatorScanResult { address: addr, .. } =
-                                self.scan_for_substate(&execute_res_addr, None).await?;
+                                self.scan_for_substate(&tx_receipt_addr, None).await?;
                             substate_addresses.insert(addr.address, addr.version);
                         },
                         SubstateValue::Vault(vault) => {

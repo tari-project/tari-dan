@@ -126,7 +126,7 @@ pub enum RuntimeError {
     ComponentAddressMustBeSequential { index: u32 },
     #[error("Failed to load template '{address}': {details}")]
     FailedToLoadTemplate { address: TemplateAddress, details: String },
-    #[error("Execute Result already exists {address}")]
+    #[error("Transaction Receipt already exists {address}")]
     TransactionReceiptAlreadyExists { address: TransactionReceiptAddress },
     #[error("Transaction Receipt not found")]
     TransactionReceiptNotFound,
