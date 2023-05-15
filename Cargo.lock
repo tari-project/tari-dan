@@ -7908,6 +7908,7 @@ dependencies = [
  "tari_shutdown",
  "tokio",
  "tower-http",
+ "webrtc",
 ]
 
 [[package]]
