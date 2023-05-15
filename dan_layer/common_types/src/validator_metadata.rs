@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_crypto::hash::blake2::Blake256;
 use tari_engine_types::serde_with;
-use tari_mmr::BalancedBinaryMerkleProof;
 
 use crate::{NodeAddressable, ShardId};
 
