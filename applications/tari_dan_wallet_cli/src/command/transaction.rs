@@ -826,7 +826,14 @@ impl CliArg {
             CliArg::I8(v) => arg!(v),
             CliArg::Bool(v) => arg!(v),
             CliArg::Blob(v) => Arg::Literal(v),
-            CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
+            CliArg::SubstateAddress(v) => match v {
+                SubstateAddress::Component(v) => arg!(v),
+                SubstateAddress::Resource(v) => arg!(v),
+                SubstateAddress::Vault(v) => arg!(v),
+                SubstateAddress::UnclaimedConfidentialOutput(v) => arg!(v),
+                SubstateAddress::NonFungible(v) => arg!(v),
+                SubstateAddress::NonFungibleIndex(v) => arg!(v),
+            },
             CliArg::NonFungibleId(v) => arg!(v),
         }
     }

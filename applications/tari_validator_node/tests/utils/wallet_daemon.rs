@@ -23,7 +23,6 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::PathBuf,
-    time::Duration,
 };
 
 use reqwest::Url;
@@ -37,7 +36,10 @@ use tari_wallet_daemon_client::WalletDaemonClient;
 use tokio::task;
 
 use crate::{
-    utils::{helpers::get_os_assigned_ports, logging::get_base_dir},
+    utils::{
+        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
     TariWorld,
 };
 
@@ -52,6 +54,11 @@ pub struct DanWalletDaemonProcess {
 
 pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, indexer_name: String) {
     let (signaling_server_port, json_rpc_port) = get_os_assigned_ports();
+    let base_dir = get_base_dir_for_scenario(
+        "wallet_daemon",
+        world.current_scenario_name.as_ref().unwrap(),
+        &wallet_daemon_name,
+    );
 
     let indexer_jrpc_port = world.indexers.get(&indexer_name).unwrap().json_rpc_port;
     let shutdown = Shutdown::new();
@@ -66,22 +73,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
         dan_wallet_daemon: WalletDaemonConfig::default(),
     };
 
-    let scenario_slug = world
-        .current_scenario_name
-        .as_ref()
-        .unwrap()
-        .chars()
-        .map(|x| match x {
-            'A'..='Z' | 'a'..='z' | '0'..='9' => x,
-            _ => '-',
-        })
-        .collect::<String>();
-    let temp_dir = get_base_dir()
-        .join("wallet_daemons")
-        .join(scenario_slug)
-        .join(wallet_daemon_name.clone());
-
-    config.common.base_path = temp_dir.clone();
+    config.common.base_path = base_dir.clone();
     config.dan_wallet_daemon.listen_addr = Some(listen_addr);
     config.dan_wallet_daemon.signaling_server_addr = Some(signaling_server_addr);
     config.dan_wallet_daemon.indexer_node_json_rpc_url = indexer_url;
@@ -93,8 +85,8 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
         }
     });
 
-    // give it some time for the wallet daemon to start
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    // Wait for node to start up
+    wait_listener_on_local_port(json_rpc_port).await;
 
     if handle.is_finished() {
         handle.await.unwrap();
@@ -105,7 +97,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
         name: wallet_daemon_name.clone(),
         json_rpc_port,
         indexer_jrpc_port,
-        temp_path_dir: temp_dir,
+        temp_path_dir: base_dir,
         shutdown,
     };
 

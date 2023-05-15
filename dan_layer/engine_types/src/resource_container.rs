@@ -16,20 +16,26 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-use crate::confidential::{validate_confidential_proof, validate_confidential_withdraw, ConfidentialOutput};
+use crate::{
+    confidential::{validate_confidential_proof, validate_confidential_withdraw, ConfidentialOutput},
+    serde_with,
+};
 
 /// Instances of a single resource kept in Buckets and Vaults
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResourceContainer {
     Fungible {
+        #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         amount: Amount,
     },
     NonFungible {
+        #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         token_ids: BTreeSet<NonFungibleId>,
     },
     Confidential {
+        #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         commitments: BTreeMap<PublicKey, ConfidentialOutput>,
         revealed_amount: Amount,

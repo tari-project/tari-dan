@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{net::SocketAddr, str::FromStr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use rand::rngs::OsRng;
 use tari_base_node::{run_base_node, BaseNodeConfig, MetricsConfig};
@@ -30,10 +30,15 @@ use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
-use tempfile::tempdir;
 use tokio::task;
 
-use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
+use crate::{
+    utils::{
+        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
+    TariWorld,
+};
 
 #[derive(Debug)]
 pub struct BaseNodeProcess {
@@ -42,13 +47,13 @@ pub struct BaseNodeProcess {
     pub grpc_port: u16,
     pub identity: NodeIdentity,
     pub handle: task::JoinHandle<()>,
-    pub temp_dir_path: String,
+    pub temp_dir_path: PathBuf,
     pub shutdown: Shutdown,
 }
 
 impl BaseNodeProcess {
-    pub async fn create_client(&self) -> GrpcBaseNodeClient {
-        get_base_node_client(self.grpc_port).await
+    pub fn create_client(&self) -> GrpcBaseNodeClient {
+        get_base_node_client(self.grpc_port)
     }
 }
 
@@ -63,8 +68,8 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     let base_node_identity = NodeIdentity::random(&mut OsRng, base_node_address, PeerFeatures::COMMUNICATION_NODE);
     println!("Base node identity: {}", base_node_identity);
     let identity = base_node_identity.clone();
-    let temp_dir = tempdir().unwrap();
-    let temp_dir_path = temp_dir.path().display().to_string();
+    let temp_dir = get_base_dir_for_scenario("base_node", world.current_scenario_name.as_ref().unwrap(), &bn_name);
+    let temp_dir_path = temp_dir.clone();
     let base_node_name = bn_name.clone();
 
     let shutdown = Shutdown::new();
@@ -80,27 +85,27 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
                 metrics: MetricsConfig::default(),
             };
 
-            println!("Using base_node temp_dir: {}", temp_dir.path().display());
+            println!("Using base_node temp_dir: {}", temp_dir.display());
             base_node_config.base_node.network = Network::LocalNet;
             base_node_config.base_node.grpc_enabled = true;
             base_node_config.base_node.grpc_address =
                 Some(format!("/ip4/127.0.0.1/tcp/{}", grpc_port).parse().unwrap());
             base_node_config.base_node.report_grpc_error = true;
 
-            base_node_config.base_node.data_dir = temp_dir.path().join("db");
-            base_node_config.base_node.identity_file = temp_dir.path().join("base_node_id.json");
-            base_node_config.base_node.tor_identity_file = temp_dir.path().join("base_node_tor_id.json");
+            base_node_config.base_node.data_dir = temp_dir.join("db");
+            base_node_config.base_node.identity_file = temp_dir.join("base_node_id.json");
+            base_node_config.base_node.tor_identity_file = temp_dir.join("base_node_tor_id.json");
 
-            base_node_config.base_node.lmdb_path = temp_dir.path().to_path_buf();
+            base_node_config.base_node.lmdb_path = temp_dir.to_path_buf();
             base_node_config.base_node.p2p.transport.transport_type = TransportType::Tcp;
             base_node_config.base_node.p2p.transport.tcp.listener_address =
                 format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap();
             base_node_config.base_node.p2p.public_addresses =
                 vec![base_node_config.base_node.p2p.transport.tcp.listener_address.clone()].into();
-            base_node_config.base_node.p2p.datastore_path = temp_dir.path().join("peer_db/base-node");
+            base_node_config.base_node.p2p.datastore_path = temp_dir.join("peer_db/base-node");
             base_node_config.base_node.p2p.dht = DhtConfig {
                 // Not all platforms support sqlite memory connection urls
-                database_url: DbConnectionUrl::File(temp_dir.path().join("dht.sqlite")),
+                database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
                 ..DhtConfig::default_local_test()
             };
 
@@ -108,7 +113,7 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
             if let Err(e) = result {
                 let dest = format!("./temp/base_node_{}", base_node_name);
                 std::fs::create_dir_all(&dest).unwrap();
-                std::fs::copy(temp_dir.path(), dest).unwrap();
+                std::fs::copy(temp_dir, dest).unwrap();
                 panic!("{:?}", e);
             }
         }
@@ -126,12 +131,11 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     };
     world.base_nodes.insert(bn_name, node_process);
 
-    // We need to give it time for the base node to startup
-    // TODO: it would be better to scan the base node to detect when it has started
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Wait for node to start up
+    wait_listener_on_local_port(grpc_port).await;
 }
 
-pub async fn get_base_node_client(port: u16) -> GrpcBaseNodeClient {
+pub fn get_base_node_client(port: u16) -> GrpcBaseNodeClient {
     let endpoint: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
     GrpcBaseNodeClient::new(endpoint)
 }

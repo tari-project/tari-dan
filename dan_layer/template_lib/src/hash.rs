@@ -106,6 +106,7 @@ impl TryFrom<&[u8]> for Hash {
         Ok(Hash::from_array(hash))
     }
 }
+
 impl TryFrom<Vec<u8>> for Hash {
     type Error = HashParseError;
 
@@ -121,6 +122,7 @@ impl Deref for Hash {
         &self.0
     }
 }
+
 impl DerefMut for Hash {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0

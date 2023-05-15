@@ -20,9 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
+use tari_dan_common_types::{QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::{
     apis::jwt::JrpcPermissions,
     models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress},
@@ -31,6 +33,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
     instruction_result::InstructionResult,
+    serde_with,
     substate::SubstateAddress,
     TemplateAddress,
 };
@@ -256,6 +259,7 @@ pub struct AccountsGetBalancesResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BalanceEntry {
     pub vault_address: SubstateAddress,
+    #[serde(with = "serde_with::string")]
     pub resource_address: ResourceAddress,
     pub balance: Amount,
     pub resource_type: ResourceType,
@@ -463,6 +467,7 @@ pub struct WebRtcStartResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginRequest {
     pub permissions: JrpcPermissions,
+    pub duration: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

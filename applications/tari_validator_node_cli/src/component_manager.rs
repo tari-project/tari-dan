@@ -25,8 +25,10 @@ use std::{fs, io, path::Path};
 use anyhow::anyhow;
 use jfs::Config;
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::serde_with;
-use tari_engine_types::substate::{SubstateAddress, SubstateDiff};
+use tari_engine_types::{
+    serde_with,
+    substate::{SubstateAddress, SubstateDiff},
+};
 
 use crate::versioned_substate_address::VersionedSubstateAddress;
 

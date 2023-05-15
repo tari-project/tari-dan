@@ -1,8 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use ciborium::tag::Required;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tari_bor::BorTag;
 use tari_template_abi::{
     call_engine,
     rust::{fmt, fmt::Display, write},
@@ -168,7 +168,7 @@ impl Display for NonFungibleId {
 const TAG: u64 = BinaryTag::NonFungibleAddress.as_u64();
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-pub struct NonFungibleAddress(Required<NonFungibleAddressContents, TAG>);
+pub struct NonFungibleAddress(BorTag<NonFungibleAddressContents, TAG>);
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct NonFungibleAddressContents {
@@ -179,15 +179,15 @@ pub struct NonFungibleAddressContents {
 impl NonFungibleAddress {
     pub fn new(resource_address: ResourceAddress, id: NonFungibleId) -> Self {
         let inner = NonFungibleAddressContents { resource_address, id };
-        Self(Required(inner))
+        Self(BorTag::new(inner))
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {
-        &self.0 .0.resource_address
+        &self.0.inner().resource_address
     }
 
     pub fn id(&self) -> &NonFungibleId {
-        &self.0 .0.id
+        &self.0.inner().id
     }
 
     pub fn from_public_key(public_key: RistrettoPublicKeyBytes) -> Self {
@@ -198,7 +198,7 @@ impl NonFungibleAddress {
     }
 
     pub fn to_public_key(&self) -> Option<RistrettoPublicKeyBytes> {
-        if self.0 .0.resource_address != *PUBLIC_IDENTITY_RESOURCE_ADDRESS {
+        if self.0.resource_address != *PUBLIC_IDENTITY_RESOURCE_ADDRESS {
             return None;
         }
         match self.id() {
@@ -213,13 +213,13 @@ impl NonFungibleAddress {
 
 impl From<NonFungibleAddressContents> for NonFungibleAddress {
     fn from(contents: NonFungibleAddressContents) -> Self {
-        Self(Required(contents))
+        Self(BorTag::new(contents))
     }
 }
 
 impl Display for NonFungibleAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} nft_{}", self.0 .0.resource_address, self.0 .0.id)
+        write!(f, "{} nft_{}", self.0.resource_address, self.0.id)
     }
 }
 
