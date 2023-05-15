@@ -663,6 +663,7 @@ pub(crate) async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daem
     let AuthLoginResponse { auth_token } = client
         .auth_request(AuthLoginRequest {
             permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+            duration: None,
         })
         .await
         .unwrap();
