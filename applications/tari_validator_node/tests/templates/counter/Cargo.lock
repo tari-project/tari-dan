@@ -1399,10 +1399,11 @@ checksum = "8f5f3913fa0bfe7ee1fd8248b6b9f42a5af4b9d65ec2dd2c3c26132b950ecfc2"
 
 [[package]]
 name = "generic-array"
-version = "0.14.6"
+version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bff49e947297f3312447abdca79f45f4738097cc82b06e72054d2223f601f1b9"
+checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
+ "serde",
  "typenum",
  "version_check",
 ]
@@ -3656,6 +3657,7 @@ dependencies = [
  "lazy_static",
  "rand 0.7.3",
  "serde",
+ "serde_bytes",
  "serde_json",
  "tari_bor",
  "tari_common_types 0.50.0-pre.0",
@@ -3786,9 +3788,13 @@ dependencies = [
 name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
+ "base64 0.13.1",
+ "generic-array",
+ "lazy_static",
  "newtype-ops",
  "serde",
  "serde-big-array 0.5.1",
+ "serde_bytes",
  "tari_bor",
  "tari_crypto 0.16.11",
  "tari_template_abi",
