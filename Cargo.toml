@@ -9,6 +9,7 @@ members = [
     "applications/tari_signaling_server",
     "applications/tari_validator_node_cli",
     "applications/tari_validator_node",
+    "applications/tari_web_extension",
     "clients/validator_node_client",
     "clients/wallet_daemon_client",
     "dan_layer/core",

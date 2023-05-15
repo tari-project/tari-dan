@@ -101,7 +101,7 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
             base_node_config.base_node.p2p.transport.tcp.listener_address =
                 format!("/ip4/127.0.0.1/tcp/{}", port).parse().unwrap();
             base_node_config.base_node.p2p.public_addresses =
-                vec![base_node_config.base_node.p2p.transport.tcp.listener_address.clone()].into();
+                vec![base_node_config.base_node.p2p.transport.tcp.listener_address.clone()];
             base_node_config.base_node.p2p.datastore_path = temp_dir.join("peer_db/base-node");
             base_node_config.base_node.p2p.dht = DhtConfig {
                 // Not all platforms support sqlite memory connection urls

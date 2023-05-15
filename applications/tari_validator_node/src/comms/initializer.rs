@@ -293,6 +293,6 @@ async fn initialize_hidden_service(
         builder = builder.with_tor_identity(identity);
     }
 
-    let hidden_svc_ctl = builder.build()?;
+    let hidden_svc_ctl = builder.build().await?;
     Ok(hidden_svc_ctl)
 }
