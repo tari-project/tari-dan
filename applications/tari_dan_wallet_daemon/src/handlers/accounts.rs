@@ -649,7 +649,6 @@ pub async fn handle_claim_burn(
             },
         ])
         .with_inputs(inputs)
-        .with_outputs(outputs)
         .sign(&account_secret_key.k)
         .build();
 
