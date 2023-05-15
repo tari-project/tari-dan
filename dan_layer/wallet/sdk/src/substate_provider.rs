@@ -19,6 +19,7 @@ pub trait WalletNetworkInterface {
         &self,
         address: &SubstateAddress,
         version: Option<u32>,
+        local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error>;
 
     async fn submit_transaction(&self, transaction: Transaction, is_dry_run: bool) -> Result<FixedHash, Self::Error>;

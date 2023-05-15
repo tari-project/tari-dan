@@ -14,7 +14,7 @@ use tari_template_lib::{
 use crate::state_store::{StateStoreError, StateWriter};
 
 pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStoreError> {
-    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(*PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     // Create the resource for badges
     state_db.set_state(
         &address,
@@ -25,7 +25,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
     )?;
 
     // Create the second layer tari resource
-    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let metadata = Metadata::new();
     // TODO: decide on symbol for L2 tari
     // metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
