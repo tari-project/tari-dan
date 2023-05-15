@@ -212,11 +212,23 @@ jobs:
         with:
           command: test
           args: --no-run --locked --all-features --release
+      - name: Install cargo-nextest
+        uses: actions-rs/cargo@v1
+        with:
+          command: install
+          args: cargo-nextest --locked
       - name: cargo test
         uses: actions-rs/cargo@v1
         with:
-          command: test
-          args: -v --all-features --release
+          command: nextest
+          args: --all-features --release  -E "not (cucumber)" --profile ci
+      - name: upload artifact
+        uses: actions/upload-artifact@v3  # upload test results as artifact
+        if: always()
+        with:
+          name: test-results
+          path: ${{ github.workspace }}/target/nextest/ci/junit.xml
+
   # Allows other workflows to know the PR number
   artifacts:
     name: test
@@ -233,3 +245,13 @@ jobs:
         with:
           name: pr_num
           path: ./pr_num.txt
+
+  # needed for test results
+  event_file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: Event File
+          path: ${{ github.event_path }}
