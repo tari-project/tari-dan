@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_core::ValidatorNodeBmtHasherBlake256;
 use tari_crypto::hash::blake2::Blake256;
+use tari_engine_types::serde_with;
 use tari_mmr::BalancedBinaryMerkleProof;
 
-use crate::{serde_with, NodeAddressable, ShardId};
+use crate::{NodeAddressable, ShardId};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ValidatorMetadata {

@@ -3,7 +3,10 @@
 
 use std::sync::{atomic::AtomicU32, Arc, Mutex};
 
-use tari_engine_types::hashing::{hasher, EngineHashDomainLabel};
+use tari_engine_types::{
+    component::new_component_address_from_parts,
+    hashing::{hasher, EngineHashDomainLabel},
+};
 use tari_template_lib::{
     models::{BucketId, ComponentAddress, ResourceAddress, TemplateAddress, VaultId},
     Hash,
@@ -81,13 +84,8 @@ impl IdProvider {
             Some(hash) => hash,
             None => self.new_id()?,
         };
-
-        let hash = hasher(EngineHashDomainLabel::ComponentAddress)
-            .chain(&template_address)
-            .chain(&component_id)
-            .result();
-
-        Ok(ComponentAddress::new(hash))
+        let address = new_component_address_from_parts(&template_address, &component_id);
+        Ok(address)
     }
 
     pub fn new_address_hash(&self) -> Result<Hash, IdProviderError> {

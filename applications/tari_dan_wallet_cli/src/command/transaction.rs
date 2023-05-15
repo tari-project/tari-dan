@@ -62,6 +62,7 @@ use tari_wallet_daemon_client::{
         TransactionSubmitResponse,
         TransactionWaitResultRequest,
         TransactionWaitResultResponse,
+        TransferRequest,
     },
     ComponentAddressOrName,
     WalletDaemonClient,
@@ -137,7 +138,7 @@ pub struct SubmitManifestArgs {
 pub struct SendArgs {
     amount: u32,
     resource_address: ResourceAddress,
-    dest_address: ComponentAddress,
+    destination_public_key: FromHex<Vec<u8>>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
     source_account_name: Option<ComponentAddressOrName>,
@@ -358,83 +359,27 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
         source_account_name,
         amount,
         resource_address,
-        dest_address,
+        destination_public_key,
         common,
     } = args;
 
-    let account;
-    if let Some(source_account_name) = source_account_name.clone() {
-        let AccountGetResponse { account: account2, .. } = client.accounts_get(source_account_name).await?;
-        account = account2;
-    } else {
-        account = client.accounts_get_default().await?.account;
-    }
-    let source_component_address = account
-        .address
-        .as_component_address()
-        .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
+    let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
 
-    let fee_account = if let Some(fee_account_name) = common.fee_account.clone() {
-        let AccountGetResponse {
-            account: fee_account, ..
-        } = client.accounts_get(fee_account_name).await?;
-        fee_account.address.as_component_address().unwrap()
-    } else {
-        source_component_address
-    };
+    let resp = client
+        .accounts_transfer(TransferRequest {
+            account: source_account_name,
+            amount: Amount::from(amount),
+            resource_address,
+            destination_public_key,
+            fee: common.fee.map(|f| f.try_into()).transpose()?,
+        })
+        .await?;
 
-    let instructions = vec![
-        Instruction::CallMethod {
-            component_address: source_component_address,
-            method: String::from("withdraw"),
-            args: args![resource_address, Amount::from(amount)], // amount is u32
-        },
-        Instruction::PutLastInstructionOutputOnWorkspace {
-            key: b"bucket".to_vec(),
-        },
-        Instruction::CallMethod {
-            component_address: dest_address,
-            method: String::from("deposit"),
-            args: args![Variable("bucket")],
-        },
-    ];
+    println!("Transaction: {}", resp.hash);
+    println!("Fee: {}", resp.fee);
+    println!();
+    summarize_finalize_result(&resp.result);
 
-    let request = TransactionSubmitRequest {
-        signing_key_index: Some(account.key_index),
-        fee_instructions: vec![Instruction::CallMethod {
-            component_address: fee_account,
-            method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
-        }],
-        instructions,
-        inputs: common.inputs,
-        override_inputs: common.override_inputs.unwrap_or_default(),
-        new_outputs: common.num_outputs.unwrap_or(0),
-        specific_non_fungible_outputs: common
-            .non_fungible_mint_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.non_fungible_id))
-            .collect(),
-        new_resources: common
-            .new_resources
-            .into_iter()
-            .map(|r| (r.template_address, r.token_symbol))
-            .collect(),
-        new_non_fungible_outputs: common
-            .new_non_fungible_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.count))
-            .collect(),
-        new_non_fungible_index_outputs: common
-            .new_non_fungible_index_outputs
-            .into_iter()
-            .map(|i| (i.parent_address, i.index))
-            .collect(),
-        is_dry_run: common.dry_run,
-        proof_ids: vec![],
-    };
-
-    submit_transaction(request, client).await?;
     Ok(())
 }
 
@@ -881,7 +826,14 @@ impl CliArg {
             CliArg::I8(v) => arg!(v),
             CliArg::Bool(v) => arg!(v),
             CliArg::Blob(v) => Arg::Literal(v),
-            CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
+            CliArg::SubstateAddress(v) => match v {
+                SubstateAddress::Component(v) => arg!(v),
+                SubstateAddress::Resource(v) => arg!(v),
+                SubstateAddress::Vault(v) => arg!(v),
+                SubstateAddress::UnclaimedConfidentialOutput(v) => arg!(v),
+                SubstateAddress::NonFungible(v) => arg!(v),
+                SubstateAddress::NonFungibleIndex(v) => arg!(v),
+            },
             CliArg::NonFungibleId(v) => arg!(v),
         }
     }

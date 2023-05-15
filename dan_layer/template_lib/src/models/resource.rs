@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
+use tari_bor::BorTag;
 use tari_template_abi::rust::{
     fmt,
     fmt::{Display, Formatter},
@@ -34,15 +34,15 @@ use crate::{hash::HashParseError, Hash};
 const TAG: u64 = BinaryTag::ResourceAddress.as_u64();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct ResourceAddress(Required<Hash, TAG>);
+pub struct ResourceAddress(BorTag<Hash, TAG>);
 
 impl ResourceAddress {
     pub const fn new(address: Hash) -> Self {
-        Self(Required(address))
+        Self(BorTag::new(address))
     }
 
     pub fn hash(&self) -> &Hash {
-        &self.0 .0
+        &self.0
     }
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
@@ -73,6 +73,21 @@ impl<T: Into<Hash>> From<T> for ResourceAddress {
 
 impl Display for ResourceAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "resource_{}", self.0 .0)
+        write!(f, "resource_{}", *self.0)
+    }
+}
+
+impl AsRef<[u8]> for ResourceAddress {
+    fn as_ref(&self) -> &[u8] {
+        self.hash()
+    }
+}
+
+impl TryFrom<Vec<u8>> for ResourceAddress {
+    type Error = HashParseError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let hash = Hash::try_from(value)?;
+        Ok(Self::new(hash))
     }
 }

@@ -22,7 +22,7 @@
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
+use tari_dan_common_types::{QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::{
     apis::jwt::JrpcPermissions,
     models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress},
@@ -31,6 +31,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
     instruction_result::InstructionResult,
+    serde_with,
     substate::SubstateAddress,
     TemplateAddress,
 };
@@ -244,6 +245,7 @@ pub struct AccountsGetBalancesResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BalanceEntry {
     pub vault_address: SubstateAddress,
+    #[serde(with = "serde_with::string")]
     pub resource_address: ResourceAddress,
     pub balance: Amount,
     pub resource_type: ResourceType,
@@ -301,12 +303,30 @@ pub struct AccountSetDefaultRequest {
 pub struct AccountSetDefaultResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransferRequest {
+    #[serde(deserialize_with = "opt_string_or_struct")]
+    pub account: Option<ComponentAddressOrName>,
+    pub amount: Amount,
+    pub resource_address: ResourceAddress,
+    pub destination_public_key: PublicKey,
+    pub fee: Option<Amount>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransferResponse {
+    #[serde(with = "serde_with::hex")]
+    pub hash: FixedHash,
+    pub fee: Amount,
+    pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ProofsGenerateRequest {
     pub amount: Amount,
     pub reveal_amount: Amount,
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
-    #[serde(deserialize_with = "string_or_struct")]
+    // TODO: #[serde(deserialize_with = "string_or_struct")]
     pub resource_address: ResourceAddress,
     // TODO: For now, we assume that this is obtained "somehow" from the destination account
     pub destination_public_key: PublicKey,

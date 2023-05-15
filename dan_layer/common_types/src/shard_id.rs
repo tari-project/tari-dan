@@ -12,11 +12,10 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
+    serde_with,
     substate::SubstateAddress,
 };
 use tari_utilities::hex::{from_hex, Hex};
-
-use crate::serde_with;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);

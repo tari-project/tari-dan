@@ -20,7 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{env, path::Path, str::FromStr, thread, thread::JoinHandle, time::Duration};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    str::FromStr,
+    thread,
+    thread::JoinHandle,
+    time::Duration,
+};
 
 use log::Level;
 use tari_app_grpc::{
@@ -36,7 +43,6 @@ use tari_console_wallet::{run_wallet_with_cli, ApplicationConfig};
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tari_wallet::WalletConfig;
-use tempfile::tempdir;
 use tokio::{runtime, runtime::Runtime};
 use tonic::{
     codegen::InterceptedService,
@@ -44,7 +50,13 @@ use tonic::{
 };
 
 type WalletGrpcClient = WalletClient<InterceptedService<Channel, ClientAuthenticationInterceptor>>;
-use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
+use crate::{
+    utils::{
+        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
+    TariWorld,
+};
 
 #[derive(Debug)]
 pub struct WalletProcess {
@@ -52,7 +64,7 @@ pub struct WalletProcess {
     pub port: u16,
     pub grpc_port: u16,
     pub handle: JoinHandle<()>,
-    pub temp_dir_path: String,
+    pub temp_dir_path: PathBuf,
     pub shutdown: Shutdown,
 }
 
@@ -106,8 +118,12 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         net_address: format! {"/ip4/127.0.0.1/tcp/{}", base_node_port},
         public_key_hex: base_node_public_key.to_string(),
     };
-    let temp_dir = tempdir().unwrap();
-    let temp_dir_path = temp_dir.path().display().to_string();
+    let temp_dir = get_base_dir_for_scenario(
+        "console_wallet",
+        world.current_scenario_name.as_ref().unwrap(),
+        &wallet_name,
+    );
+    let temp_dir_path = temp_dir.clone();
     let shutdown = Shutdown::new();
 
     let handle = thread::spawn({
@@ -120,25 +136,25 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
                 peer_seeds: PeerSeedsConfig::default(),
             };
 
-            eprintln!("Using wallet temp_dir: {}", temp_dir.path().display());
+            eprintln!("Using wallet temp_dir: {}", temp_dir.display());
 
             wallet_config.wallet.network = Network::LocalNet;
             wallet_config.wallet.password = Some("test".into());
             wallet_config.wallet.grpc_enabled = true;
             wallet_config.wallet.grpc_address =
                 Some(Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", grpc_port)).unwrap());
-            wallet_config.wallet.data_dir = temp_dir.path().join("data/wallet");
-            wallet_config.wallet.db_file = temp_dir.path().join("db/console_wallet.db");
+            wallet_config.wallet.data_dir = temp_dir.join("data/wallet");
+            wallet_config.wallet.db_file = temp_dir.join("db/console_wallet.db");
 
             wallet_config.wallet.p2p.transport.transport_type = TransportType::Tcp;
             wallet_config.wallet.p2p.transport.tcp.listener_address =
                 Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
             wallet_config.wallet.p2p.public_addresses =
                 vec![wallet_config.wallet.p2p.transport.tcp.listener_address.clone()];
-            wallet_config.wallet.p2p.datastore_path = temp_dir.path().join("peer_db/wallet");
+            wallet_config.wallet.p2p.datastore_path = temp_dir.join("peer_db/wallet");
             wallet_config.wallet.p2p.dht = DhtConfig {
                 // Not all platforms support sqlite memory connection urls
-                database_url: DbConnectionUrl::File(temp_dir.path().join("dht.sqlite")),
+                database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
                 ..DhtConfig::default_local_test()
             };
 
@@ -168,7 +184,9 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         "Wallet {} GRPC listening on port {}",
         wallet_name, wallet_process.grpc_port
     );
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    // Wait for node to start up
+    wait_listener_on_local_port(grpc_port).await;
+
     let mut wallet_client = wallet_process.create_client().await;
 
     let identity = wallet_client

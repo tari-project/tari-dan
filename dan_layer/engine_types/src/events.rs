@@ -25,11 +25,13 @@ use std::{collections::HashMap, fmt::Display};
 use serde::{Deserialize, Serialize};
 use tari_template_lib::Hash;
 
-use crate::TemplateAddress;
+use crate::{serde_with, TemplateAddress};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
+    #[serde(with = "serde_with::hex")]
     pub template_address: TemplateAddress,
+    #[serde(with = "serde_with::hex")]
     pub tx_hash: Hash,
     pub topic: String,
     pub payload: HashMap<String, String>,

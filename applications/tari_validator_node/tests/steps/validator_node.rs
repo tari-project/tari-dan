@@ -11,7 +11,7 @@ use tari_template_lib::{args, prelude::ComponentAddress};
 use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest, TransactionFinalizeResult};
 
-use crate::TariWorld;
+use crate::{utils::validator_node_cli::create_key, TariWorld};
 
 #[then(expr = "validator node {word} has state at {word}")]
 async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String, state_address_name: String) {
@@ -23,12 +23,15 @@ async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String
         .validator_nodes
         .get(&vn_name)
         .unwrap_or_else(|| panic!("Validator node {} not found", vn_name));
-    let mut client = vn.create_client().await;
+    let mut client = vn.create_client();
     let shard_id = ShardId::from_address(
         &SubstateAddress::from_str(state_address).expect("Invalid state address"),
         0,
     );
-    client.get_state(GetStateRequest { shard_id }).await.unwrap();
+    if let Err(e) = client.get_state(GetStateRequest { shard_id }).await {
+        println!("Failed to get state: {}", e);
+        panic!("Failed to get state: {}", e);
+    }
 }
 
 #[when(expr = "I claim burn {word} with {word}, {word} and {word} and spend it into account {word} on {word}")]
@@ -63,7 +66,7 @@ async fn when_i_claim_burn(
     );
 
     let (account_secret, _) = world
-        .account_public_keys
+        .account_keys
         .get(&account_name)
         .unwrap_or_else(|| panic!("Account {} not found", account_name));
 
@@ -101,7 +104,8 @@ async fn when_i_claim_burn(
         is_dry_run: false,
     };
 
-    let mut client = vn.create_client().await;
+    let mut client = vn.create_client();
+
     let resp = client.submit_transaction(request).await?;
     let result = resp.result.ok_or_else(|| anyhow::anyhow!("Transaction failed"))?;
 
@@ -143,7 +147,7 @@ async fn vn_has_scanned_to_epoch(world: &mut TariWorld, vn_name: String, epoch: 
         .validator_nodes
         .get(&vn_name)
         .unwrap_or_else(|| panic!("Validator node {} not found", vn_name));
-    let mut client = vn.create_client().await;
+    let mut client = vn.create_client();
     for _ in 0..seconds {
         let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
         if stats.current_epoch == epoch {
@@ -162,7 +166,7 @@ async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_
         .validator_nodes
         .get(&vn_name)
         .unwrap_or_else(|| panic!("Validator node {} not found", vn_name));
-    let mut client = vn.create_client().await;
+    let mut client = vn.create_client();
     for _ in 0..seconds {
         let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
         if stats.current_block_height == block_height {
@@ -173,4 +177,9 @@ async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_
 
     let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
     assert_eq!(stats.current_block_height, block_height);
+}
+
+#[when(expr = "I create a new key pair {word}")]
+async fn when_i_create_new_key_pair(world: &mut TariWorld, key_name: String) {
+    create_key(world, key_name);
 }

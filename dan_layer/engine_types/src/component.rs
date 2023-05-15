@@ -1,4 +1,4 @@
-//   Copyright 2022. The Tari Project
+//   Copyright 2023. The Tari Project
 //
 //   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //   following conditions are met:
@@ -20,28 +20,52 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{Deserialize, Deserializer, Serializer};
+use serde::{Deserialize, Serialize};
+use tari_template_lib::{auth::AccessRules, models::TemplateAddress, prelude::ComponentAddress, Hash};
 
-pub fn serialize<S: Serializer, T: AsRef<[u8]>>(v: &T, s: S) -> Result<S::Ok, S::Error> {
-    if s.is_human_readable() {
-        let base64 = base64::encode(v);
-        s.serialize_str(&base64)
-    } else {
-        s.serialize_bytes(v.as_ref())
+use crate::{
+    hashing::{hasher, EngineHashDomainLabel},
+    serde_with,
+};
+
+pub fn new_component_address_from_parts(template_address: &TemplateAddress, component_id: &Hash) -> ComponentAddress {
+    let address = hasher(EngineHashDomainLabel::ComponentAddress)
+        .chain(template_address)
+        .chain(component_id)
+        .result();
+    ComponentAddress::new(address)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentHeader {
+    #[serde(with = "serde_with::hex")]
+    pub template_address: TemplateAddress,
+    pub module_name: String,
+    // TODO: Access rules should be a separate substate?
+    pub access_rules: AccessRules,
+    // TODO: Split the state from the header
+    pub state: ComponentBody,
+}
+
+impl ComponentHeader {
+    pub fn into_component(self) -> ComponentBody {
+        self.state
+    }
+
+    pub fn state(&self) -> &[u8] {
+        &self.state.state
     }
 }
 
-pub fn deserialize<'de, D, T>(d: D) -> Result<T, D::Error>
-where
-    D: Deserializer<'de>,
-    T: TryFrom<Vec<u8>>,
-{
-    let bytes = if d.is_human_readable() {
-        let s = String::deserialize(d)?;
-        base64::decode(s.as_bytes()).map_err(serde::de::Error::custom)?
-    } else {
-        Vec::<u8>::deserialize(d)?
-    };
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComponentBody {
+    #[serde(with = "serde_with::hex")]
+    pub state: Vec<u8>,
+}
 
-    T::try_from(bytes).map_err(|_| serde::de::Error::custom("Failed to convert bytes to T"))
+impl ComponentBody {
+    pub fn set(&mut self, state: Vec<u8>) -> &mut Self {
+        self.state = state;
+        self
+    }
 }

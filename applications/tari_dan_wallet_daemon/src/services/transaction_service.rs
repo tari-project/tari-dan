@@ -24,7 +24,7 @@ use crate::{
     services::{TransactionFinalizedEvent, TransactionInvalidEvent, WalletEvent},
 };
 
-const LOG_TARGET: &str = "tari::dan_wallet_daemon::transaction_service";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::transaction_service";
 
 pub struct TransactionService<TStore, TNetworkInterface> {
     notify: Notify<WalletEvent>,
