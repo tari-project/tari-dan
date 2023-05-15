@@ -1,0 +1,35 @@
+[package]
+name = "integration_tests"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[dev-dependencies]
+cucumber = "0.19.1"
+tempfile = "3.3.0"
+multiaddr = "0.17.0"
+base64 = "0.21.0"
+tari_test_utils = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_test_utils" }
+tari_base_node = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_base_node" }
+tari_console_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_console_wallet" }
+tari_comms_dht = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_comms_dht" }
+tari_dan_wallet_daemon = { path = "../tari_dan_wallet_daemon" }
+tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
+tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
+tari_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", package = "tari_wallet" }
+tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
+tari_validator_node_cli = { path = "../tari_validator_node_cli" }
+tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
+tari_indexer = { path = "../tari_indexer" }
+tari_indexer_client = { path = "../../clients/tari_indexer_client" }
+#env_logger = "0.9.0"
+# httpmock handles signals but this causes us not to be able to ctrl + c / SIGINT.
+httpmock = { git = "https://github.com/sdbondi/httpmock.git", branch = "remove-signal-handling" }
+indexmap = "1.9.1"
+
+[[test]]
+name = "cucumber" # this should be the same as the filename of your test target
+harness = false # allows Cucumber to print output instead of libtest
