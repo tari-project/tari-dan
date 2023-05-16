@@ -1009,8 +1009,17 @@ async fn successful_transaction(world: &mut TariWorld) {
 
             let hash = FixedHash::try_from(payload_id).unwrap();
             let get_transaction_req = GetTransactionResultRequest { hash };
-            let get_transaction_res = client.get_transaction_result(get_transaction_req).await.unwrap();
-            let finalized_tx = get_transaction_res.result.unwrap();
+            let get_transaction_res = client
+                .get_transaction_result(get_transaction_req)
+                .await
+                .expect(format!("Failed to get transaction with hash {} for vn = {}", hash, vn_ps.name).as_str());
+            let finalized_tx = get_transaction_res.result.expect(
+                format!(
+                    "Transaction result was rejected for tx hash {} and vn = {}",
+                    hash, vn_ps.name
+                )
+                .as_str(),
+            );
             finalized_tx.expect_success();
         }
     }
