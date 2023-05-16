@@ -3,7 +3,7 @@
 
 Feature: Fungible tokens
 
-  @serial @current
+  @serial
   Scenario: Mint fungible tokens
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -36,7 +36,7 @@ Feature: Fungible tokens
     When I create an account ACC_2 on VN
 
     # Submit a transaction manifest
-    When I print the cucumber world
+#    When I print the cucumber world
     When I submit a transaction manifest on VN with inputs "FAUCET, ACC_1" and 3 outputs named "TX1" signed with key ACC_1
     ```
     let faucet = global!["FAUCET/components/TestFaucet"];
@@ -46,7 +46,7 @@ Feature: Fungible tokens
     let faucet_bucket = faucet.take_free_coins();
     acc1.deposit(faucet_bucket);
     ```
-    When I print the cucumber world
+#    When I print the cucumber world
     # Submit a transaction manifest
     When I submit a transaction manifest on VN with inputs "FAUCET, TX1, ACC_2" and 1 output named "TX2" signed with key ACC_1
       ```

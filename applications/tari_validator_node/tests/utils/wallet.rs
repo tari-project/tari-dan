@@ -180,22 +180,22 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         shutdown,
     };
 
-    eprintln!(
-        "Wallet {} GRPC listening on port {}",
-        wallet_name, wallet_process.grpc_port
-    );
+    // eprintln!(
+    //     "Wallet {} GRPC listening on port {}",
+    //     wallet_name, wallet_process.grpc_port
+    // );
     // Wait for node to start up
     wait_listener_on_local_port(grpc_port).await;
 
     let mut wallet_client = wallet_process.create_client().await;
 
-    let identity = wallet_client
+    let _identity = wallet_client
         .identify(GetIdentityRequest {})
         .await
         .unwrap()
         .into_inner();
 
-    eprintln!("Wallet {} comms address: {}", wallet_name, identity.public_address);
+    // eprintln!("Wallet {} comms address: {}", wallet_name, identity.public_address);
 
     // TODO: Clean up
     let mut status = wallet_client.get_network_status(Empty {}).await.unwrap().into_inner();

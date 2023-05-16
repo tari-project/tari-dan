@@ -11,23 +11,6 @@
 #  timestamp [target] LEVEL message
 refresh_rate: 30 seconds
 appenders:
-  # An appender named "stdout" that writes to stdout
-  stdout:
-    kind: console
-    encoder:
-      pattern: "{d(%H:%M)} [{t}] {h({l}):5} {m} [{f}:{L}]{n}"
-    filters:
-      - kind: threshold
-        level: info
-
-  # An appender named "stdout" that writes to stdout
-  stdout_warn:
-    kind: console
-    encoder:
-      pattern: "{d(%H:%M)} {h({l}):5} {m} [{f}:{L}]{n}"
-    filters:
-      - kind: threshold
-        level: warn
 
   # An appender named "dan_layer" that writes to a file with a custom pattern encoder
   dan_layer:
@@ -101,21 +84,18 @@ appenders:
 root:
   level: warn
   appenders:
-    - stdout_warn
     - other
 
 loggers:
   tari::application:
     level: debug
     appenders:
-      - stdout
       - dan_layer
     additive: false
 
   tari::validator_node:
     level: debug
     appenders:
-      - stdout
       - dan_layer
     additive: false
 
@@ -123,13 +103,11 @@ loggers:
     level: info
     appenders:
       - dan_layer
-      - stdout
     additive: false
 
   tari::indexer:
     level: debug
     appenders:
-      - stdout
       - dan_layer
     additive: false
 
