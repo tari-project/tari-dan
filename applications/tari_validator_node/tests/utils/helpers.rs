@@ -14,14 +14,14 @@ pub fn get_os_assigned_ports() -> (u16, u16) {
 
 pub async fn wait_listener_on_local_port(port: u16) {
     let mut i = 0;
-    while let Err(e) = tokio::net::TcpSocket::new_v4()
+    while let Err(_e) = tokio::net::TcpSocket::new_v4()
         .unwrap()
         .connect(([127u8, 0, 0, 1], port).into())
         .await
     {
-        println!("Waiting for base node to start listening on port {}. {}", port, e);
+        // println!("Waiting for base node to start listening on port {}. {}", port, e);
         if i >= 10 {
-            println!("Node failed to start listening on port {} within 10s", port);
+            // println!("Node failed to start listening on port {} within 10s", port);
             panic!("Node failed to start listening on port {} within 10s", port);
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
