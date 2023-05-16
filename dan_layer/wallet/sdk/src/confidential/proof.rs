@@ -60,7 +60,7 @@ pub fn get_commitment_factory() -> &'static CommitmentFactory {
 pub struct ConfidentialProofStatement {
     pub amount: Amount,
     pub mask: PrivateKey,
-    pub sender_public_nonce: Option<PublicKey>,
+    pub sender_public_nonce: PublicKey,
     pub minimum_value_promise: u64,
     pub reveal_amount: Amount,
 }
@@ -82,10 +82,8 @@ pub fn generate_confidential_proof(
             let encrypted_value = encrypt_value(&stmt.mask, &change_commitment, stmt.amount.value() as u64)?;
             Ok(ConfidentialStatement {
                 commitment: copy_fixed(change_commitment.as_bytes()),
-                sender_public_nonce: stmt.sender_public_nonce.as_ref().map(|nonce| {
-                    RistrettoPublicKeyBytes::from_bytes(nonce.as_bytes())
-                        .expect("[generate_confidential_proof] change nonce")
-                }),
+                sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(stmt.sender_public_nonce.as_bytes())
+                    .expect("[generate_confidential_proof] change nonce"),
                 encrypted_value,
                 minimum_value_promise: stmt.minimum_value_promise,
                 revealed_amount: stmt.reveal_amount,
@@ -101,10 +99,8 @@ pub fn generate_confidential_proof(
     Ok(ConfidentialOutputProof {
         output_statement: ConfidentialStatement {
             commitment: copy_fixed(commitment.as_bytes()),
-            sender_public_nonce: output_statement.sender_public_nonce.as_ref().map(|nonce| {
-                RistrettoPublicKeyBytes::from_bytes(nonce.as_bytes())
-                    .expect("[generate_confidential_proof] output nonce")
-            }),
+            sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(output_statement.sender_public_nonce.as_bytes())
+                .expect("[generate_confidential_proof] output nonce"),
             encrypted_value,
             minimum_value_promise: output_statement.minimum_value_promise,
             revealed_amount: output_statement.reveal_amount,
@@ -126,7 +122,7 @@ fn inner_encrypted_value_kdf_aead(encryption_key: &PrivateKey, commitment: &Comm
 }
 
 const ENCRYPTED_VALUE_TAG: &[u8] = b"TARI_AAD_VALUE";
-fn encrypt_value(
+pub(crate) fn encrypt_value(
     encryption_key: &PrivateKey,
     commitment: &Commitment,
     amount: u64,

@@ -33,15 +33,19 @@ use tari_dan_common_types::NodeAddressable;
 #[async_trait]
 pub trait PeerProvider {
     type Addr: NodeAddressable + Send;
+    type NodeId: Display + Send;
     type Error: std::error::Error + Send + Sync + 'static;
 
     async fn get_seed_peers(&self) -> Result<Vec<DanPeer<Self::Addr>>, Self::Error>;
     async fn get_peer(&self, addr: &Self::Addr) -> Result<DanPeer<Self::Addr>, Self::Error>;
+    async fn get_peer_by_node_id(&self, node_id: &Self::NodeId) -> Result<DanPeer<Self::Addr>, Self::Error>;
     async fn add_peer(&self, peer: DanPeer<Self::Addr>) -> Result<(), Self::Error>;
     async fn update_peer(&self, peer: DanPeer<Self::Addr>) -> Result<(), Self::Error>;
     async fn peers_for_current_epoch_iter(
         &self,
     ) -> Box<dyn Iterator<Item = Result<DanPeer<Self::Addr>, Self::Error>> + Send>;
+
+    async fn is_protocol_supported(&self, addr: &Self::Addr, protocol: &[u8]) -> Result<bool, Self::Error>;
 }
 
 pub struct DanPeer<TAddr> {

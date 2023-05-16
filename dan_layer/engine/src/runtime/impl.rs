@@ -25,7 +25,6 @@ use std::collections::{BTreeSet, HashMap};
 use log::warn;
 use tari_bor::encode;
 use tari_crypto::{
-    commitment::HomomorphicCommitmentFactory,
     range_proof::RangeProofService,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
@@ -98,7 +97,6 @@ pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = L
     consensus: ConsensusContext,
     sender_public_key: RistrettoPublicKey,
     modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
-    fee_loan: Amount,
 }
 
 pub struct StateFinalize {
@@ -113,7 +111,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         consensus: ConsensusContext,
         sender_public_key: RistrettoPublicKey,
         modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
-        fee_loan: Amount,
     ) -> Result<Self, RuntimeError> {
         let runtime = Self {
             tracker,
@@ -121,7 +118,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             consensus,
             sender_public_key,
             modules,
-            fee_loan,
         };
         runtime.invoke_modules_on_initialize()?;
         Ok(runtime)
@@ -784,8 +780,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 unclaimed_output.commitment.as_public_key().clone(),
                 ConfidentialOutput {
                     commitment: unclaimed_output.commitment,
-                    stealth_public_nonce: Some(diffie_hellman_public_key),
-                    encrypted_value: Some(unclaimed_output.encrypted_value),
+                    stealth_public_nonce: diffie_hellman_public_key,
+                    encrypted_value: unclaimed_output.encrypted_value,
                     minimum_value_promise: 0,
                 },
             )),
@@ -805,27 +801,24 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         Ok(())
     }
 
-    fn create_free_test_coins(&self, amount: u64, private_key: RistrettoSecretKey) -> Result<(), RuntimeError> {
-        let commitment = get_commitment_factory().commit(&private_key, &RistrettoSecretKey::from(amount));
+    fn create_free_test_coins(
+        &self,
+        revealed_amount: Amount,
+        output: Option<ConfidentialOutput>,
+    ) -> Result<BucketId, RuntimeError> {
         let resource = ResourceContainer::confidential(
             *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            Some((commitment.as_public_key().clone(), ConfidentialOutput {
-                commitment,
-                stealth_public_nonce: None,
-                encrypted_value: None,
-                minimum_value_promise: 0,
-            })),
-            Amount::new(amount as i64),
+            output.map(|o| (o.commitment.as_public_key().clone(), o)),
+            revealed_amount,
         );
 
         let bucket_id = self.tracker.new_bucket(resource)?;
         self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
-
-        Ok(())
+        Ok(bucket_id)
     }
 
     fn fee_checkpoint(&self) -> Result<(), RuntimeError> {
-        if self.tracker.total_payments() < self.tracker.total_charges() - self.fee_loan {
+        if self.tracker.total_payments() < self.tracker.total_charges() {
             return Err(RuntimeError::InsufficientFeesPaid {
                 required_fee: self.tracker.total_charges(),
                 fees_paid: self.tracker.total_payments(),
@@ -845,7 +838,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         // TODO: this should not be checked here because it will silently fail
         // and the transaction will think it succeeds. Rather move this check to the transaction
         // processor and reset to fee checkpoint there.
-        if !self.tracker.are_fees_paid_in_full() && self.tracker.total_charges() > self.fee_loan {
+        if !self.tracker.are_fees_paid_in_full() {
             self.reset_to_fee_checkpoint()?;
         }
 

@@ -25,6 +25,7 @@ mod utils;
 use std::{
     collections::HashMap,
     convert::TryFrom,
+    fs,
     future,
     io,
     panic,
@@ -38,6 +39,7 @@ use cucumber::{
     then,
     when,
     writer,
+    writer::Verbosity,
     World,
     WriterExt,
 };
@@ -217,14 +219,16 @@ async fn main() {
     let mut shutdown = Shutdown::new();
     let mock_port = spawn_template_http_server(shutdown.to_signal()).await;
 
+    let file = fs::File::create("cucumber-output-junit.xml").unwrap();
     TariWorld::cucumber()
         .max_concurrent_scenarios(1)
-        .with_writer(
+        .with_writer(writer::Tee::new(
             // following config needed to use eprint statements in the tests
-            writer::Basic::raw(io::stdout(), writer::Coloring::Auto, 0)
+            writer::Basic::raw(io::stdout(), writer::Coloring::Auto, Verbosity::ShowWorldAndDocString)
                 .summarized()
-                .assert_normalized(),
-        )
+                .normalized(),
+            writer::Normalize::new(writer::JUnit::new(file, Verbosity::ShowWorldAndDocString)),
+        ))
         .before(move |_feature, _rule, scenario, world| {
             world.current_scenario_name = Some(scenario.name.clone());
             Box::pin(async move {
@@ -240,7 +244,7 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
-        .run_and_exit("tests/features/")
+        .run("tests/features/")
         .await;
 
     shutdown.trigger();
