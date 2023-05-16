@@ -54,6 +54,15 @@ impl From<AuthLoginRequestEvent> for WalletEvent {
 #[derive(Debug, Clone)]
 pub struct TransactionSubmittedEvent {
     pub hash: FixedHash,
+    /// Set to Some if this transaction results in a new account
+    pub new_account: Option<NewAccountInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewAccountInfo {
+    pub name: Option<String>,
+    pub key_index: u64,
+    pub is_default: bool,
 }
 
 #[derive(Debug, Clone)]

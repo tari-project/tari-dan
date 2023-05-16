@@ -23,7 +23,10 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
 
 use reqwest::Url;
-use tari_common::configuration::{CommonConfig, StringList};
+use tari_common::{
+    configuration::{CommonConfig, StringList},
+    exit_codes::ExitError,
+};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_crypto::tari_utilities::message_format::MessageFormat;
@@ -43,7 +46,7 @@ use tokio::task;
 
 use crate::{
     utils::{
-        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+        helpers::{check_join_handle, get_os_assigned_ports, wait_listener_on_local_port},
         logging::get_base_dir_for_scenario,
     },
     TariWorld,
@@ -57,7 +60,7 @@ pub struct IndexerProcess {
     pub graphql_port: u16,
     pub base_node_grpc_port: u16,
     pub http_ui_port: u16,
-    pub handle: task::JoinHandle<()>,
+    pub handle: task::JoinHandle<Result<(), ExitError>>,
     pub temp_dir_path: String,
     pub shutdown: Shutdown,
     pub db_path: PathBuf,
@@ -212,18 +215,13 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
 
-        let result = run_indexer(config, shutdown_signal).await;
-        if let Err(e) = result {
-            panic!("{:?}", e);
-        }
+        run_indexer(config, shutdown_signal).await
     });
 
     // Wait for node to start up
     wait_listener_on_local_port(json_rpc_port).await;
-    if handle.is_finished() {
-        handle.await.unwrap();
-        return;
-    }
+    // Check if the task errored/panicked
+    let handle = check_join_handle(&name, handle).await;
 
     // make the new vn able to be referenced by other processes
     let indexer_process = IndexerProcess {

@@ -145,8 +145,8 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                 }),
             },
             101 => Instruction::CreateFreeTestCoins {
-                amount: request.create_free_test_coins_amount,
-                private_key: request.create_free_test_coins_private_key,
+                revealed_amount: request.create_free_test_coins_amount.try_into()?,
+                output: tari_bor::decode(&request.create_free_test_coins_output_blob)?,
             },
             _ => return Err(anyhow!("invalid instruction_type")),
         };
@@ -200,10 +200,14 @@ impl From<Instruction> for proto::transaction::Instruction {
             // TODO: debugging feature should not be the default. Perhaps a better way to create faucet coins is to mint
             //       a faucet vault in the genesis state for dev networks and use faucet builtin template to withdraw
             //       funds.
-            Instruction::CreateFreeTestCoins { amount, private_key } => {
+            Instruction::CreateFreeTestCoins {
+                revealed_amount: amount,
+                output,
+            } => {
                 result.instruction_type = 101;
-                result.create_free_test_coins_amount = amount;
-                result.create_free_test_coins_private_key = private_key;
+                result.create_free_test_coins_amount = amount.value() as u64;
+                result.create_free_test_coins_output_blob =
+                    output.map(|o| tari_bor::encode(&o).unwrap()).unwrap_or_default();
             },
         }
         result
@@ -404,16 +408,19 @@ impl TryFrom<proto::transaction::ConfidentialStatement> for ConfidentialStatemen
     type Error = anyhow::Error;
 
     fn try_from(val: proto::transaction::ConfidentialStatement) -> Result<Self, Self::Error> {
+        let sender_public_nonce = Some(val.sender_public_nonce)
+            .filter(|v| !v.is_empty())
+            .map(|v| {
+                RistrettoPublicKeyBytes::from_bytes(&v)
+                    .map_err(|e| anyhow!("Invalid sender_public_nonce: {}", e.to_error_string()))
+            })
+            .transpose()?
+            .ok_or_else(|| anyhow!("sender_public_nonce is missing"))?;
+
         Ok(ConfidentialStatement {
             commitment: checked_copy_fixed(&val.commitment)
                 .ok_or_else(|| anyhow!("Invalid length of commitment bytes"))?,
-            sender_public_nonce: Some(val.sender_public_nonce)
-                .filter(|v| !v.is_empty())
-                .map(|v| {
-                    RistrettoPublicKeyBytes::from_bytes(&v)
-                        .map_err(|e| anyhow!("Invalid sender_public_nonce: {}", e.to_error_string()))
-                })
-                .transpose()?,
+            sender_public_nonce,
             encrypted_value: EncryptedValue(
                 checked_copy_fixed(&val.encrypted_value)
                     .ok_or_else(|| anyhow!("Invalid length of encrypted_value bytes"))?,
@@ -428,10 +435,7 @@ impl From<ConfidentialStatement> for proto::transaction::ConfidentialStatement {
     fn from(val: ConfidentialStatement) -> Self {
         Self {
             commitment: val.commitment.to_vec(),
-            sender_public_nonce: val
-                .sender_public_nonce
-                .map(|v| v.as_bytes().to_vec())
-                .unwrap_or_default(),
+            sender_public_nonce: val.sender_public_nonce.as_bytes().to_vec(),
             encrypted_value: val.encrypted_value.as_ref().to_vec(),
             minimum_value_promise: val.minimum_value_promise,
             revealed_amount: val

@@ -457,14 +457,14 @@ pub mod utilities {
                 output_proof: ConfidentialOutputProof {
                     output_statement: ConfidentialStatement {
                         commitment: output_statement.commitment,
-                        sender_public_nonce: None,
+                        sender_public_nonce: Default::default(),
                         encrypted_value: EncryptedValue::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
                         revealed_amount,
                     },
                     change_statement: Some(ConfidentialStatement {
                         commitment: change_statement.commitment,
-                        sender_public_nonce: None,
+                        sender_public_nonce: Default::default(),
                         encrypted_value: EncryptedValue::default(),
                         minimum_value_promise: change_statement.minimum_value_promise,
                         revealed_amount: Amount::zero(),
@@ -512,14 +512,14 @@ pub mod utilities {
                     output_statement: ConfidentialStatement {
                         commitment: output_statement.commitment,
                         // R and encrypted value are informational and can be left out as far as the VN is concerned
-                        sender_public_nonce: None,
+                        sender_public_nonce: Default::default(),
                         encrypted_value: Default::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
                         revealed_amount,
                     },
                     change_statement: change_statement.map(|change| ConfidentialStatement {
                         commitment: change.commitment,
-                        sender_public_nonce: None,
+                        sender_public_nonce: Default::default(),
                         encrypted_value: Default::default(),
                         minimum_value_promise: change.minimum_value_promise,
                         revealed_amount: Amount::zero(),
@@ -543,10 +543,8 @@ pub mod utilities {
     ) -> Result<ConfidentialOutputProof, RangeProofError> {
         let proof_change_statement = change_statement.as_ref().map(|statement| ConfidentialStatement {
             commitment: commitment_to_bytes(&statement.mask, statement.amount),
-            sender_public_nonce: Some(
-                RistrettoPublicKeyBytes::from_bytes(statement.sender_public_nonce.as_bytes())
-                    .expect("[generate_confidential_proof] change nonce"),
-            ),
+            sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(statement.sender_public_nonce.as_bytes())
+                .expect("[generate_confidential_proof] change nonce"),
             encrypted_value: Default::default(),
             minimum_value_promise: statement.minimum_value_promise,
             revealed_amount: Amount::zero(),
@@ -557,10 +555,10 @@ pub mod utilities {
         Ok(ConfidentialOutputProof {
             output_statement: ConfidentialStatement {
                 commitment: commitment_to_bytes(&output_statement.mask, output_statement.amount),
-                sender_public_nonce: Some(
-                    RistrettoPublicKeyBytes::from_bytes(output_statement.sender_public_nonce.as_bytes())
-                        .expect("[generate_confidential_proof] output nonce"),
-                ),
+                sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(
+                    output_statement.sender_public_nonce.as_bytes(),
+                )
+                .expect("[generate_confidential_proof] output nonce"),
                 encrypted_value: Default::default(),
                 minimum_value_promise: output_statement.minimum_value_promise,
                 revealed_amount: Amount::zero(),

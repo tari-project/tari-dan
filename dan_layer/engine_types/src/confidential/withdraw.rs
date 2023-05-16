@@ -22,11 +22,11 @@ pub struct ValidatedConfidentialWithdrawProof {
     pub change_revealed_amount: Amount,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConfidentialOutput {
     pub commitment: Commitment,
-    pub stealth_public_nonce: Option<PublicKey>,
-    pub encrypted_value: Option<EncryptedValue>,
+    pub stealth_public_nonce: PublicKey,
+    pub encrypted_value: EncryptedValue,
     pub minimum_value_promise: u64,
 }
 

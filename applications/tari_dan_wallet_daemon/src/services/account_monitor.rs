@@ -4,6 +4,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_dan_wallet_sdk::{
     apis::{
@@ -18,11 +19,12 @@ use tari_dan_wallet_sdk::{
 };
 use tari_engine_types::{
     indexed_value::{IndexedValue, ValueVisitorError},
-    substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
+    substate::{SubstateAddress, SubstateDiff, SubstateValue},
     vault::Vault,
 };
 use tari_shutdown::ShutdownSignal;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
+use tari_template_lib::resource::TOKEN_SYMBOL;
 use tokio::{
     sync::{mpsc, oneshot},
     time,
@@ -31,7 +33,7 @@ use tokio::{
 
 use crate::{
     notify::Notify,
-    services::{AccountChangedEvent, Reply, WalletEvent},
+    services::{AccountChangedEvent, NewAccountInfo, Reply, WalletEvent},
 };
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::account_monitor";
@@ -40,6 +42,7 @@ pub struct AccountMonitor<TStore, TNetworkInterface> {
     notify: Notify<WalletEvent>,
     wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
     request_rx: mpsc::Receiver<AccountMonitorRequest>,
+    pending_accounts: HashMap<FixedHash, NewAccountInfo>,
     shutdown_signal: ShutdownSignal,
 }
 
@@ -61,6 +64,7 @@ where
                 notify,
                 wallet_sdk,
                 request_rx,
+                pending_accounts: HashMap::new(),
                 shutdown_signal,
             },
             AccountMonitorHandle { sender: request_tx },
@@ -241,31 +245,124 @@ where
         Ok(())
     }
 
-    async fn process_result(&self, diff: &SubstateDiff) -> Result<(), AccountMonitorError> {
+    async fn process_result(&mut self, tx_hash: FixedHash, diff: &SubstateDiff) -> Result<(), AccountMonitorError> {
+        let substate_api = self.wallet_sdk.substate_api();
         let accounts_api = self.wallet_sdk.accounts_api();
-        let components = diff
-            .up_iter()
-            .filter(|(a, v)| a.is_component() && is_account(v))
-            .map(|(a, _)| a);
 
-        for addr in components {
-            if accounts_api.has_account(addr)? {
-                self.refresh_account(addr).await?;
-            }
+        if let Some(new_account) = self.pending_accounts.remove(&tx_hash) {
+            // Filter for a _new_ account created in this transaction
+            let new_account_address =
+                find_new_account_address(diff).ok_or_else(|| AccountMonitorError::ExpectedNewAccount {
+                    tx_hash,
+                    account_name: new_account.name.clone().unwrap_or_else(|| "<no-name>".to_string()),
+                })?;
+
+            accounts_api.add_account(
+                new_account.name.as_deref(),
+                new_account_address,
+                new_account.key_index,
+                new_account.is_default,
+            )?;
         }
 
+        let vaults = diff.up_iter().filter(|(a, _)| a.is_vault()).collect::<Vec<_>>();
+        for (vault_addr, substate) in vaults {
+            let SubstateValue::Vault(vault) = substate.substate_value() else {
+                error!(target: LOG_TARGET, "👁️‍🗨️ Substate {} is not a vault. This should be impossible.", vault_addr);
+                continue;
+            };
+
+            // Try and get the account address from the vault
+            let maybe_vault_substate = substate_api.get_substate(vault_addr).optional()?;
+            let Some(vault_substate) = maybe_vault_substate else {
+                // This should be impossible.
+                error!(target: LOG_TARGET, "👁️‍🗨️ Vault {} is not a known substate.", vault_addr);
+                continue;
+            };
+
+            let Some(account_addr) = vault_substate.parent_address else {
+                warn!(target: LOG_TARGET, "👁️‍🗨️ Vault {} has no parent component. Assuming", vault_addr);
+                continue;
+            };
+
+            // Check if this vault is associated with an account
+            if accounts_api.get_account_by_address(&account_addr).optional()?.is_none() {
+                info!(
+                    target: LOG_TARGET,
+                    "👁️‍🗨️ Vault {} not in any known account",
+                    vault.vault_id(),
+                );
+                continue;
+            }
+
+            // Add the vault if it does not exist
+            if !accounts_api.has_vault(vault_addr)? {
+                let resx_addr = SubstateAddress::Resource(*vault.resource_address());
+                let version = substate_api
+                    .get_substate(&resx_addr)
+                    .optional()?
+                    .map(|s| s.address.version)
+                    .unwrap_or(0);
+                let scan_result = substate_api.scan_for_substate(&resx_addr, Some(version)).await;
+                let maybe_resource = match scan_result {
+                    Ok(ValidatorScanResult { substate: resource, .. }) => {
+                        let resx = resource.into_resource().ok_or_else(|| {
+                            AccountMonitorError::UnexpectedSubstate(format!(
+                                "Expected {} to be a resource.",
+                                vault.resource_address()
+                            ))
+                        })?;
+                        Some(resx)
+                    },
+                    // Dont fail to update if scanning fails
+                    Err(err) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "👁️‍🗨️ Failed to scan vault {} from VN: {}",
+                            vault.vault_id(),
+                            err
+                        );
+                        None
+                    },
+                };
+
+                let token_symbol = maybe_resource.and_then(|r| r.metadata().get(TOKEN_SYMBOL).map(|s| s.to_string()));
+                info!(
+                    target: LOG_TARGET,
+                    "👁️‍🗨️ New {} in account {}",
+                    vault.vault_id(),
+                    account_addr
+                );
+                accounts_api.add_vault(
+                    account_addr.clone(),
+                    vault_addr.clone(),
+                    *vault.resource_address(),
+                    vault.resource_type(),
+                    token_symbol,
+                )?;
+            }
+
+            // Update the vault balance / confidential outputs
+            self.refresh_vault(&account_addr, vault)?;
+        }
         Ok(())
     }
 
-    async fn on_event(&self, event: WalletEvent) -> Result<(), AccountMonitorError> {
+    async fn on_event(&mut self, event: WalletEvent) -> Result<(), AccountMonitorError> {
         match event {
-            WalletEvent::TransactionSubmitted(_) => {},
-            WalletEvent::TransactionFinalized(event) => {
-                if let Some(diff) = event.finalize.result.accept() {
-                    self.process_result(diff).await?;
+            WalletEvent::TransactionSubmitted(event) => {
+                if let Some(account) = event.new_account {
+                    self.pending_accounts.insert(event.hash, account);
                 }
             },
-            WalletEvent::TransactionInvalid(_) => {},
+            WalletEvent::TransactionFinalized(event) => {
+                if let Some(diff) = event.finalize.result.accept() {
+                    self.process_result(event.hash, diff).await?;
+                }
+            },
+            WalletEvent::TransactionInvalid(event) => {
+                self.pending_accounts.remove(&event.hash);
+            },
             WalletEvent::AccountChanged(_) => {},
             WalletEvent::AuthLoginRequest(_) => {},
         }
@@ -312,13 +409,34 @@ pub enum AccountMonitorError {
     ConfidentialOutputs(#[from] ConfidentialOutputsApiError),
     #[error("Failed to decode binary value: {0}")]
     DecodeValueFailed(#[from] ValueVisitorError),
+    #[error("Unexpected substate: {0}")]
+    UnexpectedSubstate(String),
     #[error("Monitor service is not running")]
     ServiceShutdown,
+
+    #[error("Failed to send request to monitor service")]
+    ExpectedNewAccount { tx_hash: FixedHash, account_name: String },
 }
 
-fn is_account(s: &Substate) -> bool {
-    s.substate_value()
-        .component()
-        .filter(|c| c.template_address == *ACCOUNT_TEMPLATE_ADDRESS)
-        .is_some()
+fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
+    // TODO: We assume only one new account is created in a transaction.
+    diff.up_iter().find_map(|(a, v)| {
+        // Newly created in this transaction
+        if v.version() > 0 {
+            return None;
+        }
+
+        // Is an account component
+        if !a.is_component() ||
+            v.substate_value()
+                .component()
+                .expect("Value was not component for component address")
+                .template_address !=
+                *ACCOUNT_TEMPLATE_ADDRESS
+        {
+            return None;
+        }
+
+        Some(a)
+    })
 }

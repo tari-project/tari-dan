@@ -316,7 +316,6 @@ async fn handle_create_free_test_coins(
 }
 
 async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
-    println!("Submitted account list transaction...");
     let resp = client.list_accounts(0, 100).await?;
 
     if resp.accounts.is_empty() {
