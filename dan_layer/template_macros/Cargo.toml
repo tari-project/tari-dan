@@ -12,8 +12,7 @@ proc-macro = true
 
 [dependencies]
 proc-macro2 = "1.0.42"
-# Locked due to https://github.com/diesel-rs/diesel/issues/3541
-quote = "=1.0.20"
+quote = "1.0.20"
 syn = { version = "1.0.98", features = ["full", "extra-traits"] }
 
 [dev-dependencies]

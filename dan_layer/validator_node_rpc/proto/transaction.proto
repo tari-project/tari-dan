@@ -75,7 +75,7 @@ message Instruction {
 
   // DEBUGGING: Test coins
   uint64 create_free_test_coins_amount = 101;
-  bytes create_free_test_coins_private_key = 102;
+  bytes create_free_test_coins_output_blob = 102;
 }
 
 message Arg {

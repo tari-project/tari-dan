@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{net::TcpListener, time::Duration};
+use std::{fmt::Display, net::TcpListener, time::Duration};
 
 pub fn get_os_assigned_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -26,5 +26,26 @@ pub async fn wait_listener_on_local_port(port: u16) {
         }
         tokio::time::sleep(Duration::from_secs(1)).await;
         i += 1;
+    }
+}
+
+pub async fn check_join_handle<E: Display>(
+    name: &str,
+    handle: tokio::task::JoinHandle<Result<(), E>>,
+) -> tokio::task::JoinHandle<Result<(), E>> {
+    if !handle.is_finished() {
+        return handle;
+    }
+
+    match handle.await {
+        Ok(Ok(_)) => {
+            panic!("Node {} exited unexpectedly", name);
+        },
+        Ok(Err(e)) => {
+            panic!("Node {} exited unexpectedly with error: {}", name, e);
+        },
+        Err(e) => {
+            panic!("Node {} panicked: {:?}", name, e.try_into_panic());
+        },
     }
 }

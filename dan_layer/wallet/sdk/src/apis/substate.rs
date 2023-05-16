@@ -24,7 +24,12 @@ pub struct SubstatesApi<'a, TStore, TNetworkInterface> {
     network_interface: &'a TNetworkInterface,
 }
 
-impl<'a, TStore: WalletStore, TNetworkInterface: WalletNetworkInterface> SubstatesApi<'a, TStore, TNetworkInterface> {
+impl<'a, TStore, TNetworkInterface> SubstatesApi<'a, TStore, TNetworkInterface>
+where
+    TStore: WalletStore,
+    TNetworkInterface: WalletNetworkInterface,
+    TNetworkInterface::Error: IsNotFoundError,
+{
     pub fn new(store: &'a TStore, network_interface: &'a TNetworkInterface) -> Self {
         Self {
             store,
@@ -133,11 +138,16 @@ impl<'a, TStore: WalletStore, TNetworkInterface: WalletNetworkInterface> Substat
             version_hint.unwrap_or(0)
         );
 
+        // TODO: make configuration option to not do network requests
         let resp = self
             .network_interface
-            .query_substate(address, version_hint)
+            .query_substate(address, version_hint, true)
             .await
-            .map_err(|e| SubstateApiError::NetworkIndexerError(e.into()))?;
+            .optional()
+            .map_err(|e| SubstateApiError::NetworkIndexerError(e.into()))?
+            .ok_or_else(|| SubstateApiError::SubstateDoesNotExist {
+                address: address.clone(),
+            })?;
 
         debug!(
             target: LOG_TARGET,
