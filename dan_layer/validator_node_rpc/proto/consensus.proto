@@ -43,6 +43,8 @@ message QuorumCertificate {
   repeated ShardPledge all_shard_pledges = 8;
   repeated ValidatorMetadata validators_metadata = 9;
   bytes proposed_by = 10;
+  bytes merged_merkle_proof = 11;
+  repeated bytes leaves_hashes = 12;
 }
 
 message HotStuffTreeNode {
@@ -63,8 +65,6 @@ message ValidatorMetadata {
   bytes public_key = 1;
   bytes vn_shard_key = 2;
   tari.dan.common.Signature signature = 3;
-  bytes merkle_proof = 4;
-  uint64 merkle_leaf_index = 5;
 }
 
 message TariDanPayload {
@@ -76,6 +76,8 @@ message VoteMessage {
   QuorumDecision decision = 2;
   repeated ShardPledge all_shard_pledges = 3;
   ValidatorMetadata validator_metadata = 4;
+  bytes merkle_proof = 5;
+  bytes node_hash = 6;
 }
 
 enum QuorumDecision {

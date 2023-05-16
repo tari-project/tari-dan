@@ -19,6 +19,8 @@ pub struct GetSubstateRequest {
     #[serde(with = "serde_tools::string")]
     pub address: SubstateAddress,
     pub version: Option<u32>,
+    #[serde(default)]
+    pub local_search_only: bool,
 }
 
 // #[serde_as]

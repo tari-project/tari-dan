@@ -16,7 +16,10 @@ use axum::async_trait;
 pub use context::HandlerContext;
 use error::HandlerError;
 use tari_dan_common_types::optional::Optional;
-use tari_dan_wallet_sdk::{apis::accounts::AccountsApi, models::Account};
+use tari_dan_wallet_sdk::{
+    apis::accounts::{AccountsApi, AccountsApiError},
+    models::Account,
+};
 use tari_wallet_daemon_client::ComponentAddressOrName;
 
 #[async_trait]
@@ -53,15 +56,17 @@ where
 }
 
 pub fn get_account<TStore>(
-    account: ComponentAddressOrName,
+    account: &ComponentAddressOrName,
     accounts_api: &AccountsApi<'_, TStore>,
-) -> Result<Account, anyhow::Error>
+) -> Result<Account, AccountsApiError>
 where
     TStore: tari_dan_wallet_sdk::storage::WalletStore,
 {
     match account {
-        ComponentAddressOrName::ComponentAddress(address) => Ok(accounts_api.get_account_by_address(&address.into())?),
-        ComponentAddressOrName::Name(name) => Ok(accounts_api.get_account_by_name(&name)?),
+        ComponentAddressOrName::ComponentAddress(address) => {
+            Ok(accounts_api.get_account_by_address(&(*address).into())?)
+        },
+        ComponentAddressOrName::Name(name) => Ok(accounts_api.get_account_by_name(name)?),
     }
 }
 
@@ -74,7 +79,7 @@ where
 {
     let result;
     if let Some(a) = account {
-        result = get_account(a, accounts_api)?;
+        result = get_account(&a, accounts_api)?;
     } else {
         result = accounts_api
             .get_default()

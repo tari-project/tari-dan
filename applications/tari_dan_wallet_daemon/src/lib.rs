@@ -31,6 +31,7 @@ mod webrtc;
 
 use std::{fs, panic, process};
 
+use log::*;
 use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::ShutdownSignal;
@@ -43,6 +44,8 @@ use crate::{
     notify::Notify,
     services::spawn_services,
 };
+
+const LOG_TARGET: &str = "tari::dan::wallet_daemon";
 
 const DEFAULT_FEE: Amount = Amount::new(1000);
 
@@ -85,7 +88,14 @@ pub async fn run_tari_dan_wallet_daemon(
     let handlers = HandlerContext::new(wallet_sdk.clone(), notify, services.account_monitor_handle.clone());
     let listen_fut = jrpc_server::listen(address, signaling_server_address, handlers, shutdown_signal);
 
-    fs::write(config.common.base_path.join("pid"), process::id().to_string())?;
+    if let Err(e) = fs::write(config.common.base_path.join("pid"), process::id().to_string()) {
+        error!(
+            target: LOG_TARGET,
+            "Failed to create PID file {}: {}",
+            config.common.base_path.join("pid").display(),
+            e
+        )
+    }
     // Wait for shutdown, or for any service to error
     tokio::select! {
         res = listen_fut => {

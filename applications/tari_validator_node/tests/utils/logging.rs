@@ -28,3 +28,15 @@ pub fn get_base_dir() -> PathBuf {
     let crate_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     crate_root.join(format!("tests/temp/cucumber_{}", process::id()))
 }
+
+pub fn get_base_dir_for_scenario(application: &str, scenario: &str, node_name: &str) -> PathBuf {
+    let scenario_slug = scenario
+        .chars()
+        .map(|x| match x {
+            'A'..='Z' | 'a'..='z' | '0'..='9' => x,
+            _ => '-',
+        })
+        .collect::<String>();
+
+    get_base_dir().join(scenario_slug).join(application).join(node_name)
+}

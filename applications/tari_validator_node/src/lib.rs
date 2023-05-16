@@ -36,8 +36,10 @@ mod registration;
 mod template_registration_signing;
 
 use std::{
+    fs,
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
+    process,
 };
 
 use log::*;
@@ -152,6 +154,8 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         task::spawn(run_http_ui_server(address, jrpc_address));
     }
 
+    fs::write(config.common.base_path.join("pid"), process::id().to_string())
+        .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
     run_dan_node(services, shutdown_signal).await?;
 
     Ok(())

@@ -30,7 +30,7 @@ Feature: Indexer node
     Then the template "basic_nft" is listed as registered by the validator node VN
 
     # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
+    When I use an account key named K1
 
     # Create a new Counter component and increase it to have a version 1
     When I create a component COUNTER_1 of template "counter" on VN using "new"
@@ -41,7 +41,7 @@ Feature: Indexer node
 
     # Create a new SparkleNft component and mint an NFT
     When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT" with new resource "SPKL"
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 12 outputs named "TX2"
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 12 outputs named "TX2" signed with key ACC1
     ```
     // $mint NFT/resources/0 6
     // $nft_index NFT/resources/0 0

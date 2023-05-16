@@ -25,7 +25,6 @@ use std::collections::{BTreeSet, HashMap};
 use log::warn;
 use tari_bor::encode;
 use tari_crypto::{
-    commitment::HomomorphicCommitmentFactory,
     range_proof::RangeProofService,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
@@ -779,13 +778,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         // 4. Create the confidential resource
         let mut resource = ResourceContainer::confidential(
-            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             Some((
                 unclaimed_output.commitment.as_public_key().clone(),
                 ConfidentialOutput {
                     commitment: unclaimed_output.commitment,
-                    stealth_public_nonce: Some(diffie_hellman_public_key),
-                    encrypted_value: Some(unclaimed_output.encrypted_value),
+                    stealth_public_nonce: diffie_hellman_public_key,
+                    encrypted_value: unclaimed_output.encrypted_value,
                     minimum_value_promise: 0,
                 },
             )),
@@ -805,23 +804,20 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         Ok(())
     }
 
-    fn create_free_test_coins(&self, amount: u64, private_key: RistrettoSecretKey) -> Result<(), RuntimeError> {
-        let commitment = get_commitment_factory().commit(&private_key, &RistrettoSecretKey::from(amount));
+    fn create_free_test_coins(
+        &self,
+        revealed_amount: Amount,
+        output: Option<ConfidentialOutput>,
+    ) -> Result<BucketId, RuntimeError> {
         let resource = ResourceContainer::confidential(
-            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            Some((commitment.as_public_key().clone(), ConfidentialOutput {
-                commitment,
-                stealth_public_nonce: None,
-                encrypted_value: None,
-                minimum_value_promise: 0,
-            })),
-            Amount::new(amount as i64),
+            *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            output.map(|o| (o.commitment.as_public_key().clone(), o)),
+            revealed_amount,
         );
 
         let bucket_id = self.tracker.new_bucket(resource)?;
         self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
-
-        Ok(())
+        Ok(bucket_id)
     }
 
     fn fee_checkpoint(&self) -> Result<(), RuntimeError> {
