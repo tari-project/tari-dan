@@ -44,7 +44,6 @@ import {
 } from 'react-icons/io5';
 import Tooltip from '@mui/material/Tooltip';
 import Fade from '@mui/material/Fade';
-import './MenuItems.css';
 import theme from '../theme/theme';
 
 const iconStyle = {
