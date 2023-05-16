@@ -270,8 +270,8 @@ mod tests {
         let public_key = PublicKey::default();
         let confidential_output = ConfidentialOutput {
             commitment: HomomorphicCommitment::from_public_key(&public_key),
-            stealth_public_nonce: Some(public_key.clone()),
-            encrypted_value: Some(EncryptedValue([0; 24])),
+            stealth_public_nonce: public_key.clone(),
+            encrypted_value: EncryptedValue([0; 24]),
             minimum_value_promise: 0,
         };
         let commitment = Some((public_key, confidential_output));
