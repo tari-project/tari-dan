@@ -66,7 +66,7 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
 export async function jsonRpc(method: string, params: any = null) {
   await mutex_token.runExclusive(async () => {
     if (token === null) {
-      let auth_response = await internalJsonRpc("auth.request", null, [["Admin"]]);
+      let auth_response = await internalJsonRpc("auth.request", null, [["Admin"], null]);
       let auth_token = auth_response["auth_token"];
       let accept_response = await internalJsonRpc("auth.accept", null, [auth_token]);
       token = accept_response.permissions_token
