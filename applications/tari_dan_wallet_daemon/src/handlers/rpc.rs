@@ -27,9 +27,10 @@ pub async fn handle_login_request(
 ) -> Result<AuthLoginResponse, anyhow::Error> {
     let jwt = context.wallet_sdk().jwt_api();
 
-    let auth_token = jwt.generate_auth_token(auth_request.permissions)?;
+    let (auth_token, valid_till) = jwt.generate_auth_token(auth_request.permissions, auth_request.duration)?;
     context.notifier().notify(AuthLoginRequestEvent {
         auth_token: auth_token.clone(),
+        valid_till,
     });
     Ok(AuthLoginResponse { auth_token })
 }
@@ -41,7 +42,7 @@ pub async fn handle_login_accept(
 ) -> Result<AuthLoginAcceptResponse, anyhow::Error> {
     let mut jwt = context.wallet_sdk().jwt_api();
 
-    let permissions_token = jwt.grant(auth_accept_request.auth_token)?; // context.jwt().generate(auth_accept_request.auth_token.as_str())?;
+    let permissions_token = jwt.grant(auth_accept_request.auth_token)?;
     Ok(AuthLoginAcceptResponse { permissions_token })
 }
 

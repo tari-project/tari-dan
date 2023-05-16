@@ -107,6 +107,22 @@ pub enum ComponentAddressOrName {
     Name(String),
 }
 
+impl ComponentAddressOrName {
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Self::ComponentAddress(_) => None,
+            Self::Name(name) => Some(name),
+        }
+    }
+
+    pub fn component_address(&self) -> Option<&ComponentAddress> {
+        match self {
+            Self::ComponentAddress(address) => Some(address),
+            Self::Name(_) => None,
+        }
+    }
+}
+
 impl Display for ComponentAddressOrName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -133,7 +149,7 @@ pub struct WalletDaemonClient {
     client: reqwest::Client,
     endpoint: Url,
     request_id: i64,
-    pub token: Option<String>,
+    token: Option<String>,
 }
 
 impl WalletDaemonClient {
@@ -152,6 +168,11 @@ impl WalletDaemonClient {
             request_id: 0,
             token,
         })
+    }
+
+    pub fn set_auth_token(&mut self, token: String) -> &mut Self {
+        self.token = Some(token);
+        self
     }
 
     // pub async fn get_identity(&mut self) -> Result<GetIdentityResponse, WalletDaemonClientError> {

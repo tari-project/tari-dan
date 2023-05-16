@@ -54,7 +54,7 @@ use tari_dan_core::{
     },
     workers::events::{EventSubscription, HotStuffEvent},
 };
-use tari_dan_engine::fees::{FeeTable, DEFAULT_FEE_LOAN};
+use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_engine_types::{
@@ -174,7 +174,7 @@ pub async fn spawn_services(
     let fee_table = if config.validator_node.no_fees {
         FeeTable::zero_rated()
     } else {
-        FeeTable::new(1, 1, DEFAULT_FEE_LOAN)
+        FeeTable::new(1, 1)
     };
     let payload_processor = TariDanPayloadProcessor::new(template_manager.clone(), fee_table);
 
@@ -332,7 +332,7 @@ where
 {
     let genesis_payload = PayloadId::new([0u8; 32]);
 
-    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(*PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if tx.get_substate_states(&[shard_id])?.is_empty() {
         // Create the resource for public identity
@@ -357,7 +357,7 @@ where
         ))?;
     }
 
-    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if tx.get_substate_states(&[shard_id])?.is_empty() {
         // Create the second layer tari resource

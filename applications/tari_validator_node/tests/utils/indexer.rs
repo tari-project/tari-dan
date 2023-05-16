@@ -23,7 +23,10 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr, time::Duration};
 
 use reqwest::Url;
-use tari_common::configuration::{CommonConfig, StringList};
+use tari_common::{
+    configuration::{CommonConfig, StringList},
+    exit_codes::ExitError,
+};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_crypto::tari_utilities::message_format::MessageFormat;
@@ -39,10 +42,15 @@ use tari_indexer_client::{
 };
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
-use tempfile::tempdir;
 use tokio::task;
 
-use crate::{utils::helpers::get_os_assigned_ports, TariWorld};
+use crate::{
+    utils::{
+        helpers::{check_join_handle, get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
+    TariWorld,
+};
 
 #[derive(Debug)]
 pub struct IndexerProcess {
@@ -52,7 +60,7 @@ pub struct IndexerProcess {
     pub graphql_port: u16,
     pub base_node_grpc_port: u16,
     pub http_ui_port: u16,
-    pub handle: task::JoinHandle<()>,
+    pub handle: task::JoinHandle<Result<(), ExitError>>,
     pub temp_dir_path: String,
     pub shutdown: Shutdown,
     pub db_path: PathBuf,
@@ -74,6 +82,7 @@ impl IndexerProcess {
             .get_substate(GetSubstateRequest {
                 address: address.clone(),
                 version: Some(version),
+                local_search_only: true,
             })
             .await
             .unwrap();
@@ -155,13 +164,12 @@ fn get_address_from_output(world: &TariWorld, output_ref: String) -> &SubstateAd
 pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_node_name: String) {
     // each spawned indexer will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
-    let (graphql_port, _) = get_os_assigned_ports();
-    let (http_ui_port, _) = get_os_assigned_ports();
+    let (graphql_port, http_ui_port) = get_os_assigned_ports();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let name = indexer_name.clone();
 
-    let temp_dir = tempdir().unwrap().path().join(indexer_name.clone());
-    let temp_dir_path = temp_dir.display().to_string();
+    let base_dir = get_base_dir_for_scenario("indexer", world.current_scenario_name.as_ref().unwrap(), &indexer_name);
+    let base_dir_path = base_dir.display().to_string();
 
     // we need to add all the validator nodes as seed peers
     let peer_seeds: Vec<String> = world
@@ -172,6 +180,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
+    let db_path = base_dir.to_path_buf().join("state.db");
 
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
@@ -182,22 +191,21 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         };
 
         // temporal folder for the VN files (e.g. sqlite file, json files, etc.)
-        let temp_dir = tempdir().unwrap().path().join(indexer_name.clone());
-        println!("Using indexer temp_dir: {}", temp_dir.display());
-        config.indexer.data_dir = temp_dir.to_path_buf();
-        config.indexer.identity_file = temp_dir.join("indexer_id.json");
-        config.indexer.tor_identity_file = temp_dir.join("indexer_tor_id.json");
+        println!("Using indexer temp_dir: {}", base_dir.display());
+        config.indexer.data_dir = base_dir.to_path_buf();
+        config.indexer.identity_file = base_dir.join("indexer_id.json");
+        config.indexer.tor_identity_file = base_dir.join("indexer_tor_id.json");
         config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
         config.indexer.dan_layer_scanning_internal = Duration::from_secs(60);
 
         config.indexer.p2p.transport.transport_type = TransportType::Tcp;
         config.indexer.p2p.transport.tcp.listener_address =
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
-        config.indexer.p2p.public_addresses = vec![config.indexer.p2p.transport.tcp.listener_address.clone()];
-        config.indexer.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
+        config.indexer.p2p.public_addresses = vec![config.indexer.p2p.transport.tcp.listener_address.clone()].into();
+        config.indexer.p2p.datastore_path = base_dir.to_path_buf().join("peer_db/vn");
         config.indexer.p2p.dht = DhtConfig {
             // Not all platforms support sqlite memory connection urls
-            database_url: DbConnectionUrl::File(temp_dir.join("dht.sqlite")),
+            database_url: DbConnectionUrl::File(base_dir.join("dht.sqlite")),
             ..DhtConfig::default_local_test()
         };
         config.indexer.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
@@ -207,21 +215,13 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
 
-        let result = run_indexer(config, shutdown_signal).await;
-        if let Err(e) = result {
-            panic!("{:?}", e);
-        }
+        run_indexer(config, shutdown_signal).await
     });
 
-    let db_path = temp_dir.to_path_buf().join("state.db");
-
-    // We need to give it time for the indexer to startup
-    // TODO: it would be better to check the indexer ports to detect when it has started
-    tokio::time::sleep(Duration::from_secs(5)).await;
-    if handle.is_finished() {
-        handle.await.unwrap();
-        return;
-    }
+    // Wait for node to start up
+    wait_listener_on_local_port(json_rpc_port).await;
+    // Check if the task errored/panicked
+    let handle = check_join_handle(&name, handle).await;
 
     // make the new vn able to be referenced by other processes
     let indexer_process = IndexerProcess {
@@ -232,7 +232,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         handle,
         json_rpc_port,
         graphql_port,
-        temp_dir_path,
+        temp_dir_path: base_dir_path,
         shutdown,
         db_path,
     };

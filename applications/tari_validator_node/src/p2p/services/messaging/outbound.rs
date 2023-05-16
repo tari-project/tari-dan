@@ -71,7 +71,7 @@ impl OutboundService for OutboundMessaging {
         // tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         if to == self.our_node_addr {
-            debug!(target: LOG_TARGET, "Sending {:?} to self", message);
+            trace!(target: LOG_TARGET, "Sending {:?} to self", message);
             self.loopback_sender
                 .send(message)
                 .await

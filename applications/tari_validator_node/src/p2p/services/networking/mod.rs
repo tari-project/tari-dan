@@ -41,7 +41,6 @@ mod error;
 pub use error::NetworkingError;
 
 mod handle;
-mod peer_sync;
 
 pub use handle::NetworkingHandle;
 

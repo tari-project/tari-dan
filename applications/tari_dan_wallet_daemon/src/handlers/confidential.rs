@@ -6,7 +6,8 @@ use std::convert::TryInto;
 use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use log::*;
 use serde_json::json;
-use tari_crypto::commitment::HomomorphicCommitmentFactory;
+use tari_common_types::types::PublicKey;
+use tari_crypto::{commitment::HomomorphicCommitmentFactory, keys::PublicKey as _};
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
@@ -24,7 +25,7 @@ use tari_wallet_daemon_client::types::{
 
 use crate::handlers::{get_account_or_default, HandlerContext};
 
-const LOG_TARGET: &str = "tari::dan_wallet_daemon::json_rpc::confidential";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc::confidential";
 
 pub async fn handle_create_transfer_proof(
     context: &HandlerContext,
@@ -34,10 +35,13 @@ pub async fn handle_create_transfer_proof(
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
-    if req.amount.is_negative() {
+    if req.amount.is_negative() || req.reveal_amount.is_negative() {
         return Err(JsonRpcError::new(
             JsonRpcErrorReason::InvalidRequest,
-            "Amount to send must be positive".to_string(),
+            format!(
+                "Amount to send must be positive. Amount = {}, Revealed = {}",
+                req.amount, req.reveal_amount
+            ),
             json!({}),
         )
         .into());
@@ -72,21 +76,28 @@ pub async fn handle_create_transfer_proof(
     let output_statement = ConfidentialProofStatement {
         amount: req.amount,
         mask: output_mask,
-        sender_public_nonce: Some(public_nonce),
+        sender_public_nonce: public_nonce,
         minimum_value_promise: 0,
         reveal_amount: req.reveal_amount,
     };
 
     let change_amount = total_input_value - req.amount.value() as u64 - req.reveal_amount.value() as u64;
-    let change_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
     let maybe_change_statement = if change_amount > 0 {
+        let account_secret = sdk
+            .key_manager_api()
+            .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+        let account_pk = PublicKey::from_secret_key(&account_secret.k);
+        let (change_mask, public_nonce) = sdk
+            .confidential_crypto_api()
+            .derive_output_mask_for_destination(&account_pk);
+
         sdk.confidential_outputs_api().add_output(ConfidentialOutputModel {
             account_address: account.address,
             vault_address: vault.address,
-            commitment: get_commitment_factory().commit_value(&change_key.k, change_amount),
+            commitment: get_commitment_factory().commit_value(&change_mask, change_amount),
             value: change_amount,
-            sender_public_nonce: None,
-            secret_key_index: change_key.key_index,
+            sender_public_nonce: Some(public_nonce.clone()),
+            secret_key_index: account.key_index,
             public_asset_tag: None,
             status: OutputStatus::LockedUnconfirmed,
             locked_by_proof: Some(proof_id),
@@ -94,8 +105,8 @@ pub async fn handle_create_transfer_proof(
 
         Some(ConfidentialProofStatement {
             amount: change_amount.try_into()?,
-            mask: change_key.k,
-            sender_public_nonce: None,
+            mask: change_mask,
+            sender_public_nonce: public_nonce,
             minimum_value_promise: 0,
             reveal_amount: Amount::zero(),
         })
@@ -146,11 +157,15 @@ pub async fn handle_create_output_proof(
 ) -> Result<ConfidentialCreateOutputProofResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+    let (_, key) = sdk.key_manager_api().get_active_key(key_manager::TRANSACTION_BRANCH)?;
+    let public_key = PublicKey::from_secret_key(&key.k);
+    let (output_mask, nonce) = sdk
+        .confidential_crypto_api()
+        .derive_output_mask_for_destination(&public_key);
     let statement = ConfidentialProofStatement {
         amount: req.amount,
-        mask: key.k,
-        sender_public_nonce: None,
+        mask: output_mask,
+        sender_public_nonce: nonce,
         minimum_value_promise: 0,
         reveal_amount: Amount::zero(),
     };

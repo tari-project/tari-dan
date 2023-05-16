@@ -32,7 +32,11 @@ mod faucet_template {
 
     impl TestFaucet {
         pub fn mint(initial_supply: Amount) -> Self {
-            let coins = ResourceBuilder::fungible("faucets")
+            Self::mint_with_symbol(initial_supply, "faucets".to_string())
+        }
+
+        pub fn mint_with_symbol(initial_supply: Amount, symbol: String) -> Self {
+            let coins = ResourceBuilder::fungible(symbol)
                 .initial_supply(initial_supply)
                 .build_bucket();
 

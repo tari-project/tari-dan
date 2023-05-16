@@ -80,10 +80,10 @@ impl TemplateTest {
         let mut builder = Package::builder();
 
         // Add Account template builtin
-        let wasm = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
+        let wasm = get_template_builtin(*ACCOUNT_TEMPLATE_ADDRESS);
         let template = WasmModule::from_code(wasm.to_vec()).load_template().unwrap();
-        builder.add_template(ACCOUNT_TEMPLATE_ADDRESS, template);
-        name_to_template.insert("Account".to_string(), ACCOUNT_TEMPLATE_ADDRESS);
+        builder.add_template(*ACCOUNT_TEMPLATE_ADDRESS, template);
+        name_to_template.insert("Account".to_string(), *ACCOUNT_TEMPLATE_ADDRESS);
         // Add test Faucet
         let wasm = compile_template(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/faucet"), &[]).unwrap();
         let test_faucet_template_address = template_hasher().chain(wasm.code()).result();
@@ -120,7 +120,7 @@ impl TemplateTest {
             // TODO: cleanup
             consensus_context: ConsensusContext { current_epoch: 0 },
             enable_fees: false,
-            fee_table: FeeTable::new(1, 1, 250),
+            fee_table: FeeTable::new(1, 1),
         }
     }
 
@@ -132,7 +132,7 @@ impl TemplateTest {
         let id_provider = IdProvider::new(Hash::default(), 10);
         let vault_id = id_provider.new_vault_id().unwrap();
         let vault = Vault::new(vault_id, ResourceContainer::Confidential {
-            address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            address: *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             commitments: Default::default(),
             revealed_amount: initial_supply,
         });
@@ -367,7 +367,7 @@ impl TemplateTest {
         let mut modules: Vec<Box<dyn RuntimeModule<Package>>> = vec![Box::new(self.track_calls.clone())];
 
         if self.enable_fees {
-            modules.push(Box::new(FeeModule::new(self.fee_table.loan(), self.fee_table.clone())));
+            modules.push(Box::new(FeeModule::new(0, self.fee_table.clone())));
         }
 
         let auth_params = AuthParams {
@@ -379,7 +379,6 @@ impl TemplateTest {
             auth_params,
             self.consensus_context.clone(),
             modules,
-            Amount::try_from(self.fee_table.loan()).unwrap(),
         );
 
         let result = processor.execute(transaction)?;

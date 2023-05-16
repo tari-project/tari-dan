@@ -15,7 +15,7 @@ use crate::storage::{WalletStorageError, WalletStore, WalletStoreWriter};
 
 pub struct JwtApi<'a, TStore> {
     store: &'a TStore,
-    duration: Duration,
+    default_expiry: Duration,
     auth_secret_key: String,
     jwt_secret_key: String,
 }
@@ -115,10 +115,10 @@ pub struct AuthClaims {
 }
 
 impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
-    pub(crate) fn new(store: &'a TStore, duration: Duration, secret_key: String) -> Self {
+    pub(crate) fn new(store: &'a TStore, default_expiry: Duration, secret_key: String) -> Self {
         Self {
             store,
-            duration,
+            default_expiry,
             auth_secret_key: format!("auth-{secret_key}"),
             jwt_secret_key: format!("jwt-{secret_key}"),
         }
@@ -132,23 +132,24 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         Ok(index)
     }
 
-    pub fn generate_auth_token(&self, permissions: JrpcPermissions) -> Result<String, JwtApiError> {
+    pub fn generate_auth_token(
+        &self,
+        permissions: JrpcPermissions,
+        duration: Option<Duration>,
+    ) -> Result<(String, SystemTime), JwtApiError> {
         let id = self.get_index()?;
-
+        let valid_till = SystemTime::now() + duration.unwrap_or(self.default_expiry);
         let my_claims = AuthClaims {
             id,
             permissions,
-            exp: (SystemTime::now() + self.duration)
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as usize,
+            exp: valid_till.duration_since(UNIX_EPOCH).unwrap().as_secs() as usize,
         };
         let auth_token = encode(
             &Header::default(),
             &my_claims,
             &EncodingKey::from_secret(self.auth_secret_key.as_ref()),
         )?;
-        Ok(auth_token)
+        Ok((auth_token, valid_till))
     }
 
     fn check_auth_token(&self, auth_token: &str) -> Result<AuthClaims, JwtApiError> {
@@ -174,10 +175,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         let my_claims = Claims {
             id: auth_claims.id,
             permissions: auth_claims.permissions,
-            exp: (SystemTime::now() + self.duration)
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as usize,
+            exp: auth_claims.exp,
         };
         let permissions_token = encode(
             &Header::default(),
@@ -185,7 +183,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
             &EncodingKey::from_secret(self.jwt_secret_key.as_ref()),
         )?;
         let mut tx = self.store.create_write_tx()?;
-        println!("Storing ID {}", auth_claims.id);
+
         tx.jwt_store_decision(auth_claims.id, Some(permissions_token.clone()))?;
         tx.commit()?;
         Ok(permissions_token)
@@ -199,8 +197,19 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         Ok(())
     }
 
+    fn is_token_revoked(&self, token: &str) -> Result<bool, JwtApiError> {
+        let mut tx = self.store.create_write_tx()?;
+        let revoked = tx.jwt_is_revoked(token)?;
+        tx.commit()?;
+        Ok(revoked)
+    }
+
     pub fn check_auth(&self, token: Option<String>, req_permissions: &[JrpcPermission]) -> Result<(), JwtApiError> {
-        let permissions = self.get_permissions(token.ok_or(JwtApiError::TokenMissing)?.as_str())?;
+        let token = token.ok_or(JwtApiError::TokenMissing)?;
+        if self.is_token_revoked(&token)? {
+            return Err(JwtApiError::TokenRevoked {});
+        }
+        let permissions = self.get_permissions(&token)?;
         for permission in req_permissions {
             permissions.check_permission(permission)?;
         }
@@ -218,4 +227,6 @@ pub enum JwtApiError {
     TokenMissing,
     #[error("Insufficient permissions. Required '{required:?}'")]
     InsufficientPermissions { required: JrpcPermission },
+    #[error("Token revoked")]
+    TokenRevoked,
 }

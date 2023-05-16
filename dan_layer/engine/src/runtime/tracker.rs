@@ -480,7 +480,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn put_in_workspace(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), RuntimeError> {
         self.write_with(|state| {
-            state.workspace.insert(key.clone(), value);
+            state.workspace.insert(key.clone(), value)?;
             Ok(())
         })
     }
@@ -593,7 +593,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             .sum::<Amount>();
 
         let mut fee_resource =
-            ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount::zero());
+            ResourceContainer::confidential(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount::zero());
 
         // Collect the fee
         let mut remaining_fees = total_fees;

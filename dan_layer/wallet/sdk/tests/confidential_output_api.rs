@@ -138,7 +138,7 @@ impl Test {
         let sdk = DanWalletSdk::initialize(store.clone(), PanicIndexer, WalletSdkConfig {
             password: None,
             indexer_jrpc_endpoint: "".to_string(),
-            jwt_duration: Duration::from_secs(60),
+            jwt_expiry: Duration::from_secs(60),
             jwt_secret_key: "secret_key".to_string(),
         })
         .unwrap();
@@ -150,7 +150,7 @@ impl Test {
             .add_vault(
                 Test::test_account_address(),
                 Test::test_vault_address(),
-                CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                 ResourceType::Confidential,
                 Some("TEST".to_string()),
             )
@@ -229,6 +229,7 @@ impl WalletNetworkInterface for PanicIndexer {
         &self,
         _address: &SubstateAddress,
         _version: Option<u32>,
+        _local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
         unimplemented!()
     }

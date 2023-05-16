@@ -25,21 +25,23 @@ use std::{
     fmt,
     fmt::{Display, Formatter},
     ops::{Deref, DerefMut},
+    str::FromStr,
 };
 
+use generic_array::{typenum::U32, GenericArray};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Hash([u8; 32]);
+pub struct Hash(GenericArray<u8, U32>);
 
 impl Hash {
-    pub const fn from_array(bytes: [u8; 32]) -> Self {
-        Self(bytes)
+    pub fn from_array(bytes: [u8; 32]) -> Self {
+        Self(GenericArray::<u8, U32>::clone_from_slice(&bytes))
     }
 
     pub fn into_array(self) -> [u8; 32] {
-        self.0
+        self.0.into()
     }
 
     pub fn from_hex(s: &str) -> Result<Self, HashParseError> {
@@ -51,7 +53,7 @@ impl Hash {
         for (i, h) in hash.iter_mut().enumerate() {
             *h = u8::from_str_radix(&s[2 * i..2 * (i + 1)], 16).map_err(|_| HashParseError)?;
         }
-        Ok(Hash(hash))
+        Ok(Hash(GenericArray::<u8, U32>::from(hash)))
     }
 
     pub fn write_hex_fmt<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {
@@ -74,7 +76,21 @@ impl AsRef<[u8]> for Hash {
 
 impl From<[u8; 32]> for Hash {
     fn from(hash: [u8; 32]) -> Self {
-        Self(hash)
+        Self::from_array(hash)
+    }
+}
+
+impl FromStr for Hash {
+    type Err = HashParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match Hash::from_hex(s) {
+            Ok(v) => Ok(v),
+            Err(_) => {
+                let v = base64::decode(s).map_err(|_| HashParseError)?;
+                Ok(Hash::try_from_vec(v)?)
+            },
+        }
     }
 }
 
@@ -87,7 +103,7 @@ impl TryFrom<&[u8]> for Hash {
         }
         let mut hash = [0u8; 32];
         hash.copy_from_slice(value);
-        Ok(Hash(hash))
+        Ok(Hash::from_array(hash))
     }
 }
 

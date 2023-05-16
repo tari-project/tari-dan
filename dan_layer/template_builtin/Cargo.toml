@@ -6,3 +6,4 @@ license = "BSD-3-Clause"
 
 [dependencies]
 tari_engine_types = { path = "../engine_types" }
+lazy_static = "1.4.0"

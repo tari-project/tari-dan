@@ -50,8 +50,10 @@ use tari_wallet_daemon_client::{
         AccountsGetBalancesRequest,
         AuthLoginAcceptRequest,
         AuthLoginRequest,
+        AuthLoginResponse,
         ClaimBurnRequest,
         ClaimBurnResponse,
+        ConfidentialTransferRequest,
         ProofsGenerateRequest,
         RevealFundsRequest,
         TransactionSubmitRequest,
@@ -91,7 +93,13 @@ pub async fn claim_burn(
         fee: Some(Amount(1)),
     };
 
-    let claim_burn_resp = client.claim_burn(claim_burn_request).await.unwrap();
+    let claim_burn_resp = match client.claim_burn(claim_burn_request).await {
+        Ok(resp) => resp,
+        Err(err) => {
+            println!("Failed to claim burn: {}", err);
+            panic!("Failed to claim burn: {}", err);
+        },
+    };
 
     let wait_req = TransactionWaitResultRequest {
         hash: claim_burn_resp.hash,
@@ -181,7 +189,7 @@ pub async fn transfer_confidential(
         .expect("Failed to get component address from destination account");
     let destination_public_key = destination_account_resp.public_key;
 
-    let resource_address = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
+    let resource_address = *CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
 
     let create_transfer_proof_req = ProofsGenerateRequest {
         account: Some(source_account_name),
@@ -258,7 +266,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
     let key_resp = client.create_key().await.unwrap();
     let key_id = key_resp.id;
     world
-        .account_public_keys
+        .account_keys
         .insert(account_name.clone(), (key.secret_key.clone(), key.public_key.clone()));
 
     let request = AccountsCreateRequest {
@@ -296,8 +304,28 @@ pub async fn get_balance(world: &mut TariWorld, account_name: String, wallet_dae
         .get_account_balances(get_balance_req)
         .await
         .expect("Failed to get balance from account");
-    let balances = resp.balances;
-    balances.iter().map(|e| e.balance.value()).sum()
+    eprintln!("resp = {}", serde_json::to_string_pretty(&resp).unwrap());
+    resp.balances.iter().map(|e| e.balance.value()).sum()
+}
+
+pub async fn get_confidential_balance(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+) -> Amount {
+    let account_name = ComponentAddressOrName::Name(account_name);
+    let get_balance_req = AccountsGetBalancesRequest {
+        account: Some(account_name),
+        refresh: true,
+    };
+    let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
+
+    let resp = client
+        .get_account_balances(get_balance_req)
+        .await
+        .expect("Failed to get balance from account");
+    eprintln!("resp = {}", serde_json::to_string_pretty(&resp).unwrap());
+    resp.balances.iter().map(|e| e.confidential_balance).sum()
 }
 
 pub async fn submit_manifest_with_signing_keys(
@@ -604,8 +632,10 @@ pub async fn transfer(
     wallet_daemon_name: String,
     outputs_name: String,
 ) {
+    println!("🔒️️HERE1");
     let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
 
+    println!("🔒️️HERE2");
     let account = Some(ComponentAddressOrName::Name(account_name));
     let fee = Some(Amount(1));
 
@@ -618,6 +648,33 @@ pub async fn transfer(
     };
 
     let resp = client.accounts_transfer(request).await.unwrap();
+    println!("🔒️️HERE3");
+    add_substate_addresses_from_wallet_daemon(world, outputs_name, resp.result.result.accept().unwrap());
+    println!("🔒️️HERE4");
+}
+
+pub async fn confidential_transfer(
+    world: &mut TariWorld,
+    account_name: String,
+    destination_public_key: RistrettoPublicKey,
+    amount: Amount,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
+
+    let account = Some(ComponentAddressOrName::Name(account_name));
+    let fee = Some(Amount(1));
+
+    let request = ConfidentialTransferRequest {
+        account,
+        amount,
+        destination_public_key,
+        fee,
+        resource_address: *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+    };
+
+    let resp = client.accounts_confidential_transfer(request).await.unwrap();
     add_substate_addresses_from_wallet_daemon(world, outputs_name, resp.result.result.accept().unwrap());
 }
 
@@ -629,19 +686,15 @@ pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_na
 pub(crate) async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
     // authentication
-    let auth_response = client
+    let AuthLoginResponse { auth_token } = client
         .auth_request(AuthLoginRequest {
             permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+            duration: None,
         })
         .await
         .unwrap();
-    let auth_reponse = client
-        .auth_accept(AuthLoginAcceptRequest {
-            auth_token: auth_response.auth_token,
-        })
-        .await
-        .unwrap();
-    client.token = Some(auth_reponse.permissions_token);
+    let auth_response = client.auth_accept(AuthLoginAcceptRequest { auth_token }).await.unwrap();
+    client.set_auth_token(auth_response.permissions_token);
     client
 }
 
