@@ -49,8 +49,6 @@ pub struct RequestArgs {
 #[derive(Debug, Args, Clone)]
 pub struct GrantArgs {
     auth_token: String,
-    #[clap(long, short = 'e', value_parser = humantime::parse_duration)]
-    token_expiry: Option<Duration>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -80,7 +78,6 @@ impl AuthSubcommand {
                 let resp = client
                     .auth_accept(AuthLoginAcceptRequest {
                         auth_token: args.auth_token,
-                        token_expiry: args.token_expiry,
                     })
                     .await?;
                 println!("Access granted. Your JRPC token : {}", resp.permissions_token);

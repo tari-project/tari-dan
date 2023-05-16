@@ -7576,7 +7576,6 @@ dependencies = [
  "base64 0.20.0",
  "clap 3.2.23",
  "dirs",
- "humantime",
  "log",
  "multiaddr 0.14.0",
  "reqwest",
