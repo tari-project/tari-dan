@@ -503,37 +503,23 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         // Resolve the transfers to the fee pool resource and vault refunds
         let finalized_fee = self.finalize_fees(&mut substates_to_persist)?;
 
-        let transaction_receipt = substates_to_persist
-            .entry(SubstateAddress::TransactionReceipt(self.transaction_hash().into()))
-            .and_modify(|x| {
-                x.into_transaction_receipt().and_then(|x| {
-                    Some(TransactionReceipt {
-                        transaction_hash: x.transaction_hash,
-                        events: x.events.clone(),
-                        logs: x.logs.clone(),
-                        fee_receipt: Some(finalized_fee.clone()),
-                    })
-                });
-            })
-            .or_insert_with(|| panic!("Failed to get transaction receipt"));
-        // events and logs
-        let events = transaction_receipt
-            .into_transaction_receipt()
-            .expect("Failed to get transaction receipt")
-            .events
-            .clone();
-        let logs = transaction_receipt
-            .into_transaction_receipt()
-            .expect("Failed to get transaction receipt")
-            .logs
-            .clone();
+        let transaction_receipt_mut = substates_to_persist
+            .get_mut(&SubstateAddress::TransactionReceipt(self.transaction_hash().into()))
+            .and_then(|s| s.as_transaction_receipt_mut())
+            .expect(
+                "InvariantViolation: expected transaction receipt to be added to substates to persist but it wasnt",
+            );
+        transaction_receipt_mut.fee_receipt = Some(finalized_fee.clone());
+
+        let events = transaction_receipt_mut.events.clone();
+        let logs = transaction_receipt_mut.logs.clone();
 
         // Finalise will always reset the state
         let state = self.take_working_state();
 
         let result = state
             .validate_finalized()
-            .and_then(|_| self.generate_substate_diff(state, substates_to_persist.clone()));
+            .and_then(|_| self.generate_substate_diff(state, substates_to_persist));
 
         let result = match result {
             Ok(substate_diff) => TransactionResult::Accept(substate_diff),
@@ -689,22 +675,20 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                 up_states.insert(addr, substate.into());
             }
 
-            if state.transaction_receipt.is_none() {
-                let events = state.events.clone();
-                let logs = state.logs.clone();
+            let events = state.events.clone();
+            let logs = state.logs.clone();
 
-                let transaction_receipt = TransactionReceipt {
-                    transaction_hash: self.transaction_hash(),
-                    events,
-                    logs,
-                    fee_receipt: None,
-                };
+            let transaction_receipt = TransactionReceipt {
+                transaction_hash: self.transaction_hash(),
+                events,
+                logs,
+                fee_receipt: None,
+            };
 
-                up_states.insert(
-                    SubstateAddress::TransactionReceipt(transaction_receipt.transaction_hash.into()),
-                    SubstateValue::TransactionReceipt(transaction_receipt),
-                );
-            }
+            up_states.insert(
+                SubstateAddress::TransactionReceipt(transaction_receipt.transaction_hash.into()),
+                SubstateValue::TransactionReceipt(transaction_receipt),
+            );
 
             up_states
         })

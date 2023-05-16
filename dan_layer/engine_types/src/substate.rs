@@ -422,7 +422,21 @@ impl SubstateValue {
         }
     }
 
-    pub fn into_transaction_receipt(&self) -> Option<&TransactionReceipt> {
+    pub fn into_transaction_receipt(self) -> Option<TransactionReceipt> {
+        match self {
+            SubstateValue::TransactionReceipt(tx_receipt) => Some(tx_receipt),
+            _ => None,
+        }
+    }
+
+    pub fn as_transaction_receipt(&self) -> Option<&TransactionReceipt> {
+        match self {
+            SubstateValue::TransactionReceipt(tx_receipt) => Some(tx_receipt),
+            _ => None,
+        }
+    }
+
+    pub fn as_transaction_receipt_mut(&mut self) -> Option<&mut TransactionReceipt> {
         match self {
             SubstateValue::TransactionReceipt(tx_receipt) => Some(tx_receipt),
             _ => None,
