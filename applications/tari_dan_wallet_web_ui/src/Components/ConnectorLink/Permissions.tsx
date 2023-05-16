@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import FormControl from '@mui/material/FormControl';
 import FormGroup from '@mui/material/FormGroup';
 import FormControlLabel from '@mui/material/FormControlLabel';
@@ -29,54 +29,28 @@ import Switch from '@mui/material/Switch';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import './Permissions.css';
+import { TariPermission } from '../../utils/tari_permissions';
 
-export default function Permissions() {
-  const [permissions, setPermissions] = useState([
-    {
-      id: 1,
-      name: 'Choose an identity (account public key) to log in with',
-      checked: true,
-    },
-    {
-      id: 2,
-      name: 'Choose an NFT as a profile picture',
-      checked: true,
-    },
-    {
-      id: 3,
-      name: 'Read all NFTs of a specific contract (in your wallet)',
-      checked: true,
-    },
-    {
-      id: 4,
-      name: 'Generate a proof of ownership of NFT',
-      checked: true,
-    },
-    {
-      id: 5,
-      name: 'Send funds',
-      checked: true,
-    },
-    {
-      id: 6,
-      name: 'Invoke generic method',
-      checked: true,
-    },
-  ]);
+export default function Permissions({ requiredPermissions, optionalPermissions, setOptionalPermissions }: { requiredPermissions: TariPermission[], optionalPermissions: TariPermission[], setOptionalPermissions: any }) {
+  const [permissions, setPermissions] = useState(optionalPermissions.map((permission, index) => {
+    return ({ id: index, name: permission.toString(), checked: true });
+  }));
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (index: number) => {
     setPermissions(
       permissions.map((item) => {
-        if (item.name === event.target.name) {
+        if (item.id === index) {
           return {
             ...item,
-            checked: event.target.checked,
+            checked: !item.checked,
           };
         }
         return item;
       })
     );
   };
+
+  useEffect(() => setOptionalPermissions(permissions.map((item) => item.checked)), [permissions]);
 
   return (
     <>
@@ -90,6 +64,27 @@ export default function Permissions() {
       >
         <Divider />
         <FormGroup>
+          {requiredPermissions.map((permissions) => {
+            return (
+              <>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={true}
+                      disabled={true}
+                    />
+                  }
+                  label={permissions.toString()}
+                  labelPlacement="start"
+                  key={permissions.toString()}
+                  className="permissions-switch"
+                />
+                <Divider />
+              </>
+            );
+          })}
+        </FormGroup>
+        <FormGroup>
           {permissions.map(({ checked, name, id }) => {
             return (
               <>
@@ -97,7 +92,7 @@ export default function Permissions() {
                   control={
                     <Switch
                       checked={checked}
-                      onChange={handleChange}
+                      onChange={() => handleChange(id)}
                       name={name}
                       value={name}
                     />

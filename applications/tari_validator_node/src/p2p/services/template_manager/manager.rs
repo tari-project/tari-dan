@@ -27,6 +27,7 @@ use std::{
 };
 
 use chrono::Utc;
+use lazy_static::lazy_static;
 use log::*;
 use tari_core::transactions::transaction_components::TemplateType;
 use tari_dan_app_utilities::template_manager::{
@@ -50,10 +51,11 @@ use tari_template_builtin::get_template_builtin;
 use tari_template_lib::models::TemplateAddress;
 
 use crate::p2p::services::template_manager::TemplateConfig;
-
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
-pub const ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
+lazy_static! {
+    pub static ref ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
+}
 
 #[derive(Debug, Clone)]
 pub struct TemplateManager {
@@ -84,9 +86,9 @@ impl TemplateManager {
         let mut builtin_templates = HashMap::new();
 
         // get the builtin WASM code of the account template
-        let compiled_code = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
-        let template = Self::load_builtin_template("account", ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
-        builtin_templates.insert(ACCOUNT_TEMPLATE_ADDRESS, template);
+        let compiled_code = get_template_builtin(*ACCOUNT_TEMPLATE_ADDRESS);
+        let template = Self::load_builtin_template("account", *ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        builtin_templates.insert(*ACCOUNT_TEMPLATE_ADDRESS, template);
 
         builtin_templates
     }

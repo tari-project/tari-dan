@@ -23,4 +23,5 @@ pub mod substate;
 pub mod vault;
 
 mod template;
+
 pub use template::{calculate_template_binary_hash, TemplateAddress};
