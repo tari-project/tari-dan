@@ -107,6 +107,22 @@ pub enum ComponentAddressOrName {
     Name(String),
 }
 
+impl ComponentAddressOrName {
+    pub fn name(&self) -> Option<&str> {
+        match self {
+            Self::ComponentAddress(_) => None,
+            Self::Name(name) => Some(name),
+        }
+    }
+
+    pub fn component_address(&self) -> Option<&ComponentAddress> {
+        match self {
+            Self::ComponentAddress(address) => Some(address),
+            Self::Name(_) => None,
+        }
+    }
+}
+
 impl Display for ComponentAddressOrName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

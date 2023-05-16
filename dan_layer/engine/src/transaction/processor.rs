@@ -23,13 +23,15 @@
 use std::sync::Arc;
 
 use log::*;
-use tari_crypto::ristretto::RistrettoSecretKey;
+use tari_bor::encode;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    indexed_value::IndexedValue,
     instruction::Instruction,
     instruction_result::InstructionResult,
 };
+use tari_template_abi::Type;
 use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
@@ -37,7 +39,6 @@ use tari_template_lib::{
     models::{Amount, ComponentAddress},
 };
 use tari_transaction::{id_provider::IdProvider, Transaction};
-use tari_utilities::ByteArray;
 
 use crate::{
     packager::LoadedTemplate,
@@ -265,11 +266,19 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 runtime.interface().claim_burn(*claim)?;
                 Ok(InstructionResult::empty())
             },
-            Instruction::CreateFreeTestCoins { amount, private_key } => {
-                runtime
-                    .interface()
-                    .create_free_test_coins(amount, RistrettoSecretKey::from_bytes(&private_key)?)?;
-                Ok(InstructionResult::empty())
+            Instruction::CreateFreeTestCoins {
+                revealed_amount: amount,
+                output,
+            } => {
+                let bucket_id = runtime.interface().create_free_test_coins(amount, output)?;
+                let encoded = encode(&bucket_id)?;
+                Ok(InstructionResult {
+                    value: IndexedValue::from_raw(&encoded)?,
+                    raw: encoded,
+                    return_type: Type::Other {
+                        name: "BucketId".to_string(),
+                    },
+                })
             },
         }
     }

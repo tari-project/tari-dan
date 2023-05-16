@@ -37,7 +37,7 @@ use tokio::task;
 
 use crate::{
     utils::{
-        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+        helpers::{check_join_handle, get_os_assigned_ports, wait_listener_on_local_port},
         logging::get_base_dir_for_scenario,
     },
     TariWorld,
@@ -78,20 +78,12 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
     config.dan_wallet_daemon.signaling_server_addr = Some(signaling_server_addr);
     config.dan_wallet_daemon.indexer_node_json_rpc_url = indexer_url;
 
-    let handle = task::spawn(async move {
-        let result = run_tari_dan_wallet_daemon(config, shutdown_signal).await;
-        if let Err(e) = result {
-            panic!("{:?}", e);
-        }
-    });
+    let handle = task::spawn(run_tari_dan_wallet_daemon(config, shutdown_signal));
 
     // Wait for node to start up
     wait_listener_on_local_port(json_rpc_port).await;
-
-    if handle.is_finished() {
-        handle.await.unwrap();
-        return;
-    }
+    // Check if the task errored/panicked
+    let _handle = check_join_handle(&wallet_daemon_name, handle).await;
 
     let wallet_daemon_process = DanWalletDaemonProcess {
         name: wallet_daemon_name.clone(),
