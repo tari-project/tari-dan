@@ -97,7 +97,6 @@ pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = L
     consensus: ConsensusContext,
     sender_public_key: RistrettoPublicKey,
     modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
-    fee_loan: Amount,
 }
 
 pub struct StateFinalize {
@@ -112,7 +111,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         consensus: ConsensusContext,
         sender_public_key: RistrettoPublicKey,
         modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
-        fee_loan: Amount,
     ) -> Result<Self, RuntimeError> {
         let runtime = Self {
             tracker,
@@ -120,7 +118,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             consensus,
             sender_public_key,
             modules,
-            fee_loan,
         };
         runtime.invoke_modules_on_initialize()?;
         Ok(runtime)
@@ -821,7 +818,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     }
 
     fn fee_checkpoint(&self) -> Result<(), RuntimeError> {
-        if self.tracker.total_payments() < self.tracker.total_charges() - self.fee_loan {
+        if self.tracker.total_payments() < self.tracker.total_charges() {
             return Err(RuntimeError::InsufficientFeesPaid {
                 required_fee: self.tracker.total_charges(),
                 fees_paid: self.tracker.total_payments(),
@@ -841,7 +838,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         // TODO: this should not be checked here because it will silently fail
         // and the transaction will think it succeeds. Rather move this check to the transaction
         // processor and reset to fee checkpoint there.
-        if !self.tracker.are_fees_paid_in_full() && self.tracker.total_charges() > self.fee_loan {
+        if !self.tracker.are_fees_paid_in_full() {
             self.reset_to_fee_checkpoint()?;
         }
 
