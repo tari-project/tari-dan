@@ -23,16 +23,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use tari_comms::{
-    connectivity::ConnectivityRequester,
-    peer_manager::PeerFeatures,
-    types::CommsPublicKey,
-    NodeIdentity,
-};
-use tari_dan_core::message::NetworkAnnounce;
-use tokio::{sync::mpsc, task::JoinHandle};
-
-use crate::p2p::services::{comms_peer_provider::CommsPeerProvider, messaging::OutboundMessaging};
+use tari_comms::{connectivity::ConnectivityRequester, NodeIdentity};
+use tokio::task::JoinHandle;
 
 mod service;
 use service::Networking;
@@ -40,32 +32,14 @@ use service::Networking;
 mod error;
 pub use error::NetworkingError;
 
-mod handle;
-
-pub use handle::NetworkingHandle;
-
-pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
+use crate::p2p::services::comms_peer_provider::CommsPeerProvider;
 
 pub fn spawn(
-    rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
     node_identity: Arc<NodeIdentity>,
-    outbound: OutboundMessaging,
     peer_provider: CommsPeerProvider,
     connectivity: ConnectivityRequester,
-) -> (NetworkingHandle, JoinHandle<anyhow::Result<()>>) {
-    let (tx, rx) = mpsc::channel(1);
-    let handle = tokio::spawn(
-        Networking::new(
-            rx_network_announce,
-            rx,
-            node_identity,
-            outbound,
-            peer_provider,
-            connectivity,
-        )
-        .run(),
-    );
-    (NetworkingHandle::new(tx), handle)
+) -> JoinHandle<anyhow::Result<()>> {
+    tokio::spawn(Networking::new(node_identity, peer_provider, connectivity).run())
 }
 
 #[async_trait]

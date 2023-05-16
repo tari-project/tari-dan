@@ -23,6 +23,7 @@ tari_bor = { path = "../../dan_layer/tari_bor" }
 anyhow = "1.0.53"
 async-trait = "0.1"
 chrono = "0.4.22"
+log = "0.4"
 prost = "0.9"
 serde = "1.0"
 tonic = "0.6.2"
