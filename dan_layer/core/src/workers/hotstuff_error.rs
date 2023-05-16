@@ -22,6 +22,7 @@
 
 use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId};
 use tari_engine_types::{commit_result::RejectReason, substate::SubstateAddress};
+use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::SubstateChange;
 use thiserror::Error;
 use tokio::sync::mpsc;
@@ -93,6 +94,10 @@ pub enum HotStuffError {
     NodeIsNotInvolvedInPayload { payload_id: PayloadId },
     #[error("MathOverflow")]
     MathOverflow,
+    #[error("Merkle proof is missing")]
+    MerkleProofMissing,
+    #[error("Merkle proof error: {0}")]
+    BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {

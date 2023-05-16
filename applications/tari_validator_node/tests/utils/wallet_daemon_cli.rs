@@ -188,7 +188,7 @@ pub async fn transfer_confidential(
         .expect("Failed to get component address from destination account");
     let destination_public_key = destination_account_resp.public_key;
 
-    let resource_address = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
+    let resource_address = *CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
 
     let create_transfer_proof_req = ProofsGenerateRequest {
         account: Some(source_account_name),
@@ -663,6 +663,7 @@ pub(crate) async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daem
     let AuthLoginResponse { auth_token } = client
         .auth_request(AuthLoginRequest {
             permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+            duration: None,
         })
         .await
         .unwrap();

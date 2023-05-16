@@ -20,31 +20,54 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+/// A tag applied to various engine types. We use an unassigned CBOR tag range (128 to 255 inclusive). https://www.iana.org/assignments/cbor-tags/cbor-tags.xhtml
 #[derive(Clone, Copy)]
 #[repr(u8)]
 pub enum BinaryTag {
-    ComponentAddress = 0,
-    Metadata = 1,
-    NonFungibleAddress = 2,
-    ResourceAddress = 3,
-    VaultId = 4,
-    BucketId = 5,
+    ComponentAddress = 128,
+    Metadata = 129,
+    NonFungibleAddress = 130,
+    ResourceAddress = 131,
+    VaultId = 132,
+    BucketId = 133,
 }
 
 impl BinaryTag {
     pub fn from_u64(value: u64) -> Option<Self> {
         match value {
-            0 => Some(Self::ComponentAddress),
-            1 => Some(Self::Metadata),
-            2 => Some(Self::NonFungibleAddress),
-            3 => Some(Self::ResourceAddress),
-            4 => Some(Self::VaultId),
-            5 => Some(Self::BucketId),
+            128 => Some(Self::ComponentAddress),
+            129 => Some(Self::Metadata),
+            130 => Some(Self::NonFungibleAddress),
+            131 => Some(Self::ResourceAddress),
+            132 => Some(Self::VaultId),
+            133 => Some(Self::BucketId),
+
             _ => None,
         }
     }
 
     pub const fn as_u64(&self) -> u64 {
         *self as u64
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_and_as_u64_parity() {
+        let cases = &[
+            BinaryTag::ComponentAddress,
+            BinaryTag::Metadata,
+            BinaryTag::NonFungibleAddress,
+            BinaryTag::ResourceAddress,
+            BinaryTag::VaultId,
+            BinaryTag::BucketId,
+        ];
+
+        for case in cases {
+            assert_eq!(BinaryTag::from_u64(case.as_u64()).unwrap().as_u64(), case.as_u64());
+        }
     }
 }

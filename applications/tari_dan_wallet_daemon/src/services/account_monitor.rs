@@ -319,6 +319,6 @@ pub enum AccountMonitorError {
 fn is_account(s: &Substate) -> bool {
     s.substate_value()
         .component()
-        .filter(|c| c.template_address == ACCOUNT_TEMPLATE_ADDRESS)
+        .filter(|c| c.template_address == *ACCOUNT_TEMPLATE_ADDRESS)
         .is_some()
 }

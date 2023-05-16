@@ -27,9 +27,10 @@ pub async fn handle_login_request(
 ) -> Result<AuthLoginResponse, anyhow::Error> {
     let jwt = context.wallet_sdk().jwt_api();
 
-    let auth_token = jwt.generate_auth_token(auth_request.permissions)?;
+    let (auth_token, valid_till) = jwt.generate_auth_token(auth_request.permissions, auth_request.duration)?;
     context.notifier().notify(AuthLoginRequestEvent {
         auth_token: auth_token.clone(),
+        valid_till,
     });
     Ok(AuthLoginResponse { auth_token })
 }
