@@ -967,7 +967,7 @@ async fn given_all_validator_connects_to_other_vns(world: &mut TariWorld) {
             eprintln!("Skipping validator node {} that is not running", vn.name);
             continue;
         }
-        let mut cli = vn.create_client().await;
+        let mut cli = vn.create_client();
         let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
         for (pk, addr) in details.iter().cloned() {
             if pk == this_pk {
