@@ -41,15 +41,12 @@ pub fn validate_confidential_proof(
         }
     })?;
 
-    let output_public_nonce = proof
-        .output_statement
-        .sender_public_nonce
-        .map(|nonce| {
-            PublicKey::from_bytes(nonce.as_bytes()).map_err(|_| ResourceError::InvalidConfidentialProof {
+    let output_public_nonce =
+        PublicKey::from_bytes(proof.output_statement.sender_public_nonce.as_bytes()).map_err(|_| {
+            ResourceError::InvalidConfidentialProof {
                 details: "Invalid sender public nonce".to_string(),
-            })
-        })
-        .transpose()?;
+            }
+        })?;
 
     let change = proof
         .change_statement
@@ -59,19 +56,17 @@ pub fn validate_confidential_proof(
                 Commitment::from_bytes(&stmt.commitment).map_err(|_| ResourceError::InvalidConfidentialProof {
                     details: "Invalid commitment".to_string(),
                 })?;
-            let stealth_public_nonce = stmt
-                .sender_public_nonce
-                .map(|nonce| {
-                    PublicKey::from_bytes(nonce.as_bytes()).map_err(|_| ResourceError::InvalidConfidentialProof {
-                        details: "Invalid sender public nonce".to_string(),
-                    })
-                })
-                .transpose()?;
+
+            let stealth_public_nonce = PublicKey::from_bytes(stmt.sender_public_nonce.as_bytes()).map_err(|_| {
+                ResourceError::InvalidConfidentialProof {
+                    details: "Invalid sender public nonce".to_string(),
+                }
+            })?;
 
             Ok(ConfidentialOutput {
                 commitment,
                 stealth_public_nonce,
-                encrypted_value: Some(stmt.encrypted_value),
+                encrypted_value: stmt.encrypted_value,
                 minimum_value_promise: stmt.minimum_value_promise,
             })
         })
@@ -83,7 +78,7 @@ pub fn validate_confidential_proof(
         output: ConfidentialOutput {
             commitment: output_commitment,
             stealth_public_nonce: output_public_nonce,
-            encrypted_value: Some(proof.output_statement.encrypted_value),
+            encrypted_value: proof.output_statement.encrypted_value,
             minimum_value_promise: proof.output_statement.minimum_value_promise,
         },
         change_output: change,
