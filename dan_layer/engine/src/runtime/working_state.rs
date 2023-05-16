@@ -6,7 +6,6 @@ use std::collections::HashMap;
 use tari_dan_common_types::optional::Optional;
 use tari_engine_types::{
     bucket::Bucket,
-    commit_result::TransactionReceipt,
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     events::Event,
@@ -44,7 +43,6 @@ pub(super) struct WorkingState {
     pub new_non_fungibles: HashMap<NonFungibleAddress, NonFungibleContainer>,
     pub new_non_fungible_indexes: HashMap<NonFungibleIndexAddress, NonFungibleIndex>,
     pub claimed_confidential_outputs: Vec<UnclaimedConfidentialOutputAddress>,
-    pub transaction_receipt: Option<TransactionReceipt>,
 
     pub runtime_state: Option<RuntimeState>,
     pub last_instruction_output: Option<Vec<u8>>,
@@ -63,7 +61,6 @@ impl WorkingState {
             new_vaults: HashMap::new(),
             new_non_fungibles: HashMap::new(),
             claimed_confidential_outputs: Vec::new(),
-            transaction_receipt: None,
             new_non_fungible_indexes: HashMap::new(),
             runtime_state: None,
             last_instruction_output: None,
