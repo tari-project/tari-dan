@@ -262,13 +262,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "faucet"
-version = "0.1.0"
-dependencies = [
- "tari_template_lib",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -792,6 +785,14 @@ dependencies = [
  "subtle",
  "thiserror",
  "zeroize",
+]
+
+[[package]]
+name = "tariswap"
+version = "0.1.0"
+dependencies = [
+ "tari_template_abi",
+ "tari_template_lib",
 ]
 
 [[package]]
