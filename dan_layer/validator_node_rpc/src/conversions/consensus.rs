@@ -23,7 +23,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{
@@ -49,6 +49,8 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
             decision: i32::from(msg.decision().as_u8()),
             all_shard_pledges: msg.all_shard_pledges().iter().map(|n| n.clone().into()).collect(),
             validator_metadata: Some(msg.validator_metadata().clone().into()),
+            merkle_proof: msg.encode_merkle_proof(),
+            node_hash: msg.node_hash().to_vec(),
         }
     }
 }
@@ -69,6 +71,8 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
                 .map(|n| n.try_into())
                 .collect::<Result<_, _>>()?,
             metadata.try_into()?,
+            VoteMessage::decode_merkle_proof(&value.merkle_proof)?,
+            FixedHash::try_from(value.node_hash)?,
         ))
     }
 }
@@ -149,6 +153,7 @@ impl From<HotStuffTreeNode<CommsPublicKey, TariDanPayload>> for proto::consensus
 
 impl From<QuorumCertificate<PublicKey>> for proto::consensus::QuorumCertificate {
     fn from(source: QuorumCertificate<PublicKey>) -> Self {
+        let merged_merkle_proof = source.encode_merged_merkle_proof();
         Self {
             payload_id: source.payload_id().as_bytes().to_vec(),
             payload_height: source.payload_height().as_u64(),
@@ -163,6 +168,8 @@ impl From<QuorumCertificate<PublicKey>> for proto::consensus::QuorumCertificate 
             proposed_by: source.proposed_by().as_bytes().to_vec(),
             all_shard_pledges: source.all_shard_pledges().iter().map(|p| p.clone().into()).collect(),
             validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),
+            merged_merkle_proof,
+            leaves_hashes: source.leave_hashes().iter().map(|hash| hash.to_vec()).collect(),
         }
     }
 }
@@ -189,6 +196,12 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate<PublicKe
                 .validators_metadata
                 .iter()
                 .map(|v| v.clone().try_into())
+                .collect::<Result<_, _>>()?,
+            QuorumCertificate::<PublicKey>::decode_merged_merkle_proof(&value.merged_merkle_proof)?,
+            value
+                .leaves_hashes
+                .into_iter()
+                .map(FixedHash::try_from)
                 .collect::<Result<_, _>>()?,
         ))
     }
@@ -308,13 +321,10 @@ impl From<SubstateState> for proto::consensus::SubstateState {
 
 impl From<ValidatorMetadata> for proto::consensus::ValidatorMetadata {
     fn from(msg: ValidatorMetadata) -> Self {
-        let merkle_proof = msg.encode_merkle_proof();
         Self {
             public_key: msg.public_key.to_vec(),
             vn_shard_key: msg.vn_shard_key.as_bytes().to_vec(),
             signature: Some(msg.signature.into()),
-            merkle_proof,
-            merkle_leaf_index: msg.merkle_leaf_index,
         }
     }
 }
@@ -331,8 +341,6 @@ impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
                 .map(TryFrom::try_from)
                 .transpose()?
                 .ok_or_else(|| anyhow!("ValidatorMetadata missing signature"))?,
-            merkle_proof: ValidatorMetadata::decode_merkle_proof(&value.merkle_proof)?,
-            merkle_leaf_index: value.merkle_leaf_index,
         })
     }
 }

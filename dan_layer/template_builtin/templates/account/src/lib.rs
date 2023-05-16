@@ -160,12 +160,12 @@ mod account_template {
 
         /// Pay fees from previously revealed confidential resource.
         pub fn pay_fee(&mut self, amount: Amount) {
-            self.get_vault_mut(CONFIDENTIAL_TARI_RESOURCE_ADDRESS).pay_fee(amount);
+            self.get_vault_mut(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS).pay_fee(amount);
         }
 
         /// Reveal confidential tokens and return the revealed bucket to pay fees.
         pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
-            self.get_vault_mut(CONFIDENTIAL_TARI_RESOURCE_ADDRESS)
+            self.get_vault_mut(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS)
                 .pay_fee_confidential(proof);
         }
     }

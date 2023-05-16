@@ -68,7 +68,7 @@ impl Validator<Transaction> for FeeTransactionValidator {
                 let Instruction::CallFunction { template_address, function, args } = first else {
                     return Err(MempoolError::NoFeeInstructions);
                 };
-                if *template_address == ACCOUNT_TEMPLATE_ADDRESS && function == "create" && args.len() == 1 {
+                if *template_address == *ACCOUNT_TEMPLATE_ADDRESS && function == "create" && args.len() == 1 {
                     return Ok(());
                 }
             }

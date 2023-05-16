@@ -47,8 +47,11 @@ mod working_state;
 
 use std::{collections::HashMap, fmt::Debug, sync::Arc};
 
-use tari_crypto::ristretto::RistrettoSecretKey;
-use tari_engine_types::{confidential::ConfidentialClaim, TemplateAddress};
+use tari_engine_types::{
+    component::ComponentHeader,
+    confidential::{ConfidentialClaim, ConfidentialOutput},
+    TemplateAddress,
+};
 use tari_template_lib::{
     args::{
         Arg,
@@ -68,7 +71,7 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{ComponentAddress, ComponentHeader, NonFungibleAddress, VaultRef},
+    models::{Amount, BucketId, ComponentAddress, NonFungibleAddress, VaultRef},
     Hash,
 };
 pub use tracker::{RuntimeState, StateTracker};
@@ -135,7 +138,11 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn claim_burn(&self, claim: ConfidentialClaim) -> Result<(), RuntimeError>;
 
-    fn create_free_test_coins(&self, amount: u64, private_key: RistrettoSecretKey) -> Result<(), RuntimeError>;
+    fn create_free_test_coins(
+        &self,
+        revealed_amount: Amount,
+        confidential_output: Option<ConfidentialOutput>,
+    ) -> Result<BucketId, RuntimeError>;
     fn fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn reset_to_fee_checkpoint(&self) -> Result<(), RuntimeError>;
     fn finalize(&self) -> Result<StateFinalize, RuntimeError>;

@@ -400,7 +400,7 @@ pub async fn handle_confidential_transfer(
         .accounts_confidential_transfer(ConfidentialTransferRequest {
             account: source_account,
             amount: Amount::from(amount),
-            resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
+            resource_address: resource_address.unwrap_or(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
             destination_public_key,
             fee: common.fee.map(|f| f.try_into()).transpose()?,
         })
@@ -823,7 +823,14 @@ impl CliArg {
             CliArg::I8(v) => arg!(v),
             CliArg::Bool(v) => arg!(v),
             CliArg::Blob(v) => Arg::Literal(v),
-            CliArg::SubstateAddress(v) => arg!(v.to_canonical_hash()),
+            CliArg::SubstateAddress(v) => match v {
+                SubstateAddress::Component(v) => arg!(v),
+                SubstateAddress::Resource(v) => arg!(v),
+                SubstateAddress::Vault(v) => arg!(v),
+                SubstateAddress::UnclaimedConfidentialOutput(v) => arg!(v),
+                SubstateAddress::NonFungible(v) => arg!(v),
+                SubstateAddress::NonFungibleIndex(v) => arg!(v),
+            },
             CliArg::NonFungibleId(v) => arg!(v),
         }
     }

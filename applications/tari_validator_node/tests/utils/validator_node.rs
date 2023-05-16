@@ -24,11 +24,13 @@ use std::{
     fs,
     path::{Path, PathBuf},
     str::FromStr,
-    time::Duration,
 };
 
 use reqwest::Url;
-use tari_common::configuration::{CommonConfig, StringList};
+use tari_common::{
+    configuration::{CommonConfig, StringList},
+    exit_codes::ExitError,
+};
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
@@ -38,7 +40,10 @@ use tari_validator_node_client::ValidatorNodeClient;
 use tokio::task;
 
 use crate::{
-    utils::{helpers::get_os_assigned_ports, logging::get_base_dir},
+    utils::{
+        helpers::{check_join_handle, get_os_assigned_port, get_os_assigned_ports, wait_listener_on_local_port},
+        logging::get_base_dir_for_scenario,
+    },
     TariWorld,
 };
 
@@ -50,14 +55,14 @@ pub struct ValidatorNodeProcess {
     pub json_rpc_port: u16,
     pub http_ui_port: u16,
     pub base_node_grpc_port: u16,
-    pub handle: task::JoinHandle<()>,
+    pub handle: task::JoinHandle<Result<(), ExitError>>,
     pub temp_dir_path: PathBuf,
     pub shutdown: Shutdown,
 }
 
 impl ValidatorNodeProcess {
-    pub async fn create_client(&self) -> ValidatorNodeClient {
-        get_vn_client(self.json_rpc_port).await
+    pub fn create_client(&self) -> ValidatorNodeClient {
+        get_vn_client(self.json_rpc_port)
     }
 
     pub async fn save_database(&self, database_name: String, to: &Path) {
@@ -78,7 +83,7 @@ pub async fn spawn_validator_node(
 ) {
     // each spawned VN will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
-    let (http_ui_port, _) = get_os_assigned_ports();
+    let http_ui_port = get_os_assigned_port();
     let base_node_grpc_port = world.base_nodes.get(&base_node_name).unwrap().grpc_port;
     let wallet_grpc_port = world.wallets.get(&wallet_name).unwrap().grpc_port;
     let name = validator_node_name.clone();
@@ -91,20 +96,11 @@ pub async fn spawn_validator_node(
 
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
-    let scenario_slug = world
-        .current_scenario_name
-        .as_ref()
-        .unwrap()
-        .chars()
-        .map(|x| match x {
-            'A'..='Z' | 'a'..='z' | '0'..='9' => x,
-            _ => '-',
-        })
-        .collect::<String>();
-    let temp_dir = get_base_dir()
-        .join("validator_nodes")
-        .join(scenario_slug)
-        .join(validator_node_name.clone());
+    let temp_dir = get_base_dir_for_scenario(
+        "validator_node",
+        world.current_scenario_name.as_ref().unwrap(),
+        &validator_node_name,
+    );
     let temp_dir_path = temp_dir.clone();
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
@@ -128,7 +124,7 @@ pub async fn spawn_validator_node(
         config.validator_node.p2p.transport.tcp.listener_address =
             Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", port)).unwrap();
         config.validator_node.p2p.public_addresses =
-            vec![config.validator_node.p2p.transport.tcp.listener_address.clone()];
+            vec![config.validator_node.p2p.transport.tcp.listener_address.clone()].into();
         config.validator_node.public_address = Some(config.validator_node.p2p.transport.tcp.listener_address.clone());
         config.validator_node.p2p.datastore_path = temp_dir.to_path_buf().join("peer_db/vn");
         config.validator_node.p2p.dht = DhtConfig {
@@ -147,21 +143,14 @@ pub async fn spawn_validator_node(
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
-        let result = run_validator_node(&config, shutdown_signal).await;
-        if let Err(e) = result {
-            panic!("{:?}", e);
-        }
+        run_validator_node(&config, shutdown_signal).await
     });
 
-    // We need to give it time for the VN to startup
-    // TODO: it would be better to scan the VN to detect when it has started
-    tokio::time::sleep(Duration::from_secs(5)).await;
+    // Wait for node to start up
+    wait_listener_on_local_port(json_rpc_port).await;
 
     // Check if the inner thread panicked
-    if handle.is_finished() {
-        handle.await.unwrap();
-        return;
-    }
+    let handle = check_join_handle(&name, handle).await;
 
     // get the public key of the VN
     let public_key = get_vn_identity(json_rpc_port).await;
@@ -185,14 +174,14 @@ pub async fn spawn_validator_node(
     }
 }
 
-pub async fn get_vn_client(port: u16) -> ValidatorNodeClient {
+pub fn get_vn_client(port: u16) -> ValidatorNodeClient {
     let endpoint: Url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
     ValidatorNodeClient::connect(endpoint).unwrap()
 }
 
 async fn get_vn_identity(jrpc_port: u16) -> String {
     // send the JSON RPC "get_identity" request to the VN
-    let mut client = get_vn_client(jrpc_port).await;
+    let mut client = get_vn_client(jrpc_port);
     let resp = client.get_identity().await.unwrap();
 
     assert!(!resp.public_key.is_empty());

@@ -20,9 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{serde_with, QuorumCertificate, ShardId};
+use tari_dan_common_types::{QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::{
     apis::jwt::JrpcPermissions,
     models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress},
@@ -31,6 +33,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
     instruction_result::InstructionResult,
+    serde_with,
     substate::SubstateAddress,
     TemplateAddress,
 };
@@ -50,17 +53,28 @@ use crate::{
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CallInstructionRequest {
     pub instruction: Instruction,
+    #[serde(deserialize_with = "string_or_struct")]
     pub fee_account: ComponentAddressOrName,
+    #[serde(deserialize_with = "opt_string_or_struct")]
     pub dump_outputs_into: Option<ComponentAddressOrName>,
     pub fee: u64,
+    #[serde(default)]
     pub inputs: Vec<VersionedSubstateAddress>,
+    #[serde(default)]
     pub override_inputs: Option<bool>,
+    #[serde(default)]
     pub new_outputs: Option<u8>,
+    #[serde(default)]
     pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
+    #[serde(default)]
     pub new_resources: Vec<(TemplateAddress, String)>,
+    #[serde(default)]
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
+    #[serde(default)]
     pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
+    #[serde(default)]
     pub is_dry_run: bool,
+    #[serde(default)]
     pub proof_ids: Vec<ConfidentialProofId>,
 }
 
@@ -107,6 +121,7 @@ pub struct TransactionGetResponse {
     pub transaction: Transaction,
     pub result: Option<FinalizeResult>,
     pub status: TransactionStatus,
+    pub transaction_failure: Option<RejectReason>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -244,6 +259,7 @@ pub struct AccountsGetBalancesResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BalanceEntry {
     pub vault_address: SubstateAddress,
+    #[serde(with = "serde_with::string")]
     pub resource_address: ResourceAddress,
     pub balance: Amount,
     pub resource_type: ResourceType,
@@ -441,7 +457,7 @@ pub struct WebRtcStart {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WebRtcStartRequest {
     pub signaling_server_token: String,
-    pub permissions_token: String,
+    pub permissions: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -450,6 +466,7 @@ pub struct WebRtcStartResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginRequest {
     pub permissions: JrpcPermissions,
+    pub duration: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

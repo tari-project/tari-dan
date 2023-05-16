@@ -72,11 +72,11 @@ use super::context::HandlerContext;
 use crate::{
     handlers::{get_account, get_account_or_default},
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
-    services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
+    services::{NewAccountInfo, TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
     DEFAULT_FEE,
 };
 
-const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::handlers::transaction";
 
 pub async fn handle_create(
     context: &HandlerContext,
@@ -104,7 +104,7 @@ pub async fn handle_create(
     info!(target: LOG_TARGET, "Creating account with owner token {}", owner_pk);
 
     let transaction = Transaction::builder()
-        .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
+        .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
         .with_new_outputs(1)
         .sign(&signing_key.k)
         .build();
@@ -112,34 +112,37 @@ pub async fn handle_create(
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+    context.notifier().notify(TransactionSubmittedEvent {
+        hash: tx_hash,
+        new_account: Some(NewAccountInfo {
+            name: req.account_name,
+            key_index,
+            is_default: req.is_default,
+        }),
+    });
 
-    let finalized = wait_for_result(&mut events, tx_hash).await?;
-    if let Some(reject) = finalized.finalize.result.reject() {
+    let event = wait_for_result(&mut events, tx_hash).await?;
+    if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!("Create account transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.transaction_failure {
+    if let Some(reason) = event.transaction_failure {
         return Err(anyhow!("Create account transaction failed: {}", reason));
     }
-    let diff: &tari_engine_types::substate::SubstateDiff = finalized.finalize.result.accept().unwrap();
-    let (addr, _) = diff
+
+    let address = event
+        .finalize
+        .result
+        .accept()
+        .unwrap()
         .up_iter()
-        .find(|(addr, _)| addr.is_component())
-        .ok_or_else(|| anyhow!("Create account transaction accepted but no component address was returned"))?;
-
-    let is_first_account = sdk.accounts_api().count()? == 0;
-
-    sdk.accounts_api().add_account(
-        req.account_name.as_deref(),
-        addr,
-        key_index,
-        req.is_default || is_first_account,
-    )?;
+        .find(|(a, v)| a.is_component() && v.version() == 0)
+        .map(|(a, _)| a.clone())
+        .ok_or_else(|| anyhow!("Finalize result did not UP any new version 0 component"))?;
 
     Ok(AccountsCreateResponse {
-        address: addr.clone(),
+        address,
         public_key: owner_pk,
-        result: finalized.finalize,
+        result: event.finalize,
     })
 }
 
@@ -150,7 +153,7 @@ pub async fn handle_set_default(
 ) -> Result<AccountSetDefaultResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account(req.account, &sdk.accounts_api())?;
+    let account = get_account(&req.account, &sdk.accounts_api())?;
     sdk.accounts_api().set_default_account(&account.address)?;
     Ok(AccountSetDefaultResponse {})
 }
@@ -223,7 +226,10 @@ pub async fn handle_invoke(
 
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+    context.notifier().notify(TransactionSubmittedEvent {
+        hash: tx_hash,
+        new_account: None,
+    });
 
     let mut finalized = wait_for_result(&mut events, tx_hash).await?;
     if let Some(reject) = finalized.finalize.result.reject() {
@@ -287,7 +293,7 @@ pub async fn handle_get(
 ) -> Result<AccountGetResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account(req.name_or_address, &sdk.accounts_api())?;
+    let account = get_account(&req.name_or_address, &sdk.accounts_api())?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
     let public_key = PublicKey::from_secret_key(&key.k);
@@ -359,7 +365,7 @@ pub async fn handle_reveal_funds(
         let output_statement = ConfidentialProofStatement {
             amount: input_amount - amount_to_reveal,
             mask: output_mask,
-            sender_public_nonce: Some(public_nonce),
+            sender_public_nonce: public_nonce,
             minimum_value_promise: 0,
             reveal_amount: amount_to_reveal,
         };
@@ -388,7 +394,7 @@ pub async fn handle_reveal_funds(
                 Instruction::CallMethod {
                     component_address: account_address,
                     method: "withdraw_confidential".to_string(),
-                    args: args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
+                    args: args![*CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
                 },
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"revealed".to_vec(),
@@ -408,7 +414,7 @@ pub async fn handle_reveal_funds(
             builder = builder
                 .fee_transaction_pay_from_component(account_address, fee)
                 .call_method(account_address, "withdraw_confidential", args![
-                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                    *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                     reveal_proof
                 ])
                 .put_last_instruction_output_on_workspace("revealed")
@@ -446,7 +452,10 @@ pub async fn handle_reveal_funds(
         let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
         let mut events = notifier.subscribe();
-        notifier.notify(TransactionSubmittedEvent { hash: tx_hash });
+        notifier.notify(TransactionSubmittedEvent {
+            hash: tx_hash,
+            new_account: None,
+        });
 
         let finalized = wait_for_result(&mut events, tx_hash).await?;
         if let Some(reason) = finalized.transaction_failure {
@@ -565,12 +574,12 @@ pub async fn handle_claim_burn(
     let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
     inputs.extend(child_addresses);
 
-    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
-    //       object is mutated
-    let outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
+    // // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when
+    // the //       object is mutated
+    // let outputs = inputs
+    //     .iter()
+    //     .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
+    //     .collect::<Vec<_>>();
 
     // add the commitment substate address as input to the claim burn transaction
     let commitment_substate_address = VersionedSubstateAddress {
@@ -611,7 +620,7 @@ pub async fn handle_claim_burn(
     let output_statement = ConfidentialProofStatement {
         amount: Amount::try_from(unmasked_output.value)? - fee,
         mask,
-        sender_public_nonce: Some(output_public_nonce),
+        sender_public_nonce: output_public_nonce,
         minimum_value_promise: 0,
         reveal_amount: fee,
     };
@@ -651,18 +660,21 @@ pub async fn handle_claim_burn(
             }
         ])
         .with_inputs(inputs)
-        .with_outputs(outputs)
+        // .with_outputs(outputs)
         // transaction should have one output, corresponding to the same shard
         // as the account substate address
         // TODO: on a second claim burn, we shouldn't have any new outputs being created.
-        .with_new_outputs(1)
+        // .with_new_outputs(1)
         .sign(&account_secret_key.k)
         .build();
 
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+    context.notifier().notify(TransactionSubmittedEvent {
+        hash: tx_hash,
+        new_account: None,
+    });
 
     let finalized = wait_for_result(&mut events, tx_hash).await?;
     if let Some(reject) = finalized.finalize.result.reject() {
@@ -682,6 +694,8 @@ pub async fn handle_claim_burn(
     })
 }
 
+/// Mints free test coins into an account. If an account name is provided which does not exist, that account is created
+#[allow(clippy::too_many_lines)]
 pub async fn handle_create_free_test_coins(
     context: &HandlerContext,
     token: Option<String>,
@@ -689,21 +703,108 @@ pub async fn handle_create_free_test_coins(
 ) -> Result<AccountsCreateFreeTestCoinsResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
 
-    let account_secret_key = sdk
-        .key_manager_api()
-        .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-
+    let accounts_api = sdk.accounts_api();
     let mut inputs = vec![];
 
-    // Add the account component
-    let account_substate = sdk.substate_api().get_substate(&account.address)?;
-    inputs.push(account_substate.address);
+    // Get the account is one is specified and exists.
+    let maybe_account = match req.account {
+        Some(ref addr_or_name) => get_account(addr_or_name, &accounts_api).optional()?,
+        None => {
+            let account = accounts_api
+                .get_default()
+                .optional()?
+                .ok_or_else(|| anyhow::anyhow!("No default account found. Please set a default account."))?;
 
-    // Add all versioned account child addresses as inputs
-    let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
-    inputs.extend(child_addresses);
+            Some(account)
+        },
+    };
+
+    let (account_address, account_secret_key, new_account_name) = match maybe_account {
+        Some(account) => {
+            let account_secret_key = sdk
+                .key_manager_api()
+                .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+            let account_substate = sdk.substate_api().get_substate(&account.address)?;
+            inputs.push(account_substate.address);
+            (account.address, account_secret_key, None)
+        },
+        None => {
+            let name = req
+                .account
+                .as_ref()
+                .unwrap()
+                .name()
+                .ok_or_else(|| anyhow!("Account name must be provided when creating a new account"))?;
+            let account_secret_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+            let account_pk = PublicKey::from_secret_key(&account_secret_key.k);
+
+            let component_id = Hash::try_from(account_pk.as_bytes())?;
+            let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
+
+            inputs.push(VersionedSubstateAddress {
+                address: account_address.into(),
+                version: 0,
+            });
+            (account_address.into(), account_secret_key, Some(name.to_string()))
+        },
+    };
+
+    let account_public_key = PublicKey::from_secret_key(&account_secret_key.k);
+    let output = sdk
+        .confidential_crypto_api()
+        .generate_output_for_dest(&account_public_key, req.amount)?;
+
+    let mut instructions = vec![
+        // TODO: We create double what is expected, amount confidential and amount revealed. Should let the caller
+        //       specify these values separately.
+        Instruction::CreateFreeTestCoins {
+            revealed_amount: req.amount,
+            output: Some(output),
+        },
+        Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"free_test_coins".to_vec(),
+        },
+    ];
+
+    let account_component_address = account_address
+        .as_component_address()
+        .ok_or_else(|| anyhow!("Invalid account address"))?;
+
+    if new_account_name.is_none() {
+        instructions.push(Instruction::CallMethod {
+            component_address: account_component_address,
+            method: "deposit".to_string(),
+            args: args![Workspace("free_test_coins")],
+        });
+    } else {
+        let owner_token = NonFungibleAddress::from_public_key(
+            RistrettoPublicKeyBytes::from_bytes(account_public_key.as_bytes()).unwrap(),
+        );
+        instructions.push(Instruction::CallFunction {
+            template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+            function: "create_with_bucket".to_string(),
+            args: args![owner_token, Workspace("free_test_coins")],
+        });
+    }
+
+    // Pay fees from the account
+    let fee = req.fee.unwrap_or(DEFAULT_FEE);
+    instructions.push(Instruction::CallMethod {
+        component_address: account_component_address,
+        method: "pay_fee".to_string(),
+        args: args![fee],
+    });
+
+    // Add the account component
+    // let account_substate = sdk.substate_api().get_substate(&account_address)?;
+    // inputs.push(account_substate.address);
+
+    // Add all versioned account child addresses as inputs unless the account is new
+    if new_account_name.is_none() {
+        let child_addresses = sdk.substate_api().load_dependent_substates(&[&account_address])?;
+        inputs.extend(child_addresses);
+    }
 
     // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
     //       object is mutated
@@ -717,32 +818,8 @@ pub async fn handle_create_free_test_coins(
         .map(|s| ShardId::from_address(&s.address, s.version))
         .collect();
 
-    let account_address = account
-        .address
-        .as_component_address()
-        .ok_or_else(|| anyhow!("Invalid account address"))?;
-
-    let fee = req.fee.unwrap_or(DEFAULT_FEE);
     let transaction = Transaction::builder()
-        .with_fee_instructions(vec![
-            Instruction::CreateFreeTestCoins {
-                amount: req.amount.value() as u64,
-                private_key: account_secret_key.k.to_vec(),
-            },
-            Instruction::PutLastInstructionOutputOnWorkspace {
-                key: b"create_free_test_coins".to_vec(),
-            },
-            Instruction::CallMethod {
-                component_address: account_address,
-                method: "deposit".to_string(),
-                args: args![Workspace("create_free_test_coins")],
-            },
-            Instruction::CallMethod {
-                component_address: account_address,
-                method: "pay_fee".to_string(),
-                args: args![fee],
-            },
-        ])
+        .with_fee_instructions(instructions)
         .with_inputs(inputs)
         .with_outputs(outputs)
         .with_new_outputs(1)
@@ -751,8 +828,16 @@ pub async fn handle_create_free_test_coins(
 
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
+    let is_first_account = accounts_api.count()? == 0;
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+    context.notifier().notify(TransactionSubmittedEvent {
+        hash: tx_hash,
+        new_account: new_account_name.map(|name| NewAccountInfo {
+            name: Some(name),
+            key_index: account_secret_key.key_index,
+            is_default: is_first_account,
+        }),
+    });
 
     let finalized = wait_for_result(&mut events, tx_hash).await?;
     if let Some(reject) = finalized.finalize.result.reject() {
@@ -872,7 +957,10 @@ pub async fn handle_transfer(
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
     let mut events = context.notifier().subscribe();
-    context.notifier().notify(TransactionSubmittedEvent { hash: tx_hash });
+    context.notifier().notify(TransactionSubmittedEvent {
+        hash: tx_hash,
+        new_account: None,
+    });
 
     let finalized = wait_for_result(&mut events, tx_hash).await?;
     if let Some(reject) = finalized.finalize.result.reject() {
@@ -902,23 +990,24 @@ async fn get_or_create_account_address(
     let component_id = Hash::try_from(public_key.as_bytes())?;
     let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
 
-    let account_scan: Result<ValidatorScanResult, _> = sdk
+    let account_scan = sdk
         .substate_api()
         .scan_for_substate(&SubstateAddress::Component(account_address), None)
-        .await;
+        .await
+        .optional()?;
 
     match account_scan {
-        Ok(res) => {
+        Some(res) => {
             // the account already exists in the network, so we must add the substate address to the inputs
             inputs.push(res.address);
         },
-        Err(_) => {
+        None => {
             // the account does not exists, so we must add a instruction to create it, matching the public key
             let owner_token = NonFungibleAddress::from_public_key(
                 RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
             );
             instructions.insert(0, Instruction::CallFunction {
-                template_address: ACCOUNT_TEMPLATE_ADDRESS,
+                template_address: *ACCOUNT_TEMPLATE_ADDRESS,
                 function: "create".to_string(),
                 args: args![owner_token],
             });
@@ -980,21 +1069,23 @@ pub async fn handle_confidential_transfer(
         let output_statement = ConfidentialProofStatement {
             amount: req.amount,
             mask: output_mask,
-            sender_public_nonce: Some(public_nonce),
+            sender_public_nonce: public_nonce,
             minimum_value_promise: 0,
             reveal_amount: Amount::zero(),
         };
 
         let change_amount = total_input_value - req.amount.as_u64_checked().unwrap();
-        let change_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
         let maybe_change_statement = if change_amount > 0 {
+            let account_pk = PublicKey::from_secret_key(&account_secret.k);
+            let (change_mask, public_nonce) = crypto_api.derive_output_mask_for_destination(&account_pk);
+
             outputs_api.add_output(ConfidentialOutputModel {
                 account_address: account.address,
                 vault_address: src_vault.address,
-                commitment: get_commitment_factory().commit_value(&change_key.k, change_amount),
+                commitment: get_commitment_factory().commit_value(&change_mask, change_amount),
                 value: change_amount,
-                sender_public_nonce: None,
-                secret_key_index: change_key.key_index,
+                sender_public_nonce: Some(public_nonce.clone()),
+                secret_key_index: account.key_index,
                 public_asset_tag: None,
                 status: OutputStatus::LockedUnconfirmed,
                 locked_by_proof: Some(proof_id),
@@ -1002,8 +1093,8 @@ pub async fn handle_confidential_transfer(
 
             Some(ConfidentialProofStatement {
                 amount: change_amount.try_into()?,
-                mask: change_key.k,
-                sender_public_nonce: None,
+                mask: change_mask,
+                sender_public_nonce: public_nonce,
                 minimum_value_promise: 0,
                 reveal_amount: Amount::zero(),
             })
@@ -1076,7 +1167,10 @@ pub async fn handle_confidential_transfer(
         let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
 
         let mut events = notifier.subscribe();
-        notifier.notify(TransactionSubmittedEvent { hash: tx_hash });
+        notifier.notify(TransactionSubmittedEvent {
+            hash: tx_hash,
+            new_account: None,
+        });
 
         let finalized = wait_for_result(&mut events, tx_hash).await?;
         if let Some(reject) = finalized.finalize.result.reject() {

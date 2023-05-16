@@ -18,7 +18,7 @@ Feature: Claim Burn
     Then the validator node VN is listed as registered
 
     # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
+    When I use an account key named K1
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
     When I create an account ACC_1 on VN
 
@@ -51,7 +51,7 @@ Feature: Claim Burn
     Then the validator node VN is listed as registered
 
     # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
+    When I use an account key named K1
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
     When I create an account ACC_1 on VN
 
@@ -91,7 +91,7 @@ Feature: Claim Burn
     Given a wallet daemon WALLET_D connected to indexer IDX
 
     # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
+    When I use an account key named K1
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
     When I wait 3 seconds
     When I create an account ACC via the wallet daemon WALLET_D

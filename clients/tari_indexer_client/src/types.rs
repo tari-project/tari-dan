@@ -4,25 +4,30 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{serde_with as serde_tools, PayloadId};
+use tari_dan_common_types::PayloadId;
 use tari_engine_types::{
     commit_result::ExecuteResult,
+    serde_with as serde_tools,
     substate::{Substate, SubstateAddress},
 };
 use tari_transaction::Transaction;
 
-#[serde_as]
+// #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateRequest {
-    #[serde_as(as = "DisplayFromStr")]
+    // #[serde_as(as = "DisplayFromStr")]
+    #[serde(with = "serde_tools::string")]
     pub address: SubstateAddress,
     pub version: Option<u32>,
+    #[serde(default)]
+    pub local_search_only: bool,
 }
 
-#[serde_as]
+// #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateResponse {
-    #[serde_as(as = "DisplayFromStr")]
+    // #[serde_as(as = "DisplayFromStr")]
+    #[serde(with = "serde_tools::string")]
     pub address: SubstateAddress,
     pub version: u32,
     pub substate: Substate,

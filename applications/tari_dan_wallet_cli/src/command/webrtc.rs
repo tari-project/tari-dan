@@ -44,7 +44,7 @@ impl WebRtcSubcommand {
                 let _resp = client
                     .webrtc_start(WebRtcStartRequest {
                         signaling_server_token: args.signaling_server_token,
-                        permissions_token: args.webrtc_permissions_token,
+                        permissions: args.webrtc_permissions_token,
                     })
                     .await?;
             },

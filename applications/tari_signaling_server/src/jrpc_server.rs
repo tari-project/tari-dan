@@ -6,7 +6,7 @@ use std::{
     net::SocketAddr,
     path::PathBuf,
     process,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use axum::{
@@ -27,6 +27,7 @@ use log::*;
 use serde_json::json;
 use tari_shutdown::ShutdownSignal;
 use tower_http::cors::CorsLayer;
+use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 
 use crate::data::Data;
 
@@ -74,6 +75,92 @@ pub async fn listen(
     Ok(())
 }
 
+fn add_offer(
+    id: u64,
+    value: &JsonRpcExtractor,
+    mut data: MutexGuard<Data>,
+) -> std::result::Result<std::string::String, anyhow::Error> {
+    info!(
+        target: LOG_TARGET,
+        "Adding offer to id {id} : {}",
+        value.parsed.as_str().unwrap()
+    );
+    data.add_offer(id, value.parsed.as_str().unwrap().to_string());
+    Ok(serde_json::to_string("").unwrap())
+}
+
+fn add_offer_ice_candidate(
+    id: u64,
+    value: &JsonRpcExtractor,
+    mut data: MutexGuard<Data>,
+) -> std::result::Result<std::string::String, anyhow::Error> {
+    info!(
+        target: LOG_TARGET,
+        "Adding offer ice candidate to id {id} : {}", value.parsed
+    );
+    match serde_json::from_value::<RTCIceCandidateInit>(value.parsed.clone()) {
+        Ok(ice_candidate) => {
+            data.add_offer_ice_candidate(id, ice_candidate);
+            Ok(serde_json::to_string("").unwrap())
+        },
+        Err(e) => Err(anyhow::anyhow!(e)),
+    }
+}
+
+fn add_answer(
+    id: u64,
+    value: &JsonRpcExtractor,
+    mut data: MutexGuard<Data>,
+) -> std::result::Result<std::string::String, anyhow::Error> {
+    info!(target: LOG_TARGET, "Adding answer to id {id} : {}", value.parsed);
+    data.add_answer(id, value.parsed.to_string());
+    Ok(serde_json::to_string("").unwrap())
+}
+
+fn add_answer_ice_candidate(
+    id: u64,
+    value: &JsonRpcExtractor,
+    mut data: MutexGuard<Data>,
+) -> std::result::Result<std::string::String, anyhow::Error> {
+    info!(
+        target: LOG_TARGET,
+        "Adding answer ice candidate to id {id} : {}", value.parsed
+    );
+    match serde_json::from_value::<RTCIceCandidateInit>(value.parsed.clone()) {
+        Ok(ice_candidate) => {
+            data.add_answer_ice_candidate(id, ice_candidate);
+            Ok(serde_json::to_string("").unwrap())
+        },
+        Err(e) => Err(anyhow::anyhow!(e)),
+    }
+}
+
+fn get_offer(id: u64, data: MutexGuard<Data>) -> std::result::Result<std::string::String, anyhow::Error> {
+    info!(target: LOG_TARGET, "Getting offer for id {id}");
+    println!("Offer {}", data.get_offer(id).map(|res| res.clone()).unwrap());
+    data.get_offer(id).map(|res| res.clone())
+}
+
+fn get_answer(id: u64, data: MutexGuard<Data>) -> std::result::Result<std::string::String, anyhow::Error> {
+    info!(target: LOG_TARGET, "Getting answer for id {id}");
+    data.get_answer(id).map(|res| res.clone())
+}
+
+fn get_offer_ice_candidates(
+    id: u64,
+    data: MutexGuard<Data>,
+) -> std::result::Result<std::string::String, anyhow::Error> {
+    info!(target: LOG_TARGET, "Getting offer ice candidate for id {id}");
+    Ok(serde_json::to_string(data.get_offer_ice_candidates(id).unwrap()).unwrap())
+}
+fn get_answer_ice_candidates(
+    id: u64,
+    data: MutexGuard<Data>,
+) -> std::result::Result<std::string::String, anyhow::Error> {
+    info!(target: LOG_TARGET, "Getting answer ice candidate for id {id}");
+    Ok(serde_json::to_string(data.get_answer_ice_candidates(id).unwrap()).unwrap())
+}
+
 async fn handler(
     Extension(data): Extension<Arc<Mutex<Data>>>,
     Extension(token): Extension<Option<String>>,
@@ -93,50 +180,14 @@ async fn handler(
             },
         };
         result = match value.method() {
-            "add.offer" => {
-                info!(target: LOG_TARGET, "Adding offer to id {id} : {}", value.parsed);
-                data.add_offer(id, value.parsed.to_string());
-                Ok(serde_json::to_string("").unwrap())
-            },
-            "add.offer_ice_candidate" => {
-                info!(
-                    target: LOG_TARGET,
-                    "Adding offer ice candidate to id {id} : {}", value.parsed
-                );
-                data.add_offer_ice_candidate(id, value.parsed.to_string());
-                Ok(serde_json::to_string("").unwrap())
-            },
-            "add.answer" => {
-                info!(target: LOG_TARGET, "Adding answer to id {id} : {}", value.parsed);
-                data.add_answer(id, value.parsed.to_string());
-                Ok(serde_json::to_string("").unwrap())
-            },
-            "add.answer_ice_candidate" => {
-                info!(
-                    target: LOG_TARGET,
-                    "Adding answer ice candidate to id {id} : {}", value.parsed
-                );
-                data.add_answer_ice_candidate(id, value.parsed.to_string());
-                Ok(serde_json::to_string("").unwrap())
-            },
-            "get.offer" => {
-                info!(target: LOG_TARGET, "Getting offer for id {id}");
-                data.get_offer(id).map(|res| res.clone())
-            },
-            "get.answer" => {
-                info!(target: LOG_TARGET, "Getting answer for id {id}");
-                data.get_answer(id).map(|res| res.clone())
-            },
-            "get.offer_ice_candidates" => {
-                info!(target: LOG_TARGET, "Getting offer ice candidate for id {id}");
-                data.get_offer_ice_candidates(id)
-                    .map(|res| serde_json::to_string(res).unwrap())
-            },
-            "get.answer_ice_candidates" => {
-                info!(target: LOG_TARGET, "Getting answer ice candidate for id {id}");
-                data.get_answer_ice_candidates(id)
-                    .map(|res| serde_json::to_string(res).unwrap())
-            },
+            "add.offer" => add_offer(id, &value, data),
+            "add.offer_ice_candidate" => add_offer_ice_candidate(id, &value, data),
+            "add.answer" => add_answer(id, &value, data),
+            "add.answer_ice_candidate" => add_answer_ice_candidate(id, &value, data),
+            "get.offer" => get_offer(id, data),
+            "get.answer" => get_answer(id, data),
+            "get.offer_ice_candidates" => get_offer_ice_candidates(id, data),
+            "get.answer_ice_candidates" => get_answer_ice_candidates(id, data),
             _ => {
                 error!(target: LOG_TARGET, "Method not found {}", value.method);
                 return Ok(JsonRpcResponse::error(

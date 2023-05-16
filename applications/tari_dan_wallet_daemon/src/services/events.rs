@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::time::SystemTime;
+
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::models::TransactionStatus;
@@ -52,6 +54,15 @@ impl From<AuthLoginRequestEvent> for WalletEvent {
 #[derive(Debug, Clone)]
 pub struct TransactionSubmittedEvent {
     pub hash: FixedHash,
+    /// Set to Some if this transaction results in a new account
+    pub new_account: Option<NewAccountInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewAccountInfo {
+    pub name: Option<String>,
+    pub key_index: u64,
+    pub is_default: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -79,4 +90,5 @@ pub struct TransactionInvalidEvent {
 #[derive(Debug, Clone)]
 pub struct AuthLoginRequestEvent {
     pub auth_token: String,
+    pub valid_till: SystemTime,
 }

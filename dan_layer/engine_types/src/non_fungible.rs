@@ -4,6 +4,8 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_bor::{decode_exact, BorError};
 
+use crate::serde_with;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NonFungibleContainer(Option<NonFungible>);
 
@@ -35,7 +37,9 @@ impl NonFungibleContainer {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NonFungible {
+    #[serde(with = "serde_with::hex")]
     data: Vec<u8>,
+    #[serde(with = "serde_with::hex")]
     mutable_data: Vec<u8>,
 }
 

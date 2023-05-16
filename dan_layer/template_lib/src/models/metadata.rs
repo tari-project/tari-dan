@@ -22,35 +22,35 @@
 
 use std::collections::HashMap;
 
-use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
+use tari_bor::BorTag;
 
 use super::BinaryTag;
 const TAG: u64 = BinaryTag::Metadata as u64;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Metadata(Required<HashMap<String, String>, TAG>);
+pub struct Metadata(BorTag<HashMap<String, String>, TAG>);
 
 impl Metadata {
     pub fn new() -> Self {
-        Self(Required::<HashMap<String, String>, TAG>(HashMap::new()))
+        Self(BorTag::new(HashMap::new()))
     }
 
     pub fn insert<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
         let key = key.into();
         let value = value.into();
-        self.0 .0.insert(key, value);
+        self.0.insert(key, value);
         self
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
-        self.0 .0.get(key).map(|v| v.as_str())
+        self.0.get(key).map(|v| v.as_str())
     }
 }
 
 impl From<HashMap<String, String>> for Metadata {
     fn from(value: HashMap<String, String>) -> Self {
-        Self(Required(value))
+        Self(BorTag::new(value))
     }
 }
 
