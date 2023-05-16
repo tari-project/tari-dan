@@ -138,7 +138,7 @@ impl Test {
         let sdk = DanWalletSdk::initialize(store.clone(), PanicIndexer, WalletSdkConfig {
             password: None,
             indexer_jrpc_endpoint: "".to_string(),
-            jwt_duration: Duration::from_secs(60),
+            jwt_expiry: Duration::from_secs(60),
             jwt_secret_key: "secret_key".to_string(),
         })
         .unwrap();
