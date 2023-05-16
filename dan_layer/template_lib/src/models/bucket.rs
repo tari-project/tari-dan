@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
+use tari_bor::BorTag;
 use tari_template_abi::{call_engine, rust::fmt, EngineOp};
 
 use crate::{
@@ -33,17 +33,17 @@ use crate::{
 const TAG: u64 = BinaryTag::BucketId.as_u64();
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Hash)]
-pub struct BucketId(Required<u32, TAG>);
+pub struct BucketId(BorTag<u32, TAG>);
 
 impl From<u32> for BucketId {
     fn from(value: u32) -> Self {
-        Self(Required(value))
+        Self(BorTag::new(value))
     }
 }
 
 impl fmt::Display for BucketId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "BucketId({})", self.0 .0)
+        write!(f, "BucketId({})", self.0.inner())
     }
 }
 

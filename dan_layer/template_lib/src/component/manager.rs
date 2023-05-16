@@ -27,7 +27,7 @@ use tari_template_abi::{call_engine, EngineOp};
 use crate::{
     args::{ComponentAction, ComponentInvokeArg, ComponentRef, InvokeResult},
     auth::AccessRules,
-    models::{ComponentAddress, ComponentHeader},
+    models::ComponentAddress,
 };
 
 pub struct ComponentManager {
@@ -47,8 +47,8 @@ impl ComponentManager {
             args: invoke_args![],
         });
 
-        let component: ComponentHeader = result.decode().expect("failed to decode component header from engine");
-        decode_exact(component.state()).expect("Failed to decode component state")
+        let component: Vec<u8> = result.decode().expect("failed to decode component state from engine");
+        decode_exact(&component).expect("Failed to decode component state")
     }
 
     pub fn set_state<T: Serialize>(&self, state: T) {

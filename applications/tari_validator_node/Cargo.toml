@@ -17,7 +17,7 @@ tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
 tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0" }
 tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.0", default-features = false, features = ["transactions"] }
-tari_crypto ={ version = "0.16.10" }
+tari_crypto ={ version = "0.16" }
 tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
@@ -48,6 +48,7 @@ config = "0.13.0"
 futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
 json5 = "0.2.2"
+lazy_static = "1.4.0"
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }
 lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
@@ -89,7 +90,8 @@ tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
 tari_indexer = { path = "../tari_indexer" }
 tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 #env_logger = "0.9.0"
-httpmock = "0.6.7"
+# httpmock handles signals but this causes us not to be able to ctrl + c / SIGINT.
+httpmock = { git = "https://github.com/sdbondi/httpmock.git", branch = "remove-signal-handling" }
 indexmap = "1.9.1"
 
 [[test]]

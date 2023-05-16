@@ -332,7 +332,7 @@ where
 {
     let genesis_payload = PayloadId::new([0u8; 32]);
 
-    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(*PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if tx.get_substate_states(&[shard_id])?.is_empty() {
         // Create the resource for public identity
@@ -357,7 +357,7 @@ where
         ))?;
     }
 
-    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if tx.get_substate_states(&[shard_id])?.is_empty() {
         // Create the second layer tari resource

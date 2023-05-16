@@ -15,7 +15,7 @@ Feature: Counter template
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 20000000 uT
+    When wallet WALLET has at least 20 T
 
     # VN registration
     When validator node VAL_1 sends a registration transaction
@@ -28,7 +28,7 @@ Feature: Counter template
     Then the template "counter" is listed as registered by the validator node VAL_1
 
     # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
+    When I use an account key named K1
 
     # Create a new Counter component
     When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"

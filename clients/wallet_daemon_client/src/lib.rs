@@ -133,7 +133,7 @@ pub struct WalletDaemonClient {
     client: reqwest::Client,
     endpoint: Url,
     request_id: i64,
-    pub token: Option<String>,
+    token: Option<String>,
 }
 
 impl WalletDaemonClient {
@@ -152,6 +152,11 @@ impl WalletDaemonClient {
             request_id: 0,
             token,
         })
+    }
+
+    pub fn set_auth_token(&mut self, token: String) -> &mut Self {
+        self.token = Some(token);
+        self
     }
 
     // pub async fn get_identity(&mut self) -> Result<GetIdentityResponse, WalletDaemonClientError> {

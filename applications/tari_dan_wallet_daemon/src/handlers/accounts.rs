@@ -76,7 +76,7 @@ use crate::{
     DEFAULT_FEE,
 };
 
-const LOG_TARGET: &str = "tari::dan_wallet_daemon::handlers::transaction";
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::handlers::transaction";
 
 pub async fn handle_create(
     context: &HandlerContext,
@@ -104,7 +104,7 @@ pub async fn handle_create(
     info!(target: LOG_TARGET, "Creating account with owner token {}", owner_pk);
 
     let transaction = Transaction::builder()
-        .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
+        .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
         .with_new_outputs(1)
         .sign(&signing_key.k)
         .build();
@@ -388,7 +388,7 @@ pub async fn handle_reveal_funds(
                 Instruction::CallMethod {
                     component_address: account_address,
                     method: "withdraw_confidential".to_string(),
-                    args: args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
+                    args: args![*CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
                 },
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"revealed".to_vec(),
@@ -408,7 +408,7 @@ pub async fn handle_reveal_funds(
             builder = builder
                 .fee_transaction_pay_from_component(account_address, fee)
                 .call_method(account_address, "withdraw_confidential", args![
-                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                    *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                     reveal_proof
                 ])
                 .put_last_instruction_output_on_workspace("revealed")
@@ -565,12 +565,12 @@ pub async fn handle_claim_burn(
     let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
     inputs.extend(child_addresses);
 
-    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
-    //       object is mutated
-    let outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
+    // // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when
+    // the //       object is mutated
+    // let outputs = inputs
+    //     .iter()
+    //     .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
+    //     .collect::<Vec<_>>();
 
     // add the commitment substate address as input to the claim burn transaction
     let commitment_substate_address = VersionedSubstateAddress {
@@ -651,11 +651,11 @@ pub async fn handle_claim_burn(
             }
         ])
         .with_inputs(inputs)
-        .with_outputs(outputs)
+        // .with_outputs(outputs)
         // transaction should have one output, corresponding to the same shard
         // as the account substate address
         // TODO: on a second claim burn, we shouldn't have any new outputs being created.
-        .with_new_outputs(1)
+        // .with_new_outputs(1)
         .sign(&account_secret_key.k)
         .build();
 
@@ -918,7 +918,7 @@ async fn get_or_create_account_address(
                 RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
             );
             instructions.insert(0, Instruction::CallFunction {
-                template_address: ACCOUNT_TEMPLATE_ADDRESS,
+                template_address: *ACCOUNT_TEMPLATE_ADDRESS,
                 function: "create".to_string(),
                 args: args![owner_token],
             });

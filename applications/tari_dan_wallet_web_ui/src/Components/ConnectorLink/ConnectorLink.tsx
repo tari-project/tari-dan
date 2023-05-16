@@ -36,13 +36,32 @@ import Permissions from './Permissions';
 import CheckMark from './CheckMark';
 import connectorLogo from './assets/tari-connector.png';
 import ConnectorLogo from './ConnectorLogo';
+import { parse } from '../../utils/tari_permissions';
+import { webrtc } from '../../utils/json_rpc';
 
 const ConnectorDialog = () => {
   const [page, setPage] = useState(1);
   const [isOpen, setIsOpen] = useState(false);
   const [linkDetected, setLinkDetected] = useState(false);
-  const [link, setLink] = useState('');
+  const [link, _setLink] = useState('');
+  const [signalingServerJWT, setSignalingServerJWT] = useState('');
+  const [permissions, setPermissions] = useState([]);
+  const [optionalPermissions, setOptionalPermissions] = useState([]);
+  const [chosenOptionalPermissions, setChosenOptionalPermissions] = useState<boolean[]>([])
   const linkRef = useRef<HTMLInputElement>(null);
+
+  const setLink = (value: string) => {
+    const re = /tari:\/\/([a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+)\/(.*)\/(.*)/i
+    let groups;
+    if (groups = re.exec(value)) {
+      setSignalingServerJWT(groups[1]);
+      setPermissions(JSON.parse(groups[2]).map((permission: any) => parse(permission)));
+      setOptionalPermissions(JSON.parse(groups[3]).map((permission: any) => parse(permission)));
+    }
+    _setLink(value);
+  }
+
+  useEffect(() => setChosenOptionalPermissions(Array(optionalPermissions.length).fill(true)), [optionalPermissions])
 
   async function getClipboardContent() {
     if (navigator.clipboard && navigator.clipboard.readText) {
@@ -77,7 +96,13 @@ const ConnectorDialog = () => {
   };
 
   const handleAuth = () => {
-    setPage(page + 1);
+    console.log('chosenOptionalPermissions', chosenOptionalPermissions)
+    let allowedPermissions = [...permissions, ...optionalPermissions.filter((value, index) => chosenOptionalPermissions[index])];
+    console.log('jwt', signalingServerJWT);
+    console.log('perm', JSON.stringify(allowedPermissions));
+    webrtc(signalingServerJWT, JSON.stringify(allowedPermissions)).then((resp) => {
+      setPage(page + 1);
+    });
   };
 
   const handleConnect = (e: React.FormEvent<HTMLFormElement>) => {
@@ -93,6 +118,7 @@ const ConnectorDialog = () => {
   useEffect(() => {
     getClipboardContent();
   }, []);
+
 
   const renderPage = () => {
     switch (page) {
@@ -154,13 +180,13 @@ const ConnectorDialog = () => {
       case 2:
         return (
           <div className="dialog-inner">
-            <Permissions />
+            <Permissions requiredPermissions={permissions} optionalPermissions={optionalPermissions} setOptionalPermissions={setChosenOptionalPermissions} />
             <DialogActions>
               <Button onClick={handleClose} variant="outlined">
                 Cancel
               </Button>
               <Button onClick={handleAuth} variant="contained">
-                Authorise
+                Authorize
               </Button>
             </DialogActions>
           </div>

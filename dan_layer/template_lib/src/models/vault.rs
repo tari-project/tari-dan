@@ -20,8 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use ciborium::tag::Required;
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
+use tari_bor::BorTag;
 use tari_template_abi::{
     call_engine,
     rust::{
@@ -42,15 +44,15 @@ use crate::{
 const TAG: u64 = BinaryTag::VaultId as u64;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct VaultId(Required<Hash, TAG>);
+pub struct VaultId(BorTag<Hash, TAG>);
 
 impl VaultId {
-    pub fn new(address: Hash) -> Self {
-        Self(Required::<Hash, TAG>(address))
+    pub const fn new(address: Hash) -> Self {
+        Self(BorTag::new(address))
     }
 
     pub fn hash(&self) -> &Hash {
-        &self.0 .0
+        &self.0
     }
 
     pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
@@ -67,7 +69,32 @@ impl From<Hash> for VaultId {
 
 impl Display for VaultId {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "vault_{}", self.0 .0)
+        write!(f, "vault_{}", *self.0)
+    }
+}
+
+impl AsRef<[u8]> for VaultId {
+    fn as_ref(&self) -> &[u8] {
+        self.hash()
+    }
+}
+
+impl FromStr for VaultId {
+    type Err = HashParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s = s.strip_prefix("vault_").ok_or(HashParseError)?;
+        let hash = Hash::from_hex(s)?;
+        Ok(Self::new(hash))
+    }
+}
+
+impl TryFrom<Vec<u8>> for VaultId {
+    type Error = HashParseError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let hash = Hash::try_from(value)?;
+        Ok(Self::new(hash))
     }
 }
 
