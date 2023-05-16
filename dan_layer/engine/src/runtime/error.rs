@@ -42,6 +42,7 @@ use tari_template_lib::models::{
 };
 use tari_transaction::id_provider::IdProviderError;
 
+use super::workspace::WorkspaceError;
 use crate::{
     runtime::{FunctionIdent, RuntimeModuleError},
     state_store::StateStoreError,
@@ -55,6 +56,8 @@ pub enum RuntimeError {
     StateDbError(#[from] anyhow::Error),
     #[error("State storage error: {0}")]
     StateStoreError(#[from] StateStoreError),
+    #[error("Workspace error: {0}")]
+    WorkspaceError(#[from] WorkspaceError),
     #[error("Substate not found with address '{address}'")]
     SubstateNotFound { address: SubstateAddress },
     #[error("Component not found with address '{address}'")]

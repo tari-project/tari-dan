@@ -44,10 +44,10 @@ Feature: Counter template
 
     # Check that the counter has been increased
     When I invoke on VAL_1 on component TX1/components/Counter the method call "value" with 1 outputs the result is "1"
-    When I print the cucumber world
+#    When I print the cucumber world
 
     # Uncomment the following lines to stop execution for manual inspection of the nodes
     # When I print the cucumber world
     # When I wait 5000 seconds
-    
+
 

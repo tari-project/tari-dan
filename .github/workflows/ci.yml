@@ -217,6 +217,13 @@ jobs:
         with:
           command: test
           args: -v --all-features --release
+      - name: upload artifact
+        uses: actions/upload-artifact@v3  # upload test results as artifact
+        if: always()
+        with:
+            name: cucumber-test-results
+            path: ${{ github.workspace }}/applications/tari_validator_node/cucumber-output-junit.xml
+
   # Allows other workflows to know the PR number
   artifacts:
     name: test

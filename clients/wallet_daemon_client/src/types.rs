@@ -40,7 +40,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
-    models::{Amount, ComponentAddress, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
+    models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
     prelude::{ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::Transaction;
@@ -381,7 +381,6 @@ pub struct ConfidentialTransferRequest {
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
     pub resource_address: ResourceAddress,
-    pub destination_account: ComponentAddress,
     pub destination_public_key: PublicKey,
     pub fee: Option<Amount>,
 }

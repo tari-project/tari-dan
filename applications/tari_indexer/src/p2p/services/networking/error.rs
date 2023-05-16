@@ -20,44 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_lib::prelude::*;
+use tari_comms::connectivity::ConnectivityError;
 
-#[template]
-mod faucet_template {
-    use super::*;
+use crate::p2p::services::comms_peer_provider::CommsPeerProviderError;
 
-    pub struct TestFaucet {
-        vault: Vault,
-    }
-
-    impl TestFaucet {
-        pub fn mint(initial_supply: Amount) -> Self {
-            Self::mint_with_symbol(initial_supply, "faucets".to_string())
-        }
-
-        pub fn mint_with_symbol(initial_supply: Amount, symbol: String) -> Self {
-            let coins = ResourceBuilder::fungible(symbol)
-                .initial_supply(initial_supply)
-                .build_bucket();
-
-            Self {
-                vault: Vault::from_bucket(coins),
-            }
-        }
-
-        pub fn take_free_coins(&mut self) -> Bucket {
-            debug("Withdrawing 1000 coins from faucet");
-            self.vault.withdraw(Amount(1000))
-        }
-
-        // TODO: we can make a fungible utility template with these common operations
-        pub fn burn_coins(&mut self, amount: Amount) {
-            let mut bucket = self.vault.withdraw(amount);
-            bucket.burn();
-        }
-
-        pub fn total_supply(&self) -> Amount {
-            ResourceManager::get(self.vault.resource_address()).total_supply()
-        }
-    }
+#[derive(Debug, thiserror::Error)]
+pub enum NetworkingError {
+    #[error("Comms peer provider error: {0}")]
+    CommsPeerProviderError(#[from] CommsPeerProviderError),
+    #[error("Connectivity error: {0}")]
+    ConnectivityError(#[from] ConnectivityError),
 }

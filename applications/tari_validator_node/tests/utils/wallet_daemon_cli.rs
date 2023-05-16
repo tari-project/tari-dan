@@ -53,6 +53,7 @@ use tari_wallet_daemon_client::{
         AuthLoginResponse,
         ClaimBurnRequest,
         ClaimBurnResponse,
+        ConfidentialTransferRequest,
         ProofsGenerateRequest,
         RevealFundsRequest,
         TransactionSubmitRequest,
@@ -650,6 +651,31 @@ pub async fn transfer(
     println!("🔒️️HERE3");
     add_substate_addresses_from_wallet_daemon(world, outputs_name, resp.result.result.accept().unwrap());
     println!("🔒️️HERE4");
+}
+
+pub async fn confidential_transfer(
+    world: &mut TariWorld,
+    account_name: String,
+    destination_public_key: RistrettoPublicKey,
+    amount: Amount,
+    wallet_daemon_name: String,
+    outputs_name: String,
+) {
+    let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
+
+    let account = Some(ComponentAddressOrName::Name(account_name));
+    let fee = Some(Amount(1));
+
+    let request = ConfidentialTransferRequest {
+        account,
+        amount,
+        destination_public_key,
+        fee,
+        resource_address: *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+    };
+
+    let resp = client.accounts_confidential_transfer(request).await.unwrap();
+    add_substate_addresses_from_wallet_daemon(world, outputs_name, resp.result.result.accept().unwrap());
 }
 
 pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: String) -> WalletDaemonClient {

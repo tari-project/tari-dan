@@ -72,7 +72,7 @@ tower-layer = "0.3"
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_common", features = ["build"] }
 
 [dev-dependencies]
-cucumber = "0.19.1"
+cucumber = { version ="0.19.1", features = ["output-junit"] }
 tempfile = "3.3.0"
 multiaddr = "0.17.0"
 base64 = "0.21.0"
