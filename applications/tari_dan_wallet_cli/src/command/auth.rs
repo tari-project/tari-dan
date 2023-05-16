@@ -31,11 +31,8 @@ use tari_wallet_daemon_client::{
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum AuthSubcommand {
-    #[clap(alias = "request")]
     Request(RequestArgs),
-    #[clap(alias = "grant")]
     Grant(GrantArgs),
-    #[clap(alias = "deny")]
     Deny(DenyArgs),
 }
 
