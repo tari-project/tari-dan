@@ -223,11 +223,11 @@ async fn main() {
     TariWorld::cucumber()
         .max_concurrent_scenarios(1)
         .with_writer(writer::Tee::new(
+            writer::JUnit::new(file, Verbosity::ShowWorldAndDocString).normalized(),
             // following config needed to use eprint statements in the tests
             writer::Basic::raw(io::stdout(), writer::Coloring::Auto, Verbosity::ShowWorldAndDocString)
-                .summarized()
-                .normalized(),
-            writer::Normalize::new(writer::JUnit::new(file, Verbosity::ShowWorldAndDocString)),
+                .normalized()
+                .summarized(),
         ))
         .before(move |_feature, _rule, scenario, world| {
             world.current_scenario_name = Some(scenario.name.clone());
