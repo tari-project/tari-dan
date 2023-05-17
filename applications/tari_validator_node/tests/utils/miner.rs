@@ -38,7 +38,6 @@ use tari_app_grpc::{
     },
 };
 use tari_base_node_grpc_client::BaseNodeGrpcClient;
-use tari_crypto::tari_utilities::hex::to_hex;
 use tonic::codegen::InterceptedService;
 
 use crate::TariWorld;
@@ -96,12 +95,12 @@ async fn mine_block(base_client: &mut BaseNodeClient, wallet_client: &mut Wallet
     let block = block_result.block.unwrap();
 
     // We don't need to mine, as Localnet blocks have difficulty 1s
-    let submit_res = base_client.submit_block(block).await.unwrap().into_inner();
-    println!(
-        "Block {} successfully mined at height {:?}",
-        to_hex(&submit_res.block_hash),
-        block_template.header.unwrap().height
-    );
+    let _submit_res = base_client.submit_block(block).await.unwrap().into_inner();
+    // println!(
+    //     "Block {} successfully mined at height {:?}",
+    //     to_hex(&submit_res.block_hash),
+    //     block_template.header.unwrap().height
+    // );
 }
 
 async fn create_block_template_with_coinbase(
