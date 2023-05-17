@@ -32,24 +32,17 @@ Feature: Leader failure scenarios
     Then VAL_4 has scanned to height 18 within 10 seconds
     Then all validator nodes are listed as registered
 
-    When I wait 1 seconds
-
     # Stop VN 4
     When I stop validator node VAL_4
 
     # A file-base CLI account must be created to sign future calls
     When I use an account key named K1
 
-    # Need to wait a few seconds, so that all VNs get properly
-    # registered
-    When I wait 5 seconds
-
     # Send transactions, VAL_4 is offline, but should be the leader in 1 of 4
     # transactions, so we send 10 transactions. All should succeed
     When I create 10 accounts on VAL_1
 
     # Wait a few seconds and then verify that all transactions have succeeded
-    When I wait 3 seconds
     Then all transactions succeed on all validator nodes
 
   # Uncomment the following lines to stop execution for manual inspection of the nodes

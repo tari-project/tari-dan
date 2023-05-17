@@ -91,8 +91,6 @@ Feature: Committee scenarios
     # Create a new Counter component
     When I create a component COUNTER_1 of template "counter" on VAL_1 using "new"
 
-    # wait a few seconds
-    When I wait 10 seconds
 
     # The initial value of the counter must be 0
     When I invoke on all validator nodes on component COUNTER_1/components/Counter the method call "value" with 1 outputs named "0"

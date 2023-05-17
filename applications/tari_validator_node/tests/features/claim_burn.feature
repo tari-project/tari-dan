@@ -93,7 +93,6 @@ Feature: Claim Burn
     # A file-base CLI account must be created to sign future calls
     When I use an account key named K1
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
-    When I wait 3 seconds
     When I create an account ACC via the wallet daemon WALLET_D
 
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACC, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
