@@ -80,9 +80,6 @@ async fn handler(
     value: JsonRpcExtractor,
 ) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
-
-    dbg!(&value);
-
     match value.method.as_str().split_once('.') {
         Some(("auth", method)) => match method {
             "request" => call_handler(context, value, token, rpc::handle_login_request).await,

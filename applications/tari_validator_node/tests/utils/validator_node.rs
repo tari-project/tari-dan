@@ -112,6 +112,7 @@ pub async fn spawn_validator_node(
 
         // temporal folder for the VN files (e.g. sqlite file, json files, etc.)
         println!("Using validator_node temp_dir: {}", temp_dir.display());
+        config.common.base_path = temp_dir.clone();
         config.validator_node.data_dir = temp_dir.to_path_buf();
         config.validator_node.shard_key_file = temp_dir.join("shard_key.json");
         config.validator_node.identity_file = temp_dir.join("validator_node_id.json");
