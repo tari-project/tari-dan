@@ -24,8 +24,11 @@ use std::fmt::Display;
 
 use log::*;
 use tari_dan_common_types::ShardId;
-use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::{models::NonFungibleIndexAddress, prelude::ResourceAddress};
+use tari_engine_types::{
+    events::Event,
+    substate::{SubstateAddress, SubstateValue},
+};
+use tari_template_lib::{models::NonFungibleIndexAddress, prelude::ResourceAddress, Hash};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
 use crate::{committee_provider::CommitteeProvider, error::IndexerError, NonFungibleSubstate};
@@ -181,6 +184,7 @@ where
         Ok(SubstateResult::DoesNotExist)
     }
 
+    /// Gets a substate directly from querying a VN
     async fn get_substate_from_vn(
         &self,
         vn_public_key: &TCommitteeProvider::Addr,
@@ -194,5 +198,20 @@ where
             .await
             .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
         Ok(result)
+    }
+
+    /// Queries the network to obtain events for a given transaction
+    async fn get_events_for_transaction(&self, transaction_hash: Hash) -> Result<Vec<Event>, IndexerError> {
+        let substate_address = SubstateAddress::TransactionReceipt(transaction_hash.into());
+        let substate = self.get_specific_substate_from_committee(&substate_address, 0).await?;
+        let substate_value = match substate {
+            SubstateResult::Up { substate, .. } => substate.substate_value(),
+            _ => Err(IndexerError::InvalidSubstateState),
+        };
+        let events = match substate_value {
+            SubstateValue::TransactionReceipt(inner) => inner.events.clone(),
+            _ => Err(IndexerError::InvalidSubstateValue),
+        };
+        Ok(events)
     }
 }

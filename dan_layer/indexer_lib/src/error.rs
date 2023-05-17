@@ -7,4 +7,8 @@ pub enum IndexerError {
     CommitteeProviderError(String),
     #[error("Validator node client error: {0}")]
     ValidatorNodeClientError(String),
+    #[error("Invalid substate state")]
+    InvalidSubstateState,
+    #[error("Invalid substate value")]
+    InvalidSubstateValue,
 }

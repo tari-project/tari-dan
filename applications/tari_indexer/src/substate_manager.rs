@@ -45,10 +45,7 @@ use crate::{
             substate::NewSubstate,
         },
         sqlite_substate_store_factory::{
-            SqliteSubstateStore,
-            SqliteSubstateStoreWriteTransaction,
-            SubstateStore,
-            SubstateStoreReadTransaction,
+            SqliteSubstateStore, SqliteSubstateStoreWriteTransaction, SubstateStore, SubstateStoreReadTransaction,
             SubstateStoreWriteTransaction,
         },
     },
@@ -69,6 +66,12 @@ pub struct NonFungibleResponse {
     pub index: u64,
     pub address: SubstateAddress,
     pub substate: Substate,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EventResponse {
+    pub address: SubstateAddress,
+    pub created_by_transaction: FixedHash,
 }
 
 pub struct SubstateManager {
