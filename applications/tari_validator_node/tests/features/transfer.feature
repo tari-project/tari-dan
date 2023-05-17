@@ -25,7 +25,6 @@ Feature: Account transfers
 
     # A file-base CLI account must be created to sign future calls
     When I use an account key named K1
-#    When I wait 3 seconds
 
     # Register the "faucet" template
     When validator node VN registers the template "faucet"
@@ -51,7 +50,6 @@ Feature: Account transfers
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACCOUNT via the wallet daemon WALLET_D
 
     # Wait for the wallet daemon account monitor to update the sender account information
-#    When I wait 10 seconds
 
     # Fund the sender account with faucet tokens
     When I print the cucumber world
@@ -65,9 +63,7 @@ Feature: Account transfers
     acc1.deposit(faucet_bucket);
     ```
 
-    When I print the cucumber world
     # Wait for the wallet daemon account monitor to update the sender account information
-    When I wait 10 seconds
 
     When I check the balance of ACCOUNT on wallet daemon WALLET_D the amount is at least 1000
     # Do the transfer from ACCOUNT to the second account (which does not exist yet in the network)
@@ -106,7 +102,6 @@ Feature: Account transfers
 
     # A file-base CLI account must be created to sign future calls
     When I create a DAN wallet
-    When I wait 3 seconds
 
     # Create the sender account
     When I create an account ACC_1 via the wallet daemon WALLET_D
@@ -118,9 +113,6 @@ Feature: Account transfers
     Then validator node VN has state at COMM_ADDRESS
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC_1 via the wallet daemon WALLET_D
 
-    # Wait for the wallet daemon account monitor to update the sender account information
-    When I wait 10 seconds
-    
     # Do the transfer from ACC_1 to the second account (which does not exist yet in the network)
     When I create a new key pair KEY_ACC_2
     When I do a confidential transfer of 50T from account ACC_1 to public key KEY_ACC_2 via the wallet daemon WALLET_D named TRANSFER

@@ -80,8 +80,6 @@ Feature: Indexer node
     # Track the NFT resource so the indexer tries to get all individual NFTs
     When the indexer IDX tracks the address NFT/resources/0
 
-    # The indexer needs a bit of time to track and store all NFTs of a resource
-    When I wait 5 seconds
 
     # Get substate of a component (the counter has been increased, so the version is 1)
     Then the indexer IDX returns version 1 for substate COUNTER_1/components/Counter
