@@ -563,6 +563,9 @@ pub fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::Resource(_) => {
                         println!("      ▶ resource: {}", address);
                     },
+                    SubstateValue::TransactionReceipt(_) => {
+                        println!("      ▶ transaction_receipt: {}", address);
+                    },
                     SubstateValue::Vault(vault) => {
                         println!("      ▶ vault: {} {}", address, vault.resource_address());
                     },
@@ -830,6 +833,7 @@ impl CliArg {
                 SubstateAddress::UnclaimedConfidentialOutput(v) => arg!(v),
                 SubstateAddress::NonFungible(v) => arg!(v),
                 SubstateAddress::NonFungibleIndex(v) => arg!(v),
+                SubstateAddress::TransactionReceipt(v) => arg!(v),
             },
             CliArg::NonFungibleId(v) => arg!(v),
         }

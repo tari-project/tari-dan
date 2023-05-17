@@ -25,7 +25,11 @@ use std::fmt::Display;
 use anyhow::anyhow;
 use tari_bor::BorError;
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
+use tari_engine_types::{
+    commit_result::TransactionReceiptAddress,
+    resource_container::ResourceError,
+    substate::SubstateAddress,
+};
 use tari_template_lib::models::{
     Amount,
     BucketId,
@@ -125,6 +129,10 @@ pub enum RuntimeError {
     ComponentAddressMustBeSequential { index: u32 },
     #[error("Failed to load template '{address}': {details}")]
     FailedToLoadTemplate { address: TemplateAddress, details: String },
+    #[error("Transaction Receipt already exists {address}")]
+    TransactionReceiptAlreadyExists { address: TransactionReceiptAddress },
+    #[error("Transaction Receipt not found")]
+    TransactionReceiptNotFound,
 }
 
 impl RuntimeError {
