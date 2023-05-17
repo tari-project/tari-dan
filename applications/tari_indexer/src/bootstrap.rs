@@ -46,7 +46,7 @@ use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
 use crate::{
     comms,
-    p2p::services::{epoch_manager, template_manager},
+    p2p::services::{comms_peer_provider::CommsPeerProvider, epoch_manager, networking, template_manager},
     substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore,
     ApplicationConfig,
 };
@@ -74,6 +74,11 @@ pub async fn spawn_services(
     // Initialize comms
     let (comms, _) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
 
+    networking::spawn(
+        comms.node_identity(),
+        CommsPeerProvider::new(comms.peer_manager()),
+        comms.connectivity(),
+    );
     // Connect to substate db
     let substate_store = SqliteSubstateStore::try_create(config.indexer.state_db_path())?;
 

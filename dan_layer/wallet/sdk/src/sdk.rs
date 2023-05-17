@@ -27,7 +27,7 @@ pub struct WalletSdkConfig {
     /// Encryption password for the wallet database. NOTE: Not yet implemented, this field is ignored
     pub password: Option<SafePassword>,
     pub indexer_jrpc_endpoint: String,
-    pub jwt_duration: Duration,
+    pub jwt_expiry: Duration,
     pub jwt_secret_key: String,
 }
 
@@ -85,11 +85,7 @@ where
     }
 
     pub fn jwt_api(&self) -> JwtApi<'_, TStore> {
-        JwtApi::new(
-            &self.store,
-            self.config.jwt_duration,
-            self.config.jwt_secret_key.clone(),
-        )
+        JwtApi::new(&self.store, self.config.jwt_expiry, self.config.jwt_secret_key.clone())
     }
 
     pub fn confidential_outputs_api(&self) -> ConfidentialOutputsApi<'_, TStore> {

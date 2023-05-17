@@ -1034,6 +1034,8 @@ pub async fn handle_confidential_transfer(
         let substate_api = sdk.substate_api();
         let key_manager_api = sdk.key_manager_api();
 
+        let mut instructions = vec![];
+
         // -------------------------------- Load up known substates -------------------------------- //
         let account = get_account_or_default(req.account, &accounts_api)?;
         let account_secret = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
@@ -1046,15 +1048,20 @@ pub async fn handle_confidential_transfer(
         let src_vault = accounts_api.get_vault_by_resource(&account.address, &CONFIDENTIAL_TARI_RESOURCE_ADDRESS)?;
         let src_vault_substate = substate_api.get_substate(&src_vault.address)?;
 
-        info!(target: LOG_TARGET, "Scanning for account: {}", req.destination_account);
-        // TODO: Scan for account and determine the dest vault for a particular resource
-        //       For now we assume we already know it
-        let dest_dependent_states = substate_api.load_dependent_substates(&[&req.destination_account.into()])?;
+        // get destination account information
+        let mut destination_account_inputs = vec![];
+        let destination_account_address = get_or_create_account_address(
+            &sdk,
+            &req.destination_public_key,
+            &mut destination_account_inputs,
+            &mut instructions,
+        )
+        .await?;
 
         // -------------------------------- Lock outputs for spending -------------------------------- //
         let total_amount = req.fee.unwrap_or(DEFAULT_FEE) + req.amount;
         let proof_id = outputs_api.add_proof(&src_vault.address)?;
-        let (inputs, total_input_value) =
+        let (confidential_inputs, total_input_value) =
             outputs_api.lock_outputs_by_amount(&src_vault.address, total_amount.as_u64_checked().unwrap(), proof_id)?;
 
         let (output_mask, public_nonce) = crypto_api.derive_output_mask_for_destination(&req.destination_public_key);
@@ -1095,16 +1102,32 @@ pub async fn handle_confidential_transfer(
             None
         };
 
-        let inputs = outputs_api.resolve_output_masks(inputs, key_manager::TRANSACTION_BRANCH)?;
+        let confidential_inputs =
+            outputs_api.resolve_output_masks(confidential_inputs, key_manager::TRANSACTION_BRANCH)?;
 
-        let proof = crypto_api.generate_withdraw_proof(&inputs, &output_statement, maybe_change_statement.as_ref())?;
+        let proof = crypto_api.generate_withdraw_proof(
+            &confidential_inputs,
+            &output_statement,
+            maybe_change_statement.as_ref(),
+        )?;
 
-        let mut shard_inputs = vec![
-            // Source account input
-            ShardId::from_address(&account_substate.address.address, account_substate.address.version),
-            ShardId::from_address(&src_vault_substate.address.address, src_vault_substate.address.version),
-        ];
-        let mut shard_outputs = vec![
+        // destination account inputs
+        let mut shard_inputs: Vec<ShardId> = destination_account_inputs
+            .into_iter()
+            .map(|s| ShardId::from_address(&s.address, s.version))
+            .collect();
+
+        // Source account input
+        shard_inputs.push(ShardId::from_address(
+            &account_substate.address.address,
+            account_substate.address.version,
+        ));
+        shard_inputs.push(ShardId::from_address(
+            &src_vault_substate.address.address,
+            src_vault_substate.address.version,
+        ));
+
+        let shard_outputs = vec![
             // Source account mutated
             ShardId::from_address(&account_substate.address.address, account_substate.address.version + 1),
             ShardId::from_address(
@@ -1113,26 +1136,25 @@ pub async fn handle_confidential_transfer(
             ),
         ];
 
-        // Dest account and all vaults - TODO: Only pledge the vault that is going to be mutated
-        shard_inputs.extend(
-            dest_dependent_states
-                .iter()
-                .map(|s| ShardId::from_address(&s.address, s.version)),
-        );
-        shard_outputs.extend(
-            dest_dependent_states
-                .iter()
-                .map(|s| ShardId::from_address(&s.address, s.version + 1)),
-        );
+        instructions.append(&mut vec![
+            Instruction::CallMethod {
+                component_address: source_component_address,
+                method: "withdraw_confidential".to_string(),
+                args: args![req.resource_address, proof],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"bucket".to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: destination_account_address,
+                method: "deposit".to_string(),
+                args: args![Workspace("bucket")],
+            },
+        ]);
 
         let transaction = Transaction::builder()
             .fee_transaction_pay_from_component(source_component_address, req.fee.unwrap_or(DEFAULT_FEE))
-            .call_method(source_component_address, "withdraw_confidential", args![
-                req.resource_address,
-                proof
-            ])
-            .put_last_instruction_output_on_workspace(b"bucket")
-            .call_method(req.destination_account, "deposit", args![Variable("bucket")])
+            .with_instructions(instructions)
             .with_inputs(shard_inputs)
             .with_outputs(shard_outputs)
             // Possible new dest vault

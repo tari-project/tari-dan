@@ -26,6 +26,7 @@ use tari_template_lib::models::{
     VaultId,
 };
 
+use super::workspace::Workspace;
 use crate::{
     runtime::{RuntimeError, RuntimeState, TransactionCommitError},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
@@ -46,7 +47,7 @@ pub(super) struct WorkingState {
 
     pub runtime_state: Option<RuntimeState>,
     pub last_instruction_output: Option<Vec<u8>>,
-    pub workspace: HashMap<Vec<u8>, Vec<u8>>,
+    pub workspace: Workspace,
     pub state_store: MemoryStateStore,
 }
 
@@ -64,7 +65,7 @@ impl WorkingState {
             new_non_fungible_indexes: HashMap::new(),
             runtime_state: None,
             last_instruction_output: None,
-            workspace: HashMap::new(),
+            workspace: Workspace::default(),
             state_store,
         }
     }

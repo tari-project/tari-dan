@@ -54,7 +54,8 @@ pub struct WalletDaemonConfig {
     /// The validator nodes jrpc endpoint url
     pub indexer_node_json_rpc_url: String,
     /// Expiration duration of the JWT token
-    pub jwt_duration: Option<Duration>,
+    #[serde(with = "humantime_serde::option")]
+    pub jwt_expiry: Option<Duration>,
     /// Secret key for the JWT token.
     pub jwt_secret_key: Option<String>,
 }
@@ -67,7 +68,7 @@ impl Default for WalletDaemonConfig {
             signaling_server_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9100))),
             indexer_node_json_rpc_url: "http://127.0.0.1:18300/json_rpc".to_string(),
             // TODO: Come up with a reasonable default value
-            jwt_duration: Some(Duration::from_secs(500 * 60)),
+            jwt_expiry: Some(Duration::from_secs(500 * 60)),
             // TODO: Generate a random secret key at start if not set by hand. Otherwise anyone can generate a JWT token
             // when they know the secret_key.
             jwt_secret_key: Some("secret_key".to_string()),

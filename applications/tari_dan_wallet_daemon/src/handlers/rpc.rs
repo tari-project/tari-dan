@@ -42,7 +42,7 @@ pub async fn handle_login_accept(
 ) -> Result<AuthLoginAcceptResponse, anyhow::Error> {
     let mut jwt = context.wallet_sdk().jwt_api();
 
-    let permissions_token = jwt.grant(auth_accept_request.auth_token)?; // context.jwt().generate(auth_accept_request.auth_token.as_str())?;
+    let permissions_token = jwt.grant(auth_accept_request.auth_token)?;
     Ok(AuthLoginAcceptResponse { permissions_token })
 }
 
