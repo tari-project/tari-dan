@@ -11,7 +11,7 @@ use tari_template_lib::{
     Hash,
 };
 
-use crate::{serde_with, substate::SubstateAddress};
+use crate::{commit_result::TransactionReceiptAddress, serde_with, substate::SubstateAddress};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct IndexedValue {
@@ -20,6 +20,7 @@ pub struct IndexedValue {
     component_addresses: Vec<ComponentAddress>,
     #[serde(with = "serde_with::hex::vec")]
     resource_addresses: Vec<ResourceAddress>,
+    transaction_receipt_addresses: Vec<TransactionReceiptAddress>,
     // #[serde(with = "serde_with::hex::vec")]
     non_fungible_addresses: Vec<NonFungibleAddress>,
     #[serde(with = "serde_with::hex::vec")]
@@ -37,6 +38,7 @@ impl IndexedValue {
             buckets: visitor.buckets,
             resource_addresses: visitor.resource_addresses,
             component_addresses: visitor.component_addresses,
+            transaction_receipt_addresses: visitor.transaction_receipt_addresses,
             non_fungible_addresses: visitor.non_fungible_addresses,
             vault_ids: visitor.vault_ids,
             metadata: visitor.metadata,
@@ -47,6 +49,7 @@ impl IndexedValue {
         match addr {
             SubstateAddress::Component(addr) => self.component_addresses.contains(addr),
             SubstateAddress::Resource(addr) => self.resource_addresses.contains(addr),
+            SubstateAddress::TransactionReceipt(addr) => self.transaction_receipt_addresses.contains(addr),
             SubstateAddress::NonFungible(addr) => self.non_fungible_addresses.contains(addr),
             SubstateAddress::Vault(addr) => self.vault_ids.contains(addr),
             SubstateAddress::UnclaimedConfidentialOutput(_) => false,
@@ -92,6 +95,7 @@ impl IndexedValue {
 pub enum TariValue {
     ComponentAddress(ComponentAddress),
     ResourceAddress(ResourceAddress),
+    TransactionReceiptAddress(TransactionReceiptAddress),
     NonFungibleAddress(NonFungibleAddress),
     BucketId(BucketId),
     Metadata(Metadata),
@@ -117,6 +121,10 @@ impl FromTagAndValue for TariValue {
                 let resource_address: Hash = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::ResourceAddress(resource_address.into()))
             },
+            BinaryTag::TransactionReceipt => {
+                let tx_receipt_hash: Hash = value.deserialized().map_err(BorError::from)?;
+                Ok(Self::TransactionReceiptAddress(tx_receipt_hash.into()))
+            },
             BinaryTag::NonFungibleAddress => {
                 let non_fungible_address: NonFungibleAddressContents = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::NonFungibleAddress(non_fungible_address.into()))
@@ -138,6 +146,7 @@ pub struct IndexedValueVisitor {
     buckets: Vec<BucketId>,
     component_addresses: Vec<ComponentAddress>,
     resource_addresses: Vec<ResourceAddress>,
+    transaction_receipt_addresses: Vec<TransactionReceiptAddress>,
     non_fungible_addresses: Vec<NonFungibleAddress>,
     vault_ids: Vec<VaultId>,
     metadata: Vec<Metadata>,
@@ -149,6 +158,7 @@ impl IndexedValueVisitor {
             buckets: vec![],
             component_addresses: vec![],
             resource_addresses: vec![],
+            transaction_receipt_addresses: vec![],
             non_fungible_addresses: vec![],
             vault_ids: vec![],
             metadata: vec![],
@@ -166,6 +176,9 @@ impl ValueVisitor<TariValue> for IndexedValueVisitor {
             },
             TariValue::ResourceAddress(address) => {
                 self.resource_addresses.push(address);
+            },
+            TariValue::TransactionReceiptAddress(address) => {
+                self.transaction_receipt_addresses.push(address);
             },
             TariValue::BucketId(bucket_id) => {
                 self.buckets.push(bucket_id);
