@@ -189,6 +189,13 @@ where V: Validator<Transaction, Error = MempoolError>
         }
 
         for shard_id in committee_shards {
+            info!(
+                target: LOG_TARGET,
+                "FLAG: CUCUMBER sending tx = {}, shard_id = {} and public_key = {:?}",
+                transaction.hash(),
+                shard_id,
+                self.node_identity.public_key()
+            );
             debug!(
                 target: LOG_TARGET,
                 " 🚀 Sending transaction {} for shard {} to consensus",
