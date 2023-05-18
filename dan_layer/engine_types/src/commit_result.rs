@@ -63,7 +63,7 @@ impl<T: Into<Hash>> From<T> for TransactionReceiptAddress {
 
 impl Display for TransactionReceiptAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "transaction_receipt_{}", self.0 .0)
+        write!(f, "txreceipt_{}", self.0 .0)
     }
 }
 
