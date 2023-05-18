@@ -418,32 +418,6 @@ pub async fn submit_transaction(
     request: TransactionSubmitRequest,
     client: &mut WalletDaemonClient,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    // If we're calling a component, then this will be used as an input
-    let has_call_method = request
-        .instructions
-        .iter()
-        .any(|i| matches!(i, Instruction::CallMethod { .. }));
-
-    let has_no_outputs = request.new_outputs == 0 &&
-        request.specific_non_fungible_outputs.is_empty() &&
-        request.new_non_fungible_outputs.is_empty() &&
-        request.new_resources.is_empty() &&
-        request.new_non_fungible_index_outputs.is_empty();
-
-    if has_no_outputs {
-        if request.override_inputs && request.inputs.is_empty() {
-            return Err(anyhow::anyhow!(
-                "No inputs or outputs, transaction will not be processed by the network"
-            ));
-        }
-
-        if !has_call_method && request.inputs.is_empty() {
-            return Err(anyhow::anyhow!(
-                "No inputs or outputs, transaction will not be processed by the network"
-            ));
-        }
-    }
-
     let timer = Instant::now();
 
     let resp = client.submit_transaction(&request).await?;

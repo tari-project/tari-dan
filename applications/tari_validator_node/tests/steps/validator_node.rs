@@ -93,7 +93,6 @@ async fn when_i_claim_burn(
         .call_method(component_address, "deposit", args![Workspace("burn")])
         .with_outputs(vec![account_v1_shard])
         .with_inputs(vec![commitment_shard, account_shard])
-        .with_new_outputs(1)
         .sign(account_secret)
         .build();
 
