@@ -25,7 +25,7 @@ use tari_comms::types::CommsPublicKey;
 use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    consensus_constants::BaseLayerConsensusConstants,
+    consensus_constants::{BaseLayerConsensusConstants, ConsensusConstants},
     models::{Committee, ValidatorNode},
     services::epoch_manager::{EpochManagerError, ShardCommitteeAllocation},
 };
@@ -111,6 +111,9 @@ pub enum EpochManagerRequest {
     },
     GetBaseLayerConsensusConstants {
         reply: Reply<BaseLayerConsensusConstants>,
+    },
+    GetConsensusConstants {
+        reply: Reply<ConsensusConstants>,
     },
 }
 

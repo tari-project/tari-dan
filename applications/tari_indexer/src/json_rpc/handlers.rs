@@ -314,7 +314,7 @@ impl JsonRpcHandlers {
                             substate,
                             created_by_transaction: created_by_tx,
                         })),
-                        SubstateResult::Down { version } => Err(JsonRpcResponse::error(
+                        SubstateResult::Down { version, .. } => Err(JsonRpcResponse::error(
                             answer_id,
                             JsonRpcError::new(
                                 JsonRpcErrorReason::ApplicationError(301),

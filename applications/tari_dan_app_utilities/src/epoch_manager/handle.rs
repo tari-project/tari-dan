@@ -26,7 +26,7 @@ use tari_comms::types::CommsPublicKey;
 use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT};
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_core::{
-    consensus_constants::BaseLayerConsensusConstants,
+    consensus_constants::{BaseLayerConsensusConstants, ConsensusConstants},
     models::{Committee, ValidatorNode},
     services::epoch_manager::{EpochManager, EpochManagerError, ShardCommitteeAllocation},
 };
@@ -201,6 +201,16 @@ impl EpochManager<CommsPublicKey> for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    async fn get_consensus_constants(&self) -> Result<ConsensusConstants, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetConsensusConstants { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     async fn is_validator_in_committee_for_current_epoch(
         &self,
         shard: ShardId,
@@ -293,5 +303,13 @@ impl CommitteeProvider for EpochManagerHandle {
     async fn get_committee(&self, shard_id: ShardId) -> Result<Committee<Self::Addr>, Self::Error> {
         let epoch = self.current_epoch().await?;
         EpochManager::get_committee(self, epoch, shard_id).await
+    }
+
+    async fn get_committee_size(&self) -> Result<usize, Self::Error> {
+        let consensus_constants = self.get_consensus_constants().await?;
+        Ok(consensus_constants
+            .committee_size
+            .try_into()
+            .expect("Failed to convert u64 to usize"))
     }
 }

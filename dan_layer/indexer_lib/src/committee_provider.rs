@@ -11,5 +11,5 @@ pub trait CommitteeProvider {
     type Error: std::error::Error + Send + Sync + 'static;
 
     async fn get_committee(&self, shard_id: ShardId) -> Result<Committee<Self::Addr>, Self::Error>;
-    fn get_committee_size(&self) -> usize;
+    async fn get_committee_size(&self) -> Result<usize, Self::Error>;
 }

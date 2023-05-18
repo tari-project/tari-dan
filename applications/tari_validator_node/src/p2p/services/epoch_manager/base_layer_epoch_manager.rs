@@ -355,6 +355,10 @@ impl BaseLayerEpochManager {
         Ok(Committee::new(result.into_iter().map(|v| v.public_key).collect()))
     }
 
+    pub fn get_consensus_constants(&self) -> ConsensusConstants {
+        self.consensus_constants.clone()
+    }
+
     pub fn is_validator_in_committee(
         &self,
         epoch: Epoch,

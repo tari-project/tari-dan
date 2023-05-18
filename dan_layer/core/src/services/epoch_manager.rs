@@ -30,6 +30,7 @@ use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use thiserror::Error;
 
 use crate::{
+    consensus_constants::{self, ConsensusConstants},
     models::{Committee, ValidatorNode},
     services::{base_node_error::BaseNodeError, ValidatorNodeClientError},
     storage::StorageError,
@@ -99,6 +100,7 @@ pub trait EpochManager<TAddr: NodeAddressable>: Clone {
     ) -> Result<Vec<ShardCommitteeAllocation<TAddr>>, EpochManagerError>;
 
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, EpochManagerError>;
+    async fn get_consensus_constants(&self) -> Result<ConsensusConstants, EpochManagerError>;
     async fn is_validator_in_committee_for_current_epoch(
         &self,
         shard: ShardId,
@@ -128,10 +130,16 @@ pub struct RangeEpochManager<TAddr> {
     #[allow(clippy::type_complexity)]
     epochs: HashMap<Epoch, Vec<(Range<ShardId>, Committee<TAddr>)>>,
     registered_vns: HashMap<Epoch, Vec<ValidatorNode<TAddr>>>,
+    consensus_constants: ConsensusConstants,
 }
 
 impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
-    pub fn new(vn_keys: Vec<TAddr>, current: Range<ShardId>, committee: Vec<TAddr>) -> Self {
+    pub fn new(
+        vn_keys: Vec<TAddr>,
+        current: Range<ShardId>,
+        committee: Vec<TAddr>,
+        consensus_constants: ConsensusConstants,
+    ) -> Self {
         let mut epochs = HashMap::new();
         epochs.insert(Epoch(0), vec![(current, Committee::new(committee))]);
 
@@ -149,10 +157,15 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
             current_epoch: Epoch(0),
             epochs,
             registered_vns,
+            consensus_constants,
         }
     }
 
-    pub fn new_with_multiple(vn_keys: Vec<TAddr>, ranges: &[(Range<ShardId>, Vec<TAddr>)]) -> Self {
+    pub fn new_with_multiple(
+        vn_keys: Vec<TAddr>,
+        ranges: &[(Range<ShardId>, Vec<TAddr>)],
+        consensus_constants: ConsensusConstants,
+    ) -> Self {
         let mut epochs = HashMap::new();
         epochs.insert(
             Epoch(0),
@@ -175,6 +188,7 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
             current_epoch: Epoch(0),
             epochs,
             registered_vns,
+            consensus_constants,
         }
     }
 }
@@ -245,6 +259,10 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
             }
         }
         Err(EpochManagerError::NoCommitteeFound(shard))
+    }
+
+    async fn get_consensus_constants(&self) -> Result<ConsensusConstants, EpochManagerError> {
+        Ok(self.consensus_constants.clone())
     }
 
     async fn is_validator_in_committee_for_current_epoch(

@@ -15,4 +15,6 @@ pub enum IndexerError {
     InvalidSubstateValue,
     #[error("Not found transaction for component address {0} and version {1}")]
     NotFoundTransaction(ComponentAddress, u32),
+    #[error("Failed to get consensus constants: {0}")]
+    FailedToGetCommitteeSize(String),
 }

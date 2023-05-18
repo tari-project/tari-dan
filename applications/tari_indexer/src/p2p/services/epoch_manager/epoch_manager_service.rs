@@ -46,6 +46,7 @@ pub struct EpochManagerService {
         broadcast::Sender<EpochManagerEvent>,
         broadcast::Receiver<EpochManagerEvent>,
     ),
+    consensus_constants: ConsensusConstants,
 }
 
 impl EpochManagerService {
@@ -64,10 +65,11 @@ impl EpochManagerService {
                 inner: BaseLayerEpochManager::new(
                     global_db,
                     base_node_client,
-                    consensus_constants,
+                    consensus_constants.clone(),
                     validator_node_client_factory,
                 ),
                 events: (tx, rx),
+                consensus_constants,
             }
             .run(shutdown)
             .await;
@@ -142,6 +144,9 @@ impl EpochManagerService {
             EpochManagerRequest::Subscribe { .. } => todo!(),
             EpochManagerRequest::RemainingRegistrationEpochs { .. } => todo!(),
             EpochManagerRequest::GetBaseLayerConsensusConstants { .. } => todo!(),
+            EpochManagerRequest::GetConsensusConstants { reply } => {
+                handle(reply, Ok(self.consensus_constants.clone()));
+            },
         }
     }
 }

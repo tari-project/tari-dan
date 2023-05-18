@@ -212,13 +212,15 @@ where
     async fn get_events_for_transaction(&self, transaction_hash: Hash) -> Result<Vec<Event>, IndexerError> {
         let substate_address = SubstateAddress::TransactionReceipt(transaction_hash.into());
         let substate = self.get_specific_substate_from_committee(&substate_address, 0).await?;
-        let substate_value = match substate {
-            SubstateResult::Up { substate, .. } => substate.substate_value(),
-            _ => Err(IndexerError::InvalidSubstateState),
+        let substate_value = if let SubstateResult::Up { substate, .. } = substate {
+            substate.substate_value().clone()
+        } else {
+            return Err(IndexerError::InvalidSubstateState);
         };
-        let events = match substate_value {
-            SubstateValue::TransactionReceipt(inner) => inner.events.clone(),
-            _ => Err(IndexerError::InvalidSubstateValue),
+        let events = if let SubstateValue::TransactionReceipt(tx_receipt) = substate_value {
+            tx_receipt.events.clone()
+        } else {
+            return Err(IndexerError::InvalidSubstateValue);
         };
         Ok(events)
     }
@@ -246,7 +248,11 @@ where
             // extract f + 1 members of the committee, so that at least one of these is assumed
             // to be honest. Moreover, we randomize our seach to avoid increasing the traffic of
             // a specific member.
-            let committee_size = self.committee_provider.get_committee_size();
+            let committee_size = self
+                .committee_provider
+                .get_committee_size()
+                .await
+                .map_err(|e| IndexerError::FailedToGetCommitteeSize(e.to_string()))?;
 
             let mut rng = rand::thread_rng();
             let to_query_members = extract_random_committee_members(&mut rng, &committee.members, committee_size);
@@ -269,7 +275,7 @@ where
                                 target: LOG_TARGET,
                                 "validator node: {} does not have state for component_address = {} and version = {}",
                                 member,
-                                substate_address.as_component_address(),
+                                substate_address.as_component_address().unwrap(),
                                 version
                             );
                             continue;
@@ -278,8 +284,9 @@ where
                     Err(e) => {
                         warn!(
                             target: LOG_TARGET,
-                            "Could not find substate result for component_address = {} and version = {}, with error = {}",
-                            substate_address.as_component_address(),
+                            "Could not find substate result for component_address = {} and version = {}, with error = \
+                             {}",
+                            substate_address.as_component_address().unwrap(),
                             version,
                             e
                         );
@@ -289,17 +296,18 @@ where
             }
 
             if let Some(tx_hash) = transaction_hash {
+                let tx_hash = Hash::try_from(tx_hash.as_slice()).expect("Failed to parse hash array");
                 let tx_events = self
                     .get_events_for_transaction(tx_hash)
                     .await?
-                    .iter()
-                    .map(|e| (tx_hash, *e))
+                    .into_iter()
+                    .map(|e| (tx_hash, e.clone()))
                     .collect::<Vec<_>>();
                 events.extend(tx_events);
             } else {
                 // no transaction was found in the network for this component address and version
                 return Err(IndexerError::NotFoundTransaction(
-                    substate_address.as_component_address(),
+                    substate_address.as_component_address().unwrap(),
                     version,
                 ));
             }

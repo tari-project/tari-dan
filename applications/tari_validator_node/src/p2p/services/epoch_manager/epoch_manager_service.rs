@@ -173,6 +173,9 @@ impl EpochManagerService {
             EpochManagerRequest::GetBaseLayerConsensusConstants { reply } => {
                 handle(reply, self.inner.get_base_layer_consensus_constants().await.cloned())
             },
+            EpochManagerRequest::GetConsensusConstants { reply } => {
+                handle(reply, Ok(self.inner.get_consensus_constants()))
+            },
         }
     }
 }
