@@ -84,6 +84,22 @@ async fn when_i_create_account_via_wallet_daemon(
     wallet_daemon_cli::create_account(world, account_name, wallet_daemon_name).await;
 }
 
+#[when(expr = "I create an account {word} via the wallet daemon {word} with {int} free coins")]
+async fn when_i_create_account_via_wallet_daemon_with_free_coins(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    amount: i64,
+) {
+    wallet_daemon_cli::create_account_with_free_coins(
+        world,
+        account_name,
+        wallet_daemon_name,
+        amount.try_into().unwrap(),
+    )
+    .await;
+}
+
 #[when(
     expr = "I burn {int}T on wallet {word} with wallet daemon {word} into commitment {word} with proof {word} for \
             {word}, range proof {word} and claim public key {word}"
@@ -259,25 +275,24 @@ async fn when_transfer_via_wallet_daemon(
 }
 
 #[when(
-    expr = "I do a confidential transfer of {int}T from account {word} to public key {word} via the wallet daemon \
+    expr = "I do a confidential transfer of {int} from account {word} to public key {word} via the wallet daemon \
             {word} named {word}"
 )]
 async fn when_confidential_transfer_via_wallet_daemon(
     world: &mut TariWorld,
-    amount: i32,
+    amount: i64,
     account_name: String,
     destination_public_key: String,
     wallet_daemon_name: String,
     outputs_name: String,
 ) {
     let (_, destination_public_key) = world.account_keys.get(&destination_public_key).unwrap().clone();
-    let amount = Amount::new(amount.into());
 
     wallet_daemon_cli::confidential_transfer(
         world,
         account_name,
         destination_public_key,
-        amount,
+        Amount(amount),
         wallet_daemon_name,
         outputs_name,
     )

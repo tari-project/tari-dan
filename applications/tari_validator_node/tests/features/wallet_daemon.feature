@@ -39,7 +39,7 @@ Feature: Wallet Daemon
         When I use an account key named K1
 
         # Create two accounts to test sending the tokens
-        When I create an account ACC_1 via the wallet daemon WALLET_D
+        When I create an account ACC_1 via the wallet daemon WALLET_D with 1000 free coins
         When I create an account ACC_2 via the wallet daemon WALLET_D
 
         # Create a new Faucet component
@@ -72,8 +72,8 @@ Feature: Wallet Daemon
         acc1.balance(faucet_resource);
         ```
         # Check balances
-        # Notice that `take_free_coins` extracts precisely 1000 faucet tokens
-        When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at most 1000
+        # Notice that `take_free_coins` extracts precisely 1000 faucet tokens + 1000 free coins
+        When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 1000
         When I check the balance of ACC_2 on wallet daemon WALLET_D the amount is exactly 50
 
     @serial
@@ -96,10 +96,8 @@ Feature: Wallet Daemon
         # Initialize the wallet daemon
         Given a wallet daemon WALLET_D connected to indexer IDX
 
-        # A file-base CLI account must be created to sign future calls
-        When I use an account key named K1
         # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
-        When I create an account ACCOUNT_1 via the wallet daemon WALLET_D
+        When I create an account ACCOUNT_1 via the wallet daemon WALLET_D with 1000 free coins
         When I create an account ACCOUNT_2 via the wallet daemon WALLET_D
 
         When I burn 1000T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACCOUNT_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
@@ -111,7 +109,6 @@ Feature: Wallet Daemon
 
         When I convert commitment COMMITMENT into COMM_ADDRESS address
         Then validator node VN has state at COMM_ADDRESS
-        When I check the balance of ACCOUNT_1 on wallet daemon WALLET_D the amount is at most 0
 
         When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACCOUNT_1 via the wallet daemon WALLET_D
         When I print the cucumber world

@@ -46,6 +46,7 @@ use tari_validator_node_cli::{command::transaction::CliArg, versioned_substate_a
 use tari_wallet_daemon_client::{
     types::{
         AccountGetResponse,
+        AccountsCreateFreeTestCoinsRequest,
         AccountsCreateRequest,
         AccountsGetBalancesRequest,
         AuthLoginAcceptRequest,
@@ -219,6 +220,7 @@ pub async fn transfer_confidential(
         },
     ];
 
+    println!("🐞 HERE1");
     let submit_req = TransactionSubmitRequest {
         signing_key_index: Some(signing_key_index),
         fee_instructions: vec![Instruction::CallMethod {
@@ -238,6 +240,7 @@ pub async fn transfer_confidential(
         new_outputs: 1,
     };
 
+    println!("🐞 HERE2");
     let submit_resp = client.submit_transaction(submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
@@ -266,14 +269,39 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         account_name: Some(account_name.clone()),
         custom_access_rules: None,
         is_default: true,
-        fee: Some(Amount(1)),
+        fee: None,
     };
 
     let resp = client.create_account(request).await.unwrap();
 
-    world
-        .walletd_account_keys
-        .insert(account_name.clone(), resp.public_key.clone());
+    let wait_req = TransactionWaitResultRequest {
+        hash: FixedHash::from(resp.result.transaction_hash.into_array()),
+        timeout_secs: Some(120),
+    };
+    let _wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
+
+    add_substate_addresses_from_wallet_daemon(
+        world,
+        account_name,
+        &resp.result.result.expect("Failed to obtain substate diffs"),
+    );
+}
+
+pub async fn create_account_with_free_coins(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    amount: Amount,
+) {
+    let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
+
+    let request = AccountsCreateFreeTestCoinsRequest {
+        account: Some(ComponentAddressOrName::Name(account_name.clone())),
+        amount,
+        fee: None,
+    };
+
+    let resp = client.create_free_test_coins(request).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
         hash: FixedHash::from(resp.result.transaction_hash.into_array()),
@@ -628,10 +656,8 @@ pub async fn transfer(
     wallet_daemon_name: String,
     outputs_name: String,
 ) {
-    println!("🔒️️HERE1");
     let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
 
-    println!("🔒️️HERE2");
     let account = Some(ComponentAddressOrName::Name(account_name));
     let fee = Some(Amount(1));
 
@@ -644,9 +670,7 @@ pub async fn transfer(
     };
 
     let resp = client.accounts_transfer(request).await.unwrap();
-    println!("🔒️️HERE3");
     add_substate_addresses_from_wallet_daemon(world, outputs_name, resp.result.result.accept().unwrap());
-    println!("🔒️️HERE4");
 }
 
 pub async fn confidential_transfer(

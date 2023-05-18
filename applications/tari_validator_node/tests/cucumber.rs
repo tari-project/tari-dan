@@ -105,7 +105,6 @@ pub struct TariWorld {
     pub addresses: IndexMap<String, String>,
     pub num_databases_saved: usize,
     pub account_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
-    pub walletd_account_keys: IndexMap<String, PublicKey>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
     pub wallet_daemon_outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
