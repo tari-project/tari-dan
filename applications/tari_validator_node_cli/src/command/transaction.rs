@@ -403,6 +403,9 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::Resource(_) => {
                         println!("      ▶ resource: {}", address);
                     },
+                    SubstateValue::TransactionReceipt(_) => {
+                        println!("      ▶ transaction_receipt: {}", address);
+                    },
                     SubstateValue::Vault(vault) => {
                         println!("      ▶ vault: {} {}", address, vault.resource_address());
                     },

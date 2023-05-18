@@ -22,6 +22,7 @@
 
 pub mod client;
 mod conversions;
+pub mod peer_sync;
 pub mod proto;
 pub mod rpc_service;
 mod utils;

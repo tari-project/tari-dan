@@ -30,6 +30,7 @@ pub enum BinaryTag {
     ResourceAddress = 131,
     VaultId = 132,
     BucketId = 133,
+    TransactionReceipt = 134,
 }
 
 impl BinaryTag {
@@ -41,7 +42,7 @@ impl BinaryTag {
             131 => Some(Self::ResourceAddress),
             132 => Some(Self::VaultId),
             133 => Some(Self::BucketId),
-
+            134 => Some(Self::TransactionReceipt),
             _ => None,
         }
     }

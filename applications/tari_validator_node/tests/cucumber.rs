@@ -25,6 +25,7 @@ mod utils;
 use std::{
     collections::HashMap,
     convert::TryFrom,
+    fs,
     future,
     io,
     panic,
@@ -38,6 +39,7 @@ use cucumber::{
     then,
     when,
     writer,
+    writer::Verbosity,
     World,
     WriterExt,
 };
@@ -181,10 +183,10 @@ impl TariWorld {
                 let tx_count = client.get_mempool_transaction_count().await.unwrap();
 
                 if tx_count < min_tx_count {
-                    println!(
-                        "Waiting for {} to have {} transaction(s) in mempool (currently has {})",
-                        bn.name, min_tx_count, tx_count
-                    );
+                    // println!(
+                    //     "Waiting for {} to have {} transaction(s) in mempool (currently has {})",
+                    //     bn.name, min_tx_count, tx_count
+                    // );
                     if timer.elapsed() > timeout {
                         println!(
                             "Timed out waiting for base node {} to have {} transactions in mempool",
@@ -198,8 +200,6 @@ impl TariWorld {
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     continue 'outer;
                 }
-
-                println!("{} has {} transaction(s) in mempool", bn.name, tx_count);
             }
 
             break;
@@ -217,14 +217,16 @@ async fn main() {
     let mut shutdown = Shutdown::new();
     let mock_port = spawn_template_http_server(shutdown.to_signal()).await;
 
+    let file = fs::File::create("cucumber-output-junit.xml").unwrap();
     TariWorld::cucumber()
         .max_concurrent_scenarios(1)
-        .with_writer(
+        .with_writer(writer::Tee::new(
+            writer::JUnit::new(file, Verbosity::ShowWorldAndDocString).normalized(),
             // following config needed to use eprint statements in the tests
-            writer::Basic::raw(io::stdout(), writer::Coloring::Auto, 0)
-                .summarized()
-                .assert_normalized(),
-        )
+            writer::Basic::raw(io::stdout(), writer::Coloring::Auto, Verbosity::ShowWorldAndDocString)
+                .normalized()
+                .summarized(),
+        ))
         .before(move |_feature, _rule, scenario, world| {
             world.current_scenario_name = Some(scenario.name.clone());
             Box::pin(async move {
@@ -240,7 +242,7 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
-        .run_and_exit("tests/features/")
+        .run("tests/features/")
         .await;
 
     shutdown.trigger();
@@ -951,8 +953,8 @@ async fn assert_indexer_non_fungible_list(
 
 #[when(expr = "I wait {int} seconds")]
 async fn wait_seconds(_world: &mut TariWorld, seconds: u64) {
-    println!("NOT Waiting {} seconds", seconds);
-    // tokio::time::sleep(Duration::from_secs(seconds)).await;
+    // println!("NOT Waiting {} seconds", seconds);
+    tokio::time::sleep(Duration::from_secs(seconds)).await;
 }
 
 #[then(expr = "all transactions succeed on all validator nodes")]

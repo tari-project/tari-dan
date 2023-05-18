@@ -20,7 +20,7 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fs;
+use std::{fs, panic, process};
 
 use tari_common::{initialize_logging, load_configuration};
 use tari_dan_wallet_daemon::{cli::Cli, config::ApplicationConfig, run_tari_dan_wallet_daemon};
@@ -28,6 +28,14 @@ use tari_shutdown::Shutdown;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    // Setup a panic hook which prints the default rust panic message but also exits the process. This makes a panic in
+    // any thread "crash" the system instead of silently continuing.
+    let default_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |info| {
+        default_hook(info);
+        process::exit(1);
+    }));
+
     let cli = Cli::init();
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli)?;

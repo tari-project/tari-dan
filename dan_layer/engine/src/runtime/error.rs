@@ -25,7 +25,11 @@ use std::fmt::Display;
 use anyhow::anyhow;
 use tari_bor::BorError;
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_engine_types::{resource_container::ResourceError, substate::SubstateAddress};
+use tari_engine_types::{
+    commit_result::TransactionReceiptAddress,
+    resource_container::ResourceError,
+    substate::SubstateAddress,
+};
 use tari_template_lib::models::{
     Amount,
     BucketId,
@@ -38,6 +42,7 @@ use tari_template_lib::models::{
 };
 use tari_transaction::id_provider::IdProviderError;
 
+use super::workspace::WorkspaceError;
 use crate::{
     runtime::{FunctionIdent, RuntimeModuleError},
     state_store::StateStoreError,
@@ -51,6 +56,8 @@ pub enum RuntimeError {
     StateDbError(#[from] anyhow::Error),
     #[error("State storage error: {0}")]
     StateStoreError(#[from] StateStoreError),
+    #[error("Workspace error: {0}")]
+    WorkspaceError(#[from] WorkspaceError),
     #[error("Substate not found with address '{address}'")]
     SubstateNotFound { address: SubstateAddress },
     #[error("Component not found with address '{address}'")]
@@ -122,6 +129,10 @@ pub enum RuntimeError {
     ComponentAddressMustBeSequential { index: u32 },
     #[error("Failed to load template '{address}': {details}")]
     FailedToLoadTemplate { address: TemplateAddress, details: String },
+    #[error("Transaction Receipt already exists {address}")]
+    TransactionReceiptAlreadyExists { address: TransactionReceiptAddress },
+    #[error("Transaction Receipt not found")]
+    TransactionReceiptNotFound,
 }
 
 impl RuntimeError {

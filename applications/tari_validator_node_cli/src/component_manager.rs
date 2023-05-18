@@ -88,6 +88,7 @@ impl ComponentManager {
                     component = Some((addr, substate.version()));
                 },
                 addr @ SubstateAddress::Resource(_) |
+                addr @ SubstateAddress::TransactionReceipt(_) |
                 addr @ SubstateAddress::Vault(_) |
                 addr @ SubstateAddress::NonFungible(_) |
                 addr @ SubstateAddress::NonFungibleIndex(_) => {

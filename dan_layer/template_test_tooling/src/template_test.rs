@@ -120,7 +120,7 @@ impl TemplateTest {
             // TODO: cleanup
             consensus_context: ConsensusContext { current_epoch: 0 },
             enable_fees: false,
-            fee_table: FeeTable::new(1, 1, 250),
+            fee_table: FeeTable::new(1, 1),
         }
     }
 
@@ -367,7 +367,7 @@ impl TemplateTest {
         let mut modules: Vec<Box<dyn RuntimeModule<Package>>> = vec![Box::new(self.track_calls.clone())];
 
         if self.enable_fees {
-            modules.push(Box::new(FeeModule::new(self.fee_table.loan(), self.fee_table.clone())));
+            modules.push(Box::new(FeeModule::new(0, self.fee_table.clone())));
         }
 
         let auth_params = AuthParams {
@@ -379,7 +379,6 @@ impl TemplateTest {
             auth_params,
             self.consensus_context.clone(),
             modules,
-            Amount::try_from(self.fee_table.loan()).unwrap(),
         );
 
         let result = processor.execute(transaction)?;

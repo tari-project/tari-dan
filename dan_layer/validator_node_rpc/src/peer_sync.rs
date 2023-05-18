@@ -26,8 +26,9 @@ use log::*;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerIdentityClaim, types::CommsPublicKey, PeerConnection};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::services::{DanPeer, PeerProvider};
-use tari_validator_node_rpc::{proto, rpc_service};
 use tokio_stream::StreamExt;
+
+use crate::{proto, rpc_service};
 
 const LOG_TARGET: &str = "tari::validator_node::networking::peer_sync";
 

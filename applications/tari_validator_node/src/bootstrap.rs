@@ -54,7 +54,7 @@ use tari_dan_core::{
     },
     workers::events::{EventSubscription, HotStuffEvent},
 };
-use tari_dan_engine::fees::{FeeTable, DEFAULT_FEE_LOAN};
+use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_engine_types::{
@@ -174,7 +174,7 @@ pub async fn spawn_services(
     let fee_table = if config.validator_node.no_fees {
         FeeTable::zero_rated()
     } else {
-        FeeTable::new(1, 1, DEFAULT_FEE_LOAN)
+        FeeTable::new(1, 1)
     };
     let payload_processor = TariDanPayloadProcessor::new(template_manager.clone(), fee_table);
 

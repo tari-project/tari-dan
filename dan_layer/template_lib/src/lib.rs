@@ -23,7 +23,7 @@
 pub mod auth;
 
 mod hash;
-pub use hash::Hash;
+pub use hash::{Hash, HashParseError};
 
 #[macro_use]
 pub mod args;
