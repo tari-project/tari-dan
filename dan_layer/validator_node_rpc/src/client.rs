@@ -28,11 +28,7 @@ use tokio_stream::StreamExt;
 
 use crate::{
     proto::rpc::{
-        GetPeersRequest,
-        GetTransactionResultRequest,
-        PayloadResultStatus,
-        SubmitTransactionRequest,
-        SubstateStatus,
+        GetPeersRequest, GetTransactionResultRequest, PayloadResultStatus, SubmitTransactionRequest, SubstateStatus,
     },
     rpc_service,
 };
@@ -84,6 +80,7 @@ pub enum SubstateResult {
     },
     Down {
         version: u32,
+        deleted_by_tx: FixedHash,
     },
 }
 
@@ -195,7 +192,17 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                     created_by_tx: tx_hash,
                 })
             },
-            SubstateStatus::Down => Ok(SubstateResult::Down { version: resp.version }),
+            SubstateStatus::Down => {
+                let tx_hash = resp.transaction_hash.try_into().map_err(|_| {
+                    ValidatorNodeClientError::InvalidResponse(anyhow!(
+                        "Node returned an invalid or empty transaction hash"
+                    ))
+                })?;
+                Ok(SubstateResult::Down {
+                    version: resp.version,
+                    deleted_by_tx: tx_hash,
+                })
+            },
             SubstateStatus::DoesNotExist => Ok(SubstateResult::DoesNotExist),
         }
     }

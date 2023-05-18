@@ -23,13 +23,21 @@
 use std::fmt::Display;
 
 use log::*;
+use rand::prelude::*;
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{
     events::Event,
     substate::{SubstateAddress, SubstateValue},
 };
-use tari_template_lib::{models::NonFungibleIndexAddress, prelude::ResourceAddress, Hash};
-use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+use tari_template_lib::{
+    models::NonFungibleIndexAddress,
+    prelude::{ComponentAddress, ResourceAddress},
+    Hash,
+};
+use tari_validator_node_rpc::{
+    client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient},
+    proto::consensus::substate_state,
+};
 
 use crate::{committee_provider::CommitteeProvider, error::IndexerError, NonFungibleSubstate};
 
@@ -200,7 +208,7 @@ where
         Ok(result)
     }
 
-    /// Queries the network to obtain events for a given transaction
+    /// Queries the network to obtain events stored emitted in a single transaction
     async fn get_events_for_transaction(&self, transaction_hash: Hash) -> Result<Vec<Event>, IndexerError> {
         let substate_address = SubstateAddress::TransactionReceipt(transaction_hash.into());
         let substate = self.get_specific_substate_from_committee(&substate_address, 0).await?;
@@ -214,4 +222,107 @@ where
         };
         Ok(events)
     }
+
+    /// Queries the network to obtain all the events associated with a component, together
+    /// with the hash of the transation in which these were emitted
+    pub async fn get_events_for_component(
+        &self,
+        component_address: ComponentAddress,
+        version: Option<u32>,
+    ) -> Result<Vec<(Hash, Event)>, IndexerError> {
+        let mut events = vec![];
+        let substate_address = SubstateAddress::Component(component_address);
+        let mut version = version.unwrap_or_default();
+        let mut got_up_substate_result = false;
+
+        'outer: loop {
+            let shard_id = ShardId::from_address(&substate_address, version);
+            let committee = self
+                .committee_provider
+                .get_committee(shard_id)
+                .await
+                .map_err(|e| IndexerError::CommitteeProviderError(e.to_string()))?;
+
+            // extract f + 1 members of the committee, so that at least one of these is assumed
+            // to be honest. Moreover, we randomize our seach to avoid increasing the traffic of
+            // a specific member.
+            let committee_size = self.committee_provider.get_committee_size();
+
+            let mut rng = rand::thread_rng();
+            let to_query_members = extract_random_committee_members(&mut rng, &committee.members, committee_size);
+
+            let mut transaction_hash = None;
+            'inner: for member in to_query_members {
+                match self.get_substate_from_vn(member, &substate_address, version).await {
+                    Ok(substate_result) => match substate_result {
+                        SubstateResult::Up { created_by_tx, .. } => {
+                            transaction_hash = Some(created_by_tx);
+                            got_up_substate_result = true;
+                            break 'inner;
+                        },
+                        SubstateResult::Down { deleted_by_tx, .. } => {
+                            transaction_hash = Some(deleted_by_tx);
+                            break 'inner;
+                        },
+                        SubstateResult::DoesNotExist => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "validator node: {} does not have state for component_address = {} and version = {}",
+                                member,
+                                substate_address.as_component_address(),
+                                version
+                            );
+                            continue;
+                        },
+                    },
+                    Err(e) => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Could not find substate result for component_address = {} and version = {}, with error = {}",
+                            substate_address.as_component_address(),
+                            version,
+                            e
+                        );
+                        continue;
+                    },
+                }
+            }
+
+            if let Some(tx_hash) = transaction_hash {
+                let tx_events = self
+                    .get_events_for_transaction(tx_hash)
+                    .await?
+                    .iter()
+                    .map(|e| (tx_hash, *e))
+                    .collect::<Vec<_>>();
+                events.extend(tx_events);
+            } else {
+                // no transaction was found in the network for this component address and version
+                return Err(IndexerError::NotFoundTransaction(
+                    substate_address.as_component_address(),
+                    version,
+                ));
+            }
+
+            version += 1;
+
+            if got_up_substate_result {
+                break 'outer;
+            }
+        }
+
+        Ok(events)
+    }
+}
+
+fn extract_random_committee_members<'a, TAddr>(
+    rng: &mut impl Rng,
+    committee_members: &'a [TAddr],
+    committee_size: usize,
+) -> Vec<&'a TAddr> {
+    let mut sample_indices: Vec<usize> = (0..committee_members.len()).collect();
+    sample_indices.shuffle(rng);
+    let sample_indices = &sample_indices[..committee_size];
+
+    sample_indices.iter().map(|&i| &committee_members[i]).collect()
 }
