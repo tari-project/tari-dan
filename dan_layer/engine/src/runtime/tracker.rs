@@ -385,7 +385,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         let component_address = self
             .id_provider()
             .new_component_address(template_address, component_id)?;
-        debug!(target: LOG_TARGET, "New component created: {}", component_address);
 
         let component = ComponentBody { state };
         let component = ComponentHeader {
@@ -396,9 +395,18 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         };
 
         self.write_with(|state| {
-            // New root component
+            // The template address/component_id combination will not necessarily be unique so we need to check this.
+            if state.get_component(&component_address).optional()?.is_some() {
+                return Err(RuntimeError::ComponentAlreadyExists {
+                    address: component_address,
+                });
+            }
+
             state.new_components.insert(component_address, component);
-        });
+            Ok(())
+        })?;
+
+        debug!(target: LOG_TARGET, "New component created: {}", component_address);
         Ok(component_address)
     }
 

@@ -23,9 +23,6 @@ Feature: Account transfers
     # Initialize the wallet daemon
     Given a wallet daemon WALLET_D connected to indexer IDX
 
-    # A file-base CLI account must be created to sign future calls
-    When I use an account key named K1
-
     # Register the "faucet" template
     When validator node VN registers the template "faucet"
     # Mine some blocks until the UTXOs are scanned
@@ -81,6 +78,7 @@ Feature: Account transfers
 
 
   @serial
+  @doit
   Scenario: Confidential transfer to unexisting account
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -100,13 +98,10 @@ Feature: Account transfers
     # Initialize the wallet daemon
     Given a wallet daemon WALLET_D connected to indexer IDX
 
-    # A file-base CLI account must be created to sign future calls
-    When I create a DAN wallet
-
     # Create the sender account
     When I create an account ACC_1 via the wallet daemon WALLET_D
 
-    # Burn some tari in the base layer to have funds for fees in the sender account
+    # Burn some tari in the base layer to have funds for fees in the sender account
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACC_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
     When miner MINER mines 13 new blocks
     When I convert commitment COMMITMENT into COMM_ADDRESS address

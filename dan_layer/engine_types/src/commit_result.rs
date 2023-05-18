@@ -98,7 +98,7 @@ impl ExecuteResult {
 
     pub fn expect_failure(&self) -> &RejectReason {
         match self.finalize.result {
-            TransactionResult::Accept(_) => panic!("Transaction succeeded"),
+            TransactionResult::Accept(_) => panic!("Expected transaction to fail but it succeeded"),
             TransactionResult::Reject(ref reason) => reason,
         }
     }

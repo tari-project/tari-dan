@@ -31,7 +31,7 @@ use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNode
 use super::validator_node::get_vn_client;
 use crate::{utils::logging::get_base_dir_for_scenario, TariWorld};
 
-pub(super) fn get_key_manager(world: &mut TariWorld) -> KeyManager {
+fn get_key_manager(world: &mut TariWorld) -> KeyManager {
     let path = get_cli_data_dir(world);
 
     // initialize the account public/private keys

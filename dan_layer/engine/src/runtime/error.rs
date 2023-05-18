@@ -133,6 +133,8 @@ pub enum RuntimeError {
     TransactionReceiptAlreadyExists { address: TransactionReceiptAddress },
     #[error("Transaction Receipt not found")]
     TransactionReceiptNotFound,
+    #[error("Component already exists {address}")]
+    ComponentAlreadyExists { address: ComponentAddress },
 }
 
 impl RuntimeError {

@@ -64,7 +64,7 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
-use super::{validator_node_cli::get_key_manager, wallet_daemon::get_walletd_client};
+use super::wallet_daemon::get_walletd_client;
 use crate::TariWorld;
 
 pub async fn claim_burn(
@@ -262,22 +262,18 @@ pub async fn transfer_confidential(
 pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_daemon_name: String) {
     let mut client = get_auth_wallet_daemon_client(world, wallet_daemon_name.clone()).await;
 
-    let key = get_key_manager(world).get_active_key().expect("No active keypair");
-    let key_resp = client.create_key().await.unwrap();
-    let key_id = key_resp.id;
-    world
-        .account_keys
-        .insert(account_name.clone(), (key.secret_key.clone(), key.public_key.clone()));
-
     let request = AccountsCreateRequest {
         account_name: Some(account_name.clone()),
-        signing_key_index: Some(key_id),
         custom_access_rules: None,
         is_default: true,
         fee: Some(Amount(1)),
     };
 
     let resp = client.create_account(request).await.unwrap();
+
+    world
+        .walletd_account_keys
+        .insert(account_name.clone(), resp.public_key.clone());
 
     let wait_req = TransactionWaitResultRequest {
         hash: FixedHash::from(resp.result.transaction_hash.into_array()),
