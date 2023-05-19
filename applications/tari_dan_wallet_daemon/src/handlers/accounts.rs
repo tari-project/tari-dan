@@ -710,7 +710,7 @@ pub async fn handle_create_free_test_coins(
     let accounts_api = sdk.accounts_api();
     let mut inputs = vec![];
 
-    // Get the account is one is specified and exists.
+    // Get the account if one is specified and exists.
     let maybe_account = match req.account {
         Some(ref addr_or_name) => get_account(addr_or_name, &accounts_api).optional()?,
         None => {

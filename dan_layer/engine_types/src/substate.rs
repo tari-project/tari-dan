@@ -376,6 +376,13 @@ impl SubstateValue {
         }
     }
 
+    pub fn vault(&self) -> Option<&Vault> {
+        match self {
+            SubstateValue::Vault(vault) => Some(vault),
+            _ => None,
+        }
+    }
+
     pub fn into_resource(self) -> Option<Resource> {
         match self {
             SubstateValue::Resource(resource) => Some(resource),
