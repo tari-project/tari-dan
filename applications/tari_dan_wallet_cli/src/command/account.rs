@@ -173,7 +173,6 @@ async fn handle_create(args: CreateArgs, client: &mut WalletDaemonClient) -> Res
     let resp = client
         .create_account(AccountsCreateRequest {
             account_name: args.account_name,
-            signing_key_index: None,
             custom_access_rules: None,
             is_default: args.is_default,
             fee: args.fee.map(|u| Amount::new(u.into())),

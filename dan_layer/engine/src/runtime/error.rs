@@ -26,19 +26,11 @@ use anyhow::anyhow;
 use tari_bor::BorError;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{
-    commit_result::TransactionReceiptAddress,
-    resource_container::ResourceError,
-    substate::SubstateAddress,
+    commit_result::TransactionReceiptAddress, resource_container::ResourceError, substate::SubstateAddress,
 };
 use tari_template_lib::models::{
-    Amount,
-    BucketId,
-    ComponentAddress,
-    NonFungibleId,
-    ResourceAddress,
-    TemplateAddress,
-    UnclaimedConfidentialOutputAddress,
-    VaultId,
+    Amount, BucketId, ComponentAddress, NonFungibleId, ResourceAddress, TemplateAddress,
+    UnclaimedConfidentialOutputAddress, VaultId,
 };
 use tari_transaction::id_provider::IdProviderError;
 
@@ -133,6 +125,8 @@ pub enum RuntimeError {
     TransactionReceiptAlreadyExists { address: TransactionReceiptAddress },
     #[error("Transaction Receipt not found")]
     TransactionReceiptNotFound,
+    #[error("Component already exists {address}")]
+    ComponentAlreadyExists { address: ComponentAddress },
 }
 
 impl RuntimeError {
@@ -145,11 +139,11 @@ impl IsNotFoundError for RuntimeError {
     fn is_not_found_error(&self) -> bool {
         matches!(
             self,
-            RuntimeError::ComponentNotFound { .. } |
-                RuntimeError::VaultNotFound { .. } |
-                RuntimeError::BucketNotFound { .. } |
-                RuntimeError::ResourceNotFound { .. } |
-                RuntimeError::NonFungibleNotFound { .. }
+            RuntimeError::ComponentNotFound { .. }
+                | RuntimeError::VaultNotFound { .. }
+                | RuntimeError::BucketNotFound { .. }
+                | RuntimeError::ResourceNotFound { .. }
+                | RuntimeError::NonFungibleNotFound { .. }
         )
     }
 }

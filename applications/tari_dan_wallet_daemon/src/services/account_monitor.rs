@@ -19,12 +19,13 @@ use tari_dan_wallet_sdk::{
 };
 use tari_engine_types::{
     indexed_value::{IndexedValue, ValueVisitorError},
-    substate::{SubstateAddress, SubstateDiff, SubstateValue},
+    resource::Resource,
+    substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
     vault::Vault,
 };
 use tari_shutdown::ShutdownSignal;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::resource::TOKEN_SYMBOL;
+use tari_template_lib::{prelude::ResourceAddress, resource::TOKEN_SYMBOL};
 use tokio::{
     sync::{mpsc, oneshot},
     time,
@@ -194,6 +195,9 @@ where
             is_updated = true;
 
             substate_api.save_child(created_by_tx, versioned_account_address.address.clone(), versioned_addr)?;
+
+            self.add_vault_to_account_if_not_exist(&versioned_account_address.address, &vault)
+                .await?;
             self.refresh_vault(&versioned_account_address.address, &vault)?;
         }
 
@@ -265,15 +269,50 @@ where
             )?;
         }
 
-        let vaults = diff.up_iter().filter(|(a, _)| a.is_vault()).collect::<Vec<_>>();
+        let mut vaults = diff
+            .up_iter()
+            .filter(|(a, _)| a.is_vault())
+            .map(|(a, s)| (a.as_vault_id().unwrap(), s))
+            .collect::<HashMap<_, _>>();
+
+        let accounts = diff
+            .up_iter()
+            .filter(|(_, s)| is_account(s))
+            .filter_map(
+                |(a, s)| match IndexedValue::from_raw(&s.substate_value().component().unwrap().state.state) {
+                    Ok(value) => Some((a, value)),
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "👁️‍🗨️ Failed to parse account substate {} in tx {}: {}", a, tx_hash, e
+                        );
+                        None
+                    },
+                },
+            )
+            .collect::<Vec<_>>();
+
+        // Find and process all new vaults
+        for (account_addr, value) in accounts {
+            for vault_id in value.vault_ids() {
+                // Any vaults we process here do not need to be reprocesed later
+                if let Some(vault) = vaults.remove(vault_id).and_then(|s| s.substate_value().vault()) {
+                    self.add_vault_to_account_if_not_exist(account_addr, vault).await?;
+                    self.refresh_vault(account_addr, vault)?;
+                }
+            }
+        }
+
+        // Process all existing vaults that belong to an account
         for (vault_addr, substate) in vaults {
+            let vault_addr = SubstateAddress::Vault(vault_addr);
             let SubstateValue::Vault(vault) = substate.substate_value() else {
                 error!(target: LOG_TARGET, "👁️‍🗨️ Substate {} is not a vault. This should be impossible.", vault_addr);
                 continue;
             };
 
             // Try and get the account address from the vault
-            let maybe_vault_substate = substate_api.get_substate(vault_addr).optional()?;
+            let maybe_vault_substate = substate_api.get_substate(&vault_addr).optional()?;
             let Some(vault_substate) = maybe_vault_substate else {
                 // This should be impossible.
                 error!(target: LOG_TARGET, "👁️‍🗨️ Vault {} is not a known substate.", vault_addr);
@@ -295,56 +334,68 @@ where
                 continue;
             }
 
-            // Add the vault if it does not exist
-            if !accounts_api.has_vault(vault_addr)? {
-                let resx_addr = SubstateAddress::Resource(*vault.resource_address());
-                let version = substate_api
-                    .get_substate(&resx_addr)
-                    .optional()?
-                    .map(|s| s.address.version)
-                    .unwrap_or(0);
-                let scan_result = substate_api.scan_for_substate(&resx_addr, Some(version)).await;
-                let maybe_resource = match scan_result {
-                    Ok(ValidatorScanResult { substate: resource, .. }) => {
-                        let resx = resource.into_resource().ok_or_else(|| {
-                            AccountMonitorError::UnexpectedSubstate(format!(
-                                "Expected {} to be a resource.",
-                                vault.resource_address()
-                            ))
-                        })?;
-                        Some(resx)
-                    },
-                    // Dont fail to update if scanning fails
-                    Err(err) => {
-                        warn!(
-                            target: LOG_TARGET,
-                            "👁️‍🗨️ Failed to scan vault {} from VN: {}",
-                            vault.vault_id(),
-                            err
-                        );
-                        None
-                    },
-                };
-
-                let token_symbol = maybe_resource.and_then(|r| r.metadata().get(TOKEN_SYMBOL).map(|s| s.to_string()));
-                info!(
-                    target: LOG_TARGET,
-                    "👁️‍🗨️ New {} in account {}",
-                    vault.vault_id(),
-                    account_addr
-                );
-                accounts_api.add_vault(
-                    account_addr.clone(),
-                    vault_addr.clone(),
-                    *vault.resource_address(),
-                    vault.resource_type(),
-                    token_symbol,
-                )?;
-            }
+            self.add_vault_to_account_if_not_exist(&account_addr, vault).await?;
 
             // Update the vault balance / confidential outputs
             self.refresh_vault(&account_addr, vault)?;
         }
+        Ok(())
+    }
+
+    async fn fetch_resource(&self, resx_addr: ResourceAddress) -> Result<Resource, AccountMonitorError> {
+        let substate_api = self.wallet_sdk.substate_api();
+        let resx_addr = SubstateAddress::Resource(resx_addr);
+        let version = substate_api
+            .get_substate(&resx_addr)
+            .optional()?
+            .map(|s| s.address.version)
+            .unwrap_or(0);
+        let ValidatorScanResult { substate: resource, .. } =
+            substate_api.scan_for_substate(&resx_addr, Some(version)).await?;
+        let resx = resource.into_resource().ok_or_else(|| {
+            AccountMonitorError::UnexpectedSubstate(format!("Expected {} to be a resource.", resx_addr))
+        })?;
+        Ok(resx)
+    }
+
+    async fn add_vault_to_account_if_not_exist(
+        &self,
+        account_addr: &SubstateAddress,
+        vault: &Vault,
+    ) -> Result<(), AccountMonitorError> {
+        let vault_addr = SubstateAddress::Vault(*vault.vault_id());
+        let accounts_api = self.wallet_sdk.accounts_api();
+        if accounts_api.has_vault(&vault_addr)? {
+            return Ok(());
+        }
+        let maybe_resource = match self.fetch_resource(*vault.resource_address()).await {
+            Ok(r) => Some(r),
+            Err(e) => {
+                warn!(
+                    target: LOG_TARGET,
+                    "👁️‍🗨️ Failed to scan vault {} from VN: {}",
+                    vault.vault_id(),
+                    e
+                );
+                None
+            },
+        };
+
+        let token_symbol = maybe_resource.and_then(|r| r.metadata().get(TOKEN_SYMBOL).map(|s| s.to_string()));
+        info!(
+            target: LOG_TARGET,
+            "👁️‍🗨️ New {} in account {}",
+            vault.vault_id(),
+            account_addr
+        );
+        accounts_api.add_vault(
+            account_addr.clone(),
+            vault_addr,
+            *vault.resource_address(),
+            vault.resource_type(),
+            token_symbol,
+        )?;
+
         Ok(())
     }
 
@@ -439,4 +490,11 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
 
         Some(a)
     })
+}
+
+fn is_account(s: &Substate) -> bool {
+    s.substate_value()
+        .component()
+        .filter(|c| c.template_address == *ACCOUNT_TEMPLATE_ADDRESS)
+        .is_some()
 }

@@ -123,7 +123,7 @@ where V: Validator<Transaction, Error = MempoolError>
         self.transactions.remove(hash);
     }
 
-    async fn handle_new_transaction(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
+    async fn handle_new_transaction(&mut self, mut transaction: Transaction) -> Result<(), MempoolError> {
         debug!(
             target: LOG_TARGET,
             "Received transaction: {} {:?}",
@@ -142,9 +142,8 @@ where V: Validator<Transaction, Error = MempoolError>
 
         self.validator.validate(&transaction).await?;
 
-        // we do a dry run processsor to precalculate shards for new outputs,
+        // we do a dry run processor to precalculate shards for new outputs,
         // so the client does not need to specify them
-        let mut transaction = transaction.clone();
         if let Err(e) = self.dry_run_processor.add_missing_shards(&mut transaction).await {
             error!(target: LOG_TARGET, "Could not add missing shards: {}", e);
         }

@@ -192,6 +192,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
 
         // temporal folder for the VN files (e.g. sqlite file, json files, etc.)
         println!("Using indexer temp_dir: {}", base_dir.display());
+        config.common.base_path = base_dir.to_path_buf();
         config.indexer.data_dir = base_dir.to_path_buf();
         config.indexer.identity_file = base_dir.join("indexer_id.json");
         config.indexer.tor_identity_file = base_dir.join("indexer_tor_id.json");

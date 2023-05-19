@@ -39,7 +39,6 @@ use tari_engine_types::{
     logs::LogEntry,
     resource_container::ResourceContainer,
     substate::{SubstateAddress, SubstateValue},
-    
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
@@ -169,7 +168,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             LogLevel::Debug => log::Level::Debug,
         };
 
-        eprintln!("{}: {}", log_level, message);
+        // eprintln!("{}: {}", log_level, message);
         log::log!(target: "tari::dan::engine::runtime", log_level, "{}", message);
         self.tracker.add_log(LogEntry::new(level, message));
         Ok(())

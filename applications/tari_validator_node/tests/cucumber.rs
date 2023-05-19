@@ -107,7 +107,6 @@ pub struct TariWorld {
     pub account_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
-    pub wallet_daemon_outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
 }
 
 impl TariWorld {
@@ -133,12 +132,12 @@ impl TariWorld {
             .unwrap_or_else(|| panic!("Base node {} not found", name))
     }
 
-    pub fn get_account_component_address(&self, name: &str) -> Option<String> {
+    pub fn get_account_component_address(&self, name: &str) -> Option<VersionedSubstateAddress> {
         let all_components = self
             .outputs
             .get(name)
             .unwrap_or_else(|| panic!("Account component address {} not found", name));
-        all_components.get("components/Account").map(|a| a.address.to_string())
+        all_components.get("components/Account").cloned()
     }
 
     pub fn after(&mut self, _scenario: &Scenario) {
@@ -168,10 +167,7 @@ impl TariWorld {
             // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
             p.shutdown.trigger();
         }
-        println!("Removing validator node outputs");
         self.outputs.clear();
-        println!("Removing wallet daemon outputs");
-        self.wallet_daemon_outputs.clear();
         self.miners.clear();
     }
 
@@ -183,10 +179,10 @@ impl TariWorld {
                 let tx_count = client.get_mempool_transaction_count().await.unwrap();
 
                 if tx_count < min_tx_count {
-                    println!(
-                        "Waiting for {} to have {} transaction(s) in mempool (currently has {})",
-                        bn.name, min_tx_count, tx_count
-                    );
+                    // println!(
+                    //     "Waiting for {} to have {} transaction(s) in mempool (currently has {})",
+                    //     bn.name, min_tx_count, tx_count
+                    // );
                     if timer.elapsed() > timeout {
                         println!(
                             "Timed out waiting for base node {} to have {} transactions in mempool",
@@ -200,8 +196,6 @@ impl TariWorld {
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     continue 'outer;
                 }
-
-                println!("{} has {} transaction(s) in mempool", bn.name, tx_count);
             }
 
             break;
@@ -223,11 +217,11 @@ async fn main() {
     TariWorld::cucumber()
         .max_concurrent_scenarios(1)
         .with_writer(writer::Tee::new(
+            writer::JUnit::new(file, Verbosity::ShowWorldAndDocString).normalized(),
             // following config needed to use eprint statements in the tests
             writer::Basic::raw(io::stdout(), writer::Coloring::Auto, Verbosity::ShowWorldAndDocString)
-                .summarized()
-                .normalized(),
-            writer::Normalize::new(writer::JUnit::new(file, Verbosity::ShowWorldAndDocString)),
+                .normalized()
+                .summarized(),
         ))
         .before(move |_feature, _rule, scenario, world| {
             world.current_scenario_name = Some(scenario.name.clone());
@@ -953,10 +947,45 @@ async fn assert_indexer_non_fungible_list(
     );
 }
 
+#[given(expr = "all validator nodes are connected to each other")]
+async fn given_all_validator_connects_to_other_vns(world: &mut TariWorld) {
+    let details = world
+        .validator_nodes
+        .values()
+        .map(|vn| {
+            (
+                PublicKey::from_hex(&vn.public_key).unwrap(),
+                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    for vn in world.validator_nodes.values() {
+        if vn.handle.is_finished() {
+            eprintln!("Skipping validator node {} that is not running", vn.name);
+            continue;
+        }
+        let mut cli = vn.create_client();
+        let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
+        for (pk, addr) in details.iter().cloned() {
+            if pk == this_pk {
+                continue;
+            }
+            cli.add_peer(AddPeerRequest {
+                public_key: pk,
+                addresses: vec![addr],
+                wait_for_dial: true,
+            })
+            .await
+            .unwrap();
+        }
+    }
+}
+
 #[when(expr = "I wait {int} seconds")]
 async fn wait_seconds(_world: &mut TariWorld, seconds: u64) {
-    println!("NOT Waiting {} seconds", seconds);
-    // tokio::time::sleep(Duration::from_secs(seconds)).await;
+    // println!("NOT Waiting {} seconds", seconds);
+    tokio::time::sleep(Duration::from_secs(seconds)).await;
 }
 
 #[then(expr = "all transactions succeed on all validator nodes")]
@@ -978,8 +1007,17 @@ async fn successful_transaction(world: &mut TariWorld) {
 
             let hash = FixedHash::try_from(payload_id).unwrap();
             let get_transaction_req = GetTransactionResultRequest { hash };
-            let get_transaction_res = client.get_transaction_result(get_transaction_req).await.unwrap();
-            let finalized_tx = get_transaction_res.result.unwrap();
+            let get_transaction_res = client
+                .get_transaction_result(get_transaction_req)
+                .await
+                .expect(format!("Failed to get transaction with hash {} for vn = {}", hash, vn_ps.name).as_str());
+            let finalized_tx = get_transaction_res.result.expect(
+                format!(
+                    "Transaction result was rejected for tx hash {} and vn = {}",
+                    hash, vn_ps.name
+                )
+                .as_str(),
+            );
             finalized_tx.expect_success();
         }
     }
@@ -1046,14 +1084,6 @@ async fn print_world(world: &mut TariWorld) {
     for (name, daemon) in world.wallet_daemons.iter() {
         eprintln!("Wallet daemons \"{}\"", name);
         eprintln!("  - {}: {}", name, daemon.name);
-    }
-
-    // wallet daemon substate addresses
-    for (name, outputs) in world.wallet_daemon_outputs.iter() {
-        eprintln!("Outputs \"{}\"", name);
-        for (name, addr) in outputs {
-            eprintln!("  - {}: {}", name, addr);
-        }
     }
 
     eprintln!();
