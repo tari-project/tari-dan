@@ -22,10 +22,11 @@ diesel::table! {
 diesel::table! {
     events (id) {
         id -> Integer,
-        template_address -> Text,
+        component_address -> Text,
         tx_hash -> Text,
         topic -> Text,
         payload -> Text,
+        version -> Integer,
     }
 }
 

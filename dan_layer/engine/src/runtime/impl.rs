@@ -44,28 +44,10 @@ use tari_engine_types::{
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
-        BucketAction,
-        BucketRef,
-        CallerContextAction,
-        ComponentAction,
-        ComponentRef,
-        ConfidentialRevealArg,
-        ConsensusAction,
-        CreateComponentArg,
-        CreateResourceArg,
-        GenerateRandomAction,
-        InvokeResult,
-        LogLevel,
-        MintResourceArg,
-        NonFungibleAction,
-        PayFeeArg,
-        ResourceAction,
-        ResourceGetNonFungibleArg,
-        ResourceRef,
-        ResourceUpdateNonFungibleDataArg,
-        VaultAction,
-        VaultWithdrawArg,
-        WorkspaceAction,
+        BucketAction, BucketRef, CallerContextAction, ComponentAction, ComponentRef, ConfidentialRevealArg,
+        ConsensusAction, CreateComponentArg, CreateResourceArg, GenerateRandomAction, InvokeResult, LogLevel,
+        MintResourceArg, NonFungibleAction, PayFeeArg, ResourceAction, ResourceGetNonFungibleArg, ResourceRef,
+        ResourceUpdateNonFungibleDataArg, VaultAction, VaultWithdrawArg, WorkspaceAction,
     },
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
@@ -78,14 +60,8 @@ use super::tracker::FinalizeTracker;
 use crate::{
     packager::LoadedTemplate,
     runtime::{
-        engine_args::EngineArgs,
-        tracker::StateTracker,
-        AuthParams,
-        ConsensusContext,
-        RuntimeError,
-        RuntimeInterface,
-        RuntimeModule,
-        RuntimeState,
+        engine_args::EngineArgs, tracker::StateTracker, AuthParams, ConsensusContext, RuntimeError, RuntimeInterface,
+        RuntimeModule, RuntimeState,
     },
 };
 
@@ -167,14 +143,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
     fn emit_event(
         &self,
-        template_address: TemplateAddress,
+        component_address: ComponentAddress,
         tx_hash: Hash,
         topic: String,
         payload: HashMap<String, String>,
     ) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
-        let mut event = Event::new(template_address, tx_hash, topic);
+        let mut event = Event::new(component_address, tx_hash, topic);
         payload
             .into_iter()
             .for_each(|(key, value)| event.add_payload(key, value));

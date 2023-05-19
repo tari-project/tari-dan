@@ -23,27 +23,36 @@
 use std::{collections::HashMap, fmt::Display};
 
 use serde::{Deserialize, Serialize};
-use tari_template_lib::Hash;
+use tari_template_lib::{prelude::ComponentAddress, Hash};
 
-use crate::{serde_with, TemplateAddress};
+use crate::serde_with;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
     #[serde(with = "serde_with::hex")]
-    pub template_address: TemplateAddress,
+    component_address: ComponentAddress,
     #[serde(with = "serde_with::hex")]
-    pub tx_hash: Hash,
-    pub topic: String,
-    pub payload: HashMap<String, String>,
+    tx_hash: Hash,
+    topic: String,
+    payload: HashMap<String, String>,
 }
 
 impl Event {
-    pub fn new(template_address: TemplateAddress, tx_hash: Hash, topic: String) -> Self {
+    pub fn new(component_address: ComponentAddress, tx_hash: Hash, topic: String) -> Self {
+        Self::new_with_payload(component_address, tx_hash, topic, HashMap::new())
+    }
+
+    pub fn new_with_payload(
+        component_address: ComponentAddress,
+        tx_hash: Hash,
+        topic: String,
+        payload: HashMap<String, String>,
+    ) -> Self {
         Self {
-            template_address,
+            component_address,
             tx_hash,
             topic,
-            payload: HashMap::new(),
+            payload,
         }
     }
 
@@ -60,8 +69,8 @@ impl Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "event: template_address {}, tx_hash {}, topic {}",
-            self.template_address, self.tx_hash, self.topic
+            "event: component_address {}, tx_hash {}, topic {}",
+            self.component_address, self.tx_hash, self.topic
         )
     }
 }

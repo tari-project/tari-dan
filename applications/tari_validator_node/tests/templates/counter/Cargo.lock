@@ -770,7 +770,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "tari_dan_common_types"
 version = "0.50.0-pre.0"
 dependencies = [
@@ -951,8 +950,6 @@ dependencies = [
 ]
 
 [[package]]
-=======
->>>>>>> development
 name = "tari_template_abi"
 version = "0.50.0-pre.0"
 dependencies = [

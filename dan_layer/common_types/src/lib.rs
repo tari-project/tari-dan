@@ -92,6 +92,10 @@ impl PayloadId {
     pub fn into_array(self) -> [u8; 32] {
         self.id
     }
+
+    pub fn from_array(data: [u8; 32]) -> Self {
+        Self { id: data }
+    }
 }
 
 impl Display for PayloadId {

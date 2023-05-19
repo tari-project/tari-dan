@@ -55,20 +55,8 @@ use tari_engine_types::{
 };
 use tari_template_lib::{
     args::{
-        Arg,
-        BucketAction,
-        BucketRef,
-        CallerContextAction,
-        ComponentAction,
-        ComponentRef,
-        ConsensusAction,
-        GenerateRandomAction,
-        InvokeResult,
-        LogLevel,
-        NonFungibleAction,
-        ResourceAction,
-        ResourceRef,
-        VaultAction,
+        Arg, BucketAction, BucketRef, CallerContextAction, ComponentAction, ComponentRef, ConsensusAction,
+        GenerateRandomAction, InvokeResult, LogLevel, NonFungibleAction, ResourceAction, ResourceRef, VaultAction,
         WorkspaceAction,
     },
     invoke_args,
@@ -82,7 +70,7 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn emit_event(
         &self,
-        template_address: TemplateAddress,
+        component_address: ComponentAddress,
         tx_hash: Hash,
         topic: String,
         payload: HashMap<String, String>,

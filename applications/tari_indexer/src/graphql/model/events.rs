@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::PayloadId;
 use tari_engine_types::TemplateAddress;
+use tari_template_lib::prelude::ComponentAddress;
 
 use crate::substate_manager::SubstateManager;
 
@@ -36,7 +37,7 @@ const LOG_TARGET: &str = "tari::indexer::graphql::events";
 #[derive(SimpleObject, Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
-    pub template_address: [u8; 32],
+    pub component_address: [u8; 32],
     pub tx_hash: [u8; 32],
     pub topic: String,
     pub payload: HashMap<String, String>,
@@ -51,19 +52,19 @@ impl EventQuery {
     pub async fn get_event(
         &self,
         ctx: &Context<'_>,
-        template_address: [u8; 32],
+        component_address: [u8; 32],
         tx_hash: [u8; 32],
     ) -> Result<Vec<Event>, anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "Querying events with template_address = {} and tx_hash = {}",
-            template_address.to_hex(),
+            "Querying events with component_address = {} and tx_hash = {}",
+            component_address.to_hex(),
             tx_hash.to_hex()
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let template_address = TemplateAddress::from_array(template_address);
+        let component_address = ComponentAddress::from_array(component_address);
         let tx_hash = PayloadId::new(tx_hash);
-        let events = substate_manager.get_event_from_db(template_address, tx_hash).await?;
+        let events = substate_manager.get_event_from_db(component_address, tx_hash).await?;
         let events = events
             .into_iter()
             .map(|e| e.try_into())
@@ -74,29 +75,34 @@ impl EventQuery {
     pub async fn save_event(
         &self,
         ctx: &Context<'_>,
-        template_address: [u8; 32],
+        component_address: [u8; 32],
         tx_hash: [u8; 32],
         topic: String,
         payload: String,
+        version: u64,
     ) -> Result<Event, anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "Saving event for template_address = {:?}, tx_hash = {:?} and topic = {}", template_address, tx_hash, topic
+            "Saving event for component_address = {:?}, tx_hash = {:?} and topic = {}",
+            component_address,
+            tx_hash,
+            topic
         );
 
         let payload: HashMap<String, String> = serde_json::from_str(&payload)?;
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         substate_manager
             .save_event_to_db(
-                TemplateAddress::from_array(template_address),
+                ComponentAddress::from_array(component_address),
                 PayloadId::new(tx_hash),
                 topic.clone(),
                 payload.clone(),
+                version,
             )
             .await?;
 
         Ok(Event {
-            template_address,
+            component_address,
             tx_hash,
             topic,
             payload,

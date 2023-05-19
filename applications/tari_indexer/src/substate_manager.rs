@@ -30,10 +30,12 @@ use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::PayloadId;
 use tari_engine_types::{
+    events::Event,
     substate::{Substate, SubstateAddress},
     TemplateAddress,
 };
 use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
+use tari_template_lib::prelude::ComponentAddress;
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::{
@@ -45,10 +47,7 @@ use crate::{
             substate::NewSubstate,
         },
         sqlite_substate_store_factory::{
-            SqliteSubstateStore,
-            SqliteSubstateStoreWriteTransaction,
-            SubstateStore,
-            SubstateStoreReadTransaction,
+            SqliteSubstateStore, SqliteSubstateStoreWriteTransaction, SubstateStore, SubstateStoreReadTransaction,
             SubstateStoreWriteTransaction,
         },
     },
@@ -268,31 +267,66 @@ impl SubstateManager {
 
     pub async fn get_event_from_db(
         &self,
-        template_address: TemplateAddress,
+        component_address: ComponentAddress,
         tx_hash: PayloadId,
     ) -> Result<Vec<EventData>, anyhow::Error> {
         let mut tx = self.substate_store.create_read_tx()?;
-        let events = tx.get_events(template_address, tx_hash)?;
+        let events = tx.get_events(&component_address, tx_hash)?;
         Ok(events)
     }
 
     pub async fn save_event_to_db(
         &self,
-        template_address: TemplateAddress,
+        component_address: ComponentAddress,
         tx_hash: PayloadId,
         topic: String,
         payload: HashMap<String, String>,
+        version: u64,
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
         let new_event = NewEvent {
-            template_address: template_address.to_string(),
+            component_address: component_address.to_string(),
             tx_hash: tx_hash.to_string(),
             topic,
             payload: payload.to_json().expect("Failed to convert to JSON"),
+            version: version as i32,
         };
-        tx.save_events(new_event)?;
+        tx.save_event(new_event)?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub async fn scan_events_for_substate_from_network(
+        &self,
+        component_address: ComponentAddress,
+        version: Option<u32>,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        let mut events = vec![];
+        let substate_address = SubstateAddress::Component(component_address);
+        let version = version.unwrap_or_default();
+
+        // check if database contains the events for this transaction, by querying
+        // what is the latest version for the given component_address
+        let mut tx = self.substate_store.create_read_tx()?;
+        let latest_version_in_db = tx.get_latest_version_of_events(&component_address)?;
+
+        let stored_events = tx
+            .get_all_events(&component_address)?
+            .iter()
+            .map(|e| e.clone().try_into())
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+        events.extend(stored_events);
+
+        let version = version.max(latest_version_in_db);
+        // check if there are newest events for this component address in the network
+        let network_events = self
+            .substate_scanner
+            .get_events_for_component(component_address, Some(version))
+            .await?;
+        // stores the newest network events to the db
+        events.extend(network_events);
+
+        Ok(events)
     }
 
     pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {

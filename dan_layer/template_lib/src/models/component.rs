@@ -53,6 +53,10 @@ impl ComponentAddress {
         let hash = Hash::from_hex(hex)?;
         Ok(Self::new(hash))
     }
+
+    pub fn from_array(arr: [u8; 32]) -> Self {
+        Self::new(Hash::from_array(arr))
+    }
 }
 
 impl FromStr for ComponentAddress {

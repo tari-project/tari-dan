@@ -26,10 +26,7 @@ use lazy_static::lazy_static;
 use rand::rngs::OsRng;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_comms::{
-    multiaddr::Multiaddr,
-    peer_manager::PeerFeatures,
-    protocol::rpc::__macro_reexports::future::join_all,
-    NodeIdentity,
+    multiaddr::Multiaddr, peer_manager::PeerFeatures, protocol::rpc::__macro_reexports::future::join_all, NodeIdentity,
 };
 use tari_core::ValidatorNodeBMT;
 use tari_crypto::{
@@ -38,6 +35,7 @@ use tari_crypto::{
 };
 use tari_dan_common_types::{vn_bmt_node_hash, Epoch, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
+    consensus_constants::ConsensusConstants,
     models::{vote_message::VoteMessage, HotStuffMessage, HotstuffPhase, Payload, TariDanPayload},
     services::{
         epoch_manager::RangeEpochManager,
@@ -131,7 +129,12 @@ async fn test_receives_new_payload_starts_new_chain() {
     // let node1 = "node1".to_string()
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let registered_vn_keys = vec![node1.clone()];
-    let epoch_manager = RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone()]);
+    let epoch_manager = RangeEpochManager::new(
+        registered_vn_keys,
+        *SHARD0..*SHARD1,
+        vec![node1.clone()],
+        ConsensusConstants::devnet(),
+    );
     let mut instance = HsTestHarness::new(
         node1_pk.clone(),
         node1.clone(),
@@ -152,8 +155,12 @@ async fn test_hs_waiter_leader_proposes() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
-    let epoch_manager =
-        RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
+    let epoch_manager = RangeEpochManager::new(
+        registered_vn_keys,
+        *SHARD0..*SHARD1,
+        vec![node1.clone(), node2.clone()],
+        ConsensusConstants::devnet(),
+    );
     let mut instance = HsTestHarness::new(
         node1_pk.clone(),
         node1.clone(),
@@ -197,8 +204,12 @@ async fn test_hs_waiter_replica_sends_vote_for_proposal() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let (node2_pk, node2) = PublicKey::random_keypair(&mut OsRng);
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
-    let epoch_manager =
-        RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
+    let epoch_manager = RangeEpochManager::new(
+        registered_vn_keys,
+        *SHARD0..*SHARD1,
+        vec![node1.clone(), node2.clone()],
+        ConsensusConstants::devnet(),
+    );
     let mut instance = HsTestHarness::new(
         node1_pk.clone(),
         node1.clone(),
@@ -260,8 +271,12 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     let vn_bmt = ValidatorNodeBMT::create(vn_bmt_vec);
 
-    let epoch_manager =
-        RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone(), node2.clone()]);
+    let epoch_manager = RangeEpochManager::new(
+        registered_vn_keys,
+        *SHARD0..*SHARD1,
+        vec![node1.clone(), node2.clone()],
+        ConsensusConstants::devnet(),
+    );
     let mut instance = HsTestHarness::new(
         node1_pk.clone(),
         node1.clone(),
@@ -340,7 +355,12 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 async fn test_hs_waiter_execute_called_at_prepare_phase_only() {
     let (node1_pk, node1) = PublicKey::random_keypair(&mut OsRng);
     let registered_vn_keys = vec![node1.clone()];
-    let epoch_manager = RangeEpochManager::new(registered_vn_keys, *SHARD0..*SHARD1, vec![node1.clone()]);
+    let epoch_manager = RangeEpochManager::new(
+        registered_vn_keys,
+        *SHARD0..*SHARD1,
+        vec![node1.clone()],
+        ConsensusConstants::devnet(),
+    );
     let mut instance = HsTestHarness::new(
         node1_pk.clone(),
         node1.clone(),
@@ -412,10 +432,14 @@ async fn test_hs_waiter_multishard_votes() {
     let shard0_committee = vec![node1.clone()];
     let shard1_committee = vec![node2.clone()];
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
-    let epoch_manager = RangeEpochManager::new_with_multiple(registered_vn_keys, &[
-        (*SHARD0..*SHARD1, shard0_committee),
-        (*SHARD1..*SHARD2, shard1_committee),
-    ]);
+    let epoch_manager = RangeEpochManager::new_with_multiple(
+        registered_vn_keys,
+        &[
+            (*SHARD0..*SHARD1, shard0_committee),
+            (*SHARD1..*SHARD2, shard1_committee),
+        ],
+        ConsensusConstants::devnet(),
+    );
     let mut node1_instance = HsTestHarness::new(
         node1_pk.clone(),
         node1.clone(),
@@ -527,10 +551,14 @@ async fn test_leader_fails_only_foreignly() {
     let shard0_committee = vec![node0.clone()];
     let shard1_committee = vec![node1.clone()];
     let registered_vn_keys = vec![node0.clone(), node1.clone()];
-    let epoch_manager = RangeEpochManager::new_with_multiple(registered_vn_keys, &[
-        (*SHARD0..*SHARD1, shard0_committee),
-        (*SHARD1..*SHARD2, shard1_committee),
-    ]);
+    let epoch_manager = RangeEpochManager::new_with_multiple(
+        registered_vn_keys,
+        &[
+            (*SHARD0..*SHARD1, shard0_committee),
+            (*SHARD1..*SHARD2, shard1_committee),
+        ],
+        ConsensusConstants::devnet(),
+    );
 
     let mut instance0 = HsTestHarness::new(
         node0_pk.clone(),
@@ -954,6 +982,7 @@ impl Test {
                 .map(|committee| committee.get_range_with_keys())
                 .collect::<Vec<_>>()
                 .as_slice(),
+            ConsensusConstants::devnet(),
         );
 
         // Init the HsTestHarness instances for the committees.
@@ -1369,10 +1398,11 @@ async fn test_kitchen_sink() {
     let s2 = involved_shards[1];
 
     let registered_vn_keys = vec![node1.clone(), node2.clone()];
-    let epoch_manager = RangeEpochManager::new_with_multiple(registered_vn_keys, &[
-        (s1..s2, shard0_committee),
-        (s2..ShardId([255u8; 32]), shard1_committee),
-    ]);
+    let epoch_manager = RangeEpochManager::new_with_multiple(
+        registered_vn_keys,
+        &[(s1..s2, shard0_committee), (s2..ShardId([255u8; 32]), shard1_committee)],
+        ConsensusConstants::devnet(),
+    );
     // Create 2x hotstuff waiters
     let node1_instance = HsTestHarness::new(
         node1_pk.clone(),
