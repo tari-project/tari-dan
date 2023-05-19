@@ -332,7 +332,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
                 crate::substate_storage_sqlite::schema::events::component_address
                     .eq(&component_address.hash().to_string()),
             )
-            .select(diesel::dsl::max(events::version.nullable()))
+            .select(diesel::dsl::max(events::version))
             .first(self.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
