@@ -7,7 +7,7 @@ use cucumber::{then, when};
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{confidential::ConfidentialClaim, substate::SubstateAddress};
-use tari_template_lib::{args, prelude::ComponentAddress};
+use tari_template_lib::args;
 use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest, TransactionFinalizeResult};
 
@@ -70,16 +70,16 @@ async fn when_i_claim_burn(
         .get(&account_name)
         .unwrap_or_else(|| panic!("Account {} not found", account_name));
 
-    let account_address = world.get_account_component_address(&account_name).unwrap();
-    let component_address = ComponentAddress::from_str(&account_address).expect("Invalid account address");
+    let account_address = world.get_account_component_address(&account_name).unwrap().address;
+    let component_address = account_address.as_component_address().expect("Invalid account address");
 
     let reciprocal_public_key = world
         .claim_public_keys
         .get(&claim_public_key_name)
         .unwrap_or_else(|| panic!("Claim public key {} not found", claim_public_key_name));
 
-    let account_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 0);
-    let account_v1_shard = ShardId::from_address(&SubstateAddress::from_str(&account_address).unwrap(), 1);
+    let account_shard = ShardId::from_address(&account_address, 0);
+    let account_v1_shard = ShardId::from_address(&account_address, 1);
 
     let transaction = Transaction::builder()
         .claim_burn(ConfidentialClaim {

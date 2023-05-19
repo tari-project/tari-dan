@@ -107,7 +107,6 @@ pub struct TariWorld {
     pub account_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
-    pub wallet_daemon_outputs: IndexMap<String, IndexMap<String, VersionedSubstateAddress>>,
 }
 
 impl TariWorld {
@@ -133,12 +132,12 @@ impl TariWorld {
             .unwrap_or_else(|| panic!("Base node {} not found", name))
     }
 
-    pub fn get_account_component_address(&self, name: &str) -> Option<String> {
+    pub fn get_account_component_address(&self, name: &str) -> Option<VersionedSubstateAddress> {
         let all_components = self
             .outputs
             .get(name)
             .unwrap_or_else(|| panic!("Account component address {} not found", name));
-        all_components.get("components/Account").map(|a| a.address.to_string())
+        all_components.get("components/Account").cloned()
     }
 
     pub fn after(&mut self, _scenario: &Scenario) {
@@ -168,10 +167,7 @@ impl TariWorld {
             // You have explicitly trigger the shutdown now because of the change to use Arc/Mutex in tari_shutdown
             p.shutdown.trigger();
         }
-        println!("Removing validator node outputs");
         self.outputs.clear();
-        println!("Removing wallet daemon outputs");
-        self.wallet_daemon_outputs.clear();
         self.miners.clear();
     }
 
@@ -1088,14 +1084,6 @@ async fn print_world(world: &mut TariWorld) {
     for (name, daemon) in world.wallet_daemons.iter() {
         eprintln!("Wallet daemons \"{}\"", name);
         eprintln!("  - {}: {}", name, daemon.name);
-    }
-
-    // wallet daemon substate addresses
-    for (name, outputs) in world.wallet_daemon_outputs.iter() {
-        eprintln!("Outputs \"{}\"", name);
-        for (name, addr) in outputs {
-            eprintln!("  - {}: {}", name, addr);
-        }
     }
 
     eprintln!();

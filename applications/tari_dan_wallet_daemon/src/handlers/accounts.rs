@@ -24,7 +24,7 @@ use tari_engine_types::{
     component::new_component_address_from_parts,
     confidential::ConfidentialClaim,
     instruction::Instruction,
-    substate::SubstateAddress,
+    substate::{Substate, SubstateAddress},
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -84,6 +84,7 @@ pub async fn handle_create(
     req: AccountsCreateRequest,
 ) -> Result<AccountsCreateResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    let key_manager_api = sdk.key_manager_api();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
     if let Some(name) = req.account_name.as_ref() {
@@ -92,17 +93,38 @@ pub async fn handle_create(
         }
     }
 
-    let (key_index, signing_key) = sdk
-        .key_manager_api()
-        .get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
-    let owner_pk = PublicKey::from_secret_key(&signing_key.k);
+    let default_account = sdk.accounts_api().get_default()?;
+    let inputs = sdk
+        .substate_api()
+        .locate_dependent_substates(&[&default_account.address])
+        .await?;
+
+    let signing_key_index = default_account.key_index;
+    let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
+
+    let owner_key = key_manager_api.next_key(key_manager::TRANSACTION_BRANCH)?;
+    let owner_pk = PublicKey::from_secret_key(&owner_key.k);
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
-    info!(target: LOG_TARGET, "Creating account with owner token {}", owner_pk);
+    info!(
+        target: LOG_TARGET,
+        "Creating account with owner token {}. Fees are paid using account '{}' {}",
+        owner_pk,
+        default_account.name,
+        default_account.address
+    );
 
+    let fee = req.fee.unwrap_or(DEFAULT_FEE);
     let transaction = Transaction::builder()
+        .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), fee)
         .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
+        .with_inputs(
+            inputs
+                .iter()
+                .map(|addr| ShardId::from_address(&addr.address, addr.version))
+                .collect(),
+        )
         .sign(&signing_key.k)
         .build();
 
@@ -113,7 +135,7 @@ pub async fn handle_create(
         hash: tx_hash,
         new_account: Some(NewAccountInfo {
             name: req.account_name,
-            key_index,
+            key_index: owner_key.key_index,
             is_default: req.is_default,
         }),
     });
@@ -132,7 +154,7 @@ pub async fn handle_create(
         .accept()
         .unwrap()
         .up_iter()
-        .find(|(a, v)| a.is_component() && v.version() == 0)
+        .find(|(_, v)| v.version() == 0 && is_account_substate(v))
         .map(|(a, _)| a.clone())
         .ok_or_else(|| anyhow!("Finalize result did not UP any new version 0 component"))?;
 
@@ -187,23 +209,12 @@ pub async fn handle_invoke(
 ) -> Result<AccountsInvokeResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let (_, signing_key) = sdk
-        .key_manager_api()
-        .get_key_or_active(key_manager::TRANSACTION_BRANCH, None)?;
 
     let account = get_account_or_default(req.account, &sdk.accounts_api())?;
-    let account_substate = sdk.substate_api().get_substate(&account.address)?;
 
-    let vault = sdk
-        .accounts_api()
-        .get_vault_by_resource(&account.address, &CONFIDENTIAL_TARI_RESOURCE_ADDRESS)?;
-
-    let vault_substate = sdk.substate_api().get_substate(&vault.address)?;
-    // Because of the fee, we pledge that the account and confidential vault substates will be mutated
-    let outputs = vec![
-        ShardId::from_address(&account_substate.address.address, account_substate.address.version + 1),
-        ShardId::from_address(&vault_substate.address.address, vault_substate.address.version + 1),
-    ];
+    let signing_key = sdk
+        .key_manager_api()
+        .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
 
     let inputs = sdk.substate_api().load_dependent_substates(&[&account.address])?;
 
@@ -217,7 +228,6 @@ pub async fn handle_invoke(
         .fee_transaction_pay_from_component(account_address, req.fee.unwrap_or(DEFAULT_FEE))
         .call_method(account_address, &req.method, req.args)
         .with_inputs(inputs)
-        .with_outputs(outputs)
         .sign(&signing_key.k)
         .build();
 
@@ -700,7 +710,7 @@ pub async fn handle_create_free_test_coins(
     let accounts_api = sdk.accounts_api();
     let mut inputs = vec![];
 
-    // Get the account is one is specified and exists.
+    // Get the account if one is specified and exists.
     let maybe_account = match req.account {
         Some(ref addr_or_name) => get_account(addr_or_name, &accounts_api).optional()?,
         None => {
@@ -1205,4 +1215,12 @@ fn invalid_params(field: &str, details: Option<String>) -> JsonRpcError {
         ),
         serde_json::Value::Null,
     )
+}
+
+fn is_account_substate(substate: &Substate) -> bool {
+    substate
+        .substate_value()
+        .component()
+        .filter(|c| c.template_address == *ACCOUNT_TEMPLATE_ADDRESS)
+        .is_some()
 }

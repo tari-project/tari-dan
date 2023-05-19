@@ -302,14 +302,10 @@ impl FromStr for SubstateAddress {
                     .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::UnclaimedConfidentialOutput(commitment_address))
             },
-            Some(("transaction", s2)) => {
-                if let Some(("receipt", addr)) = s2.split_once('_') {
-                    let tx_receipt_addr = TransactionReceiptAddress::from_hex(addr)
-                        .map_err(|_| InvalidSubstateAddressFormat(addr.to_string()))?;
-                    Ok(SubstateAddress::TransactionReceipt(tx_receipt_addr))
-                } else {
-                    Err(InvalidSubstateAddressFormat(s.to_string()))
-                }
+            Some(("txreceipt", addr)) => {
+                let tx_receipt_addr = TransactionReceiptAddress::from_hex(addr)
+                    .map_err(|_| InvalidSubstateAddressFormat(addr.to_string()))?;
+                Ok(SubstateAddress::TransactionReceipt(tx_receipt_addr))
             },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
@@ -374,6 +370,13 @@ impl SubstateValue {
     }
 
     pub fn into_vault(self) -> Option<Vault> {
+        match self {
+            SubstateValue::Vault(vault) => Some(vault),
+            _ => None,
+        }
+    }
+
+    pub fn vault(&self) -> Option<&Vault> {
         match self {
             SubstateValue::Vault(vault) => Some(vault),
             _ => None,

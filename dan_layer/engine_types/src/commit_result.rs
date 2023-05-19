@@ -63,7 +63,7 @@ impl<T: Into<Hash>> From<T> for TransactionReceiptAddress {
 
 impl Display for TransactionReceiptAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "transaction_receipt_{}", self.0 .0)
+        write!(f, "txreceipt_{}", self.0 .0)
     }
 }
 
@@ -98,7 +98,7 @@ impl ExecuteResult {
 
     pub fn expect_failure(&self) -> &RejectReason {
         match self.finalize.result {
-            TransactionResult::Accept(_) => panic!("Transaction succeeded"),
+            TransactionResult::Accept(_) => panic!("Expected transaction to fail but it succeeded"),
             TransactionResult::Reject(ref reason) => reason,
         }
     }
