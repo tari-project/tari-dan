@@ -35,12 +35,10 @@ Feature: Wallet Daemon
         When miner MINER mines 5 new blocks
         Then the template "faucet" is listed as registered by the validator node VAL_1
 
-        # A file-base CLI account must be created to sign future calls
-        When I use an account key named K1
-
         # Create two accounts to test sending the tokens
         When I create an account ACC_1 via the wallet daemon WALLET_D with 1000 free coins
         When I create an account ACC_2 via the wallet daemon WALLET_D
+        When I check the balance of ACC_2 on wallet daemon WALLET_D the amount is exactly 0
 
         # Create a new Faucet component
         When I call function "mint" on template "faucet" using account ACC_1 to pay fees via wallet daemon WALLET_D with args "10000" and 3 outputs named "FAUCET"
@@ -72,9 +70,9 @@ Feature: Wallet Daemon
         acc1.balance(faucet_resource);
         ```
         # Check balances
-        # Notice that `take_free_coins` extracts precisely 1000 faucet tokens + 1000 free coins
+        # Notice that `take_free_coins` extracts precisely 1000 faucet tokens
         When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 1000
-        When I check the balance of ACC_2 on wallet daemon WALLET_D the amount is exactly 50
+        When I wait for ACC_2 on wallet daemon WALLET_D to have balance eq 50
 
     @serial
     Scenario: Claim and transfer confidential assets via wallet daemon

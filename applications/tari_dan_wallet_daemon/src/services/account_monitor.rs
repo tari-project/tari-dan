@@ -195,12 +195,9 @@ where
             is_updated = true;
 
             substate_api.save_child(created_by_tx, versioned_account_address.address.clone(), versioned_addr)?;
-            // Add the vault if it does not exist
-            if !accounts_api.has_vault(&vault_addr)? {
-                self.add_vault_to_account(&versioned_account_address.address, &vault)
-                    .await?;
-            }
 
+            self.add_vault_to_account_if_not_exist(&versioned_account_address.address, &vault)
+                .await?;
             self.refresh_vault(&versioned_account_address.address, &vault)?;
         }
 
@@ -300,7 +297,7 @@ where
             for vault_id in value.vault_ids() {
                 // Any vaults we process here do not need to be reprocesed later
                 if let Some(vault) = vaults.remove(vault_id).and_then(|s| s.substate_value().vault()) {
-                    self.add_vault_to_account(account_addr, vault).await?;
+                    self.add_vault_to_account_if_not_exist(account_addr, vault).await?;
                     self.refresh_vault(account_addr, vault)?;
                 }
             }
@@ -337,10 +334,7 @@ where
                 continue;
             }
 
-            // Add the vault if it does not exist
-            if !accounts_api.has_vault(&vault_addr)? {
-                self.add_vault_to_account(&account_addr, vault).await?;
-            }
+            self.add_vault_to_account_if_not_exist(&account_addr, vault).await?;
 
             // Update the vault balance / confidential outputs
             self.refresh_vault(&account_addr, vault)?;
@@ -364,12 +358,16 @@ where
         Ok(resx)
     }
 
-    async fn add_vault_to_account(
+    async fn add_vault_to_account_if_not_exist(
         &self,
         account_addr: &SubstateAddress,
         vault: &Vault,
     ) -> Result<(), AccountMonitorError> {
+        let vault_addr = SubstateAddress::Vault(*vault.vault_id());
         let accounts_api = self.wallet_sdk.accounts_api();
+        if accounts_api.has_vault(&vault_addr)? {
+            return Ok(());
+        }
         let maybe_resource = match self.fetch_resource(*vault.resource_address()).await {
             Ok(r) => Some(r),
             Err(e) => {
@@ -392,7 +390,7 @@ where
         );
         accounts_api.add_vault(
             account_addr.clone(),
-            SubstateAddress::Vault(*vault.vault_id()),
+            vault_addr,
             *vault.resource_address(),
             vault.resource_type(),
             token_symbol,
