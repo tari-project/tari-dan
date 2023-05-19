@@ -111,19 +111,19 @@ impl IndexerProcess {
 
     pub async fn insert_event_mock_data(&mut self) {
         let mut graphql_client = self.get_graphql_indexer_client().await;
-        let template_address = [0u8; 32];
+        let component_address = [0u8; 32];
         let tx_hash = [0u8; 32];
         let topic = "my_event".to_string();
         let payload = HashMap::<String, String>::from([("my".to_string(), "event".to_string())])
             .to_json()
             .unwrap();
         let query = format!(
-            "{{ saveEvent(templateAddress: {:?}, txHash: {:?}, topic: {:?}, payload: {:?}) {{ templateAddress txHash \
-             topic payload }} }}",
-            template_address,
+            "{{ saveEvent(componentAddress: {:?}, txHash: {:?}, topic: {:?}, payload: {:?}) {{ componentAddress \
+             txHash topic payload }} }}",
+            component_address,
             tx_hash,
             topic,
-            payload // template_address, tx_hash, topic, payload
+            payload // component_address, tx_hash, topic, payload
         );
         let res = graphql_client
             .send_request::<HashMap<String, tari_indexer::graphql::model::events::Event>>(&query, None, None)
@@ -131,7 +131,7 @@ impl IndexerProcess {
             .unwrap_or_else(|e| panic!("Failed to save event via graphql client: {}", e));
         let res = res.get("saveEvent").unwrap();
 
-        assert_eq!(res.component_address, template_address);
+        assert_eq!(res.component_address, component_address);
     }
 
     pub async fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {

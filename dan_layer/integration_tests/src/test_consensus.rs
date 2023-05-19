@@ -26,7 +26,10 @@ use lazy_static::lazy_static;
 use rand::rngs::OsRng;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_comms::{
-    multiaddr::Multiaddr, peer_manager::PeerFeatures, protocol::rpc::__macro_reexports::future::join_all, NodeIdentity,
+    multiaddr::Multiaddr,
+    peer_manager::PeerFeatures,
+    protocol::rpc::__macro_reexports::future::join_all,
+    NodeIdentity,
 };
 use tari_core::ValidatorNodeBMT;
 use tari_crypto::{

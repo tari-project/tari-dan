@@ -244,8 +244,11 @@ where
             .await
             .map_err(|e| IndexerError::FailedToGetCommitteeSize(e.to_string()))?;
 
-        let mut rng = rand::thread_rng();
-        let to_query_members = extract_random_committee_members(&mut rng, &committee.members, committee_size);
+        let to_query_members;
+        {
+            let mut rng = rand::thread_rng();
+            to_query_members = extract_random_committee_members(&mut rng, &committee.members, committee_size);
+        }
 
         let mut transaction_hash = None;
         for member in to_query_members {
@@ -253,8 +256,8 @@ where
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up {
                         created_by_tx: tx_hash, ..
-                    }
-                    | SubstateResult::Down {
+                    } |
+                    SubstateResult::Down {
                         deleted_by_tx: tx_hash, ..
                     } => {
                         transaction_hash = Some(tx_hash);
@@ -274,8 +277,7 @@ where
                 Err(e) => {
                     warn!(
                         target: LOG_TARGET,
-                        "Could not find substate result for component_address = {} and version = {}, with error = \
-                             {}",
+                        "Could not find substate result for component_address = {} and version = {}, with error = {}",
                         substate_address.as_component_address().unwrap(),
                         version,
                         e

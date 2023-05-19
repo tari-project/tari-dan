@@ -133,29 +133,14 @@ checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
 name = "ciborium"
-version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
-dependencies = [
- "ciborium-io 0.2.0",
- "ciborium-ll 0.2.0",
- "serde",
-]
-
-[[package]]
-name = "ciborium"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "effd91f6c78e5a4ace8a5d3c0b6bfaec9e2baaef55f3efc00e45fb2e477ee926"
 dependencies = [
- "ciborium-io 0.2.1",
- "ciborium-ll 0.2.1",
+ "ciborium-io",
+ "ciborium-ll",
  "serde",
 ]
-
-[[package]]
-name = "ciborium-io"
-version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
 
 [[package]]
 name = "ciborium-io"
@@ -165,20 +150,11 @@ checksum = "cdf919175532b369853f5d5e20b26b43112613fd6fe7aee757e35f7a44642656"
 
 [[package]]
 name = "ciborium-ll"
-version = "0.2.0"
-source = "git+https://github.com/enarx/ciborium.git?rev=ac38b3dddeadf81f93cc8e58689ea92dc46a8e56#ac38b3dddeadf81f93cc8e58689ea92dc46a8e56"
-dependencies = [
- "ciborium-io 0.2.0",
- "half",
-]
-
-[[package]]
-name = "ciborium-ll"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "defaa24ecc093c77630e6c15e17c51f5e187bf35ee514f4e2d67baaa96dae22b"
 dependencies = [
- "ciborium-io 0.2.1",
+ "ciborium-io",
  "half",
 ]
 
@@ -694,7 +670,7 @@ dependencies = [
 name = "tari_bor"
 version = "0.50.0-pre.0"
 dependencies = [
- "ciborium 0.2.1",
+ "ciborium",
  "serde",
 ]
 
@@ -767,186 +743,6 @@ dependencies = [
  "tari_utilities",
  "thiserror",
  "zeroize",
-]
-
-[[package]]
-name = "tari_dan_common_types"
-version = "0.50.0-pre.0"
-dependencies = [
- "anyhow",
- "bincode",
- "digest 0.9.0",
- "newtype-ops",
- "prost",
- "prost-types",
- "rand 0.7.3",
- "serde",
- "tari_bor",
- "tari_common 0.50.0-pre.0",
- "tari_common_types 0.50.0-pre.0",
- "tari_core",
- "tari_crypto 0.16.11",
- "tari_engine_types",
- "tari_mmr",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "tari_dan_engine"
-version = "0.50.0-pre.0"
-dependencies = [
- "anyhow",
- "cargo_toml",
- "d3ne",
- "log",
- "rand 0.7.3",
- "serde",
- "serde_json",
- "tari_bor",
- "tari_common_types 0.50.0-pre.0",
- "tari_crypto 0.16.11",
- "tari_dan_common_types",
- "tari_engine_types",
- "tari_mmr",
- "tari_template_abi",
- "tari_template_lib",
- "tari_transaction",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "tempfile",
- "thiserror",
- "wasmer",
- "wasmer-middlewares",
-]
-
-[[package]]
-name = "tari_engine_types"
-version = "0.50.0-pre.0"
-dependencies = [
- "base64 0.21.0",
- "borsh",
- "ciborium 0.2.0",
- "digest 0.9.0",
- "hex",
- "lazy_static",
- "rand 0.7.3",
- "serde",
- "serde_bytes",
- "serde_json",
- "tari_bor",
- "tari_common_types 0.50.0-pre.0",
- "tari_crypto 0.16.11",
- "tari_template_abi",
- "tari_template_lib",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "thiserror",
-]
-
-[[package]]
-name = "tari_metrics"
-version = "0.1.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.50.0-pre.0#dbc592f8ee434935aa11cffc0ca62fee3e4c8f3e"
-dependencies = [
- "once_cell",
- "prometheus",
- "thiserror",
-]
-
-[[package]]
-name = "tari_mmr"
-version = "0.50.0-pre.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.50.0-pre.0#dbc592f8ee434935aa11cffc0ca62fee3e4c8f3e"
-dependencies = [
- "borsh",
- "croaring",
- "digest 0.9.0",
- "log",
- "serde",
- "tari_common 0.50.0-pre.0",
- "tari_crypto 0.16.11",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "thiserror",
-]
-
-[[package]]
-name = "tari_p2p"
-version = "0.50.0-pre.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.50.0-pre.0#dbc592f8ee434935aa11cffc0ca62fee3e4c8f3e"
-dependencies = [
- "anyhow",
- "fs2",
- "futures",
- "lmdb-zero",
- "log",
- "prost",
- "rand 0.7.3",
- "rustls",
- "serde",
- "tari_common 0.50.0-pre.0",
- "tari_comms",
- "tari_comms_dht",
- "tari_crypto 0.16.11",
- "tari_service_framework",
- "tari_shutdown",
- "tari_storage",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "thiserror",
- "tokio",
- "tokio-stream",
- "tower",
- "trust-dns-client",
- "webpki 0.21.4",
-]
-
-[[package]]
-name = "tari_script"
-version = "0.12.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.50.0-pre.0#dbc592f8ee434935aa11cffc0ca62fee3e4c8f3e"
-dependencies = [
- "blake2 0.9.2",
- "borsh",
- "digest 0.9.0",
- "integer-encoding",
- "serde",
- "sha2 0.9.9",
- "sha3",
- "tari_crypto 0.16.11",
- "tari_utilities 0.4.10 (registry+https://github.com/rust-lang/crates.io-index)",
- "thiserror",
-]
-
-[[package]]
-name = "tari_service_framework"
-version = "0.50.0-pre.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.50.0-pre.0#dbc592f8ee434935aa11cffc0ca62fee3e4c8f3e"
-dependencies = [
- "anyhow",
- "async-trait",
- "futures",
- "log",
- "tari_shutdown",
- "thiserror",
- "tokio",
- "tower-service",
-]
-
-[[package]]
-name = "tari_shutdown"
-version = "0.50.0-pre.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.50.0-pre.0#dbc592f8ee434935aa11cffc0ca62fee3e4c8f3e"
-dependencies = [
- "futures",
-]
-
-[[package]]
-name = "tari_storage"
-version = "0.50.0-pre.0"
-source = "git+https://github.com/tari-project/tari.git?tag=v0.50.0-pre.0#dbc592f8ee434935aa11cffc0ca62fee3e4c8f3e"
-dependencies = [
- "bincode",
- "lmdb-zero",
- "log",
- "serde",
- "thiserror",
 ]
 
 [[package]]

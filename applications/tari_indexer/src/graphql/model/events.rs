@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryInto, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
@@ -40,6 +40,17 @@ pub struct Event {
     pub tx_hash: [u8; 32],
     pub topic: String,
     pub payload: HashMap<String, String>,
+}
+
+impl From<tari_engine_types::events::Event> for Event {
+    fn from(event: tari_engine_types::events::Event) -> Self {
+        Self {
+            component_address: event.component_address().into_array(),
+            tx_hash: event.tx_hash().into_array(),
+            topic: event.topic().clone(),
+            payload: event.get_full_payload().clone(),
+        }
+    }
 }
 
 pub(crate) type EventSchema = Schema<EventQuery, EmptyMutation, EmptySubscription>;
@@ -63,11 +74,18 @@ impl EventQuery {
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let component_address = ComponentAddress::from_array(component_address);
         let tx_hash = PayloadId::new(tx_hash);
-        let events = substate_manager.get_event_from_db(component_address, tx_hash).await?;
-        let events = events
-            .into_iter()
-            .map(|e| e.try_into())
-            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+        let mut events = substate_manager.get_event(component_address, tx_hash).await?;
+
+        // if not events are stored in the db, we scan the network
+        if events.is_empty() {
+            // for now we scan the whole network history for the given component
+            events = substate_manager
+                .scan_events_for_substate_from_network(component_address, Some(0))
+                .await?;
+        }
+
+        let events = events.iter().map(|e| Event::from(e.clone())).collect::<Vec<Event>>();
+
         Ok(events)
     }
 

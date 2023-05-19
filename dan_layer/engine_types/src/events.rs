@@ -75,6 +75,10 @@ impl Event {
     pub fn get_payload(&self, key: &str) -> Option<String> {
         self.payload.get(key).cloned()
     }
+
+    pub fn get_full_payload(&self) -> HashMap<String, String> {
+        self.payload.clone()
+    }
 }
 
 impl Display for Event {

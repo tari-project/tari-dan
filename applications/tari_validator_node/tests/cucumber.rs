@@ -888,7 +888,7 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     let template_address = [0u8; 32];
     let tx_hash = [0u8; 32];
     let query = format!(
-        "{{ getEvent(templateAddress: {:?}, txHash: {:?}) {{ templateAddress, txHash, topic, payload }} }}",
+        "{{ getEvent(componentAddress: {:?}, txHash: {:?}) {{ componentAddress, txHash, topic, payload }} }}",
         template_address, tx_hash
     );
     let res = graphql_client

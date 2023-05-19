@@ -34,19 +34,18 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
 };
 use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
-use tari_template_lib::prelude::ComponentAddress;
+use tari_template_lib::{prelude::ComponentAddress, Hash};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::{
     substate_decoder::find_related_substates,
     substate_storage_sqlite::{
-        models::{
-            events::{EventData, NewEvent},
-            non_fungible_index::NewNonFungibleIndex,
-            substate::NewSubstate,
-        },
+        models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
         sqlite_substate_store_factory::{
-            SqliteSubstateStore, SqliteSubstateStoreWriteTransaction, SubstateStore, SubstateStoreReadTransaction,
+            SqliteSubstateStore,
+            SqliteSubstateStoreWriteTransaction,
+            SubstateStore,
+            SubstateStoreReadTransaction,
             SubstateStoreWriteTransaction,
         },
     },
@@ -264,13 +263,28 @@ impl SubstateManager {
         Ok(nfts)
     }
 
-    pub async fn get_event_from_db(
+    pub async fn get_event(
         &self,
         component_address: ComponentAddress,
         tx_hash: PayloadId,
-    ) -> Result<Vec<EventData>, anyhow::Error> {
-        let mut tx = self.substate_store.create_read_tx()?;
-        let events = tx.get_events(&component_address, tx_hash)?;
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        let mut events;
+        {
+            let mut tx = self.substate_store.create_read_tx()?;
+            events = tx
+                .get_events(&component_address, tx_hash)?
+                .iter()
+                .map(|e| e.clone().try_into())
+                .collect::<Result<Vec<_>, anyhow::Error>>()?;
+        }
+
+        if events.is_empty() {
+            events = self
+                .substate_scanner
+                .get_events_for_transaction(Hash::from_array(tx_hash.into_array()))
+                .await?;
+        }
+
         Ok(events)
     }
 
@@ -305,15 +319,18 @@ impl SubstateManager {
 
         // check if database contains the events for this transaction, by querying
         // what is the latest version for the given component_address
-        let mut tx = self.substate_store.create_read_tx()?;
-        let latest_version_in_db = tx.get_latest_version_of_events(&component_address)?;
+        let latest_version_in_db;
+        {
+            let mut tx = self.substate_store.create_read_tx()?;
+            latest_version_in_db = tx.get_latest_version_of_events(&component_address)?;
 
-        let stored_events = tx
-            .get_all_events(&component_address)?
-            .iter()
-            .map(|e| e.clone().try_into())
-            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
-        events.extend(stored_events);
+            let stored_events = tx
+                .get_all_events(&component_address)?
+                .iter()
+                .map(|e| e.clone().try_into())
+                .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+            events.extend(stored_events);
+        }
 
         let version = version.max(latest_version_in_db);
         // check if there are newest events for this component address in the network
@@ -322,6 +339,19 @@ impl SubstateManager {
             .get_events_for_component(component_address, Some(version))
             .await?;
         // stores the newest network events to the db
+        for event in network_events.iter() {
+            let tx_hash = event.tx_hash();
+            let topic = event.topic();
+            let payload = event.get_full_payload();
+            self.save_event_to_db(
+                component_address,
+                PayloadId::from_array(tx_hash.into_array()),
+                topic,
+                payload,
+                version as u64,
+            )
+            .await?;
+        }
         events.extend(network_events);
 
         Ok(events)
