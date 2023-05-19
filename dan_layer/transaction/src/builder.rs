@@ -214,16 +214,6 @@ impl TransactionBuilder {
             .sum::<u32>();
         let id_provider = IdProvider::new(*transaction.hash(), max_outputs + total_new_nft_outputs);
 
-        transaction
-            .meta_mut()
-            .involved_objects_mut()
-            .extend((0..max_outputs).map(|_| {
-                let new_hash = id_provider
-                    .new_address_hash()
-                    .expect("id provider provides num_outputs IDs");
-                (ShardId::from_hash(&new_hash, 0), SubstateChange::Create)
-            }));
-
         let mut new_nft_outputs =
             Vec::with_capacity(usize::try_from(total_new_nft_outputs).expect("too many new NFT outputs"));
         for (resource_addr, count) in self.new_non_fungible_outputs {

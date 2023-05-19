@@ -4,9 +4,10 @@
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
-    models::{Amount, ComponentAddress},
+    models::{Amount, ComponentAddress, ResourceAddress},
 };
 use tari_template_test_tooling::TemplateTest;
+use tari_transaction::Transaction;
 
 #[test]
 fn basic_faucet_transfer() {
@@ -183,4 +184,50 @@ fn withdraw_from_account_prevented() {
         result.finalize.execution_results[0].decode::<Amount>().unwrap(),
         Amount(0)
     );
+}
+
+#[test]
+fn attempt_to_overwrite_account() {
+    let mut template_test = TemplateTest::new::<_, &str>([]);
+
+    // Create sender and receiver accounts
+    let (source_account, source_account_proof, source_account_sk) = template_test.create_owned_account();
+
+    template_test.enable_fees();
+    let overwriting_tx = template_test
+        .try_execute_and_commit(
+            Transaction::builder()
+                .fee_transaction_pay_from_component(source_account, Amount(1000))
+                .call_function(template_test.get_template_address("Account"), "create", args![
+                    &source_account_proof
+                ])
+                // Signed by source account so that it can pay the fees for the new account creation
+                .sign(&source_account_sk)
+                .build(),
+            vec![source_account_proof],
+        )
+        .unwrap();
+
+    template_test.disable_fees();
+
+    let result = template_test
+        .try_execute_and_commit(
+            Transaction::builder()
+                .call_method(source_account, "get_balances", args![])
+                .sign(&source_account_sk)
+                .build(),
+            vec![],
+        )
+        .unwrap();
+
+    result.expect_success();
+    let balances = result.finalize.execution_results[0]
+        .decode::<Vec<(ResourceAddress, Amount)>>()
+        .unwrap();
+    // If the source account was overwritten due to the address collision, then we'd have no vaults
+    assert_eq!(balances.len(), 1);
+
+    // Now that we know that the component state was not overwritten, lets check that the previous transaction failed
+    // because of an address collision.
+    overwriting_tx.expect_transaction_failure();
 }

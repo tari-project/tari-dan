@@ -289,7 +289,7 @@ pub async fn submit_transaction(
         .sign(&key.secret_key)
         .build();
 
-    if transaction.meta().involved_shards().is_empty() {
+    if transaction.meta().involved_shards().is_empty() && transaction.meta().max_outputs() == 0 {
         return Err(anyhow::anyhow!(
             "No inputs or outputs, transaction will not be processed by the network"
         ));
@@ -402,6 +402,9 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     },
                     SubstateValue::Resource(_) => {
                         println!("      ▶ resource: {}", address);
+                    },
+                    SubstateValue::TransactionReceipt(_) => {
+                        println!("      ▶ transaction_receipt: {}", address);
                     },
                     SubstateValue::Vault(vault) => {
                         println!("      ▶ vault: {} {}", address, vault.resource_address());

@@ -56,10 +56,11 @@ use tari_validator_node_rpc::{
     proto::rpc::VnStateSyncResponse,
 };
 use thiserror::Error;
+use tokio::task;
 
 use crate::{p2p::services::template_manager::TemplateManager, payload_processor::TariDanPayloadProcessor};
 
-const LOG_TARGET: &str = "tari::validator_node::dry_run_transaction_processor";
+const LOG_TARGET: &str = "tari::dan::validator_node::dry_run_transaction_processor";
 
 #[derive(Error, Debug)]
 pub enum DryRunTransactionProcessorError {
@@ -128,9 +129,10 @@ impl DryRunTransactionProcessor {
 
         // execute the payload in the WASM engine and return the result
         let consensus_context = self.get_consensus_context().await?;
-        let result = self
-            .payload_processor
-            .process_payload(payload, shard_pledges, consensus_context)?;
+        let result = task::block_in_place(|| {
+            self.payload_processor
+                .process_payload(payload, shard_pledges, consensus_context)
+        })?;
 
         if let Some(ref fees) = result.fee_receipt {
             info!(target: LOG_TARGET, "Transaction fees: {}", fees.total_fees_charged());

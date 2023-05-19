@@ -1,6 +1,8 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
+use std::time::Duration;
+
 use cucumber::{then, when};
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
@@ -84,6 +86,22 @@ async fn when_i_create_account_via_wallet_daemon(
     wallet_daemon_cli::create_account(world, account_name, wallet_daemon_name).await;
 }
 
+#[when(expr = "I create an account {word} via the wallet daemon {word} with {int} free coins")]
+async fn when_i_create_account_via_wallet_daemon_with_free_coins(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    amount: i64,
+) {
+    wallet_daemon_cli::create_account_with_free_coins(
+        world,
+        account_name,
+        wallet_daemon_name,
+        amount.try_into().unwrap(),
+    )
+    .await;
+}
+
 #[when(
     expr = "I burn {int}T on wallet {word} with wallet daemon {word} into commitment {word} with proof {word} for \
             {word}, range proof {word} and claim public key {word}"
@@ -99,7 +117,7 @@ async fn when_i_burn_funds_with_wallet_daemon(
     rangeproof_name: String,
     claim_pubkey_name: String,
 ) {
-    let mut wallet_daemon_client = wallet_daemon_cli::get_auth_wallet_daemon_client(world, wallet_daemon_name).await;
+    let mut wallet_daemon_client = wallet_daemon_cli::get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
     let account = wallet_daemon_client
         .accounts_get(account_name.parse().unwrap())
@@ -152,7 +170,7 @@ async fn check_account_balance_via_daemon(
     amount: i64,
 ) {
     // This also refreshes the wallet vaults
-    let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
+    let current_balance = wallet_daemon_cli::get_balance(world, &account_name, &wallet_daemon_name).await;
     match least_or_most.to_lowercase().as_str() {
         "least" => {
             if current_balance < amount {
@@ -170,6 +188,39 @@ async fn check_account_balance_via_daemon(
     }
 }
 
+#[when(expr = "I wait for {word} on wallet daemon {word} to have balance {word} {int}")]
+async fn wait_account_balance_via_daemon(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    operator: String,
+    amount: i64,
+) {
+    let op = match operator.as_str() {
+        "gt" => |a, b| a > b,
+        "gte" => |a, b| a >= b,
+        "lt" => |a, b| a < b,
+        "lte" => |a, b| a <= b,
+        "eq" => |a, b| a == b,
+        _ => panic!("Expected gt, gte, lt, lte or eq, got {}", operator),
+    };
+
+    let mut i = 0;
+    loop {
+        // This also refreshes the wallet vaults
+        let current_balance = wallet_daemon_cli::get_balance(world, &account_name, &wallet_daemon_name).await;
+        if op(current_balance, amount) {
+            break;
+        }
+
+        i += 1;
+        if i == 10 {
+            panic!("Timeout waiting for balance. Current balance = {}", current_balance);
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+}
+
 #[when(expr = "I check the balance of {word} on wallet daemon {word} the amount is exactly {int}")]
 async fn check_account_balance_is_exactly_via_daemon(
     world: &mut TariWorld,
@@ -178,7 +229,7 @@ async fn check_account_balance_is_exactly_via_daemon(
     amount: i64,
 ) {
     // THis refreshes
-    let current_balance = wallet_daemon_cli::get_balance(world, account_name, wallet_daemon_name).await;
+    let current_balance = wallet_daemon_cli::get_balance(world, &account_name, &wallet_daemon_name).await;
     if current_balance != amount {
         println!("Expected balance to be {} but was {}", amount, current_balance);
         panic!("Expected balance to be {} but was {}", amount, current_balance);
@@ -235,7 +286,7 @@ async fn when_transfer_via_wallet_daemon(
         )
     });
     let resource_address = world
-        .wallet_daemon_outputs
+        .outputs
         .get(resource_input_group)
         .unwrap_or_else(|| panic!("No outputs found with name {}", resource_input_group))
         .iter()
@@ -259,25 +310,24 @@ async fn when_transfer_via_wallet_daemon(
 }
 
 #[when(
-    expr = "I do a confidential transfer of {int}T from account {word} to public key {word} via the wallet daemon \
+    expr = "I do a confidential transfer of {int} from account {word} to public key {word} via the wallet daemon \
             {word} named {word}"
 )]
 async fn when_confidential_transfer_via_wallet_daemon(
     world: &mut TariWorld,
-    amount: i32,
+    amount: i64,
     account_name: String,
     destination_public_key: String,
     wallet_daemon_name: String,
     outputs_name: String,
 ) {
     let (_, destination_public_key) = world.account_keys.get(&destination_public_key).unwrap().clone();
-    let amount = Amount::new(amount.into());
 
     wallet_daemon_cli::confidential_transfer(
         world,
         account_name,
         destination_public_key,
-        amount,
+        Amount(amount),
         wallet_daemon_name,
         outputs_name,
     )

@@ -115,6 +115,7 @@ pub enum EngineHashDomainLabel {
     ResourceAddress,
     ComponentAddress,
     RandomBytes,
+    TransactionReceipt,
     QuorumCertificate,
 }
 
@@ -136,6 +137,7 @@ impl EngineHashDomainLabel {
             Self::ResourceAddress => "ResourceAddress",
             Self::ComponentAddress => "ComponentAddress",
             Self::RandomBytes => "RandomBytes",
+            Self::TransactionReceipt => "TransactionReceipt",
             Self::QuorumCertificate => "QuorumCertificate",
         }
     }

@@ -111,6 +111,7 @@ impl From<StringArg<'_>> for Arg {
                 SubstateAddress::UnclaimedConfidentialOutput(v) => arg!(v),
                 SubstateAddress::NonFungible(v) => arg!(v),
                 SubstateAddress::NonFungibleIndex(v) => arg!(v),
+                SubstateAddress::TransactionReceipt(v) => arg!(v),
             },
             StringArg::UnsignedInteger(v) => arg!(v),
             StringArg::SignedInteger(v) => arg!(v),

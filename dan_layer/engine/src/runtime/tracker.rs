@@ -32,7 +32,7 @@ use log::debug;
 use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_engine_types::{
     bucket::Bucket,
-    commit_result::{RejectReason, TransactionResult},
+    commit_result::{RejectReason, TransactionReceipt, TransactionResult},
     component::{ComponentBody, ComponentHeader},
     confidential::UnclaimedConfidentialOutput,
     events::Event,
@@ -385,7 +385,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         let component_address = self
             .id_provider()
             .new_component_address(template_address, component_id)?;
-        debug!(target: LOG_TARGET, "New component created: {}", component_address);
 
         let component = ComponentBody { state };
         let component = ComponentHeader {
@@ -396,9 +395,18 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         };
 
         self.write_with(|state| {
-            // New root component
+            // The template address/component_id combination will not necessarily be unique so we need to check this.
+            if state.get_component(&component_address).optional()?.is_some() {
+                return Err(RuntimeError::ComponentAlreadyExists {
+                    address: component_address,
+                });
+            }
+
             state.new_components.insert(component_address, component);
-        });
+            Ok(())
+        })?;
+
+        debug!(target: LOG_TARGET, "New component created: {}", component_address);
         Ok(component_address)
     }
 
@@ -502,9 +510,17 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     ) -> Result<FinalizeTracker, RuntimeError> {
         // Resolve the transfers to the fee pool resource and vault refunds
         let finalized_fee = self.finalize_fees(&mut substates_to_persist)?;
-        // events and logs
-        let events = self.take_events();
-        let logs = self.take_logs();
+
+        let transaction_receipt_mut = substates_to_persist
+            .get_mut(&SubstateAddress::TransactionReceipt(self.transaction_hash().into()))
+            .and_then(|s| s.as_transaction_receipt_mut())
+            .expect(
+                "InvariantViolation: expected transaction receipt to be added to substates to persist but it wasnt",
+            );
+        transaction_receipt_mut.fee_receipt = Some(finalized_fee.clone());
+
+        let events = transaction_receipt_mut.events.clone();
+        let logs = transaction_receipt_mut.logs.clone();
 
         // Finalise will always reset the state
         let state = self.take_working_state();
@@ -666,6 +682,21 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                 let addr = SubstateAddress::NonFungibleIndex(address.clone());
                 up_states.insert(addr, substate.into());
             }
+
+            let events = state.events.clone();
+            let logs = state.logs.clone();
+
+            let transaction_receipt = TransactionReceipt {
+                transaction_hash: self.transaction_hash(),
+                events,
+                logs,
+                fee_receipt: None,
+            };
+
+            up_states.insert(
+                SubstateAddress::TransactionReceipt(transaction_receipt.transaction_hash.into()),
+                SubstateValue::TransactionReceipt(transaction_receipt),
+            );
 
             up_states
         })
