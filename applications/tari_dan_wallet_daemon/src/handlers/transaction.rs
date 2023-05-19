@@ -8,7 +8,7 @@ use log::*;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::apis::{jwt::JrpcPermission, key_manager};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
-use tari_template_lib::{args, models::Amount, prelude::NonFungibleAddress};
+use tari_template_lib::{args, models::Amount};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
     AccountGetRequest,
@@ -89,10 +89,15 @@ pub async fn handle_submit(
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+    let account_api = sdk.accounts_api();
     let key_api = sdk.key_manager_api();
+    let signing_key = req
+        .signing_key_index
+        .or_else(|| Some(account_api.get_default().ok()?.key_index))
+        .ok_or_else(|| anyhow!("A signing key must be provided if no default account is set"))?;
     // Fetch the key to sign the transaction
     // TODO: Ideally the SDK should take care of signing the transaction internally
-    let (_, key) = key_api.get_key_or_active(key_manager::TRANSACTION_BRANCH, req.signing_key_index)?;
+    let key = key_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key)?;
 
     let inputs = if req.override_inputs {
         req.inputs
@@ -105,17 +110,6 @@ pub async fn handle_submit(
         vec![req.inputs, loaded_dependent_substates].concat()
     };
 
-    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
-    //       object is mutated
-    let mut outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
-
-    outputs.extend(req.specific_non_fungible_outputs.into_iter().map(|(resx_addr, id)| {
-        ShardId::from_address(&SubstateAddress::NonFungible(NonFungibleAddress::new(resx_addr, id)), 0)
-    }));
-
     let inputs = inputs
         .into_iter()
         .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version))
@@ -125,7 +119,6 @@ pub async fn handle_submit(
         .with_instructions(req.instructions)
         .with_fee_instructions(req.fee_instructions)
         .with_inputs(inputs.clone())
-        .with_outputs(outputs.clone())
         .with_new_resources(req.new_resources)
         .with_new_non_fungible_outputs(req.new_non_fungible_outputs)
         .with_new_non_fungible_index_outputs(req.new_non_fungible_index_outputs)
@@ -156,7 +149,11 @@ pub async fn handle_submit(
         });
     }
 
-    Ok(TransactionSubmitResponse { hash, inputs, outputs })
+    Ok(TransactionSubmitResponse {
+        hash,
+        inputs,
+        outputs: vec![],
+    })
 }
 
 pub async fn handle_get(
