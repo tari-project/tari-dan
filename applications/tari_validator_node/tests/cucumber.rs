@@ -951,6 +951,41 @@ async fn assert_indexer_non_fungible_list(
     );
 }
 
+#[given(expr = "all validator nodes are connected to each other")]
+async fn given_all_validator_connects_to_other_vns(world: &mut TariWorld) {
+    let details = world
+        .validator_nodes
+        .values()
+        .map(|vn| {
+            (
+                PublicKey::from_hex(&vn.public_key).unwrap(),
+                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    for vn in world.validator_nodes.values() {
+        if vn.handle.is_finished() {
+            eprintln!("Skipping validator node {} that is not running", vn.name);
+            continue;
+        }
+        let mut cli = vn.create_client();
+        let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
+        for (pk, addr) in details.iter().cloned() {
+            if pk == this_pk {
+                continue;
+            }
+            cli.add_peer(AddPeerRequest {
+                public_key: pk,
+                addresses: vec![addr],
+                wait_for_dial: true,
+            })
+            .await
+            .unwrap();
+        }
+    }
+}
+
 #[when(expr = "I wait {int} seconds")]
 async fn wait_seconds(_world: &mut TariWorld, seconds: u64) {
     // println!("NOT Waiting {} seconds", seconds);
@@ -976,8 +1011,17 @@ async fn successful_transaction(world: &mut TariWorld) {
 
             let hash = FixedHash::try_from(payload_id).unwrap();
             let get_transaction_req = GetTransactionResultRequest { hash };
-            let get_transaction_res = client.get_transaction_result(get_transaction_req).await.unwrap();
-            let finalized_tx = get_transaction_res.result.unwrap();
+            let get_transaction_res = client
+                .get_transaction_result(get_transaction_req)
+                .await
+                .expect(format!("Failed to get transaction with hash {} for vn = {}", hash, vn_ps.name).as_str());
+            let finalized_tx = get_transaction_res.result.expect(
+                format!(
+                    "Transaction result was rejected for tx hash {} and vn = {}",
+                    hash, vn_ps.name
+                )
+                .as_str(),
+            );
             finalized_tx.expect_success();
         }
     }
