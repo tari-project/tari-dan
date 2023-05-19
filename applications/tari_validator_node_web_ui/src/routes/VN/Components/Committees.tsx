@@ -32,7 +32,9 @@ import TableBody from '@mui/material/TableBody';
 import TableRow from '@mui/material/TableRow';
 import TablePagination from '@mui/material/TablePagination';
 import { Typography } from '@mui/material';
-import ECharts from './CommitteesChart';
+import CommitteesPieChart from './CommitteesPieChart';
+import CommitteesRadial from './CommitteesRadial';
+import CommitteesWaterfall from './CommitteesWaterfall';
 
 async function get_all_committees(
   currentEpoch: number,
@@ -110,10 +112,11 @@ function Committees({
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
-
   return (
     <>
-      <ECharts chartData={committees} />
+      <CommitteesRadial committees={committees} />
+      <CommitteesWaterfall committees={committees} />
+      <CommitteesPieChart chartData={committees} />
       <TableContainer>
         <Table>
           <TableHead>
