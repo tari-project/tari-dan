@@ -39,7 +39,7 @@ use log::warn;
 use tari_dan_common_types::PayloadId;
 use tari_dan_core::storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
-use tari_engine_types::{substate::SubstateAddress, TemplateAddress};
+use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::prelude::ComponentAddress;
 use thiserror::Error;
 
@@ -327,21 +327,20 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
 
     fn get_latest_version_of_events(&mut self, component_address: &ComponentAddress) -> Result<u32, StorageError> {
         use crate::substate_storage_sqlite::schema::events;
-        let res: Option<Option<i32>> = events::table
+        let res: Option<i32> = events::table
             .filter(
                 crate::substate_storage_sqlite::schema::events::component_address
                     .eq(&component_address.hash().to_string()),
             )
             .select(diesel::dsl::max(events::version))
             .first(self.connection())
-            .optional()
             .map_err(|e| StorageError::QueryError {
                 reason: format!("get_last_verision_of_events: {}", e),
             })?;
 
         // for our purposes, a non-existing version in the db, means we have
         // to scan the network from res = 0
-        let res = res.unwrap().unwrap_or_default();
+        let res = res.unwrap_or_default();
         Ok(res as u32)
     }
 

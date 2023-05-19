@@ -903,7 +903,7 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
         .unwrap();
     let res = res.get("getEvent").unwrap();
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0].template_address, [0u8; 32]);
+    assert_eq!(res[0].component_address, [0u8; 32]);
     assert_eq!(res[0].tx_hash, [0u8; 32]);
     assert_eq!(res[0].topic, "my_event");
     assert_eq!(res[0].payload, HashMap::from([("my".to_string(), "event".to_string())]));

@@ -32,7 +32,6 @@ use tari_dan_common_types::PayloadId;
 use tari_engine_types::{
     events::Event,
     substate::{Substate, SubstateAddress},
-    TemplateAddress,
 };
 use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
 use tari_template_lib::prelude::ComponentAddress;
@@ -302,7 +301,6 @@ impl SubstateManager {
         version: Option<u32>,
     ) -> Result<Vec<Event>, anyhow::Error> {
         let mut events = vec![];
-        let substate_address = SubstateAddress::Component(component_address);
         let version = version.unwrap_or_default();
 
         // check if database contains the events for this transaction, by querying

@@ -51,7 +51,6 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tari_engine_types::{
     component::ComponentHeader,
     confidential::{ConfidentialClaim, ConfidentialOutput},
-    TemplateAddress,
 };
 use tari_template_lib::{
     args::{

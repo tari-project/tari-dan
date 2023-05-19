@@ -56,6 +56,18 @@ impl Event {
         }
     }
 
+    pub fn component_address(&self) -> ComponentAddress {
+        self.component_address
+    }
+
+    pub fn tx_hash(&self) -> Hash {
+        self.tx_hash
+    }
+
+    pub fn topic(&self) -> String {
+        self.topic.clone()
+    }
+
     pub fn add_payload(&mut self, key: String, value: String) {
         self.payload.insert(key, value);
     }

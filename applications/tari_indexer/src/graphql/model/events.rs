@@ -27,7 +27,6 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::PayloadId;
-use tari_engine_types::TemplateAddress;
 use tari_template_lib::prelude::ComponentAddress;
 
 use crate::substate_manager::SubstateManager;

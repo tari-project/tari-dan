@@ -30,7 +30,7 @@ use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use thiserror::Error;
 
 use crate::{
-    consensus_constants::{self, ConsensusConstants},
+    consensus_constants::ConsensusConstants,
     models::{Committee, ValidatorNode},
     services::{base_node_error::BaseNodeError, ValidatorNodeClientError},
     storage::StorageError,

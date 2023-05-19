@@ -39,7 +39,7 @@ use tari_engine_types::{
     logs::LogEntry,
     resource_container::ResourceContainer,
     substate::{SubstateAddress, SubstateValue},
-    TemplateAddress,
+    
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{

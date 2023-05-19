@@ -34,10 +34,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, ResourceAddress},
     Hash,
 };
-use tari_validator_node_rpc::{
-    client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient},
-    proto::consensus::substate_state,
-};
+use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
 use crate::{committee_provider::CommitteeProvider, error::IndexerError, NonFungibleSubstate};
 
@@ -251,18 +248,17 @@ where
         let to_query_members = extract_random_committee_members(&mut rng, &committee.members, committee_size);
 
         let mut transaction_hash = None;
-        let mut got_up_substate_result = false;
-        'inner: for member in to_query_members {
+        for member in to_query_members {
             match self.get_substate_from_vn(member, &substate_address, version).await {
                 Ok(substate_result) => match substate_result {
-                    SubstateResult::Up { created_by_tx, .. } => {
-                        transaction_hash = Some(created_by_tx);
-                        got_up_substate_result = true;
-                        break 'inner;
-                    },
-                    SubstateResult::Down { deleted_by_tx, .. } => {
-                        transaction_hash = Some(deleted_by_tx);
-                        break 'inner;
+                    SubstateResult::Up {
+                        created_by_tx: tx_hash, ..
+                    }
+                    | SubstateResult::Down {
+                        deleted_by_tx: tx_hash, ..
+                    } => {
+                        transaction_hash = Some(tx_hash);
+                        break;
                     },
                     SubstateResult::DoesNotExist => {
                         warn!(
