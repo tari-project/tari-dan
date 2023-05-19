@@ -114,16 +114,14 @@ impl IndexerProcess {
         let component_address = [0u8; 32];
         let tx_hash = [0u8; 32];
         let topic = "my_event".to_string();
+        let version = 0;
         let payload = HashMap::<String, String>::from([("my".to_string(), "event".to_string())])
             .to_json()
             .unwrap();
         let query = format!(
-            "{{ saveEvent(componentAddress: {:?}, txHash: {:?}, topic: {:?}, payload: {:?}) {{ componentAddress \
-             txHash topic payload }} }}",
-            component_address,
-            tx_hash,
-            topic,
-            payload // component_address, tx_hash, topic, payload
+            "{{ saveEvent(componentAddress: {:?}, txHash: {:?}, topic: {:?}, payload: {:?}, version: {:?}) {{ \
+             componentAddress txHash topic payload }} }}",
+            component_address, tx_hash, topic, payload, version
         );
         let res = graphql_client
             .send_request::<HashMap<String, tari_indexer::graphql::model::events::Event>>(&query, None, None)

@@ -307,7 +307,8 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         tx_hash: PayloadId,
     ) -> Result<Vec<EventData>, StorageError> {
         let res = sql_query(
-            "SELECT component_address, tx_hash, topic, payload FROM events WHERE component_address = ? AND tx_hash = ?",
+            "SELECT component_address, tx_hash, topic, payload, version FROM events WHERE component_address = ? AND \
+             tx_hash = ?",
         )
         .bind::<Text, _>(component_address.hash().to_string())
         .bind::<Text, _>(tx_hash.to_string())

@@ -205,7 +205,7 @@ where
         Ok(result)
     }
 
-    /// Queries the network to obtain events stored emitted in a single transaction
+    /// Queries the network to obtain events emitted in a single transaction
     pub async fn get_events_for_transaction(&self, transaction_hash: Hash) -> Result<Vec<Event>, IndexerError> {
         let substate_address = SubstateAddress::TransactionReceipt(transaction_hash.into());
         let substate = self.get_specific_substate_from_committee(&substate_address, 0).await?;
@@ -215,7 +215,7 @@ where
             return Err(IndexerError::InvalidSubstateState);
         };
         let events = if let SubstateValue::TransactionReceipt(tx_receipt) = substate_value {
-            tx_receipt.events.clone()
+            tx_receipt.events
         } else {
             return Err(IndexerError::InvalidSubstateValue);
         };
@@ -252,7 +252,7 @@ where
 
         let mut transaction_hash = None;
         for member in to_query_members {
-            match self.get_substate_from_vn(member, &substate_address, version).await {
+            match self.get_substate_from_vn(member, substate_address, version).await {
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up {
                         created_by_tx: tx_hash, ..
@@ -291,7 +291,7 @@ where
             Hash::try_from(tx_hash.as_slice()).map_err(|e| IndexerError::FailedToParseTransactionHash(e.to_string()))
         } else {
             // no transaction was found in the network for this component address and version
-            return Err(IndexerError::NotFoundTransaction(substate_address.clone(), version));
+            Err(IndexerError::NotFoundTransaction(substate_address.clone(), version))
         }
     }
 

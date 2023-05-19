@@ -298,7 +298,7 @@ impl SubstateManager {
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
         let new_event = NewEvent {
-            component_address: component_address.to_string(),
+            component_address: component_address.hash().to_string(),
             tx_hash: tx_hash.to_string(),
             topic,
             payload: payload.to_json().expect("Failed to convert to JSON"),
