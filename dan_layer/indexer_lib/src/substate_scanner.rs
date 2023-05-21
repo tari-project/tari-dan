@@ -295,28 +295,55 @@ where
         }
     }
 
-    /// Queries the network to obtain all the events associated with a component, together
-    /// with the hash of the transation in which these were emitted
+    /// Queries the network to obtain all the events associated with a component and
+    /// a specific version.
+    pub async fn get_events_for_component_and_version(
+        &self,
+        component_address: ComponentAddress,
+        version: u32,
+    ) -> Result<Vec<(Hash, Event)>, IndexerError> {
+        let substate_address = SubstateAddress::Component(component_address);
+
+        let tx_hash = self
+            .get_transaction_hash_from_substate_address(&substate_address, version)
+            .await?;
+
+        let tx_hash = Hash::try_from(tx_hash.as_ref()).expect("Failed to parse hash array");
+        match self.get_events_for_transaction(tx_hash).await {
+            Ok(tx_events) => {
+                // we need to filter all transaction events, by those corresponding
+                // to the current component address
+                let component_tx_events = tx_events
+                    .into_iter()
+                    .filter(|e| e.component_address() == component_address)
+                    .map(|e| (tx_hash, e))
+                    .collect::<Vec<(Hash, Event)>>();
+                Ok(component_tx_events)
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Queries the network to obtain all the events associated with a component,
+    /// starting at an optional version (if `None`, starts from `0`).
     pub async fn get_events_for_component(
         &self,
         component_address: ComponentAddress,
         version: Option<u32>,
-    ) -> Result<Vec<Event>, IndexerError> {
+    ) -> Result<Vec<(Hash, Event)>, IndexerError> {
         let mut events = vec![];
-        let substate_address = SubstateAddress::Component(component_address);
         let mut version: u32 = version.unwrap_or_default();
 
         loop {
-            let tx_hash = self
-                .get_transaction_hash_from_substate_address(&substate_address, version)
-                .await?;
-
-            let tx_hash = Hash::try_from(tx_hash.as_ref()).expect("Failed to parse hash array");
-            match self.get_events_for_transaction(tx_hash).await {
-                Ok(tx_events) => events.extend(tx_events),
+            match self
+                .get_events_for_component_and_version(component_address, version)
+                .await
+            {
+                Ok(component_tx_events) => events.extend(component_tx_events),
                 Err(IndexerError::NotFoundTransaction(..)) => return Ok(events),
                 Err(e) => return Err(e),
             }
+
             version += 1;
         }
     }

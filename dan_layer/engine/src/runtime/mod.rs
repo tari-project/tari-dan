@@ -72,7 +72,6 @@ use tari_template_lib::{
     },
     invoke_args,
     models::{Amount, BucketId, ComponentAddress, NonFungibleAddress, VaultRef},
-    Hash,
 };
 pub use tracker::{RuntimeState, StateTracker};
 
@@ -82,7 +81,6 @@ pub trait RuntimeInterface: Send + Sync {
     fn emit_event(
         &self,
         component_address: ComponentAddress,
-        tx_hash: Hash,
         topic: String,
         payload: HashMap<String, String>,
     ) -> Result<(), RuntimeError>;

@@ -141,7 +141,6 @@ pub struct CreateComponentArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EmitEventArg {
     pub component_address: ComponentAddress,
-    pub tx_hash: Hash,
     pub topic: String,
     pub payload: HashMap<String, String>,
 }

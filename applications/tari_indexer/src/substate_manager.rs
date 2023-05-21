@@ -263,31 +263,6 @@ impl SubstateManager {
         Ok(nfts)
     }
 
-    pub async fn get_event(
-        &self,
-        component_address: ComponentAddress,
-        tx_hash: PayloadId,
-    ) -> Result<Vec<Event>, anyhow::Error> {
-        let mut events;
-        {
-            let mut tx = self.substate_store.create_read_tx()?;
-            events = tx
-                .get_events(&component_address, tx_hash)?
-                .iter()
-                .map(|e| e.clone().try_into())
-                .collect::<Result<Vec<_>, anyhow::Error>>()?;
-        }
-
-        if events.is_empty() {
-            events = self
-                .substate_scanner
-                .get_events_for_transaction(Hash::from_array(tx_hash.into_array()))
-                .await?;
-        }
-
-        Ok(events)
-    }
-
     pub async fn save_event_to_db(
         &self,
         component_address: ComponentAddress,
@@ -309,38 +284,74 @@ impl SubstateManager {
         Ok(())
     }
 
+    pub async fn scan_events_for_transaction(&self, tx_hash: Hash) -> Result<Vec<Event>, anyhow::Error> {
+        let mut events = vec![];
+        {
+            let mut tx = self.substate_store.create_read_tx()?;
+            let stored_events = tx
+                .get_events_for_transaction(PayloadId::from_array(tx_hash.into_array()))?
+                .iter()
+                .map(|e| e.clone().try_into())
+                .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+
+            events.extend(stored_events);
+        }
+        if events.is_empty() {
+            let network_events = self.substate_scanner.get_events_for_transaction(tx_hash).await?;
+            events.extend(network_events);
+        }
+
+        Ok(events)
+    }
+
     pub async fn scan_events_for_substate_from_network(
         &self,
         component_address: ComponentAddress,
         version: Option<u32>,
-    ) -> Result<Vec<Event>, anyhow::Error> {
+    ) -> Result<Vec<(Hash, Event)>, anyhow::Error> {
         let mut events = vec![];
         let version = version.unwrap_or_default();
 
         // check if database contains the events for this transaction, by querying
         // what is the latest version for the given component_address
-        let latest_version_in_db;
+        let stored_versions_in_db;
         {
             let mut tx = self.substate_store.create_read_tx()?;
-            latest_version_in_db = tx.get_latest_version_of_events(&component_address)?;
+            stored_versions_in_db = tx.get_stored_versions_of_events(&component_address, version)?;
 
             let stored_events = tx
                 .get_all_events(&component_address)?
                 .iter()
-                .map(|e| e.clone().try_into())
-                .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+                .map(|e| {
+                    let tx_hash = Hash::from_hex(&e.tx_hash).expect("Failed to parse hex string to Hash");
+                    let event = e.clone().try_into().expect("Failed to parse EventData to engine Event");
+                    (tx_hash, event)
+                })
+                .collect::<Vec<_>>();
             events.extend(stored_events);
         }
 
+        for v in 0..version {
+            if stored_versions_in_db.contains(&v) {
+                continue;
+            }
+            let network_version_events = self
+                .substate_scanner
+                .get_events_for_component_and_version(component_address, v)
+                .await?;
+            events.extend(network_version_events);
+        }
+
+        let latest_version_in_db = stored_versions_in_db.into_iter().max().unwrap_or_default();
         let version = version.max(latest_version_in_db);
+
         // check if there are newest events for this component address in the network
         let network_events = self
             .substate_scanner
             .get_events_for_component(component_address, Some(version))
             .await?;
         // stores the newest network events to the db
-        for event in network_events.iter() {
-            let tx_hash = event.tx_hash();
+        for (tx_hash, event) in network_events.iter() {
             let topic = event.topic();
             let payload = event.get_full_payload();
             self.save_event_to_db(

@@ -151,7 +151,7 @@ impl WasmProcess {
             EngineOp::EmitEvent => Self::handle(env, arg, |env, arg: EmitEventArg| {
                 env.state()
                     .interface()
-                    .emit_event(arg.component_address, arg.tx_hash, arg.topic, arg.payload)
+                    .emit_event(arg.component_address, arg.topic, arg.payload)
             }),
         };
 

@@ -26,7 +26,7 @@ use std::convert::TryFrom;
 use diesel::sql_types::{Integer, Text};
 use serde::{Deserialize, Serialize};
 use tari_crypto::tari_utilities::hex::from_hex;
-use tari_template_lib::{prelude::ComponentAddress, Hash};
+use tari_template_lib::prelude::ComponentAddress;
 
 use crate::substate_storage_sqlite::schema::*;
 
@@ -95,14 +95,8 @@ impl TryFrom<EventData> for tari_engine_types::events::Event {
     fn try_from(event_data: EventData) -> Result<Self, Self::Error> {
         let component_address = ComponentAddress::from_hex(event_data.component_address.as_str())
             .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        let tx_hash = Hash::from_hex(event_data.tx_hash.as_str()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
         let payload = serde_json::from_str(event_data.payload.as_str()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
 
-        Ok(Self::new_with_payload(
-            component_address,
-            tx_hash,
-            event_data.topic.clone(),
-            payload,
-        ))
+        Ok(Self::new_with_payload(component_address, event_data.topic, payload))
     }
 }

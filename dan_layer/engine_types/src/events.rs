@@ -23,7 +23,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{prelude::ComponentAddress, Hash};
+use tari_template_lib::prelude::ComponentAddress;
 
 use crate::serde_with;
 
@@ -31,26 +31,22 @@ use crate::serde_with;
 pub struct Event {
     #[serde(with = "serde_with::hex")]
     component_address: ComponentAddress,
-    #[serde(with = "serde_with::hex")]
-    tx_hash: Hash,
     topic: String,
     payload: HashMap<String, String>,
 }
 
 impl Event {
-    pub fn new(component_address: ComponentAddress, tx_hash: Hash, topic: String) -> Self {
-        Self::new_with_payload(component_address, tx_hash, topic, HashMap::new())
+    pub fn new(component_address: ComponentAddress, topic: String) -> Self {
+        Self::new_with_payload(component_address, topic, HashMap::new())
     }
 
     pub fn new_with_payload(
         component_address: ComponentAddress,
-        tx_hash: Hash,
         topic: String,
         payload: HashMap<String, String>,
     ) -> Self {
         Self {
             component_address,
-            tx_hash,
             topic,
             payload,
         }
@@ -58,10 +54,6 @@ impl Event {
 
     pub fn component_address(&self) -> ComponentAddress {
         self.component_address
-    }
-
-    pub fn tx_hash(&self) -> Hash {
-        self.tx_hash
     }
 
     pub fn topic(&self) -> String {
@@ -85,8 +77,8 @@ impl Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "event: component_address {}, tx_hash {}, topic {}",
-            self.component_address, self.tx_hash, self.topic
+            "event: component_address {}, topic {}",
+            self.component_address, self.topic
         )
     }
 }

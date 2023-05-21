@@ -185,12 +185,12 @@ pub trait SubstateStoreReadTransaction {
         start_idx: i32,
         end_idx: i32,
     ) -> Result<Vec<IndexedNftSubstate>, StorageError>;
-    fn get_events(
+    fn get_events_for_transaction(&mut self, tx_hash: PayloadId) -> Result<Vec<EventData>, StorageError>;
+    fn get_stored_versions_of_events(
         &mut self,
         component_address: &ComponentAddress,
-        tx_hash: PayloadId,
-    ) -> Result<Vec<EventData>, StorageError>;
-    fn get_latest_version_of_events(&mut self, component_address: &ComponentAddress) -> Result<u32, StorageError>;
+        start_version: u32,
+    ) -> Result<Vec<u32>, StorageError>;
     fn get_events_by_version(
         &mut self,
         component_address: &ComponentAddress,
@@ -301,42 +301,38 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         Ok(res)
     }
 
-    fn get_events(
-        &mut self,
-        component_address: &ComponentAddress,
-        tx_hash: PayloadId,
-    ) -> Result<Vec<EventData>, StorageError> {
-        let res = sql_query(
-            "SELECT component_address, tx_hash, topic, payload, version FROM events WHERE component_address = ? AND \
-             tx_hash = ?",
-        )
-        .bind::<Text, _>(component_address.hash().to_string())
-        .bind::<Text, _>(tx_hash.to_string())
-        .get_results::<EventData>(self.connection())
-        .map_err(|e| StorageError::QueryError {
-            reason: format!("get_events: {}", e),
-        })?;
+    fn get_events_for_transaction(&mut self, tx_hash: PayloadId) -> Result<Vec<EventData>, StorageError> {
+        let res = sql_query("SELECT component_address, tx_hash, topic, payload, version FROM events WHERE tx_hash = ?")
+            .bind::<Text, _>(tx_hash.to_string())
+            .get_results::<EventData>(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_events: {}", e),
+            })?;
 
         Ok(res)
     }
 
-    fn get_latest_version_of_events(&mut self, component_address: &ComponentAddress) -> Result<u32, StorageError> {
+    fn get_stored_versions_of_events(
+        &mut self,
+        component_address: &ComponentAddress,
+        start_version: u32,
+    ) -> Result<Vec<u32>, StorageError> {
         use crate::substate_storage_sqlite::schema::events;
-        let res: Option<i32> = events::table
+        let res: Vec<i32> = events::table
             .filter(
-                crate::substate_storage_sqlite::schema::events::component_address
-                    .eq(&component_address.hash().to_string()),
+                events::component_address
+                    .eq(&component_address.hash().to_string())
+                    .and(events::version.gt(start_version as i32)),
             )
-            .select(diesel::dsl::max(events::version))
-            .first(self.connection())
+            .select(events::version)
+            .get_results(self.connection())
             .map_err(|e| StorageError::QueryError {
                 reason: format!("get_last_verision_of_events: {}", e),
             })?;
 
         // for our purposes, a non-existing version in the db, means we have
         // to scan the network from res = 0
-        let res = res.unwrap_or_default();
-        Ok(res as u32)
+        Ok(res.into_iter().map(|v| v as u32).collect::<Vec<_>>())
     }
 
     fn get_events_by_version(

@@ -69,7 +69,6 @@ use tari_template_lib::{
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{Amount, BucketId, ComponentAddress, NonFungibleAddress, VaultRef},
-    Hash,
 };
 use tari_utilities::ByteArray;
 
@@ -167,13 +166,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn emit_event(
         &self,
         component_address: ComponentAddress,
-        tx_hash: Hash,
         topic: String,
         payload: HashMap<String, String>,
     ) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
-        let mut event = Event::new(component_address, tx_hash, topic);
+        let mut event = Event::new(component_address, topic);
         payload
             .into_iter()
             .for_each(|(key, value)| event.add_payload(key, value));

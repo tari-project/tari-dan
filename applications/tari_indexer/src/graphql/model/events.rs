@@ -27,7 +27,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::PayloadId;
-use tari_template_lib::prelude::ComponentAddress;
+use tari_template_lib::{prelude::ComponentAddress, Hash};
 
 use crate::substate_manager::SubstateManager;
 
@@ -42,14 +42,14 @@ pub struct Event {
     pub payload: HashMap<String, String>,
 }
 
-impl From<tari_engine_types::events::Event> for Event {
-    fn from(event: tari_engine_types::events::Event) -> Self {
-        Self {
+impl Event {
+    fn from_engine_event(event: tari_engine_types::events::Event, tx_hash: Hash) -> Result<Self, anyhow::Error> {
+        Ok(Self {
             component_address: event.component_address().into_array(),
-            tx_hash: event.tx_hash().into_array(),
-            topic: event.topic().clone(),
-            payload: event.get_full_payload().clone(),
-        }
+            tx_hash: tx_hash.into_array(),
+            topic: event.topic(),
+            payload: event.get_full_payload(),
+        })
     }
 }
 
@@ -59,32 +59,56 @@ pub struct EventQuery;
 
 #[Object]
 impl EventQuery {
-    pub async fn get_event(
+    pub async fn get_events_for_transaction(
         &self,
         ctx: &Context<'_>,
-        component_address: [u8; 32],
         tx_hash: [u8; 32],
     ) -> Result<Vec<Event>, anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "Querying events with component_address = {} and tx_hash = {}",
-            component_address.to_hex(),
+            "Querying events for transaction hash = {}",
             tx_hash.to_hex()
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let component_address = ComponentAddress::from_array(component_address);
-        let tx_hash = PayloadId::new(tx_hash);
-        let mut events = substate_manager.get_event(component_address, tx_hash).await?;
+        let tx_hash = Hash::from_array(tx_hash);
+        let mut events = substate_manager.scan_events_for_transaction(tx_hash).await?;
 
         // if not events are stored in the db, we scan the network
         if events.is_empty() {
             // for now we scan the whole network history for the given component
             events = substate_manager
-                .scan_events_for_substate_from_network(component_address, Some(0))
+                .scan_events_for_transaction(Hash::from_array(tx_hash.into_array()))
                 .await?;
         }
 
-        let events = events.iter().map(|e| Event::from(e.clone())).collect::<Vec<Event>>();
+        let events = events
+            .iter()
+            .map(|e| Event::from_engine_event(e.clone(), tx_hash))
+            .collect::<Result<Vec<Event>, _>>()?;
+
+        Ok(events)
+    }
+
+    pub async fn get_events_for_component(
+        &self,
+        ctx: &Context<'_>,
+        component_address: [u8; 32],
+        version: Option<u32>,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        let version = version.unwrap_or_default();
+        info!(
+            target: LOG_TARGET,
+            "Querying events for component_address = component_{}, starting from version = {}",
+            component_address.to_hex(),
+            version
+        );
+        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
+        let events = substate_manager
+            .scan_events_for_substate_from_network(ComponentAddress::from_array(component_address), Some(version))
+            .await?
+            .iter()
+            .map(|(tx_hash, e)| Event::from_engine_event(e.clone(), *tx_hash))
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
 
         Ok(events)
     }

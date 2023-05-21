@@ -34,10 +34,9 @@ mod event {
         pub fn test_function() {
             println!("Emitting a new event");
             let template_hash = tari_template_lib::Hash::from_array([0u8; 32]);
-            let tx_hash = tari_template_lib::Hash::from_array([0u8; 32]);
             let topic = "Hello world !";
             let payload: HashMap<String, String> = HashMap::from([("my".to_string(), "event".to_string())]);
-            emit_event(ComponentAddress::from(template_hash), tx_hash, topic, payload);
+            emit_event(ComponentAddress::from(template_hash), topic, payload);
         }
     }
 }
