@@ -44,6 +44,19 @@ where
         Ok(substate)
     }
 
+    pub async fn get_related_substates(
+        &self,
+        address: &SubstateAddress,
+        version: Option<u32>,
+    ) -> Result<Vec<SubstateAddress>, SubstateApiError> {
+        let related_addresses = self
+            .network_interface
+            .get_related_substates(address, version)
+            .await
+            .map_err(|e| SubstateApiError::NetworkIndexerError(e.into()))?;
+        Ok(related_addresses)
+    }
+
     pub fn load_dependent_substates(
         &self,
         parents: &[&SubstateAddress],

@@ -48,6 +48,7 @@ use tari_indexer_client::types::{
     GetNonFungibleCountRequest,
     GetNonFungiblesRequest,
     GetNonFungiblesResponse,
+    GetRelatedSubstatesRequest,
     GetSubstateRequest,
     GetSubstateResponse,
     GetTransactionResultRequest,
@@ -398,6 +399,19 @@ impl JsonRpcHandlers {
                 warn!(target: LOG_TARGET, "Error adding address: {}", e);
                 Err(Self::generic_error_response(answer_id))
             },
+        }
+    }
+
+    pub async fn get_related_substates(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetRelatedSubstatesRequest = value.parse_params()?;
+        match self
+            .substate_manager
+            .get_related_substates(&request.address, request.version)
+            .await
+        {
+            Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, addresses)),
+            Err(_e) => Err(Self::generic_error_response(answer_id)),
         }
     }
 

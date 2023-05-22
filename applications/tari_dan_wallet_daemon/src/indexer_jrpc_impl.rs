@@ -13,7 +13,7 @@ use tari_engine_types::substate::SubstateAddress;
 use tari_indexer_client::{
     error::IndexerClientError,
     json_rpc_client::IndexerJsonRpcClient,
-    types::{GetSubstateRequest, GetTransactionResultRequest, SubmitTransactionRequest},
+    types::{GetRelatedSubstatesRequest, GetSubstateRequest, GetTransactionResultRequest, SubmitTransactionRequest},
 };
 use tari_transaction::Transaction;
 
@@ -61,6 +61,21 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
             substate: result.substate,
             created_by_transaction: result.created_by_transaction,
         })
+    }
+
+    async fn get_related_substates(
+        &self,
+        address: &SubstateAddress,
+        version: Option<u32>,
+    ) -> Result<Vec<SubstateAddress>, Self::Error> {
+        let mut client = self.get_client()?;
+        let result = client
+            .get_related_substates(GetRelatedSubstatesRequest {
+                address: address.clone(),
+                version,
+            })
+            .await?;
+        Ok(result.substates)
     }
 
     async fn submit_transaction(&self, transaction: Transaction, is_dry_run: bool) -> Result<FixedHash, Self::Error> {

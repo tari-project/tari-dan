@@ -234,6 +234,14 @@ impl WalletNetworkInterface for PanicIndexer {
         unimplemented!()
     }
 
+    async fn get_related_substates(
+        &self,
+        _address: &SubstateAddress,
+        _version: Option<u32>,
+    ) -> Result<Vec<SubstateAddress>, Self::Error> {
+        unimplemented!()
+    }
+
     async fn submit_transaction(&self, _transaction: Transaction, _is_dry_run: bool) -> Result<FixedHash, Self::Error> {
         todo!()
     }

@@ -119,3 +119,18 @@ pub struct NonFungibleSubstate {
     pub address: SubstateAddress,
     pub substate: Substate,
 }
+
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetRelatedSubstatesRequest {
+    #[serde_as(as = "DisplayFromStr")]
+    pub address: SubstateAddress,
+    pub version: Option<u32>,
+}
+
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetRelatedSubstatesResponse {
+    #[serde_as(as = "Vec<DisplayFromStr>")]
+    pub substates: Vec<SubstateAddress>,
+}

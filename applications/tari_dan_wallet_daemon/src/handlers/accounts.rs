@@ -913,6 +913,23 @@ pub async fn handle_transfer(
     let destination_account_address =
         get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
+    let related = context
+        .wallet_sdk()
+        .substate_api()
+        .get_related_substates(&destination_account_address.into(), None)
+        .await?;
+
+    for address in &related {
+        if let SubstateAddress::Vault(_) = address.clone() {
+            let vault = context
+                .wallet_sdk()
+                .substate_api()
+                .scan_for_substate(address, None)
+                .await?;
+            inputs.push(vault.address);
+        }
+    }
+
     // calculate inputs and outputs shard ids
     let outputs = inputs
         .iter()
@@ -1128,6 +1145,18 @@ pub async fn handle_confidential_transfer(
             &src_vault_substate.address.address,
             src_vault_substate.address.version,
         ));
+
+        let related = sdk
+            .substate_api()
+            .get_related_substates(&destination_account_address.into(), None)
+            .await?;
+
+        for address in &related {
+            if let SubstateAddress::Vault(_) = address.clone() {
+                let vault = sdk.substate_api().scan_for_substate(address, None).await?;
+                shard_inputs.push(ShardId::from_address(&vault.address.address, vault.address.version));
+            }
+        }
 
         let shard_outputs = vec![
             // Source account mutated

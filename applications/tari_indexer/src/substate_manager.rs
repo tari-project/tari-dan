@@ -33,6 +33,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
     TemplateAddress,
 };
+use tari_indexer_client::types::GetRelatedSubstatesResponse;
 use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
@@ -206,6 +207,22 @@ impl SubstateManager {
             })),
             _ => Ok(None),
         }
+    }
+
+    pub async fn get_related_substates(
+        &self,
+        substate_address: &SubstateAddress,
+        version: Option<u32>,
+    ) -> Result<GetRelatedSubstatesResponse, anyhow::Error> {
+        let substate = match self.substate_scanner.get_substate(substate_address, version).await {
+            Ok(SubstateResult::Up { substate, .. }) => substate,
+            Ok(_) => return Err(anyhow!("Substate not found in the network")),
+            Err(err) => return Err(anyhow!("Error scanning for substate: {}", err)),
+        };
+        let related_addresses = find_related_substates(&substate)?;
+        Ok(GetRelatedSubstatesResponse {
+            substates: related_addresses,
+        })
     }
 
     async fn get_substate_from_db(

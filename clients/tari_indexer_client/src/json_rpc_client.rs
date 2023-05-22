@@ -33,6 +33,8 @@ use crate::{
         DeleteAddressRequest,
         GetNonFungiblesRequest,
         GetNonFungiblesResponse,
+        GetRelatedSubstatesRequest,
+        GetRelatedSubstatesResponse,
         GetSubstateRequest,
         GetSubstateResponse,
         GetTransactionResultRequest,
@@ -77,6 +79,13 @@ impl IndexerJsonRpcClient {
 
     pub async fn get_substate(&mut self, req: GetSubstateRequest) -> Result<GetSubstateResponse, IndexerClientError> {
         self.send_request("get_substate", req).await
+    }
+
+    pub async fn get_related_substates(
+        &mut self,
+        req: GetRelatedSubstatesRequest,
+    ) -> Result<GetRelatedSubstatesResponse, IndexerClientError> {
+        self.send_request("get_related_substates", req).await
     }
 
     pub async fn submit_transaction(
@@ -128,7 +137,10 @@ impl IndexerJsonRpcClient {
             .body(request_json.to_string())
             .send()
             .await?;
+        println!("CO TO JE {:?}", resp);
+        // println!("{:?}", resp.text().await);
         let val = resp.json().await?;
+        println!("CO TO JE {:?}", val);
         let resp = jsonrpc_result(val)?;
         // Response might not deserialize to R....
         match serde_json::from_value(resp) {

@@ -62,6 +62,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "add_peer" => handlers.add_peer(value).await,
         "get_comms_stats" => handlers.get_comms_stats(value).await,
         "get_substate" => handlers.get_substate(value).await,
+        "get_related_substates" => handlers.get_related_substates(value).await,
         "inspect_substate" => handlers.inspect_substate(value).await,
         "get_addresses" => handlers.get_addresses(value).await,
         "add_address" => handlers.add_address(value).await,
