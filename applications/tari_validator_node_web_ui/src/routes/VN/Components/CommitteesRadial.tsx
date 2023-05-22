@@ -23,7 +23,6 @@
 import { useState, useEffect } from 'react';
 import EChartsReact from 'echarts-for-react';
 import { fromHexString } from './helpers';
-import theme from '../../../theme/theme';
 
 type CommitteeData = [string, string, string[]][];
 
@@ -40,10 +39,15 @@ export default function CommitteesRadial({
     activeright: [],
   });
   const [titles, setTitles] = useState<any[]>([]);
+  const [divHeight, setDivHeight] = useState<number>(0);
 
   const TOTAL_WIDTH = 256;
-  const ACTIVE_COLOR = theme.palette.primary.dark;
   const INACTIVE_COLOR = 'rgba(0, 0, 0, 0)';
+  const ACTIVE_COLOR = (params: any) => {
+    let index = params.dataIndex;
+    var colorList = ['#ECA86A', '#DB7E7E', '#7AC1C2', '#318EFA', '#9D5CF9'];
+    return colorList[index % colorList.length];
+  };
 
   useEffect(() => {
     const info: any = {
@@ -98,6 +102,7 @@ export default function CommitteesRadial({
       (data: any, index: any) => `Committee ${index + 1}`
     );
     setTitles(newTitles);
+    setDivHeight(newTitles.length * 60);
   }, [committees]);
 
   function tooltipFormatter(params: any) {
@@ -222,5 +227,5 @@ export default function CommitteesRadial({
     ],
   };
 
-  return <EChartsReact option={option} style={{ height: '1000px' }} />;
+  return <EChartsReact option={option} style={{ height: 600 }} />;
 }

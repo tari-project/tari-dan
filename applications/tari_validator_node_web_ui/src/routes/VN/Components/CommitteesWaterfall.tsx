@@ -23,7 +23,6 @@
 import { useState, useEffect } from 'react';
 import { fromHexString } from './helpers';
 import EChartsReact from 'echarts-for-react';
-import theme from '../../../theme/theme';
 
 type CommitteeData = [string, string, string[]][];
 
@@ -43,8 +42,12 @@ export default function CommitteesWaterfall({
   const [divHeight, setDivHeight] = useState<number>(0);
 
   const TOTAL_WIDTH = 256;
-  const ACTIVE_COLOR = theme.palette.primary.dark;
   const INACTIVE_COLOR = 'rgba(0, 0, 0, 0)';
+  const ACTIVE_COLOR = (params: any) => {
+    let index = params.dataIndex;
+    var colorList = ['#ECA86A', '#DB7E7E', '#7AC1C2', '#318EFA', '#9D5CF9'];
+    return colorList[index % colorList.length];
+  };
 
   useEffect(() => {
     const info: any = {
@@ -95,7 +98,7 @@ export default function CommitteesWaterfall({
       }
     });
     setChartData(info);
-    setDivHeight(dataset.length * 40);
+    setDivHeight(dataset.length * 50);
     const newTitles = dataset.map(
       (data: any, index: any) => `Committee ${index + 1}`
     );
