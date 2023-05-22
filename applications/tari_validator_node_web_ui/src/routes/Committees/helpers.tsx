@@ -20,50 +20,44 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-interface IEpoch {
-  current_epoch: number;
-  is_valid: boolean;
+import { getCommittee, getShardKey } from '../../utils/json_rpc';
+import { U256 } from '../VN/Components/helpers';
+
+async function get_all_committees(
+  currentEpoch: number,
+  shardKey: string,
+  publicKey: string
+) {
+  let shardKeyMap: { [id: string]: string } = { [publicKey]: shardKey };
+  let committee = await getCommittee(currentEpoch, shardKey);
+  if (committee?.committee?.members === undefined) {
+    return;
+  }
+  let nextShardSpace = new U256(shardKey).inc();
+  let nextCommittee = await getCommittee(currentEpoch, nextShardSpace.n);
+  let lastMemberShardKey;
+  let shardSpaces: Array<[string, string, Array<string>]> = [];
+  for (const member of committee.committee.members.concat(
+    nextCommittee.committee.members[nextCommittee.committee.members.length - 1]
+  )) {
+    if (!(member in shardKeyMap)) {
+      shardKeyMap[member] = (
+        await getShardKey(currentEpoch * 10, member)
+      ).shard_key;
+    }
+    if (lastMemberShardKey !== undefined) {
+      let end = new U256(shardKeyMap[member]).dec();
+      shardSpaces.push([
+        lastMemberShardKey,
+        end.n,
+        (await getCommittee(currentEpoch, lastMemberShardKey)).committee
+          .members,
+      ]);
+    }
+    lastMemberShardKey = shardKeyMap[member];
+  }
+
+  return shardSpaces;
 }
 
-interface IIdentity {
-  node_id: string;
-  public_address: string;
-  public_key: string;
-}
-
-interface IFunction {
-  name: string;
-  arguments: Array<string>;
-  output: string;
-}
-
-interface ITemplate {
-  registration_metadata: {
-    address: string;
-    url: string;
-    binary_sha: Array<number>;
-    height: number;
-  };
-  abi: { template_name: string; functions: Array<IFunction> };
-}
-
-type ICommittees = [string, string, string[]][];
-
-type ICommitteeMap = [number, number, string[]];
-
-interface ICommitteeChart {
-  activeleft: number[];
-  inactiveleft: number[];
-  activemiddle: number[];
-  inactiveright: number[];
-  activeright: number[];
-}
-
-export {
-  type IEpoch,
-  type IIdentity,
-  type ITemplate,
-  type ICommittees,
-  type ICommitteeChart,
-  type ICommitteeMap,
-};
+export { get_all_committees };

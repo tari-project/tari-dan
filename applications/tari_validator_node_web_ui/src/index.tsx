@@ -30,7 +30,7 @@ import Transaction, {
   transactionLoader,
 } from './routes/Transaction/Transaction';
 import App from './App';
-import Committees from './routes/Committees/Committees';
+import Committees from './routes/Committees/CommitteesLayout';
 import Connections from './routes/Connections/Connections';
 import Fees from './routes/Fees/Fees';
 import Mempool from './routes/Mempool/Mempool';
@@ -39,7 +39,7 @@ import Templates from './routes/Templates/Templates';
 import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
 import ErrorPage from './routes/ErrorPage';
 import TemplateFunctions from './routes/VN/Components/TemplateFunctions';
-import CommitteeMembers from './routes/VN/Components/CommitteeMembers';
+import CommitteeMembers from './routes/Committees/CommitteeMembers';
 
 const router = createBrowserRouter([
   {

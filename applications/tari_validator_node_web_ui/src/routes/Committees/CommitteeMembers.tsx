@@ -20,14 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect, useContext, useCallback } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
-import { getCommittee, getShardKey } from '../../../utils/json_rpc';
-import { Grid, Typography } from '@mui/material';
-import { StyledPaper } from '../../../Components/StyledComponents';
-import PageHeading from '../../../Components/PageHeading';
+import { useState, useEffect, useContext } from 'react';
+import { useParams } from 'react-router-dom';
+import { getCommittee } from '../../utils/json_rpc';
+import { Grid } from '@mui/material';
+import { StyledPaper } from '../../Components/StyledComponents';
+import PageHeading from '../../Components/PageHeading';
 import Committee from './CommitteeSingle';
-import { VNContext } from '../../../App';
+import { VNContext } from '../../App';
 
 async function getMembers(
   currentEpoch: number,

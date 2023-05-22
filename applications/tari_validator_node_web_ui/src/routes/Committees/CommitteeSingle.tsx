@@ -26,7 +26,7 @@ import {
   DataTableCell,
   BoxHeading,
   BoxHeading2,
-} from '../../../Components/StyledComponents';
+} from '../../Components/StyledComponents';
 import { Typography } from '@mui/material';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';

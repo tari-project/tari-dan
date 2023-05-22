@@ -21,24 +21,28 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState, useEffect } from 'react';
+import { fromHexString } from '../VN/Components/helpers';
 import EChartsReact from 'echarts-for-react';
-import { fromHexString } from './helpers';
+import {
+  ICommittees,
+  ICommitteeChart,
+  ICommitteeMap,
+} from '../../utils/interfaces';
+import '../../theme/echarts.css';
 
-type CommitteeData = [string, string, string[]][];
-
-export default function CommitteesRadial({
+export default function CommitteesWaterfall({
   committees,
 }: {
-  committees: CommitteeData;
+  committees: ICommittees;
 }) {
-  const [chartData, setChartData] = useState<any>({
+  const [chartData, setChartData] = useState<ICommitteeChart>({
     activeleft: [],
     inactiveleft: [],
     activemiddle: [],
     inactiveright: [],
     activeright: [],
   });
-  const [titles, setTitles] = useState<any[]>([]);
+  const [titles, setTitles] = useState<string[]>([]);
   const [divHeight, setDivHeight] = useState<number>(0);
 
   const TOTAL_WIDTH = 256;
@@ -50,7 +54,18 @@ export default function CommitteesRadial({
   };
 
   useEffect(() => {
-    const info: any = {
+    const dataset = committees.map(
+      ([begin, end, committee]: ICommittees[number]) => {
+        const data: ICommitteeMap = [
+          fromHexString(begin)[0],
+          fromHexString(end)[0],
+          committee,
+        ];
+        return data;
+      }
+    );
+
+    const info: ICommitteeChart = {
       activeleft: [],
       inactiveleft: [],
       activemiddle: [],
@@ -58,16 +73,7 @@ export default function CommitteesRadial({
       activeright: [],
     };
 
-    const dataset = committees.map(([begin, end, committee]: any) => {
-      const data: any = [
-        fromHexString(begin)[0],
-        fromHexString(end)[0],
-        committee,
-      ];
-      return data;
-    });
-
-    dataset.forEach((data: any) => {
+    dataset.forEach((data: ICommitteeMap) => {
       const [firstValue, secondValue] = data;
       switch (true) {
         case firstValue === secondValue:
@@ -98,11 +104,11 @@ export default function CommitteesRadial({
       }
     });
     setChartData(info);
+    setDivHeight(dataset.length * 50);
     const newTitles = dataset.map(
-      (data: any, index: any) => `Committee ${index + 1}`
+      (data: ICommitteeMap, index: number) => `Committee ${index + 1}`
     );
     setTitles(newTitles);
-    setDivHeight(newTitles.length * 60);
   }, [committees]);
 
   function tooltipFormatter(params: any) {
@@ -111,6 +117,7 @@ export default function CommitteesRadial({
     const members = data[2] as string[];
     const begin = data[0] as string;
     const end = data[1] as string;
+
     const memberList = members
       .map((member: string) => `<li>${member}</li>`)
       .slice(0, 5)
@@ -126,10 +133,17 @@ export default function CommitteesRadial({
   }
 
   const option = {
-    angleAxis: {
-      max: TOTAL_WIDTH,
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '3%',
+      containLabel: true,
     },
-    radiusAxis: {
+    xAxis: {
+      type: 'value',
+      max: 256,
+    },
+    yAxis: {
       type: 'category',
       data: titles,
       z: 10,
@@ -157,69 +171,78 @@ export default function CommitteesRadial({
       },
       backgroundColor: '#ffffffe6',
     },
-    polar: {},
     series: [
       {
-        type: 'bar',
-        data: chartData.activeleft,
-        coordinateSystem: 'polar',
         name: 'ActiveLeft',
-        stack: 'a',
+        type: 'bar',
+        stack: 'total',
+        label: {
+          show: false,
+        },
         emphasis: {
           focus: 'none',
         },
+        data: chartData.activeleft,
         itemStyle: {
           color: ACTIVE_COLOR,
         },
       },
       {
-        type: 'bar',
-        data: chartData.inactiveleft,
-        coordinateSystem: 'polar',
         name: 'InactiveLeft',
-        stack: 'a',
+        type: 'bar',
+        stack: 'total',
+        label: {
+          show: false,
+        },
         emphasis: {
           focus: 'none',
         },
+        data: chartData.inactiveleft,
         itemStyle: {
           color: INACTIVE_COLOR,
         },
       },
       {
-        type: 'bar',
-        data: chartData.activemiddle,
-        coordinateSystem: 'polar',
         name: 'ActiveMiddle',
-        stack: 'a',
+        type: 'bar',
+        stack: 'total',
+        label: {
+          show: false,
+        },
         emphasis: {
           focus: 'none',
         },
+        data: chartData.activemiddle,
         itemStyle: {
           color: ACTIVE_COLOR,
         },
       },
       {
-        type: 'bar',
-        data: chartData.inactiveright,
-        coordinateSystem: 'polar',
         name: 'InactiveRight',
-        stack: 'a',
+        type: 'bar',
+        stack: 'total',
+        label: {
+          show: false,
+        },
         emphasis: {
           focus: 'none',
         },
+        data: chartData.inactiveright,
         itemStyle: {
           color: INACTIVE_COLOR,
         },
       },
       {
-        type: 'bar',
-        data: chartData.activeright,
-        coordinateSystem: 'polar',
         name: 'ActiveRight',
-        stack: 'a',
+        type: 'bar',
+        stack: 'total',
+        label: {
+          show: false,
+        },
         emphasis: {
           focus: 'none',
         },
+        data: chartData.activeright,
         itemStyle: {
           color: ACTIVE_COLOR,
         },
@@ -227,5 +250,5 @@ export default function CommitteesRadial({
     ],
   };
 
-  return <EChartsReact option={option} style={{ height: 600 }} />;
+  return <EChartsReact option={option} style={{ height: divHeight }} />;
 }

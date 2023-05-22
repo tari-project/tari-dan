@@ -20,43 +20,103 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import PageHeading from '../../Components/PageHeading';
-import Typography from '@mui/material/Typography';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import { useContext } from 'react';
-import { VNContext } from '../../App';
-// import CommitteesCharts from '../VN/Components/CommitteesCharts';
-import Committees from '../VN/Components/Committees';
+import { useEffect, useState } from 'react';
+import Committee from './Committee';
+import Table from '@mui/material/Table';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableBody from '@mui/material/TableBody';
+import TableRow from '@mui/material/TableRow';
+import TablePagination from '@mui/material/TablePagination';
+import { Typography } from '@mui/material';
+import CommitteesWaterfall from './CommitteesWaterfall';
+import { get_all_committees } from './helpers';
 
-function CommitteesLayout() {
-  const { epoch, shardKey, identity, error } = useContext(VNContext);
+function Committees({
+  currentEpoch,
+  shardKey,
+  publicKey,
+}: {
+  currentEpoch: number;
+  shardKey: string;
+  publicKey: string;
+}) {
+  const [committees, setCommittees] = useState<
+    Array<[string, string, Array<string>]>
+  >([]);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  if (error !== '') {
-    return <div className="error">{error}</div>;
+  useEffect(() => {
+    if (publicKey !== null) {
+      get_all_committees(currentEpoch, shardKey, publicKey).then((response) => {
+        if (response) setCommittees(response);
+      });
+    }
+  }, [currentEpoch, shardKey, publicKey]);
+  if (!committees) {
+    return <Typography>Committees are loading</Typography>;
   }
-  if (epoch === undefined || identity === undefined) return <div>Loading</div>;
 
+  const emptyRows =
+    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - committees.length) : 0;
+
+  const handleChangePage = (event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
   return (
-    <div>
-      <Grid container spacing={5}>
-        <PageHeading>Committees</PageHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Typography>
-              {shardKey ? (
-                <Committees
-                  currentEpoch={epoch.current_epoch}
-                  shardKey={shardKey}
-                  publicKey={identity.public_key}
-                />
-              ) : null}
-            </Typography>
-          </StyledPaper>
-        </Grid>
-      </Grid>
-    </div>
+    <>
+      <CommitteesWaterfall committees={committees} />
+      <TableContainer>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Range</TableCell>
+              <TableCell style={{ textAlign: 'center' }}>Members</TableCell>
+              <TableCell style={{ textAlign: 'center' }}>Details</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {committees.map(([begin, end, committee]) => (
+              <Committee
+                key={begin}
+                begin={begin}
+                end={end}
+                members={committee}
+                publicKey={publicKey}
+              />
+            ))}
+            {emptyRows > 0 && (
+              <TableRow
+                style={{
+                  height: 67 * emptyRows,
+                }}
+              >
+                <TableCell colSpan={2} />
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50]}
+          component="div"
+          count={committees.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={handleChangePage}
+          onRowsPerPageChange={handleChangeRowsPerPage}
+        />
+      </TableContainer>
+    </>
   );
 }
 
-export default CommitteesLayout;
+export default Committees;

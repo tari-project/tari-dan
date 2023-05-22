@@ -22,7 +22,7 @@
 
 import { Routes, Route } from 'react-router-dom';
 import Mempool from './routes/Mempool/Mempool';
-import Committees from './routes/Committees/Committees';
+import Committees from './routes/Committees/CommitteesLayout';
 import ValidatorNode from './routes/VN/ValidatorNode';
 import Connections from './routes/Connections/Connections';
 import Fees from './routes/Fees/Fees';
@@ -33,7 +33,7 @@ import ErrorPage from './routes/ErrorPage';
 import Transaction from './routes/Transaction/Transaction';
 import TemplateFunctions from './routes/VN/Components/TemplateFunctions';
 import Layout from './theme/LayoutMain';
-import CommitteeMembers from './routes/VN/Components/CommitteeMembers';
+import CommitteeMembers from './routes/Committees/CommitteeMembers';
 import { createContext, useState, useEffect } from 'react';
 import { IEpoch, IIdentity } from './utils/interfaces';
 import {

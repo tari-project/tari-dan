@@ -21,25 +21,28 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState, useEffect } from 'react';
-import { fromHexString } from './helpers';
+import { fromHexString } from '../VN/Components/helpers';
 import EChartsReact from 'echarts-for-react';
+import {
+  ICommittees,
+  ICommitteeChart,
+  ICommitteeMap,
+} from '../../utils/interfaces';
+import '../../theme/echarts.css';
 
-type CommitteeData = [string, string, string[]][];
-
-export default function CommitteesWaterfall({
+export default function CommitteesRadial({
   committees,
 }: {
-  committees: CommitteeData;
+  committees: ICommittees;
 }) {
-  const [chartData, setChartData] = useState<any>({
+  const [chartData, setChartData] = useState<ICommitteeChart>({
     activeleft: [],
     inactiveleft: [],
     activemiddle: [],
     inactiveright: [],
     activeright: [],
   });
-  const [titles, setTitles] = useState<any[]>([]);
-  const [divHeight, setDivHeight] = useState<number>(0);
+  const [titles, setTitles] = useState<string[]>([]);
 
   const TOTAL_WIDTH = 256;
   const INACTIVE_COLOR = 'rgba(0, 0, 0, 0)';
@@ -50,7 +53,18 @@ export default function CommitteesWaterfall({
   };
 
   useEffect(() => {
-    const info: any = {
+    const dataset = committees.map(
+      ([begin, end, committee]: ICommittees[number]) => {
+        const data: ICommitteeMap = [
+          fromHexString(begin)[0],
+          fromHexString(end)[0],
+          committee,
+        ];
+        return data;
+      }
+    );
+
+    const info: ICommitteeChart = {
       activeleft: [],
       inactiveleft: [],
       activemiddle: [],
@@ -58,16 +72,7 @@ export default function CommitteesWaterfall({
       activeright: [],
     };
 
-    const dataset = committees.map(([begin, end, committee]: any) => {
-      const data: any = [
-        fromHexString(begin)[0],
-        fromHexString(end)[0],
-        committee,
-      ];
-      return data;
-    });
-
-    dataset.forEach((data: any) => {
+    dataset.forEach((data: ICommitteeMap) => {
       const [firstValue, secondValue] = data;
       switch (true) {
         case firstValue === secondValue:
@@ -98,9 +103,8 @@ export default function CommitteesWaterfall({
       }
     });
     setChartData(info);
-    setDivHeight(dataset.length * 50);
     const newTitles = dataset.map(
-      (data: any, index: any) => `Committee ${index + 1}`
+      (data: ICommitteeMap, index: number) => `Committee ${index + 1}`
     );
     setTitles(newTitles);
   }, [committees]);
@@ -125,18 +129,12 @@ export default function CommitteesWaterfall({
             <a class="tooltip-btn" href="committees/${begin},${end}">View Committee</a>
             `;
   }
+
   const option = {
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
-      containLabel: true,
+    angleAxis: {
+      max: TOTAL_WIDTH,
     },
-    xAxis: {
-      type: 'value',
-      max: 256,
-    },
-    yAxis: {
+    radiusAxis: {
       type: 'category',
       data: titles,
       z: 10,
@@ -164,78 +162,69 @@ export default function CommitteesWaterfall({
       },
       backgroundColor: '#ffffffe6',
     },
+    polar: {},
     series: [
       {
-        name: 'ActiveLeft',
         type: 'bar',
-        stack: 'total',
-        label: {
-          show: false,
-        },
-        emphasis: {
-          focus: 'none',
-        },
         data: chartData.activeleft,
+        coordinateSystem: 'polar',
+        name: 'ActiveLeft',
+        stack: 'a',
+        emphasis: {
+          focus: 'none',
+        },
         itemStyle: {
           color: ACTIVE_COLOR,
         },
       },
       {
-        name: 'InactiveLeft',
         type: 'bar',
-        stack: 'total',
-        label: {
-          show: false,
-        },
-        emphasis: {
-          focus: 'none',
-        },
         data: chartData.inactiveleft,
+        coordinateSystem: 'polar',
+        name: 'InactiveLeft',
+        stack: 'a',
+        emphasis: {
+          focus: 'none',
+        },
         itemStyle: {
           color: INACTIVE_COLOR,
         },
       },
       {
-        name: 'ActiveMiddle',
         type: 'bar',
-        stack: 'total',
-        label: {
-          show: false,
-        },
+        data: chartData.activemiddle,
+        coordinateSystem: 'polar',
+        name: 'ActiveMiddle',
+        stack: 'a',
         emphasis: {
           focus: 'none',
         },
-        data: chartData.activemiddle,
         itemStyle: {
           color: ACTIVE_COLOR,
         },
       },
       {
-        name: 'InactiveRight',
         type: 'bar',
-        stack: 'total',
-        label: {
-          show: false,
-        },
+        data: chartData.inactiveright,
+        coordinateSystem: 'polar',
+        name: 'InactiveRight',
+        stack: 'a',
         emphasis: {
           focus: 'none',
         },
-        data: chartData.inactiveright,
         itemStyle: {
           color: INACTIVE_COLOR,
         },
       },
       {
-        name: 'ActiveRight',
         type: 'bar',
-        stack: 'total',
-        label: {
-          show: false,
-        },
+        data: chartData.activeright,
+        coordinateSystem: 'polar',
+        name: 'ActiveRight',
+        stack: 'a',
         emphasis: {
           focus: 'none',
         },
-        data: chartData.activeright,
         itemStyle: {
           color: ACTIVE_COLOR,
         },
@@ -243,5 +232,5 @@ export default function CommitteesWaterfall({
     ],
   };
 
-  return <EChartsReact option={option} style={{ height: divHeight }} />;
+  return <EChartsReact option={option} style={{ height: 600 }} />;
 }

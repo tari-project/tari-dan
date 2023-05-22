@@ -22,7 +22,7 @@
 
 import { useContext } from 'react';
 import AllVNs from './Components/AllVNs';
-import Committees from './Components/Committees';
+import Committees from '../Committees/Committees';
 import Connections from './Components/Connections';
 import Fees from './Components/Fees';
 import Info from './Components/Info';
@@ -45,17 +45,6 @@ function ValidatorNode() {
 
   return (
     <Grid container spacing={5}>
-      {/* <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          {shardKey ? (
-            <CommitteesCharts
-              currentEpoch={epoch.current_epoch}
-              shardKey={shardKey}
-              publicKey={identity.public_key}
-            />
-          ) : null}
-        </StyledPaper>
-      </Grid> */}
       <SecondaryHeading>Info</SecondaryHeading>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>

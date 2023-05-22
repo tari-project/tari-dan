@@ -22,6 +22,7 @@
 
 import { useState, useEffect } from 'react';
 import EChartsReact from 'echarts-for-react';
+import '../../theme/echarts.css';
 
 const MyChartComponent = ({ chartData }: any) => {
   const [data, setData] = useState([]);
@@ -55,7 +56,7 @@ const MyChartComponent = ({ chartData }: any) => {
       .map((item: any) => `<li>${item}</li>`)
       .slice(0, 5)
       .join(' ')}</ul><br />
-      <a href="${link}">View All Members</a><br />`;
+      <a class="tooltip-btn" href="${link}">View All Members</a><br />`;
   };
 
   const option = {
@@ -65,6 +66,7 @@ const MyChartComponent = ({ chartData }: any) => {
       confine: true,
       formatter: tooltipFomatter,
       enterable: true,
+      backgroundColor: '#ffffffe6',
     },
     legend: {
       type: 'scroll',
