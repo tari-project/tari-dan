@@ -358,7 +358,7 @@ fn build_arguments(args: Punctuated<Expr, Comma>) -> Result<Vec<ManifestLiteral>
                 } else {
                     Err(syn::Error::new_spanned(
                         func,
-                        "Invalid function call, only Amount is supported",
+                        "Invalid function call, only Amount and NonFungibleId are supported",
                     ))
                 }
             },
@@ -399,7 +399,7 @@ fn handle_special_literals(name: &Ident, args: Punctuated<Expr, Comma>) -> Resul
     } else {
         Err(syn::Error::new_spanned(
             name,
-            "Invalid function call, only Amount is supported",
+            "Invalid function call, only Amount and NonFungibleId are supported",
         ))
     }
 }

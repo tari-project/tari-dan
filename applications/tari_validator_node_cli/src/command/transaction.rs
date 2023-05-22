@@ -93,8 +93,6 @@ pub struct CommonSubmitArgs {
     /// Timeout in seconds
     #[clap(long, short = 't')]
     pub wait_for_result_timeout: Option<u64>,
-    #[clap(long, short = 'n')]
-    pub num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
     pub inputs: Vec<VersionedSubstateAddress>,
     #[clap(long, short = 'v')]
@@ -105,14 +103,6 @@ pub struct CommonSubmitArgs {
     pub account_template_address: Option<String>,
     #[clap(long)]
     pub dry_run: bool,
-    #[clap(long, short = 'r', alias = "resource")]
-    pub new_resources: Vec<NewResourceOutput>,
-    #[clap(long, short = 'm', alias = "mint-specific")]
-    pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
-    #[clap(long, alias = "mint-new")]
-    pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
-    #[clap(long, alias = "new-nft-index")]
-    pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -237,55 +227,18 @@ pub async fn submit_transaction(
         common.inputs
     };
 
-    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
-    //       object is mutated
-    let mut outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
-
-    outputs.extend(
-        common
-            .non_fungible_mint_outputs
-            .into_iter()
-            .map(|m| ShardId::from_address(&m.to_substate_address(), 0)),
-    );
-
     // Convert to shard id
     let inputs = inputs
         .into_iter()
         .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version))
         .collect::<Vec<_>>();
 
-    summarize_request(&instructions, &inputs, &outputs, 1, common.dry_run);
+    summarize_request(&instructions, &inputs, 1, common.dry_run);
     println!();
 
     let transaction = Transaction::builder()
         .with_instructions(instructions)
         .with_inputs(inputs)
-        .with_new_outputs(common.num_outputs.unwrap_or(0))
-        .with_outputs(outputs)
-        .with_new_resources(
-            common
-                .new_resources
-                .into_iter()
-                .map(|r| (r.template_address, r.token_symbol))
-                .collect(),
-        )
-        .with_new_non_fungible_outputs(
-            common
-                .new_non_fungible_outputs
-                .into_iter()
-                .map(|m| (m.resource_address, m.count))
-                .collect(),
-        )
-        .with_new_non_fungible_index_outputs(
-            common
-                .new_non_fungible_index_outputs
-                .into_iter()
-                .map(|i| (i.parent_address, i.index))
-                .collect(),
-        )
         .sign(&key.secret_key)
         .build();
 
@@ -325,13 +278,7 @@ pub async fn submit_transaction(
     Ok(resp)
 }
 
-fn summarize_request(
-    instructions: &[Instruction],
-    inputs: &[ShardId],
-    outputs: &[ShardId],
-    fee: u64,
-    is_dry_run: bool,
-) {
+fn summarize_request(instructions: &[Instruction], inputs: &[ShardId], fee: u64, is_dry_run: bool) {
     if is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();
@@ -342,15 +289,6 @@ fn summarize_request(
         println!("  None");
     } else {
         for shard_id in inputs {
-            println!("- {}", shard_id);
-        }
-    }
-    println!();
-    println!("Outputs:");
-    if outputs.is_empty() {
-        println!("  None");
-    } else {
-        for shard_id in outputs {
             println!("- {}", shard_id);
         }
     }

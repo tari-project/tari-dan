@@ -79,7 +79,6 @@ async fn when_i_claim_burn(
         .unwrap_or_else(|| panic!("Claim public key {} not found", claim_public_key_name));
 
     let account_shard = ShardId::from_address(&account_address, 0);
-    let account_v1_shard = ShardId::from_address(&account_address, 1);
 
     let transaction = Transaction::builder()
         .claim_burn(ConfidentialClaim {
@@ -91,7 +90,6 @@ async fn when_i_claim_burn(
         })
         .put_last_instruction_output_on_workspace("burn")
         .call_method(component_address, "deposit", args![Workspace("burn")])
-        .with_outputs(vec![account_v1_shard])
         .with_inputs(vec![commitment_shard, account_shard])
         .sign(account_secret)
         .build();

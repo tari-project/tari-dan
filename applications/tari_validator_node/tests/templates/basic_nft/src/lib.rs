@@ -32,13 +32,33 @@ mod sparkle_nft_template {
 
     pub struct SparkleNft {
         resource_address: ResourceAddress,
+        vault: Vault,
     }
 
     impl SparkleNft {
         pub fn new() -> Self {
             let resource_address = ResourceBuilder::non_fungible("SPKL").build();
 
-            Self { resource_address }
+            Self {
+                resource_address,
+                vault: Vault::new_empty(resource_address),
+            }
+        }
+
+        pub fn with_initial_nft(nft: NonFungibleId) -> Self {
+            let empty = Metadata::new();
+            let bucket = ResourceBuilder::non_fungible("SPKL")
+                .with_non_fungibles(Some((nft, (&(), &empty))))
+                .build_bucket();
+
+            Self {
+                resource_address: bucket.resource_address(),
+                vault: Vault::from_bucket(bucket),
+            }
+        }
+
+        pub fn take_initial_nft(&mut self) -> Bucket {
+            self.vault.withdraw(Amount(1))
         }
 
         pub fn mint(&mut self, name: String, url: String) -> Bucket {

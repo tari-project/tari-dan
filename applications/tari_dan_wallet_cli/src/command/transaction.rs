@@ -425,7 +425,7 @@ pub async fn submit_transaction(
     println!("✅ Transaction {} submitted.", resp.hash);
     println!();
     // TODO: Would be great if we could display the Substate addresses as well as shard ids
-    summarize_request(&request, &resp.inputs, &resp.outputs);
+    summarize_request(&request, &resp.inputs);
 
     println!();
     println!("⏳️ Waiting for transaction result...");
@@ -447,7 +447,7 @@ pub async fn submit_transaction(
     Ok(resp)
 }
 
-fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], outputs: &[ShardId]) {
+fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId]) {
     if request.is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();
@@ -461,15 +461,6 @@ fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], out
         }
     }
     println!();
-    println!("Outputs:");
-    if outputs.is_empty() && request.new_outputs == 0 {
-        println!("  None");
-    } else {
-        for shard_id in outputs {
-            println!("- {}", shard_id);
-        }
-        println!("- {} new output(s)", request.new_outputs);
-    }
     println!();
     println!("🌟 Submitting fee instructions:");
     for instruction in &request.fee_instructions {

@@ -8,20 +8,10 @@ use tari_engine_types::{
     substate::{SubstateAddress, SubstateDiff},
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{args, prelude::NonFungibleId};
+use tari_template_lib::args;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
-    command::transaction::{
-        handle_submit,
-        submit_transaction,
-        CliArg,
-        CliInstruction,
-        CommonSubmitArgs,
-        NewNonFungibleIndexOutput,
-        NewNonFungibleMintOutput,
-        SpecificNonFungibleMintOutput,
-        SubmitArgs,
-    },
+    command::transaction::{handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
     from_hex::FromHex,
     key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,
@@ -72,16 +62,11 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     let common = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(90),
-        num_outputs: Some(1),
         inputs: vec![],
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
-        new_resources: vec![],
-        non_fungible_mint_outputs: vec![],
-        new_non_fungible_outputs: vec![],
-        new_non_fungible_index_outputs: vec![],
     };
     let mut client = get_validator_node_client(world, validator_node_name).await;
     let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
@@ -107,8 +92,6 @@ pub async fn create_component(
     vn_name: String,
     function_call: String,
     args: Vec<String>,
-    num_outputs: u64,
-    new_resource_token_symbols: Vec<String>,
 ) {
     let data_dir = get_cli_data_dir(world);
 
@@ -124,30 +107,16 @@ pub async fn create_component(
         args,
     };
 
-    let num_outputs = if num_outputs == 0 {
-        None
-    } else {
-        Some(num_outputs as u8)
-    };
-
     let args = SubmitArgs {
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
             wait_for_result_timeout: Some(300),
-            num_outputs,
             inputs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
-            new_resources: new_resource_token_symbols
-                .iter()
-                .map(|s| format!("{}:{}", template_address, s).parse().unwrap())
-                .collect(),
-            non_fungible_mint_outputs: vec![],
-            new_non_fungible_outputs: vec![],
-            new_non_fungible_index_outputs: vec![],
         },
     };
     dbg!(args.clone());
@@ -239,7 +208,6 @@ pub async fn call_method(
     fq_component_name: String,
     outputs_name: String,
     method_call: String,
-    num_outputs: u64,
 ) -> SubmitTransactionResponse {
     let data_dir = get_cli_data_dir(world);
     let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
@@ -264,27 +232,16 @@ pub async fn call_method(
         args: vec![],
     };
 
-    let num_outputs = if num_outputs == 0 {
-        None
-    } else {
-        Some(num_outputs as u8)
-    };
-
     let args = SubmitArgs {
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
             wait_for_result_timeout: Some(60),
-            num_outputs,
             inputs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
-            new_resources: vec![],
-            non_fungible_mint_outputs: vec![],
-            new_non_fungible_outputs: vec![],
-            new_non_fungible_index_outputs: vec![],
         },
     };
     let mut client = get_validator_node_client(world, vn_name).await;
@@ -308,7 +265,6 @@ pub async fn submit_manifest(
     outputs_name: String,
     manifest_content: String,
     inputs: String,
-    num_outputs: u64,
     signing_key_name: String,
 ) {
     // HACKY: Sets the active key so that submit_transaction will use it.
@@ -329,66 +285,12 @@ pub async fn submit_manifest(
         })
         .collect();
 
-    // dbg!(globals.clone());
-
-    // parse the minting outputs (if any) specified in the manifest as comments
-    let new_non_fungible_outputs: Vec<NewNonFungibleMintOutput> = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $mint "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let count = l[1].parse().unwrap();
-            NewNonFungibleMintOutput {
-                resource_address,
-                count,
-            }
-        })
-        .collect();
-
-    dbg!(new_non_fungible_outputs.clone());
-
-    // parse the minting specific outputs (if any) specified in the manifest as comments
-    let non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput> = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $mint_specific "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let non_fungible_id = NonFungibleId::try_from_canonical_string(l[1]).unwrap();
-            SpecificNonFungibleMintOutput {
-                resource_address,
-                non_fungible_id,
-            }
-        })
-        .collect();
-
-    // parse the nft indexes (if any) specified in the manifest as comments
-    let new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput> = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $nft_index "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let parent_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let index = u64::from_str(l[1]).unwrap();
-            NewNonFungibleIndexOutput { parent_address, index }
-        })
-        .collect();
-
     // parse the manifest
     let instructions = parse_manifest(&manifest_content, globals).unwrap();
 
     // submit the instructions to the vn
     let mut client = get_validator_node_client(world, vn_name).await;
     let data_dir = get_cli_data_dir(world);
-    let num_outputs = if num_outputs == 0 {
-        None
-    } else {
-        Some(num_outputs as u8)
-    };
 
     // Supply the inputs explicitly. If this is empty, the internal component manager will attempt to supply the correct
     // inputs
@@ -406,16 +308,11 @@ pub async fn submit_manifest(
     let args = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(60),
-        num_outputs,
         inputs,
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
-        new_resources: vec![],
-        non_fungible_mint_outputs,
-        new_non_fungible_outputs,
-        new_non_fungible_index_outputs,
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await

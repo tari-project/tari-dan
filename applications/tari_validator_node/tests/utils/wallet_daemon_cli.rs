@@ -594,7 +594,6 @@ pub async fn create_component(
     wallet_daemon_name: String,
     function_call: String,
     args: Vec<String>,
-    _num_outputs: u64,
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 

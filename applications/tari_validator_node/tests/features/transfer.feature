@@ -34,8 +34,7 @@ Feature: Account transfers
     When I create an account ACCOUNT via the wallet daemon WALLET_D with 1000 free coins
 
     # Create a new Faucet component
-    # When I call function "mint" on template "faucet" on VN with args "amount_10000" and 3 outputs named "FAUCET" with new resource "test"
-    When I call function "mint" on template "faucet" using account ACCOUNT to pay fees via wallet daemon WALLET_D with args "amount_10000" and 3 outputs named "FAUCET"
+    When I call function "mint" on template "faucet" using account ACCOUNT to pay fees via wallet daemon WALLET_D with args "amount_10000" and outputs named "FAUCET"
 
     # Burn some tari in the base layer to have funds for fees in the sender account
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACCOUNT, range proof RANGEPROOF and claim public key CLAIM_PUBKEY

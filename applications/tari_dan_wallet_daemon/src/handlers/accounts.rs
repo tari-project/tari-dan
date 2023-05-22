@@ -435,23 +435,12 @@ pub async fn handle_reveal_funds(
         let mut inputs = vec![account_substate.address];
         inputs.extend(child_addresses);
 
-        // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when
-        // the       object is mutated
-        let outputs = inputs
-            .iter()
-            .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-            .collect::<Vec<_>>();
-
         let inputs = inputs
             .into_iter()
             .map(|addr| ShardId::from_address(&addr.address, addr.version))
             .collect();
 
-        let transaction = builder
-            .with_inputs(inputs)
-            .with_outputs(outputs)
-            .sign(&account_key.k)
-            .build();
+        let transaction = builder.with_inputs(inputs).sign(&account_key.k).build();
 
         sdk.confidential_outputs_api()
             .proofs_set_transaction_hash(proof_id, *transaction.hash())?;
@@ -809,13 +798,6 @@ pub async fn handle_create_free_test_coins(
         inputs.extend(child_addresses);
     }
 
-    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
-    //       object is mutated
-    let outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
-
     let inputs = inputs
         .into_iter()
         .map(|s| ShardId::from_address(&s.address, s.version))
@@ -824,7 +806,6 @@ pub async fn handle_create_free_test_coins(
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
-        .with_outputs(outputs)
         .sign(&account_secret_key.k)
         .build();
 
@@ -913,12 +894,7 @@ pub async fn handle_transfer(
     let destination_account_address =
         get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
-    // calculate inputs and outputs shard ids
-    let outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
-
+    // calculate inputs shard ids
     let inputs = inputs
         .into_iter()
         .map(|s| ShardId::from_address(&s.address, s.version))
@@ -949,7 +925,6 @@ pub async fn handle_transfer(
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
-        .with_outputs(outputs)
         // potentially we can create new outputs for the destination account with its vault
         .with_new_outputs(2)
         .sign(&account_secret_key.k)
@@ -1129,15 +1104,6 @@ pub async fn handle_confidential_transfer(
             src_vault_substate.address.version,
         ));
 
-        let shard_outputs = vec![
-            // Source account mutated
-            ShardId::from_address(&account_substate.address.address, account_substate.address.version + 1),
-            ShardId::from_address(
-                &src_vault_substate.address.address,
-                src_vault_substate.address.version + 1,
-            ),
-        ];
-
         instructions.append(&mut vec![
             Instruction::CallMethod {
                 component_address: source_component_address,
@@ -1158,7 +1124,6 @@ pub async fn handle_confidential_transfer(
             .fee_transaction_pay_from_component(source_component_address, req.fee.unwrap_or(DEFAULT_FEE))
             .with_instructions(instructions)
             .with_inputs(shard_inputs)
-            .with_outputs(shard_outputs)
             .sign(&account_secret.k)
             .build();
 

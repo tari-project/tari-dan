@@ -99,7 +99,6 @@ pub struct TransactionSubmitResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
     pub inputs: Vec<ShardId>,
-    pub outputs: Vec<ShardId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -149,11 +149,7 @@ pub async fn handle_submit(
         });
     }
 
-    Ok(TransactionSubmitResponse {
-        hash,
-        inputs,
-        outputs: vec![],
-    })
+    Ok(TransactionSubmitResponse { hash, inputs })
 }
 
 pub async fn handle_get(

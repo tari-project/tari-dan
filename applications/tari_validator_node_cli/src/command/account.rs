@@ -80,16 +80,11 @@ pub async fn handle_create(
     let common = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(60),
-        num_outputs: Some(1),
         inputs: vec![],
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: args.is_dry_run,
-        new_resources: vec![],
-        non_fungible_mint_outputs: vec![],
-        new_non_fungible_outputs: vec![],
-        new_non_fungible_index_outputs: vec![],
     };
 
     submit_transaction(vec![instruction], common, base_dir, client).await
