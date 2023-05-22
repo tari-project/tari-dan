@@ -80,7 +80,7 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn emit_event(
         &self,
-        component_address: ComponentAddress,
+        component_address: Option<ComponentAddress>,
         topic: String,
         payload: HashMap<String, String>,
     ) -> Result<(), RuntimeError>;

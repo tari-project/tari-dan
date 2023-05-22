@@ -36,7 +36,8 @@ const LOG_TARGET: &str = "tari::indexer::graphql::events";
 #[derive(SimpleObject, Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
-    pub component_address: [u8; 32],
+    pub component_address: Option<[u8; 32]>,
+    pub template_address: [u8; 32],
     pub tx_hash: [u8; 32],
     pub topic: String,
     pub payload: HashMap<String, String>,
@@ -45,7 +46,8 @@ pub struct Event {
 impl Event {
     fn from_engine_event(event: tari_engine_types::events::Event, tx_hash: Hash) -> Result<Self, anyhow::Error> {
         Ok(Self {
-            component_address: event.component_address().into_array(),
+            component_address: event.component_address().map(|comp_addr| comp_addr.into_array()),
+            template_address: event.template_address().into_array(),
             tx_hash: tx_hash.into_array(),
             topic: event.topic(),
             payload: event.get_full_payload(),
@@ -117,6 +119,7 @@ impl EventQuery {
         &self,
         ctx: &Context<'_>,
         component_address: [u8; 32],
+        template_address: [u8; 32],
         tx_hash: [u8; 32],
         topic: String,
         payload: String,
@@ -135,6 +138,7 @@ impl EventQuery {
         substate_manager
             .save_event_to_db(
                 ComponentAddress::from_array(component_address),
+                Hash::from_array(template_address),
                 PayloadId::new(tx_hash),
                 topic.clone(),
                 payload.clone(),
@@ -143,7 +147,8 @@ impl EventQuery {
             .await?;
 
         Ok(Event {
-            component_address,
+            component_address: Some(component_address),
+            template_address,
             tx_hash,
             topic,
             payload,

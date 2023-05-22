@@ -23,7 +23,7 @@
 use std::fmt::Display;
 
 use log::*;
-use rand::prelude::*;
+use rand::{prelude::*, rngs::OsRng};
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{
     events::Event,
@@ -229,29 +229,16 @@ where
         version: u32,
     ) -> Result<Hash, IndexerError> {
         let shard_id = ShardId::from_address(substate_address, version);
-        let committee = self
+        let mut committee = self
             .committee_provider
             .get_committee(shard_id)
             .await
             .map_err(|e| IndexerError::CommitteeProviderError(e.to_string()))?;
 
-        // extract f + 1 members of the committee, so that at least one of these is assumed
-        // to be honest. Moreover, we randomize our seach to avoid increasing the traffic of
-        // a specific member.
-        let committee_size = self
-            .committee_provider
-            .get_committee_size()
-            .await
-            .map_err(|e| IndexerError::FailedToGetCommitteeSize(e.to_string()))?;
-
-        let to_query_members;
-        {
-            let mut rng = rand::thread_rng();
-            to_query_members = extract_random_committee_members(&mut rng, &committee.members, committee_size);
-        }
+        committee.members.shuffle(&mut OsRng);
 
         let mut transaction_hash = None;
-        for member in to_query_members {
+        for member in &committee.members {
             match self.get_substate_from_vn(member, substate_address, version).await {
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up {
@@ -311,11 +298,12 @@ where
         let tx_hash = Hash::try_from(tx_hash.as_ref()).expect("Failed to parse hash array");
         match self.get_events_for_transaction(tx_hash).await {
             Ok(tx_events) => {
+                // TODO: ideally we would filter
                 // we need to filter all transaction events, by those corresponding
                 // to the current component address
                 let component_tx_events = tx_events
                     .into_iter()
-                    .filter(|e| e.component_address() == component_address)
+                    .filter(|e| e.component_address().is_some() && e.component_address().unwrap() == component_address)
                     .map(|e| (tx_hash, e))
                     .collect::<Vec<(Hash, Event)>>();
                 Ok(component_tx_events)
@@ -347,16 +335,4 @@ where
             version += 1;
         }
     }
-}
-
-fn extract_random_committee_members<'a, TAddr>(
-    rng: &mut impl Rng,
-    committee_members: &'a [TAddr],
-    committee_size: usize,
-) -> Vec<&'a TAddr> {
-    let mut sample_indices: Vec<usize> = (0..committee_members.len()).collect();
-    sample_indices.shuffle(rng);
-    let sample_indices = &sample_indices[..committee_size];
-
-    sample_indices.iter().map(|&i| &committee_members[i]).collect()
 }

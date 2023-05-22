@@ -34,7 +34,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
 };
 use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
-use tari_template_lib::{prelude::ComponentAddress, Hash};
+use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::{
@@ -266,6 +266,7 @@ impl SubstateManager {
     pub async fn save_event_to_db(
         &self,
         component_address: ComponentAddress,
+        template_address: TemplateAddress,
         tx_hash: PayloadId,
         topic: String,
         payload: HashMap<String, String>,
@@ -273,7 +274,8 @@ impl SubstateManager {
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
         let new_event = NewEvent {
-            component_address: component_address.hash().to_string(),
+            component_address: Some(component_address.hash().to_string()),
+            template_address: template_address.to_string(),
             tx_hash: tx_hash.to_string(),
             topic,
             payload: payload.to_json().expect("Failed to convert to JSON"),
@@ -352,10 +354,12 @@ impl SubstateManager {
             .await?;
         // stores the newest network events to the db
         for (tx_hash, event) in network_events.iter() {
+            let template_address = event.template_address();
             let topic = event.topic();
             let payload = event.get_full_payload();
             self.save_event_to_db(
                 component_address,
+                template_address,
                 PayloadId::from_array(tx_hash.into_array()),
                 topic,
                 payload,

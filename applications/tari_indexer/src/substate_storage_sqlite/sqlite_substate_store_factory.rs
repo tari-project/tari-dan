@@ -31,7 +31,7 @@ use diesel::{
     dsl::count,
     prelude::*,
     sql_query,
-    sql_types::{Integer, Text},
+    sql_types::{Integer, Nullable, Text},
     SqliteConnection,
 };
 use diesel_migrations::EmbeddedMigrations;
@@ -302,12 +302,15 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
     }
 
     fn get_events_for_transaction(&mut self, tx_hash: PayloadId) -> Result<Vec<EventData>, StorageError> {
-        let res = sql_query("SELECT component_address, tx_hash, topic, payload, version FROM events WHERE tx_hash = ?")
-            .bind::<Text, _>(tx_hash.to_string())
-            .get_results::<EventData>(self.connection())
-            .map_err(|e| StorageError::QueryError {
-                reason: format!("get_events: {}", e),
-            })?;
+        let res = sql_query(
+            "SELECT component_address, template_address, tx_hash, topic, payload, version FROM events WHERE tx_hash = \
+             ?",
+        )
+        .bind::<Text, _>(tx_hash.to_string())
+        .get_results::<EventData>(self.connection())
+        .map_err(|e| StorageError::QueryError {
+            reason: format!("get_events_for_transaction: {}", e),
+        })?;
 
         Ok(res)
     }
@@ -341,9 +344,10 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         version: u32,
     ) -> Result<Vec<EventData>, StorageError> {
         let res = sql_query(
-            "SELECT component_address, tx_hash, topic, payload FROM events WHERE component_address = ? AND version = ?",
+            "SELECT component_address, template_address, tx_hash, topic, payload FROM events WHERE component_address \
+             = ? AND version = ?",
         )
-        .bind::<Text, _>(component_address.hash().to_string())
+        .bind::<Nullable<Text>, _>(Some(component_address.hash().to_string()))
         .bind::<Integer, _>(version as i32)
         .get_results::<EventData>(self.connection())
         .map_err(|e| StorageError::QueryError {
@@ -503,8 +507,10 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
 
         log::info!(
             target: LOG_TARGET,
-            "Added new event to the database with template_address = {} and for transaction hash = {}",
+            "Added new event to the database with component_address = {:?}, template_address = {} and for transaction \
+             hash = {}",
             new_event.component_address,
+            new_event.template_address,
             new_event.tx_hash
         );
 

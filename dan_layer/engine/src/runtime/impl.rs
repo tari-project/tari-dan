@@ -165,13 +165,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
     fn emit_event(
         &self,
-        component_address: ComponentAddress,
+        component_address: Option<ComponentAddress>,
         topic: String,
         payload: HashMap<String, String>,
     ) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
-        let mut event = Event::new(component_address, topic);
+        let tx_hash = self.tracker.transaction_hash();
+        let template_address = self.tracker.get_template_address()?;
+
+        let mut event = Event::new(component_address, template_address, tx_hash, topic);
         payload
             .into_iter()
             .for_each(|(key, value)| event.add_payload(key, value));

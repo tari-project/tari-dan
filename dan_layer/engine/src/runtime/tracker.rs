@@ -153,6 +153,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         Ok(())
     }
 
+    pub fn get_template_address(&self) -> Result<TemplateAddress, RuntimeError> {
+        Ok(self.runtime_state()?.template_address)
+    }
+
     pub fn new_resource(
         &self,
         resource_type: ResourceType,

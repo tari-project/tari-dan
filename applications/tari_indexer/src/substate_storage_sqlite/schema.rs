@@ -22,7 +22,8 @@ diesel::table! {
 diesel::table! {
     events (id) {
         id -> Integer,
-        component_address -> Text,
+        component_address -> Nullable<Text>,
+        template_address -> Text,
         tx_hash -> Text,
         topic -> Text,
         payload -> Text,
