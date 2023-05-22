@@ -7,6 +7,7 @@ use log::*;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
+    commit_result::TransactionReceiptAddress,
     indexed_value::{IndexedValue, ValueVisitorError},
     substate::{SubstateAddress, SubstateValue},
 };
@@ -95,6 +96,17 @@ where
                             }
                         },
                         SubstateValue::Resource(_) => {},
+                        SubstateValue::TransactionReceipt(tx_receipt) => {
+                            let tx_receipt_addr = SubstateAddress::TransactionReceipt(TransactionReceiptAddress::new(
+                                tx_receipt.transaction_hash,
+                            ));
+                            if substate_addresses.contains_key(&tx_receipt_addr) {
+                                continue;
+                            }
+                            let ValidatorScanResult { address: addr, .. } =
+                                self.scan_for_substate(&tx_receipt_addr, None).await?;
+                            substate_addresses.insert(addr.address, addr.version);
+                        },
                         SubstateValue::Vault(vault) => {
                             let resx_addr = SubstateAddress::Resource(*vault.resource_address());
                             if substate_addresses.contains_key(&resx_addr) {

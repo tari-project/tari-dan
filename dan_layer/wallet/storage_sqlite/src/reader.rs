@@ -382,6 +382,18 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(vault)
     }
 
+    fn vaults_exists(&mut self, address: &SubstateAddress) -> Result<bool, WalletStorageError> {
+        use crate::schema::vaults;
+
+        let count = vaults::table
+            .filter(vaults::address.eq(address.to_string()))
+            .count()
+            .first::<i64>(self.connection())
+            .map_err(|e| WalletStorageError::general("vaults_exists", e))?;
+
+        Ok(count > 0)
+    }
+
     fn vaults_get_by_resource(
         &mut self,
         account_addr: &SubstateAddress,

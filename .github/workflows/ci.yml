@@ -226,7 +226,6 @@ jobs:
 
   # Allows other workflows to know the PR number
   artifacts:
-    name: test
     runs-on: [ ubuntu-20.04 ]
     steps:
       - name: Save the PR number in an artifact
@@ -240,3 +239,13 @@ jobs:
         with:
           name: pr_num
           path: ./pr_num.txt
+
+  # needed for test results
+  event_file:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: Event File
+          path: ${{ github.event_path }}

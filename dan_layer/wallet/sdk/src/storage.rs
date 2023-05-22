@@ -129,6 +129,7 @@ pub trait WalletStoreReader {
 
     // Vaults
     fn vaults_get(&mut self, address: &SubstateAddress) -> Result<VaultModel, WalletStorageError>;
+    fn vaults_exists(&mut self, address: &SubstateAddress) -> Result<bool, WalletStorageError>;
     fn vaults_get_by_resource(
         &mut self,
         account_addr: &SubstateAddress,

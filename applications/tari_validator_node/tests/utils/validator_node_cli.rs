@@ -31,7 +31,7 @@ use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNode
 use super::validator_node::get_vn_client;
 use crate::{utils::logging::get_base_dir_for_scenario, TariWorld};
 
-pub(super) fn get_key_manager(world: &mut TariWorld) -> KeyManager {
+fn get_key_manager(world: &mut TariWorld) -> KeyManager {
     let path = get_cli_data_dir(world);
 
     // initialize the account public/private keys
@@ -167,7 +167,7 @@ pub async fn create_component(
 
 pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
     let outputs = world.outputs.entry(outputs_name).or_default();
-    let mut counters = [0usize, 0, 0, 0, 0, 0, 0];
+    let mut counters = [0usize, 0, 0, 0, 0, 0, 0, 0];
     for (addr, data) in diff.up_iter() {
         match addr {
             SubstateAddress::Component(_) => {
@@ -218,6 +218,16 @@ pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String
                     version: data.version(),
                 });
                 counters[5] += 1;
+            },
+            SubstateAddress::TransactionReceipt(_) => {
+                outputs.insert(
+                    format!("transaction_receipt/{}", counters[6]),
+                    VersionedSubstateAddress {
+                        address: addr.clone(),
+                        version: data.version(),
+                    },
+                );
+                counters[6] += 1;
             },
         }
     }

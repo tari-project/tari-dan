@@ -1235,7 +1235,7 @@ where
                             })?;
                             Ok(finalize)
                         }),
-                        Err(e @ HotStuffError::MissingPledges(_)) => {
+                        Err(e) => {
                             let finalize_result = FinalizeResult::reject(
                                 payload_id.into_array().into(),
                                 RejectReason::ShardsNotPledged(e.to_string()),
@@ -1253,7 +1253,6 @@ where
 
                             Ok(finalize_result)
                         },
-                        Err(e) => Err(e),
                     }
                 } else {
                     self.shard_store.with_write_tx(|tx| {

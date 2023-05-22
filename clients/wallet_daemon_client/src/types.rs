@@ -197,7 +197,6 @@ pub struct KeysCreateResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateRequest {
     pub account_name: Option<String>,
-    pub signing_key_index: Option<u64>,
     pub custom_access_rules: Option<AccessRules>,
     pub fee: Option<Amount>,
     pub is_default: bool,

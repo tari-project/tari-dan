@@ -30,19 +30,15 @@ Feature: Wallet Daemon
 
         # Register the "faucet" template
         When validator node VAL_1 registers the template "faucet"
-        When I wait 5 seconds
 
         # Mine some blocks until the UTXOs are scanned
         When miner MINER mines 5 new blocks
-        When I wait 10 seconds
         Then the template "faucet" is listed as registered by the validator node VAL_1
 
-        # A file-base CLI account must be created to sign future calls
-        When I use an account key named K1
-
         # Create two accounts to test sending the tokens
-        When I create an account ACC_1 via the wallet daemon WALLET_D
+        When I create an account ACC_1 via the wallet daemon WALLET_D with 1000 free coins
         When I create an account ACC_2 via the wallet daemon WALLET_D
+        When I check the balance of ACC_2 on wallet daemon WALLET_D the amount is exactly 0
 
         # Create a new Faucet component
         When I call function "mint" on template "faucet" using account ACC_1 to pay fees via wallet daemon WALLET_D with args "10000" and 3 outputs named "FAUCET"
@@ -75,8 +71,8 @@ Feature: Wallet Daemon
         ```
         # Check balances
         # Notice that `take_free_coins` extracts precisely 1000 faucet tokens
-        When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at most 1000
-        When I check the balance of ACC_2 on wallet daemon WALLET_D the amount is exactly 50
+        When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 1000
+        When I wait for ACC_2 on wallet daemon WALLET_D to have balance eq 50
 
     @serial
     Scenario: Claim and transfer confidential assets via wallet daemon
@@ -98,11 +94,8 @@ Feature: Wallet Daemon
         # Initialize the wallet daemon
         Given a wallet daemon WALLET_D connected to indexer IDX
 
-        # A file-base CLI account must be created to sign future calls
-        When I use an account key named K1
         # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
-        When I wait 3 seconds
-        When I create an account ACCOUNT_1 via the wallet daemon WALLET_D
+        When I create an account ACCOUNT_1 via the wallet daemon WALLET_D with 1000 free coins
         When I create an account ACCOUNT_2 via the wallet daemon WALLET_D
 
         When I burn 1000T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACCOUNT_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
@@ -114,11 +107,9 @@ Feature: Wallet Daemon
 
         When I convert commitment COMMITMENT into COMM_ADDRESS address
         Then validator node VN has state at COMM_ADDRESS
-        When I check the balance of ACCOUNT_1 on wallet daemon WALLET_D the amount is at most 0
 
         When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACCOUNT_1 via the wallet daemon WALLET_D
         When I print the cucumber world
-        When I wait 3 seconds
         When I check the confidential balance of ACCOUNT_1 on wallet daemon WALLET_D the amount is at least 1000
         # When account ACCOUNT_1 reveals 100 burned tokens via wallet daemon WALLET_D
         Then I make a confidential transfer with amount 5 from ACCOUNT_1 to ACCOUNT_2 creating output OUTPUT_TX1 via the wallet_daemon WALLET_D
