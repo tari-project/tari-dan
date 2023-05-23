@@ -909,8 +909,18 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
 #[when(expr = "indexer {word} scans the network events for account {word}")]
 async fn indexer_scans_network_events(world: &mut TariWorld, indexer_name: String, account_name: String) {
     let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
-    let account_component_address = world.outputs.get(&account_name).expect("Account name not found");
-    let graphql_client = indexer.get_graphql_indexer_client().await;
+    let accounts_component_addresses = world.outputs.get(&account_name).expect("Account name not found");
+    let component_addresses = accounts_component_addresses
+        .into_iter()
+        .filter(|(k, _)| k.contains(&account_name))
+        .map(|(_, v)| {
+            v.address
+                .as_component_address()
+                .expect("Failed to parse `ComponentAddress`")
+        })
+        .collect::<Vec<_>>();
+    let component_address = *component_addresses.first().expect("Did not find component addresses");
+    let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
         "{{ getEventsForComponent(componentAddress: {:?}, version: 0)}} {{ componentAddress, templateAddress, txHash, \
          topic, payload }}",

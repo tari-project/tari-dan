@@ -120,28 +120,28 @@ Feature: Indexer node
     # Check GraphQL request
     Given IDX indexer GraphQL request works
 
-#   @serial
-#   Scenario: Indexer GraphQL requests work over network substate indexing
-#     # Initialize a base node, wallet, miner and VN
-#     Given a base node BASE
-#     Given a wallet WALLET connected to base node BASE
-#     Given a miner MINER connected to base node BASE and wallet WALLET
+  @serial
+  Scenario: Indexer GraphQL requests work over network substate indexing
+    # Initialize a base node, wallet, miner and VN
+    Given a base node BASE
+    Given a wallet WALLET connected to base node BASE
+    Given a miner MINER connected to base node BASE and wallet WALLET
 
-#     # Initialize a VN
-#     Given a validator node VN connected to base node BASE and wallet WALLET
+    # Initialize a VN
+    Given a validator node VN connected to base node BASE and wallet WALLET
 
-#     # The wallet must have some funds before the VN sends transactions
-#     When miner MINER mines 6 new blocks
-#     When wallet WALLET has at least 2000000000 uT
+    # The wallet must have some funds before the VN sends transactions
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 2000000000 uT
 
-#     # VN registration
-#     When validator node VN sends a registration transaction
+    # VN registration
+    When validator node VN sends a registration transaction
 
-#     # A file-base CLI account must be created to sign future calls
-#     When I use an account key named K1
+    # A file-base CLI account must be created to sign future calls
+    When I use an account key named K1
 
-#     # Creates a new account
-#     When I create an account ACC_1 on VN
+    # Creates a new account
+    When I create an account ACC_1 on VN
 
 # # # Initialize an indexer
 # # Given an indexer IDX connected to base node BASE

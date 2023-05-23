@@ -61,19 +61,16 @@ impl TariEngine {
     ) -> ComponentAddress {
         let encoded_state = encode(&initial_state).unwrap();
 
-        let result = call_engine::<_, InvokeResult>(
-            EngineOp::ComponentInvoke,
-            &ComponentInvokeArg {
-                component_ref: ComponentRef::Component,
-                action: ComponentAction::Create,
-                args: invoke_args![CreateComponentArg {
-                    module_name: module_name.clone(),
-                    encoded_state,
-                    access_rules: access_rules.clone(),
-                    component_id,
-                }],
-            },
-        );
+        let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
+            component_ref: ComponentRef::Component,
+            action: ComponentAction::Create,
+            args: invoke_args![CreateComponentArg {
+                module_name: module_name.clone(),
+                encoded_state,
+                access_rules: access_rules.clone(),
+                component_id,
+            }],
+        });
 
         let component_address = result.decode().expect("failed to decode component address");
         let topic = format!("New component created, with address: {}", component_address);
@@ -87,13 +84,10 @@ impl TariEngine {
     }
 
     pub fn emit_log<T: Into<String>>(&self, level: LogLevel, msg: T) {
-        call_engine::<_, ()>(
-            EngineOp::EmitLog,
-            &EmitLogArg {
-                level,
-                message: msg.into(),
-            },
-        );
+        call_engine::<_, ()>(EngineOp::EmitLog, &EmitLogArg {
+            level,
+            message: msg.into(),
+        });
     }
 
     pub fn component_manager(&self, component_address: ComponentAddress) -> ComponentManager {
