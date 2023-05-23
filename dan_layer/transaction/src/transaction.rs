@@ -9,6 +9,7 @@ use tari_dan_common_types::ShardId;
 use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
     instruction::Instruction,
+    substate::SubstateAddress,
 };
 use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
@@ -146,16 +147,30 @@ impl Eq for Transaction {}
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct TransactionMeta {
+    required_inputs: Vec<SubstateRequirement>,
     involved_objects: HashMap<ShardId, SubstateChange>,
     max_outputs: u32,
 }
 
 impl TransactionMeta {
-    pub fn new(involved_objects: HashMap<ShardId, SubstateChange>, max_outputs: u32) -> Self {
+    pub fn new(
+        required_inputs: Vec<SubstateRequirement>,
+        involved_objects: HashMap<ShardId, SubstateChange>,
+        max_outputs: u32,
+    ) -> Self {
         Self {
+            required_inputs,
             involved_objects,
             max_outputs,
         }
+    }
+
+    pub fn required_inputs_iter(&self) -> impl Iterator<Item = &SubstateRequirement> + '_ {
+        self.required_inputs.iter()
+    }
+
+    pub fn required_inputs(&self) -> &[SubstateRequirement] {
+        &self.required_inputs
     }
 
     pub fn involved_objects_iter(&self) -> impl Iterator<Item = (&ShardId, &SubstateChange)> + '_ {
@@ -181,5 +196,25 @@ impl TransactionMeta {
 
     pub fn max_outputs(&self) -> u32 {
         self.max_outputs
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+pub struct SubstateRequirement {
+    address: SubstateAddress,
+    version: Option<u32>,
+}
+
+impl SubstateRequirement {
+    pub fn new(address: SubstateAddress, version: Option<u32>) -> Self {
+        Self { address, version }
+    }
+
+    pub fn address(&self) -> &SubstateAddress {
+        &self.address
+    }
+
+    pub fn version(&self) -> Option<u32> {
+        self.version
     }
 }
