@@ -73,15 +73,16 @@ impl EventQuery {
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let tx_hash = Hash::from_array(tx_hash);
-        let mut events = substate_manager.scan_events_for_transaction(tx_hash).await?;
-
-        // if not events are stored in the db, we scan the network
-        if events.is_empty() {
-            // for now we scan the whole network history for the given component
-            events = substate_manager
-                .scan_events_for_transaction(Hash::from_array(tx_hash.into_array()))
-                .await?;
-        }
+        let events = match substate_manager.scan_events_for_transaction(tx_hash).await {
+            Ok(events) => events,
+            Err(e) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Failed to scan events for transaction {} with error {}", tx_hash, e
+                );
+                return Err(e);
+            },
+        };
 
         let events = events
             .iter()

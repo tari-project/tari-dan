@@ -35,7 +35,7 @@ use diesel::{
     SqliteConnection,
 };
 use diesel_migrations::EmbeddedMigrations;
-use log::warn;
+use log::{info, warn};
 use tari_dan_common_types::PayloadId;
 use tari_dan_core::storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
@@ -98,15 +98,19 @@ impl SqliteSubstateStore {
 }
 pub trait SubstateStore {
     type ReadTransaction<'a>: SubstateStoreReadTransaction
-    where Self: 'a;
+    where
+        Self: 'a;
     type WriteTransaction<'a>: SubstateStoreWriteTransaction + Deref<Target = Self::ReadTransaction<'a>>
-    where Self: 'a;
+    where
+        Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError>;
 
     fn with_write_tx<F: FnOnce(&mut Self::WriteTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let mut tx = self.create_write_tx()?;
         match f(&mut tx) {
             Ok(r) => {
@@ -123,7 +127,9 @@ pub trait SubstateStore {
     }
 
     fn with_read_tx<F: FnOnce(&Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let tx = self.create_read_tx()?;
         let ret = f(&tx)?;
         Ok(ret)
@@ -302,6 +308,10 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
     }
 
     fn get_events_for_transaction(&mut self, tx_hash: PayloadId) -> Result<Vec<EventData>, StorageError> {
+        info!(
+            target: LOG_TARGET,
+            "Querying substate scanner database: get_events_for_transaction with tx_hash = {}", tx_hash
+        );
         let res = sql_query(
             "SELECT component_address, template_address, tx_hash, topic, payload, version FROM events WHERE tx_hash = \
              ?",
@@ -320,6 +330,10 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         component_address: &ComponentAddress,
         start_version: u32,
     ) -> Result<Vec<u32>, StorageError> {
+        info!(
+            target: LOG_TARGET,
+            "Querying substate scanner database: get_stored_versions_of_events with component_address = {} and start_version = {}", component_address, start_version
+        );
         use crate::substate_storage_sqlite::schema::events;
         let res: Vec<i32> = events::table
             .filter(
@@ -343,6 +357,12 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         component_address: &ComponentAddress,
         version: u32,
     ) -> Result<Vec<EventData>, StorageError> {
+        info!(
+            target: LOG_TARGET,
+            "Querying substate scanner database: get_events_by_version with component_address = {} and version = {}",
+            component_address,
+            version
+        );
         let res = sql_query(
             "SELECT component_address, template_address, tx_hash, topic, payload FROM events WHERE component_address \
              = ? AND version = ?",
@@ -424,11 +444,9 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update leaf node: {}", e),
                     })?;
-                log::info!(
+                info!(
                     target: LOG_TARGET,
-                    "Updated substate {} version to {}",
-                    address,
-                    new_substate.version
+                    "Updated substate {} version to {}", address, new_substate.version
                 );
             },
             None => {
@@ -438,11 +456,9 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
                     .map_err(|e| StorageError::QueryError {
                         reason: format!("Update substate error: {}", e),
                     })?;
-                log::info!(
+                info!(
                     target: LOG_TARGET,
-                    "Added new substate {} with version {}",
-                    address,
-                    new_substate.version
+                    "Added new substate {} with version {}", address, new_substate.version
                 );
             },
         };
@@ -485,27 +501,27 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
                 reason: format!("add_non_fungible_index error: {}", e),
             })?;
 
-        log::info!(
+        info!(
             target: LOG_TARGET,
-            "Added new NFT index for resource {} with index {}",
-            new_nft_index.resource_address,
-            new_nft_index.idx
+            "Added new NFT index for resource {} with index {}", new_nft_index.resource_address, new_nft_index.idx
         );
 
         Ok(())
     }
 
     fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError> {
+        info!("FLAG: CUCUMBER JDFIAIOISDJFPOIFJAOFJ");
+
         use crate::substate_storage_sqlite::schema::events;
 
         diesel::insert_into(events::table)
             .values(&new_event)
             .execute(&mut *self.connection())
             .map_err(|e| StorageError::QueryError {
-                reason: format!("events: {}", e),
+                reason: format!("save_events: {}", e),
             })?;
 
-        log::info!(
+        info!(
             target: LOG_TARGET,
             "Added new event to the database with component_address = {:?}, template_address = {} and for transaction \
              hash = {}",
@@ -520,7 +536,7 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
     fn save_events(&mut self, new_events: Vec<NewEvent>) -> Result<(), StorageError> {
         use crate::substate_storage_sqlite::schema::events;
 
-        log::info!(target: LOG_TARGET, "Inserting events on the substate manager database");
+        info!(target: LOG_TARGET, "Inserting events on the substate manager database");
         diesel::insert_into(events::table)
             .values(&new_events)
             .execute(&mut *self.connection())

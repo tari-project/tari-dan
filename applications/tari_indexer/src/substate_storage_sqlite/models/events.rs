@@ -34,29 +34,28 @@ use crate::substate_storage_sqlite::schema::*;
 #[diesel(table_name = events)]
 pub struct Event {
     pub id: i32,
-    pub component_address: Option<String>,
     pub template_address: String,
     pub tx_hash: String,
     pub topic: String,
     pub payload: String,
     pub version: i32,
+    pub component_address: Option<String>,
 }
 
 #[derive(Debug, Clone, Insertable, AsChangeset)]
 #[diesel(table_name = events)]
+#[diesel(treat_none_as_null = true)]
 pub struct NewEvent {
-    pub component_address: Option<String>,
     pub template_address: String,
     pub tx_hash: String,
     pub topic: String,
     pub payload: String,
     pub version: i32,
+    pub component_address: Option<String>,
 }
 
 #[derive(Clone, Debug, QueryableByName, Deserialize, Serialize)]
 pub struct EventData {
-    #[diesel(sql_type = Nullable<Text>)]
-    pub component_address: Option<String>,
     #[diesel(sql_type = Text)]
     pub template_address: String,
     #[diesel(sql_type = Text)]
@@ -67,6 +66,8 @@ pub struct EventData {
     pub payload: String,
     #[diesel(sql_type = Integer)]
     pub version: i32,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub component_address: Option<String>,
 }
 
 impl TryFrom<EventData> for crate::graphql::model::events::Event {
