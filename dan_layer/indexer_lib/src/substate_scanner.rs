@@ -288,24 +288,23 @@ where
         &self,
         component_address: ComponentAddress,
         version: u32,
-    ) -> Result<Vec<(Hash, Event)>, IndexerError> {
+    ) -> Result<Vec<Event>, IndexerError> {
         let substate_address = SubstateAddress::Component(component_address);
 
         let tx_hash = self
             .get_transaction_hash_from_substate_address(&substate_address, version)
             .await?;
 
-        let tx_hash = Hash::try_from(tx_hash.as_ref()).expect("Failed to parse hash array");
+        let tx_hash =
+            Hash::try_from(tx_hash.as_ref()).map_err(|e| IndexerError::FailedToParseTransactionHash(e.to_string()))?;
         match self.get_events_for_transaction(tx_hash).await {
             Ok(tx_events) => {
-                // TODO: ideally we would filter
                 // we need to filter all transaction events, by those corresponding
                 // to the current component address
                 let component_tx_events = tx_events
                     .into_iter()
                     .filter(|e| e.component_address().is_some() && e.component_address().unwrap() == component_address)
-                    .map(|e| (tx_hash, e))
-                    .collect::<Vec<(Hash, Event)>>();
+                    .collect::<Vec<Event>>();
                 Ok(component_tx_events)
             },
             Err(e) => Err(e),
@@ -318,7 +317,7 @@ where
         &self,
         component_address: ComponentAddress,
         version: Option<u32>,
-    ) -> Result<Vec<(Hash, Event)>, IndexerError> {
+    ) -> Result<Vec<Event>, IndexerError> {
         let mut events = vec![];
         let mut version: u32 = version.unwrap_or_default();
 

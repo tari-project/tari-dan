@@ -42,7 +42,10 @@ use crate::{
     substate_storage_sqlite::{
         models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
         sqlite_substate_store_factory::{
-            SqliteSubstateStore, SqliteSubstateStoreWriteTransaction, SubstateStore, SubstateStoreReadTransaction,
+            SqliteSubstateStore,
+            SqliteSubstateStoreWriteTransaction,
+            SubstateStore,
+            SubstateStoreReadTransaction,
             SubstateStoreWriteTransaction,
         },
     },
@@ -269,11 +272,9 @@ impl SubstateManager {
         payload: HashMap<String, String>,
         version: u64,
     ) -> Result<(), anyhow::Error> {
-        info!("FLAG: CUCUMBER JDFIAIOISDJFPOIFJAOFJ");
-
         let mut tx = self.substate_store.create_write_tx()?;
         let new_event = NewEvent {
-            component_address: Some(component_address.hash().to_string()),
+            component_address: Some(component_address.to_string()),
             template_address: template_address.to_string(),
             tx_hash: tx_hash.to_string(),
             topic,
@@ -302,22 +303,10 @@ impl SubstateManager {
             events.extend(stored_events);
         }
 
-        info!(target: LOG_TARGET, "FLAG: CUCUMBER upppppppsssssssssssss {:?}", events);
-
-        let mut events = match events
+        let mut events = events
             .iter()
-            .map(|e| e.clone().try_into())
-            .collect::<Result<Vec<Event>, anyhow::Error>>()
-        {
-            Ok(events) => {
-                info!(target: LOG_TARGET, "FLAG: CUCUMBER UPPPPPS");
-                events
-            },
-            Err(e) => {
-                info!(target: LOG_TARGET, "FLAG: CUCUMBER {}", e);
-                return Err(e);
-            },
-        };
+            .map(|e| Event::try_from(e.clone()))
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
 
         if events.is_empty() {
             let network_events = self.substate_scanner.get_events_for_transaction(tx_hash).await?;
@@ -331,7 +320,7 @@ impl SubstateManager {
         &self,
         component_address: ComponentAddress,
         version: Option<u32>,
-    ) -> Result<Vec<(Hash, Event)>, anyhow::Error> {
+    ) -> Result<Vec<Event>, anyhow::Error> {
         let mut events = vec![];
         let version = version.unwrap_or_default();
 
@@ -358,12 +347,8 @@ impl SubstateManager {
 
             let stored_events = stored_events
                 .iter()
-                .map(|e| {
-                    let tx_hash = Hash::from_hex(&e.tx_hash).expect("Failed to parse hex string to Hash");
-                    let event = e.clone().try_into().expect("Failed to parse EventData to engine Event");
-                    (tx_hash, event)
-                })
-                .collect::<Vec<_>>();
+                .map(|e| e.clone().try_into())
+                .collect::<Result<Vec<_>, _>>()?;
             events.extend(stored_events);
         }
 
@@ -387,8 +372,9 @@ impl SubstateManager {
             .get_events_for_component(component_address, Some(version))
             .await?;
         // stores the newest network events to the db
-        for (tx_hash, event) in &network_events {
+        for event in &network_events {
             let template_address = event.template_address();
+            let tx_hash = event.tx_hash();
             let topic = event.topic();
             let payload = event.get_full_payload();
             self.save_event_to_db(

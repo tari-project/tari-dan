@@ -44,11 +44,11 @@ pub struct Event {
 }
 
 impl Event {
-    fn from_engine_event(event: tari_engine_types::events::Event, tx_hash: Hash) -> Result<Self, anyhow::Error> {
+    fn from_engine_event(event: tari_engine_types::events::Event) -> Result<Self, anyhow::Error> {
         Ok(Self {
             component_address: event.component_address().map(|comp_addr| comp_addr.into_array()),
             template_address: event.template_address().into_array(),
-            tx_hash: tx_hash.into_array(),
+            tx_hash: event.tx_hash().into_array(),
             topic: event.topic(),
             payload: event.get_full_payload(),
         })
@@ -86,7 +86,7 @@ impl EventQuery {
 
         let events = events
             .iter()
-            .map(|e| Event::from_engine_event(e.clone(), tx_hash))
+            .map(|e| Event::from_engine_event(e.clone()))
             .collect::<Result<Vec<Event>, _>>()?;
 
         Ok(events)
@@ -110,7 +110,7 @@ impl EventQuery {
             .scan_events_for_substate_from_network(ComponentAddress::from_array(component_address), Some(version))
             .await?
             .iter()
-            .map(|(tx_hash, e)| Event::from_engine_event(e.clone(), *tx_hash))
+            .map(|e| Event::from_engine_event(e.clone()))
             .collect::<Result<Vec<Event>, anyhow::Error>>()?;
 
         Ok(events)
