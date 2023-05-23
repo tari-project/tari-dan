@@ -120,32 +120,35 @@ Feature: Indexer node
     # Check GraphQL request
     Given IDX indexer GraphQL request works
 
-#   @serial
-#   Scenario: Indexer GraphQL requests work over network substate indexing
-#     # Initialize a base node, wallet, miner and VN
-#     Given a base node BASE
-#     Given a wallet WALLET connected to base node BASE
-#     Given a miner MINER connected to base node BASE and wallet WALLET
+  @serial
+  Scenario: Indexer GraphQL requests work over network substate indexing
+    # Initialize a base node, wallet, miner and VN
+    Given a base node BASE
+    Given a wallet WALLET connected to base node BASE
+    Given a miner MINER connected to base node BASE and wallet WALLET
 
-#     # Initialize a VN
-#     Given a validator node VN connected to base node BASE and wallet WALLET
+    # Initialize a VN
+    Given a validator node VN connected to base node BASE and wallet WALLET
 
-#     # The wallet must have some funds before the VN sends transactions
-#     When miner MINER mines 6 new blocks
-#     When wallet WALLET has at least 2000000000 uT
+    # The wallet must have some funds before the VN sends transactions
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 2000000000 uT
 
-#     # VN registration
-#     When validator node VN sends a registration transaction
+    # VN registration
+    When validator node VN sends a registration transaction
 
-#     # Register some templates
-#     When validator node VN registers the template "events"
-#     When miner MINER mines 10 new blocks
-#     Then VN has scanned to height 13 within 10 seconds
-#     Then the validator node VN is listed as registered
-#     Then the template "events" is listed as registered by the validator node VN
+    # A file-base CLI account must be created to sign future calls
+    When I use an account key named K1
 
-#     # A file-base CLI account must be created to sign future calls
-#     When I use an account key named K1
+    # Creates a new account
+    When I create an account ACC_1 on VN
+
+# # Initialize an indexer
+# Given an indexer IDX connected to base node BASE
+
+# # Indexer queries network events
+# When indexer IDX scans the network events for account ACC_1
+
 
 # #     # Create a new Counter component and increase it to have a version 1
 # #     When I create a component COUNTER_1 of template "counter" on VN using "new"

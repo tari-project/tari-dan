@@ -906,6 +906,13 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     assert_eq!(res[0].payload, HashMap::from([("my".to_string(), "event".to_string())]));
 }
 
+#[when(expr = "indexer {word} scans the network events for account {word}")]
+async fn indexer_scans_network_events(world: &mut TariWorld, indexer_name: String, account_name: String) {
+    let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
+    let account_component_address = world.outputs.get(&account_name).expect("Account name not found");
+    let graphql_client = indexer.get_graphql_indexer_client().await;
+}
+
 #[when(expr = "the indexer {word} tracks the address {word}")]
 async fn track_addresss_in_indexer(world: &mut TariWorld, indexer_name: String, output_ref: String) {
     let indexer = world.indexers.get(&indexer_name).unwrap();

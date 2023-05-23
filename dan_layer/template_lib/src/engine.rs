@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::HashMap;
+
 use serde::Serialize;
 use tari_bor::encode;
 use tari_template_abi::{call_engine, EngineOp};
@@ -28,6 +30,7 @@ use crate::{
     args::{ComponentAction, ComponentInvokeArg, ComponentRef, CreateComponentArg, EmitLogArg, InvokeResult, LogLevel},
     component::ComponentManager,
     context::Context,
+    events::emit_event,
     get_context,
     models::ComponentAddress,
     prelude::AccessRules,
@@ -58,25 +61,39 @@ impl TariEngine {
     ) -> ComponentAddress {
         let encoded_state = encode(&initial_state).unwrap();
 
-        let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
-            component_ref: ComponentRef::Component,
-            action: ComponentAction::Create,
-            args: invoke_args![CreateComponentArg {
-                module_name,
-                encoded_state,
-                access_rules,
-                component_id,
-            }],
-        });
+        let result = call_engine::<_, InvokeResult>(
+            EngineOp::ComponentInvoke,
+            &ComponentInvokeArg {
+                component_ref: ComponentRef::Component,
+                action: ComponentAction::Create,
+                args: invoke_args![CreateComponentArg {
+                    module_name: module_name.clone(),
+                    encoded_state,
+                    access_rules: access_rules.clone(),
+                    component_id,
+                }],
+            },
+        );
 
-        result.decode().expect("failed to decode component address")
+        let component_address = result.decode().expect("failed to decode component address");
+        let topic = format!("New component created, with address: {}", component_address);
+        let payload = HashMap::from([
+            ("module_name".to_string(), module_name),
+            ("access_rules".to_string(), format!("{:?}", access_rules)),
+        ]);
+        emit_event(Some(component_address), topic, payload);
+
+        component_address
     }
 
     pub fn emit_log<T: Into<String>>(&self, level: LogLevel, msg: T) {
-        call_engine::<_, ()>(EngineOp::EmitLog, &EmitLogArg {
-            level,
-            message: msg.into(),
-        });
+        call_engine::<_, ()>(
+            EngineOp::EmitLog,
+            &EmitLogArg {
+                level,
+                message: msg.into(),
+            },
+        );
     }
 
     pub fn component_manager(&self, component_address: ComponentAddress) -> ComponentManager {
