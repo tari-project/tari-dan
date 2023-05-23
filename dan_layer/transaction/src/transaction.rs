@@ -105,6 +105,7 @@ impl Transaction {
             .chain(self.signature.signature().get_signature())
             .chain(&self.fee_instructions)
             .chain(&self.instructions)
+            .chain(&self.meta.required_inputs())
             .result()
     }
 
