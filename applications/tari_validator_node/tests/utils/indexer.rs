@@ -111,9 +111,7 @@ impl IndexerProcess {
 
     pub async fn insert_event_mock_data(&mut self) {
         let mut graphql_client = self.get_graphql_indexer_client().await;
-        let mut component_address = [0u8; 32];
-        component_address[0] = 1;
-        component_address[31] = 255;
+        let component_address = [0u8; 32];
         let template_address = [0u8; 32];
         let tx_hash = [0u8; 32];
         let topic = "my_event".to_string();

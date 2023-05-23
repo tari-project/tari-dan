@@ -29,7 +29,7 @@ use crate::serde_with;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
-    // #[serde(with = "serde_with::hex")]
+    #[serde(with = "serde_with::hex::option")]
     component_address: Option<ComponentAddress>,
     #[serde(with = "serde_with::hex")]
     template_address: TemplateAddress,
