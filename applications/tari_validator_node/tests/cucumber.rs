@@ -911,6 +911,17 @@ async fn indexer_scans_network_events(world: &mut TariWorld, indexer_name: Strin
     let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
     let account_component_address = world.outputs.get(&account_name).expect("Account name not found");
     let graphql_client = indexer.get_graphql_indexer_client().await;
+    let query = format!(
+        "{{ getEventsForComponent(componentAddress: {:?}, version: 0)}} {{ componentAddress, templateAddress, txHash, \
+         topic, payload }}",
+        component_address
+    );
+    let res = graphql_client
+        .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
+        .await
+        .expect("Failed to obtain getEventsForComponent query result");
+
+    assert!(!res.is_empty());
 }
 
 #[when(expr = "the indexer {word} tracks the address {word}")]
