@@ -335,7 +335,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         let res: Vec<i32> = events::table
             .filter(
                 events::component_address
-                    .eq(&component_address.hash().to_string())
+                    .eq(&component_address.to_string())
                     .and(events::version.gt(start_version as i32)),
             )
             .select(events::version)
@@ -364,7 +364,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             "SELECT component_address, template_address, tx_hash, topic, payload FROM events WHERE component_address \
              = ? AND version = ?",
         )
-        .bind::<Nullable<Text>, _>(Some(component_address.hash().to_string()))
+        .bind::<Nullable<Text>, _>(Some(component_address.to_string()))
         .bind::<Integer, _>(version as i32)
         .get_results::<EventData>(self.connection())
         .map_err(|e| StorageError::QueryError {
@@ -377,7 +377,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
     fn get_all_events(&mut self, component_address: &ComponentAddress) -> Result<Vec<EventData>, StorageError> {
         let res =
             sql_query("SELECT component_address, tx_hash, topic, payload FROM events WHERE component_address = ?")
-                .bind::<Text, _>(component_address.hash().to_string())
+                .bind::<Text, _>(component_address.to_string())
                 .get_results::<EventData>(self.connection())
                 .map_err(|e| StorageError::QueryError {
                     reason: format!("get_events_by_version: {}", e),

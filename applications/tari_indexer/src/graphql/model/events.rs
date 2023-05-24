@@ -136,16 +136,14 @@ impl EventQuery {
 
         let payload: HashMap<String, String> = serde_json::from_str(&payload)?;
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        substate_manager
-            .save_event_to_db(
-                ComponentAddress::from_array(component_address),
-                Hash::from_array(template_address),
-                PayloadId::new(tx_hash),
-                topic.clone(),
-                payload.clone(),
-                version,
-            )
-            .await?;
+        substate_manager.save_event_to_db(
+            ComponentAddress::from_array(component_address),
+            Hash::from_array(template_address),
+            PayloadId::new(tx_hash),
+            topic.clone(),
+            payload.clone(),
+            version,
+        )?;
 
         Ok(Event {
             component_address: Some(component_address),

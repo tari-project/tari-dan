@@ -163,14 +163,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         Ok(())
     }
 
-    fn emit_event(
-        &self,
-        component_address: Option<ComponentAddress>,
-        topic: String,
-        payload: HashMap<String, String>,
-    ) -> Result<(), RuntimeError> {
+    fn emit_event(&self, topic: String, payload: HashMap<String, String>) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
+        let component_address = self.tracker.runtime_state_component_address()?;
         let tx_hash = self.tracker.transaction_hash();
         let template_address = self.tracker.get_template_address()?;
 

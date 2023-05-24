@@ -78,12 +78,7 @@ pub use tracker::{RuntimeState, StateTracker};
 pub trait RuntimeInterface: Send + Sync {
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError>;
 
-    fn emit_event(
-        &self,
-        component_address: Option<ComponentAddress>,
-        topic: String,
-        payload: HashMap<String, String>,
-    ) -> Result<(), RuntimeError>;
+    fn emit_event(&self, topic: String, payload: HashMap<String, String>) -> Result<(), RuntimeError>;
 
     fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError>;
 

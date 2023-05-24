@@ -94,6 +94,7 @@ pub struct StateTracker<TTemplateProvider: TemplateProvider<Template = LoadedTem
 #[derive(Debug, Clone)]
 pub struct RuntimeState {
     pub template_address: TemplateAddress,
+    pub component_address: Option<ComponentAddress>,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracker<TTemplateProvider> {
@@ -466,6 +467,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
         self.read_with(|state| state.runtime_state.clone().ok_or(RuntimeError::IllegalRuntimeState))
+    }
+
+    pub fn runtime_state_component_address(&self) -> Result<Option<ComponentAddress>, RuntimeError> {
+        Ok(self.runtime_state()?.component_address)
     }
 
     pub fn set_last_instruction_output(&self, output: Option<Vec<u8>>) {

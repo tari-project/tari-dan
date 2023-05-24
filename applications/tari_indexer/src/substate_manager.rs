@@ -263,7 +263,7 @@ impl SubstateManager {
         Ok(nfts)
     }
 
-    pub async fn save_event_to_db(
+    pub fn save_event_to_db(
         &self,
         component_address: ComponentAddress,
         template_address: TemplateAddress,
@@ -287,27 +287,17 @@ impl SubstateManager {
     }
 
     pub async fn scan_events_for_transaction(&self, tx_hash: Hash) -> Result<Vec<Event>, anyhow::Error> {
-        let mut events = vec![];
-        {
+        let events = {
             let mut tx = self.substate_store.create_read_tx()?;
-            let stored_events = match tx.get_events_for_transaction(PayloadId::from_array(tx_hash.into_array())) {
-                Ok(events) => events,
-                Err(e) => {
-                    info!(
-                        target: LOG_TARGET,
-                        "Unable to get events for transaction: {:?} with error {}", tx_hash, e
-                    );
-                    return Err(e.into());
-                },
-            };
-            events.extend(stored_events);
-        }
+            tx.get_events_for_transaction(PayloadId::from_array(tx_hash.into_array()))?
+        };
 
         let mut events = events
             .iter()
             .map(|e| Event::try_from(e.clone()))
             .collect::<Result<Vec<Event>, anyhow::Error>>()?;
 
+        // If we have no events locally, fetch from the network if possible.
         if events.is_empty() {
             let network_events = self.substate_scanner.get_events_for_transaction(tx_hash).await?;
             events.extend(network_events);
@@ -384,8 +374,7 @@ impl SubstateManager {
                 topic,
                 payload,
                 u64::from(version),
-            )
-            .await?;
+            )?;
         }
         events.extend(network_events);
 

@@ -78,7 +78,7 @@ impl TariEngine {
             ("module_name".to_string(), module_name),
             ("access_rules".to_string(), format!("{:?}", access_rules)),
         ]);
-        emit_event(Some(component_address), topic, payload);
+        emit_event(topic, payload);
 
         component_address
     }

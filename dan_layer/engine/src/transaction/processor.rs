@@ -207,9 +207,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 function,
                 args,
             } => {
-                runtime
-                    .interface()
-                    .set_current_runtime_state(RuntimeState { template_address })?;
+                runtime.interface().set_current_runtime_state(RuntimeState {
+                    template_address,
+                    component_address: None,
+                })?;
 
                 let template = template_provider
                     .get_template_module(&template_address)
@@ -319,6 +320,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
         runtime.interface().set_current_runtime_state(RuntimeState {
             template_address: component.template_address,
+            component_address: Some(*component_address),
         })?;
 
         let mut final_args = Vec::with_capacity(args.len() + 1);

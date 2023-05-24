@@ -31,20 +31,11 @@ mod event {
     pub struct EventEmitter {}
 
     impl EventEmitter {
-        pub fn test_function_without_component_address() {
-            println!("Emitting a new event");
-            let component_address = None;
-            let topic = "Hello world !";
-            let payload: HashMap<String, String> = HashMap::from([("my".to_string(), "event".to_string())]);
-            emit_event(component_address, topic, payload);
-        }
-
         pub fn test_function() {
             println!("Emitting a new event");
-            let component_address = Some(ComponentAddress::from_array([0u8; 32]));
             let topic = "Hello world !";
             let payload: HashMap<String, String> = HashMap::from([("my".to_string(), "event".to_string())]);
-            emit_event(component_address, topic, payload);
+            emit_event(topic, payload);
         }
     }
 }
