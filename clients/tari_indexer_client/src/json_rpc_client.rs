@@ -137,10 +137,8 @@ impl IndexerJsonRpcClient {
             .body(request_json.to_string())
             .send()
             .await?;
-        println!("CO TO JE {:?}", resp);
         // println!("{:?}", resp.text().await);
         let val = resp.json().await?;
-        println!("CO TO JE {:?}", val);
         let resp = jsonrpc_result(val)?;
         // Response might not deserialize to R....
         match serde_json::from_value(resp) {
