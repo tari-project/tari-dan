@@ -59,6 +59,7 @@ fn test_state() {
         "set_current_runtime_state",
         "emit_log",
         "component_invoke",
+        "emit_event",
         "set_last_instruction_output",
         "finalize",
     ]);
