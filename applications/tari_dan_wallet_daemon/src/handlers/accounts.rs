@@ -907,7 +907,7 @@ pub async fn handle_transfer(
         .substate_api()
         .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
         .await?;
-    inputs.push(resource_substate.address);
+    // inputs.push(resource_substate.address);
 
     // get destination account information
     let destination_account_address =
