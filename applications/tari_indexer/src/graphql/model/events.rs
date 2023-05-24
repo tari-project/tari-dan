@@ -132,7 +132,7 @@ impl EventQuery {
 
         let component_address = ComponentAddress::from_hex(&component_address)?;
         let template_address = Hash::from_str(&template_address)?;
-        let tx_hash = PayloadId::new(&Hash::from_hex(&tx_hash).map_err(|e| anyhow!(e.to_string()))?);
+        let tx_hash = PayloadId::new(Hash::from_hex(&tx_hash).map_err(|e| anyhow!(e.to_string()))?);
 
         let payload: HashMap<String, String> = serde_json::from_str(&payload)?;
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
