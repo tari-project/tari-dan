@@ -144,9 +144,6 @@ impl EpochManagerService {
             EpochManagerRequest::Subscribe { .. } => todo!(),
             EpochManagerRequest::RemainingRegistrationEpochs { .. } => todo!(),
             EpochManagerRequest::GetBaseLayerConsensusConstants { .. } => todo!(),
-            EpochManagerRequest::GetConsensusConstants { reply } => {
-                handle(reply, Ok(self.consensus_constants.clone()));
-            },
         }
     }
 }

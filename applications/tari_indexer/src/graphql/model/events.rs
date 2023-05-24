@@ -20,12 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
+use anyhow::anyhow;
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
 use serde::{Deserialize, Serialize};
-use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::PayloadId;
 use tari_template_lib::{prelude::ComponentAddress, Hash};
 
@@ -64,15 +64,11 @@ impl EventQuery {
     pub async fn get_events_for_transaction(
         &self,
         ctx: &Context<'_>,
-        tx_hash: [u8; 32],
+        tx_hash: String,
     ) -> Result<Vec<Event>, anyhow::Error> {
-        info!(
-            target: LOG_TARGET,
-            "Querying events for transaction hash = {}",
-            tx_hash.to_hex()
-        );
+        info!(target: LOG_TARGET, "Querying events for transaction hash = {}", tx_hash);
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let tx_hash = Hash::from_array(tx_hash);
+        let tx_hash = Hash::from_hex(&tx_hash).map_err(|e| anyhow!(e.to_string()))?;
         let events = match substate_manager.scan_events_for_transaction(tx_hash).await {
             Ok(events) => events,
             Err(e) => {
@@ -95,19 +91,22 @@ impl EventQuery {
     pub async fn get_events_for_component(
         &self,
         ctx: &Context<'_>,
-        component_address: [u8; 32],
+        component_address: String,
         version: Option<u32>,
     ) -> Result<Vec<Event>, anyhow::Error> {
         let version = version.unwrap_or_default();
         info!(
             target: LOG_TARGET,
             "Querying events for component_address = component_{}, starting from version = {}",
-            component_address.to_hex(),
+            component_address,
             version
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let events = substate_manager
-            .scan_events_for_substate_from_network(ComponentAddress::from_array(component_address), Some(version))
+            .scan_events_for_substate_from_network(
+                ComponentAddress::from_str(&component_address).map_err(|e| anyhow!(e.to_string()))?,
+                Some(version),
+            )
             .await?
             .iter()
             .map(|e| Event::from_engine_event(e.clone()))
@@ -119,36 +118,37 @@ impl EventQuery {
     pub async fn save_event(
         &self,
         ctx: &Context<'_>,
-        component_address: [u8; 32],
-        template_address: [u8; 32],
-        tx_hash: [u8; 32],
+        component_address: String,
+        template_address: String,
+        tx_hash: String,
         topic: String,
         payload: String,
         version: u64,
     ) -> Result<Event, anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "Saving event for component_address = {:?}, tx_hash = {:?} and topic = {}",
-            component_address,
-            tx_hash,
-            topic
+            "Saving event for component_address = {}, tx_hash = {} and topic = {}", component_address, tx_hash, topic
         );
+
+        let component_address = ComponentAddress::from_hex(&component_address)?;
+        let template_address = Hash::from_str(&template_address)?;
+        let tx_hash = PayloadId::new(&Hash::from_hex(&tx_hash).map_err(|e| anyhow!(e.to_string()))?);
 
         let payload: HashMap<String, String> = serde_json::from_str(&payload)?;
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         substate_manager.save_event_to_db(
-            ComponentAddress::from_array(component_address),
-            Hash::from_array(template_address),
-            PayloadId::new(tx_hash),
+            component_address,
+            template_address,
+            tx_hash,
             topic.clone(),
             payload.clone(),
             version,
         )?;
 
         Ok(Event {
-            component_address: Some(component_address),
-            template_address,
-            tx_hash,
+            component_address: Some(component_address.into_array()),
+            template_address: template_address.into_array(),
+            tx_hash: tx_hash.into_array(),
             topic,
             payload,
         })
