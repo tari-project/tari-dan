@@ -501,7 +501,7 @@ impl BaseLayerEpochManager {
         let expiry = constants.validator_node_registration_expiry();
 
         // Note this can be negative in some cases
-        let num_blocks_since_last_reg = self.current_epoch - last_registration_epoch;
+        let num_blocks_since_last_reg = self.current_epoch.saturating_sub(last_registration_epoch);
 
         // None indicates that we are not registered, or a previous registration has expired
         Ok(expiry.checked_sub(num_blocks_since_last_reg))
