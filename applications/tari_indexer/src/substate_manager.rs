@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryInto, str::FromStr};
+use std::{collections::HashMap, convert::TryInto, str::FromStr, sync::Arc};
 
 use anyhow::anyhow;
 use log::info;
@@ -72,13 +72,13 @@ pub struct NonFungibleResponse {
 }
 
 pub struct SubstateManager {
-    substate_scanner: SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+    substate_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
     substate_store: SqliteSubstateStore,
 }
 
 impl SubstateManager {
     pub fn new(
-        dan_layer_scanner: SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+        dan_layer_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
         substate_store: SqliteSubstateStore,
     ) -> Self {
         Self {
@@ -103,6 +103,7 @@ impl SubstateManager {
             if let SubstateResult::Up {
                 substate: related_substate,
                 ..
+            // TODO: substate fetching could be done in parallel (tokio)
             } = self.substate_scanner.get_substate(&address, None).await?
             {
                 related_substates.insert(address, related_substate);

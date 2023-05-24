@@ -301,7 +301,7 @@ impl<T: Borrow<TransactionMeta>> From<T> for proto::transaction::TransactionMeta
                 change: proto::transaction::SubstateChange::from(*ch) as i32,
             });
         }
-        meta.required_inputs = val.borrow().required_inputs().iter().map(Into::into).collect();
+        meta.required_inputs = val.borrow().required_inputs_iter().map(Into::into).collect();
         meta.max_outputs = val.borrow().max_outputs();
         meta
     }

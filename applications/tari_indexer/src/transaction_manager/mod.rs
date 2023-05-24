@@ -22,32 +22,35 @@
 
 mod error;
 
-use std::{fmt::Display, future::Future};
+use std::{fmt::Display, future::Future, sync::Arc};
 
 use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
+use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
     PayloadId,
     ShardId,
 };
 use tari_engine_types::substate::SubstateAddress;
-use tari_indexer_lib::committee_provider::CommitteeProvider;
-use tari_transaction::Transaction;
+use tari_indexer_lib::{committee_provider::CommitteeProvider, substate_scanner::SubstateScanner};
+use tari_transaction::{SubstateChange, Transaction};
 use tari_validator_node_rpc::client::{
     SubstateResult,
+    TariCommsValidatorNodeClientFactory,
     TransactionResultStatus,
     ValidatorNodeClientFactory,
     ValidatorNodeRpcClient,
 };
 
-use crate::transaction_manager::error::TransactionManagerError;
+use crate::{substate_decoder::find_related_substates, transaction_manager::error::TransactionManagerError};
 
 const LOG_TARGET: &str = "tari::indexer::transaction_manager";
 
 pub struct TransactionManager<TCommitteeProvider, TClientFactory> {
     store: TCommitteeProvider,
     client_provider: TClientFactory,
+    substate_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
 }
 
 impl<TCommitteeProvider, TClientFactory> TransactionManager<TCommitteeProvider, TClientFactory>
@@ -57,14 +60,73 @@ where
     TClientFactory: ValidatorNodeClientFactory<Addr = TCommitteeProvider::Addr>,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
 {
-    pub fn new(store: TCommitteeProvider, client_provider: TClientFactory) -> Self {
-        Self { store, client_provider }
+    pub fn new(
+        store: TCommitteeProvider,
+        client_provider: TClientFactory,
+        substate_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
+    ) -> Self {
+        Self {
+            store,
+            client_provider,
+            substate_scanner,
+        }
     }
 
     pub async fn submit_transaction(&self, transaction: Transaction) -> Result<PayloadId, TransactionManagerError> {
         let tx_hash = *transaction.hash();
+
+        // scan the network to fetch all the substates for each required input
+        // TODO: perform this loop concurrently by spawning a tokio task for each scan
+        let mut input_substates = vec![];
+        for r in transaction.meta().required_inputs() {
+            // note that if the version specified is "None", the scanner will fetch the latest version
+            let scan_res = self.substate_scanner.get_substate(r.address(), r.version()).await?;
+
+            // TODO: should we return an error if some of the inputs are not "Up"?
+            if let SubstateResult::Up { substate, .. } = scan_res {
+                input_substates.push(substate);
+            }
+        }
+
+        // get all related substates related to the inputs the inputs
+        // TODO: perform this loop concurrently by spawning a tokio task for each scan
+        // TODO: we are going to only check the first level of recursion, for composability we may want to do it
+        // recursively (with a recursion limit)
+        let mut autofilled_inputs: Vec<(SubstateAddress, u32)> = vec![];
+        let related_addresses: Vec<Vec<SubstateAddress>> = input_substates
+            .iter()
+            .map(find_related_substates)
+            .collect::<Result<_, _>>()?;
+        let related_addresses = related_addresses.into_iter().flatten();
+        for address in related_addresses {
+            // we need to fetch the latest version of all the related substates
+            let scan_res = self.substate_scanner.get_substate(&address, None).await?;
+
+            // TODO: should we return an error if some of the inputs are not "Up"?
+            if let SubstateResult::Up { substate, .. } = scan_res {
+                autofilled_inputs.push((address, substate.version()));
+            }
+        }
+
+        // calculate the shard ids for each autofilled input
+        let autofilled_objects: Vec<(ShardId, SubstateChange)> = autofilled_inputs
+            .iter()
+            .map(|i| {
+                let shard_id = ShardId::from_hash(&i.0.to_canonical_hash(), i.1);
+                (shard_id, SubstateChange::Create)
+            })
+            .collect();
+
+        // include the related addresess into the involved objects
+        // note that the transaction hash will not change
+        let mut autofilled_transaction = transaction.clone();
+        autofilled_transaction
+            .meta_mut()
+            .involved_objects_mut()
+            .extend(autofilled_objects);
+
         self.try_with_committee(tx_hash.into_array().into(), move |mut client| {
-            let transaction = transaction.clone();
+            let transaction = autofilled_transaction.clone();
             async move { client.submit_transaction(transaction).await }
         })
         .await
