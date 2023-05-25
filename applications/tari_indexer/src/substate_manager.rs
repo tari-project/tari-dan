@@ -377,7 +377,7 @@ impl SubstateManager {
                 tx_hash,
                 topic,
                 payload,
-                *version as u64,
+                u64::from(version),
             )?;
         }
         events.extend(network_events.into_iter().map(|(_, e)| e).collect::<Vec<_>>());
