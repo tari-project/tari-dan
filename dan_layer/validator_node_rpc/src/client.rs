@@ -80,6 +80,7 @@ pub enum SubstateResult {
     },
     Down {
         version: u32,
+        created_by_tx: FixedHash,
         deleted_by_tx: FixedHash,
     },
 }
@@ -180,7 +181,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
 
         match status {
             SubstateStatus::Up => {
-                let tx_hash = resp.transaction_hash.try_into().map_err(|_| {
+                let tx_hash = resp.created_transaction_hash.try_into().map_err(|_| {
                     ValidatorNodeClientError::InvalidResponse(anyhow!(
                         "Node returned an invalid or empty transaction hash"
                     ))
@@ -193,14 +194,20 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                 })
             },
             SubstateStatus::Down => {
-                let tx_hash = resp.transaction_hash.try_into().map_err(|_| {
+                let created_by_tx = resp.created_transaction_hash.try_into().map_err(|_| {
                     ValidatorNodeClientError::InvalidResponse(anyhow!(
-                        "Node returned an invalid or empty transaction hash"
+                        "Node returned an invalid or empty created transaction hash"
+                    ))
+                })?;
+                let deleted_by_tx = resp.destroyed_transaction_hash.try_into().map_err(|_| {
+                    ValidatorNodeClientError::InvalidResponse(anyhow!(
+                        "Node returned an invalid or empty destroyed transaction hash"
                     ))
                 })?;
                 Ok(SubstateResult::Down {
                     version: resp.version,
-                    deleted_by_tx: tx_hash,
+                    deleted_by_tx,
+                    created_by_tx,
                 })
             },
             SubstateStatus::DoesNotExist => Ok(SubstateResult::DoesNotExist),

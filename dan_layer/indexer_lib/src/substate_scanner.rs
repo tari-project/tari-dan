@@ -259,7 +259,7 @@ where
                         created_by_tx: tx_hash, ..
                     }
                     | SubstateResult::Down {
-                        deleted_by_tx: tx_hash, ..
+                        created_by_tx: tx_hash, ..
                     } => {
                         transaction_hash = Some(tx_hash);
                         break;
