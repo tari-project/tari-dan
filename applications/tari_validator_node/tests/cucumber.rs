@@ -942,16 +942,17 @@ async fn indexer_scans_network_events(world: &mut TariWorld, indexer_name: Strin
         .unwrap_or_else(|_| panic!("Failed to obtain getEventsForComponent query result"));
 
     let events_for_component = res.get("getEventsForComponent").unwrap();
-    assert_eq!(
-        events_for_component.last().unwrap().clone(),
-        tari_indexer::graphql::model::events::Event {
-            component_address: Some(component_address.into_array()),
-            template_address: [0u8; 32],
-            tx_hash: tx_hash.into_array(),
-            topic: "component-created".to_string(),
-            payload: HashMap::from([("module_name".to_string(), "Account".to_string())])
-        }
-    );
+    panic!("FLAG: CUCUMBER {:?}", events_for_component);
+    // assert_eq!(
+    //     events_for_component.last().unwrap().clone(),
+    //     tari_indexer::graphql::model::events::Event {
+    //         component_address: Some(component_address.into_array()),
+    //         template_address: [0u8; 32],
+    //         tx_hash: tx_hash.into_array(),
+    //         topic: "component-created".to_string(),
+    //         payload: HashMap::from([("module_name".to_string(), "Account".to_string())])
+    //     }
+    // );
 }
 
 #[when(expr = "the indexer {word} tracks the address {word}")]

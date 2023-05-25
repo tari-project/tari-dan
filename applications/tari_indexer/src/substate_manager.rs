@@ -42,10 +42,7 @@ use crate::{
     substate_storage_sqlite::{
         models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
         sqlite_substate_store_factory::{
-            SqliteSubstateStore,
-            SqliteSubstateStoreWriteTransaction,
-            SubstateStore,
-            SubstateStoreReadTransaction,
+            SqliteSubstateStore, SqliteSubstateStoreWriteTransaction, SubstateStore, SubstateStoreReadTransaction,
             SubstateStoreWriteTransaction,
         },
     },
@@ -356,27 +353,38 @@ impl SubstateManager {
         let latest_version_in_db = stored_versions_in_db.into_iter().max().unwrap_or_default();
         let version = version.max(latest_version_in_db);
 
+        log::warn!(target: LOG_TARGET, "FLAG: CUCUMBER {}", version);
         // check if there are newest events for this component address in the network
         let network_events = self
             .substate_scanner
             .get_events_for_component(component_address, Some(version))
             .await?;
+
         // stores the newest network events to the db
-        for event in &network_events {
+        // because the same component address with different version
+        // can be processed in the same transaction, we need to avoid
+        // duplicates
+        let mut stored_tx_hashes = vec![];
+        for (version, event) in &network_events {
             let template_address = event.template_address();
-            let tx_hash = event.tx_hash();
+            let tx_hash = PayloadId::from_array(event.tx_hash().into_array());
             let topic = event.topic();
             let payload = event.get_full_payload();
-            self.save_event_to_db(
-                component_address,
-                template_address,
-                PayloadId::from_array(tx_hash.into_array()),
-                topic,
-                payload,
-                u64::from(version),
-            )?;
+
+            if !stored_tx_hashes.contains(&tx_hash) {
+                self.save_event_to_db(
+                    component_address,
+                    template_address,
+                    tx_hash,
+                    topic,
+                    payload,
+                    *version as u64,
+                )?;
+            }
+
+            stored_tx_hashes.push(tx_hash);
         }
-        events.extend(network_events);
+        events.extend(network_events.into_iter().map(|(_, e)| e).collect::<Vec<_>>());
 
         Ok(events)
     }

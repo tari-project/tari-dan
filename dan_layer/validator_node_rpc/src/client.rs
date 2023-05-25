@@ -28,11 +28,7 @@ use tokio_stream::StreamExt;
 
 use crate::{
     proto::rpc::{
-        GetPeersRequest,
-        GetTransactionResultRequest,
-        PayloadResultStatus,
-        SubmitTransactionRequest,
-        SubstateStatus,
+        GetPeersRequest, GetTransactionResultRequest, PayloadResultStatus, SubmitTransactionRequest, SubstateStatus,
     },
     rpc_service,
 };

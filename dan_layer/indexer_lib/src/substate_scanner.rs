@@ -219,6 +219,12 @@ where
         } else {
             return Err(IndexerError::InvalidSubstateValue);
         };
+
+        log::warn!(
+            target: LOG_TARGET,
+            "FLAG: CUCUMBER the transaction events = {:?}",
+            events
+        );
         Ok(events)
     }
 
@@ -229,6 +235,14 @@ where
         version: u32,
     ) -> Result<Hash, IndexerError> {
         let shard_id = ShardId::from_address(substate_address, version);
+
+        log::warn!(
+            target: LOG_TARGET,
+            "FLAG: CUCUMBER version = {} and shard_id = {}",
+            version,
+            shard_id
+        );
+
         let mut committee = self
             .committee_provider
             .get_committee(shard_id)
@@ -243,8 +257,8 @@ where
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up {
                         created_by_tx: tx_hash, ..
-                    } |
-                    SubstateResult::Down {
+                    }
+                    | SubstateResult::Down {
                         deleted_by_tx: tx_hash, ..
                     } => {
                         transaction_hash = Some(tx_hash);
@@ -274,6 +288,7 @@ where
             }
         }
 
+        log::warn!(target: LOG_TARGET, "FLAG: CUCUMBER tx_hash = {:?}", transaction_hash);
         if let Some(tx_hash) = transaction_hash {
             Hash::try_from(tx_hash.as_slice()).map_err(|e| IndexerError::FailedToParseTransactionHash(e.to_string()))
         } else {
@@ -295,12 +310,11 @@ where
             .get_transaction_hash_from_substate_address(&substate_address, version)
             .await?;
 
-        let tx_hash =
-            Hash::try_from(tx_hash.as_ref()).map_err(|e| IndexerError::FailedToParseTransactionHash(e.to_string()))?;
         match self.get_events_for_transaction(tx_hash).await {
             Ok(tx_events) => {
                 // we need to filter all transaction events, by those corresponding
                 // to the current component address
+                log::warn!(target: LOG_TARGET, "FLAG: CUCUMBER tx_events = {:?}", tx_events);
                 let component_tx_events = tx_events
                     .into_iter()
                     .filter(|e| e.component_address().is_some() && e.component_address().unwrap() == component_address)
@@ -317,7 +331,7 @@ where
         &self,
         component_address: ComponentAddress,
         version: Option<u32>,
-    ) -> Result<Vec<Event>, IndexerError> {
+    ) -> Result<Vec<(u32, Event)>, IndexerError> {
         let mut events = vec![];
         let mut version: u32 = version.unwrap_or_default();
 
@@ -326,7 +340,12 @@ where
                 .get_events_for_component_and_version(component_address, version)
                 .await
             {
-                Ok(component_tx_events) => events.extend(component_tx_events),
+                Ok(component_tx_events) => events.extend(
+                    component_tx_events
+                        .into_iter()
+                        .map(|e| (version, e))
+                        .collect::<Vec<_>>(),
+                ),
                 Err(IndexerError::NotFoundTransaction(..)) => return Ok(events),
                 Err(e) => return Err(e),
             }

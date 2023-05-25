@@ -93,6 +93,10 @@ Feature: Indexer node
     # List the nfts of a resource
     Then the indexer IDX returns 6 non fungibles for resource NFT/resources/0
 
+    # Scan the network for the event emitted on ACC_1 creation
+    When indexer IDX scans the network events for account ACC1
+
+
   # When I print the cucumber world
   # When I wait 5000 seconds
 

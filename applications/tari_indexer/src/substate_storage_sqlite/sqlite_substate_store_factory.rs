@@ -98,15 +98,19 @@ impl SqliteSubstateStore {
 }
 pub trait SubstateStore {
     type ReadTransaction<'a>: SubstateStoreReadTransaction
-    where Self: 'a;
+    where
+        Self: 'a;
     type WriteTransaction<'a>: SubstateStoreWriteTransaction + Deref<Target = Self::ReadTransaction<'a>>
-    where Self: 'a;
+    where
+        Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError>;
 
     fn with_write_tx<F: FnOnce(&mut Self::WriteTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let mut tx = self.create_write_tx()?;
         match f(&mut tx) {
             Ok(r) => {
@@ -123,7 +127,9 @@ pub trait SubstateStore {
     }
 
     fn with_read_tx<F: FnOnce(&Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let tx = self.create_read_tx()?;
         let ret = f(&tx)?;
         Ok(ret)
@@ -341,7 +347,7 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             .select(events::version)
             .get_results(self.connection())
             .map_err(|e| StorageError::QueryError {
-                reason: format!("get_last_verision_of_events: {}", e),
+                reason: format!("get_last_version_of_events: {}", e),
             })?;
 
         // for our purposes, a non-existing version in the db, means we have
@@ -508,7 +514,15 @@ impl SubstateStoreWriteTransaction for SqliteSubstateStoreWriteTransaction<'_> {
 
     fn save_event(&mut self, new_event: NewEvent) -> Result<(), StorageError> {
         use crate::substate_storage_sqlite::schema::events;
-
+        warn!(
+            target: LOG_TARGET,
+            "Added new event to the database with component_address = {:?}, template_address = {} and for transaction \
+             hash = {}, version = {}",
+            new_event.component_address,
+            new_event.template_address,
+            new_event.tx_hash,
+            new_event.version,
+        );
         diesel::insert_into(events::table)
             .values(&new_event)
             .execute(&mut *self.connection())
