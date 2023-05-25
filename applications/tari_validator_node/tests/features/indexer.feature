@@ -121,7 +121,7 @@ Feature: Indexer node
     Given IDX indexer GraphQL request works
 
   @serial
-  Scenario: Indexer GraphQL requests work over network substate indexing
+  Scenario: Indexer GraphQL requests events over network substate indexing
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -137,8 +137,17 @@ Feature: Indexer node
     # VN registration
     When validator node VN sends a registration transaction
 
+    When miner MINER mines 16 new blocks
+    Then the validator node VN is listed as registered
+
     # A file-base CLI account must be created to sign future calls
     When I use an account key named K1
 
     # Creates a new account
     When I create an account ACC_1 on VN
+
+    # Initialize an indexer
+    Given an indexer IDX connected to base node BASE
+
+    # Scan the network for the event emitted on ACC_1 creation
+    When indexer IDX scans the network events for account ACC_1

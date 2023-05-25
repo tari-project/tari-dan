@@ -91,14 +91,11 @@ impl EventQuery {
         &self,
         ctx: &Context<'_>,
         component_address: String,
-        version: Option<u32>,
     ) -> Result<Vec<Event>, anyhow::Error> {
-        let version = version.unwrap_or_default();
+        let version = 0;
         info!(
             target: LOG_TARGET,
-            "Querying events for component_address = component_{}, starting from version = {}",
-            component_address,
-            version
+            "Querying events for component_address = {}, starting from version = {}", component_address, version
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let events = substate_manager
