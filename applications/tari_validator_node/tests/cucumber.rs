@@ -941,7 +941,7 @@ async fn indexer_scans_network_events(
         .unwrap_or_else(|_| panic!("Failed to obtain getEventsForComponent query result"));
 
     let events_for_component = res.get("getEventsForComponent").unwrap();
-    // assert_eq!(events_for_component.len(), num_events as usize);
+    assert_eq!(events_for_component.len(), num_events as usize);
 
     let topics = topics.split(',').collect::<Vec<_>>();
     assert_eq!(topics.len(), num_events as usize);

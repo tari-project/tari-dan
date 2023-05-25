@@ -366,25 +366,19 @@ impl SubstateManager {
         // because the same component address with different version
         // can be processed in the same transaction, we need to avoid
         // duplicates
-        let mut stored_tx_hashes = vec![];
         for (version, event) in &network_events {
             let template_address = event.template_address();
             let tx_hash = PayloadId::from_array(event.tx_hash().into_array());
             let topic = event.topic();
             let payload = event.get_full_payload();
-
-            if !stored_tx_hashes.contains(&tx_hash) {
-                self.save_event_to_db(
-                    component_address,
-                    template_address,
-                    tx_hash,
-                    topic,
-                    payload,
-                    *version as u64,
-                )?;
-            }
-
-            stored_tx_hashes.push(tx_hash);
+            self.save_event_to_db(
+                component_address,
+                template_address,
+                tx_hash,
+                topic,
+                payload,
+                *version as u64,
+            )?;
         }
         events.extend(network_events.into_iter().map(|(_, e)| e).collect::<Vec<_>>());
 

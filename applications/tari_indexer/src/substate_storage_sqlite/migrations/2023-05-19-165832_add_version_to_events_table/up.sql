@@ -6,6 +6,3 @@ alter table events
 
 -- drop previous index 
 drop index unique_events_indexer;
-
--- add new `unique_events_indexer`
-create unique index unique_events_indexer on events (template_address, tx_hash, topic, component_address, version);
