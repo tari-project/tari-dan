@@ -145,9 +145,13 @@ Feature: Indexer node
 
     # Creates a new account
     When I create an account ACC_1 on VN
+    When I create an account ACC_2 on VN
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
 
     # Scan the network for the event emitted on ACC_1 creation
     When indexer IDX scans the network events for account ACC_1
+
+    # Scan the network for the event emitted on ACC_2 creation
+    When indexer IDX scans the network events for account ACC_2

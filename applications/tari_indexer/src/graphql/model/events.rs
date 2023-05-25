@@ -32,7 +32,7 @@ use crate::substate_manager::SubstateManager;
 
 const LOG_TARGET: &str = "tari::indexer::graphql::events";
 
-#[derive(SimpleObject, Clone, Debug, Deserialize, Serialize)]
+#[derive(SimpleObject, Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
     pub component_address: Option<[u8; 32]>,
@@ -91,8 +91,9 @@ impl EventQuery {
         &self,
         ctx: &Context<'_>,
         component_address: String,
+        version: Option<u32>,
     ) -> Result<Vec<Event>, anyhow::Error> {
-        let version = 0;
+        let version = version.unwrap_or_default();
         info!(
             target: LOG_TARGET,
             "Querying events for component_address = {}, starting from version = {}", component_address, version

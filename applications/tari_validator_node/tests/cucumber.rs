@@ -920,19 +920,38 @@ async fn indexer_scans_network_events(world: &mut TariWorld, indexer_name: Strin
         })
         .collect::<Vec<_>>();
 
-    let component_address = *component_addresses.first().expect("Did not find component addresses");
+    let tx_hash = accounts_component_addresses
+        .into_iter()
+        .filter(|(k, _)| k.contains("transaction_receipt/0"))
+        .map(|(_, v)| v.address.to_canonical_hash())
+        .collect::<Vec<_>>();
+    let tx_hash = tx_hash.first().unwrap_or_else(|| panic!("No transaction hash found"));
+
+    let component_address = *component_addresses
+        .first()
+        .unwrap_or_else(|| panic!("Did not find component addresses"));
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        "{{ getEventsForComponent(componentAddress: {:?}) {{ componentAddress, templateAddress, txHash, topic, \
-         payload }} }}",
+        "{{ getEventsForComponent(componentAddress: {:?}, version: 0) {{ componentAddress, templateAddress, txHash, \
+         topic, payload }} }}",
         component_address.to_string()
     );
     let res = graphql_client
         .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
         .await
-        .expect("Failed to obtain getEventsForComponent query result");
+        .unwrap_or_else(|_| panic!("Failed to obtain getEventsForComponent query result"));
 
-    assert!(res.get("getEventsForComponent").unwrap().is_empty());
+    let events_for_component = res.get("getEventsForComponent").unwrap();
+    assert_eq!(
+        events_for_component.last().unwrap().clone(),
+        tari_indexer::graphql::model::events::Event {
+            component_address: Some(component_address.into_array()),
+            template_address: [0u8; 32],
+            tx_hash: tx_hash.into_array(),
+            topic: "component-created".to_string(),
+            payload: HashMap::from([("module_name".to_string(), "Account".to_string())])
+        }
+    );
 }
 
 #[when(expr = "the indexer {word} tracks the address {word}")]
