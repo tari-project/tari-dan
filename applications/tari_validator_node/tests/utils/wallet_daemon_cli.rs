@@ -274,6 +274,11 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
 
     let resp = client.create_account(request).await.unwrap();
 
+    // TODO: store the secret key in the world, but we don't have a need for it at the moment
+    world
+        .account_keys
+        .insert(account_name.clone(), (RistrettoSecretKey::default(), resp.public_key.clone()));
+
     let wait_req = TransactionWaitResultRequest {
         hash: FixedHash::from(resp.result.transaction_hash.into_array()),
         timeout_secs: Some(120),
