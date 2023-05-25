@@ -140,7 +140,7 @@ impl EpochManagerService {
             } => {
                 handle(
                     reply,
-                    self.inner.filter_to_local_shards(epoch, &for_addr, &available_shards),
+                    self.inner.filter_to_local_shards(epoch, &for_addr, available_shards),
                 );
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.1.resubscribe())),

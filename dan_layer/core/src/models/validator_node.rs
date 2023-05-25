@@ -20,14 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::TryFrom;
-
 use serde::Serialize;
 use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::{vn_bmt_node_hash, NodeAddressable, ShardId};
-use tari_dan_storage::global::DbValidatorNode;
-use tari_utilities::ByteArray;
+use tari_dan_storage::global::models;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ValidatorNode<TAddr> {
@@ -41,13 +38,11 @@ impl<TAddr: NodeAddressable> ValidatorNode<TAddr> {
     }
 }
 
-impl TryFrom<DbValidatorNode> for ValidatorNode<CommsPublicKey> {
-    type Error = anyhow::Error;
-
-    fn try_from(db_vn: DbValidatorNode) -> Result<Self, Self::Error> {
-        Ok(Self {
-            shard_key: ShardId::from_bytes(&db_vn.shard_key)?,
-            public_key: CommsPublicKey::from_bytes(&db_vn.public_key)?,
-        })
+impl From<models::ValidatorNode> for ValidatorNode<CommsPublicKey> {
+    fn from(db_vn: models::ValidatorNode) -> Self {
+        Self {
+            shard_key: db_vn.shard_key,
+            public_key: db_vn.public_key,
+        }
     }
 }

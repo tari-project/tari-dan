@@ -37,7 +37,10 @@ use tari_dan_core::{
         BaseNodeClient,
     },
 };
-use tari_dan_storage::global::{DbEpoch, DbValidatorNode, GlobalDb, MetadataKey};
+use tari_dan_storage::{
+    global,
+    global::{DbEpoch, GlobalDb, MetadataKey},
+};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
@@ -147,17 +150,17 @@ impl BaseLayerEpochManager {
                 public_key: registration.public_key().clone(),
                 block_height,
             })?;
-        let new_vns = vec![DbValidatorNode {
-            public_key: registration.public_key().to_vec(),
-            shard_key: shard_key.as_bytes().to_vec(),
+        let new_vns = vec![global::models::ValidatorNode {
+            public_key: registration.public_key().clone(),
+            shard_key,
             epoch: next_epoch,
+            committee_slot: shard_key.to_committee_slot(committee_size),
         }];
 
         let mut tx = self.global_db.create_transaction()?;
-        self.global_db
-            .validator_nodes(&mut tx)
-            .insert_validator_nodes(new_vns)?;
-
+        let mut global_db = self.global_db.validator_nodes(&mut tx);
+        let num_vns = global_db.count(start_epoch, end_epoch)?;
+        global_db.insert_validator_nodes(new_vns)?;
         tx.commit()?;
 
         Ok(())
@@ -318,7 +321,7 @@ impl BaseLayerEpochManager {
         let db_vns = self
             .global_db
             .validator_nodes(&mut tx)
-            .get_all_within_epochs(start_epoch.as_u64(), end_epoch.as_u64())?;
+            .get_all_within_epochs(start_epoch, end_epoch)?;
         let vns = db_vns
             .into_iter()
             .map(TryInto::try_into)

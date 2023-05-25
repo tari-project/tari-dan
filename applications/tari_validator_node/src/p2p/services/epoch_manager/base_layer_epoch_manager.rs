@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, ops::RangeInclusive, sync::Arc};
+use std::{cmp, convert::TryInto, ops::RangeInclusive, sync::Arc};
 
 use log::*;
 use tari_common_types::types::{FixedHash, PublicKey};
@@ -32,7 +32,7 @@ use tari_core::{
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_utilities::{base_node_client::GrpcBaseNodeClient, epoch_manager::EpochManagerEvent};
-use tari_dan_common_types::{optional::Optional, vn_bmt_node_hash, Epoch, ShardId};
+use tari_dan_common_types::{optional::Optional, uint::U256, vn_bmt_node_hash, Epoch, NodeAddressable, ShardId};
 use tari_dan_core::{
     consensus_constants::{BaseLayerConsensusConstants, ConsensusConstants},
     models::{Committee, ValidatorNode},
@@ -41,9 +41,12 @@ use tari_dan_core::{
         BaseNodeClient,
     },
 };
-use tari_dan_storage::global::{DbEpoch, DbValidatorNode, GlobalDb, MetadataKey};
+use tari_dan_storage::{
+    global,
+    global::{DbEpoch, GlobalDb, MetadataKey},
+};
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
-use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
+use tari_validator_node_rpc::client::{TariCommsValidatorNodeClientFactory, ValidatorNodeClientFactory};
 use tokio::sync::broadcast;
 
 use crate::p2p::services::epoch_manager::PeerSyncManagerService;
@@ -172,9 +175,9 @@ impl BaseLayerEpochManager {
                 public_key: registration.public_key().clone(),
                 block_height,
             })?;
-        let new_vns = vec![DbValidatorNode {
-            public_key: registration.public_key().to_vec(),
-            shard_key: shard_key.as_bytes().to_vec(),
+        let new_vns = vec![global::models::ValidatorNode {
+            public_key: registration.public_key().clone(),
+            shard_key,
             epoch: next_epoch,
         }];
 
@@ -264,10 +267,10 @@ impl BaseLayerEpochManager {
         let vn = self
             .global_db
             .validator_nodes(&mut tx)
-            .get(start_epoch.as_u64(), end_epoch.as_u64(), public_key.as_bytes())
+            .get(start_epoch, end_epoch, ByteArray::as_bytes(public_key))
             .optional()?;
 
-        Ok(vn.map(|vn| ShardId::from_bytes(&vn.shard_key).expect("Invalid Shard Key, Database is corrupt")))
+        Ok(vn.map(|vn| vn.shard_key))
     }
 
     pub fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
@@ -312,42 +315,28 @@ impl BaseLayerEpochManager {
         epoch: Epoch,
         shard: ShardId,
     ) -> Result<Vec<ValidatorNode<CommsPublicKey>>, EpochManagerError> {
-        // retrieve the validator nodes for this epoch from database
+        // retrieve the validator nodes for this epoch from database, sorted by shard_key
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
+        if vns.is_empty() {
+            return Err(EpochManagerError::NoCommitteeVns { shard_id: shard, epoch });
+        }
 
-        let half_committee_size = {
-            let committee_size = self.consensus_constants.committee_size as usize;
-            let v = committee_size / 2;
-            if committee_size % 2 > 0 {
-                v + 1
-            } else {
-                v
-            }
-        };
-        if vns.len() < half_committee_size * 2 {
+        // Number of committees adapts to the number of validators available
+        let num_committees = cmp::max(1, vns.len() as u64 / self.consensus_constants.committee_size);
+        if num_committees == 1 {
             return Ok(vns);
         }
 
-        let mid_point = vns.iter().filter(|x| x.shard_key < shard).count();
-        let begin =
-            ((vns.len() as i64 + mid_point as i64 - (half_committee_size - 1) as i64) % vns.len() as i64) as usize;
-        let end = ((mid_point as i64 + half_committee_size as i64) % vns.len() as i64) as usize;
-        let mut result = Vec::with_capacity(half_committee_size * 2);
-        if begin > mid_point {
-            result.extend_from_slice(&vns[begin..]);
-            result.extend_from_slice(&vns[0..mid_point]);
-        } else {
-            result.extend_from_slice(&vns[begin..mid_point]);
-        }
+        // A shard slot is a equal slice of the shard space that a validator fits into
+        let shard_slot = shard.to_committee_slot(num_committees);
 
-        if end < mid_point {
-            result.extend_from_slice(&vns[mid_point..]);
-            result.extend_from_slice(&vns[0..end]);
-        } else {
-            result.extend_from_slice(&vns[mid_point..end]);
-        }
+        // TODO(perf): calculate each VNS shard slot once per epoch
+        let selected_vns = vns
+            .into_iter()
+            .filter(|vn| vn.shard_key.to_committee_slot(num_committees) == shard_slot)
+            .collect();
 
-        Ok(result)
+        Ok(selected_vns)
     }
 
     pub fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
@@ -386,12 +375,8 @@ impl BaseLayerEpochManager {
         let db_vns = self
             .global_db
             .validator_nodes(&mut tx)
-            .get_all_within_epochs(start_epoch.as_u64(), end_epoch.as_u64())?;
-        let vns = db_vns
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()
-            .expect("get_validator_nodes_per_epoch: Database is corrupt");
+            .get_all_within_epochs(start_epoch, end_epoch)?;
+        let vns = db_vns.into_iter().map(Into::into).collect();
         Ok(vns)
     }
 
@@ -399,16 +384,24 @@ impl BaseLayerEpochManager {
         &self,
         epoch: Epoch,
         for_addr: &CommsPublicKey,
-        available_shards: &[ShardId],
+        available_shards: Vec<ShardId>,
     ) -> Result<Vec<ShardId>, EpochManagerError> {
-        let mut result = vec![];
-        for shard in available_shards {
-            let committee = self.get_committee(epoch, *shard)?;
-            if committee.contains(for_addr) {
-                result.push(*shard);
-            }
-        }
-        Ok(result)
+        let (start, end) = self.get_epoch_range(epoch)?;
+
+        let mut tx = self.global_db.create_transaction()?;
+        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
+        let vn = validator_node_db.get(start, end, ByteArray::as_bytes(for_addr))?;
+        let num_vns = validator_node_db.count(start, end)?;
+        drop(tx);
+
+        let num_committees = cmp::max(1, num_vns as u64 / self.consensus_constants.committee_size);
+
+        let filtered = available_shards
+            .into_iter()
+            .filter(|shard| shard.to_committee_slot(num_committees) == vn.committee_slot)
+            .collect();
+
+        Ok(filtered)
     }
 
     pub fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
@@ -526,5 +519,15 @@ fn get_committee_shard_range<TAddr>(
             .expect("Committee VNs cannot be empty, at this point")
             .shard_key;
         min_shard_id..=max_shard_id
+    }
+}
+
+const fn div_ceil(lhs: usize, rhs: usize) -> usize {
+    let d = lhs / rhs;
+    let r = lhs % rhs;
+    if r > 0 && rhs > 0 {
+        d + 1
+    } else {
+        d
     }
 }

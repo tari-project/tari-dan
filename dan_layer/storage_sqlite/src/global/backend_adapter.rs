@@ -29,19 +29,28 @@ use std::{
 
 use diesel::{prelude::*, RunQueryDsl, SqliteConnection};
 use serde::{de::DeserializeOwned, Serialize};
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::{
-    global::{DbEpoch, DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey, TemplateStatus},
+    global::{
+        models::ValidatorNode,
+        DbEpoch,
+        DbTemplate,
+        DbTemplateUpdate,
+        GlobalDbAdapter,
+        MetadataKey,
+        TemplateStatus,
+    },
     AtomicDb,
 };
 
-use super::models::{
-    epoch::Epoch,
-    validator_node::{NewValidatorNode, ValidatorNode},
+use super::{
+    models,
+    models::{DbValidatorNode, NewValidatorNode},
 };
 use crate::{
     error::SqliteStorageError,
     global::{
-        models::{epoch::NewEpoch, MetadataModel, NewTemplateModel, TemplateModel, TemplateUpdateModel},
+        models::{MetadataModel, NewEpoch, NewTemplateModel, TemplateModel, TemplateUpdateModel},
         schema::templates,
     },
     SqliteTransaction,
@@ -301,22 +310,22 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     fn insert_validator_nodes(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        validator_nodes: Vec<DbValidatorNode>,
+        validator_nodes: Vec<ValidatorNode>,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 
-        let sqlite_vns: Vec<NewValidatorNode> = validator_nodes.into_iter().map(Into::into).collect();
+        let records = validator_nodes
+            .into_iter()
+            .map(NewValidatorNode::from)
+            .collect::<Vec<_>>();
 
-        // Sqlite does not support batch transactions, so we need to insert each VN in a separated query
-        for vn in sqlite_vns {
-            diesel::insert_into(validator_nodes::table)
-                .values(&vn)
-                .execute(tx.connection())
-                .map_err(|source| SqliteStorageError::DieselError {
-                    source,
-                    operation: "insert::validator_nodes".to_string(),
-                })?;
-        }
+        diesel::insert_into(validator_nodes::table)
+            .values(records)
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "insert::validator_nodes".to_string(),
+            })?;
 
         Ok(())
     }
@@ -324,40 +333,61 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     fn get_validator_node(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: u64,
-        end_epoch: u64,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
         public_key: &[u8],
-    ) -> Result<DbValidatorNode, Self::Error> {
+    ) -> Result<ValidatorNode, Self::Error> {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let vn = dsl::validator_nodes
-            .filter(validator_nodes::epoch.ge(start_epoch as i64))
-            .filter(validator_nodes::epoch.le(end_epoch as i64))
+            .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
+            .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
             .filter(validator_nodes::public_key.eq(public_key))
             // Last one inserted
             .order_by(validator_nodes::id.desc())
-            .first::<ValidatorNode>(tx.connection())
+            .first::<DbValidatorNode>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "get::validator_node".to_string(),
             })?;
 
-        Ok(vn.into())
+        Ok(vn.try_into()?)
+    }
+
+    fn count_validator_nodes(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+    ) -> Result<u64, Self::Error> {
+        use crate::global::schema::{validator_nodes, validator_nodes::dsl};
+
+        let count = dsl::validator_nodes
+            .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
+            .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
+            .count()
+            .get_result::<i64>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "count_validator_nodes".to_string(),
+            })?;
+
+        Ok(count as u64)
     }
 
     fn get_validator_nodes_within_epochs(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: u64,
-        end_epoch: u64,
-    ) -> Result<Vec<DbValidatorNode>, Self::Error> {
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+    ) -> Result<Vec<ValidatorNode>, Self::Error> {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let sqlite_vns = dsl::validator_nodes
-            .filter(validator_nodes::epoch.ge(start_epoch as i64))
-            .filter(validator_nodes::epoch.le(end_epoch as i64))
+            .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
+            .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
             .order_by(validator_nodes::id.asc())
-            .load::<ValidatorNode>(tx.connection())
+            .load::<DbValidatorNode>(tx.connection())
             .optional()
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -372,7 +402,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             if let Some(idx) = dedup_map.insert(vn.public_key.clone(), i) {
                 *db_vns.get_mut(idx).unwrap() = None;
             }
-            db_vns.push(Some(DbValidatorNode::from(vn)));
+            db_vns.push(Some(ValidatorNode::try_from(vn)?));
         }
 
         let mut db_vns = db_vns.into_iter().flatten().collect::<Vec<_>>();
@@ -399,7 +429,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error> {
         use crate::global::schema::epochs::dsl;
 
-        let query_res: Option<Epoch> = dsl::epochs
+        let query_res: Option<models::Epoch> = dsl::epochs
             .find(epoch as i64)
             .first(tx.connection())
             .optional()

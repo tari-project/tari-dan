@@ -40,7 +40,6 @@ use tari_dan_common_types::{vn_bmt_node_hash, Epoch, QuorumCertificate, QuorumDe
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, HotstuffPhase, Payload, TariDanPayload},
     services::{
-        epoch_manager::RangeEpochManager,
         leader_strategy::{AlwaysFirstLeader, RotatingLeader},
         NodeIdentitySigningService,
     },
@@ -53,7 +52,7 @@ use tari_transaction::{Transaction, TransactionBuilder};
 use tari_utilities::ByteArray;
 use tokio::time::timeout;
 
-use crate::harness::HsTestHarness;
+use crate::{harness::HsTestHarness, range_epoch_manager::RangeEpochManager};
 
 fn create_test_default_qc(
     committee_keys: Vec<(PublicKey, PrivateKey)>,

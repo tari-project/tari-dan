@@ -21,8 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{de::DeserializeOwned, Serialize};
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::{
-    global::{DbEpoch, DbTemplate, DbTemplateUpdate, DbValidatorNode, GlobalDbAdapter, MetadataKey},
+    global::{models::ValidatorNode, DbEpoch, DbTemplate, DbTemplateUpdate, GlobalDbAdapter, MetadataKey},
     AtomicDb,
 };
 
@@ -90,7 +91,7 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
     fn insert_validator_nodes(
         &self,
         _tx: &mut Self::DbTransaction<'_>,
-        _validator_nodes: Vec<DbValidatorNode>,
+        _validator_nodes: Vec<ValidatorNode>,
     ) -> Result<(), Self::Error> {
         todo!()
     }
@@ -100,7 +101,7 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
         _tx: &mut Self::DbTransaction<'_>,
         _start_epoch: u64,
         _end_epoch: u64,
-    ) -> Result<Vec<DbValidatorNode>, Self::Error> {
+    ) -> Result<Vec<ValidatorNode>, Self::Error> {
         todo!()
     }
 
@@ -110,7 +111,7 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
         _start_epoch: u64,
         _end_epoch: u64,
         _public_key: &[u8],
-    ) -> Result<DbValidatorNode, Self::Error> {
+    ) -> Result<ValidatorNode, Self::Error> {
         todo!()
     }
 
@@ -127,6 +128,15 @@ impl GlobalDbAdapter for MockGlobalDbBackupAdapter {
         _tx: &mut Self::DbTransaction<'_>,
         _limit: usize,
     ) -> Result<Vec<DbTemplate>, Self::Error> {
+        todo!()
+    }
+
+    fn count_validator_nodes(
+        &self,
+        _tx: &mut Self::DbTransaction<'_>,
+        _start_epoch: Epoch,
+        _end_epoch: Epoch,
+    ) -> Result<u64, Self::Error> {
         todo!()
     }
 }

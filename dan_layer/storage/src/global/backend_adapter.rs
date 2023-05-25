@@ -21,12 +21,14 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{de::DeserializeOwned, Serialize};
+use tari_dan_common_types::Epoch;
 
-use super::{validator_node_db::DbValidatorNode, DbEpoch};
+use super::DbEpoch;
 use crate::{
     atomic::AtomicDb,
     global::{
         metadata_db::MetadataKey,
+        models::ValidatorNode,
         template_db::{DbTemplate, DbTemplateUpdate},
     },
 };
@@ -65,22 +67,28 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
     fn insert_validator_nodes(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        validator_nodes: Vec<DbValidatorNode>,
+        validator_nodes: Vec<ValidatorNode>,
     ) -> Result<(), Self::Error>;
     fn get_validator_nodes_within_epochs(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: u64,
-        end_epoch: u64,
-    ) -> Result<Vec<DbValidatorNode>, Self::Error>;
-
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+    ) -> Result<Vec<ValidatorNode>, Self::Error>;
     fn get_validator_node(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        start_epoch: u64,
-        end_epoch: u64,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
         public_key: &[u8],
-    ) -> Result<DbValidatorNode, Self::Error>;
+    ) -> Result<ValidatorNode, Self::Error>;
+    fn count_validator_nodes(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+    ) -> Result<u64, Self::Error>;
+
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;
 }

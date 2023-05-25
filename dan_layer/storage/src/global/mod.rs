@@ -32,7 +32,9 @@ mod template_db;
 pub use template_db::{DbTemplate, DbTemplateType, DbTemplateUpdate, TemplateDb, TemplateStatus};
 
 mod validator_node_db;
-pub use validator_node_db::{DbValidatorNode, ValidatorNodeDb};
+pub use validator_node_db::ValidatorNodeDb;
 
 mod epoch_db;
 pub use epoch_db::{DbEpoch, EpochDb};
+
+pub mod models;

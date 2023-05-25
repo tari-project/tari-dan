@@ -24,6 +24,7 @@ rand = "0.7"
 prost = "0.9"
 prost-types = "0.9"
 serde = "1.0.126"
+ruint = "1.8.0"
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_common", features = ["build"] }

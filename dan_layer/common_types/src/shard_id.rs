@@ -17,6 +17,8 @@ use tari_engine_types::{
 };
 use tari_utilities::hex::{from_hex, Hex};
 
+use crate::uint::U256;
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
@@ -54,6 +56,21 @@ impl ShardId {
 
     pub fn zero() -> Self {
         Self::new(FixedHash::default())
+    }
+
+    pub fn from_u256(shard: U256) -> Self {
+        Self(shard.to_le_bytes())
+    }
+
+    pub fn to_u256(&self) -> U256 {
+        U256::from_le_bytes(self.0)
+    }
+
+    /// Calculates and returns the slot number that this ShardId belongs.
+    /// A slot is an equal division of the 256-bit shard space. We deterministically assign slots based on the shard id
+    /// modulo the number of slots.
+    pub fn to_committee_slot(&self, num_slots: u64) -> u64 {
+        u64::try_from(self.to_u256() % U256::from(num_slots)).expect("n modulo xu64 is always <= u64::MAX")
     }
 }
 
