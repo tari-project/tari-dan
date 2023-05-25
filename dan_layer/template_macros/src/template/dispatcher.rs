@@ -134,7 +134,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     });
 
     // replace "Self" if present in the return value
-    stmts.extend(replace_self_in_output(template_ident, &ast));
+    stmts.extend(replace_self_in_output(&ast));
 
     // encode the result value
     stmts.push(parse_quote! {
@@ -161,17 +161,17 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     })
 }
 
-fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt> {
+fn replace_self_in_output(ast: &FunctionAst) -> Vec<Stmt> {
     let mut stmts: Vec<Stmt> = vec![];
     match &ast.output_type {
         Some(output_type) => match output_type {
             TypeAst::Typed { type_path, .. } => {
-                if let Some(stmt) = replace_self_in_single_value(template_ident, type_path) {
+                if let Some(stmt) = replace_self_in_single_value(type_path) {
                     stmts.push(stmt);
                 }
             },
             TypeAst::Tuple(type_tuple) => {
-                stmts.push(replace_self_in_tuple(template_ident, type_tuple));
+                stmts.push(replace_self_in_tuple(type_tuple));
             },
             _ => todo!("replace_self_in_output only supports typed and tuple"),
         },
@@ -181,23 +181,20 @@ fn replace_self_in_output(template_ident: &Ident, ast: &FunctionAst) -> Vec<Stmt
     stmts
 }
 
-fn replace_self_in_single_value(template_ident: &Ident, type_path: &TypePath) -> Option<Stmt> {
-    let template_name_str = template_ident.to_string();
+fn replace_self_in_single_value(type_path: &TypePath) -> Option<Stmt> {
     let type_ident = &type_path.path.segments[0].ident;
 
     if type_ident == "Self" {
         // TODO: AccessRules - currently we allow all calls for functions that return Self.
         return Some(parse_quote! {
-            let rtn = engine().create_component(#template_name_str.to_string(), rtn, ::tari_template_lib::auth::AccessRules::with_default_allow(), None);
+            let rtn = engine().create_component(rtn, ::tari_template_lib::auth::AccessRules::with_default_allow(), None);
         });
     }
 
     None
 }
 
-fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt {
-    let template_name_str = template_ident.to_string();
-
+fn replace_self_in_tuple(type_tuple: &TypeTuple) -> Stmt {
     // build the expressions for each element in the tuple
     let elems: Vec<Expr> = type_tuple
         .elems
@@ -210,7 +207,7 @@ fn replace_self_in_tuple(template_ident: &Ident, type_tuple: &TypeTuple) -> Stmt
                 if ident == "Self" {
                     // TODO: AccessRules - currently we allow all calls for functions that return Self.
                     parse_quote! {
-                        engine().create_component(#template_name_str.to_string(), #field_expr, ::tari_template_lib::auth::AccessRules::with_default_allow(), None)
+                        engine().create_component(#field_expr, ::tari_template_lib::auth::AccessRules::with_default_allow(), None)
                     }
                 } else {
                     field_expr

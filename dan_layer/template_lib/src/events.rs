@@ -24,14 +24,11 @@ use std::collections::HashMap;
 
 use tari_template_abi::{call_engine, EngineOp};
 
-use crate::{args::EmitEventArg, prelude::ComponentAddress};
+use crate::args::EmitEventArg;
 
 pub fn emit_event<T: Into<String>>(topic: T, payload: HashMap<String, String>) {
-    call_engine::<_, ()>(
-        EngineOp::EmitEvent,
-        &EmitEventArg {
-            topic: topic.into(),
-            payload,
-        },
-    );
+    call_engine::<_, ()>(EngineOp::EmitEvent, &EmitEventArg {
+        topic: topic.into(),
+        payload,
+    });
 }

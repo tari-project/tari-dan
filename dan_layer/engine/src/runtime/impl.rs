@@ -221,12 +221,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 let arg: CreateComponentArg = args.get(0)?;
                 let template_def = self.tracker.get_template_def()?;
                 validate_access_rules(&arg.access_rules, &template_def)?;
-                let component_address = self.tracker.new_component(
-                    arg.module_name,
-                    arg.encoded_state,
-                    arg.access_rules,
-                    arg.component_id,
-                )?;
+                let component_address =
+                    self.tracker
+                        .new_component(arg.encoded_state, arg.access_rules, arg.component_id)?;
                 Ok(InvokeResult::encode(&component_address)?)
             },
 

@@ -62,7 +62,6 @@ use tari_template_lib::{
         UnclaimedConfidentialOutputAddress,
         VaultId,
     },
-    prelude::emit_event,
     resource::ResourceType,
     Hash,
 };
@@ -94,6 +93,7 @@ pub struct StateTracker<TTemplateProvider: TemplateProvider<Template = LoadedTem
 
 #[derive(Debug, Clone)]
 pub struct RuntimeState {
+    pub template_name: String,
     pub template_address: TemplateAddress,
     pub component_address: Option<ComponentAddress>,
 }
@@ -381,13 +381,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn new_component(
         &self,
-        module_name: String,
         state: Vec<u8>,
         access_rules: AccessRules,
         component_id: Option<Hash>,
     ) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
         let template_address = runtime_state.template_address;
+        let module_name = runtime_state.template_name;
         let tx_hash = self.transaction_hash();
         let component_address = self
             .id_provider()
@@ -396,7 +396,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         let component = ComponentBody { state };
         let component = ComponentHeader {
             template_address: runtime_state.template_address,
-            module_name,
+            module_name: module_name.clone(),
             access_rules,
             state: component,
         };

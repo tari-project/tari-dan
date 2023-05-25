@@ -31,8 +31,15 @@ use tari_template_abi::rust::{
 
 use crate::{
     models::{
-        Amount, BucketId, ComponentAddress, ConfidentialWithdrawProof, Metadata, NonFungibleAddress, NonFungibleId,
-        ResourceAddress, VaultRef,
+        Amount,
+        BucketId,
+        ComponentAddress,
+        ConfidentialWithdrawProof,
+        Metadata,
+        NonFungibleAddress,
+        NonFungibleId,
+        ResourceAddress,
+        VaultRef,
     },
     prelude::{AccessRules, ConfidentialOutputProof},
     resource::ResourceType,
@@ -123,7 +130,6 @@ impl ComponentRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateComponentArg {
-    pub module_name: String,
     pub encoded_state: Vec<u8>,
     pub access_rules: AccessRules,
     pub component_id: Option<Hash>,
