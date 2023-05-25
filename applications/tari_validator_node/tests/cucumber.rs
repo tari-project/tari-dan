@@ -906,8 +906,14 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     assert_eq!(res[0].payload, HashMap::from([("my".to_string(), "event".to_string())]));
 }
 
-#[when(expr = "indexer {word} scans the network events for account {word}")]
-async fn indexer_scans_network_events(world: &mut TariWorld, indexer_name: String, account_name: String) {
+#[when(expr = "indexer {word} scans the network {int} events for account {word} with topics {word}")]
+async fn indexer_scans_network_events(
+    world: &mut TariWorld,
+    indexer_name: String,
+    num_events: u32,
+    account_name: String,
+    topics: String,
+) {
     let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
     let accounts_component_addresses = world.outputs.get(&account_name).expect("Account name not found");
     let component_addresses = accounts_component_addresses
@@ -919,13 +925,6 @@ async fn indexer_scans_network_events(world: &mut TariWorld, indexer_name: Strin
                 .expect("Failed to parse `ComponentAddress`")
         })
         .collect::<Vec<_>>();
-
-    let tx_hash = accounts_component_addresses
-        .into_iter()
-        .filter(|(k, _)| k.contains("transaction_receipt/0"))
-        .map(|(_, v)| v.address.to_canonical_hash())
-        .collect::<Vec<_>>();
-    let tx_hash = tx_hash.first().unwrap_or_else(|| panic!("No transaction hash found"));
 
     let component_address = *component_addresses
         .first()
@@ -942,17 +941,15 @@ async fn indexer_scans_network_events(world: &mut TariWorld, indexer_name: Strin
         .unwrap_or_else(|_| panic!("Failed to obtain getEventsForComponent query result"));
 
     let events_for_component = res.get("getEventsForComponent").unwrap();
-    panic!("FLAG: CUCUMBER {:?}", events_for_component);
-    // assert_eq!(
-    //     events_for_component.last().unwrap().clone(),
-    //     tari_indexer::graphql::model::events::Event {
-    //         component_address: Some(component_address.into_array()),
-    //         template_address: [0u8; 32],
-    //         tx_hash: tx_hash.into_array(),
-    //         topic: "component-created".to_string(),
-    //         payload: HashMap::from([("module_name".to_string(), "Account".to_string())])
-    //     }
-    // );
+    // assert_eq!(events_for_component.len(), num_events as usize);
+
+    let topics = topics.split(',').collect::<Vec<_>>();
+    assert_eq!(topics.len(), num_events as usize);
+
+    for (ind, topic) in topics.iter().enumerate() {
+        let event = events_for_component[ind].clone();
+        assert_eq!(&event.topic, topic);
+    }
 }
 
 #[when(expr = "the indexer {word} tracks the address {word}")]

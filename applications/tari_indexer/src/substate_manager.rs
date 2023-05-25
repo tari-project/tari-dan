@@ -42,7 +42,10 @@ use crate::{
     substate_storage_sqlite::{
         models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
         sqlite_substate_store_factory::{
-            SqliteSubstateStore, SqliteSubstateStoreWriteTransaction, SubstateStore, SubstateStoreReadTransaction,
+            SqliteSubstateStore,
+            SqliteSubstateStoreWriteTransaction,
+            SubstateStore,
+            SubstateStoreReadTransaction,
             SubstateStoreWriteTransaction,
         },
     },
@@ -353,7 +356,6 @@ impl SubstateManager {
         let latest_version_in_db = stored_versions_in_db.into_iter().max().unwrap_or_default();
         let version = version.max(latest_version_in_db);
 
-        log::warn!(target: LOG_TARGET, "FLAG: CUCUMBER {}", version);
         // check if there are newest events for this component address in the network
         let network_events = self
             .substate_scanner

@@ -215,16 +215,12 @@ where
             return Err(IndexerError::InvalidSubstateState);
         };
         let events = if let SubstateValue::TransactionReceipt(tx_receipt) = substate_value {
+            warn!(target: LOG_TARGET, "FLAG: CUCUMBER events: {:?}", tx_receipt.events);
             tx_receipt.events
         } else {
             return Err(IndexerError::InvalidSubstateValue);
         };
 
-        log::warn!(
-            target: LOG_TARGET,
-            "FLAG: CUCUMBER the transaction events = {:?}",
-            events
-        );
         Ok(events)
     }
 
@@ -235,13 +231,6 @@ where
         version: u32,
     ) -> Result<Hash, IndexerError> {
         let shard_id = ShardId::from_address(substate_address, version);
-
-        log::warn!(
-            target: LOG_TARGET,
-            "FLAG: CUCUMBER version = {} and shard_id = {}",
-            version,
-            shard_id
-        );
 
         let mut committee = self
             .committee_provider
@@ -257,8 +246,8 @@ where
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up {
                         created_by_tx: tx_hash, ..
-                    }
-                    | SubstateResult::Down {
+                    } |
+                    SubstateResult::Down {
                         created_by_tx: tx_hash, ..
                     } => {
                         transaction_hash = Some(tx_hash);
@@ -288,7 +277,6 @@ where
             }
         }
 
-        log::warn!(target: LOG_TARGET, "FLAG: CUCUMBER tx_hash = {:?}", transaction_hash);
         if let Some(tx_hash) = transaction_hash {
             Hash::try_from(tx_hash.as_slice()).map_err(|e| IndexerError::FailedToParseTransactionHash(e.to_string()))
         } else {
@@ -314,7 +302,6 @@ where
             Ok(tx_events) => {
                 // we need to filter all transaction events, by those corresponding
                 // to the current component address
-                log::warn!(target: LOG_TARGET, "FLAG: CUCUMBER tx_events = {:?}", tx_events);
                 let component_tx_events = tx_events
                     .into_iter()
                     .filter(|e| e.component_address().is_some() && e.component_address().unwrap() == component_address)

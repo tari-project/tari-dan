@@ -94,8 +94,7 @@ Feature: Indexer node
     Then the indexer IDX returns 6 non fungibles for resource NFT/resources/0
 
     # Scan the network for the event emitted on ACC_1 creation
-    When indexer IDX scans the network events for account ACC1
-
+    When indexer IDX scans the network 2 events for account ACC1 with topics component-created,deposit
 
   # When I print the cucumber world
   # When I wait 5000 seconds
@@ -155,7 +154,7 @@ Feature: Indexer node
     Given an indexer IDX connected to base node BASE
 
     # Scan the network for the event emitted on ACC_1 creation
-    When indexer IDX scans the network events for account ACC_1
+    When indexer IDX scans the network 1 events for account ACC_1 with topics component-created
 
     # Scan the network for the event emitted on ACC_2 creation
-    When indexer IDX scans the network events for account ACC_2
+    When indexer IDX scans the network 1 events for account ACC_2 with topics component-created
