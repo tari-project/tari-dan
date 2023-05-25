@@ -22,7 +22,6 @@
 
 use std::{collections::HashMap, str::FromStr, sync::Arc};
 
-use anyhow::anyhow;
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
 use serde::{Deserialize, Serialize};
@@ -68,7 +67,7 @@ impl EventQuery {
     ) -> Result<Vec<Event>, anyhow::Error> {
         info!(target: LOG_TARGET, "Querying events for transaction hash = {}", tx_hash);
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let tx_hash = Hash::from_hex(&tx_hash).map_err(|e| anyhow!(e.to_string()))?;
+        let tx_hash = Hash::from_hex(&tx_hash)?;
         let events = match substate_manager.scan_events_for_transaction(tx_hash).await {
             Ok(events) => events,
             Err(e) => {
@@ -103,10 +102,7 @@ impl EventQuery {
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let events = substate_manager
-            .scan_events_for_substate_from_network(
-                ComponentAddress::from_str(&component_address).map_err(|e| anyhow!(e.to_string()))?,
-                Some(version),
-            )
+            .scan_events_for_substate_from_network(ComponentAddress::from_str(&component_address)?, Some(version))
             .await?
             .iter()
             .map(|e| Event::from_engine_event(e.clone()))
@@ -132,7 +128,7 @@ impl EventQuery {
 
         let component_address = ComponentAddress::from_hex(&component_address)?;
         let template_address = Hash::from_str(&template_address)?;
-        let tx_hash = PayloadId::new(Hash::from_hex(&tx_hash).map_err(|e| anyhow!(e.to_string()))?);
+        let tx_hash = PayloadId::new(Hash::from_hex(&tx_hash)?);
 
         let payload: HashMap<String, String> = serde_json::from_str(&payload)?;
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();

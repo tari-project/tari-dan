@@ -79,15 +79,11 @@ impl TryFrom<EventData> for crate::graphql::model::events::Event {
             .transpose()?
             .map(|comp_addr| comp_addr.into_array());
 
-        let template_address = Hash::from_hex(&event_data.template_address)
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?
-            .into_array();
+        let template_address = Hash::from_hex(&event_data.template_address)?.into_array();
 
-        let tx_hash = Hash::from_hex(&event_data.tx_hash)
-            .map_err(|e| anyhow::anyhow!(e.to_string()))?
-            .into_array();
+        let tx_hash = Hash::from_hex(&event_data.tx_hash)?.into_array();
 
-        let payload = serde_json::from_str(event_data.payload.as_str()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let payload = serde_json::from_str(event_data.payload.as_str())?;
 
         Ok(Self {
             component_address,
@@ -108,10 +104,9 @@ impl TryFrom<EventData> for tari_engine_types::events::Event {
             .clone()
             .map(|comp_addr| ComponentAddress::from_str(comp_addr.as_str()))
             .transpose()?;
-        let template_address =
-            Hash::from_hex(&event_data.template_address).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        let tx_hash = Hash::from_hex(&event_data.tx_hash).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        let payload = serde_json::from_str(event_data.payload.as_str()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let template_address = Hash::from_hex(&event_data.template_address)?;
+        let tx_hash = Hash::from_hex(&event_data.tx_hash)?;
+        let payload = serde_json::from_str(event_data.payload.as_str())?;
 
         Ok(Self::new_with_payload(
             component_address,
