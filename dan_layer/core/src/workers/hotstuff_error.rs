@@ -21,16 +21,15 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId};
+use tari_dan_storage::StorageError;
 use tari_engine_types::{commit_result::RejectReason, substate::SubstateAddress};
+use tari_epoch_manager::base_layer::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::SubstateChange;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
-use crate::{
-    services::{epoch_manager::EpochManagerError, PayloadProcessorError},
-    storage::{shard_store::StoreError, StorageError},
-};
+use crate::services::PayloadProcessorError;
 
 #[derive(Error, Debug)]
 pub enum HotStuffError {
@@ -38,8 +37,6 @@ pub enum HotStuffError {
     EpochManagerError(#[from] EpochManagerError),
     #[error("Received message from a node that is not in the committee")]
     ReceivedMessageFromNonCommitteeMember,
-    #[error("Store error: {0}")]
-    StoreError(#[from] StoreError),
     #[error("Received invalid vote: {0}")]
     InvalidVote(String),
     #[error("Received invalid proposal: {0}")]

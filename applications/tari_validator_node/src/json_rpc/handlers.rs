@@ -31,6 +31,7 @@ use axum_jrpc::{
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
+use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_common_types::types::PublicKey;
 use tari_comms::{
     multiaddr::Multiaddr,
@@ -41,18 +42,12 @@ use tari_comms::{
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
-use tari_dan_app_utilities::{
-    base_node_client::GrpcBaseNodeClient,
-    epoch_manager::EpochManagerHandle,
-    template_manager::TemplateManagerHandle,
-};
+use tari_dan_app_utilities::template_manager::TemplateManagerHandle;
 use tari_dan_common_types::{optional::Optional, PayloadId, QuorumCertificate, QuorumDecision, ShardId};
-use tari_dan_core::{
-    services::{epoch_manager::EpochManager, BaseNodeClient},
-    storage::shard_store::{ShardStore, ShardStoreReadTransaction},
-    workers::events::{EventSubscription, HotStuffEvent},
-};
+use tari_dan_core::workers::events::{EventSubscription, HotStuffEvent};
+use tari_dan_storage::{ShardStore, ShardStoreReadTransaction};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManager};
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
     AddPeerRequest,
@@ -90,7 +85,7 @@ use tokio::sync::{broadcast, broadcast::error::RecvError};
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
-    grpc::services::wallet_client::GrpcWalletClient,
+    grpc::base_layer_wallet::GrpcWalletClient,
     json_rpc::{
         jrpc_errors::{internal_error, invalid_argument},
         JsonTransactionResult,

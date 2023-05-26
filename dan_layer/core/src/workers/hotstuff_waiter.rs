@@ -45,10 +45,25 @@ use tari_dan_common_types::{
     TreeNodeHash,
 };
 use tari_dan_engine::runtime::ConsensusContext;
+use tari_dan_storage::{
+    models::{
+        HotStuffMessage,
+        HotStuffMessageType,
+        HotStuffTreeNode,
+        HotstuffPhase,
+        Payload,
+        PayloadResult,
+        VoteMessage,
+    },
+    ShardStore,
+    ShardStoreReadTransaction,
+    ShardStoreWriteTransaction,
+};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
+use tari_epoch_manager::{base_layer::EpochManagerError, Committee, EpochManager};
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;
@@ -64,18 +79,7 @@ use tokio::{
 use super::pacemaker_worker::PacemakerHandle;
 use crate::{
     consensus_constants::ConsensusConstants,
-    models::{
-        vote_message::VoteMessage,
-        Committee,
-        HotStuffMessage,
-        HotStuffMessageType,
-        HotStuffTreeNode,
-        HotstuffPhase,
-        Payload,
-        PayloadResult,
-    },
-    services::{epoch_manager::EpochManager, leader_strategy::LeaderStrategy, PayloadProcessor, SigningService},
-    storage::shard_store::{ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction},
+    services::{leader_strategy::LeaderStrategy, vote_signature, PayloadProcessor, SigningService},
     workers::{
         events::HotStuffEvent,
         hotstuff_error::{HotStuffError, ProposalValidationError},
@@ -161,7 +165,7 @@ where
     TPayload: Payload + 'static,
     TAddr: NodeAddressable + Serialize + 'static,
     TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
-    TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
+    TEpochManager: EpochManager<TAddr, Error = EpochManagerError> + 'static + Send + Sync,
     TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
     TShardStore: ShardStore<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
     TSigningService: SigningService + Sync + Send + 'static,
@@ -973,9 +977,9 @@ where
             .epoch_manager
             .filter_to_local_shards(epoch, &self.public_key, &involved_shards)
             .await?;
-        let vn_shard_key = self
+        let vn = self
             .epoch_manager
-            .get_validator_shard_key(epoch, self.public_key.clone())
+            .get_validator_node(epoch, self.public_key.clone())
             .await?;
         let vn_bmt = self.epoch_manager.get_validator_node_bmt(epoch).await?;
 
@@ -1051,7 +1055,7 @@ where
                 *node.hash(),
                 shard_pledges.clone(),
                 &finalize_result.result,
-                vn_shard_key,
+                vn.shard_key,
                 &vn_bmt,
             )?;
 
@@ -1538,7 +1542,7 @@ where
 
     fn validate_vote(&self, qc: &QuorumCertificate<TAddr>, public_key: &PublicKey, signature: &Signature) -> bool {
         let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().clone());
-        let challenge = vote.construct_challenge();
+        let challenge = vote_signature::construct_challenge(&vote);
         self.signing_service
             .verify_for_public_key(public_key, signature, &*challenge)
     }
@@ -1821,7 +1825,7 @@ where
             },
         };
 
-        vote_msg.sign_vote(&self.signing_service, vn_shard_key, vn_bmt)?;
+        vote_signature::sign_vote(&mut vote_msg, &self.signing_service, vn_shard_key, vn_bmt)?;
 
         Ok(vote_msg)
     }

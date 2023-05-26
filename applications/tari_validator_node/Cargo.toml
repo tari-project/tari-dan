@@ -36,6 +36,8 @@ tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_base_node_client = { path = "../../clients/base_node_client" }
+tari_epoch_manager = { path = "../../dan_layer/epoch_manager", features = ["base_layer"] }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"

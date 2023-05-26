@@ -28,7 +28,7 @@ use tari_dan_common_types::{
     Epoch,
     ShardId,
 };
-use tari_dan_core::models::RecentTransaction;
+use tari_dan_storage::models::RecentTransaction;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     fees::FeeCostBreakdown,

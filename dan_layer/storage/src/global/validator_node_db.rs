@@ -20,7 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::Epoch;
+use std::ops::RangeInclusive;
+
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{Epoch, ShardId};
 
 use crate::global::{models::ValidatorNode, GlobalDbAdapter};
 
@@ -34,18 +37,20 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         Self { backend, tx }
     }
 
-    pub fn insert_validator_nodes(
+    pub fn insert_validator_node(
         &mut self,
-        validator_nodes: Vec<ValidatorNode>,
+        public_key: PublicKey,
+        shard_key: ShardId,
+        epoch: Epoch,
     ) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend
-            .insert_validator_nodes(self.tx, validator_nodes)
+            .insert_validator_node(self.tx, public_key, shard_key, epoch)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
     pub fn count(&mut self, start_epoch: Epoch, end_epoch: Epoch) -> Result<u64, TGlobalDbAdapter::Error> {
         self.backend
-            .count_validator_nodes(self.tx, start_epoch, end_epoch)
+            .validator_nodes_count(self.tx, start_epoch, end_epoch)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
@@ -67,6 +72,26 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
     ) -> Result<Vec<ValidatorNode>, TGlobalDbAdapter::Error> {
         self.backend
             .get_validator_nodes_within_epochs(self.tx, start_epoch, end_epoch)
+            .map_err(TGlobalDbAdapter::Error::into)
+    }
+
+    pub fn get_by_shard_range(
+        &mut self,
+        epoch: Epoch,
+        shard_range: RangeInclusive<ShardId>,
+    ) -> Result<Vec<ValidatorNode>, TGlobalDbAdapter::Error> {
+        self.backend
+            .validator_nodes_get_by_shard_range(self.tx, epoch, shard_range)
+            .map_err(TGlobalDbAdapter::Error::into)
+    }
+
+    pub fn set_committee_bucket(
+        &mut self,
+        shard_id: ShardId,
+        committee_bucket: u64,
+    ) -> Result<(), TGlobalDbAdapter::Error> {
+        self.backend
+            .validator_nodes_set_committee_bucket(self.tx, shard_id, committee_bucket)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 }

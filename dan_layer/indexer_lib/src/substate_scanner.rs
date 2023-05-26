@@ -20,15 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::Display;
-
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_engine_types::{
     events::Event,
     substate::{SubstateAddress, SubstateValue},
 };
+use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
 use tari_template_lib::{
     models::NonFungibleIndexAddress,
     prelude::{ComponentAddress, ResourceAddress},
@@ -36,22 +35,22 @@ use tari_template_lib::{
 };
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
-use crate::{committee_provider::CommitteeProvider, error::IndexerError, NonFungibleSubstate};
+use crate::{error::IndexerError, NonFungibleSubstate};
 
 const LOG_TARGET: &str = "tari::indexer::dan_layer_scanner";
 
-pub struct SubstateScanner<TCommitteeProvider, TVnClient> {
-    committee_provider: TCommitteeProvider,
+pub struct SubstateScanner<TEpochManager, TVnClient> {
+    committee_provider: TEpochManager,
     validator_node_client_factory: TVnClient,
 }
 
-impl<TCommitteeProvider, TVnClient> SubstateScanner<TCommitteeProvider, TVnClient>
+impl<TEpochManager, TVnClient, TAddr> SubstateScanner<TEpochManager, TVnClient>
 where
-    TCommitteeProvider: CommitteeProvider,
-    TVnClient: ValidatorNodeClientFactory<Addr = TCommitteeProvider::Addr>,
-    TCommitteeProvider::Addr: Display,
+    TAddr: NodeAddressable,
+    TEpochManager: EpochManager<TAddr, Error = EpochManagerError>,
+    TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
 {
-    pub fn new(committee_provider: TCommitteeProvider, validator_node_client_factory: TVnClient) -> Self {
+    pub fn new(committee_provider: TEpochManager, validator_node_client_factory: TVnClient) -> Self {
         Self {
             committee_provider,
             validator_node_client_factory,
@@ -157,11 +156,8 @@ where
         version: u32,
     ) -> Result<SubstateResult, IndexerError> {
         let shard = ShardId::from_address(substate_address, version);
-        let committee = self
-            .committee_provider
-            .get_committee(shard)
-            .await
-            .map_err(|e| IndexerError::CommitteeProviderError(e.to_string()))?;
+        let epoch = self.committee_provider.current_epoch().await?;
+        let committee = self.committee_provider.get_committee(epoch, shard).await?;
 
         // TODO: Randomize order of members, otherwise the first one will have much higher traffic.
         for vn_public_key in &committee.members {
@@ -192,7 +188,7 @@ where
     /// Gets a substate directly from querying a VN
     async fn get_substate_from_vn(
         &self,
-        vn_public_key: &TCommitteeProvider::Addr,
+        vn_public_key: &TAddr,
         address: &SubstateAddress,
         version: u32,
     ) -> Result<SubstateResult, IndexerError> {
@@ -232,11 +228,8 @@ where
     ) -> Result<Hash, IndexerError> {
         let shard_id = ShardId::from_address(substate_address, version);
 
-        let mut committee = self
-            .committee_provider
-            .get_committee(shard_id)
-            .await
-            .map_err(|e| IndexerError::CommitteeProviderError(e.to_string()))?;
+        let epoch = self.committee_provider.current_epoch().await?;
+        let mut committee = self.committee_provider.get_committee(epoch, shard_id).await?;
 
         committee.members.shuffle(&mut OsRng);
 

@@ -27,12 +27,12 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::PayloadId;
 use tari_engine_types::{
     events::Event,
     substate::{Substate, SubstateAddress},
 };
+use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
 use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};

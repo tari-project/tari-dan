@@ -20,12 +20,58 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::{io, sync::PoisonError};
+
+use tari_common_types::types::FixedHashSizeError;
+use tari_dan_common_types::optional::IsNotFoundError;
+use tari_utilities::ByteArrayError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
-    #[error("Could not connect to storage: {source}")]
-    ConnectionError { source: anyhow::Error },
-    #[error("{item} does not exist")]
-    NotFound { item: String },
-    #[error("General storage error: {source}")]
-    General { source: anyhow::Error },
+    #[error("Could not connect to storage:{reason}")]
+    ConnectionError { reason: String },
+    #[error("IO Error: {0}")]
+    Io(#[from] io::Error),
+    #[error("Query error:{reason}")]
+    QueryError { reason: String },
+    #[error("Migration error: {reason}")]
+    MigrationError { reason: String },
+    #[error("Invalid unit of work tracker type")]
+    InvalidUnitOfWorkTrackerType,
+    #[error("Not found: item: {item} key: {key}")]
+    NotFound { item: String, key: String },
+    #[error("File system path does not exist")]
+    FileSystemPathDoesNotExist,
+    #[error("Failed data decoding")]
+    // TODO: Add more details
+    DecodingError,
+    #[error("Failed data encoding")]
+    EncodingError,
+    #[error("Fixed hash size error: {0}")]
+    FixedHashSizeError(#[from] FixedHashSizeError),
+    #[error("Invalid integer cast")]
+    InvalidIntegerCast,
+    #[error("Invalid ByteArray conversion: `{0}`")]
+    InvalidByteArrayConversion(#[from] ByteArrayError),
+    #[error("Invalid type cast: {reason}")]
+    InvalidTypeCasting { reason: String },
+
+    #[error("General storage error: {details}")]
+    General { details: String },
+    #[error("Lock error")]
+    LockError,
+    #[error("Error converting substate type: {substate_type}")]
+    InvalidSubStateType { substate_type: String },
+}
+
+impl<T> From<PoisonError<T>> for StorageError {
+    fn from(_err: PoisonError<T>) -> Self {
+        Self::LockError
+    }
+}
+
+impl IsNotFoundError for StorageError {
+    fn is_not_found_error(&self) -> bool {
+        matches!(self, Self::NotFound { .. })
+    }
 }

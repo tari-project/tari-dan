@@ -38,13 +38,17 @@ use tari_crypto::{
 };
 use tari_dan_common_types::{vn_bmt_node_hash, Epoch, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::{
-    models::{vote_message::VoteMessage, HotStuffMessage, HotstuffPhase, Payload, TariDanPayload},
     services::{
         leader_strategy::{AlwaysFirstLeader, RotatingLeader},
+        vote_signature,
         NodeIdentitySigningService,
     },
-    storage::shard_store::{ShardStore, ShardStoreWriteTransaction},
     workers::hotstuff_waiter::RecoveryMessage,
+};
+use tari_dan_storage::{
+    models::{HotStuffMessage, HotstuffPhase, Payload, TariDanPayload, VoteMessage},
+    ShardStore,
+    ShardStoreWriteTransaction,
 };
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{args, models::TemplateAddress};
@@ -88,13 +92,13 @@ fn create_test_qc(
                 vec![Multiaddr::empty()],
                 PeerFeatures::COMMUNICATION_NODE,
             ));
-            node_vote
-                .sign_vote(
-                    &NodeIdentitySigningService::new(node_identity),
-                    ShardId::zero(),
-                    &vn_bmt,
-                )
-                .unwrap();
+            vote_signature::sign_vote(
+                &mut node_vote,
+                &NodeIdentitySigningService::new(node_identity),
+                ShardId::zero(),
+                &vn_bmt,
+            )
+            .unwrap();
             node_vote.validator_metadata().clone()
         })
         .collect();
@@ -310,7 +314,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
         QuorumDecision::Accept,
         new_view_message.high_qc().unwrap().all_shard_pledges().clone(),
     );
-    vote.sign_vote(instance.signing_service(), *SHARD0, &vn_bmt).unwrap();
+    vote_signature::sign_vote(&mut vote, instance.signing_service(), *SHARD0, &vn_bmt).unwrap();
     instance.tx_votes.send((node1, vote.clone())).await.unwrap();
 
     // Should get no proposal
@@ -323,8 +327,7 @@ async fn test_hs_waiter_leader_sends_new_proposal_when_enough_votes_are_received
 
     // Send another vote
     let mut vote = VoteMessage::new(*vote_hash, QuorumDecision::Accept, Default::default());
-    vote.sign_vote(instance.signing_service(), ShardId::zero(), &vn_bmt)
-        .unwrap();
+    vote_signature::sign_vote(&mut vote, instance.signing_service(), ShardId::zero(), &vn_bmt).unwrap();
     instance.tx_votes.send((node2, vote)).await.unwrap();
 
     // should get a proposal

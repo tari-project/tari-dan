@@ -24,12 +24,14 @@ use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
     fmt::{Debug, Formatter},
+    ops::RangeInclusive,
     sync::{Arc, Mutex},
 };
 
 use diesel::{prelude::*, RunQueryDsl, SqliteConnection};
 use serde::{de::DeserializeOwned, Serialize};
-use tari_dan_common_types::Epoch;
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
     global::{
         models::ValidatorNode,
@@ -43,10 +45,7 @@ use tari_dan_storage::{
     AtomicDb,
 };
 
-use super::{
-    models,
-    models::{DbValidatorNode, NewValidatorNode},
-};
+use super::{models, models::DbValidatorNode};
 use crate::{
     error::SqliteStorageError,
     global::{
@@ -307,20 +306,21 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(result > 0)
     }
 
-    fn insert_validator_nodes(
+    fn insert_validator_node(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        validator_nodes: Vec<ValidatorNode>,
+        public_key: PublicKey,
+        shard_key: ShardId,
+        epoch: Epoch,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 
-        let records = validator_nodes
-            .into_iter()
-            .map(NewValidatorNode::from)
-            .collect::<Vec<_>>();
-
         diesel::insert_into(validator_nodes::table)
-            .values(records)
+            .values((
+                validator_nodes::public_key.eq(public_key.as_bytes()),
+                validator_nodes::shard_key.eq(shard_key.as_bytes()),
+                validator_nodes::epoch.eq(epoch.as_u64() as i64),
+            ))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -351,18 +351,19 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
                 operation: "get::validator_node".to_string(),
             })?;
 
-        Ok(vn.try_into()?)
+        let vn = vn.try_into()?;
+        Ok(vn)
     }
 
-    fn count_validator_nodes(
+    fn validator_nodes_count(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
     ) -> Result<u64, Self::Error> {
-        use crate::global::schema::{validator_nodes, validator_nodes::dsl};
+        use crate::global::schema::validator_nodes;
 
-        let count = dsl::validator_nodes
+        let count = validator_nodes::table
             .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
             .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
             .count()
@@ -373,6 +374,49 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             })?;
 
         Ok(count as u64)
+    }
+
+    fn validator_nodes_set_committee_bucket(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        shard_key: ShardId,
+        committee_bucket: u64,
+    ) -> Result<(), Self::Error> {
+        use crate::global::schema::validator_nodes;
+
+        diesel::update(validator_nodes::table)
+            .filter(validator_nodes::shard_key.eq(shard_key.as_bytes()))
+            .set(validator_nodes::committee_bucket.eq(committee_bucket as i64))
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "insert::committee_bucket".to_string(),
+            })?;
+
+        Ok(())
+    }
+
+    fn validator_nodes_get_by_shard_range(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        shard_range: RangeInclusive<ShardId>,
+    ) -> Result<Vec<ValidatorNode>, Self::Error> {
+        use crate::global::schema::validator_nodes;
+
+        let validators: Vec<DbValidatorNode> = validator_nodes::table
+            .filter(validator_nodes::epoch.eq(epoch.as_u64() as i64))
+            // SQLite compares BLOB types using memcmp which, IIRC, compares bytes "left to right"/big-endian which is 
+            // the same way convert shard IDs to 256-bit integers when allocating committee shards.
+            .filter(validator_nodes::shard_key.ge(shard_range.start().as_bytes()))
+            .filter(validator_nodes::shard_key.le(shard_range.end().as_bytes()))
+            .get_results(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "validator_nodes_get_by_shard_range".to_string(),
+            })?;
+
+        validators.into_iter().map(TryInto::try_into).collect()
     }
 
     fn get_validator_nodes_within_epochs(

@@ -8,9 +8,7 @@ use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity}
 use tari_dan_common_types::{ObjectPledge, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::{vote_message::VoteMessage, HotStuffMessage, Payload, TariDanPayload},
     services::{
-        epoch_manager::EpochManager,
         leader_strategy::LeaderStrategy,
         NodeIdentitySigningService,
         PayloadProcessor,
@@ -23,11 +21,13 @@ use tari_dan_core::{
     },
 };
 use tari_dan_engine::runtime::ConsensusContext;
+use tari_dan_storage::models::{HotStuffMessage, Payload, TariDanPayload, VoteMessage};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     fees::FeeCostBreakdown,
     substate::SubstateDiff,
 };
+use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
 use tari_shutdown::Shutdown;
 use tari_template_lib::{models::Amount, Hash};
 use tokio::{
@@ -142,7 +142,7 @@ impl HsTestHarness {
         network_latency: Duration,
     ) -> Self
     where
-        TEpochManager: EpochManager<PublicKey> + Send + Sync + 'static,
+        TEpochManager: EpochManager<PublicKey, Error = EpochManagerError> + Send + Sync + 'static,
         TLeader: LeaderStrategy<PublicKey> + Send + Sync + 'static,
     {
         let (tx_new, rx_new) = channel(1);

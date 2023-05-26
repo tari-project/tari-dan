@@ -28,12 +28,9 @@ use std::{
 
 use log::*;
 use tari_comms::NodeIdentity;
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::{ShardId, TreeNodeHash};
-use tari_dan_core::{
-    message::DanMessage,
-    services::{epoch_manager::EpochManager, infrastructure_services::OutboundService},
-};
+use tari_dan_core::{message::DanMessage, services::infrastructure_services::OutboundService};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManager};
 use tari_template_lib::Hash;
 use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc, oneshot};

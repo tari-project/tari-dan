@@ -28,11 +28,12 @@ use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
+    NodeAddressable,
     PayloadId,
     ShardId,
 };
 use tari_engine_types::substate::SubstateAddress;
-use tari_indexer_lib::committee_provider::CommitteeProvider;
+use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::{
     SubstateResult,
@@ -45,20 +46,23 @@ use crate::transaction_manager::error::TransactionManagerError;
 
 const LOG_TARGET: &str = "tari::indexer::transaction_manager";
 
-pub struct TransactionManager<TCommitteeProvider, TClientFactory> {
-    store: TCommitteeProvider,
+pub struct TransactionManager<TEpochManager, TClientFactory> {
+    epoch_manager: TEpochManager,
     client_provider: TClientFactory,
 }
 
-impl<TCommitteeProvider, TClientFactory> TransactionManager<TCommitteeProvider, TClientFactory>
+impl<TEpochManager, TClientFactory, TAddr> TransactionManager<TEpochManager, TClientFactory>
 where
-    TCommitteeProvider: CommitteeProvider,
-    TCommitteeProvider::Addr: Display,
-    TClientFactory: ValidatorNodeClientFactory<Addr = TCommitteeProvider::Addr>,
+    TAddr: NodeAddressable,
+    TEpochManager: EpochManager<TAddr, Error = EpochManagerError>,
+    TClientFactory: ValidatorNodeClientFactory<Addr = TAddr>,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
 {
-    pub fn new(store: TCommitteeProvider, client_provider: TClientFactory) -> Self {
-        Self { store, client_provider }
+    pub fn new(epoch_manager: TEpochManager, client_provider: TClientFactory) -> Self {
+        Self {
+            epoch_manager,
+            client_provider,
+        }
     }
 
     pub async fn submit_transaction(&self, transaction: Transaction) -> Result<PayloadId, TransactionManagerError> {
@@ -116,11 +120,8 @@ where
         TFut: Future<Output = Result<T, E>>,
         E: Display,
     {
-        let mut committee = self
-            .store
-            .get_committee(shard_id)
-            .await
-            .map_err(|e| TransactionManagerError::CommitteeProviderError(e.to_string()))?;
+        let epoch = self.epoch_manager.current_epoch().await?;
+        let mut committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
 
         committee.members.shuffle(&mut OsRng);
 

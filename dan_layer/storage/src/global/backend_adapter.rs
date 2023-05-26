@@ -20,8 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::ops::RangeInclusive;
+
 use serde::{de::DeserializeOwned, Serialize};
-use tari_dan_common_types::Epoch;
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{Epoch, ShardId};
 
 use super::DbEpoch;
 use crate::{
@@ -64,10 +67,12 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         template: DbTemplateUpdate,
     ) -> Result<(), Self::Error>;
 
-    fn insert_validator_nodes(
+    fn insert_validator_node(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        validator_nodes: Vec<ValidatorNode>,
+        public_key: PublicKey,
+        shard_key: ShardId,
+        epoch: Epoch,
     ) -> Result<(), Self::Error>;
     fn get_validator_nodes_within_epochs(
         &self,
@@ -82,12 +87,25 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         end_epoch: Epoch,
         public_key: &[u8],
     ) -> Result<ValidatorNode, Self::Error>;
-    fn count_validator_nodes(
+    fn validator_nodes_count(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
     ) -> Result<u64, Self::Error>;
+    fn validator_nodes_set_committee_bucket(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        shard_key: ShardId,
+        bucket: u64,
+    ) -> Result<(), Self::Error>;
+
+    fn validator_nodes_get_by_shard_range(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+        shard_range: RangeInclusive<ShardId>,
+    ) -> Result<Vec<ValidatorNode>, Self::Error>;
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;

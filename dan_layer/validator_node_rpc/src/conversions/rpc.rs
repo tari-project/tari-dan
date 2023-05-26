@@ -3,7 +3,7 @@
 
 use std::convert::{TryFrom, TryInto};
 
-use tari_dan_core::models::SubstateShardData;
+use tari_dan_storage::models::SubstateShardData;
 use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::proto;

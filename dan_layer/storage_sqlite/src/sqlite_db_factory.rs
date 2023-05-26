@@ -24,8 +24,10 @@ use std::{fs::create_dir_all, path::PathBuf};
 
 use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use tari_dan_core::storage::{DbFactory, StorageError};
-use tari_dan_storage::global::GlobalDb;
+use tari_dan_storage::{
+    global::{DbFactory, GlobalDb},
+    StorageError,
+};
 
 use crate::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 

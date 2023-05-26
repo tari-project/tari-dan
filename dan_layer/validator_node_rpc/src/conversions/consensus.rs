@@ -23,6 +23,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
+use tari_bor::{decode_exact, encode};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
@@ -35,7 +36,7 @@ use tari_dan_common_types::{
     TreeNodeHash,
     ValidatorMetadata,
 };
-use tari_dan_core::models::{vote_message::VoteMessage, HotStuffMessage, HotStuffTreeNode, Node, TariDanPayload};
+use tari_dan_storage::models::{HotStuffMessage, HotStuffTreeNode, Node, TariDanPayload, VoteMessage};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::proto;
@@ -49,7 +50,8 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
             decision: i32::from(msg.decision().as_u8()),
             all_shard_pledges: msg.all_shard_pledges().iter().map(|n| n.clone().into()).collect(),
             validator_metadata: Some(msg.validator_metadata().clone().into()),
-            merkle_proof: msg.encode_merkle_proof(),
+            // TOOD: unwrap
+            merkle_proof: encode(&msg.merkle_proof()).unwrap(),
             node_hash: msg.node_hash().to_vec(),
         }
     }
@@ -71,7 +73,7 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
                 .map(|n| n.try_into())
                 .collect::<Result<_, _>>()?,
             metadata.try_into()?,
-            VoteMessage::decode_merkle_proof(&value.merkle_proof)?,
+            decode_exact(&value.merkle_proof)?,
             FixedHash::try_from(value.node_hash)?,
         ))
     }

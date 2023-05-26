@@ -2,11 +2,12 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_engine_types::substate::SubstateAddress;
+use tari_epoch_manager::base_layer::EpochManagerError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexerError {
-    #[error("Committee provider error: {0}")]
-    CommitteeProviderError(String),
+    #[error("Epoch manager error: {0}")]
+    EpochManagerError(#[from] EpochManagerError),
     #[error("Validator node client error: {0}")]
     ValidatorNodeClientError(String),
     #[error("Invalid substate state")]

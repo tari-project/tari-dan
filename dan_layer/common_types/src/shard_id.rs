@@ -5,6 +5,7 @@ use std::{
     cmp::Ordering,
     fmt,
     fmt::{Display, Formatter},
+    ops::RangeInclusive,
     str::FromStr,
 };
 
@@ -59,18 +60,31 @@ impl ShardId {
     }
 
     pub fn from_u256(shard: U256) -> Self {
-        Self(shard.to_le_bytes())
+        Self(shard.to_be_bytes())
     }
 
     pub fn to_u256(&self) -> U256 {
-        U256::from_le_bytes(self.0)
+        U256::from_be_bytes(self.0)
     }
 
-    /// Calculates and returns the slot number that this ShardId belongs.
-    /// A slot is an equal division of the 256-bit shard space. We deterministically assign slots based on the shard id
-    /// modulo the number of slots.
-    pub fn to_committee_slot(&self, num_slots: u64) -> u64 {
-        u64::try_from(self.to_u256() % U256::from(num_slots)).expect("n modulo xu64 is always <= u64::MAX")
+    /// Calculates and returns the bucket number that this ShardId belongs.
+    /// A bucket is an equal division of the 256-bit shard space.
+    pub fn to_committee_bucket(&self, num_committees: u64) -> u64 {
+        if num_committees == 0 {
+            return 0;
+        }
+        let bucket_size = U256::MAX / U256::from(num_committees);
+        u64::try_from(self.to_u256() / bucket_size).expect("too many committees")
+    }
+
+    pub fn to_committee_range(&self, num_committees: u64) -> RangeInclusive<ShardId> {
+        if num_committees == 0 {
+            return RangeInclusive::new(Self::zero(), Self::from_u256(U256::MAX));
+        }
+        let bucket_size = U256::MAX / U256::from(num_committees);
+        let bucket = self.to_u256() / bucket_size;
+        let start = bucket_size * U256::from(bucket);
+        RangeInclusive::new(Self::from_u256(start), Self::from_u256(start + bucket_size))
     }
 }
 
@@ -133,5 +147,21 @@ impl FromStr for ShardId {
         // TODO: error isnt correct
         let bytes = from_hex(s).map_err(|_| FixedHashSizeError)?;
         Self::from_bytes(&bytes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::{rngs::OsRng, RngCore};
+
+    use super::*;
+
+    #[test]
+    fn shard_id_to_from_u256_endianness_matches() {
+        let mut buf = [0u8; 32];
+        OsRng.fill_bytes(&mut buf);
+        let s = ShardId(buf);
+        let result = ShardId::from_u256(s.to_u256());
+        assert_eq!(result, s);
     }
 }

@@ -24,10 +24,10 @@ use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
 use rand::rngs::OsRng;
 use tari_base_node::{run_base_node, BaseNodeConfig, MetricsConfig};
+use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::configuration::CommonConfig;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tokio::task;

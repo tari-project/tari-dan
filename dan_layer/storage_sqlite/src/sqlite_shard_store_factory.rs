@@ -53,9 +53,8 @@ use tari_dan_common_types::{
     SubstateState,
     TreeNodeHash,
 };
-use tari_dan_core::{
+use tari_dan_storage::{
     models::{
-        vote_message::VoteMessage,
         ClaimLeaderFees,
         CurrentLeaderStates,
         HotStuffTreeNode,
@@ -67,11 +66,12 @@ use tari_dan_core::{
         SQLTransaction,
         SubstateShardData,
         TariDanPayload,
+        VoteMessage,
     },
-    storage::{
-        shard_store::{ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction},
-        StorageError,
-    },
+    ShardStore,
+    ShardStoreReadTransaction,
+    ShardStoreWriteTransaction,
+    StorageError,
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_transaction::{InstructionSignature, Transaction, TransactionMeta};
@@ -626,7 +626,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             .filter(
                 substates::shard_id
                     .ge(start_shard_id.as_bytes())
-                    .and(substates::shard_id.le(Vec::from(end_shard_id.as_bytes())))
+                    .and(substates::shard_id.le(end_shard_id.as_bytes()))
                     .and(substates::shard_id.ne_all(excluded_shards)),
             )
             .get_results(self.transaction.connection())

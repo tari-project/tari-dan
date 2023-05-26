@@ -1,14 +1,20 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, ops::Range};
+use std::{
+    collections::HashMap,
+    ops::{Range, RangeInclusive},
+};
 
 use tari_comms::async_trait;
 use tari_core::ValidatorNodeBMT;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
-use tari_dan_core::{
-    models::{Committee, ValidatorNode},
-    services::epoch_manager::{EpochManager, EpochManagerError, ShardCommitteeAllocation},
+use tari_epoch_manager::{
+    base_layer::EpochManagerError,
+    Committee,
+    EpochManager,
+    ShardCommitteeAllocation,
+    ValidatorNode,
 };
 
 #[derive(Debug, Clone)]
@@ -70,6 +76,8 @@ impl<TAddr: NodeAddressable> RangeEpochManager<TAddr> {
 
 #[async_trait]
 impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
+    type Error = EpochManagerError;
+
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {
         Ok(self.current_epoch)
     }
@@ -79,18 +87,12 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
         Ok(0)
     }
 
-    async fn get_validator_shard_key(&self, epoch: Epoch, addr: TAddr) -> Result<ShardId, EpochManagerError> {
+    async fn get_validator_node(&self, epoch: Epoch, addr: TAddr) -> Result<ValidatorNode<TAddr>, EpochManagerError> {
         self.registered_vns
             .iter()
             .find_map(|(e, vns)| {
                 if *e == epoch {
-                    vns.iter().find_map(|vn| {
-                        if vn.public_key == addr {
-                            Some(vn.shard_key)
-                        } else {
-                            None
-                        }
-                    })
+                    vns.iter().find(|vn| vn.public_key == addr).cloned()
                 } else {
                     None
                 }
@@ -134,6 +136,14 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
             }
         }
         Err(EpochManagerError::NoCommitteeFound(shard))
+    }
+
+    async fn get_committee_for_shard_range(
+        &self,
+        _epoch: Epoch,
+        _shard_range: RangeInclusive<ShardId>,
+    ) -> Result<Committee<TAddr>, Self::Error> {
+        todo!()
     }
 
     async fn is_validator_in_committee_for_current_epoch(
@@ -196,6 +206,10 @@ impl<TAddr: NodeAddressable> EpochManager<TAddr> for RangeEpochManager<TAddr> {
     async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
         let vn_mmr = self.get_validator_node_bmt(epoch).await?;
         Ok(vn_mmr.get_merkle_root())
+    }
+
+    async fn get_local_shard_range(&self, _epoch: Epoch, _addr: TAddr) -> Result<RangeInclusive<ShardId>, Self::Error> {
+        todo!()
     }
 
     async fn notify_scanning_complete(&self) -> Result<(), EpochManagerError> {

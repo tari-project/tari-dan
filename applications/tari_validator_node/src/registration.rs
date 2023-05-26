@@ -28,23 +28,22 @@ use std::{
 
 use log::{error, info, warn};
 use tari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
+use tari_base_node_client::BaseNodeClientError;
 use tari_common::configuration::bootstrap::{grpc_default_port, ApplicationType};
 use tari_comms::NodeIdentity;
-use tari_dan_app_utilities::epoch_manager::{EpochManagerEvent, EpochManagerHandle};
 use tari_dan_common_types::Epoch;
-use tari_dan_core::{
-    services::{
-        base_node_error::BaseNodeError,
-        epoch_manager::{EpochManager, EpochManagerError},
-    },
-    DigitalAssetError,
-};
 use tari_dan_storage_sqlite::error::SqliteStorageError;
+use tari_epoch_manager::{
+    base_layer::{EpochManagerError, EpochManagerEvent, EpochManagerHandle},
+    EpochManager,
+};
 use tari_shutdown::ShutdownSignal;
-use tari_wallet_grpc_client::WalletClientError;
 use tokio::{task, task::JoinHandle, time};
 
-use crate::{ApplicationConfig, GrpcWalletClient};
+use crate::{
+    grpc::base_layer_wallet::{GrpcWalletClient, WalletGrpcError},
+    ApplicationConfig,
+};
 
 const LOG_TARGET: &str = "tari::validator_node::app";
 const MAX_REGISTRATION_ATTEMPTS: u8 = 8;
@@ -56,14 +55,12 @@ pub enum AutoRegistrationError {
     RegistrationFailed { details: String },
     #[error("Epoch manager error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
-    #[error("Wallet client error: {0}")]
-    WalletClientError(#[from] WalletClientError),
-    #[error("DigitalAsset error: {0}")]
-    DigitalAssetError(#[from] DigitalAssetError),
     #[error("Sqlite storage error: {0}")]
     SqliteStorageError(#[from] SqliteStorageError),
     #[error("Base node error: {0}")]
-    BaseNodeError(#[from] BaseNodeError),
+    BaseNodeError(#[from] BaseNodeClientError),
+    #[error("Wallet GRPC error: {0}")]
+    WalletGrpcError(#[from] WalletGrpcError),
 }
 
 pub async fn register(
