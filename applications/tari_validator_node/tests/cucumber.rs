@@ -916,19 +916,16 @@ async fn indexer_scans_network_events(
 ) {
     let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
     let accounts_component_addresses = world.outputs.get(&account_name).expect("Account name not found");
-    let component_addresses = accounts_component_addresses
+    let component_address = accounts_component_addresses
         .into_iter()
-        .filter(|(k, _)| k.contains("components/Account"))
+        .find(|(k, _)| k.contains("components/Account"))
         .map(|(_, v)| {
             v.address
                 .as_component_address()
                 .expect("Failed to parse `ComponentAddress`")
         })
-        .collect::<Vec<_>>();
+        .expect("Did not find component address");
 
-    let component_address = *component_addresses
-        .first()
-        .unwrap_or_else(|| panic!("Did not find component addresses"));
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
         "{{ getEventsForComponent(componentAddress: {:?}, version: 0) {{ componentAddress, templateAddress, txHash, \
@@ -938,7 +935,7 @@ async fn indexer_scans_network_events(
     let res = graphql_client
         .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
         .await
-        .unwrap_or_else(|_| panic!("Failed to obtain getEventsForComponent query result"));
+        .expect("Failed to obtain getEventsForComponent query result");
 
     let events_for_component = res.get("getEventsForComponent").unwrap();
     assert_eq!(events_for_component.len(), num_events as usize);
