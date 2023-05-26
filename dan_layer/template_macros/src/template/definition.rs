@@ -28,7 +28,6 @@ use crate::template::ast::TemplateAst;
 pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
     let template_mod_name = format_ident!("{}_template", ast.template_name);
     let component_ident = ast.template_name.clone();
-    let component_ident_as_str = component_ident.to_string();
     let component_wrapper_ident = format_ident!("{}Component", ast.template_name);
     let (_, items) = ast.module.content.as_ref().unwrap();
 
@@ -43,7 +42,7 @@ pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
                 type Component = #component_wrapper_ident;
 
                 fn create_with_options(self, access_rules: ::tari_template_lib::auth::AccessRules, component_id: Option<::tari_template_lib::Hash>) -> Self::Component {
-                    let address = engine().create_component(#component_ident_as_str.to_string(), self, access_rules, component_id);
+                    let address = engine().create_component(self, access_rules, component_id);
                     #component_wrapper_ident{ address }
                 }
             }
@@ -118,7 +117,7 @@ mod tests {
             impl :: tari_template_lib :: component :: interface :: ComponentInterface for Foo {
                 type Component = FooComponent ;
                 fn create_with_options (self , access_rules : :: tari_template_lib :: auth :: AccessRules , component_id : Option < :: tari_template_lib :: Hash > ) -> Self :: Component {
-                    let address = engine () . create_component ("Foo" . to_string () , self , access_rules, component_id) ;
+                    let address = engine () . create_component (self , access_rules, component_id) ;
                     FooComponent { address }
                 }
             }

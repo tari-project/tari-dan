@@ -39,7 +39,6 @@ use crate::{
         NonFungibleAddress,
         NonFungibleId,
         ResourceAddress,
-        TemplateAddress,
         VaultRef,
     },
     prelude::{AccessRules, ConfidentialOutputProof},
@@ -131,7 +130,6 @@ impl ComponentRef {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateComponentArg {
-    pub module_name: String,
     pub encoded_state: Vec<u8>,
     pub access_rules: AccessRules,
     pub component_id: Option<Hash>,
@@ -141,8 +139,6 @@ pub struct CreateComponentArg {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EmitEventArg {
-    pub template_address: TemplateAddress,
-    pub tx_hash: Hash,
     pub topic: String,
     pub payload: HashMap<String, String>,
 }

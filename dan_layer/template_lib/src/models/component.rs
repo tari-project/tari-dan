@@ -53,6 +53,14 @@ impl ComponentAddress {
         let hash = Hash::from_hex(hex)?;
         Ok(Self::new(hash))
     }
+
+    pub fn from_array(arr: [u8; 32]) -> Self {
+        Self::new(Hash::from_array(arr))
+    }
+
+    pub fn into_array(self) -> [u8; 32] {
+        self.0.into_array()
+    }
 }
 
 impl FromStr for ComponentAddress {
@@ -95,6 +103,7 @@ impl AsRef<[u8]> for ComponentAddress {
         self.as_bytes()
     }
 }
+
 // #[derive(Debug, Clone, Serialize, Deserialize)]
 // pub struct ComponentHeader {
 //     pub template_address: TemplateAddress,

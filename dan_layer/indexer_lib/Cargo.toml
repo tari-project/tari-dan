@@ -18,4 +18,5 @@ tari_template_lib = { path = "../template_lib" }
 async-trait = "0.1"
 log = "0.4"
 serde = "1.0"
+rand = "0.8.5"
 thiserror = "1.0"

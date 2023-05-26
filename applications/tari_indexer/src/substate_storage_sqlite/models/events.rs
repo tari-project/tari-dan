@@ -21,11 +21,11 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-use std::convert::TryFrom;
+use std::{convert::TryFrom, str::FromStr};
 
-use diesel::sql_types::Text;
+use diesel::sql_types::{Integer, Nullable, Text};
 use serde::{Deserialize, Serialize};
-use tari_crypto::tari_utilities::hex::from_hex;
+use tari_template_lib::{prelude::ComponentAddress, Hash};
 
 use crate::substate_storage_sqlite::schema::*;
 
@@ -37,15 +37,20 @@ pub struct Event {
     pub tx_hash: String,
     pub topic: String,
     pub payload: String,
+    pub version: i32,
+    pub component_address: Option<String>,
 }
 
 #[derive(Debug, Clone, Insertable, AsChangeset)]
 #[diesel(table_name = events)]
+#[diesel(treat_none_as_null = true)]
 pub struct NewEvent {
     pub template_address: String,
     pub tx_hash: String,
     pub topic: String,
     pub payload: String,
+    pub version: i32,
+    pub component_address: Option<String>,
 }
 
 #[derive(Clone, Debug, QueryableByName, Deserialize, Serialize)]
@@ -58,28 +63,57 @@ pub struct EventData {
     pub topic: String,
     #[diesel(sql_type = Text)]
     pub payload: String,
+    #[diesel(sql_type = Integer)]
+    pub version: i32,
+    #[diesel(sql_type = Nullable<Text>)]
+    pub component_address: Option<String>,
 }
 
 impl TryFrom<EventData> for crate::graphql::model::events::Event {
     type Error = anyhow::Error;
 
     fn try_from(event_data: EventData) -> Result<Self, Self::Error> {
-        let mut template_address = [0u8; 32];
-        let template_address_buff =
-            from_hex(event_data.template_address.as_ref()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        template_address.copy_from_slice(&template_address_buff);
+        let component_address = event_data
+            .component_address
+            .map(|comp_addr| ComponentAddress::from_str(comp_addr.as_str()))
+            .transpose()?
+            .map(|comp_addr| comp_addr.into_array());
 
-        let mut tx_hash = [0u8; 32];
-        let tx_hash_buffer = from_hex(event_data.tx_hash.as_ref()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
-        tx_hash.copy_from_slice(&tx_hash_buffer);
+        let template_address = Hash::from_hex(&event_data.template_address)?.into_array();
 
-        let payload = serde_json::from_str(event_data.payload.as_str()).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        let tx_hash = Hash::from_hex(&event_data.tx_hash)?.into_array();
+
+        let payload = serde_json::from_str(event_data.payload.as_str())?;
 
         Ok(Self {
+            component_address,
             template_address,
             tx_hash,
             payload,
             topic: event_data.topic,
         })
+    }
+}
+
+impl TryFrom<EventData> for tari_engine_types::events::Event {
+    type Error = anyhow::Error;
+
+    fn try_from(event_data: EventData) -> Result<Self, Self::Error> {
+        let component_address = event_data
+            .component_address
+            .clone()
+            .map(|comp_addr| ComponentAddress::from_str(comp_addr.as_str()))
+            .transpose()?;
+        let template_address = Hash::from_hex(&event_data.template_address)?;
+        let tx_hash = Hash::from_hex(&event_data.tx_hash)?;
+        let payload = serde_json::from_str(event_data.payload.as_str())?;
+
+        Ok(Self::new_with_payload(
+            component_address,
+            template_address,
+            tx_hash,
+            event_data.topic,
+            payload,
+        ))
     }
 }
