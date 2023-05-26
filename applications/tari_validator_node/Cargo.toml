@@ -45,6 +45,7 @@ bytes = "1"
 chrono = "0.4.22"
 clap = { version = "3.2.5", features = ["env"] }
 config = "0.13.0"
+console-subscriber = "0.1.9"
 futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
 json5 = "0.2.2"

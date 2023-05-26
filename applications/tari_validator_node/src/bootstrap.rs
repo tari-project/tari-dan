@@ -68,7 +68,7 @@ use tari_template_lib::{
     prelude::ResourceType,
 };
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     comms,
@@ -121,7 +121,7 @@ pub async fn spawn_services(
     let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
 
     // Spawn messaging
-    let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
+    let (message_senders, message_receivers) = messaging::new_messaging_channel(1000000);
     let (outbound_messaging, join_handle) = messaging::spawn(
         node_identity.public_key().clone(),
         message_channel,
@@ -153,7 +153,7 @@ pub async fn spawn_services(
     shard_store.with_write_tx(|tx| bootstrap_state(tx))?;
 
     // Epoch manager
-    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
+    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity(), 10);
     let (epoch_manager, join_handle) = epoch_manager::spawn(
         global_db.clone(),
         shard_store.clone(),
@@ -192,6 +192,7 @@ pub async fn spawn_services(
     if !config.validator_node.no_fees {
         validator = validator.and_then(FeeTransactionValidator).boxed();
     }
+    let (tx_new_transaction, rx_new_transaction) = mpsc::channel(500);
     let (mempool, join_handle) = mempool::spawn(
         rx_new_transaction_message,
         outbound_messaging.clone(),
@@ -199,6 +200,7 @@ pub async fn spawn_services(
         node_identity.clone(),
         validator,
         dry_run_transaction_processor.clone(),
+        tx_new_transaction,
     );
     handles.push(join_handle);
 
@@ -222,7 +224,7 @@ pub async fn spawn_services(
         shard_store.clone(),
         outbound_messaging,
         epoch_manager.clone(),
-        mempool.clone(),
+        rx_new_transaction,
         payload_processor.clone(),
         rx_consensus_message,
         rx_recovery_message,

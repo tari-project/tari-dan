@@ -55,7 +55,7 @@ where
     TCommitteeProvider: CommitteeProvider,
     TCommitteeProvider::Addr: Display,
     TClientFactory: ValidatorNodeClientFactory<Addr = TCommitteeProvider::Addr>,
-    <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
+    // <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
 {
     pub fn new(store: TCommitteeProvider, client_provider: TClientFactory) -> Self {
         Self { store, client_provider }
@@ -75,7 +75,13 @@ where
         payload_id: PayloadId,
     ) -> Result<TransactionResultStatus, TransactionManagerError> {
         self.try_with_committee(payload_id.into_array().into(), |mut client| async move {
-            client.get_finalized_transaction_result(payload_id).await.optional()
+            match client.get_finalized_transaction_result(payload_id).await {
+                Ok(o) => Ok(Some(o)),
+                Err(err) => {
+                    // TODO: find this out properly
+                    Err(err)
+                },
+            }
         })
         .await?
         .ok_or_else(|| TransactionManagerError::NotFound {
@@ -106,13 +112,13 @@ where
     /// Fetches the committee members for the given shard and calls the given callback with each member until
     /// the callback returns a `Ok` result. If the callback returns an `Err` result, the next committee member is
     /// called.
-    async fn try_with_committee<F, T, E, TFut>(
-        &self,
+    async fn try_with_committee<'b: 'a, 'a, F, T, E, TFut>(
+        &'b self,
         shard_id: ShardId,
         mut callback: F,
     ) -> Result<T, TransactionManagerError>
     where
-        F: FnMut(TClientFactory::Client) -> TFut,
+        F: FnMut(TClientFactory::Client<'a>) -> TFut,
         TFut: Future<Output = Result<T, E>>,
         E: Display,
     {
@@ -130,7 +136,7 @@ where
         }
 
         for validator in committee.members {
-            let client = self.client_provider.create_client(&validator);
+            let client = self.client_provider.create_client(&validator).await;
             match callback(client).await {
                 Ok(ret) => {
                     return Ok(ret);

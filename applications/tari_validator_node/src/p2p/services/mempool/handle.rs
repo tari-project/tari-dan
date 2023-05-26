@@ -35,28 +35,20 @@ pub enum MempoolRequest {
 
 #[derive(Debug)]
 pub struct MempoolHandle {
-    rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
     tx_mempool_request: mpsc::Sender<MempoolRequest>,
 }
 
 impl Clone for MempoolHandle {
     fn clone(&self) -> Self {
         MempoolHandle {
-            rx_valid_transactions: self.rx_valid_transactions.resubscribe(),
             tx_mempool_request: self.tx_mempool_request.clone(),
         }
     }
 }
 
 impl MempoolHandle {
-    pub(super) fn new(
-        rx_valid_transactions: broadcast::Receiver<(Transaction, ShardId)>,
-        tx_mempool_request: mpsc::Sender<MempoolRequest>,
-    ) -> Self {
-        Self {
-            rx_valid_transactions,
-            tx_mempool_request,
-        }
+    pub(super) fn new(tx_mempool_request: mpsc::Sender<MempoolRequest>) -> Self {
+        Self { tx_mempool_request }
     }
 
     pub async fn submit_transaction(&self, transaction: Transaction) -> Result<(), MempoolError> {
@@ -72,10 +64,6 @@ impl MempoolHandle {
             .send(MempoolRequest::RemoveTransaction { transaction_hash })
             .await?;
         Ok(())
-    }
-
-    pub async fn next_valid_transaction(&mut self) -> Result<(Transaction, ShardId), RecvError> {
-        self.rx_valid_transactions.recv().await
     }
 
     pub async fn get_mempool_size(&self) -> Result<usize, MempoolError> {

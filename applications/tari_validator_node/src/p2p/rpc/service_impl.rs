@@ -49,7 +49,7 @@ use tari_validator_node_rpc::{
 };
 use tokio::{sync::mpsc, task};
 
-const LOG_TARGET: &str = "tari::dan::p2p::rpc";
+const LOG_TARGET: &str = "tari::validator_node::p2p::rpc";
 
 use crate::p2p::services::mempool::MempoolHandle;
 
@@ -85,7 +85,10 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             .map_err(|e| RpcStatus::bad_request(&format!("Malformed transaction: {}", e)))?;
 
         let transaction_hash = *transaction.hash();
-
+        debug!(
+            target: LOG_TARGET,
+            "Received instruction to submit transaction: {}", transaction_hash
+        );
         self.mempool
             .submit_transaction(transaction)
             .await
@@ -102,6 +105,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         &self,
         _request: Request<proto::rpc::GetPeersRequest>,
     ) -> Result<Streaming<proto::rpc::GetPeersResponse>, RpcStatus> {
+        debug!(target: LOG_TARGET, "Received request for peers");
         let (tx, rx) = mpsc::channel(100);
         let peer_provider = self.peer_provider.clone();
 
@@ -133,6 +137,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         &self,
         request: Request<VnStateSyncRequest>,
     ) -> Result<Streaming<VnStateSyncResponse>, RpcStatus> {
+        debug!(target: LOG_TARGET, "Received request for state sync");
         let (tx, rx) = mpsc::channel(100);
         let msg = request.into_message();
 
@@ -194,6 +199,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
     }
 
     async fn get_substate(&self, req: Request<GetSubstateRequest>) -> Result<Response<GetSubstateResponse>, RpcStatus> {
+        debug!(target: LOG_TARGET, "Received request for substate");
         let req = req.into_message();
         let mut tx = self
             .shard_state_store
@@ -246,6 +252,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         &self,
         req: Request<GetTransactionResultRequest>,
     ) -> Result<Response<GetTransactionResultResponse>, RpcStatus> {
+        debug!(target: LOG_TARGET, "Received request for transaction result");
         let req = req.into_message();
         let mut tx = self
             .shard_state_store

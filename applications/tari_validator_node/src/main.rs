@@ -63,6 +63,10 @@ async fn main_inner() -> Result<(), ExitError> {
     let config = ApplicationConfig::load_from(&cfg)?;
     println!("Starting validator node on network {}", config.network);
 
+    if cli.profile_with_tokio_console {
+        console_subscriber::init();
+    }
+
     // Remove the pid file if it exists
     let _file = fs::remove_file(config.common.base_path.join("pid"));
     let mut shutdown = Shutdown::new();

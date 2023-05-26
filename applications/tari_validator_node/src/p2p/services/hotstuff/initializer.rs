@@ -24,12 +24,14 @@ use std::sync::Arc;
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
+use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     workers::hotstuff_waiter::RecoveryMessage,
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_shutdown::ShutdownSignal;
+use tari_transaction::Transaction;
 use tokio::sync::mpsc;
 
 use super::hotstuff_service::HotstuffServiceSpawnOutput;
@@ -48,7 +50,7 @@ pub fn try_spawn(
     shard_store: SqliteShardStore,
     outbound: OutboundMessaging,
     epoch_manager: EpochManagerHandle,
-    mempool: MempoolHandle,
+    rx_new_mempool_transaction: mpsc::Receiver<(Transaction, ShardId)>,
     payload_processor: TariDanPayloadProcessor<TemplateManager>,
     rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
     rx_recovery_message: mpsc::Receiver<(CommsPublicKey, RecoveryMessage)>,
@@ -58,7 +60,7 @@ pub fn try_spawn(
     HotstuffService::spawn(
         node_identity,
         epoch_manager,
-        mempool,
+        rx_new_mempool_transaction,
         outbound,
         payload_processor,
         shard_store,

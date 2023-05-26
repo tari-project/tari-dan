@@ -76,7 +76,10 @@ impl<TShardStore: ShardStore> PeerSyncManagerService<TShardStore> {
                 continue;
             }
             info!(target: LOG_TARGET, "🌍 Connecting to sync peer: {}", sync_vn.public_key);
-            let mut sync_vn_client = self.validator_node_client_factory.create_client(&sync_vn.public_key);
+            let mut sync_vn_client = self
+                .validator_node_client_factory
+                .create_client(&sync_vn.public_key)
+                .await;
             let mut sync_vn_rpc_client = sync_vn_client
                 .client_connection()
                 .await

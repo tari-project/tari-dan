@@ -267,12 +267,12 @@ where
         let epoch = self.epoch_manager.current_epoch().await?;
 
         let payload_id = payload.to_id();
+        debug!(target: LOG_TARGET, "on_next_sync_view started: {}", payload_id);
         let involved_shards = payload.involved_shards();
         let local_shards = self
             .epoch_manager
             .filter_to_local_shards(epoch, &self.public_key, &involved_shards)
             .await?;
-        debug!(target: LOG_TARGET, "on_next_sync_view started: {}", payload_id);
 
         let committee = self.epoch_manager.get_committee(epoch, shard).await?;
         // Here the current_leader is always zero.
@@ -1889,6 +1889,7 @@ where
         loop {
             tokio::select! {
                 msg = self.rx_new.recv() => {
+                    debug!(target: LOG_TARGET, "Received new payload");
                     if let Some((payload, shard)) = msg {
                         if let Err(e) = self.on_next_sync_view(payload, shard).await {
                            error!(target: LOG_TARGET, "Error while processing new payload (on_next_sync_view): {}", e);
@@ -1896,11 +1897,12 @@ where
                         // self.on_beat(0, msg);
                         // TODO: Start timer for receiving proposal
                     } else {
-                        dbg!("All senders have dropped");
+                        error!(target: LOG_TARGET, "All senders have dropped");
                         break;
                     }
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
+                    debug!(target: LOG_TARGET, "Received new hotstuff message from {}", from);
                     if let Err(e) = self.on_new_hs_message(from, msg).await {
                         // self.publish_event(HotStuffEvent::Failed(e.to_string()));
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
@@ -1930,6 +1932,7 @@ where
                 }
             }
         }
+        debug!(target: LOG_TARGET, "HotStuff is shutting down");
         Ok(())
     }
 }
