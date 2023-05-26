@@ -17,7 +17,7 @@ tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
 tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
 tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", default-features = false, features = ["transactions"] }
-tari_crypto ={ version = "0.16" }
+tari_crypto = { version = "0.16" }
 tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
@@ -45,6 +45,7 @@ bytes = "1"
 chrono = "0.4.22"
 clap = { version = "3.2.5", features = ["env"] }
 config = "0.13.0"
+console-subscriber = "0.1.9"
 futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
 json5 = "0.2.2"
@@ -72,7 +73,7 @@ tower-layer = "0.3"
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_common", features = ["build"] }
 
 [dev-dependencies]
-cucumber = { version ="0.19.1", features = ["output-junit"] }
+cucumber = { version = "0.19.1", features = ["output-junit"] }
 tempfile = "3.3.0"
 multiaddr = "0.17.0"
 base64 = "0.21.0"

@@ -188,7 +188,7 @@ where
         version: u32,
     ) -> Result<SubstateResult, IndexerError> {
         // build a client with the VN
-        let mut client = self.validator_node_client_factory.create_client(vn_public_key);
+        let mut client = self.validator_node_client_factory.create_client(vn_public_key).await;
         let result = client
             .get_substate(address, version)
             .await

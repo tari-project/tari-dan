@@ -26,6 +26,7 @@ use std::{
 };
 
 use log::*;
+use mylog::mylog;
 use rand::seq::SliceRandom;
 use serde::Serialize;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
@@ -263,16 +264,17 @@ where
     }
 
     /// Step 1: A new payload has been received. The payload is persisted and all nodes send a NEWVIEW to the leader.
+    #[mylog]
     async fn on_next_sync_view(&mut self, payload: TPayload, shard: ShardId) -> Result<(), HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
 
         let payload_id = payload.to_id();
+        debug!(target: LOG_TARGET, "on_next_sync_view started: {}", payload_id);
         let involved_shards = payload.involved_shards();
         let local_shards = self
             .epoch_manager
             .filter_to_local_shards(epoch, &self.public_key, &involved_shards)
             .await?;
-        debug!(target: LOG_TARGET, "on_next_sync_view started: {}", payload_id);
 
         let committee = self.epoch_manager.get_committee(epoch, shard).await?;
         // Here the current_leader is always zero.
@@ -347,6 +349,7 @@ where
     /// Step 2: The leader receives a NewView from all committee members. The payload and QC are persisted.
     ///         Once $n - f$ NewViews have been received, a Proposal is sent to the replicas, see
     ///         [HotstuffWaiter::on_beat].
+    #[mylog]
     async fn leader_on_receive_new_view(
         &mut self,
         from: TAddr,
@@ -383,6 +386,7 @@ where
     #[allow(clippy::too_many_lines)]
     /// Step 4: Leader sends a Proposal to replica. A new leaf node is created that builds
     /// on the previous tree or else a genesis node is created and proposed.
+    #[mylog]
     async fn leader_on_propose(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         let high_qc;
         let payload;
@@ -463,6 +467,7 @@ where
     /// Step 5: A replica receives a Proposal from the leader. The replicas including the leader, validate the proposal
     /// and, once proposals for all shards have been received, send votes for all shards.
     #[allow(clippy::too_many_lines)]
+    #[mylog]
     async fn on_receive_proposal(
         &mut self,
         from: TAddr,
@@ -601,6 +606,7 @@ where
     }
 
     // Pacemaker triggered for the local leader. Replica sends a newview.
+    #[mylog]
     async fn pacemaker_trigger_local_leader_fail(
         &mut self,
         epoch: Epoch,
@@ -649,6 +655,7 @@ where
         Ok(())
     }
 
+    #[mylog]
     async fn pacemaker_trigger_foreign_leader_fail(
         &self,
         epoch: Epoch,
@@ -700,6 +707,7 @@ where
 
     // Sender asks if there is a newer local state, that he is not in possession of. This means that Sender didn't
     // receive a response from our local leader. In this case, we might be in the presence of a faulty leader
+    #[mylog]
     async fn on_receive_missing_proposal(
         &self,
         from: TAddr,
@@ -779,6 +787,7 @@ where
 
     // We are running a pacemaker for the proposal. But the other committee is still having an election. Let's postpone
     // the pacemaker.
+    #[mylog]
     async fn on_receive_election_in_progress(
         &self,
         _from: TAddr,
@@ -801,6 +810,7 @@ where
         Ok(())
     }
 
+    #[mylog]
     async fn on_receive_recovery_message(&self, from: TAddr, msg: RecoveryMessage) -> Result<(), HotStuffError> {
         match msg {
             RecoveryMessage::MissingProposal(epoch, shard_id, payload_id, last_height) => {
@@ -814,6 +824,7 @@ where
         }
     }
 
+    #[mylog]
     async fn on_pacemaker_trigger(&mut self, message: PacemakerEvents) -> Result<(), HotStuffError> {
         match message {
             PacemakerEvents::LocalCommittee(epoch, shard_id, payload_id) => {
@@ -829,6 +840,7 @@ where
 
     /// Checks that all pledges have been resolved (completed/abandoned). If so, atomically commit the changeset for the
     /// local shards
+    #[mylog]
     async fn finalize_payload(
         &self,
         involved_shards: &[ShardId],
@@ -903,6 +915,7 @@ where
         Ok(())
     }
 
+    #[mylog]
     fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), ProposalValidationError> {
         let payload_height = node.justify().payload_height() + NodeHeight(1);
         if !node.is_genesis() && node.payload_height() != payload_height {
@@ -954,6 +967,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
+    #[mylog]
     async fn decide_and_vote_on_all_nodes(
         &self,
         payload: TPayload,
@@ -1088,6 +1102,7 @@ where
 
     /// Checks for other shard rejections, if at least one is encountered and we were voting ACCEPT, we change our
     /// payload result to reject. We return true if all proposals are rejections, otherwise false
+    #[mylog]
     fn check_for_other_shard_rejections(
         &self,
         payload_id: &PayloadId,
@@ -1139,6 +1154,7 @@ where
     }
 
     #[allow(clippy::too_many_lines)]
+    #[mylog]
     fn decide_what_to_vote(
         &self,
         node: &HotStuffTreeNode<TAddr, TPayload>,
@@ -1287,6 +1303,7 @@ where
 
     /// Checks that all shards have been pledged correctly, if not, will return the list of shards that
     /// were not pledged
+    #[mylog]
     fn validate_pledges(shard_pledges: &[ShardPledge], diff: &SubstateDiff) -> Result<(), HotStuffError> {
         let mut missing_pledges = vec![];
 
@@ -1353,6 +1370,7 @@ where
 
     /// Step 6: The leader receives votes from the local shard, and once it has enough ($n - f$) votes, it commits a
     /// high QC and sends the next round of proposals.
+    #[mylog]
     async fn leader_on_receive_vote(&mut self, from: TAddr, msg: VoteMessage) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
@@ -1442,6 +1460,7 @@ where
         Ok(())
     }
 
+    #[mylog]
     fn get_newview_count_for(&self, shard: ShardId, payload_id: PayloadId) -> usize {
         self.newview_message_counts
             .get(&(shard, payload_id))
@@ -1449,6 +1468,7 @@ where
             .unwrap_or(0)
     }
 
+    #[mylog]
     fn is_leader(
         &self,
         payload: PayloadId,
@@ -1467,6 +1487,7 @@ where
         ))
     }
 
+    #[mylog]
     async fn validate_from_committee(&self, from: &TAddr, epoch: Epoch, shard: ShardId) -> Result<(), HotStuffError> {
         if self.epoch_manager.get_committee(epoch, shard).await?.contains(from) {
             Ok(())
@@ -1475,6 +1496,7 @@ where
         }
     }
 
+    #[mylog]
     async fn validate_qc(&self, qc: &QuorumCertificate<TAddr>, min_signers: usize) -> Result<(), HotStuffError> {
         // extract all the pairs of signer-signature present in the QC
         let signer_signatures = Self::extract_signer_signatures_from_qc(qc);
@@ -1536,6 +1558,7 @@ where
         Ok(())
     }
 
+    #[mylog]
     fn validate_vote(&self, qc: &QuorumCertificate<TAddr>, public_key: &PublicKey, signature: &Signature) -> bool {
         let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().clone());
         let challenge = vote.construct_challenge();
@@ -1543,6 +1566,7 @@ where
             .verify_for_public_key(public_key, signature, &*challenge)
     }
 
+    #[mylog]
     fn extract_signer_signatures_from_qc(qc: &QuorumCertificate<TAddr>) -> Vec<(PublicKey, Signature)> {
         qc.validators_metadata()
             .iter()
@@ -1551,6 +1575,7 @@ where
     }
 
     /// See section 6, algorithm 4 in https://arxiv.org/pdf/1803.05069.pdf
+    #[mylog]
     fn update_nodes(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), HotStuffError> {
         let mut tx = self.shard_store.create_write_tx()?;
         // commit_node is at PRE-COMMIT phase
@@ -1617,6 +1642,7 @@ where
         Ok(())
     }
 
+    #[mylog]
     fn update_high_qc(
         &self,
         tx: &mut TShardStore::WriteTransaction<'_>,
@@ -1652,6 +1678,7 @@ where
     }
 
     /// Commits the changeset and node including all parent nodes if not already done so.
+    #[mylog]
     fn on_commit(
         &self,
         tx: &mut TShardStore::WriteTransaction<'_>,
@@ -1701,6 +1728,7 @@ where
         Ok(())
     }
 
+    #[mylog]
     fn execute(
         &self,
         payload: TPayload,
@@ -1781,6 +1809,7 @@ where
         Ok(exec_result)
     }
 
+    #[mylog]
     async fn get_leader(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<TAddr, HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
         let committee = self.epoch_manager.get_committee(epoch, node.shard()).await?;
@@ -1796,6 +1825,7 @@ where
         Ok(leader.clone())
     }
 
+    #[mylog]
     fn create_vote(
         &self,
         node_hash: TreeNodeHash,
@@ -1828,6 +1858,7 @@ where
 
     /// A pacemaker beat has been triggered for a payload. If the leader has received enough NewViews, a Proposal is
     /// sent to replicas.
+    #[mylog]
     async fn on_beat(&mut self, shard: ShardId, payload_id: PayloadId) -> Result<(), HotStuffError> {
         // TODO: the leader is only known after the leaf is determined
         // TODO: Review if this is correct. The epoch should be the same for the whole 3-chain
@@ -1857,6 +1888,7 @@ where
         Ok(())
     }
 
+    #[mylog]
     async fn on_new_hs_message(
         &mut self,
         from: TAddr,
@@ -1881,14 +1913,17 @@ where
         Ok(())
     }
 
+    #[mylog]
     fn publish_event(&self, event: HotStuffEvent<TAddr>) {
         let _ignore = self.tx_events.send(event);
     }
 
+    #[mylog]
     pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), HotStuffError> {
         loop {
             tokio::select! {
                 msg = self.rx_new.recv() => {
+                    debug!(target: LOG_TARGET, "Received new payload");
                     if let Some((payload, shard)) = msg {
                         if let Err(e) = self.on_next_sync_view(payload, shard).await {
                            error!(target: LOG_TARGET, "Error while processing new payload (on_next_sync_view): {}", e);
@@ -1896,11 +1931,12 @@ where
                         // self.on_beat(0, msg);
                         // TODO: Start timer for receiving proposal
                     } else {
-                        dbg!("All senders have dropped");
+                        error!(target: LOG_TARGET, "All senders have dropped");
                         break;
                     }
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
+                    debug!(target: LOG_TARGET, "Received new hotstuff message from {}", from);
                     if let Err(e) = self.on_new_hs_message(from, msg).await {
                         // self.publish_event(HotStuffEvent::Failed(e.to_string()));
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
@@ -1930,10 +1966,12 @@ where
                 }
             }
         }
+        debug!(target: LOG_TARGET, "HotStuff is shutting down");
         Ok(())
     }
 }
 
+#[mylog]
 fn extract_changes_for_shards(
     shard_ids: &[ShardId],
     payload_id: PayloadId,

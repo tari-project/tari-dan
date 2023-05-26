@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::convert::{TryFrom, TryInto};
+use std::{
+    convert::{TryFrom, TryInto},
+    ops::{Deref, DerefMut},
+};
 
 use anyhow::anyhow;
 use async_trait::async_trait;
@@ -24,6 +27,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
 };
 use tari_transaction::Transaction;
+use tokio::sync::{Semaphore, SemaphorePermit};
 use tokio_stream::StreamExt;
 
 use crate::{
@@ -37,11 +41,13 @@ use crate::{
     rpc_service,
 };
 
+#[async_trait]
 pub trait ValidatorNodeClientFactory: Send + Sync {
     type Addr: NodeAddressable;
-    type Client: ValidatorNodeRpcClient<Addr = Self::Addr>;
+    type Client<'a>: ValidatorNodeRpcClient<Addr = Self::Addr>
+    where Self: 'a;
 
-    fn create_client(&self, address: &Self::Addr) -> Self::Client;
+    async fn create_client<'b: 'a, 'a>(&'b self, address: &Self::Addr) -> Self::Client<'a>;
 }
 
 #[async_trait]
@@ -226,26 +232,102 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TariCommsValidatorNodeClientFactory {
     connectivity: ConnectivityRequester,
+    limit: Semaphore,
+    max_permits: usize,
 }
 
-impl TariCommsValidatorNodeClientFactory {
-    pub fn new(connectivity: ConnectivityRequester) -> Self {
-        Self { connectivity }
+impl Clone for TariCommsValidatorNodeClientFactory {
+    fn clone(&self) -> Self {
+        Self {
+            connectivity: self.connectivity.clone(),
+            limit: Semaphore::new(self.max_permits),
+            max_permits: self.max_permits,
+        }
     }
 }
 
+impl TariCommsValidatorNodeClientFactory {
+    pub fn new(connectivity: ConnectivityRequester, max_connections: usize) -> Self {
+        Self {
+            connectivity,
+            limit: Semaphore::new(max_connections),
+            max_permits: max_connections,
+        }
+    }
+}
+
+pub struct SemaphoreWrappedClient<'a> {
+    client: TariCommsValidatorNodeRpcClient,
+    permit: SemaphorePermit<'a>,
+}
+
+impl<'a> Deref for SemaphoreWrappedClient<'a> {
+    type Target = TariCommsValidatorNodeRpcClient;
+
+    fn deref(&self) -> &Self::Target {
+        &self.client
+    }
+}
+
+impl<'a> DerefMut for SemaphoreWrappedClient<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.client
+    }
+}
+
+// impl Deref for SemaphoreWrappedClient {
+//     type Target = TariCommsValidatorNodeRpcClient;
+//
+//     fn deref(&self) -> &Self::Target {
+//         &self.client
+//     }
+// }
+
+#[async_trait]
+impl<'a> ValidatorNodeRpcClient for SemaphoreWrappedClient<'a> {
+    type Addr = CommsPublicKey;
+    type Error = ValidatorNodeClientError;
+
+    async fn submit_transaction(&mut self, transaction: Transaction) -> Result<PayloadId, Self::Error> {
+        self.client.submit_transaction(transaction).await.map_err(Into::into)
+    }
+
+    async fn get_finalized_transaction_result(
+        &mut self,
+        payload_id: PayloadId,
+    ) -> Result<TransactionResultStatus, Self::Error> {
+        self.client
+            .get_finalized_transaction_result(payload_id)
+            .await
+            .map_err(Into::into)
+    }
+
+    async fn get_peers(&mut self) -> Result<Vec<DanPeer<Self::Addr>>, Self::Error> {
+        self.client.get_peers().await.map_err(Into::into)
+    }
+
+    async fn get_substate(&mut self, address: &SubstateAddress, version: u32) -> Result<SubstateResult, Self::Error> {
+        self.client.get_substate(address, version).await.map_err(Into::into)
+    }
+}
+
+#[async_trait]
 impl ValidatorNodeClientFactory for TariCommsValidatorNodeClientFactory {
     type Addr = PublicKey;
-    type Client = TariCommsValidatorNodeRpcClient;
+    type Client<'a> = SemaphoreWrappedClient<'a> where Self:'a;
 
-    fn create_client(&self, address: &Self::Addr) -> Self::Client {
-        TariCommsValidatorNodeRpcClient {
-            connectivity: self.connectivity.clone(),
-            address: address.clone(),
-            connection: None,
+    async fn create_client<'b: 'a, 'a>(&'b self, address: &Self::Addr) -> Self::Client<'a> {
+        let permit = self.limit.acquire().await.expect("TODO: Handle this error");
+        SemaphoreWrappedClient {
+            permit,
+            client: TariCommsValidatorNodeRpcClient {
+                connectivity: self.connectivity.clone(),
+                address: address.clone(),
+                connection: None,
+            },
         }
     }
 }

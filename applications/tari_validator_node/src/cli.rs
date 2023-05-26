@@ -33,8 +33,8 @@ pub struct Cli {
     #[clap(flatten)]
     pub common: CommonCliArgs,
     /// Enable tracing
-    #[clap(long, aliases = &["tracing", "enable-tracing"])]
-    pub tracing_enabled: bool,
+    #[clap(long, aliases = &["tracing", "enable-tracing", "profile"])]
+    pub profile_with_tokio_console: bool,
     /// Bind address for JSON-rpc server
     #[clap(long, alias = "rpc-address")]
     pub json_rpc_address: Option<SocketAddr>,

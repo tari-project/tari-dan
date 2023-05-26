@@ -1010,14 +1010,13 @@ async fn successful_transaction(world: &mut TariWorld) {
             let get_transaction_res = client
                 .get_transaction_result(get_transaction_req)
                 .await
-                .expect(format!("Failed to get transaction with hash {} for vn = {}", hash, vn_ps.name).as_str());
-            let finalized_tx = get_transaction_res.result.expect(
-                format!(
+                .unwrap_or_else(|_| panic!("Failed to get transaction with hash {} for vn = {}", hash, vn_ps.name));
+            let finalized_tx = get_transaction_res.result.unwrap_or_else(|| {
+                panic!(
                     "Transaction result was rejected for tx hash {} and vn = {}",
                     hash, vn_ps.name
                 )
-                .as_str(),
-            );
+            });
             finalized_tx.expect_success();
         }
     }

@@ -53,7 +53,7 @@ use tokio::{
 };
 
 use crate::{
-    p2p::services::{mempool::MempoolHandle, messaging::OutboundMessaging, template_manager::TemplateManager},
+    p2p::services::{messaging::OutboundMessaging, template_manager::TemplateManager},
     payload_processor::TariDanPayloadProcessor,
 };
 
@@ -66,7 +66,7 @@ pub(crate) type HotstuffServiceSpawnOutput = (
 
 pub struct HotstuffService {
     node_public_key: CommsPublicKey,
-    mempool: MempoolHandle,
+    new_mempool_tx: Receiver<(Transaction, ShardId)>,
     outbound: OutboundMessaging,
     /// New incoming transaction from mempool
     tx_new: Sender<(TariDanPayload, ShardId)>,
@@ -87,7 +87,7 @@ impl HotstuffService {
     pub fn spawn(
         node_identity: Arc<NodeIdentity>,
         epoch_manager: EpochManagerHandle,
-        mempool: MempoolHandle,
+        new_mempool_tx: Receiver<(Transaction, ShardId)>,
         outbound: OutboundMessaging,
         payload_processor: TariDanPayloadProcessor<TemplateManager>,
         shard_store_factory: SqliteShardStore,
@@ -96,14 +96,13 @@ impl HotstuffService {
         rx_vote_messages: Receiver<(CommsPublicKey, VoteMessage)>,
         shutdown: ShutdownSignal,
     ) -> HotstuffServiceSpawnOutput {
-        dbg!("Hotstuff starting");
-        let (tx_new, rx_new) = channel(100);
-        let (tx_leader, rx_leader) = channel(100);
-        let (tx_broadcast, rx_broadcast) = channel(100);
-        let (tx_recovery, rx_recovery) = channel(100);
-        let (tx_recovery_broadcast, rx_recovery_broadcast) = channel(100);
-        let (tx_vote_message, rx_vote_message) = channel(100);
-        let (tx_events, _) = broadcast::channel(100);
+        let (tx_new, rx_new) = channel(100000);
+        let (tx_leader, rx_leader) = channel(100000);
+        let (tx_broadcast, rx_broadcast) = channel(100000);
+        let (tx_recovery, rx_recovery) = channel(100000);
+        let (tx_recovery_broadcast, rx_recovery_broadcast) = channel(100000);
+        let (tx_vote_message, rx_vote_message) = channel(100000);
+        let (tx_events, _) = broadcast::channel(100000);
 
         let leader_strategy = PayloadSpecificLeaderStrategy {};
         let consensus_constants = ConsensusConstants::devnet();
@@ -138,7 +137,7 @@ impl HotstuffService {
         let service_join_handle = tokio::spawn(
             Self {
                 node_public_key,
-                mempool,
+                new_mempool_tx,
                 outbound,
                 tx_new,
                 rx_leader,
@@ -232,11 +231,9 @@ impl HotstuffService {
         loop {
             tokio::select! {
                 // Inbound
-                res = self.mempool.next_valid_transaction() => {
-                    if let Some((tx, shard_id)) = log(res, "new valid transaction") {
+                Some((tx, shard_id)) = self.new_mempool_tx.recv() => {
                         debug!(target: LOG_TARGET, "Received new transaction {} for shard {}", tx.hash(), shard_id);
                         log(self.handle_new_valid_transaction(tx, shard_id).await, "new valid transaction");
-                    }
                 }
                 // Outbound
                 Some((to, msg)) = self.rx_leader.recv() => {

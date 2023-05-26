@@ -83,7 +83,7 @@ pub async fn spawn_services(
     let substate_store = SqliteSubstateStore::try_create(config.indexer.state_db_path())?;
 
     // Epoch manager
-    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
+    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity(), 50);
     let epoch_manager = epoch_manager::spawn(
         global_db.clone(),
         base_node_client.clone(),

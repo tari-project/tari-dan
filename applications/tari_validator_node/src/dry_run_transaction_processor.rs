@@ -245,7 +245,7 @@ impl DryRunTransactionProcessor {
             }
 
             // build a client with the VN
-            let mut sync_vn_client = self.validator_node_client_factory.create_client(&vn_public_key);
+            let mut sync_vn_client = self.validator_node_client_factory.create_client(&vn_public_key).await;
             let mut sync_vn_rpc_client = match sync_vn_client.client_connection().await {
                 Ok(rpc_client) => rpc_client,
                 Err(e) => {

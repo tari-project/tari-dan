@@ -36,7 +36,7 @@ use tari_dan_core::{
 };
 use tari_template_lib::Hash;
 use tari_transaction::Transaction;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot};
 
 use super::MempoolError;
 use crate::{
@@ -55,11 +55,11 @@ pub struct MempoolService<V> {
     new_transactions: mpsc::Receiver<Transaction>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     outbound: OutboundMessaging,
-    tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
     validator: V,
     dry_run_processor: DryRunTransactionProcessor,
+    tx_new_valid_transaction: mpsc::Sender<(Transaction, ShardId)>,
 }
 
 impl<V> MempoolService<V>
@@ -69,22 +69,22 @@ where V: Validator<Transaction, Error = MempoolError>
         new_transactions: mpsc::Receiver<Transaction>,
         mempool_requests: mpsc::Receiver<MempoolRequest>,
         outbound: OutboundMessaging,
-        tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
         epoch_manager: EpochManagerHandle,
         node_identity: Arc<NodeIdentity>,
         validator: V,
         dry_run_processor: DryRunTransactionProcessor,
+        tx_new_valid_transaction: mpsc::Sender<(Transaction, ShardId)>,
     ) -> Self {
         Self {
             transactions: Default::default(),
             new_transactions,
             mempool_requests,
             outbound,
-            tx_valid_transactions,
             epoch_manager,
             node_identity,
             validator,
             dry_run_processor,
+            tx_new_valid_transaction,
         }
     }
 
@@ -194,7 +194,11 @@ where V: Validator<Transaction, Error = MempoolError>
                 transaction.hash(),
                 shard_id
             );
-            if let Err(err) = self.tx_valid_transactions.send((transaction.clone(), shard_id)) {
+            if let Err(err) = self
+                .tx_new_valid_transaction
+                .send((transaction.clone(), shard_id))
+                .await
+            {
                 error!(
                     target: LOG_TARGET,
                     "Failed to send valid transaction to shard: {}: {}", shard_id, err

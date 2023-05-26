@@ -21,6 +21,7 @@ tari_dan_engine = { path = "../engine" }
 tari_dan_storage = { path = "../storage" }
 tari_engine_types = { path = "../engine_types" }
 tari_transaction = { path = "../transaction" }
+mylog = { path = "../mylog" }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"

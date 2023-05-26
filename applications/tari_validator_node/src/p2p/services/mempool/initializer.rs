@@ -24,12 +24,9 @@ use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
 use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
+use tari_dan_common_types::ShardId;
 use tari_transaction::Transaction;
-use tokio::{
-    sync::{broadcast, mpsc},
-    task,
-    task::JoinHandle,
-};
+use tokio::{sync::mpsc, task, task::JoinHandle};
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
@@ -46,24 +43,24 @@ pub fn spawn<TValidator>(
     node_identity: Arc<NodeIdentity>,
     validator: TValidator,
     dry_run_processor: DryRunTransactionProcessor,
+    tx_new_valid_transaction: mpsc::Sender<(Transaction, ShardId)>,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
     TValidator: Validator<Transaction, Error = MempoolError> + Send + Sync + 'static,
 {
-    let (tx_valid_transactions, rx_valid_transactions) = broadcast::channel(100);
     let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
 
     let mempool = MempoolService::new(
         new_transactions,
         rx_mempool_request,
         outbound,
-        tx_valid_transactions,
         epoch_manager,
         node_identity,
         validator,
         dry_run_processor,
+        tx_new_valid_transaction,
     );
-    let handle = MempoolHandle::new(rx_valid_transactions, tx_mempool_request);
+    let handle = MempoolHandle::new(tx_mempool_request);
 
     let join_handle = task::spawn(mempool.run());
 

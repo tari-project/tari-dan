@@ -869,11 +869,16 @@ pub async fn handle_transfer(
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let account = get_account_or_default(req.account, &sdk.accounts_api())?;
-    context
-        .account_monitor()
-        .refresh_account(account.address.clone())
-        .await?;
-
+    loop {
+        if context
+            .account_monitor()
+            .refresh_account(account.address.clone())
+            .await
+            .is_ok()
+        {
+            break;
+        }
+    }
     let account_secret_key = sdk
         .key_manager_api()
         .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
@@ -903,10 +908,10 @@ pub async fn handle_transfer(
     inputs.push(src_vault_substate.address);
 
     // add the input for the resource address to be transfered
-    let resource_substate = sdk
-        .substate_api()
-        .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
-        .await?;
+    // let resource_substate = sdk
+    //     .substate_api()
+    //     .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
+    //     .await?;
     // inputs.push(resource_substate.address);
 
     // get destination account information
