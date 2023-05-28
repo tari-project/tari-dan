@@ -254,8 +254,8 @@ where
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up {
                         created_by_tx: tx_hash, ..
-                    } |
-                    SubstateResult::Down {
+                    }
+                    | SubstateResult::Down {
                         created_by_tx: tx_hash, ..
                     } => {
                         transaction_hash = Some(tx_hash);
