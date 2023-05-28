@@ -21,7 +21,9 @@ fn basic_emit_event() {
         .expect("Failed to emit test event");
     assert!(result.finalize.is_accept());
     assert_eq!(result.finalize.events.len(), 1);
-    assert_eq!(result.finalize.events[0].topic, "Hello world !");
+    assert_eq!(result.finalize.events[0].topic(), "Hello world !");
+    assert_eq!(result.finalize.events[0].template_address(), event_emitter_template);
+    assert_eq!(result.finalize.events[0].component_address(), None);
     assert_eq!(
         result.finalize.events[0].get_payload("my").unwrap(),
         "event".to_string()

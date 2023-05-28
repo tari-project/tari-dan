@@ -23,9 +23,17 @@
 use std::fmt::Display;
 
 use log::*;
+use rand::{prelude::*, rngs::OsRng};
 use tari_dan_common_types::ShardId;
-use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::{models::NonFungibleIndexAddress, prelude::ResourceAddress};
+use tari_engine_types::{
+    events::Event,
+    substate::{SubstateAddress, SubstateValue},
+};
+use tari_template_lib::{
+    models::NonFungibleIndexAddress,
+    prelude::{ComponentAddress, ResourceAddress},
+    Hash,
+};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
 use crate::{committee_provider::CommitteeProvider, error::IndexerError, NonFungibleSubstate};
@@ -149,20 +157,29 @@ where
         version: u32,
     ) -> Result<SubstateResult, IndexerError> {
         let shard = ShardId::from_address(substate_address, version);
-        let committee = self
+        let mut committee = self
             .committee_provider
             .get_committee(shard)
             .await
             .map_err(|e| IndexerError::CommitteeProviderError(e.to_string()))?;
 
-        // TODO: Randomize order of members, otherwise the first one will have much higher traffic.
+        committee.members.shuffle(&mut OsRng);
+        let f = (committee.members.len() - 1) / 3;
+        let mut num_down_substate_results = 0;
         for vn_public_key in &committee.members {
             match self
                 .get_substate_from_vn(vn_public_key, substate_address, version)
                 .await
             {
-                // TODO: For SubstateResult::DoesNotExist, we should check that all other validators concur
-                Ok(substate_result) => return Ok(substate_result),
+                Ok(substate_result) => match substate_result {
+                    SubstateResult::Up { .. } | SubstateResult::Down { .. } => return Ok(substate_result),
+                    SubstateResult::DoesNotExist => {
+                        if num_down_substate_results >= f + 1 {
+                            return Ok(substate_result);
+                        }
+                        num_down_substate_results += 1;
+                    },
+                },
                 Err(e) => {
                     // We ignore a single VN error and keep querying the rest of the committee
                     error!(
@@ -181,6 +198,7 @@ where
         Ok(SubstateResult::DoesNotExist)
     }
 
+    /// Gets a substate directly from querying a VN
     async fn get_substate_from_vn(
         &self,
         vn_public_key: &TCommitteeProvider::Addr,
@@ -194,5 +212,140 @@ where
             .await
             .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
         Ok(result)
+    }
+
+    /// Queries the network to obtain events emitted in a single transaction
+    pub async fn get_events_for_transaction(&self, transaction_hash: Hash) -> Result<Vec<Event>, IndexerError> {
+        let substate_address = SubstateAddress::TransactionReceipt(transaction_hash.into());
+        let substate = self.get_specific_substate_from_committee(&substate_address, 0).await?;
+        let substate_value = if let SubstateResult::Up { substate, .. } = substate {
+            substate.substate_value().clone()
+        } else {
+            return Err(IndexerError::InvalidSubstateState);
+        };
+        let events = if let SubstateValue::TransactionReceipt(tx_receipt) = substate_value {
+            tx_receipt.events
+        } else {
+            return Err(IndexerError::InvalidSubstateValue);
+        };
+
+        Ok(events)
+    }
+
+    /// Queries the network to obtain a transaction hash from a given substate address and version
+    async fn get_transaction_hash_from_substate_address(
+        &self,
+        substate_address: &SubstateAddress,
+        version: u32,
+    ) -> Result<Hash, IndexerError> {
+        let shard_id = ShardId::from_address(substate_address, version);
+
+        let mut committee = self
+            .committee_provider
+            .get_committee(shard_id)
+            .await
+            .map_err(|e| IndexerError::CommitteeProviderError(e.to_string()))?;
+
+        committee.members.shuffle(&mut OsRng);
+
+        let mut transaction_hash = None;
+        for member in &committee.members {
+            match self.get_substate_from_vn(member, substate_address, version).await {
+                Ok(substate_result) => match substate_result {
+                    SubstateResult::Up {
+                        created_by_tx: tx_hash, ..
+                    } |
+                    SubstateResult::Down {
+                        created_by_tx: tx_hash, ..
+                    } => {
+                        transaction_hash = Some(tx_hash);
+                        break;
+                    },
+                    SubstateResult::DoesNotExist => {
+                        warn!(
+                            target: LOG_TARGET,
+                            "validator node: {} does not have state for component_address = {} and version = {}",
+                            member,
+                            substate_address.as_component_address().unwrap(),
+                            version
+                        );
+                        continue;
+                    },
+                },
+                Err(e) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Could not find substate result for component_address = {} and version = {}, with error = {}",
+                        substate_address.as_component_address().unwrap(),
+                        version,
+                        e
+                    );
+                    continue;
+                },
+            }
+        }
+
+        if let Some(tx_hash) = transaction_hash {
+            Hash::try_from(tx_hash.as_slice()).map_err(|e| IndexerError::FailedToParseTransactionHash(e.to_string()))
+        } else {
+            // no transaction was found in the network for this component address and version
+            Err(IndexerError::NotFoundTransaction(substate_address.clone(), version))
+        }
+    }
+
+    /// Queries the network to obtain all the events associated with a component and
+    /// a specific version.
+    pub async fn get_events_for_component_and_version(
+        &self,
+        component_address: ComponentAddress,
+        version: u32,
+    ) -> Result<Vec<Event>, IndexerError> {
+        let substate_address = SubstateAddress::Component(component_address);
+
+        let tx_hash = self
+            .get_transaction_hash_from_substate_address(&substate_address, version)
+            .await?;
+
+        match self.get_events_for_transaction(tx_hash).await {
+            Ok(tx_events) => {
+                // we need to filter all transaction events, by those corresponding
+                // to the current component address
+                let component_tx_events = tx_events
+                    .into_iter()
+                    .filter(|e| e.component_address().is_some() && e.component_address().unwrap() == component_address)
+                    .collect::<Vec<Event>>();
+                Ok(component_tx_events)
+            },
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Queries the network to obtain all the events associated with a component,
+    /// starting at an optional version (if `None`, starts from `0`).
+    pub async fn get_events_for_component(
+        &self,
+        component_address: ComponentAddress,
+        version: Option<u32>,
+    ) -> Result<Vec<(u32, Event)>, IndexerError> {
+        let mut events = vec![];
+        let mut version: u32 = version.unwrap_or_default();
+
+        loop {
+            match self
+                .get_events_for_component_and_version(component_address, version)
+                .await
+            {
+                Ok(component_tx_events) => events.extend(
+                    component_tx_events
+                        .into_iter()
+                        .map(|e| (version, e))
+                        .collect::<Vec<_>>(),
+                ),
+                Err(IndexerError::NotFoundTransaction(..)) => return Ok(events),
+                Err(e) => return Err(e),
+            }
+
+            version += 1;
+        }
     }
 }

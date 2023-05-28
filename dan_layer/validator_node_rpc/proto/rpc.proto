@@ -116,9 +116,10 @@ message GetSubstateResponse {
   // Encoded Substate
   bytes substate = 1;
   uint32 version = 2;
-  bytes transaction_hash = 3;
+  bytes created_transaction_hash = 3;
   SubstateStatus status = 4;
   repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 5;
+  bytes destroyed_transaction_hash = 6;
 }
 
 enum SubstateStatus {

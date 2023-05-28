@@ -91,3 +91,46 @@ pub mod vec {
         Ok(values)
     }
 }
+
+pub mod option {
+    use super::*;
+
+    pub fn serialize<S: Serializer, T: AsRef<[u8]>>(v: &Option<T>, s: S) -> Result<S::Ok, S::Error> {
+        if s.is_human_readable() {
+            match v {
+                Some(v) => {
+                    let st = to_hex(v.as_ref());
+                    s.serialize_some(&st)
+                },
+                None => s.serialize_none(),
+            }
+        } else {
+            match v {
+                Some(v) => s.serialize_some(v.as_ref()),
+                None => s.serialize_none(),
+            }
+        }
+    }
+
+    pub fn deserialize<'de, D, T>(d: D) -> Result<Option<T>, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: TryFrom<Vec<u8>>,
+    {
+        let bytes = if d.is_human_readable() {
+            let hex = <Option<String> as Deserialize>::deserialize(d)?;
+            hex.as_ref()
+                .map(|s| from_hex(s))
+                .transpose()
+                .map_err(serde::de::Error::custom)?
+        } else {
+            <Option<Vec<u8>> as Deserialize>::deserialize(d)?
+        };
+
+        let value = bytes
+            .map(T::try_from)
+            .transpose()
+            .map_err(|_| serde::de::Error::custom("Failed to convert bytes to T"))?;
+        Ok(value)
+    }
+}

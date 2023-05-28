@@ -51,7 +51,6 @@ impl TariEngine {
 
     pub fn create_component<T: Serialize>(
         &self,
-        module_name: String,
         initial_state: T,
         access_rules: AccessRules,
         component_id: Option<Hash>,
@@ -62,7 +61,6 @@ impl TariEngine {
             component_ref: ComponentRef::Component,
             action: ComponentAction::Create,
             args: invoke_args![CreateComponentArg {
-                module_name,
                 encoded_state,
                 access_rules,
                 component_id,
