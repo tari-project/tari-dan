@@ -38,6 +38,7 @@ use tari_template_lib::{
     models::Amount,
     prelude::{NonFungibleId, ResourceAddress},
 };
+use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::command::transaction::CliArg;
 use tari_wallet_daemon_client::{
@@ -157,17 +158,11 @@ pub async fn transfer_confidential(
 
     let source_account_addr = world
         .get_account_component_address(&source_account_name)
-        .map(|addr| tari_dan_wallet_sdk::models::VersionedSubstateAddress {
-            address: addr.address.clone(),
-            version: addr.version,
-        })
+        .map(|addr| SubstateRequirement::new(addr.address.clone(), Some(addr.version)))
         .unwrap_or_else(|| panic!("Source account {} not found", source_account_name));
     let dest_account_addr = world
         .get_account_component_address(&dest_account_name)
-        .map(|addr| tari_dan_wallet_sdk::models::VersionedSubstateAddress {
-            address: addr.address.clone(),
-            version: addr.version,
-        })
+        .map(|addr| SubstateRequirement::new(addr.address.clone(), Some(addr.version)))
         .unwrap_or_else(|| panic!("Destination account {} not found", dest_account_name));
 
     let source_account_name = ComponentAddressOrName::Name(source_account_name);
@@ -275,9 +270,10 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
     let resp = client.create_account(request).await.unwrap();
 
     // TODO: store the secret key in the world, but we don't have a need for it at the moment
-    world
-        .account_keys
-        .insert(account_name.clone(), (RistrettoSecretKey::default(), resp.public_key.clone()));
+    world.account_keys.insert(
+        account_name.clone(),
+        (RistrettoSecretKey::default(), resp.public_key.clone()),
+    );
 
     let wait_req = TransactionWaitResultRequest {
         hash: FixedHash::from(resp.result.transaction_hash.into_array()),
@@ -427,10 +423,7 @@ pub async fn submit_manifest_with_signing_keys(
                 .get(s.trim())
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
-        .map(|(_, addr)| tari_dan_wallet_sdk::models::VersionedSubstateAddress {
-            address: addr.address.clone(),
-            version: addr.version,
-        })
+        .map(|(_, addr)| SubstateRequirement::new(addr.address.clone(), Some(addr.version)))
         .collect::<Vec<_>>();
 
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
@@ -545,10 +538,7 @@ pub async fn submit_manifest(
                 .get(s.trim())
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
-        .map(|(_, addr)| tari_dan_wallet_sdk::models::VersionedSubstateAddress {
-            address: addr.address.clone(),
-            version: addr.version,
-        })
+        .map(|(_, addr)| SubstateRequirement::new(addr.address.clone(), Some(addr.version)))
         .collect::<Vec<_>>();
 
     let instructions = parse_manifest(&manifest_content, globals).unwrap();

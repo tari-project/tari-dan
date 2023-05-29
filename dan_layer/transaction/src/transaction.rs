@@ -1,7 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Display,
+    str::FromStr,
+};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
@@ -9,6 +13,7 @@ use tari_dan_common_types::ShardId;
 use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
     instruction::Instruction,
+    serde_with,
     substate::SubstateAddress,
 };
 use tari_template_lib::{
@@ -174,6 +179,10 @@ impl TransactionMeta {
         &self.required_inputs
     }
 
+    pub fn required_inputs_mut(&mut self) -> &mut Vec<SubstateRequirement> {
+        &mut self.required_inputs
+    }
+
     pub fn involved_objects_iter(&self) -> impl Iterator<Item = (&ShardId, &SubstateChange)> + '_ {
         self.involved_objects.iter()
     }
@@ -202,6 +211,7 @@ impl TransactionMeta {
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct SubstateRequirement {
+    #[serde(with = "serde_with::string")]
     address: SubstateAddress,
     version: Option<u32>,
 }
@@ -219,3 +229,41 @@ impl SubstateRequirement {
         self.version
     }
 }
+
+impl FromStr for SubstateRequirement {
+    type Err = SubstateRequirementParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.split(':');
+
+        // parse the substate address
+        let address = parts
+            .next()
+            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))?;
+        let address = SubstateAddress::from_str(address).map_err(|_| SubstateRequirementParseError(s.to_string()))?;
+
+        // parse the version (optional)
+        let version = match parts.next() {
+            Some(v) => {
+                let parse_version = v.parse().map_err(|_| SubstateRequirementParseError(s.to_string()))?;
+                Some(parse_version)
+            },
+            None => None,
+        };
+
+        Ok(Self { address, version })
+    }
+}
+
+impl Display for SubstateRequirement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.version {
+            Some(v) => write!(f, "{}:{}", self.address, v),
+            None => write!(f, "{}", self.address),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to parse substate requirement {0}")]
+pub struct SubstateRequirementParseError(String);

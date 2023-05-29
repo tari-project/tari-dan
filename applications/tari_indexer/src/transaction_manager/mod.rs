@@ -32,7 +32,7 @@ use tari_dan_common_types::{
     PayloadId,
     ShardId,
 };
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::{SubstateAddress, Substate};
 use tari_indexer_lib::{committee_provider::CommitteeProvider, substate_scanner::SubstateScanner};
 use tari_transaction::{SubstateChange, Transaction};
 use tari_validator_node_rpc::client::{
@@ -75,18 +75,35 @@ where
     pub async fn submit_transaction(&self, transaction: Transaction) -> Result<PayloadId, TransactionManagerError> {
         let tx_hash = *transaction.hash();
 
+        // include the inputs and aoutputs into the "involved_objects" field
+        // note that the transaction hash will not change as the "involved_objects" is not part of the hash
+        let mut autofilled_transaction = transaction.clone();
+
         // scan the network to fetch all the substates for each required input
         // TODO: perform this loop concurrently by spawning a tokio task for each scan
-        let mut input_substates = vec![];
+        let mut input_substates : Vec<(SubstateAddress, u32, Substate)> = vec![];
         for r in transaction.meta().required_inputs() {
             // note that if the version specified is "None", the scanner will fetch the latest version
             let scan_res = self.substate_scanner.get_substate(r.address(), r.version()).await?;
 
             // TODO: should we return an error if some of the inputs are not "Up"?
             if let SubstateResult::Up { substate, .. } = scan_res {
-                input_substates.push(substate);
+                input_substates.push((r.address().clone(), substate.version(), substate));
             }
         }
+
+        let input_shards: Vec<(ShardId, SubstateChange)> = input_substates
+            .iter()
+            .map(|s| {
+                let shard_id = ShardId::from_address(&s.0, s.1);
+                (shard_id, SubstateChange::Exists)
+            })
+            .collect();
+        autofilled_transaction
+            .meta_mut()
+            .involved_objects_mut()
+            .extend(input_shards);
+
 
         // get all related substates related to the inputs the inputs
         // TODO: perform this loop concurrently by spawning a tokio task for each scan
@@ -95,7 +112,7 @@ where
         let mut autofilled_inputs: Vec<(SubstateAddress, u32)> = vec![];
         let related_addresses: Vec<Vec<SubstateAddress>> = input_substates
             .iter()
-            .map(find_related_substates)
+            .map(|s| find_related_substates(&s.2))
             .collect::<Result<_, _>>()?;
         let related_addresses = related_addresses.into_iter().flatten();
         for address in related_addresses {
@@ -108,22 +125,35 @@ where
             }
         }
 
+        // add add all inputs into involved objects
         // calculate the shard ids for each autofilled input
-        let autofilled_objects: Vec<(ShardId, SubstateChange)> = autofilled_inputs
+        let autofilled_input_objects: Vec<(ShardId, SubstateChange)> = autofilled_inputs
             .iter()
             .map(|i| {
-                let shard_id = ShardId::from_hash(&i.0.to_canonical_hash(), i.1);
-                (shard_id, SubstateChange::Create)
+                let shard_id = ShardId::from_address(&i.0, i.1);
+                (shard_id, SubstateChange::Exists)
             })
             .collect();
-
-        // include the related addresess into the involved objects
-        // note that the transaction hash will not change
-        let mut autofilled_transaction = transaction.clone();
         autofilled_transaction
             .meta_mut()
             .involved_objects_mut()
-            .extend(autofilled_objects);
+            .extend(autofilled_input_objects);
+
+        // add the expected outputs into involved objects
+        // TODO: we assume that all inputs will be consumed and produce a new output
+        // however this is only the case when the object is mutated
+        let autofilled_output_objects: Vec<(ShardId, SubstateChange)> = autofilled_inputs
+            .iter()
+            .map(|i| {
+                let shard_id = ShardId::from_address(&i.0, i.1 + 1);
+                (shard_id, SubstateChange::Create)
+            })
+            .collect();
+        autofilled_transaction
+            .meta_mut()
+            .involved_objects_mut()
+            .extend(autofilled_output_objects);
+        
 
         self.try_with_committee(tx_hash.into_array().into(), move |mut client| {
             let transaction = autofilled_transaction.clone();
