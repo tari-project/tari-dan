@@ -33,24 +33,25 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
     TemplateAddress,
 };
-use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
+use tari_indexer_lib::{
+    substate_decoder::find_related_substates,
+    substate_scanner::SubstateScanner,
+    NonFungibleSubstate,
+};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
-use crate::{
-    substate_decoder::find_related_substates,
-    substate_storage_sqlite::{
-        models::{
-            events::{EventData, NewEvent},
-            non_fungible_index::NewNonFungibleIndex,
-            substate::NewSubstate,
-        },
-        sqlite_substate_store_factory::{
-            SqliteSubstateStore,
-            SqliteSubstateStoreWriteTransaction,
-            SubstateStore,
-            SubstateStoreReadTransaction,
-            SubstateStoreWriteTransaction,
-        },
+use crate::substate_storage_sqlite::{
+    models::{
+        events::{EventData, NewEvent},
+        non_fungible_index::NewNonFungibleIndex,
+        substate::NewSubstate,
+    },
+    sqlite_substate_store_factory::{
+        SqliteSubstateStore,
+        SqliteSubstateStoreWriteTransaction,
+        SubstateStore,
+        SubstateStoreReadTransaction,
+        SubstateStoreWriteTransaction,
     },
 };
 

@@ -58,12 +58,12 @@ use tari_indexer_client::types::{
     SubmitTransactionRequest,
     SubmitTransactionResponse,
 };
+use tari_indexer_lib::substate_decoder::encode_substate_into_json;
 use tari_validator_node_client::types::{AddPeerRequest, AddPeerResponse, GetIdentityResponse};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::{
     bootstrap::Services,
-    substate_decoder::encode_substate_into_json,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
     GrpcBaseNodeClient,

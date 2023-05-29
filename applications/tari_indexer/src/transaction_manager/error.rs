@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_indexer_lib::error::IndexerError;
+use tari_indexer_lib::{error::IndexerError, transaction_autofiller::TransactionAutofillerError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionManagerError {
@@ -16,6 +16,8 @@ pub enum TransactionManagerError {
     NotFound { entity: &'static str, key: String },
     #[error(transparent)]
     SubstateScanningError(#[from] IndexerError),
+    #[error(transparent)]
+    TransactionAutofillerError(#[from] TransactionAutofillerError),
     #[error(transparent)]
     UnexpectedError(#[from] anyhow::Error),
 }
