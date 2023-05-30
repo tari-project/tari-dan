@@ -170,7 +170,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         Ok(token_data.claims.permissions)
     }
 
-    pub fn grant(&mut self, auth_token: String) -> Result<String, JwtApiError> {
+    pub fn grant(&self, auth_token: String) -> Result<String, JwtApiError> {
         let auth_claims = self.check_auth_token(auth_token.as_ref())?;
         let my_claims = Claims {
             id: auth_claims.id,
@@ -189,7 +189,7 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         Ok(permissions_token)
     }
 
-    pub fn deny(&mut self, auth_token: String) -> Result<(), JwtApiError> {
+    pub fn deny(&self, auth_token: String) -> Result<(), JwtApiError> {
         let auth_claims = self.check_auth_token(auth_token.as_ref())?;
         let mut tx = self.store.create_write_tx()?;
         tx.jwt_store_decision(auth_claims.id, None)?;
@@ -213,6 +213,13 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         for permission in req_permissions {
             permissions.check_permission(permission)?;
         }
+        Ok(())
+    }
+
+    pub fn revoke(&self, token: &str) -> Result<(), JwtApiError> {
+        let mut tx = self.store.create_write_tx()?;
+        tx.jwt_revoke(token)?;
+        tx.commit()?;
         Ok(())
     }
 }
