@@ -55,8 +55,12 @@ impl ShardId {
         self.0
     }
 
-    pub fn zero() -> Self {
-        Self::new(FixedHash::default())
+    pub const fn zero() -> Self {
+        Self([0u8; 32])
+    }
+
+    pub const fn max() -> Self {
+        Self([0xffu8; 32])
     }
 
     pub fn from_u256(shard: U256) -> Self {
@@ -168,5 +172,23 @@ mod tests {
         let s = ShardId(buf);
         let result = ShardId::from_u256(s.to_u256());
         assert_eq!(result, s);
+    }
+
+    #[test]
+    fn shard_range() {
+        let range = divide_floor(ShardId::max(), 2).to_committee_range(3);
+        assert_eq!(range, shard(1, 3)..=minus_one(shard(2, 3)));
+    }
+
+    fn shard(bucket: u64, of: u64) -> ShardId {
+        ShardId::from_u256(U256::from(bucket) * (U256::MAX / U256::from(of)))
+    }
+
+    fn divide_floor(shard: ShardId, by: u64) -> ShardId {
+        ShardId::from_u256(shard.to_u256() / U256::from(by))
+    }
+
+    fn minus_one(shard: ShardId) -> ShardId {
+        ShardId::from_u256(shard.to_u256() - U256::from(1u64))
     }
 }

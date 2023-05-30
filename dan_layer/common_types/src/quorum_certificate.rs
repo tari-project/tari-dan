@@ -1,7 +1,7 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{borrow::Borrow, io};
+use std::borrow::Borrow;
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
@@ -185,21 +185,8 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
         self.merged_proof.as_ref()
     }
 
-    // TODO: impl CBOR for merged merkle proof
-    pub fn encode_merged_merkle_proof(&self) -> Vec<u8> {
-        bincode::serialize(&self.merged_proof).unwrap()
-    }
-
-    // TODO: impl CBOR for merkle proof
-    pub fn decode_merged_merkle_proof(
-        bytes: &[u8],
-    ) -> Result<Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>, io::Error> {
-        // Map to an io error because borsh uses that
-        bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-    }
-
-    pub fn leaf_hashes(&self) -> Vec<FixedHash> {
-        self.leaf_hashes.clone()
+    pub fn leaf_hashes(&self) -> &[FixedHash] {
+        &self.leaf_hashes
     }
 
     pub fn validators_metadata(&self) -> &[ValidatorMetadata] {
@@ -218,16 +205,11 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
             .chain(&(self.validators_metadata.len() as u64))
             .chain(&self.merged_proof)
             .chain(&self.leaf_hashes)
+            // TODO: add all fields
+            // .chain(&self.validators_metadata)
             .result()
             .into_array()
             .into()
-
-        // TODO: add all fields
-
-        // result = result.chain((self.involved_shards.len() as u32).to_le_bytes());
-        // for shard in &self.involved_shards {
-        //     result = result.chain((*shard).to_le_bytes());
-        // }
     }
 
     pub fn payload_id(&self) -> PayloadId {
@@ -238,7 +220,7 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
         self.payload_height
     }
 
-    /// The locally stable hash of the node
+    /// Tree node hash
     pub fn node_hash(&self) -> TreeNodeHash {
         self.local_node_hash
     }

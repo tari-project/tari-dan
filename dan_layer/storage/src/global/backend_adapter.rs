@@ -103,7 +103,8 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
     fn validator_nodes_get_by_shard_range(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        epoch: Epoch,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
         shard_range: RangeInclusive<ShardId>,
     ) -> Result<Vec<ValidatorNode>, Self::Error>;
 

@@ -77,11 +77,12 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
 
     pub fn get_by_shard_range(
         &mut self,
-        epoch: Epoch,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
         shard_range: RangeInclusive<ShardId>,
     ) -> Result<Vec<ValidatorNode>, TGlobalDbAdapter::Error> {
         self.backend
-            .validator_nodes_get_by_shard_range(self.tx, epoch, shard_range)
+            .validator_nodes_get_by_shard_range(self.tx, start_epoch, end_epoch, shard_range)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 

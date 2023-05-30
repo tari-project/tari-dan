@@ -7518,7 +7518,6 @@ name = "tari_dan_common_types"
 version = "0.50.0-pre.0"
 dependencies = [
  "anyhow",
- "bincode",
  "digest 0.9.0",
  "newtype-ops",
  "prost 0.9.0",
@@ -7575,7 +7574,6 @@ dependencies = [
  "anyhow",
  "cargo_toml",
  "d3ne",
- "indexmap",
  "log",
  "rand 0.7.3",
  "serde",
@@ -7654,7 +7652,6 @@ version = "0.50.0-pre.0"
 dependencies = [
  "anyhow",
  "env_logger",
- "lazy_static",
  "log",
  "rand 0.7.3",
  "tari_common_types",
@@ -7798,7 +7795,6 @@ dependencies = [
  "ciborium",
  "digest 0.9.0",
  "hex",
- "indexmap",
  "lazy_static",
  "rand 0.7.3",
  "serde",

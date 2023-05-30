@@ -98,6 +98,14 @@ impl CommitteeStateSync {
             .get_committee_for_shard_range(previous_epoch, new_local_shard_range.clone())
             .await?;
 
+        info!(
+            target: LOG_TARGET,
+            "🌍 Syncing from {} peer(s) in range {} to {}",
+            prev_committee.len(),
+            new_local_shard_range.start(),
+            new_local_shard_range.end()
+        );
+
         // synchronize state with committee validator nodes
         // TODO: some mechanism for retry
         self.sync_peers_state(prev_committee, new_local_shard_range).await?;

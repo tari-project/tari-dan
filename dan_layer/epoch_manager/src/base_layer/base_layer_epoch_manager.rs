@@ -496,6 +496,10 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             .get_validator_node(epoch, addr)?
             .ok_or(EpochManagerError::ValidatorNodeNotRegistered)?;
         let num_committees = self.get_number_of_committees(epoch)?;
+        debug!(
+            target: LOG_TARGET,
+            "VN {} epoch: {}, num_committees: {}", addr, epoch, num_committees
+        );
         Ok(vn.shard_key.to_committee_range(num_committees))
     }
 
@@ -516,7 +520,8 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         };
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
-        let validators = validator_node_db.get_by_shard_range(epoch, rounded_shard_range)?;
+        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        let validators = validator_node_db.get_by_shard_range(start_epoch, end_epoch, rounded_shard_range)?;
         Ok(Committee::new(validators.into_iter().map(|v| v.public_key).collect()))
     }
 

@@ -364,9 +364,10 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         use crate::global::schema::validator_nodes;
 
         let count = validator_nodes::table
+            .count()
             .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
             .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
-            .count()
+            .group_by(validator_nodes::public_key)
             .get_result::<i64>(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -399,24 +400,27 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     fn validator_nodes_get_by_shard_range(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        epoch: Epoch,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
         shard_range: RangeInclusive<ShardId>,
     ) -> Result<Vec<ValidatorNode>, Self::Error> {
         use crate::global::schema::validator_nodes;
 
         let validators: Vec<DbValidatorNode> = validator_nodes::table
-            .filter(validator_nodes::epoch.eq(epoch.as_u64() as i64))
+            .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
+            .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
             // SQLite compares BLOB types using memcmp which, IIRC, compares bytes "left to right"/big-endian which is 
             // the same way convert shard IDs to 256-bit integers when allocating committee shards.
             .filter(validator_nodes::shard_key.ge(shard_range.start().as_bytes()))
             .filter(validator_nodes::shard_key.le(shard_range.end().as_bytes()))
+            .order_by(validator_nodes::epoch.desc())
             .get_results(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "validator_nodes_get_by_shard_range".to_string(),
             })?;
 
-        validators.into_iter().map(TryInto::try_into).collect()
+        distinct_validators(validators)
     }
 
     fn get_validator_nodes_within_epochs(
@@ -440,18 +444,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         let sqlite_vns = sqlite_vns.unwrap_or_default();
 
         // TODO: Perhaps we should overwrite duplicate validator node entries for the epoch
-        let mut db_vns = Vec::with_capacity(sqlite_vns.len());
-        let mut dedup_map = HashMap::with_capacity(sqlite_vns.len());
-        for (i, vn) in sqlite_vns.into_iter().enumerate() {
-            if let Some(idx) = dedup_map.insert(vn.public_key.clone(), i) {
-                *db_vns.get_mut(idx).unwrap() = None;
-            }
-            db_vns.push(Some(ValidatorNode::try_from(vn)?));
-        }
-
-        let mut db_vns = db_vns.into_iter().flatten().collect::<Vec<_>>();
-        db_vns.sort_by(|a, b| a.shard_key.cmp(&b.shard_key));
-        Ok(db_vns)
+        distinct_validators(sqlite_vns)
     }
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error> {
@@ -495,4 +488,19 @@ impl Debug for SqliteGlobalDbAdapter {
             .field("db", &"Arc<Mutex<SqliteConnection>>")
             .finish()
     }
+}
+
+fn distinct_validators(sqlite_vns: Vec<DbValidatorNode>) -> Result<Vec<ValidatorNode>, SqliteStorageError> {
+    let mut db_vns = Vec::with_capacity(sqlite_vns.len());
+    let mut dedup_map = HashMap::with_capacity(sqlite_vns.len());
+    for (i, vn) in sqlite_vns.into_iter().enumerate() {
+        if let Some(idx) = dedup_map.insert(vn.public_key.clone(), i) {
+            *db_vns.get_mut(idx).unwrap() = None;
+        }
+        db_vns.push(Some(ValidatorNode::try_from(vn)?));
+    }
+
+    let mut db_vns = db_vns.into_iter().flatten().collect::<Vec<_>>();
+    db_vns.sort_by(|a, b| a.shard_key.cmp(&b.shard_key));
+    Ok(db_vns)
 }

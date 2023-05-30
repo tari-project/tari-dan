@@ -592,9 +592,6 @@ impl JsonRpcHandlers {
                     .expect("Unexpected peer database error")
                     .expect("Peer not found");
 
-                //  response.connections.push(Connection { node_id: (), public_key: (), address: (), direction: (), age:
-                //                                                                                      (), user_agent:
-                // (), Info: () })
                 response.connections.push(Connection {
                     node_id: peer.node_id,
                     public_key: peer.public_key,

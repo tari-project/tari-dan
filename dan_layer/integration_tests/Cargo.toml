@@ -22,7 +22,6 @@ tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-p
 tari_transaction = { path = "../transaction" }
 
 anyhow = "1.0"
-lazy_static = "1.4.0"
 tempdir = "0.3.7"
 tokio = { version = "1.10", features = ["macros", "time"] }
 

@@ -20,10 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryInto, str::FromStr};
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::TryInto,
+    str::FromStr,
+};
 
 use anyhow::anyhow;
-use async_graphql::indexmap::IndexMap;
 use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
@@ -270,7 +273,7 @@ impl SubstateManager {
         template_address: TemplateAddress,
         tx_hash: PayloadId,
         topic: String,
-        payload: IndexMap<String, String>,
+        payload: BTreeMap<String, String>,
         version: u64,
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;

@@ -155,7 +155,8 @@ impl From<HotStuffTreeNode<CommsPublicKey, TariDanPayload>> for proto::consensus
 
 impl From<QuorumCertificate<PublicKey>> for proto::consensus::QuorumCertificate {
     fn from(source: QuorumCertificate<PublicKey>) -> Self {
-        let merged_merkle_proof = source.encode_merged_merkle_proof();
+        // TODO: unwrap
+        let merged_merkle_proof = encode(&source.merged_proof()).unwrap();
         Self {
             payload_id: source.payload_id().as_bytes().to_vec(),
             payload_height: source.payload_height().as_u64(),
@@ -199,7 +200,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate<PublicKe
                 .iter()
                 .map(|v| v.clone().try_into())
                 .collect::<Result<_, _>>()?,
-            QuorumCertificate::<PublicKey>::decode_merged_merkle_proof(&value.merged_merkle_proof)?,
+            decode_exact(&value.merged_merkle_proof)?,
             value
                 .leaves_hashes
                 .into_iter()

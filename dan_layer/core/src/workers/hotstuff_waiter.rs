@@ -1518,7 +1518,7 @@ where
         let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
         if !qc.is_genesis() {
             // Check the proof only for non-genesis blocks
-            let res = qc
+            let is_valid = qc
                 .merged_proof()
                 .cloned()
                 .ok_or(HotStuffError::MerkleProofMissing)?
@@ -1526,10 +1526,13 @@ where
                     &validator_node_root,
                     qc.leaf_hashes().iter().map(|hash| hash.to_vec()).collect(),
                 )?;
-            if !res {
-                return Err(HotStuffError::InvalidQuorumCertificate(
-                    "invalid merkle proof".to_string(),
-                ));
+
+            if !is_valid {
+                return Err(HotStuffError::InvalidQuorumCertificate(format!(
+                    "invalid validator node merkle proof in QC for tree node {} ({} leaf hashes)",
+                    qc.node_hash(),
+                    qc.leaf_hashes().len()
+                )));
             }
         }
 
