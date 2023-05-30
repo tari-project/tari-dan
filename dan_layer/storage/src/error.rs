@@ -38,7 +38,7 @@ pub enum StorageError {
     MigrationError { reason: String },
     #[error("Invalid unit of work tracker type")]
     InvalidUnitOfWorkTrackerType,
-    #[error("Not found: item: {item} key: {key}")]
+    #[error("Not found: item: {item}, key: {key}")]
     NotFound { item: String, key: String },
     #[error("File system path does not exist")]
     FileSystemPathDoesNotExist,

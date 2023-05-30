@@ -113,15 +113,7 @@ pub struct QuorumCertificate<TAddr> {
     all_shard_pledges: ShardPledgeCollection,
     validators_metadata: Vec<ValidatorMetadata>,
     merged_proof: Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
-    leaves_hashes: Vec<FixedHash>,
-}
-
-impl<TAddr: Clone> QuorumCertificate<TAddr> {
-    pub fn set_node(&mut self, node_hash: TreeNodeHash, node_height: NodeHeight) -> &mut Self {
-        self.local_node_hash = node_hash;
-        self.local_node_height = node_height;
-        self
-    }
+    leaf_hashes: Vec<FixedHash>,
 }
 
 impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
@@ -137,8 +129,9 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
         all_shard_pledges: ShardPledgeCollection,
         validators_metadata: Vec<ValidatorMetadata>,
         merged_proof: Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
-        leaves_hashes: Vec<FixedHash>,
+        mut leaf_hashes: Vec<FixedHash>,
     ) -> Self {
+        leaf_hashes.sort();
         Self {
             payload_id: payload,
             payload_height,
@@ -151,7 +144,7 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
             all_shard_pledges,
             validators_metadata,
             merged_proof,
-            leaves_hashes,
+            leaf_hashes,
         }
     }
 
@@ -168,7 +161,7 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
             all_shard_pledges: ShardPledgeCollection::empty(),
             validators_metadata: vec![],
             merged_proof: None,
-            leaves_hashes: vec![],
+            leaf_hashes: vec![],
         }
     }
 
@@ -188,8 +181,8 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
         &self.proposed_by
     }
 
-    pub fn merged_proof(&self) -> Option<MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>> {
-        self.merged_proof.clone()
+    pub fn merged_proof(&self) -> Option<&MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>> {
+        self.merged_proof.as_ref()
     }
 
     // TODO: impl CBOR for merged merkle proof
@@ -205,8 +198,8 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
         bincode::deserialize(bytes).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
-    pub fn leave_hashes(&self) -> Vec<FixedHash> {
-        self.leaves_hashes.clone()
+    pub fn leaf_hashes(&self) -> Vec<FixedHash> {
+        self.leaf_hashes.clone()
     }
 
     pub fn validators_metadata(&self) -> &[ValidatorMetadata] {
@@ -224,7 +217,7 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
             .chain(&self.shard)
             .chain(&(self.validators_metadata.len() as u64))
             .chain(&self.merged_proof)
-            .chain(&self.leaves_hashes)
+            .chain(&self.leaf_hashes)
             .result()
             .into_array()
             .into()

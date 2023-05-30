@@ -84,7 +84,12 @@ impl ShardId {
         let bucket_size = U256::MAX / U256::from(num_committees);
         let bucket = self.to_u256() / bucket_size;
         let start = bucket_size * U256::from(bucket);
-        RangeInclusive::new(Self::from_u256(start), Self::from_u256(start + bucket_size))
+        let mut end = start + bucket_size;
+        // Edge case: The start of the next bucket is excluded except for the last bucket
+        if end < U256::MAX {
+            end -= U256::from(1u64);
+        }
+        RangeInclusive::new(Self::from_u256(start), Self::from_u256(end))
     }
 }
 

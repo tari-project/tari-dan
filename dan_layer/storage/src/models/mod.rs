@@ -36,7 +36,6 @@ mod payload;
 mod sidechain_metadata;
 mod substate_shard_data;
 mod tari_dan_payload;
-// mod validator_node;
 mod vote_message;
 
 pub use base_layer_metadata::BaseLayerMetadata;

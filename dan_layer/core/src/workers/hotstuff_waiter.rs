@@ -484,7 +484,7 @@ where
             from,
         );
 
-        self.validate_proposal(&node)?;
+        self.validate_proposal(&from, &node)?;
 
         // We remove the shard from pacemaker, so it will not trigger. We don't have to check if it's local shard or
         // not, we just remove them both, one of them will not exists, but pacemaker will take care of that.
@@ -907,7 +907,11 @@ where
         Ok(())
     }
 
-    fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), ProposalValidationError> {
+    fn validate_proposal(
+        &self,
+        from: &TAddr,
+        node: &HotStuffTreeNode<TAddr, TPayload>,
+    ) -> Result<(), ProposalValidationError> {
         let payload_height = node.justify().payload_height() + NodeHeight(1);
         if !node.is_genesis() && node.payload_height() != payload_height {
             return Err(ProposalValidationError::NodePayloadHeightIncorrect {
@@ -953,6 +957,15 @@ where
         // if node.payload_height() > NodeHeight(0) && node.justify().decision() != &QuorumDecision::Accept {
         //     return Err(HotStuffError::JustifyIsNotAccepted);
         // }
+
+        let calculated_node_hash = node.calculate_hash();
+        if calculated_node_hash != *node.hash() {
+            return Err(ProposalValidationError::NodeHashMismatch {
+                proposed_by: from.to_string(),
+                node_hash: *node.hash(),
+                calculated_node_hash,
+            });
+        }
 
         Ok(())
     }
@@ -1507,10 +1520,11 @@ where
             // Check the proof only for non-genesis blocks
             let res = qc
                 .merged_proof()
+                .cloned()
                 .ok_or(HotStuffError::MerkleProofMissing)?
                 .verify_consume(
                     &validator_node_root,
-                    qc.leave_hashes().iter().map(|hash| hash.to_vec()).collect(),
+                    qc.leaf_hashes().iter().map(|hash| hash.to_vec()).collect(),
                 )?;
             if !res {
                 return Err(HotStuffError::InvalidQuorumCertificate(
@@ -1913,7 +1927,7 @@ where
                 Some((from, msg)) = self.rx_votes.recv() => {
                     debug!(target: LOG_TARGET, "Received vote from {}", from);
                     if let Err(e) = self.leader_on_receive_vote(from, msg).await {
-                        error!(target: LOG_TARGET, "Error while processing vote (on_receive_vote): {}", e);
+                        error!(target: LOG_TARGET, "Error while processing vote (leader_on_receive_vote): {}", e);
                     }
                 },
                 Some((from,msg)) = self.rx_recovery_message.recv() => {

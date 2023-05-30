@@ -39,7 +39,7 @@ use diesel::{
     SqliteConnection,
 };
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
-use log::{debug, warn};
+use log::{debug, error, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{
@@ -486,38 +486,45 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             key: hash.to_hex(),
         })?;
 
-        let parent = {
-            let mut parent = [0u8; 32];
-            parent.copy_from_slice(node.parent_node_hash.as_slice());
-            TreeNodeHash::from(parent)
-        };
-        let hgt = node.height as u64;
+        let parent = TreeNodeHash::try_from(node.parent_node_hash)?;
+        let node_height = node.height as u64;
 
         let shard = ShardId::from_bytes(&node.shard)?;
         let payload = PayloadId::try_from(node.payload_id)?;
 
-        let payload_hgt = node.payload_height as u64;
+        let payload_height = node.payload_height as u64;
         let leader_round = node.leader_round as u32;
         let local_pledge: Option<ObjectPledge> = serde_json::from_str(&node.local_pledges).unwrap();
 
         let epoch = node.epoch as u64;
-        let proposed_by = PublicKey::from_vec(&node.proposed_by).map_err(StorageError::InvalidByteArrayConversion)?;
+        let proposed_by = PublicKey::from_bytes(&node.proposed_by).map_err(StorageError::InvalidByteArrayConversion)?;
 
         let justify: QuorumCertificate<PublicKey> = serde_json::from_str(&node.justify).unwrap();
 
-        Ok(HotStuffTreeNode::new(
+        let node = HotStuffTreeNode::new(
             parent,
             shard,
-            NodeHeight(hgt),
+            NodeHeight(node_height),
             payload,
             None,
-            NodeHeight(payload_hgt),
+            NodeHeight(payload_height),
             leader_round,
             local_pledge,
             Epoch(epoch),
             proposed_by,
             justify,
-        ))
+        );
+
+        if node.hash() != hash {
+            error!(
+                target: LOG_TARGET,
+                "Hash mismatch node in DB: {}, rehashed: {}. If you're seeing this, it is likely that a HashMap is \
+                 used somewhere in the ObjectPledge causing the hash to differ",
+                hash,
+                node.hash()
+            );
+        }
+        Ok(node)
     }
 
     fn get_locked_node_hash_and_height(
@@ -756,7 +763,7 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         use crate::schema::received_votes;
 
         let filtered_votes: Option<Vec<ReceivedVote>> = received_votes::table
-            .filter(received_votes::tree_node_hash.eq(Vec::from(node_hash.as_bytes())))
+            .filter(received_votes::tree_node_hash.eq(node_hash.as_bytes()))
             .get_results(self.transaction.connection())
             .optional()
             .map_err(|e| StorageError::QueryError {
@@ -1172,7 +1179,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     fn save_node(&mut self, node: HotStuffTreeNode<PublicKey, TariDanPayload>) -> Result<(), StorageError> {
         use crate::schema::nodes;
 
-        let node_hash = Vec::from(node.hash().as_bytes());
+        let node_hash = Vec::from(node.calculate_hash().as_bytes());
         let parent_node_hash = Vec::from(node.parent().as_bytes());
 
         let height = node.height().as_u64() as i64;
@@ -1182,7 +1189,7 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
         let payload_height = node.payload_height().as_u64() as i64;
         let leader_round = i64::from(node.leader_round());
 
-        let local_pledges = json!(&node.local_pledge()).to_string();
+        let local_pledges = serde_json::to_string_pretty(&node.local_pledge()).unwrap();
 
         let epoch = node.epoch().as_u64() as i64;
         let proposed_by = Vec::from(node.proposed_by().as_bytes());

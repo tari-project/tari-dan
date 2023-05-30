@@ -30,6 +30,7 @@ thiserror = "^1.0.20"
 tempfile = "3.3.0"
 wasmer = "2.3.0"
 wasmer-middlewares = "2.3.0"
+indexmap = "1.9"
 
 [dev-dependencies]
 tari_template_test_tooling = { path = "../template_test_tooling" }

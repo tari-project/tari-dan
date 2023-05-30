@@ -7,7 +7,6 @@ use tari_core::ValidatorNodeBMT;
 use tari_dan_common_types::{hashing::tari_hasher, vn_bmt_node_hash, ShardId, ValidatorMetadata};
 use tari_dan_storage::models::VoteMessage;
 use tari_mmr::BalancedBinaryMerkleProof;
-use tari_utilities::hex::Hex;
 
 use crate::{services::SigningService, workers::hotstuff_error::HotStuffError, TariDanCoreHashDomain};
 
@@ -27,7 +26,7 @@ pub fn sign_vote<TSigningService: SigningService>(
     debug!(
         target: LOG_TARGET,
         "[sign_vote] bmt_node_hash={}, public_key={}, shard_id={}",
-        node_hash.to_hex(),
+        node_hash,
         signing_service.public_key(),
         shard_id,
     );
@@ -46,7 +45,7 @@ pub fn sign_vote<TSigningService: SigningService>(
         log::warn!(
             target: "tari::dan_layer::votemessage",
             "Merkle proof verification failed for validator node {} at index {:?}",
-            node_hash.to_hex(),
+            node_hash,
             idx,
         );
     }

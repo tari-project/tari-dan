@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId};
+use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId, TreeNodeHash};
 use tari_dan_storage::StorageError;
 use tari_engine_types::{commit_result::RejectReason, substate::SubstateAddress};
 use tari_epoch_manager::base_layer::EpochManagerError;
@@ -128,4 +128,12 @@ pub enum ProposalValidationError {
     LocalPledgeIsNone,
     #[error("Received proposal pledge for a different payload {pledged_payload} for shard {shard}")]
     PledgePayloadMismatch { shard: ShardId, pledged_payload: PayloadId },
+    #[error(
+        "Node proposed by {proposed_by} with hash {node_hash} does not match calculated hash {calculated_node_hash}"
+    )]
+    NodeHashMismatch {
+        proposed_by: String,
+        node_hash: TreeNodeHash,
+        calculated_node_hash: TreeNodeHash,
+    },
 }

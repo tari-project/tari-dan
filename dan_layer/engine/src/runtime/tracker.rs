@@ -28,6 +28,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
 };
 
+use indexmap::IndexMap;
 use log::debug;
 use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_engine_types::{
@@ -416,7 +417,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                 template_address,
                 tx_hash,
                 "component-created".to_string(),
-                HashMap::from([("module_name".to_string(), module_name.to_string())]),
+                IndexMap::from([("module_name".to_string(), module_name.to_string())]),
             ));
 
             Ok(())

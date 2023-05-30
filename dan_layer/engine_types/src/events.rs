@@ -20,8 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 
@@ -36,7 +37,9 @@ pub struct Event {
     #[serde(with = "serde_with::hex")]
     tx_hash: Hash,
     topic: String,
-    payload: HashMap<String, String>,
+    // NOTE: We need to use an ordered map here. HashMaps are unordered, so when we pledge this state the hash
+    // resulting hash may differ.
+    payload: IndexMap<String, String>,
 }
 
 impl Event {
@@ -46,7 +49,7 @@ impl Event {
         tx_hash: Hash,
         topic: String,
     ) -> Self {
-        Self::new_with_payload(component_address, template_address, tx_hash, topic, HashMap::new())
+        Self::new_with_payload(component_address, template_address, tx_hash, topic, IndexMap::new())
     }
 
     pub fn new_with_payload(
@@ -54,7 +57,7 @@ impl Event {
         template_address: TemplateAddress,
         tx_hash: Hash,
         topic: String,
-        payload: HashMap<String, String>,
+        payload: IndexMap<String, String>,
     ) -> Self {
         Self {
             component_address,
@@ -89,8 +92,12 @@ impl Event {
         self.payload.get(key).cloned()
     }
 
-    pub fn get_full_payload(&self) -> HashMap<String, String> {
-        self.payload.clone()
+    pub fn payload(&self) -> &IndexMap<String, String> {
+        &self.payload
+    }
+
+    pub fn into_payload(self) -> IndexMap<String, String> {
+        self.payload
     }
 }
 

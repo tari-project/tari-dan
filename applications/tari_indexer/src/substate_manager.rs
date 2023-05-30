@@ -23,6 +23,7 @@
 use std::{collections::HashMap, convert::TryInto, str::FromStr};
 
 use anyhow::anyhow;
+use async_graphql::indexmap::IndexMap;
 use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
@@ -269,7 +270,7 @@ impl SubstateManager {
         template_address: TemplateAddress,
         tx_hash: PayloadId,
         topic: String,
-        payload: HashMap<String, String>,
+        payload: IndexMap<String, String>,
         version: u64,
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
@@ -366,21 +367,21 @@ impl SubstateManager {
         // because the same component address with different version
         // can be processed in the same transaction, we need to avoid
         // duplicates
-        for (version, event) in &network_events {
+        for (version, event) in network_events {
             let template_address = event.template_address();
             let tx_hash = PayloadId::from_array(event.tx_hash().into_array());
             let topic = event.topic();
-            let payload = event.get_full_payload();
+            let payload = event.payload().clone();
             self.save_event_to_db(
                 component_address,
                 template_address,
                 tx_hash,
                 topic,
                 payload,
-                u64::from(*version),
+                u64::from(version),
             )?;
+            events.push(event);
         }
-        events.extend(network_events.into_iter().map(|(_, e)| e).collect::<Vec<_>>());
 
         Ok(events)
     }

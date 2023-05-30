@@ -171,7 +171,7 @@ impl From<QuorumCertificate<PublicKey>> for proto::consensus::QuorumCertificate 
             all_shard_pledges: source.all_shard_pledges().iter().map(|p| p.clone().into()).collect(),
             validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),
             merged_merkle_proof,
-            leaves_hashes: source.leave_hashes().iter().map(|hash| hash.to_vec()).collect(),
+            leaves_hashes: source.leaf_hashes().iter().map(|hash| hash.to_vec()).collect(),
         }
     }
 }
