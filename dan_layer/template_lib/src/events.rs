@@ -24,17 +24,10 @@ use std::collections::HashMap;
 
 use tari_template_abi::{call_engine, EngineOp};
 
-use crate::{args::EmitEventArg, models::TemplateAddress, Hash};
+use crate::args::EmitEventArg;
 
-pub fn emit_event<T: Into<String>>(
-    template_address: TemplateAddress,
-    tx_hash: Hash,
-    topic: T,
-    payload: HashMap<String, String>,
-) {
+pub fn emit_event<T: Into<String>>(topic: T, payload: HashMap<String, String>) {
     call_engine::<_, ()>(EngineOp::EmitEvent, &EmitEventArg {
-        template_address,
-        tx_hash,
         topic: topic.into(),
         payload,
     });

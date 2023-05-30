@@ -207,10 +207,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 function,
                 args,
             } => {
-                runtime
-                    .interface()
-                    .set_current_runtime_state(RuntimeState { template_address })?;
-
                 let template = template_provider
                     .get_template_module(&template_address)
                     .map_err(|e| TransactionError::FailedToLoadTemplate {
@@ -220,6 +216,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     .ok_or(TransactionError::TemplateNotFound {
                         address: template_address,
                     })?;
+
+                runtime.interface().set_current_runtime_state(RuntimeState {
+                    template_name: template.template_name().to_string(),
+                    template_address,
+                    component_address: None,
+                })?;
 
                 let result = Self::invoke_template(
                     template,
@@ -318,7 +320,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             })?;
 
         runtime.interface().set_current_runtime_state(RuntimeState {
+            template_name: template.template_name().to_string(),
             template_address: component.template_address,
+            component_address: Some(*component_address),
         })?;
 
         let mut final_args = Vec::with_capacity(args.len() + 1);

@@ -221,7 +221,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             GetSubstateResponse {
                 status: SubstateStatus::Down as i32,
                 version: substate.version(),
-                transaction_hash: tx_hash.into_array().to_vec(),
+                created_transaction_hash: substate.created_payload_id().into_array().to_vec(),
+                destroyed_transaction_hash: tx_hash.into_array().to_vec(),
                 quorum_certificates: qcs.into_iter().map(Into::into).collect(),
                 ..Default::default()
             }
@@ -234,7 +235,8 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 status: SubstateStatus::Up as i32,
                 version: substate.version(),
                 substate: substate.substate().to_bytes(),
-                transaction_hash: substate.created_payload_id().into_array().to_vec(),
+                created_transaction_hash: substate.created_payload_id().into_array().to_vec(),
+                destroyed_transaction_hash: vec![],
                 quorum_certificates: qcs.into_iter().map(Into::into).collect(),
             }
         };

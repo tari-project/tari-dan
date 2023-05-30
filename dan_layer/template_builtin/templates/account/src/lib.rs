@@ -84,12 +84,27 @@ mod account_template {
 
         // #[access_rule(requires(owner_badge))]
         pub fn withdraw(&mut self, resource: ResourceAddress, amount: Amount) -> Bucket {
+            // TODO: clean up hashmap api in emit_event
+            emit_event(
+                "withdraw",
+                HashMap::from([
+                    ("amount".to_string(), amount.to_string()),
+                    ("resource".to_string(), resource.to_string()),
+                ]),
+            );
             let v = self.get_vault_mut(resource);
             v.withdraw(amount)
         }
 
         // #[access_rules(requires(owner_badge))]
         pub fn withdraw_non_fungible(&mut self, resource: ResourceAddress, nf_id: NonFungibleId) -> Bucket {
+            emit_event(
+                "withdraw_non_fungible",
+                HashMap::from([
+                    ("id".to_string(), nf_id.to_string()),
+                    ("resource".to_string(), resource.to_string()),
+                ]),
+            );
             let v = self.get_vault_mut(resource);
             v.withdraw_non_fungibles([nf_id])
         }
@@ -100,12 +115,27 @@ mod account_template {
             resource: ResourceAddress,
             withdraw_proof: ConfidentialWithdrawProof,
         ) -> Bucket {
+            emit_event(
+                "withdraw_confidential",
+                HashMap::from([
+                    ("num_inputs".to_string(), withdraw_proof.inputs.len().to_string()),
+                    ("resource".to_string(), resource.to_string()),
+                ]),
+            );
+
             let v = self.get_vault_mut(resource);
             v.withdraw_confidential(withdraw_proof)
         }
 
         // #[access_rules(allow_all)]
         pub fn deposit(&mut self, bucket: Bucket) {
+            emit_event(
+                "deposit",
+                HashMap::from([
+                    ("amount".to_string(), bucket.amount().to_string()),
+                    ("resource".to_string(), bucket.resource_address().to_string()),
+                ]),
+            );
             let resource_address = bucket.resource_address();
             let vault_mut = self
                 .vaults
@@ -143,28 +173,42 @@ mod account_template {
         }
 
         pub fn reveal_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) -> Bucket {
+            emit_event(
+                "reveal_confidential",
+                HashMap::from([
+                    ("num_inputs".to_string(), proof.inputs.len().to_string()),
+                    ("resource".to_string(), resource.to_string()),
+                ]),
+            );
             let v = self.get_vault_mut(resource);
             v.reveal_confidential(proof)
         }
 
         pub fn join_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) {
-            let v = self.get_vault_mut(resource);
-            v.join_confidential(proof);
-        }
-
-        pub fn reveal_funds(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) -> Bucket {
-            self.get_vault_mut(resource).reveal_confidential(proof)
+            emit_event(
+                "join_confidential",
+                HashMap::from([
+                    ("num_inputs".to_string(), proof.inputs.len().to_string()),
+                    ("resource".to_string(), resource.to_string()),
+                ]),
+            );
+            self.get_vault_mut(resource).join_confidential(proof);
         }
 
         // Fee methods. These are used to pay fees and satisfy a "duck-typed" interface.
 
         /// Pay fees from previously revealed confidential resource.
         pub fn pay_fee(&mut self, amount: Amount) {
+            emit_event("pay_fee", HashMap::from([("amount".to_string(), amount.to_string())]));
             self.get_vault_mut(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS).pay_fee(amount);
         }
 
         /// Reveal confidential tokens and return the revealed bucket to pay fees.
         pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
+            emit_event(
+                "pay_fee_confidential",
+                HashMap::from([("num_inputs".to_string(), proof.inputs.len().to_string())]),
+            );
             self.get_vault_mut(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS)
                 .pay_fee_confidential(proof);
         }

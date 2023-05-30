@@ -39,7 +39,6 @@ use tari_engine_types::{
     logs::LogEntry,
     resource_container::ResourceContainer,
     substate::{SubstateAddress, SubstateValue},
-    TemplateAddress,
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
@@ -70,7 +69,6 @@ use tari_template_lib::{
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{Amount, BucketId, ComponentAddress, NonFungibleAddress, VaultRef},
-    Hash,
 };
 use tari_utilities::ByteArray;
 
@@ -165,16 +163,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         Ok(())
     }
 
-    fn emit_event(
-        &self,
-        template_address: TemplateAddress,
-        tx_hash: Hash,
-        topic: String,
-        payload: HashMap<String, String>,
-    ) -> Result<(), RuntimeError> {
+    fn emit_event(&self, topic: String, payload: HashMap<String, String>) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
-        let mut event = Event::new(template_address, tx_hash, topic);
+        let component_address = self.tracker.runtime_state_component_address()?;
+        let tx_hash = self.tracker.transaction_hash();
+        let template_address = self.tracker.get_template_address()?;
+
+        let mut event = Event::new(component_address, template_address, tx_hash, topic);
         payload
             .into_iter()
             .for_each(|(key, value)| event.add_payload(key, value));
@@ -225,12 +221,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 let arg: CreateComponentArg = args.get(0)?;
                 let template_def = self.tracker.get_template_def()?;
                 validate_access_rules(&arg.access_rules, &template_def)?;
-                let component_address = self.tracker.new_component(
-                    arg.module_name,
-                    arg.encoded_state,
-                    arg.access_rules,
-                    arg.component_id,
-                )?;
+                let component_address =
+                    self.tracker
+                        .new_component(arg.encoded_state, arg.access_rules, arg.component_id)?;
                 Ok(InvokeResult::encode(&component_address)?)
             },
 

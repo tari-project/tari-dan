@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use tari_core::transactions::tari_amount::MicroTari;
 use tari_dan_common_types::{Epoch, NodeHeight};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ConsensusConstants {
     pub base_layer_confirmations: u64,
     pub committee_size: u64,

@@ -30,22 +30,19 @@ use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::PayloadId;
 use tari_engine_types::{
+    events::Event,
     substate::{Substate, SubstateAddress},
-    TemplateAddress,
 };
 use tari_indexer_lib::{
     substate_decoder::find_related_substates,
     substate_scanner::SubstateScanner,
     NonFungibleSubstate,
 };
+use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::substate_storage_sqlite::{
-    models::{
-        events::{EventData, NewEvent},
-        non_fungible_index::NewNonFungibleIndex,
-        substate::NewSubstate,
-    },
+    models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
     sqlite_substate_store_factory::{
         SqliteSubstateStore,
         SqliteSubstateStoreWriteTransaction,
@@ -70,6 +67,12 @@ pub struct NonFungibleResponse {
     pub index: u64,
     pub address: SubstateAddress,
     pub substate: Substate,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EventResponse {
+    pub address: SubstateAddress,
+    pub created_by_transaction: FixedHash,
 }
 
 pub struct SubstateManager {
@@ -262,33 +265,126 @@ impl SubstateManager {
         Ok(nfts)
     }
 
-    pub async fn get_event_from_db(
+    pub fn save_event_to_db(
         &self,
-        template_address: TemplateAddress,
-        tx_hash: PayloadId,
-    ) -> Result<Vec<EventData>, anyhow::Error> {
-        let mut tx = self.substate_store.create_read_tx()?;
-        let events = tx.get_events(template_address, tx_hash)?;
-        Ok(events)
-    }
-
-    pub async fn save_event_to_db(
-        &self,
+        component_address: ComponentAddress,
         template_address: TemplateAddress,
         tx_hash: PayloadId,
         topic: String,
         payload: HashMap<String, String>,
+        version: u64,
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
         let new_event = NewEvent {
+            component_address: Some(component_address.to_string()),
             template_address: template_address.to_string(),
             tx_hash: tx_hash.to_string(),
             topic,
             payload: payload.to_json().expect("Failed to convert to JSON"),
+            version: version as i32,
         };
-        tx.save_events(new_event)?;
+        tx.save_event(new_event)?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub async fn scan_events_for_transaction(&self, tx_hash: Hash) -> Result<Vec<Event>, anyhow::Error> {
+        let events = {
+            let mut tx = self.substate_store.create_read_tx()?;
+            tx.get_events_for_transaction(PayloadId::from_array(tx_hash.into_array()))?
+        };
+
+        let mut events = events
+            .iter()
+            .map(|e| Event::try_from(e.clone()))
+            .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+
+        // If we have no events locally, fetch from the network if possible.
+        if events.is_empty() {
+            let network_events = self.substate_scanner.get_events_for_transaction(tx_hash).await?;
+            events.extend(network_events);
+        }
+
+        Ok(events)
+    }
+
+    pub async fn scan_events_for_substate_from_network(
+        &self,
+        component_address: ComponentAddress,
+        version: Option<u32>,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        let mut events = vec![];
+        let version = version.unwrap_or_default();
+
+        // check if database contains the events for this transaction, by querying
+        // what is the latest version for the given component_address
+        let stored_versions_in_db;
+        {
+            let mut tx = self.substate_store.create_read_tx()?;
+            stored_versions_in_db = tx.get_stored_versions_of_events(&component_address, version)?;
+
+            let stored_events = match tx.get_all_events(&component_address) {
+                Ok(events) => events,
+                Err(e) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "Failed to get all events for component_address = {}, version = {} with error = {}",
+                        component_address,
+                        version,
+                        e
+                    );
+                    return Err(e.into());
+                },
+            };
+
+            let stored_events = stored_events
+                .iter()
+                .map(|e| e.clone().try_into())
+                .collect::<Result<Vec<_>, _>>()?;
+            events.extend(stored_events);
+        }
+
+        for v in 0..version {
+            if stored_versions_in_db.contains(&v) {
+                continue;
+            }
+            let network_version_events = self
+                .substate_scanner
+                .get_events_for_component_and_version(component_address, v)
+                .await?;
+            events.extend(network_version_events);
+        }
+
+        let latest_version_in_db = stored_versions_in_db.into_iter().max().unwrap_or_default();
+        let version = version.max(latest_version_in_db);
+
+        // check if there are newest events for this component address in the network
+        let network_events = self
+            .substate_scanner
+            .get_events_for_component(component_address, Some(version))
+            .await?;
+
+        // stores the newest network events to the db
+        // because the same component address with different version
+        // can be processed in the same transaction, we need to avoid
+        // duplicates
+        for (version, event) in &network_events {
+            let template_address = event.template_address();
+            let tx_hash = PayloadId::from_array(event.tx_hash().into_array());
+            let topic = event.topic();
+            let payload = event.get_full_payload();
+            self.save_event_to_db(
+                component_address,
+                template_address,
+                tx_hash,
+                topic,
+                payload,
+                u64::from(*version),
+            )?;
+        }
+        events.extend(network_events.into_iter().map(|(_, e)| e).collect::<Vec<_>>());
+
+        Ok(events)
     }
 
     pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {

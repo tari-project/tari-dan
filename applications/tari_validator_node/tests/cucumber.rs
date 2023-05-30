@@ -885,22 +885,68 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     // insert event mock data in the substate manager database
     indexer.insert_event_mock_data().await;
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
+    let component_address = [0u8; 32];
     let template_address = [0u8; 32];
     let tx_hash = [0u8; 32];
     let query = format!(
-        "{{ getEvent(templateAddress: {:?}, txHash: {:?}) {{ templateAddress, txHash, topic, payload }} }}",
-        template_address, tx_hash
+        "{{ getEventsForTransaction(txHash: {:?}) {{ componentAddress, templateAddress, txHash, topic, payload }}
+    }}",
+        tx_hash.to_hex()
     );
     let res = graphql_client
         .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
         .await
-        .unwrap();
-    let res = res.get("getEvent").unwrap();
+        .expect("Failed to obtain getEventsForTransaction query result");
+    let res = res.get("getEventsForTransaction").unwrap();
     assert_eq!(res.len(), 1);
-    assert_eq!(res[0].template_address, [0u8; 32]);
-    assert_eq!(res[0].tx_hash, [0u8; 32]);
+    assert_eq!(res[0].component_address, Some(component_address));
+    assert_eq!(res[0].template_address, template_address);
+    assert_eq!(res[0].tx_hash, tx_hash);
     assert_eq!(res[0].topic, "my_event");
     assert_eq!(res[0].payload, HashMap::from([("my".to_string(), "event".to_string())]));
+}
+
+#[when(expr = "indexer {word} scans the network {int} events for account {word} with topics {word}")]
+async fn indexer_scans_network_events(
+    world: &mut TariWorld,
+    indexer_name: String,
+    num_events: u32,
+    account_name: String,
+    topics: String,
+) {
+    let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
+    let accounts_component_addresses = world.outputs.get(&account_name).expect("Account name not found");
+    let component_address = accounts_component_addresses
+        .into_iter()
+        .find(|(k, _)| k.contains("components/Account"))
+        .map(|(_, v)| {
+            v.address
+                .as_component_address()
+                .expect("Failed to parse `ComponentAddress`")
+        })
+        .expect("Did not find component address");
+
+    let mut graphql_client = indexer.get_graphql_indexer_client().await;
+    let query = format!(
+        "{{ getEventsForComponent(componentAddress: {:?}, version: 0) {{ componentAddress, templateAddress, txHash, \
+         topic, payload }} }}",
+        component_address.to_string()
+    );
+    let res = graphql_client
+        .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
+        .await
+        .expect("Failed to obtain getEventsForComponent query result");
+
+    let events_for_component = res.get("getEventsForComponent").unwrap();
+    assert_eq!(events_for_component.len(), num_events as usize);
+
+    let topics = topics.split(',').collect::<Vec<_>>();
+    assert_eq!(topics.len(), num_events as usize);
+
+    for (ind, topic) in topics.iter().enumerate() {
+        let event = events_for_component[ind].clone();
+        assert_eq!(&event.topic, topic);
+    }
 }
 
 #[when(expr = "the indexer {word} tracks the address {word}")]
@@ -1010,14 +1056,13 @@ async fn successful_transaction(world: &mut TariWorld) {
             let get_transaction_res = client
                 .get_transaction_result(get_transaction_req)
                 .await
-                .expect(format!("Failed to get transaction with hash {} for vn = {}", hash, vn_ps.name).as_str());
-            let finalized_tx = get_transaction_res.result.expect(
-                format!(
+                .unwrap_or_else(|_| panic!("Failed to get transaction with hash {} for vn = {}", hash, vn_ps.name));
+            let finalized_tx = get_transaction_res.result.unwrap_or_else(|| {
+                panic!(
                     "Transaction result was rejected for tx hash {} and vn = {}",
                     hash, vn_ps.name
                 )
-                .as_str(),
-            );
+            });
             finalized_tx.expect_success();
         }
     }
