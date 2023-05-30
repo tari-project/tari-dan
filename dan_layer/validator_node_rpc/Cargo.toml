@@ -28,8 +28,13 @@ log = "0.4"
 prost = "0.9"
 serde = "1.0"
 thiserror = "1.0"
-tonic = "0.6.2"
 tokio-stream = "0.1"
 
 [build-dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_common", features = ["build"] }
+
+[package.metadata.cargo-machete]
+ignored = [
+    # Used via OUT_DIR macro, not detectable
+    "prost",
+]

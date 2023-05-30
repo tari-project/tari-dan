@@ -53,7 +53,7 @@ async fn main() {
             "Exiting with code ({}) {:?}: {}",
             exit_code as i32,
             exit_code,
-            err.details.unwrap_or_else(String::new)
+            err.details.unwrap_or_default()
         );
         process::exit(exit_code as i32);
     }

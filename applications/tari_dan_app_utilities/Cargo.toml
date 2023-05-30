@@ -6,10 +6,7 @@ edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
-tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
 tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", default-features = false, features = ["transactions"] }
 tari_crypto = { version = "0.16" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
@@ -24,12 +21,9 @@ tari_epoch_manager = { path = "../../dan_layer/epoch_manager", features = ["base
 tari_base_node_client = { path = "../../clients/base_node_client" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
-tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
 
 anyhow = "1.0.53"
-async-trait = "0.1.50"
 log = { version = "0.4.8", features = ["std"] }
 serde_json = "1.0.64"
 thiserror = "^1.0.20"
 tokio = { version = "1.10", features = ["macros", "time", "sync", "rt-multi-thread"] }
-tonic = "0.6.2"
