@@ -3,6 +3,7 @@
 
 use std::{fmt::Display, sync::Arc};
 
+use log::warn;
 use tari_dan_common_types::ShardId;
 use tari_engine_types::substate::{Substate, SubstateAddress};
 use tari_transaction::{SubstateChange, Transaction};
@@ -14,6 +15,8 @@ use crate::{
     substate_decoder::{find_related_substates, SubstateDecoderError},
     substate_scanner::SubstateScanner,
 };
+
+const LOG_TARGET: &str = "tari::indexer::transaction_autofiller";
 
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionAutofillerError {
@@ -50,12 +53,27 @@ where
         let mut input_addresses: Vec<(SubstateAddress, u32)> = vec![];
         let mut input_substates: Vec<Substate> = vec![];
         for r in autofilled_transaction.meta().required_inputs() {
-            let scan_res = self.substate_scanner.get_substate(r.address(), r.version()).await?;
+            let scan_res = match r.version() {
+                Some(version) => {
+                    // if the client specifyied a version, we need to retrieve it
+                    self.substate_scanner
+                        .get_specific_substate_from_committee(r.address(), version)
+                        .await?
+                },
+                None => {
+                    // if the client didn't specify a version, we fetch the latest one
+                    self.substate_scanner.get_substate(r.address(), None).await?
+                },
+            };
 
-            // TODO: should we return an error if some of the inputs are not "Up"?
             if let SubstateResult::Up { substate, .. } = scan_res {
                 input_addresses.push((r.address().clone(), substate.version()));
                 input_substates.push(substate);
+            } else {
+                warn!(
+                    target: LOG_TARGET,
+                    "The substate for input requirement {} is not in UP status, skipping", r
+                );
             }
         }
 
@@ -76,9 +94,13 @@ where
             // note that if the version specified is "None", the scanner will fetch the latest version
             let scan_res = self.substate_scanner.get_substate(&address, None).await?;
 
-            // TODO: should we return an error if some of the inputs are not "Up"?
             if let SubstateResult::Up { substate, .. } = scan_res {
                 autofilled_inputs.push((address, substate.version()));
+            } else {
+                warn!(
+                    target: LOG_TARGET,
+                    "The related substate {} is not in UP status, skipping", address
+                );
             }
         }
         Self::add_involved_objects(&mut autofilled_transaction, &autofilled_inputs, SubstateChange::Exists);
