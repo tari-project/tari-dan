@@ -38,7 +38,10 @@ use tari_template_lib::{
 };
 use tari_transaction::{SubstateChange, SubstateRequirement, Transaction, TransactionMeta};
 
-use crate::{proto, utils::checked_copy_fixed};
+use crate::{
+    proto::{self, transaction::OptionalVersion},
+    utils::checked_copy_fixed,
+};
 
 //---------------------------------- Transaction --------------------------------------------//
 impl TryFrom<proto::transaction::Transaction> for Transaction {
@@ -267,7 +270,7 @@ impl TryFrom<proto::transaction::TransactionMeta> for TransactionMeta {
             .into_iter()
             .map(|spec| {
                 let address = SubstateAddress::from_bytes(&spec.address)?;
-                let version = spec.version;
+                let version = spec.version.map(|v| v.version);
                 Result::<_, anyhow::Error>::Ok(SubstateRequirement::new(address, version))
             })
             .collect::<Result<_, _>>()?;
@@ -313,7 +316,7 @@ impl TryFrom<proto::transaction::SubstateRequirement> for SubstateRequirement {
 
     fn try_from(val: proto::transaction::SubstateRequirement) -> Result<Self, Self::Error> {
         let address = SubstateAddress::from_bytes(&val.address)?;
-        let version = val.version;
+        let version = val.version.map(|v| v.version);
         let substate_specification = SubstateRequirement::new(address, version);
         Ok(substate_specification)
     }
@@ -323,7 +326,7 @@ impl From<SubstateRequirement> for proto::transaction::SubstateRequirement {
     fn from(val: SubstateRequirement) -> Self {
         Self {
             address: val.address().to_bytes(),
-            version: val.version(),
+            version: val.version().map(|v| OptionalVersion { version: v }),
         }
     }
 }
@@ -332,7 +335,7 @@ impl From<&SubstateRequirement> for proto::transaction::SubstateRequirement {
     fn from(val: &SubstateRequirement) -> Self {
         Self {
             address: val.address().to_bytes(),
-            version: val.version(),
+            version: val.version().map(|v| OptionalVersion { version: v }),
         }
     }
 }
