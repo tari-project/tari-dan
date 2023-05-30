@@ -84,7 +84,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan::hotstuff_waiter";
-pub const NETWORK_LATENCY: Duration = Duration::from_secs(30);
+pub const NETWORK_LATENCY: Duration = Duration::from_secs(900);
 
 // This is the value that we wait over in the pacemaker. So when it trigger we know what triggered it.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -486,7 +486,6 @@ where
         );
 
         self.validate_proposal(&node)?;
-
         // We remove the shard from pacemaker, so it will not trigger. We don't have to check if it's local shard or
         // not, we just remove them both, one of them will not exists, but pacemaker will take care of that.
         self.pacemaker

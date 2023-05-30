@@ -65,8 +65,8 @@ impl<T> Pacemaker<T>
 where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
 {
     pub fn spawn(shutdown: ShutdownSignal) -> PacemakerHandle<T> {
-        let (tx_timeout_status, rx_timeout_status) = channel(100);
-        let (tx_signal, rx_signal) = channel(100);
+        let (tx_timeout_status, rx_timeout_status) = channel(100000);
+        let (tx_signal, rx_signal) = channel(100000);
 
         let pacemaker = Self::new(rx_signal, tx_timeout_status);
         tokio::spawn(pacemaker.run(shutdown));
