@@ -20,7 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryInto, str::FromStr};
+use std::{
+    collections::{BTreeMap, HashMap},
+    convert::TryInto,
+    str::FromStr,
+};
 
 use anyhow::anyhow;
 use log::info;
@@ -269,7 +273,7 @@ impl SubstateManager {
         template_address: TemplateAddress,
         tx_hash: PayloadId,
         topic: String,
-        payload: HashMap<String, String>,
+        payload: BTreeMap<String, String>,
         version: u64,
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;

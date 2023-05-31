@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::BTreeMap, fmt::Display};
 
 use serde::{Deserialize, Serialize};
 use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
@@ -36,32 +36,23 @@ pub struct Event {
     #[serde(with = "serde_with::hex")]
     tx_hash: Hash,
     topic: String,
-    payload: HashMap<String, String>,
+    payload: BTreeMap<String, String>,
 }
 
 impl Event {
-    pub fn new(
+    pub fn new<P: IntoIterator<Item = (String, String)>>(
         component_address: Option<ComponentAddress>,
         template_address: TemplateAddress,
         tx_hash: Hash,
         topic: String,
-    ) -> Self {
-        Self::new_with_payload(component_address, template_address, tx_hash, topic, HashMap::new())
-    }
-
-    pub fn new_with_payload(
-        component_address: Option<ComponentAddress>,
-        template_address: TemplateAddress,
-        tx_hash: Hash,
-        topic: String,
-        payload: HashMap<String, String>,
+        payload: P,
     ) -> Self {
         Self {
             component_address,
             template_address,
             tx_hash,
             topic,
-            payload,
+            payload: payload.into_iter().collect(),
         }
     }
 
@@ -89,7 +80,7 @@ impl Event {
         self.payload.get(key).cloned()
     }
 
-    pub fn get_full_payload(&self) -> HashMap<String, String> {
+    pub fn get_full_payload(&self) -> BTreeMap<String, String> {
         self.payload.clone()
     }
 }
