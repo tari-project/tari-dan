@@ -19,6 +19,7 @@ tari_dan_storage = { path = "../storage" }
 tari_engine_types = { path = "../engine_types" }
 tari_transaction = { path = "../transaction" }
 tari_base_node_client = { path = "../../clients/base_node_client" }
+bincode="1.3.3"
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"

@@ -67,6 +67,7 @@ use tari_epoch_manager::{base_layer::EpochManagerError, Committee, EpochManager}
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;
+use tari_utilities::ByteArray;
 use tokio::{
     sync::{
         broadcast,
@@ -1400,6 +1401,7 @@ where
                 return Err(HotStuffError::NotTheLeader);
             }
         }
+        let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(node.epoch()).await?;
 
         let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
         {
@@ -1411,13 +1413,46 @@ where
             // Collect votes
             tx.save_received_vote_for(from, msg.local_node_hash(), msg.clone())?;
 
-            let votes = tx.get_received_votes_for(msg.local_node_hash())?;
+            let votes: Vec<VoteMessage> = tx.get_received_votes_for(msg.local_node_hash())?;
 
             if votes.len() == valid_committee.consensus_threshold() {
                 let validator_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
-                let proofs = votes.iter().map(|v| v.merkle_proof().unwrap()).collect();
+                let proofs = votes.iter().map(|v| v.merkle_proof().unwrap()).collect::<Vec<_>>();
+
+                // TODO: remove debugging code
+                {
+                    for v in &votes {
+                        if !v
+                            .merkle_proof()
+                            .unwrap()
+                            .verify(&validator_node_root, v.node_hash().to_vec())
+                        {
+                            return Err(HotStuffError::InvalidVote(format!(
+                                "Invalid proof for {}",
+                                v.node_hash()
+                            )));
+                        }
+                    }
+                }
+
                 let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(proofs).unwrap();
-                let leaves_hashes = votes.iter().map(|v| v.node_hash()).collect();
+                let leaf_hashes = votes.iter().map(|v| v.node_hash()).collect::<Vec<_>>();
+
+                // TODO: remove debugging code
+                {
+                    if merged_proof
+                        .clone()
+                        .verify_consume(
+                            &validator_node_root,
+                            leaf_hashes.iter().map(|h| h.to_vec()).collect::<Vec<_>>(),
+                        )
+                        .unwrap()
+                    {
+                        return Err(HotStuffError::InvalidVote(
+                            "Creating an invalid merged proof".to_string(),
+                        ));
+                    }
+                }
                 // TODO: Check all votes
                 let main_vote = votes.get(0).unwrap();
 
@@ -1433,7 +1468,7 @@ where
                     main_vote.all_shard_pledges().clone(),
                     validator_metadata,
                     Some(merged_proof),
-                    leaves_hashes,
+                    leaf_hashes,
                 );
                 self.update_high_qc(&mut tx, node.proposed_by().clone(), qc)?;
 

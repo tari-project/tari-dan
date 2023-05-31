@@ -9,7 +9,6 @@ use crate::{PayloadId, ShardId, SubstateState, TreeNodeHash};
 pub struct ObjectPledge {
     pub shard_id: ShardId,
     pub current_state: SubstateState,
-    // pub current_state_hash: SubstateState,
     pub pledged_to_payload: PayloadId,
 }
 
