@@ -124,11 +124,12 @@ impl SubstateManager {
         // if it's a resource, we need also to retrieve all the individual nfts
         let non_fungibles = if let SubstateAddress::Resource(addr) = substate_address {
             // fetch the last index from database to avoid scaning always from the beginning
-            let mut tx = self.substate_store.create_read_tx()?;
-            let latest_non_fungible_index = tx
-                .get_non_fungible_latest_index(addr.to_string())?
-                .map(|i| i as u64)
-                .unwrap_or_default();
+            let latest_non_fungible_index = {
+                let mut tx = self.substate_store.create_read_tx()?;
+                tx.get_non_fungible_latest_index(addr.to_string())?
+                    .map(|i| i as u64)
+                    .unwrap_or_default()
+            };
             self.substate_scanner
                 .get_non_fungibles(addr, latest_non_fungible_index, None)
                 .await?
