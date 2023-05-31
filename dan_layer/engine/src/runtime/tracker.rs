@@ -93,7 +93,9 @@ pub struct StateTracker<TTemplateProvider: TemplateProvider<Template = LoadedTem
 
 #[derive(Debug, Clone)]
 pub struct RuntimeState {
+    pub template_name: String,
     pub template_address: TemplateAddress,
+    pub component_address: Option<ComponentAddress>,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracker<TTemplateProvider> {
@@ -151,6 +153,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             });
         }
         Ok(())
+    }
+
+    pub fn get_template_address(&self) -> Result<TemplateAddress, RuntimeError> {
+        Ok(self.runtime_state()?.template_address)
     }
 
     pub fn new_resource(
@@ -375,13 +381,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn new_component(
         &self,
-        module_name: String,
         state: Vec<u8>,
         access_rules: AccessRules,
         component_id: Option<Hash>,
     ) -> Result<ComponentAddress, RuntimeError> {
         let runtime_state = self.runtime_state()?;
         let template_address = runtime_state.template_address;
+        let module_name = runtime_state.template_name;
+        let tx_hash = self.transaction_hash();
         let component_address = self
             .id_provider()
             .new_component_address(template_address, component_id)?;
@@ -389,7 +396,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         let component = ComponentBody { state };
         let component = ComponentHeader {
             template_address: runtime_state.template_address,
-            module_name,
+            module_name: module_name.clone(),
             access_rules,
             state: component,
         };
@@ -403,6 +410,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             }
 
             state.new_components.insert(component_address, component);
+
+            state.events.push(Event::new(
+                Some(component_address),
+                template_address,
+                tx_hash,
+                "component-created".to_string(),
+                [("module_name".to_string(), module_name.to_string())],
+            ));
+
             Ok(())
         })?;
 
@@ -462,6 +478,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
         self.read_with(|state| state.runtime_state.clone().ok_or(RuntimeError::IllegalRuntimeState))
+    }
+
+    pub fn runtime_state_component_address(&self) -> Result<Option<ComponentAddress>, RuntimeError> {
+        Ok(self.runtime_state()?.component_address)
     }
 
     pub fn set_last_instruction_output(&self, output: Option<Vec<u8>>) {

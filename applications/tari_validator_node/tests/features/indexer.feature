@@ -93,6 +93,9 @@ Feature: Indexer node
     # List the nfts of a resource
     Then the indexer IDX returns 6 non fungibles for resource NFT/resources/0
 
+    # Scan the network for the event emitted on ACC_1 creation
+    When indexer IDX scans the network 7 events for account ACC1 with topics component-created,deposit,deposit,deposit,deposit,deposit,deposit
+
   # When I print the cucumber world
   # When I wait 5000 seconds
 
@@ -119,3 +122,39 @@ Feature: Indexer node
 
     # Check GraphQL request
     Given IDX indexer GraphQL request works
+
+  @serial
+  Scenario: Indexer GraphQL requests events over network substate indexing
+    # Initialize a base node, wallet, miner and VN
+    Given a base node BASE
+    Given a wallet WALLET connected to base node BASE
+    Given a miner MINER connected to base node BASE and wallet WALLET
+
+    # Initialize a VN
+    Given a validator node VN connected to base node BASE and wallet WALLET
+
+    # The wallet must have some funds before the VN sends transactions
+    When miner MINER mines 6 new blocks
+    When wallet WALLET has at least 2000000000 uT
+
+    # VN registration
+    When validator node VN sends a registration transaction
+
+    When miner MINER mines 16 new blocks
+    Then the validator node VN is listed as registered
+
+    # A file-base CLI account must be created to sign future calls
+    When I use an account key named K1
+
+    # Creates a new account
+    When I create an account ACC_1 on VN
+    When I create an account ACC_2 on VN
+
+    # Initialize an indexer
+    Given an indexer IDX connected to base node BASE
+
+    # Scan the network for the event emitted on ACC_1 creation
+    When indexer IDX scans the network 1 events for account ACC_1 with topics component-created
+
+    # Scan the network for the event emitted on ACC_2 creation
+    When indexer IDX scans the network 1 events for account ACC_2 with topics component-created

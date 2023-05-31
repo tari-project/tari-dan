@@ -45,6 +45,7 @@ Feature: Wallet Daemon
 
         # Submit a transaction manifest
         When I print the cucumber world
+        When I wait 5 seconds
         When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACC_1" and 3 outputs named "TX1"
         ```
         let faucet = global!["FAUCET/components/TestFaucet"];

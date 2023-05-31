@@ -20,31 +20,56 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::BTreeMap, fmt::Display};
 
 use serde::{Deserialize, Serialize};
-use tari_template_lib::Hash;
+use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 
-use crate::{serde_with, TemplateAddress};
+use crate::serde_with;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Event {
+    #[serde(with = "serde_with::hex::option")]
+    component_address: Option<ComponentAddress>,
     #[serde(with = "serde_with::hex")]
-    pub template_address: TemplateAddress,
+    template_address: TemplateAddress,
     #[serde(with = "serde_with::hex")]
-    pub tx_hash: Hash,
-    pub topic: String,
-    pub payload: HashMap<String, String>,
+    tx_hash: Hash,
+    topic: String,
+    payload: BTreeMap<String, String>,
 }
 
 impl Event {
-    pub fn new(template_address: TemplateAddress, tx_hash: Hash, topic: String) -> Self {
+    pub fn new<P: IntoIterator<Item = (String, String)>>(
+        component_address: Option<ComponentAddress>,
+        template_address: TemplateAddress,
+        tx_hash: Hash,
+        topic: String,
+        payload: P,
+    ) -> Self {
         Self {
+            component_address,
             template_address,
             tx_hash,
             topic,
-            payload: HashMap::new(),
+            payload: payload.into_iter().collect(),
         }
+    }
+
+    pub fn component_address(&self) -> Option<ComponentAddress> {
+        self.component_address
+    }
+
+    pub fn template_address(&self) -> TemplateAddress {
+        self.template_address
+    }
+
+    pub fn tx_hash(&self) -> Hash {
+        self.tx_hash
+    }
+
+    pub fn topic(&self) -> String {
+        self.topic.clone()
     }
 
     pub fn add_payload(&mut self, key: String, value: String) {
@@ -54,14 +79,18 @@ impl Event {
     pub fn get_payload(&self, key: &str) -> Option<String> {
         self.payload.get(key).cloned()
     }
+
+    pub fn get_full_payload(&self) -> BTreeMap<String, String> {
+        self.payload.clone()
+    }
 }
 
 impl Display for Event {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "event: template_address {}, tx_hash {}, topic {}",
-            self.template_address, self.tx_hash, self.topic
+            "event: component_address {:?}, template_address {}, tx_hash {}, topic {} and payload {:?}",
+            self.component_address, self.template_address, self.tx_hash, self.topic, self.payload
         )
     }
 }

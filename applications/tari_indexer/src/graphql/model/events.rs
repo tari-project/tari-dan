@@ -20,26 +20,38 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, convert::TryInto, sync::Arc};
+use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
 use serde::{Deserialize, Serialize};
-use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::PayloadId;
-use tari_engine_types::TemplateAddress;
+use tari_template_lib::{prelude::ComponentAddress, Hash};
 
 use crate::substate_manager::SubstateManager;
 
 const LOG_TARGET: &str = "tari::indexer::graphql::events";
 
-#[derive(SimpleObject, Clone, Debug, Deserialize, Serialize)]
+#[derive(SimpleObject, Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
+    pub component_address: Option<[u8; 32]>,
     pub template_address: [u8; 32],
     pub tx_hash: [u8; 32],
     pub topic: String,
-    pub payload: HashMap<String, String>,
+    pub payload: BTreeMap<String, String>,
+}
+
+impl Event {
+    fn from_engine_event(event: tari_engine_types::events::Event) -> Result<Self, anyhow::Error> {
+        Ok(Self {
+            component_address: event.component_address().map(|comp_addr| comp_addr.into_array()),
+            template_address: event.template_address().into_array(),
+            tx_hash: event.tx_hash().into_array(),
+            topic: event.topic(),
+            payload: event.get_full_payload().into_iter().collect(),
+        })
+    }
 }
 
 pub(crate) type EventSchema = Schema<EventQuery, EmptyMutation, EmptySubscription>;
@@ -48,56 +60,89 @@ pub struct EventQuery;
 
 #[Object]
 impl EventQuery {
-    pub async fn get_event(
+    pub async fn get_events_for_transaction(
         &self,
         ctx: &Context<'_>,
-        template_address: [u8; 32],
-        tx_hash: [u8; 32],
+        tx_hash: String,
     ) -> Result<Vec<Event>, anyhow::Error> {
+        info!(target: LOG_TARGET, "Querying events for transaction hash = {}", tx_hash);
+        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
+        let tx_hash = Hash::from_hex(&tx_hash)?;
+        let events = match substate_manager.scan_events_for_transaction(tx_hash).await {
+            Ok(events) => events,
+            Err(e) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Failed to scan events for transaction {} with error {}", tx_hash, e
+                );
+                return Err(e);
+            },
+        };
+
+        let events = events
+            .iter()
+            .map(|e| Event::from_engine_event(e.clone()))
+            .collect::<Result<Vec<Event>, _>>()?;
+
+        Ok(events)
+    }
+
+    pub async fn get_events_for_component(
+        &self,
+        ctx: &Context<'_>,
+        component_address: String,
+        version: Option<u32>,
+    ) -> Result<Vec<Event>, anyhow::Error> {
+        let version = version.unwrap_or_default();
         info!(
             target: LOG_TARGET,
-            "Querying events with template_address = {} and tx_hash = {}",
-            template_address.to_hex(),
-            tx_hash.to_hex()
+            "Querying events for component_address = {}, starting from version = {}", component_address, version
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let template_address = TemplateAddress::from_array(template_address);
-        let tx_hash = PayloadId::new(tx_hash);
-        let events = substate_manager.get_event_from_db(template_address, tx_hash).await?;
-        let events = events
-            .into_iter()
-            .map(|e| e.try_into())
+        let events = substate_manager
+            .scan_events_for_substate_from_network(ComponentAddress::from_str(&component_address)?, Some(version))
+            .await?
+            .iter()
+            .map(|e| Event::from_engine_event(e.clone()))
             .collect::<Result<Vec<Event>, anyhow::Error>>()?;
+
         Ok(events)
     }
 
     pub async fn save_event(
         &self,
         ctx: &Context<'_>,
-        template_address: [u8; 32],
-        tx_hash: [u8; 32],
+        component_address: String,
+        template_address: String,
+        tx_hash: String,
         topic: String,
         payload: String,
+        version: u64,
     ) -> Result<Event, anyhow::Error> {
         info!(
             target: LOG_TARGET,
-            "Saving event for template_address = {:?}, tx_hash = {:?} and topic = {}", template_address, tx_hash, topic
+            "Saving event for component_address = {}, tx_hash = {} and topic = {}", component_address, tx_hash, topic
         );
 
-        let payload: HashMap<String, String> = serde_json::from_str(&payload)?;
-        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        substate_manager
-            .save_event_to_db(
-                TemplateAddress::from_array(template_address),
-                PayloadId::new(tx_hash),
-                topic.clone(),
-                payload.clone(),
-            )
-            .await?;
+        let component_address = ComponentAddress::from_hex(&component_address)?;
+        let template_address = Hash::from_str(&template_address)?;
+        let tx_hash = PayloadId::new(Hash::from_hex(&tx_hash)?);
 
-        Ok(Event {
+        let payload: BTreeMap<String, String> = serde_json::from_str(&payload)?;
+        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
+        substate_manager.save_event_to_db(
+            component_address,
             template_address,
             tx_hash,
+            topic.clone(),
+            payload.clone().into_iter().collect(),
+            version,
+        )?;
+
+        Ok(Event {
+            component_address: Some(component_address.into_array()),
+            template_address: template_address.into_array(),
+            tx_hash: tx_hash.into_array(),
             topic,
             payload,
         })

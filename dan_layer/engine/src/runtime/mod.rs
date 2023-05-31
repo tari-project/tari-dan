@@ -51,7 +51,6 @@ use std::{collections::HashMap, fmt::Debug, sync::Arc};
 use tari_engine_types::{
     component::ComponentHeader,
     confidential::{ConfidentialClaim, ConfidentialOutput},
-    TemplateAddress,
 };
 use tari_template_lib::{
     args::{
@@ -73,20 +72,13 @@ use tari_template_lib::{
     },
     invoke_args,
     models::{Amount, BucketId, ComponentAddress, NonFungibleAddress, VaultRef},
-    Hash,
 };
 pub use tracker::{RuntimeState, StateTracker};
 
 pub trait RuntimeInterface: Send + Sync {
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError>;
 
-    fn emit_event(
-        &self,
-        template_address: TemplateAddress,
-        tx_hash: Hash,
-        topic: String,
-        payload: HashMap<String, String>,
-    ) -> Result<(), RuntimeError>;
+    fn emit_event(&self, topic: String, payload: HashMap<String, String>) -> Result<(), RuntimeError>;
 
     fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError>;
 
