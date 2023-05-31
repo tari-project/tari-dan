@@ -98,7 +98,7 @@ impl SubstateManager {
         // get the last version of the substate from the dan layer
         let latest_stored_substate_version = {
             let mut tx = self.substate_store.create_read_tx()?;
-            tx.get_latest_version_for_substate(&substate_address)?
+            tx.get_latest_version_for_substate(substate_address)?
                 .map(|i| u32::try_from(i).expect("Failed to parse latest substate version"))
         };
 
