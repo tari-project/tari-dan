@@ -42,15 +42,7 @@ pub fn sign_vote<TSigningService: SigningService>(
         .map_err(|_| HotStuffError::ValidatorNodeNotIncludedInBMT)?;
     // TODO: remove
     if !merkle_proof.verify(&root, node_hash.to_vec()) {
-        error!(
-            target: "tari::dan::votemessage",
-            "Merkle proof verification failed for validator node {}, shard:{} hash: {} at index {:?} leaf index {}",
-            signing_service.public_key(),
-            shard_id,
-            node_hash,
-            idx,
-            leaf_index,
-        );
+        error!( target: "tari::dan::votemessage", "Merkle proof verification failed for validator node {}, shard:{} hash: {} at index {:?} leaf index {}", signing_service.public_key(), shard_id, node_hash, idx, leaf_index, );
     }
 
     let validator_metadata = ValidatorMetadata::new(signing_service.public_key().clone(), shard_id, signature);

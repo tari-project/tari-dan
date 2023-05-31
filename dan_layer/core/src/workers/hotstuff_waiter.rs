@@ -1401,7 +1401,6 @@ where
                 return Err(HotStuffError::NotTheLeader);
             }
         }
-        let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(node.epoch()).await?;
 
         let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
         {
@@ -1417,42 +1416,14 @@ where
 
             if votes.len() == valid_committee.consensus_threshold() {
                 let validator_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
-                let proofs = votes.iter().map(|v| v.merkle_proof().unwrap()).collect::<Vec<_>>();
-
-                // TODO: remove debugging code
-                {
-                    for v in &votes {
-                        if !v
-                            .merkle_proof()
-                            .unwrap()
-                            .verify(&validator_node_root, v.node_hash().to_vec())
-                        {
-                            return Err(HotStuffError::InvalidVote(format!(
-                                "Invalid proof for {}",
-                                v.node_hash()
-                            )));
-                        }
-                    }
-                }
+                let proofs = votes
+                    .iter()
+                    .map(|v| v.merkle_proof().unwrap().clone())
+                    .collect::<Vec<_>>();
 
                 let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(proofs).unwrap();
                 let leaf_hashes = votes.iter().map(|v| v.node_hash()).collect::<Vec<_>>();
 
-                // TODO: remove debugging code
-                {
-                    if merged_proof
-                        .clone()
-                        .verify_consume(
-                            &validator_node_root,
-                            leaf_hashes.iter().map(|h| h.to_vec()).collect::<Vec<_>>(),
-                        )
-                        .unwrap()
-                    {
-                        return Err(HotStuffError::InvalidVote(
-                            "Creating an invalid merged proof".to_string(),
-                        ));
-                    }
-                }
                 // TODO: Check all votes
                 let main_vote = votes.get(0).unwrap();
 
@@ -1879,6 +1850,18 @@ where
         };
 
         vote_signature::sign_vote(&mut vote_msg, &self.signing_service, vn_shard_key, vn_bmt)?;
+
+        // TODO: remove debugging code
+        {
+            let root = vn_bmt.get_merkle_root();
+            if !vote_msg
+                .merkle_proof()
+                .unwrap()
+                .verify(&root, vote_msg.node_hash().to_vec())
+            {
+                panic!("Invalid vote merkle proof");
+            }
+        }
 
         Ok(vote_msg)
     }

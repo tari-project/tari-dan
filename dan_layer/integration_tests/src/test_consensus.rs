@@ -712,11 +712,11 @@ pub struct Committee {
     instances: Vec<HsTestHarness>,
     previous_leader: Option<RistrettoPublicKey>,
     shard_range: Range<ShardId>,
-    timeout: Duration,
+    network_latency: Duration,
 }
 
 impl Committee {
-    pub fn init(size: usize, timeout: Duration, shard_range: Range<ShardId>) -> Self {
+    pub fn init(size: usize, network_latency: Duration, shard_range: Range<ShardId>) -> Self {
         let keys = (0..size)
             .map(|_| PublicKey::random_keypair(&mut OsRng))
             .collect::<Vec<_>>();
@@ -731,7 +731,7 @@ impl Committee {
             instances: vec![],
             previous_leader: None,
             shard_range,
-            timeout,
+            network_latency,
         }
     }
 
@@ -745,7 +745,7 @@ impl Committee {
                     public.clone(),
                     epoch_manager.clone(),
                     RotatingLeader {},
-                    self.timeout,
+                    self.network_latency,
                 )
             })
             .collect::<Vec<_>>();
@@ -920,7 +920,8 @@ pub struct Test {
 }
 
 impl Test {
-    // Each committee is a tuple of (size of the committe, timeout), each committee will be used for different shard
+    // Each committee is a tuple of (size of the committe, network_latency), each committee will be used for different
+    // shard
     pub fn init(committees: Vec<(usize, Duration)>) -> Self {
         let shards_ranges = vec![SHARD0..SHARD1, SHARD1..SHARD2, SHARD2..SHARD3];
         assert!(
@@ -931,7 +932,7 @@ impl Test {
         let mut committees = committees
             .into_iter()
             .zip(shards_ranges.into_iter())
-            .map(|((size, timeout), shard_range)| Committee::init(size, timeout, shard_range))
+            .map(|((size, network_latency), shard_range)| Committee::init(size, network_latency, shard_range))
             .collect::<Vec<_>>();
         // Get all VNs keys flattened
         let registered_vn_keys = committees
@@ -1157,7 +1158,6 @@ async fn test_local_leader_failure_multiple() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "Test is broken. Seems to be an issue with the MergedBalancedBinaryMerkleProof."]
 async fn test_local_leader_failure_whole_tx() {
-    // env_logger::init();
     // We need 13 members, on every step one will go offline, so f=4
     let mut test = Test::init(vec![(13, ONE_SEC)]);
     let mut committee = test.remove_committee(0);

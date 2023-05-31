@@ -101,8 +101,8 @@ impl VoteMessage {
         &self.all_shard_pledges
     }
 
-    pub fn merkle_proof(&self) -> Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>> {
-        self.merkle_proof.clone()
+    pub fn merkle_proof(&self) -> Option<&BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>> {
+        self.merkle_proof.as_ref()
     }
 
     pub fn node_hash(&self) -> FixedHash {

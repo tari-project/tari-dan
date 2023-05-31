@@ -447,7 +447,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
 
         // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time per
         // epoch
-        let mut vn_bmt_vec = Vec::new();
+        let mut vn_bmt_vec = Vec::with_capacity(vns.len());
         for vn in vns {
             vn_bmt_vec.push(vn.node_hash().to_vec())
         }
