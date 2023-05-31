@@ -23,7 +23,7 @@
 mod steps;
 mod utils;
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     convert::TryFrom,
     fs,
     future,
@@ -903,7 +903,10 @@ async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
     assert_eq!(res[0].template_address, template_address);
     assert_eq!(res[0].tx_hash, tx_hash);
     assert_eq!(res[0].topic, "my_event");
-    assert_eq!(res[0].payload, HashMap::from([("my".to_string(), "event".to_string())]));
+    assert_eq!(
+        res[0].payload,
+        BTreeMap::from([("my".to_string(), "event".to_string())])
+    );
 }
 
 #[when(expr = "indexer {word} scans the network {int} events for account {word} with topics {word}")]

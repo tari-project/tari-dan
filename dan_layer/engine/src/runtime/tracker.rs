@@ -411,12 +411,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
             state.new_components.insert(component_address, component);
 
-            state.events.push(Event::new_with_payload(
+            state.events.push(Event::new(
                 Some(component_address),
                 template_address,
                 tx_hash,
                 "component-created".to_string(),
-                HashMap::from([("module_name".to_string(), module_name.to_string())]),
+                [("module_name".to_string(), module_name.to_string())],
             ));
 
             Ok(())

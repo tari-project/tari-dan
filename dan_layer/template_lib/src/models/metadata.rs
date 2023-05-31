@@ -20,20 +20,19 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
+use tari_template_abi::rust::collections::BTreeMap;
 
 use super::BinaryTag;
 const TAG: u64 = BinaryTag::Metadata as u64;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Metadata(BorTag<HashMap<String, String>, TAG>);
+pub struct Metadata(BorTag<BTreeMap<String, String>, TAG>);
 
 impl Metadata {
     pub fn new() -> Self {
-        Self(BorTag::new(HashMap::new()))
+        Self(BorTag::new(BTreeMap::new()))
     }
 
     pub fn insert<K: Into<String>, V: Into<String>>(&mut self, key: K, value: V) -> &mut Self {
@@ -48,8 +47,8 @@ impl Metadata {
     }
 }
 
-impl From<HashMap<String, String>> for Metadata {
-    fn from(value: HashMap<String, String>) -> Self {
+impl From<BTreeMap<String, String>> for Metadata {
+    fn from(value: BTreeMap<String, String>) -> Self {
         Self(BorTag::new(value))
     }
 }
