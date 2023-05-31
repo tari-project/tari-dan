@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, str::FromStr, sync::Arc};
+use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
@@ -39,7 +39,7 @@ pub struct Event {
     pub template_address: [u8; 32],
     pub tx_hash: [u8; 32],
     pub topic: String,
-    pub payload: HashMap<String, String>,
+    pub payload: BTreeMap<String, String>,
 }
 
 impl Event {
@@ -128,7 +128,7 @@ impl EventQuery {
         let template_address = Hash::from_str(&template_address)?;
         let tx_hash = PayloadId::new(Hash::from_hex(&tx_hash)?);
 
-        let payload: HashMap<String, String> = serde_json::from_str(&payload)?;
+        let payload: BTreeMap<String, String> = serde_json::from_str(&payload)?;
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         substate_manager.save_event_to_db(
             component_address,

@@ -42,28 +42,19 @@ pub struct Event {
 }
 
 impl Event {
-    pub fn new(
+    pub fn new<P: IntoIterator<Item = (String, String)>>(
         component_address: Option<ComponentAddress>,
         template_address: TemplateAddress,
         tx_hash: Hash,
         topic: String,
-    ) -> Self {
-        Self::new_with_payload(component_address, template_address, tx_hash, topic, BTreeMap::new())
-    }
-
-    pub fn new_with_payload(
-        component_address: Option<ComponentAddress>,
-        template_address: TemplateAddress,
-        tx_hash: Hash,
-        topic: String,
-        payload: BTreeMap<String, String>,
+        payload: P,
     ) -> Self {
         Self {
             component_address,
             template_address,
             tx_hash,
             topic,
-            payload,
+            payload: payload.into_iter().collect(),
         }
     }
 
