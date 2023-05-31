@@ -19,7 +19,6 @@
 //  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
@@ -28,7 +27,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use diesel::{prelude::*, RunQueryDsl, SqliteConnection};
+use diesel::{
+    prelude::*,
+    sql_query,
+    sql_types::{BigInt, Integer},
+    RunQueryDsl,
+    SqliteConnection,
+};
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
@@ -361,20 +366,23 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         start_epoch: Epoch,
         end_epoch: Epoch,
     ) -> Result<u64, Self::Error> {
-        use crate::global::schema::validator_nodes;
+        #[derive(QueryableByName)]
+        pub struct Count {
+            #[diesel(sql_type = BigInt)]
+            cnt: i64,
+        }
 
-        let count = validator_nodes::table
-            .count()
-            .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
-            .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
-            .group_by(validator_nodes::public_key)
-            .get_result::<i64>(tx.connection())
-            .map_err(|source| SqliteStorageError::DieselError {
-                source,
-                operation: "count_validator_nodes".to_string(),
-            })?;
+        let count =
+            sql_query("SELECT COUNT(distinct public_key) as cnt FROM validator_nodes WHERE epoch >= ? AND epoch <= ?")
+                .bind::<Integer, _>(start_epoch.as_u64() as i32)
+                .bind::<Integer, _>(end_epoch.as_u64() as i32)
+                .get_result::<Count>(tx.connection())
+                .map_err(|source| SqliteStorageError::DieselError {
+                    source,
+                    operation: "count_validator_nodes".to_string(),
+                })?;
 
-        Ok(count as u64)
+        Ok(count.cnt as u64)
     }
 
     fn validator_nodes_set_committee_bucket(
@@ -413,7 +421,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             // the same way convert shard IDs to 256-bit integers when allocating committee shards.
             .filter(validator_nodes::shard_key.ge(shard_range.start().as_bytes()))
             .filter(validator_nodes::shard_key.le(shard_range.end().as_bytes()))
-            .order_by(validator_nodes::epoch.desc())
+            .order_by(validator_nodes::id.asc())
             .get_results(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,

@@ -1692,10 +1692,11 @@ where
                         TransactionResult::Accept(_) => {
                             tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
                         },
-                        TransactionResult::Reject(_) => {
+                        TransactionResult::Reject(reason) => {
                             info!(
                                 target: LOG_TARGET,
-                                "🔥 on_commit ABANDON pledge for payload {}, shard{}",
+                                "🔥 on_commit ABANDON({}) pledge for payload {}, shard {}",
+                                reason,
                                 node.payload_id(),
                                 node.shard()
                             );
