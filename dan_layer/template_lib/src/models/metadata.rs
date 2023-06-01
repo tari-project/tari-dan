@@ -62,7 +62,10 @@ impl Default for Metadata {
 
 impl Display for Metadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-        // write!(f, "{:?}", self)
+        let mut s = vec![];
+        for (key, value) in self.0.iter() {
+            s.push(format!("key = {}, value = {}", key, value))
+        }
+        write!(f, "Metadata: {:?}", s)
     }
 }

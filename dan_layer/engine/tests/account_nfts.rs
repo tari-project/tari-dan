@@ -4,12 +4,11 @@
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
-    models::{Amount, ComponentAddress, ResourceAddress},
+    models::{ComponentAddress, ResourceAddress},
     prelude::Metadata,
     Hash,
 };
 use tari_template_test_tooling::TemplateTest;
-use tari_transaction::Transaction;
 
 #[test]
 fn basic_nft_mint() {
@@ -41,7 +40,7 @@ fn basic_nft_mint() {
                 method: "get_resource_address".to_string(),
                 args: args![],
             }],
-            vec![owner_token.clone()],
+            vec![],
         )
         .unwrap();
 
@@ -51,8 +50,8 @@ fn basic_nft_mint() {
             .decode::<ResourceAddress>()
             .unwrap(),
         ResourceAddress::new(Hash::from_array([
-            111, 55, 52, 37, 223, 64, 196, 187, 156, 159, 233, 83, 173, 242, 171, 202, 185, 41, 8, 165, 148, 46, 29,
-            61, 151, 144, 62, 253, 183, 220, 7, 77
+            155, 103, 178, 255, 153, 131, 226, 138, 244, 241, 8, 90, 17, 230, 161, 198, 234, 166, 175, 80, 196, 149,
+            205, 109, 213, 226, 6, 201, 33, 209, 58, 89
         ]))
     );
 

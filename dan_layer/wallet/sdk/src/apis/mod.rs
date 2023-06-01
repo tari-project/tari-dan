@@ -7,6 +7,5 @@ pub mod confidential_outputs;
 pub mod config;
 pub mod jwt;
 pub mod key_manager;
-pub mod non_fungible_tokens;
 pub mod substate;
 pub mod transaction;
