@@ -170,10 +170,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let tx_hash = self.tracker.transaction_hash();
         let template_address = self.tracker.get_template_address()?;
 
-        let mut event = Event::new(component_address, template_address, tx_hash, topic);
-        payload
-            .into_iter()
-            .for_each(|(key, value)| event.add_payload(key, value));
+        let event = Event::new(component_address, template_address, tx_hash, topic, payload);
 
         self.tracker.add_event(event);
         Ok(())
