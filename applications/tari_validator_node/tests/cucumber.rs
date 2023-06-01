@@ -238,7 +238,7 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
-        .run("tests/features/")
+        .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore"))
         .await;
 
     shutdown.trigger();
