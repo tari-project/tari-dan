@@ -21,6 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use tari_bor::BorTag;
 use tari_template_abi::rust::collections::BTreeMap;
 
@@ -56,5 +57,12 @@ impl From<BTreeMap<String, String>> for Metadata {
 impl Default for Metadata {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Display for Metadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+        // write!(f, "{:?}", self)
     }
 }
