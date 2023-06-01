@@ -23,10 +23,10 @@ pub struct ConfidentialStatement {
     /// Public nonce (R) that was used to generate the commitment mask
     // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
     pub sender_public_nonce: RistrettoPublicKeyBytes,
-    /// Commitment value encrypted for the receiver. Without this it would be difficult (not impossible) for the
-    /// receiver to determine the value component of the commitment.
+    /// Commitment value encrypted for the receiver. This enables the receiver to determine the value component of the
+    /// commitment.
     // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
-    pub encrypted_value: EncryptedValue,
+    pub encrypted_data: EncryptedData,
     pub minimum_value_promise: u64,
     pub revealed_amount: Amount,
 }
@@ -40,20 +40,20 @@ pub struct ConfidentialWithdrawProof {
     pub balance_proof: BalanceProofSignature,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct EncryptedValue(
+pub struct EncryptedData(
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
-    pub [u8; EncryptedValue::size()],
+    #[serde(with = "serde_big_array::BigArray")] pub [u8; EncryptedData::size()],
 );
 
-impl EncryptedValue {
+impl EncryptedData {
     pub const fn size() -> usize {
-        24
+        80
     }
 }
 
-impl AsRef<[u8]> for EncryptedValue {
+impl AsRef<[u8]> for EncryptedData {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }

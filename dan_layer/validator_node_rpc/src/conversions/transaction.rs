@@ -33,7 +33,7 @@ use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instructio
 use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
-    models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedValue},
+    models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData},
     Hash,
 };
 use tari_transaction::{SubstateChange, Transaction, TransactionMeta};
@@ -421,9 +421,9 @@ impl TryFrom<proto::transaction::ConfidentialStatement> for ConfidentialStatemen
             commitment: checked_copy_fixed(&val.commitment)
                 .ok_or_else(|| anyhow!("Invalid length of commitment bytes"))?,
             sender_public_nonce,
-            encrypted_value: EncryptedValue(
-                checked_copy_fixed(&val.encrypted_value)
-                    .ok_or_else(|| anyhow!("Invalid length of encrypted_value bytes"))?,
+            encrypted_data: EncryptedData(
+                checked_copy_fixed(&val.encrypted_data)
+                    .ok_or_else(|| anyhow!("Invalid length of encrypted_data bytes"))?,
             ),
             minimum_value_promise: val.minimum_value_promise,
             revealed_amount: val.revealed_amount.try_into()?,
@@ -436,7 +436,7 @@ impl From<ConfidentialStatement> for proto::transaction::ConfidentialStatement {
         Self {
             commitment: val.commitment.to_vec(),
             sender_public_nonce: val.sender_public_nonce.as_bytes().to_vec(),
-            encrypted_value: val.encrypted_value.as_ref().to_vec(),
+            encrypted_data: val.encrypted_data.as_ref().to_vec(),
             minimum_value_promise: val.minimum_value_promise,
             revealed_amount: val
                 .revealed_amount

@@ -615,7 +615,7 @@ pub async fn handle_claim_burn(
     let output = output.into_unclaimed_confidential_output().unwrap();
     let unmasked_output = sdk.confidential_crypto_api().unblind_output(
         &output.commitment,
-        &output.encrypted_value,
+        &output.encrypted_data,
         &account_secret_key.k,
         &reciprocal_claim_public_key,
     )?;

@@ -1,15 +1,20 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::mem::size_of;
+
 use chacha20poly1305::{
     aead,
     aead::{generic_array::GenericArray, Aead, Payload},
     ChaCha20Poly1305,
     KeyInit,
     Nonce,
+    XChaCha20Poly1305,
+    XNonce,
 };
 use digest::FixedOutput;
 use lazy_static::lazy_static;
+use rand::{rngs::OsRng, RngCore};
 use tari_common_types::types::{BulletRangeProof, Commitment, CommitmentFactory, PrivateKey, PublicKey};
 use tari_crypto::{
     commitment::{ExtensionDegree, HomomorphicCommitmentFactory},
@@ -23,7 +28,7 @@ use tari_crypto::{
 };
 use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
-    models::{Amount, ConfidentialOutputProof, ConfidentialStatement, EncryptedValue},
+    models::{Amount, ConfidentialOutputProof, ConfidentialStatement, EncryptedData},
 };
 use tari_utilities::safe_array::SafeArray;
 
@@ -79,12 +84,12 @@ pub fn generate_confidential_proof(
         .as_ref()
         .map(|stmt| -> Result<_, ConfidentialProofError> {
             let change_commitment = stmt.to_commitment();
-            let encrypted_value = encrypt_value(&stmt.mask, &change_commitment, stmt.amount.value() as u64)?;
+            let encrypted_data = encrypt_value(&stmt.mask, &change_commitment, stmt.amount.value() as u64)?;
             Ok(ConfidentialStatement {
                 commitment: copy_fixed(change_commitment.as_bytes()),
                 sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(stmt.sender_public_nonce.as_bytes())
                     .expect("[generate_confidential_proof] change nonce"),
-                encrypted_value,
+                encrypted_data,
                 minimum_value_promise: stmt.minimum_value_promise,
                 revealed_amount: stmt.reveal_amount,
             })
@@ -92,8 +97,8 @@ pub fn generate_confidential_proof(
         .transpose()?;
 
     let commitment = output_statement.to_commitment();
-    let encryption_key = kdfs::encrypted_value_kdf_aead(&output_statement.mask, &commitment);
-    let encrypted_value = encrypt_value(&encryption_key, &commitment, output_statement.amount.value() as u64)?;
+    let encryption_key = kdfs::encrypted_data_kdf_aead(&output_statement.mask, &commitment);
+    let encrypted_data = encrypt_value(&encryption_key, &commitment, output_statement.amount.value() as u64)?;
     let output_range_proof = generate_extended_bullet_proof(output_statement, change_statement)?;
 
     Ok(ConfidentialOutputProof {
@@ -101,7 +106,7 @@ pub fn generate_confidential_proof(
             commitment: copy_fixed(commitment.as_bytes()),
             sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(output_statement.sender_public_nonce.as_bytes())
                 .expect("[generate_confidential_proof] output nonce"),
-            encrypted_value,
+            encrypted_data,
             minimum_value_promise: output_statement.minimum_value_promise,
             revealed_amount: output_statement.reveal_amount,
         },
@@ -110,52 +115,71 @@ pub fn generate_confidential_proof(
     })
 }
 
-fn inner_encrypted_value_kdf_aead(encryption_key: &PrivateKey, commitment: &Commitment) -> EncryptedValueKey {
+fn inner_encrypted_data_kdf_aead(encryption_key: &PrivateKey, commitment: &Commitment) -> EncryptedValueKey {
     let mut aead_key = EncryptedValueKey::from(SafeArray::default());
     // This has to be the same as the base layer so that burn claims are spendable
-    hash_domain!(TransactionKdfDomain, "com.tari.base_layer.core.transactions.kdf", 0);
-    DomainSeparatedHasher::<Blake256, TransactionKdfDomain>::new_with_label("encrypted_value")
+    hash_domain!(
+        TransactionSecureNonceKdfDomain,
+        "com.tari.base_layer.core.transactions.secure_nonce_kdf",
+        0
+    );
+    DomainSeparatedHasher::<Blake256, TransactionSecureNonceKdfDomain>::new_with_label("encrypted_value_and_mask")
         .chain(encryption_key.as_bytes())
         .chain(commitment.as_bytes())
         .finalize_into(GenericArray::from_mut_slice(aead_key.reveal_mut()));
     aead_key
 }
 
-const ENCRYPTED_VALUE_TAG: &[u8] = b"TARI_AAD_VALUE";
+const ENCRYPTED_DATA_TAG: &'static [u8] = b"TARI_AAD_VALUE_AND_MASK_EXTEND_NONCE_VARIANT";
 pub(crate) fn encrypt_value(
     encryption_key: &PrivateKey,
     commitment: &Commitment,
     amount: u64,
-) -> Result<EncryptedValue, aead::Error> {
-    let aead_key = inner_encrypted_value_kdf_aead(encryption_key, commitment);
-    let chacha_poly = ChaCha20Poly1305::new(GenericArray::from_slice(aead_key.reveal()));
+) -> Result<EncryptedData, aead::Error> {
+    let aead_key = inner_encrypted_data_kdf_aead(encryption_key, commitment);
+    let chacha_poly = XChaCha20Poly1305::new(GenericArray::from_slice(aead_key.reveal()));
     let payload = Payload {
         msg: &amount.to_le_bytes(),
-        aad: ENCRYPTED_VALUE_TAG,
+        aad: ENCRYPTED_DATA_TAG,
     };
-    // Encrypt the value (with fixed length) using ChaCha20-Poly1305 with a fixed zero nonce
-    let buffer = chacha_poly.encrypt(&Nonce::default(), payload)?;
-    let mut data: [u8; EncryptedValue::size()] = [0; EncryptedValue::size()];
+    // Produce a secure random nonce
+    let mut nonce = [0u8; size_of::<XNonce>()];
+    OsRng.fill_bytes(&mut nonce);
+    let nonce_ga = XNonce::from_slice(&nonce);
+
+    // Encrypt the value (with fixed length) using ChaCha20-Poly1305 with a fixed nonce
+    let buffer = chacha_poly.encrypt(nonce_ga, payload)?;
+    let mut data: [u8; EncryptedData::size()] = [0; EncryptedData::size()];
     data[..].copy_from_slice(&buffer);
-    Ok(EncryptedValue(data))
+    Ok(EncryptedData(data))
 }
 
-pub fn decrypt_value(
+pub fn decrypt_value_and_mask(
     encryption_key: &PrivateKey,
     commitment: &Commitment,
-    encrypted_value: &EncryptedValue,
-) -> Result<u64, aead::Error> {
-    let aead_key = inner_encrypted_value_kdf_aead(encryption_key, commitment);
+    encrypted_data: &EncryptedData,
+) -> Result<(u64, PrivateKey), aead::Error> {
+    let aead_key = inner_encrypted_data_kdf_aead(encryption_key, commitment);
+    let cipher = XChaCha20Poly1305::new(GenericArray::from_slice(aead_key.reveal()));
+
+    let (nonce, ciphertext) = encrypted_data.as_ref().split_at(size_of::<XNonce>());
+    let nonce_ga = XNonce::from_slice(nonce);
     // Authenticate and decrypt the value
     let aead_payload = Payload {
-        msg: encrypted_value.as_ref(),
-        aad: ENCRYPTED_VALUE_TAG,
+        msg: ciphertext,
+        aad: ENCRYPTED_DATA_TAG,
     };
-    let mut value_bytes = [0u8; 8];
-    let decrypted_bytes =
-        ChaCha20Poly1305::new(GenericArray::from_slice(aead_key.reveal())).decrypt(&Nonce::default(), aead_payload)?;
-    value_bytes.clone_from_slice(&decrypted_bytes[..8]);
-    Ok(u64::from_le_bytes(value_bytes))
+
+    let decrypted_bytes = cipher.decrypt(nonce_ga, aead_payload)?;
+    const VALUE_SIZE: usize = size_of::<u64>();
+    let mut value_bytes = [0u8; VALUE_SIZE];
+    value_bytes.clone_from_slice(&decrypted_bytes[..VALUE_SIZE]);
+    let mut mask_bytes = [0u8; 32];
+    mask_bytes.clone_from_slice(&decrypted_bytes[VALUE_SIZE..]);
+    Ok((
+        u64::from_le_bytes(value_bytes),
+        PrivateKey::from_bytes(&mask_bytes).unwrap(),
+    ))
 }
 
 fn generate_extended_bullet_proof(
@@ -242,7 +266,7 @@ mod tests {
             let commitment = get_commitment_factory().commit_value(&key, amount);
             let encrypted = encrypt_value(&key, &commitment, amount).unwrap();
 
-            let val = decrypt_value(&key, &commitment, &encrypted).unwrap();
+            let val = decrypt_value_and_mask(&key, &commitment, &encrypted).unwrap();
             assert_eq!(val, 100);
         }
     }

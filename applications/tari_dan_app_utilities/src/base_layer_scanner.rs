@@ -58,7 +58,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress, SubstateValue},
 };
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib::models::{EncryptedValue, TemplateAddress, UnclaimedConfidentialOutputAddress};
+use tari_template_lib::models::{EncryptedData, TemplateAddress, UnclaimedConfidentialOutputAddress};
 use tokio::{task, task::JoinHandle, time};
 
 use crate::{
@@ -363,11 +363,25 @@ impl BaseLayerScanner {
                 // Technically impossible, but anyway
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
+        let encrypted_data = {
+            let bytes = output.encrypted_data.to_byte_vec();
+            if bytes.len() != EncryptedData::size() {
+                return Err(BaseLayerScannerError::InvalidSideChainUtxoResponse(format!(
+                    "Invalid encrypted data size: {}. Expected {}",
+                    bytes.len(),
+                    EncryptedData::size()
+                )));
+            }
+            let mut data = [0u8; EncryptedData::size()];
+            data.copy_from_slice(&bytes);
+            EncryptedData(data)
+        };
+
         let substate = Substate::new(
             0,
             SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
                 commitment: output.commitment.clone(),
-                encrypted_value: EncryptedValue(output.encrypted_value.0),
+                encrypted_data,
             }),
         );
         let shard_id = ShardId::from_address(&address, 0);

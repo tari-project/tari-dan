@@ -7,13 +7,13 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
 tari_utilities = "0.4.10"
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_core" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2", package = "tari_core" }
 tari_crypto = { version = "0.16", features = ["borsh"] }
 tari_engine_types = { path = "../engine_types" }
 tari_bor = { path = "../tari_bor" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
 
 anyhow = "1.0"
 # TODO: remove once we use borsh for all serialization
@@ -26,7 +26,7 @@ prost-types = "0.9"
 serde = "1.0.126"
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_common", features = ["build"] }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2", package = "tari_common", features = ["build"] }
 
 [package.metadata.cargo-machete]
 ignored = ["prost", "prost-types"] # false positive, used in OUT_DIR structs

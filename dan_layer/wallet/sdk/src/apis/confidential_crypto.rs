@@ -13,14 +13,14 @@ use tari_crypto::{
 use tari_engine_types::confidential::{challenges, ConfidentialOutput};
 use tari_template_lib::{
     crypto::BalanceProofSignature,
-    models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedValue},
+    models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedData},
 };
 use tari_utilities::ByteArray;
 
 use crate::{
     byte_utils::copy_fixed,
     confidential::{
-        decrypt_value,
+        decrypt_value_and_mask,
         encrypt_value,
         generate_confidential_proof,
         get_commitment_factory,
@@ -52,12 +52,14 @@ impl ConfidentialCryptoApi {
         kdfs::output_mask_kdf(&shared_secret)
     }
 
-    pub fn derive_value_encryption_key_for_receiver(
+    pub fn derive_encrypted_data_key_for_receiver(
         &self,
-        private_key: &PrivateKey,
-        commitment: &Commitment,
+        public_nonce: &PublicKey,
+        secret_key: &PrivateKey,
     ) -> PrivateKey {
-        kdfs::encrypted_value_kdf_aead(private_key, commitment)
+        let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(secret_key, public_nonce);
+        let shared_secret = PrivateKey::from_bytes(shared_secret.as_bytes()).unwrap();
+        kdfs::encrypted_data_kdf_aead(&shared_secret)
     }
 
     pub fn generate_withdraw_proof(
@@ -105,13 +107,13 @@ impl ConfidentialCryptoApi {
         })
     }
 
-    pub fn extract_value(
+    pub fn extract_mask_and_value(
         &self,
         encryption_key: &PrivateKey,
         commitment: &Commitment,
-        encrypted_value: &EncryptedValue,
+        encrypted_data: &EncryptedData,
     ) -> Result<u64, ConfidentialCryptoApiError> {
-        let value = decrypt_value(encryption_key, commitment, encrypted_value)
+        let value = decrypt_value_and_mask(encryption_key, commitment, encrypted_data)
             .map_err(|_| ConfidentialCryptoApiError::FailedDecryptValue)?;
         Ok(value)
     }
@@ -127,14 +129,16 @@ impl ConfidentialCryptoApi {
     pub fn unblind_output(
         &self,
         output_commitment: &Commitment,
-        output_encrypted_value: &EncryptedValue,
+        output_encrypted_data: &EncryptedData,
         claim_secret: &PrivateKey,
         reciprocal_public_key: &PublicKey,
     ) -> Result<ConfidentialOutputWithMask, ConfidentialCryptoApiError> {
-        let mask = self.derive_output_mask_for_receiver(reciprocal_public_key, claim_secret);
-        let encryption_key = self.derive_value_encryption_key_for_receiver(&mask, output_commitment);
+        let encryption_key = self.derive_encrypted_data_key_for_receiver(reciprocal_public_key, &claim_secret);
 
-        let value = self.extract_value(&encryption_key, output_commitment, output_encrypted_value)?;
+        // let mask = self.derive_output_mask_for_receiver(reciprocal_public_key, claim_secret);
+        // let encryption_key = self.derive_encrypted_data_key_for_receiver(&mask, output_commitment);
+
+        let value = self.extract_mask_and_value(&encryption_key, output_commitment, output_encrypted_data)?;
         let commitment = get_commitment_factory().commit_value(&mask, value);
         if *output_commitment == commitment {
             Ok(ConfidentialOutputWithMask {
@@ -162,14 +166,14 @@ impl ConfidentialCryptoApi {
                 details: "[generate_output_for_dest] amount is negative".to_string(),
             })?;
         let commitment = self.create_commitment(&output_mask, amount);
-        let encrypt_key = self.derive_value_encryption_key_for_receiver(&output_mask, &commitment);
-        let encrypted_value =
+        let encrypt_key = self.derive_encrypted_data_key_for_receiver(&output_mask);
+        let encrypted_data =
             encrypt_value(&encrypt_key, &commitment, amount).map_err(ConfidentialCryptoApiError::AeadError)?;
 
         Ok(ConfidentialOutput {
             commitment,
             stealth_public_nonce: pub_nonce,
-            encrypted_value,
+            encrypted_data,
             minimum_value_promise: 0,
         })
     }
