@@ -29,4 +29,4 @@ mod transaction;
 pub use builder::TransactionBuilder;
 pub use change::SubstateChange;
 pub use signature::InstructionSignature;
-pub use transaction::{Transaction, TransactionMeta};
+pub use transaction::{SubstateRequirement, Transaction, TransactionMeta};

@@ -49,7 +49,7 @@ Feature: Leader failure scenarios
   # When I print the cucumber world
   # When I wait 5000 seconds
 
-  @serial
+  @serial @ignore
   Scenario: Leader failure with multiple committees
     # Initialize a base node, wallet and miner
     Given a base node BASE

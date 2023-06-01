@@ -24,6 +24,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     convert::TryInto,
     str::FromStr,
+    sync::Arc,
 };
 
 use anyhow::anyhow;
@@ -37,21 +38,22 @@ use tari_engine_types::{
     events::Event,
     substate::{Substate, SubstateAddress},
 };
-use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
+use tari_indexer_lib::{
+    substate_decoder::find_related_substates,
+    substate_scanner::SubstateScanner,
+    NonFungibleSubstate,
+};
 use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
-use crate::{
-    substate_decoder::find_related_substates,
-    substate_storage_sqlite::{
-        models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
-        sqlite_substate_store_factory::{
-            SqliteSubstateStore,
-            SqliteSubstateStoreWriteTransaction,
-            SubstateStore,
-            SubstateStoreReadTransaction,
-            SubstateStoreWriteTransaction,
-        },
+use crate::substate_storage_sqlite::{
+    models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
+    sqlite_substate_store_factory::{
+        SqliteSubstateStore,
+        SqliteSubstateStoreWriteTransaction,
+        SubstateStore,
+        SubstateStoreReadTransaction,
+        SubstateStoreWriteTransaction,
     },
 };
 
@@ -79,13 +81,13 @@ pub struct EventResponse {
 }
 
 pub struct SubstateManager {
-    substate_scanner: SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+    substate_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
     substate_store: SqliteSubstateStore,
 }
 
 impl SubstateManager {
     pub fn new(
-        dan_layer_scanner: SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+        dan_layer_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
         substate_store: SqliteSubstateStore,
     ) -> Self {
         Self {
@@ -119,6 +121,7 @@ impl SubstateManager {
             if let SubstateResult::Up {
                 substate: related_substate,
                 ..
+            // TODO: substate fetching could be done in parallel (tokio)
             } = self.substate_scanner.get_substate(&address, None).await?
             {
                 related_substates.insert(address, related_substate);

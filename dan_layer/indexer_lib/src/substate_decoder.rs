@@ -20,7 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use anyhow::Context;
 use tari_engine_types::{
     component::ComponentHeader,
     non_fungible::NonFungibleContainer,
@@ -35,7 +34,17 @@ pub type JsonValue = serde_json::Value;
 pub type JsonObject = serde_json::Map<String, JsonValue>;
 pub type CborValue = ciborium::value::Value;
 
-pub fn encode_substate_into_json(substate: &Substate) -> Result<JsonValue, anyhow::Error> {
+#[derive(Debug, thiserror::Error)]
+pub enum SubstateDecoderError {
+    #[error("Could not decode the substate: {0}")]
+    BinaryEncodingError(#[from] ciborium::value::Error),
+    #[error("Serde error: {0}")]
+    SerdeError(#[from] serde_json::Error),
+    #[error("Unexpected error: {0}")]
+    UnexpectedError(String),
+}
+
+pub fn encode_substate_into_json(substate: &Substate) -> Result<JsonValue, SubstateDecoderError> {
     let substate_cbor = decode_into_cbor(&substate.to_bytes())?;
     let substate_cbor = fix_invalid_object_keys(&substate_cbor);
     let mut result = serde_json::to_value(substate_cbor)?;
@@ -57,7 +66,7 @@ pub fn encode_substate_into_json(substate: &Substate) -> Result<JsonValue, anyho
 fn encode_non_fungible_into_json(
     nf_container: &NonFungibleContainer,
     substate_json_field: &mut JsonValue,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), SubstateDecoderError> {
     if let Some(nf) = nf_container.contents() {
         let non_fungible_field = get_mut_json_field(substate_json_field, "NonFungible")?;
         let non_fungible_object = json_value_as_object(non_fungible_field)?;
@@ -72,7 +81,7 @@ fn encode_non_fungible_into_json(
 fn encode_component_into_json(
     header: &ComponentHeader,
     substate_json_field: &mut JsonValue,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), SubstateDecoderError> {
     let component_field = get_mut_json_field(substate_json_field, "Component")?;
     let component_object = json_value_as_object(component_field)?;
     decode_cbor_field_into_json(header.state(), component_object, "state")?;
@@ -84,7 +93,7 @@ fn decode_cbor_field_into_json(
     bytes: &[u8],
     parent_object: &mut JsonObject,
     field_name: &str,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), SubstateDecoderError> {
     let cbor_value = decode_into_cbor(bytes)?;
     let cbor_value = fix_invalid_object_keys(&cbor_value);
     let json_value = serde_json::to_value(cbor_value)?;
@@ -136,26 +145,33 @@ fn fix_invalid_object_keys(value: &CborValue) -> CborValue {
     }
 }
 
-fn get_mut_json_field<'a>(value: &'a mut JsonValue, field_name: &str) -> Result<&'a mut JsonValue, anyhow::Error> {
+fn get_mut_json_field<'a>(
+    value: &'a mut JsonValue,
+    field_name: &str,
+) -> Result<&'a mut JsonValue, SubstateDecoderError> {
     let json_field = json_value_as_object(value)?
         .get_mut(field_name)
-        .context("field does not exist")?;
+        .ok_or(SubstateDecoderError::UnexpectedError("field does not exist".to_owned()))?;
 
     Ok(json_field)
 }
 
-fn json_value_as_object(value: &mut JsonValue) -> Result<&mut JsonObject, anyhow::Error> {
-    let json_object = value.as_object_mut().context("invalid object")?;
+fn json_value_as_object(value: &mut JsonValue) -> Result<&mut JsonObject, SubstateDecoderError> {
+    let json_object = value
+        .as_object_mut()
+        .ok_or(SubstateDecoderError::UnexpectedError("invalid object".to_owned()))?;
 
     Ok(json_object)
 }
 
-fn decode_into_cbor(bytes: &[u8]) -> Result<CborValue, anyhow::Error> {
-    Ok(ciborium::de::from_reader::<CborValue, _>(bytes)?)
+fn decode_into_cbor(bytes: &[u8]) -> Result<CborValue, SubstateDecoderError> {
+    let value = ciborium::de::from_reader::<CborValue, _>(bytes)
+        .map_err(|e| SubstateDecoderError::UnexpectedError(e.to_string()))?;
+    Ok(value)
 }
 
 // Recursively scan a substate for references to other substates
-pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress>, anyhow::Error> {
+pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress>, SubstateDecoderError> {
     match substate.substate_value() {
         SubstateValue::Component(header) => {
             // a component "state" is encoded using CBOR, so we need to decode and then scan inside for references
@@ -188,7 +204,7 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress
 }
 
 // recursively scan a CBOR value tree for substate references (represented as "tagged" values)
-fn find_related_substates_in_cbor_value(value: &CborValue) -> Result<Vec<SubstateAddress>, anyhow::Error> {
+fn find_related_substates_in_cbor_value(value: &CborValue) -> Result<Vec<SubstateAddress>, SubstateDecoderError> {
     match value {
         ciborium::value::Value::Tag(tag, _) => {
             if let Some(tag_type) = BinaryTag::from_u64(*tag) {
@@ -236,7 +252,7 @@ fn find_related_substates_in_cbor_value(value: &CborValue) -> Result<Vec<Substat
     }
 }
 
-fn find_related_substates_in_cbor_values(values: &[CborValue]) -> Result<Vec<SubstateAddress>, anyhow::Error> {
+fn find_related_substates_in_cbor_values(values: &[CborValue]) -> Result<Vec<SubstateAddress>, SubstateDecoderError> {
     let related_substates_per_item: Vec<Vec<SubstateAddress>> = values
         .iter()
         .map(find_related_substates_in_cbor_value)

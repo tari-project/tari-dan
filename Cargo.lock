@@ -7856,9 +7856,13 @@ name = "tari_indexer_lib"
 version = "0.50.0-pre.0"
 dependencies = [
  "async-trait",
+ "ciborium",
  "log",
  "rand 0.8.5",
  "serde",
+ "serde_json",
+ "tari_common_types",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_core",
  "tari_engine_types",

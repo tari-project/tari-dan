@@ -91,6 +91,16 @@ message TransactionMeta {
   repeated bytes involved_shard_ids = 1;
   repeated SubstateRef involved_substates = 2;
   uint32 max_outputs = 3;
+  repeated SubstateRequirement required_inputs = 4;
+}
+
+message SubstateRequirement {
+  bytes address = 1;
+  OptionalVersion version = 2;
+}
+
+message OptionalVersion {
+  uint32 version = 1;
 }
 
 message SubstateRef {
