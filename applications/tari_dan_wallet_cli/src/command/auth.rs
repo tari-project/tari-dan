@@ -25,7 +25,7 @@ use std::time::Duration;
 use clap::{Args, Subcommand};
 use tari_dan_wallet_sdk::apis::jwt::JrpcPermissions;
 use tari_wallet_daemon_client::{
-    types::{AuthLoginAcceptRequest, AuthLoginDenyRequest, AuthLoginRequest},
+    types::{AuthLoginAcceptRequest, AuthLoginDenyRequest, AuthLoginRequest, AuthRevokeTokenRequest},
     WalletDaemonClient,
 };
 
@@ -34,6 +34,7 @@ pub enum AuthSubcommand {
     Request(RequestArgs),
     Grant(GrantArgs),
     Deny(DenyArgs),
+    Revoke(RevokeArgs),
 }
 
 // TODO: Add permissions
@@ -54,6 +55,11 @@ pub struct GrantArgs {
 #[derive(Debug, Args, Clone)]
 pub struct DenyArgs {
     auth_token: String,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct RevokeArgs {
+    permission_token: String,
 }
 
 impl AuthSubcommand {
@@ -89,6 +95,14 @@ impl AuthSubcommand {
                     })
                     .await?;
                 println!("Access denied!");
+            },
+            Revoke(args) => {
+                client
+                    .auth_revoke(AuthRevokeTokenRequest {
+                        permission_token: args.permission_token,
+                    })
+                    .await?;
+                println!("Token revoked!");
             },
         }
         Ok(())

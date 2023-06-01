@@ -490,3 +490,11 @@ pub struct AuthLoginDenyRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginDenyResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthRevokeTokenRequest {
+    pub permission_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthRevokeTokenResponse {}
