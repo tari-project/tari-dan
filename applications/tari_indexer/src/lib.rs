@@ -33,7 +33,6 @@ pub mod graphql;
 mod http_ui;
 mod json_rpc;
 mod p2p;
-mod substate_decoder;
 mod substate_manager;
 mod substate_storage_sqlite;
 mod transaction_manager;
@@ -97,15 +96,19 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     )
     .await?;
 
-    let dan_layer_scanner = SubstateScanner::new(
+    let dan_layer_scanner = Arc::new(SubstateScanner::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
-    );
+    ));
 
-    let substate_manager = Arc::new(SubstateManager::new(dan_layer_scanner, services.substate_store.clone()));
+    let substate_manager = Arc::new(SubstateManager::new(
+        dan_layer_scanner.clone(),
+        services.substate_store.clone(),
+    ));
     let transaction_manager = TransactionManager::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
+        dan_layer_scanner,
     );
 
     // Run the JSON-RPC API
