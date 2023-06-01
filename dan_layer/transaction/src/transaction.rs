@@ -207,6 +207,10 @@ impl TransactionMeta {
     pub fn max_outputs(&self) -> u32 {
         self.max_outputs
     }
+
+    pub fn includes_substate(&self, address: &SubstateAddress) -> bool {
+        self.required_inputs.iter().any(|r| r.address() == address)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]

@@ -88,7 +88,11 @@ where
             .iter()
             .map(find_related_substates)
             .collect::<Result<_, _>>()?;
-        let related_addresses = related_addresses.into_iter().flatten();
+        // exclude related substates that have been already included as requirement by the client
+        let related_addresses = related_addresses
+            .into_iter()
+            .flatten()
+            .filter(|s| !original_transaction.meta().includes_substate(s));
         for address in related_addresses {
             // we need to fetch the latest version of all the related substates
             // note that if the version specified is "None", the scanner will fetch the latest version
