@@ -50,8 +50,8 @@ fn basic_nft_mint() {
             .decode::<ResourceAddress>()
             .unwrap(),
         ResourceAddress::new(Hash::from_array([
-            155, 103, 178, 255, 153, 131, 226, 138, 244, 241, 8, 90, 17, 230, 161, 198, 234, 166, 175, 80, 196, 149,
-            205, 109, 213, 226, 6, 201, 33, 209, 58, 89
+            173, 115, 126, 108, 48, 19, 52, 71, 245, 49, 240, 215, 58, 86, 196, 199, 60, 238, 34, 238, 227, 231, 149,
+            125, 176, 185, 11, 213, 155, 49, 237, 48
         ]))
     );
 
@@ -82,4 +82,5 @@ fn basic_nft_mint() {
         .unwrap();
 
     assert!(result.finalize.result.is_accept());
+    println!("FLAG: CUCUMBER {:?}", result.finalize.events);
 }
