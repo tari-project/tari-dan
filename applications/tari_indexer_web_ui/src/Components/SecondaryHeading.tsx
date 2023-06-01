@@ -34,7 +34,6 @@ function SecondaryHeading({ children }: Props) {
         flexDirection: 'column',
         alignItems: 'center',
         width: '100%',
-        marginTop: '30px',
       }}
     >
       <h1>{children}</h1>

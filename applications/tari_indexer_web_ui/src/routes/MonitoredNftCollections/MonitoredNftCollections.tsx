@@ -27,16 +27,16 @@ import MonitoredNftCollections from '../VN/Components/MonitoredNftCollections';
 
 function MonitoredNftCollectionsLayout() {
   return (
-    <div>
-      <Grid container spacing={5}>
+    <>
+      <Grid item sm={12} md={12} xs={12}>
         <PageHeading>Monitored NFT collections</PageHeading>
-        <Grid item xs={12}>
-          <StyledPaper>
-            <MonitoredNftCollections />
-          </StyledPaper>
-        </Grid>
       </Grid>
-    </div>
+      <Grid item sm={12} md={12} xs={12}>
+        <StyledPaper>
+          <MonitoredNftCollections />
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 
