@@ -29,16 +29,19 @@ use anyhow::anyhow;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_dan_common_types::ShardId;
-use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction};
+use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
     models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedValue},
     Hash,
 };
-use tari_transaction::{SubstateChange, Transaction, TransactionMeta};
+use tari_transaction::{SubstateChange, SubstateRequirement, Transaction, TransactionMeta};
 
-use crate::{proto, utils::checked_copy_fixed};
+use crate::{
+    proto::{self, transaction::OptionalVersion},
+    utils::checked_copy_fixed,
+};
 
 //---------------------------------- Transaction --------------------------------------------//
 impl TryFrom<proto::transaction::Transaction> for Transaction {
@@ -262,6 +265,16 @@ impl TryFrom<proto::transaction::TransactionMeta> for TransactionMeta {
             ));
         }
 
+        let required_inputs = val
+            .required_inputs
+            .into_iter()
+            .map(|spec| {
+                let address = SubstateAddress::from_bytes(&spec.address)?;
+                let version = spec.version.map(|v| v.version);
+                Result::<_, anyhow::Error>::Ok(SubstateRequirement::new(address, version))
+            })
+            .collect::<Result<_, _>>()?;
+
         let involved_objects = val
             .involved_shard_ids
             .into_iter()
@@ -278,7 +291,7 @@ impl TryFrom<proto::transaction::TransactionMeta> for TransactionMeta {
             })
             .collect::<Result<_, _>>()?;
 
-        Ok(TransactionMeta::new(involved_objects, val.max_outputs))
+        Ok(TransactionMeta::new(required_inputs, involved_objects, val.max_outputs))
     }
 }
 
@@ -291,8 +304,39 @@ impl<T: Borrow<TransactionMeta>> From<T> for proto::transaction::TransactionMeta
                 change: proto::transaction::SubstateChange::from(*ch) as i32,
             });
         }
+        meta.required_inputs = val.borrow().required_inputs_iter().map(Into::into).collect();
         meta.max_outputs = val.borrow().max_outputs();
         meta
+    }
+}
+
+// -------------------------------- SubstateRequirement -------------------------------- //
+impl TryFrom<proto::transaction::SubstateRequirement> for SubstateRequirement {
+    type Error = anyhow::Error;
+
+    fn try_from(val: proto::transaction::SubstateRequirement) -> Result<Self, Self::Error> {
+        let address = SubstateAddress::from_bytes(&val.address)?;
+        let version = val.version.map(|v| v.version);
+        let substate_specification = SubstateRequirement::new(address, version);
+        Ok(substate_specification)
+    }
+}
+
+impl From<SubstateRequirement> for proto::transaction::SubstateRequirement {
+    fn from(val: SubstateRequirement) -> Self {
+        Self {
+            address: val.address().to_bytes(),
+            version: val.version().map(|v| OptionalVersion { version: v }),
+        }
+    }
+}
+
+impl From<&SubstateRequirement> for proto::transaction::SubstateRequirement {
+    fn from(val: &SubstateRequirement) -> Self {
+        Self {
+            address: val.address().to_bytes(),
+            version: val.version().map(|v| OptionalVersion { version: v }),
+        }
     }
 }
 

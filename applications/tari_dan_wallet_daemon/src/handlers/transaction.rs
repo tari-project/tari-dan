@@ -101,30 +101,28 @@ pub async fn handle_submit(
         let mut substates = get_referenced_component_addresses(&req.instructions);
         substates.extend(get_referenced_component_addresses(&req.fee_instructions));
         let substates = substates.iter().collect::<Vec<_>>();
-        let loaded_dependent_substates = sdk.substate_api().locate_dependent_substates(&substates).await?;
+        let loaded_dependent_substates = sdk
+            .substate_api()
+            .locate_dependent_substates(&substates)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect();
         vec![req.inputs, loaded_dependent_substates].concat()
     };
 
-    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
-    //       object is mutated
-    let mut outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
-
-    outputs.extend(req.specific_non_fungible_outputs.into_iter().map(|(resx_addr, id)| {
-        ShardId::from_address(&SubstateAddress::NonFungible(NonFungibleAddress::new(resx_addr, id)), 0)
-    }));
-
-    let inputs = inputs
+    let outputs: Vec<ShardId> = req
+        .specific_non_fungible_outputs
         .into_iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version))
-        .collect::<Vec<_>>();
+        .map(|(resx_addr, id)| {
+            ShardId::from_address(&SubstateAddress::NonFungible(NonFungibleAddress::new(resx_addr, id)), 0)
+        })
+        .collect();
 
     let transaction = Transaction::builder()
         .with_instructions(req.instructions)
         .with_fee_instructions(req.fee_instructions)
-        .with_inputs(inputs.clone())
+        .with_required_inputs(inputs.clone())
         .with_outputs(outputs.clone())
         .with_new_resources(req.new_resources)
         .with_new_non_fungible_outputs(req.new_non_fungible_outputs)

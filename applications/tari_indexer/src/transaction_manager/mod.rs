@@ -22,7 +22,7 @@
 
 mod error;
 
-use std::{fmt::Display, future::Future};
+use std::{fmt::Display, future::Future, sync::Arc};
 
 use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
@@ -34,6 +34,7 @@ use tari_dan_common_types::{
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
+use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller};
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::{
     SubstateResult,
@@ -49,6 +50,7 @@ const LOG_TARGET: &str = "tari::indexer::transaction_manager";
 pub struct TransactionManager<TEpochManager, TClientFactory> {
     epoch_manager: TEpochManager,
     client_provider: TClientFactory,
+    transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory>,
 }
 
 impl<TEpochManager, TClientFactory, TAddr> TransactionManager<TEpochManager, TClientFactory>
@@ -58,17 +60,27 @@ where
     TClientFactory: ValidatorNodeClientFactory<Addr = TAddr>,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
 {
-    pub fn new(epoch_manager: TEpochManager, client_provider: TClientFactory) -> Self {
+    pub fn new(
+        epoch_manager: TEpochManager,
+        client_provider: TClientFactory,
+        substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory>>,
+    ) -> Self {
         Self {
             epoch_manager,
             client_provider,
+            transaction_autofiller: TransactionAutofiller::new(substate_scanner),
         }
     }
 
     pub async fn submit_transaction(&self, transaction: Transaction) -> Result<PayloadId, TransactionManagerError> {
         let tx_hash = *transaction.hash();
+
+        // automatically scan the inputs and add all related involved objects
+        // note that this operation does not alter the transaction hash
+        let autofilled_transaction = self.transaction_autofiller.autofill_transaction(&transaction).await?;
+
         self.try_with_committee(tx_hash.into_array().into(), move |mut client| {
-            let transaction = transaction.clone();
+            let transaction = autofilled_transaction.clone();
             async move { client.submit_transaction(transaction).await }
         })
         .await

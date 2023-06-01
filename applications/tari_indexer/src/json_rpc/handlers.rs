@@ -63,7 +63,7 @@ use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClie
 
 use crate::{
     bootstrap::Services,
-    substate_decoder::encode_substate_into_json,
+    json_rpc::special_substate_encoding::encode_substate_into_json,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
 };
