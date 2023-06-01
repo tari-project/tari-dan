@@ -157,16 +157,25 @@ where
     ) -> Result<SubstateResult, IndexerError> {
         let shard = ShardId::from_address(substate_address, version);
         let epoch = self.committee_provider.current_epoch().await?;
-        let committee = self.committee_provider.get_committee(epoch, shard).await?;
+        let mut committee = self.committee_provider.get_committee(epoch, shard).await?;
 
-        // TODO: Randomize order of members, otherwise the first one will have much higher traffic.
+        committee.members.shuffle(&mut OsRng);
+        let f = (committee.members.len() - 1) / 3;
+        let mut num_down_substate_results = 0;
         for vn_public_key in &committee.members {
             match self
                 .get_substate_from_vn(vn_public_key, substate_address, version)
                 .await
             {
-                // TODO: For SubstateResult::DoesNotExist, we should check that all other validators concur
-                Ok(substate_result) => return Ok(substate_result),
+                Ok(substate_result) => match substate_result {
+                    SubstateResult::Up { .. } | SubstateResult::Down { .. } => return Ok(substate_result),
+                    SubstateResult::DoesNotExist => {
+                        if num_down_substate_results >= f + 1 {
+                            return Ok(substate_result);
+                        }
+                        num_down_substate_results += 1;
+                    },
+                },
                 Err(e) => {
                     // We ignore a single VN error and keep querying the rest of the committee
                     error!(
@@ -211,7 +220,6 @@ where
             return Err(IndexerError::InvalidSubstateState);
         };
         let events = if let SubstateValue::TransactionReceipt(tx_receipt) = substate_value {
-            warn!(target: LOG_TARGET, "FLAG: CUCUMBER events: {:?}", tx_receipt.events);
             tx_receipt.events
         } else {
             return Err(IndexerError::InvalidSubstateValue);
