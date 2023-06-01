@@ -58,13 +58,13 @@ mod account_non_fungible_template {
         }
 
         pub fn mint_specific(&mut self, id: NonFungibleId, metadata: Metadata) -> Bucket {
-            emit_event(
-                "mint",
-                HashMap::from([
-                    ("if".to_string(), id.to_string()),
-                    ("metadata".to_string(), metadata.to_string()),
-                ]),
-            );
+            // emit_event(
+            //     "mint",
+            //     HashMap::from([
+            //         ("if".to_string(), id.to_string()),
+            //         ("metadata".to_string(), metadata.to_string()),
+            //     ]),
+            // );
 
             // Mint the NFT, this will fail if the token ID already exists
             ResourceManager::get(self.resource_address).mint_non_fungible(id, &metadata, &{})
@@ -73,5 +73,10 @@ mod account_non_fungible_template {
         pub fn get_resource_address(&self) -> ResourceAddress {
             self.resource_address
         }
+
+        // pub fn get_non_fungible(&self) -> NonFungible {
+
+        //     ResourceManager::get_non_fungible(self.resource_address)
+        // }
     }
 }
