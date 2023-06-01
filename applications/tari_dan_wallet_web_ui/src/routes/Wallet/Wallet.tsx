@@ -34,20 +34,26 @@ function Wallet() {
     return <div className="error">{error}</div>;
   }
   return (
-    <Grid container spacing={5}>
-      <SecondaryHeading>Accounts</SecondaryHeading>
+    // <Grid container spacing={5}>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Accounts</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Accounts />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Keys</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Keys</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Keys />
         </StyledPaper>
       </Grid>
-    </Grid>
+    </>
+    // </Grid>
   );
 }
 
