@@ -170,7 +170,7 @@ where
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up { .. } | SubstateResult::Down { .. } => return Ok(substate_result),
                     SubstateResult::DoesNotExist => {
-                        if num_down_substate_results >= f + 1 {
+                        if num_down_substate_results > f {
                             return Ok(substate_result);
                         }
                         num_down_substate_results += 1;

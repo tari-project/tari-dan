@@ -62,7 +62,7 @@ fn insert_and_get_within_epoch_duplicate_public_keys() {
     insert_vns(&mut validator_nodes, 1, Epoch(10));
     let pk = new_public_key();
     insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0));
-    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(1));
+    insert_vn_with_public_key(&mut validator_nodes, pk, Epoch(1));
 
     let vns = validator_nodes.get_all_within_epochs(Epoch(0), Epoch(10)).unwrap();
     assert_eq!(vns.len(), 4);
