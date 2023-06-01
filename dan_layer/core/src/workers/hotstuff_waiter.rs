@@ -1851,18 +1851,6 @@ where
 
         vote_signature::sign_vote(&mut vote_msg, &self.signing_service, vn_shard_key, vn_bmt)?;
 
-        // TODO: remove debugging code
-        {
-            let root = vn_bmt.get_merkle_root();
-            if !vote_msg
-                .merkle_proof()
-                .unwrap()
-                .verify(&root, vote_msg.node_hash().to_vec())
-            {
-                panic!("Invalid vote merkle proof");
-            }
-        }
-
         Ok(vote_msg)
     }
 
