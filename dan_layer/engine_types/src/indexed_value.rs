@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, BorError, FromTagAndValue, ValueVisitor};
@@ -130,7 +130,7 @@ impl FromTagAndValue for TariValue {
                 Ok(Self::NonFungibleAddress(non_fungible_address.into()))
             },
             BinaryTag::Metadata => {
-                let metadata: HashMap<String, String> = value.deserialized().map_err(BorError::from)?;
+                let metadata: BTreeMap<String, String> = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::Metadata(metadata.into()))
             },
             BinaryTag::VaultId => {
