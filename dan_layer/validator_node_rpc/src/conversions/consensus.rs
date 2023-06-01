@@ -30,6 +30,7 @@ use tari_dan_common_types::{
     ObjectPledge,
     QuorumCertificate,
     QuorumDecision,
+    ShardId,
     ShardPledge,
     SubstateState,
     TreeNodeHash,
@@ -51,6 +52,7 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
             validator_metadata: Some(msg.validator_metadata().clone().into()),
             merkle_proof: msg.encode_merkle_proof(),
             node_hash: msg.node_hash().to_vec(),
+            shard_id: msg.shard().into_array().to_vec(),
         }
     }
 }
@@ -73,6 +75,7 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
             metadata.try_into()?,
             VoteMessage::decode_merkle_proof(&value.merkle_proof)?,
             FixedHash::try_from(value.node_hash)?,
+            ShardId::try_from(value.shard_id)?,
         ))
     }
 }

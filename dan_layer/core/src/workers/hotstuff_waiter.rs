@@ -22,6 +22,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    sync::Arc,
     time::Duration,
 };
 
@@ -55,6 +56,7 @@ use tari_transaction::SubstateChange;
 use tokio::{
     sync::{
         broadcast,
+        mpsc,
         mpsc::{Receiver, Sender},
     },
     task,
@@ -79,6 +81,7 @@ use crate::{
     workers::{
         events::HotStuffEvent,
         hotstuff_error::{HotStuffError, ProposalValidationError},
+        pacemaker_worker::Pacemaker,
     },
 };
 
@@ -99,7 +102,7 @@ pub enum RecoveryMessage {
     ElectionInProgress(Epoch, ShardId, PayloadId),
 }
 
-pub struct HotStuffWaiter<
+pub struct HotStuffWaiterThread<
     TPayload,
     TAddr,
     TLeaderStrategy,
@@ -108,13 +111,11 @@ pub struct HotStuffWaiter<
     TShardStore,
     TSigningService,
 > {
-    signing_service: TSigningService,
+    signing_service: Arc<TSigningService>,
     public_key: TAddr,
-    leader_strategy: TLeaderStrategy,
+    leader_strategy: Arc<TLeaderStrategy>,
     /// The epoch manager
     epoch_manager: TEpochManager,
-    /// Received payloads that should be proposed. Only payloads that involve this node are pushed on this channel.
-    rx_new: Receiver<(TPayload, ShardId)>,
     /// Received replica hotstuff messages, namely Proposal messages from the leader or
     /// NewView messages from replicas.
     rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
@@ -138,9 +139,9 @@ pub struct HotStuffWaiter<
     #[allow(dead_code)]
     pacemaker: PacemakerHandle<PacemakerEvents>,
     /// The payload processor. This determines whether a payload proposal results in an accepted or rejected vote.
-    payload_processor: TPayloadProcessor,
+    payload_processor: Arc<TPayloadProcessor>,
     /// Store used to persist consensus state.
-    shard_store: TShardStore,
+    shard_store: Arc<TShardStore>,
     /// Network-wide constants
     // TODO: remove if not needed
     consensus_constants: ConsensusConstants,
@@ -153,6 +154,62 @@ pub struct HotStuffWaiter<
     /// We have to store if we are in the middle of an election, so that when we receive a recovery message
     /// from another VN, we can answer that we are electing and it should wait.
     election_in_progress: HashSet<(ShardId, PayloadId)>,
+    /// The shard_id for this thread.
+    shard_id: ShardId,
+}
+
+pub struct HotStuffWaiter<
+    TPayload,
+    TAddr,
+    TLeaderStrategy,
+    TEpochManager,
+    TPayloadProcessor,
+    TShardStore,
+    TSigningService,
+> {
+    signing_service: Arc<TSigningService>,
+    public_key: TAddr,
+    leader_strategy: Arc<TLeaderStrategy>,
+    /// The epoch manager
+    epoch_manager: TEpochManager,
+    /// Received payloads that should be proposed. Only payloads that involve this node are pushed on this channel.
+    rx_new: Receiver<(TPayload, ShardId)>,
+    /// Received replica hotstuff messages, namely Proposal messages from the leader or
+    /// NewView messages from replicas.
+    rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+    /// Received replica recovery message, namely request for missing node, response election in progress.
+    rx_recovery_message: Receiver<(TAddr, RecoveryMessage)>,
+    /// Received vote messages
+    rx_votes: Receiver<(TAddr, VoteMessage)>,
+    /// Hotstuff messages that should be delivered to the leader
+    tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+    /// Hotstuff messages that should be delivered to the replicas
+    tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
+    /// Recovery messages that should be delivered to replica that initiated recovery
+    tx_recovery: Sender<(RecoveryMessage, TAddr)>,
+    /// Recovery messages that should be delivered to foreign committee
+    tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
+    /// Vote messages that should be delivered to the leader
+    tx_vote_message: Sender<(VoteMessage, TAddr)>,
+    /// HotstuffEvent channel
+    tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
+    /// The payload processor. This determines whether a payload proposal results in an accepted or rejected vote.
+    payload_processor: Arc<TPayloadProcessor>,
+    /// Store used to persist consensus state.
+    shard_store: Arc<TShardStore>,
+    /// Network-wide constants
+    // TODO: remove if not needed
+    consensus_constants: ConsensusConstants,
+    /// Network latency
+    network_latency: Duration,
+    channels: HashMap<
+        ShardId,
+        (
+            Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+            Sender<(TAddr, RecoveryMessage)>,
+            Sender<(TAddr, VoteMessage)>,
+        ),
+    >,
 }
 
 impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
@@ -181,7 +238,6 @@ where
         tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
-        pacemaker: PacemakerHandle<PacemakerEvents>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         shutdown: ShutdownSignal,
@@ -203,7 +259,6 @@ where
             tx_recovery_broadcast,
             tx_vote_message,
             tx_events,
-            pacemaker,
             payload_processor,
             shard_store,
             consensus_constants,
@@ -230,18 +285,233 @@ where
         tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
         tx_vote_message: Sender<(VoteMessage, TAddr)>,
         tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
-        pacemaker: PacemakerHandle<PacemakerEvents>,
         payload_processor: TPayloadProcessor,
         shard_store: TShardStore,
         consensus_constants: ConsensusConstants,
         network_latency: Duration,
     ) -> Self {
         Self {
+            signing_service: Arc::new(signing_service),
+            public_key,
+            epoch_manager,
+            leader_strategy: Arc::new(leader_strategy),
+            rx_new,
+            rx_hs_message,
+            rx_recovery_message,
+            rx_votes,
+            tx_leader,
+            tx_broadcast,
+            tx_recovery,
+            tx_recovery_broadcast,
+            tx_vote_message,
+            tx_events,
+            payload_processor: Arc::new(payload_processor),
+            shard_store: Arc::new(shard_store),
+            consensus_constants,
+            network_latency,
+            channels: HashMap::new(),
+        }
+    }
+
+    async fn spawn_thread(
+        &mut self,
+        shutdown: ShutdownSignal,
+        payload: Option<TPayload>,
+        shard: ShardId,
+    ) -> JoinHandle<anyhow::Result<()>> {
+        let signing_service = Arc::clone(&self.signing_service);
+        let public_key = self.public_key.clone();
+        let epoch_manager = self.epoch_manager.clone();
+        let leader_strategy = Arc::clone(&self.leader_strategy);
+        let tx_leader = self.tx_leader.clone();
+        let tx_broadcast = self.tx_broadcast.clone();
+        let tx_recovery = self.tx_recovery.clone();
+        let tx_recovery_broadcast = self.tx_recovery_broadcast.clone();
+        let tx_vote_message = self.tx_vote_message.clone();
+        let tx_events = self.tx_events.clone();
+        let payload_processor = Arc::clone(&self.payload_processor);
+        let shard_store = Arc::clone(&self.shard_store);
+        let shutdown = shutdown.clone();
+        let consensus_constants = self.consensus_constants.clone();
+        let network_latency = self.network_latency.clone();
+        let (tx_hs_message, rx_hs_message) = mpsc::channel::<(TAddr, HotStuffMessage<TPayload, TAddr>)>(10000);
+        let (tx_recovery_message, rx_recovery_message) = mpsc::channel::<(TAddr, RecoveryMessage)>(10000);
+        let (tx_votes, rx_votes) = mpsc::channel::<(TAddr, VoteMessage)>(10000);
+        self.channels
+            .insert(shard, (tx_hs_message, tx_recovery_message, tx_votes));
+        HotStuffWaiterThread::spawn(
             signing_service,
             public_key,
             epoch_manager,
             leader_strategy,
-            rx_new,
+            rx_hs_message,
+            rx_recovery_message,
+            rx_votes,
+            tx_leader,
+            tx_broadcast,
+            tx_recovery,
+            tx_recovery_broadcast,
+            tx_vote_message,
+            tx_events,
+            payload_processor,
+            shard_store,
+            shutdown,
+            consensus_constants,
+            network_latency,
+            payload,
+            shard,
+        )
+        .await
+    }
+
+    pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), HotStuffError> {
+        loop {
+            tokio::select! {
+                msg = self.rx_new.recv() => {
+                    if let Some((payload, shard)) = msg {
+                        self.spawn_thread(shutdown.clone(), Some(payload), shard).await;
+                        // if let Err(e) = self.on_next_sync_view(payload, shard).await {
+                        //    error!(target: LOG_TARGET, "Error while processing new payload (on_next_sync_view): {}", e);
+                        // }
+                        // self.on_beat(0, msg);
+                        // TODO: Start timer for receiving proposal
+                    } else {
+                        dbg!("All senders have dropped");
+                        break;
+                    }
+                },
+                Some((from, msg)) = self.rx_hs_message.recv() => {
+                    let shard = msg.shard();
+                    if !self.channels.contains_key(&shard) {
+                        self.spawn_thread(shutdown.clone(), None, shard).await;
+                    }
+                    let (tx_hs_message,_,_) = self.channels.get(&shard).ok_or(HotStuffError::ThreadNotRunning)?;
+                    tx_hs_message.send((from, msg)).await?;
+                },
+                Some((from, msg)) = self.rx_votes.recv() => {
+                    let shard = msg.shard();
+                    if !self.channels.contains_key(&shard) {
+                        self.spawn_thread(shutdown.clone(), None, shard).await;
+                    }
+                    let (_, _, tx_votes) = self.channels.get(&shard).ok_or(HotStuffError::ThreadNotRunning)?;
+                    tx_votes.send((from, msg)).await?;
+                },
+                Some((from, msg)) = self.rx_recovery_message.recv() => {
+                    let shard = match msg {
+                        RecoveryMessage::MissingProposal(_,shard,_,_) => shard,
+                        RecoveryMessage::ElectionInProgress(_, shard, _) => shard,
+                    };
+                    if !self.channels.contains_key(&shard) {
+                        self.spawn_thread(shutdown.clone(), None, shard).await;
+                    }
+                    let (_, tx_recovery_message, _) = self.channels.get(&shard).ok_or(HotStuffError::ThreadNotRunning)?;
+                    tx_recovery_message.send((from, msg)).await?;
+                },
+                _ = shutdown.wait() => {
+                    info!(target: LOG_TARGET, "💤 Shutting down");
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<TPayload, TAddr, TLeaderStrategy, TEpochManager, TPayloadProcessor, TShardStore, TSigningService>
+    HotStuffWaiterThread<
+        TPayload,
+        TAddr,
+        TLeaderStrategy,
+        TEpochManager,
+        TPayloadProcessor,
+        TShardStore,
+        TSigningService,
+    >
+where
+    TPayload: Payload + 'static,
+    TAddr: NodeAddressable + Serialize + 'static,
+    TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
+    TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
+    TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
+    TShardStore: ShardStore<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
+    TSigningService: SigningService + Sync + Send + 'static,
+{
+    pub async fn spawn(
+        signing_service: Arc<TSigningService>,
+        public_key: TAddr,
+        epoch_manager: TEpochManager,
+        leader_strategy: Arc<TLeaderStrategy>,
+        rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+        rx_recovery_message: Receiver<(TAddr, RecoveryMessage)>,
+        rx_votes: Receiver<(TAddr, VoteMessage)>,
+        tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+        tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
+        tx_recovery: Sender<(RecoveryMessage, TAddr)>,
+        tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
+        tx_vote_message: Sender<(VoteMessage, TAddr)>,
+        tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
+        payload_processor: Arc<TPayloadProcessor>,
+        shard_store: Arc<TShardStore>,
+        shutdown: ShutdownSignal,
+        consensus_constants: ConsensusConstants,
+        network_latency: Duration,
+        payload: Option<TPayload>,
+        shard: ShardId,
+    ) -> JoinHandle<anyhow::Result<()>> {
+        let pacemaker = Pacemaker::spawn(shutdown.clone());
+        let waiter = HotStuffWaiterThread::new(
+            signing_service,
+            public_key,
+            epoch_manager,
+            leader_strategy,
+            rx_hs_message,
+            rx_recovery_message,
+            rx_votes,
+            tx_leader,
+            tx_broadcast,
+            tx_recovery,
+            tx_recovery_broadcast,
+            tx_vote_message,
+            tx_events,
+            pacemaker,
+            payload_processor,
+            shard_store,
+            consensus_constants,
+            network_latency,
+            shard,
+        );
+        tokio::spawn(async move {
+            waiter.run(shutdown, payload, shard).await?;
+            Ok(())
+        })
+    }
+
+    pub fn new(
+        signing_service: Arc<TSigningService>,
+        public_key: TAddr,
+        epoch_manager: TEpochManager,
+        leader_strategy: Arc<TLeaderStrategy>,
+        rx_hs_message: Receiver<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+        rx_recovery_message: Receiver<(TAddr, RecoveryMessage)>,
+        rx_votes: Receiver<(TAddr, VoteMessage)>,
+        tx_leader: Sender<(TAddr, HotStuffMessage<TPayload, TAddr>)>,
+        tx_broadcast: Sender<(HotStuffMessage<TPayload, TAddr>, Vec<TAddr>)>,
+        tx_recovery: Sender<(RecoveryMessage, TAddr)>,
+        tx_recovery_broadcast: Sender<(RecoveryMessage, Vec<TAddr>)>,
+        tx_vote_message: Sender<(VoteMessage, TAddr)>,
+        tx_events: broadcast::Sender<HotStuffEvent<TAddr>>,
+        pacemaker: PacemakerHandle<PacemakerEvents>,
+        payload_processor: Arc<TPayloadProcessor>,
+        shard_store: Arc<TShardStore>,
+        consensus_constants: ConsensusConstants,
+        network_latency: Duration,
+        shard_id: ShardId,
+    ) -> Self {
+        Self {
+            signing_service,
+            public_key,
+            epoch_manager,
+            leader_strategy,
             rx_hs_message,
             rx_recovery_message,
             rx_votes,
@@ -259,6 +529,7 @@ where
             network_latency,
             current_leader_round: HashMap::new(),
             election_in_progress: HashSet::new(),
+            shard_id,
         }
     }
 
@@ -1537,7 +1808,12 @@ where
     }
 
     fn validate_vote(&self, qc: &QuorumCertificate<TAddr>, public_key: &PublicKey, signature: &Signature) -> bool {
-        let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().clone());
+        let vote = VoteMessage::new(
+            qc.node_hash(),
+            *qc.decision(),
+            qc.all_shard_pledges().clone(),
+            self.shard_id,
+        );
         let challenge = vote.construct_challenge();
         self.signing_service
             .verify_for_public_key(public_key, signature, &*challenge)
@@ -1813,15 +2089,15 @@ where
                     accept.up_iter().count(),
                     accept.down_iter().count(),
                 );
-                VoteMessage::accept(node_hash, shard_pledges)
+                VoteMessage::accept(node_hash, shard_pledges, self.shard_id)
             },
             TransactionResult::Reject(ref reason) => {
                 info!(target: LOG_TARGET, "⚔ Vote to REJECT payload: {}", reason);
-                VoteMessage::reject(node_hash, shard_pledges, reason.into())
+                VoteMessage::reject(node_hash, shard_pledges, reason.into(), self.shard_id)
             },
         };
 
-        vote_msg.sign_vote(&self.signing_service, vn_shard_key, vn_bmt)?;
+        vote_msg.sign_vote(self.signing_service.as_ref(), vn_shard_key, vn_bmt)?;
 
         Ok(vote_msg)
     }
@@ -1885,21 +2161,17 @@ where
         let _ignore = self.tx_events.send(event);
     }
 
-    pub async fn run(mut self, mut shutdown: ShutdownSignal) -> Result<(), HotStuffError> {
+    pub async fn run(
+        mut self,
+        mut shutdown: ShutdownSignal,
+        payload: Option<TPayload>,
+        shard: ShardId,
+    ) -> Result<(), HotStuffError> {
+        if let Some(payload) = payload {
+            self.on_next_sync_view(payload, shard).await?;
+        }
         loop {
             tokio::select! {
-                msg = self.rx_new.recv() => {
-                    if let Some((payload, shard)) = msg {
-                        if let Err(e) = self.on_next_sync_view(payload, shard).await {
-                           error!(target: LOG_TARGET, "Error while processing new payload (on_next_sync_view): {}", e);
-                        }
-                        // self.on_beat(0, msg);
-                        // TODO: Start timer for receiving proposal
-                    } else {
-                        dbg!("All senders have dropped");
-                        break;
-                    }
-                },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg).await {
                         // self.publish_event(HotStuffEvent::Failed(e.to_string()));

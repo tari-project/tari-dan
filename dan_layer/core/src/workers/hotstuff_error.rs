@@ -98,6 +98,8 @@ pub enum HotStuffError {
     MerkleProofMissing,
     #[error("Merkle proof error: {0}")]
     BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
+    #[error("The thread is not running for this shard")]
+    ThreadNotRunning,
 }
 
 impl<T> From<mpsc::error::SendError<T>> for HotStuffError {

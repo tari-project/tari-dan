@@ -78,6 +78,7 @@ message VoteMessage {
   ValidatorMetadata validator_metadata = 4;
   bytes merkle_proof = 5;
   bytes node_hash = 6;
+  bytes shard_id = 7;
 }
 
 enum QuorumDecision {

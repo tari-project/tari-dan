@@ -51,10 +51,16 @@ pub struct VoteMessage {
     validator_metadata: Option<ValidatorMetadata>,
     merkle_proof: Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
     node_hash: FixedHash,
+    shard_id: ShardId,
 }
 
 impl VoteMessage {
-    pub fn new(local_node_hash: TreeNodeHash, decision: QuorumDecision, shard_pledges: ShardPledgeCollection) -> Self {
+    pub fn new(
+        local_node_hash: TreeNodeHash,
+        decision: QuorumDecision,
+        shard_pledges: ShardPledgeCollection,
+        shard_id: ShardId,
+    ) -> Self {
         Self {
             local_node_hash,
             decision,
@@ -62,20 +68,26 @@ impl VoteMessage {
             validator_metadata: None,
             merkle_proof: None,
             node_hash: FixedHash::zero(),
+            shard_id,
         }
     }
 
-    pub fn accept(local_node_hash: TreeNodeHash, shard_pledges: ShardPledgeCollection) -> Self {
-        Self::new(local_node_hash, QuorumDecision::Accept, shard_pledges)
+    pub fn shard(&self) -> ShardId {
+        self.shard_id
+    }
+
+    pub fn accept(local_node_hash: TreeNodeHash, shard_pledges: ShardPledgeCollection, shard_id: ShardId) -> Self {
+        Self::new(local_node_hash, QuorumDecision::Accept, shard_pledges, shard_id)
     }
 
     pub fn reject(
         local_node_hash: TreeNodeHash,
         shard_pledges: ShardPledgeCollection,
         reason: QuorumRejectReason,
+        shard_id: ShardId,
     ) -> Self {
         let decision = QuorumDecision::Reject(reason);
-        Self::new(local_node_hash, decision, shard_pledges)
+        Self::new(local_node_hash, decision, shard_pledges, shard_id)
     }
 
     pub fn with_validator_metadata(
@@ -85,6 +97,7 @@ impl VoteMessage {
         validator_metadata: ValidatorMetadata,
         merkle_proof: Option<BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>>,
         node_hash: FixedHash,
+        shard_id: ShardId,
     ) -> Self {
         Self {
             local_node_hash,
@@ -93,6 +106,7 @@ impl VoteMessage {
             validator_metadata: Some(validator_metadata),
             merkle_proof,
             node_hash,
+            shard_id,
         }
     }
 

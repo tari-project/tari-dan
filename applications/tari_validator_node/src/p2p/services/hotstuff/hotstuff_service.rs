@@ -38,7 +38,6 @@ use tari_dan_core::{
     workers::{
         events::{EventSubscription, HotStuffEvent},
         hotstuff_waiter::{HotStuffWaiter, RecoveryMessage, NETWORK_LATENCY},
-        pacemaker_worker::Pacemaker,
     },
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
@@ -108,7 +107,6 @@ impl HotstuffService {
         let leader_strategy = PayloadSpecificLeaderStrategy {};
         let consensus_constants = ConsensusConstants::devnet();
         let node_public_key = node_identity.public_key().clone();
-        let pacemaker = Pacemaker::spawn(shutdown.clone());
 
         let waiter_join_handle = HotStuffWaiter::spawn(
             NodeIdentitySigningService::new(node_identity),
@@ -127,7 +125,6 @@ impl HotstuffService {
             tx_recovery_broadcast,
             tx_vote_message,
             tx_events.clone(),
-            pacemaker,
             payload_processor,
             shard_store_factory,
             shutdown.clone(),
