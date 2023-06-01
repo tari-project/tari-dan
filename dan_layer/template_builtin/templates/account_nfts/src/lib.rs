@@ -32,7 +32,7 @@ mod account_non_fungible_template {
     }
 
     impl AccountNonFungible {
-        pub fn new(owner_token: NonFungibleAddress, token_symbol: String) -> AccountNonFungibleComponent {
+        pub fn create(owner_token: NonFungibleAddress, token_symbol: String) -> AccountNonFungibleComponent {
             // extract the public key from the token
             // we only allow owner tokens that correspond to public keys
             let public_key = owner_token

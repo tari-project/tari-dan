@@ -23,7 +23,7 @@ fn basic_nft_mint() {
         .execute_and_commit(
             vec![Instruction::CallFunction {
                 template_address: account_nft_template,
-                function: "new".to_string(),
+                function: "create".to_string(),
                 args: args![owner_token, token_symbol],
             }],
             vec![],
