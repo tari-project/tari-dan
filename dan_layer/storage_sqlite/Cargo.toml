@@ -19,3 +19,7 @@ chrono = "0.4.19"
 log = { version = "0.4.8", features = ["std"] }
 serde_json = "1.0.85"
 serde = "1.0"
+
+[dev-dependencies]
+rand = "0.7"
+tari_crypto = "0.16"

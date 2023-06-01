@@ -23,7 +23,6 @@
 use std::{fs::create_dir_all, path::PathBuf};
 
 use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tari_dan_storage::{
     global::{DbFactory, GlobalDb},
     StorageError,
@@ -67,11 +66,8 @@ impl DbFactory for SqliteDbFactory {
     }
 
     fn migrate(&self) -> Result<(), StorageError> {
-        let mut connection = self.connect()?;
-        const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./global_db_migrations");
-        connection
-            .run_pending_migrations(MIGRATIONS)
-            .map_err(|source| SqliteStorageError::MigrationError { source })?;
+        let connection = self.get_or_create_global_db()?;
+        connection.adapter().migrate()?;
 
         Ok(())
     }

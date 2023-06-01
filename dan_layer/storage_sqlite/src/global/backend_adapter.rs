@@ -34,6 +34,7 @@ use diesel::{
     RunQueryDsl,
     SqliteConnection,
 };
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
@@ -84,6 +85,16 @@ impl SqliteGlobalDbAdapter {
                 operation: "exists::metadata".to_string(),
             })?;
         Ok(result > 0)
+    }
+
+    pub fn migrate(&self) -> Result<(), SqliteStorageError> {
+        const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./global_db_migrations");
+        self.connection
+            .lock()
+            .unwrap()
+            .run_pending_migrations(MIGRATIONS)
+            .map_err(|source| SqliteStorageError::MigrationError { source })?;
+        Ok(())
     }
 }
 
@@ -428,7 +439,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
                 operation: "validator_nodes_get_by_shard_range".to_string(),
             })?;
 
-        distinct_validators(validators)
+        distinct_validators_sorted(validators)
     }
 
     fn get_validator_nodes_within_epochs(
@@ -452,7 +463,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         let sqlite_vns = sqlite_vns.unwrap_or_default();
 
         // TODO: Perhaps we should overwrite duplicate validator node entries for the epoch
-        distinct_validators(sqlite_vns)
+        distinct_validators_sorted(sqlite_vns)
     }
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error> {
@@ -498,7 +509,7 @@ impl Debug for SqliteGlobalDbAdapter {
     }
 }
 
-fn distinct_validators(sqlite_vns: Vec<DbValidatorNode>) -> Result<Vec<ValidatorNode>, SqliteStorageError> {
+fn distinct_validators_sorted(sqlite_vns: Vec<DbValidatorNode>) -> Result<Vec<ValidatorNode>, SqliteStorageError> {
     let mut db_vns = Vec::with_capacity(sqlite_vns.len());
     let mut dedup_map = HashMap::with_capacity(sqlite_vns.len());
     for (i, vn) in sqlite_vns.into_iter().enumerate() {

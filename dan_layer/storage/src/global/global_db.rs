@@ -41,6 +41,12 @@ pub struct GlobalDb<TGlobalDbBackendAdapter> {
     adapter: Arc<TGlobalDbBackendAdapter>,
 }
 
+impl<TGlobalDbBackendAdapter> GlobalDb<TGlobalDbBackendAdapter> {
+    pub fn adapter(&self) -> &TGlobalDbBackendAdapter {
+        &self.adapter
+    }
+}
+
 impl<TGlobalDbAdapter: GlobalDbAdapter> GlobalDb<TGlobalDbAdapter> {
     pub fn new(adapter: TGlobalDbAdapter) -> Self {
         Self {
