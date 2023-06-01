@@ -16,7 +16,7 @@ fn basic_nft_mint() {
 
     let account_nft_template = account_nft_template_test.get_template_address("AccountNonFungible");
 
-    let (owner_component_address, owner_token, a) = account_nft_template_test.create_owned_account();
+    let (owner_component_address, owner_token, _) = account_nft_template_test.create_owned_account();
     let token_symbol: &str = "ACCNFT";
 
     let result = account_nft_template_test
