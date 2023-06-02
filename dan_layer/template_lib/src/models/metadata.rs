@@ -20,11 +20,9 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::fmt::Display;
-
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
-use tari_template_abi::rust::collections::BTreeMap;
+use tari_template_abi::rust::{collections::BTreeMap, fmt::Display};
 
 use super::BinaryTag;
 const TAG: u64 = BinaryTag::Metadata as u64;
@@ -63,10 +61,10 @@ impl Default for Metadata {
 
 impl Display for Metadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut s = vec![];
+        write!(f, "Metadata: ")?;
         for (key, value) in self.0.iter() {
-            s.push(format!("key = {}, value = {}", key, value))
+            write!(f, "key = {}, value = {} ", key, value)?;
         }
-        write!(f, "Metadata: {:?}", s)
+        Ok(())
     }
 }

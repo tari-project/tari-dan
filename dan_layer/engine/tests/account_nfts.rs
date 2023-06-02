@@ -2,12 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_engine_types::instruction::Instruction;
-use tari_template_lib::{
-    args,
-    models::{ComponentAddress, ResourceAddress},
-    prelude::Metadata,
-    Hash,
-};
+use tari_template_lib::{args, models::ComponentAddress, prelude::Metadata};
 use tari_template_test_tooling::TemplateTest;
 
 #[test]
