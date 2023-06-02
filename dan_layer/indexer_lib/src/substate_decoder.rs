@@ -22,10 +22,13 @@
 
 use std::collections::HashSet;
 
+use log::*;
 use tari_engine_types::{
     indexed_value::{IndexedValue, IndexedValueVisitorError},
     substate::{Substate, SubstateAddress, SubstateValue},
 };
+
+const LOG_TARGET: &str = "tari::dan::initializer::substate_decoder";
 
 /// Recursively scan a substate for references to other substates
 pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress>, IndexedValueVisitorError> {
@@ -33,6 +36,11 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress
         SubstateValue::Component(header) => {
             // Look inside the component state for substate references
             let value = IndexedValue::from_raw(header.state())?;
+            debug!(
+                target: LOG_TARGET,
+                "Found {} substates in component state",
+                value.referenced_substates().count()
+            );
             Ok(value.referenced_substates().collect())
         },
         SubstateValue::NonFungible(nonfungible_container) => {
@@ -45,6 +53,11 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress
                     data.referenced_substates()
                         .chain(mutable_data.referenced_substates())
                         .collect::<HashSet<_>>(),
+                );
+                debug!(
+                    target: LOG_TARGET,
+                    "Found {} substates in non fungible state",
+                    related_substates.len()
                 );
             }
             Ok(related_substates)

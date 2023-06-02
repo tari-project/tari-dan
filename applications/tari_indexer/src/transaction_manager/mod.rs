@@ -75,6 +75,10 @@ where
     pub async fn submit_transaction(&self, transaction: Transaction) -> Result<PayloadId, TransactionManagerError> {
         let tx_hash = *transaction.hash();
 
+        info!(
+            target: LOG_TARGET,
+            "Submitting transaction with hash {} to the validator node", tx_hash
+        );
         // automatically scan the inputs and add all related involved objects
         // note that this operation does not alter the transaction hash
         let autofilled_transaction = self.transaction_autofiller.autofill_transaction(&transaction).await?;
