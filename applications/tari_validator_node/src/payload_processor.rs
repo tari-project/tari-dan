@@ -116,7 +116,7 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
     for input in inputs {
         match input.current_state {
             SubstateState::Up { address, data, .. } => {
-                log::debug!(target: "tari::dan_layer::payload_processor",
+                log::debug!(target: "tari::dan::payload_processor",
                     "State store input substate: {} v{}",
                     address,
                     data.version()

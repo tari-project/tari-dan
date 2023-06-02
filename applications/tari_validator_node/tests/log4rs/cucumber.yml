@@ -100,7 +100,7 @@ loggers:
     additive: false
 
   tari::dan:
-    level: info
+    level: debug
     appenders:
       - dan_layer
     additive: false

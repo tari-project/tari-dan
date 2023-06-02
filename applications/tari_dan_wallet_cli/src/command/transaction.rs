@@ -35,7 +35,6 @@ use clap::{Args, Subcommand};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::abi::Type;
-use tari_dan_wallet_sdk::models::VersionedSubstateAddress;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
     instruction::Instruction,
@@ -51,6 +50,7 @@ use tari_template_lib::{
     models::{Amount, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
+use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
@@ -100,7 +100,7 @@ pub struct CommonSubmitArgs {
     #[clap(long, short = 'n')]
     pub num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
-    pub inputs: Vec<VersionedSubstateAddress>,
+    pub inputs: Vec<SubstateRequirement>,
     #[clap(long, short = 'o')]
     pub override_inputs: Option<bool>,
     #[clap(long, short = 'v')]
@@ -447,7 +447,7 @@ pub async fn submit_transaction(
     Ok(resp)
 }
 
-fn summarize_request(request: &TransactionSubmitRequest, inputs: &[ShardId], outputs: &[ShardId]) {
+fn summarize_request(request: &TransactionSubmitRequest, inputs: &[SubstateRequirement], outputs: &[ShardId]) {
     if request.is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();

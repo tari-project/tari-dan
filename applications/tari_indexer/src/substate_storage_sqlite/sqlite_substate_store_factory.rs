@@ -175,10 +175,12 @@ impl<'a> SqliteSubstateStoreReadTransaction<'a> {
 
 pub trait SubstateStoreReadTransaction {
     fn get_substate(&mut self, address: &SubstateAddress) -> Result<Option<Substate>, StorageError>;
+    fn get_latest_version_for_substate(&mut self, address: &SubstateAddress) -> Result<Option<i64>, StorageError>;
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_all_substates(&mut self) -> Result<Vec<Substate>, StorageError>;
     fn get_non_fungible_collections(&mut self) -> Result<Vec<(String, i64)>, StorageError>;
     fn get_non_fungible_count(&mut self, resource_address: String) -> Result<i64, StorageError>;
+    fn get_non_fungible_latest_index(&mut self, resource_address: String) -> Result<Option<i32>, StorageError>;
     fn get_non_fungibles(
         &mut self,
         resource_address: String,
@@ -212,6 +214,20 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             })?;
 
         Ok(substate)
+    }
+
+    fn get_latest_version_for_substate(&mut self, address: &SubstateAddress) -> Result<Option<i64>, StorageError> {
+        use crate::substate_storage_sqlite::schema::substates;
+
+        let version = substates::table
+            .filter(substates::address.eq(address.to_string()))
+            .select(diesel::dsl::max(substates::version))
+            .get_result(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_latest_version_for_substate: {}", e),
+            })?;
+
+        Ok(version)
     }
 
     fn get_all_addresses(&mut self) -> Result<Vec<(String, i64)>, StorageError> {
@@ -277,6 +293,20 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
             })?;
 
         Ok(count)
+    }
+
+    fn get_non_fungible_latest_index(&mut self, resource_address: String) -> Result<Option<i32>, StorageError> {
+        use crate::substate_storage_sqlite::schema::non_fungible_indexes;
+
+        let latest_index = non_fungible_indexes::table
+            .filter(non_fungible_indexes::resource_address.eq(resource_address))
+            .select(diesel::dsl::max(non_fungible_indexes::idx))
+            .get_result(self.connection())
+            .map_err(|e| StorageError::QueryError {
+                reason: format!("get_non_fungible_latest_index: {}", e),
+            })?;
+
+        Ok(latest_index)
     }
 
     fn get_non_fungibles(

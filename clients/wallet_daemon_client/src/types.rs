@@ -27,7 +27,7 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_dan_common_types::{QuorumCertificate, ShardId};
 use tari_dan_wallet_sdk::{
     apis::jwt::JrpcPermissions,
-    models::{Account, ConfidentialProofId, TransactionStatus, VersionedSubstateAddress},
+    models::{Account, ConfidentialProofId, TransactionStatus},
 };
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
@@ -43,7 +43,7 @@ use tari_template_lib::{
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
     prelude::{ConfidentialWithdrawProof, ResourceType},
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction};
 
 use crate::{
     serialize::{opt_string_or_struct, string_or_struct},
@@ -59,7 +59,7 @@ pub struct CallInstructionRequest {
     pub dump_outputs_into: Option<ComponentAddressOrName>,
     pub fee: u64,
     #[serde(default)]
-    pub inputs: Vec<VersionedSubstateAddress>,
+    pub inputs: Vec<SubstateRequirement>,
     #[serde(default)]
     pub override_inputs: Option<bool>,
     #[serde(default)]
@@ -83,7 +83,7 @@ pub struct TransactionSubmitRequest {
     pub signing_key_index: Option<u64>,
     pub fee_instructions: Vec<Instruction>,
     pub instructions: Vec<Instruction>,
-    pub inputs: Vec<VersionedSubstateAddress>,
+    pub inputs: Vec<SubstateRequirement>,
     pub override_inputs: bool,
     pub new_outputs: u8,
     pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
@@ -98,7 +98,7 @@ pub struct TransactionSubmitRequest {
 pub struct TransactionSubmitResponse {
     #[serde(with = "serde_with::hex")]
     pub hash: FixedHash,
-    pub inputs: Vec<ShardId>,
+    pub inputs: Vec<SubstateRequirement>,
     pub outputs: Vec<ShardId>,
 }
 
@@ -490,3 +490,11 @@ pub struct AuthLoginDenyRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginDenyResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthRevokeTokenRequest {
+    pub permission_token: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthRevokeTokenResponse {}

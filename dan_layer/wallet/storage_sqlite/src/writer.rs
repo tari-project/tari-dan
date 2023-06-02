@@ -130,6 +130,22 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         }
     }
 
+    fn jwt_revoke(&mut self, token: &str) -> Result<(), WalletStorageError> {
+        if diesel::update(auth_status::table)
+            .set(auth_status::revoked.eq(true))
+            .filter(auth_status::token.eq(token))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("jwt_revoke", e))? ==
+            0
+        {
+            diesel::insert_into(auth_status::table)
+                .values((auth_status::revoked.eq(true), auth_status::token.eq(token)))
+                .execute(self.connection())
+                .map_err(|e| WalletStorageError::general("jwt_revoke", e))?;
+        }
+        Ok(())
+    }
+
     // -------------------------------- KeyManager -------------------------------- //
 
     fn key_manager_insert(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError> {

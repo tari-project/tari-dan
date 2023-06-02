@@ -24,6 +24,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     convert::TryInto,
     str::FromStr,
+    sync::Arc,
 };
 
 use anyhow::anyhow;
@@ -37,21 +38,22 @@ use tari_engine_types::{
     events::Event,
     substate::{Substate, SubstateAddress},
 };
-use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
+use tari_indexer_lib::{
+    substate_decoder::find_related_substates,
+    substate_scanner::SubstateScanner,
+    NonFungibleSubstate,
+};
 use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
-use crate::{
-    substate_decoder::find_related_substates,
-    substate_storage_sqlite::{
-        models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
-        sqlite_substate_store_factory::{
-            SqliteSubstateStore,
-            SqliteSubstateStoreWriteTransaction,
-            SubstateStore,
-            SubstateStoreReadTransaction,
-            SubstateStoreWriteTransaction,
-        },
+use crate::substate_storage_sqlite::{
+    models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
+    sqlite_substate_store_factory::{
+        SqliteSubstateStore,
+        SqliteSubstateStoreWriteTransaction,
+        SubstateStore,
+        SubstateStoreReadTransaction,
+        SubstateStoreWriteTransaction,
     },
 };
 
@@ -79,13 +81,13 @@ pub struct EventResponse {
 }
 
 pub struct SubstateManager {
-    substate_scanner: SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+    substate_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
     substate_store: SqliteSubstateStore,
 }
 
 impl SubstateManager {
     pub fn new(
-        dan_layer_scanner: SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+        dan_layer_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
         substate_store: SqliteSubstateStore,
     ) -> Self {
         Self {
@@ -96,8 +98,17 @@ impl SubstateManager {
 
     pub async fn fetch_and_add_substate_to_db(&self, substate_address: &SubstateAddress) -> Result<(), anyhow::Error> {
         // get the last version of the substate from the dan layer
-        // TODO: fetch the last version from database to avoid scanning always from the beginning
-        let substate = match self.substate_scanner.get_substate(substate_address, None).await {
+        let latest_stored_substate_version = {
+            let mut tx = self.substate_store.create_read_tx()?;
+            tx.get_latest_version_for_substate(substate_address)?
+                .map(|i| u32::try_from(i).expect("Failed to parse latest substate version"))
+        };
+
+        let substate = match self
+            .substate_scanner
+            .get_substate(substate_address, latest_stored_substate_version)
+            .await
+        {
             Ok(SubstateResult::Up { substate, .. }) => substate,
             Ok(_) => return Err(anyhow!("Substate not found in the network")),
             Err(err) => return Err(anyhow!("Error scanning for substate: {}", err)),
@@ -110,6 +121,7 @@ impl SubstateManager {
             if let SubstateResult::Up {
                 substate: related_substate,
                 ..
+            // TODO: substate fetching could be done in parallel (tokio)
             } = self.substate_scanner.get_substate(&address, None).await?
             {
                 related_substates.insert(address, related_substate);
@@ -118,8 +130,16 @@ impl SubstateManager {
 
         // if it's a resource, we need also to retrieve all the individual nfts
         let non_fungibles = if let SubstateAddress::Resource(addr) = substate_address {
-            // TODO: fetch the last index from database to avoid scaning always from the beginning
-            self.substate_scanner.get_non_fungibles(addr, 0, None).await?
+            // fetch the last index from database to avoid scaning always from the beginning
+            let latest_non_fungible_index = {
+                let mut tx = self.substate_store.create_read_tx()?;
+                tx.get_non_fungible_latest_index(addr.to_string())?
+                    .map(|i| i as u64)
+                    .unwrap_or_default()
+            };
+            self.substate_scanner
+                .get_non_fungibles(addr, latest_non_fungible_index, None)
+                .await?
         } else {
             vec![]
         };

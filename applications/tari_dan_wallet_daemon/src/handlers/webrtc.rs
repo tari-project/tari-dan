@@ -53,7 +53,7 @@ pub fn handle_start(
             ),
         )
     })?;
-    let mut jwt = context.wallet_sdk().jwt_api();
+    let jwt = context.wallet_sdk().jwt_api();
     let auth_token = jwt.generate_auth_token(permissions, None).map_err(|e| {
         JsonRpcResponse::error(
             answer_id,
