@@ -82,7 +82,7 @@ impl CommitteeStateSync {
             Err(EpochManagerError::ValidatorNodeNotRegistered) => {
                 info!(
                     target: LOG_TARGET,
-                    "📋 Validator is not registered for epoch {}, Skipping state sync", epoch
+                    "🌍️ Validator is not registered for epoch {}, Skipping state sync", epoch
                 );
                 return Ok(());
             },

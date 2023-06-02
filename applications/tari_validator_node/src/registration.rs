@@ -45,7 +45,7 @@ use crate::{
     ApplicationConfig,
 };
 
-const LOG_TARGET: &str = "tari::validator_node::app";
+const LOG_TARGET: &str = "tari::dan::validator_node::auto_registration";
 const MAX_REGISTRATION_ATTEMPTS: u8 = 8;
 const REGISTRATION_COOLDOWN_IN_MS: u32 = 350;
 
@@ -145,9 +145,9 @@ async fn start(
         tokio::select! {
             Ok(event) = rx.recv() => {
                 match event {
-                    EpochManagerEvent::EpochChanged(_) => {
+                    EpochManagerEvent::EpochChanged(epoch) => {
                         if let Err(err) = handle_epoch_changed(&config, &node_identity, &epoch_manager).await {
-                            error!(target: LOG_TARGET, "Auto-registration failed with error: {}", err);
+                            error!(target: LOG_TARGET, "Auto-registration failed for epoch {} with error: {}", epoch, err);
                         }
                     }
                 }
@@ -180,6 +180,13 @@ async fn handle_epoch_changed(
         }));
 
         register(wallet_client, node_identity, epoch_manager).await?;
+    } else {
+        info!(
+            target: LOG_TARGET,
+            "📋️ Validator is already registered or has already submitted registration. Auto-registration will occur \
+             in {} epochs.",
+            remaining_epochs
+        );
     }
 
     Ok(())
