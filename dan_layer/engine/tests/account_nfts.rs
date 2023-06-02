@@ -73,5 +73,4 @@ fn basic_nft_mint() {
         .unwrap();
 
     assert!(result.finalize.result.is_accept());
-    println!("FLAG: CUCUMBER {:?}", result.finalize.events);
 }
