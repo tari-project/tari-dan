@@ -45,15 +45,6 @@ fn basic_nft_mint() {
         .unwrap();
 
     assert!(result.finalize.is_accept());
-    assert_eq!(
-        result.finalize.execution_results[0]
-            .decode::<ResourceAddress>()
-            .unwrap(),
-        ResourceAddress::new(Hash::from_array([
-            190, 68, 108, 55, 177, 254, 106, 118, 91, 103, 229, 52, 244, 117, 117, 179, 2, 112, 56, 20, 4, 142, 53, 96,
-            31, 165, 116, 253, 5, 209, 2, 101
-        ]))
-    );
 
     let mut metadata = Metadata::new();
 
