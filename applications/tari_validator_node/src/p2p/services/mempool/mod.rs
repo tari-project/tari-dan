@@ -22,7 +22,7 @@
 
 use async_trait::async_trait;
 use tari_dan_app_utilities::template_manager::TemplateManagerError;
-use tari_dan_core::services::epoch_manager::EpochManagerError;
+use tari_epoch_manager::base_layer::EpochManagerError;
 use thiserror::Error;
 use tokio::sync::{mpsc::error::SendError, oneshot};
 

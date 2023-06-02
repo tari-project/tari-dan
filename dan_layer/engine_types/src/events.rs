@@ -36,6 +36,8 @@ pub struct Event {
     #[serde(with = "serde_with::hex")]
     tx_hash: Hash,
     topic: String,
+    // NOTE: We need to use an ordered map here. HashMaps are unordered, so when we pledge this state the hash
+    // resulting hash may differ.
     payload: BTreeMap<String, String>,
 }
 
@@ -80,8 +82,12 @@ impl Event {
         self.payload.get(key).cloned()
     }
 
-    pub fn get_full_payload(&self) -> BTreeMap<String, String> {
-        self.payload.clone()
+    pub fn payload(&self) -> &BTreeMap<String, String> {
+        &self.payload
+    }
+
+    pub fn into_payload(self) -> BTreeMap<String, String> {
+        self.payload
     }
 }
 

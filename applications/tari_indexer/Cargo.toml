@@ -8,22 +8,24 @@ version = "0.50.0-pre.0"
 edition = "2021"
 
 [dependencies]
-tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_app_utilities" }
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_common" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_common_types" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_comms" }
+tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_core", default-features = false, features = ["transactions"] }
 tari_crypto = { version="0.16" }
-tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_p2p" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_shutdown" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_storage" }
+tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_storage = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
 
+tari_bor = { path = "../../dan_layer/tari_bor" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
+tari_base_node_client = { path = "../../clients/base_node_client" }
 tari_dan_core = { path = "../../dan_layer/core" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
+tari_epoch_manager = { path = "../../dan_layer/epoch_manager" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
@@ -49,7 +51,6 @@ lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
 prost = "0.9"
-darling = "0.20.1"
 rand = "0.8"
 reqwest = "0.11.11"
 serde = { version = "1.0.126", features = ["derive"] }

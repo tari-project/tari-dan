@@ -36,6 +36,7 @@ table! {
         public_key -> Binary,
         shard_key -> Binary,
         epoch -> BigInt,
+        committee_bucket -> Nullable<BigInt>,
     }
 }
 

@@ -20,25 +20,18 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod base_node_client;
-mod events_publisher;
 pub mod infrastructure_services;
 mod payload_processor;
 mod peer_service;
 mod signing_service;
+pub mod vote_signature;
 mod wallet_client;
 
-pub use base_node_client::{BaseNodeClient, BlockInfo, SideChainUtxos};
-pub use events_publisher::{EventsPublisher, LoggingEventsPublisher};
 pub use payload_processor::{PayloadProcessor, PayloadProcessorError};
 pub use peer_service::{DanPeer, PeerProvider};
 pub use signing_service::{NodeIdentitySigningService, SigningService};
-pub mod base_node_error;
-pub mod epoch_manager;
 pub mod leader_strategy;
 mod service_specification;
-mod validator_node_rpc_client;
 
 pub use service_specification::ServiceSpecification;
-pub use validator_node_rpc_client::ValidatorNodeClientError;
 pub use wallet_client::WalletClient;

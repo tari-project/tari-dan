@@ -22,7 +22,8 @@
 
 use log::*;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_core::{message::DanMessage, models::TariDanPayload};
+use tari_dan_core::message::DanMessage;
+use tari_dan_storage::models::TariDanPayload;
 use tokio::task;
 
 use crate::p2p::services::messaging::{DanMessageSenders, InboundMessaging};

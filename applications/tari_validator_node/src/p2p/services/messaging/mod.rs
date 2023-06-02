@@ -34,11 +34,8 @@ pub use outbound::OutboundMessaging;
 // Messaging impl
 // -----------------------
 use tari_comms::types::CommsPublicKey;
-use tari_dan_core::{
-    message::NetworkAnnounce,
-    models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
-    workers::hotstuff_waiter::RecoveryMessage,
-};
+use tari_dan_core::{message::NetworkAnnounce, workers::hotstuff_waiter::RecoveryMessage};
+use tari_dan_storage::models::{HotStuffMessage, TariDanPayload, VoteMessage};
 use tari_transaction::Transaction;
 use tokio::{sync::mpsc, task::JoinHandle};
 
