@@ -21,3 +21,6 @@ pub use substate::*;
 
 mod vault;
 pub use vault::*;
+
+mod non_fungible_tokens;
+pub use non_fungible_tokens::*;

@@ -117,11 +117,26 @@ table! {
     }
 }
 
+table! {
+    non_fungible_tokens (id) {
+        id -> Integer,
+        account_id -> Integer,
+        account_address -> Text,
+        resource_address -> Text,
+        token_symbol -> Text,
+        nft_id -> Text,
+        metadata -> Text,
+        created_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
 joinable!(outputs -> accounts (account_id));
 joinable!(outputs -> vaults (vault_id));
 joinable!(proofs -> accounts (account_id));
 joinable!(proofs -> vaults (vault_id));
 joinable!(vaults -> accounts (account_id));
+joinable!(non_fungible_tokens -> accounts (account_id));
 
 allow_tables_to_appear_in_same_query!(
     accounts,
@@ -132,4 +147,5 @@ allow_tables_to_appear_in_same_query!(
     substates,
     transactions,
     vaults,
+    non_fungible_tokens,
 );
