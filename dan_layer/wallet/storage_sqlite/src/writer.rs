@@ -11,10 +11,7 @@ use chrono::NaiveDateTime;
 use diesel::{
     sql_query,
     sql_types::{BigInt, Bool, Text},
-    OptionalExtension,
-    QueryDsl,
-    RunQueryDsl,
-    SqliteConnection,
+    OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection,
 };
 use log::*;
 use serde::Serialize;
@@ -22,12 +19,7 @@ use tari_common_types::types::{Commitment, FixedHash, PublicKey};
 use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::{
     models::{
-        ConfidentialOutputModel,
-        ConfidentialProofId,
-        OutputStatus,
-        SubstateModel,
-        TransactionStatus,
-        VaultModel,
+        ConfidentialOutputModel, ConfidentialProofId, OutputStatus, SubstateModel, TransactionStatus, VaultModel,
         VersionedSubstateAddress,
     },
     storage::{WalletStorageError, WalletStoreReader, WalletStoreWriter},
@@ -37,16 +29,16 @@ use tari_engine_types::{
     substate::SubstateAddress,
     TemplateAddress,
 };
-use tari_template_lib::{models::Amount, Hash};
+use tari_template_lib::{
+    models::Amount,
+    prelude::{NonFungibleId, ResourceAddress},
+    Hash,
+};
 use tari_transaction::Transaction;
 use tari_utilities::hex::Hex;
 
 use crate::{
-    diesel::ExpressionMethods,
-    models,
-    reader::ReadTransaction,
-    schema::auth_status,
-    serialization::serialize_json,
+    diesel::ExpressionMethods, models, reader::ReadTransaction, schema::auth_status, serialization::serialize_json,
 };
 
 const LOG_TARGET: &str = "auth::tari::dan::wallet_sdk::storage_sqlite::writer";
@@ -135,8 +127,8 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .set(auth_status::revoked.eq(true))
             .filter(auth_status::token.eq(token))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("jwt_revoke", e))? ==
-            0
+            .map_err(|e| WalletStorageError::general("jwt_revoke", e))?
+            == 0
         {
             diesel::insert_into(auth_status::table)
                 .values((auth_status::revoked.eq(true), auth_status::token.eq(token)))
@@ -706,6 +698,37 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .set(proofs::transaction_hash.eq(transaction_hash.to_string()))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("proofs_set_transaction_hash", e))?;
+
+        Ok(())
+    }
+
+    // -------------------------------- Non fungible tokens -------------------------------- //
+    fn store_non_fungible_token(
+        &mut self,
+        nft_id: NonFungibleId,
+        resource_address: ResourceAddress,
+        metadata: tari_template_lib::models::Metadata,
+        token_symbol: String,
+        account_address: &SubstateAddress,
+    ) -> Result<(), WalletStorageError> {
+        use crate::schema::non_fungible_tokens;
+
+        let metadata = serde_json::to_string(&metadata).map_err(|e| WalletStorageError::DecodingError {
+            operation: "store_non_fungible_token",
+            item: "non_fungible_tokens",
+            details: e.to_string(),
+        })?;
+
+        diesel::insert_into(non_fungible_tokens::table)
+            .values((
+                non_fungible_tokens::nft_id.eq(nft_id.to_canonical_string()),
+                non_fungible_tokens::resource_address.eq(resource_address.to_string()),
+                non_fungible_tokens::metadata.eq(metadata),
+                non_fungible_tokens::token_symbol.eq(token_symbol),
+                non_fungible_tokens::account_address.eq(account_address.to_address_string()),
+            ))
+            .execute(self.connection())
+            .map_err(|e| WalletStorageError::general("store_non_fungible_token", e))?;
 
         Ok(())
     }

@@ -24,18 +24,18 @@ pub struct NonFungibleToken {
     pub updated_at: NaiveDateTime,
 }
 
-impl TryFrom<NonFungibleToken> for tari_dan_wallet_sdk::models::NonFungibleToken {
-    type Error = WalletStorageError;
-
-    fn try_from(non_fungible: NonFungibleToken) -> Result<Self, Self::Error> {
+impl NonFungibleToken {
+    pub fn try_into_non_fungible_token(
+        self,
+    ) -> Result<tari_dan_wallet_sdk::models::NonFungibleToken, WalletStorageError> {
         let metadata: BTreeMap<String, String> =
-            serde_json::from_str(&non_fungible.metadata).map_err(|e| WalletStorageError::DecodingError {
+            serde_json::from_str(&self.metadata).map_err(|e| WalletStorageError::DecodingError {
                 operation: "try_from",
                 item: "non_fungible_tokens.metadata",
                 details: e.to_string(),
             })?;
-        Ok(Self {
-            account_address: SubstateAddress::from_str(&non_fungible.account_address).map_err(|e| {
+        Ok(tari_dan_wallet_sdk::models::NonFungibleToken {
+            account_address: SubstateAddress::from_str(&self.account_address).map_err(|e| {
                 WalletStorageError::DecodingError {
                     operation: "try_from",
                     item: "non_fungible_tokens.address",
@@ -43,21 +43,21 @@ impl TryFrom<NonFungibleToken> for tari_dan_wallet_sdk::models::NonFungibleToken
                 }
             })?,
             metadata: Metadata::from(metadata),
-            resource_address: ResourceAddress::from_str(&non_fungible.resource_address).map_err(|e| {
+            resource_address: ResourceAddress::from_str(&self.resource_address).map_err(|e| {
                 WalletStorageError::DecodingError {
                     operation: "try_from",
                     item: "non_fungible_tokens.resource_address",
                     details: e.to_string(),
                 }
             })?,
-            nft_id: NonFungibleId::try_from_canonical_string(&non_fungible.nft_id).map_err(|e| {
+            nft_id: NonFungibleId::try_from_canonical_string(&self.nft_id).map_err(|e| {
                 WalletStorageError::DecodingError {
                     operation: "try_from",
                     item: "non_fungible_tokens.nft_id",
                     details: format!("{:?}", e),
                 }
             })?,
-            token_symbol: non_fungible.token_symbol,
+            token_symbol: self.token_symbol,
         })
     }
 }

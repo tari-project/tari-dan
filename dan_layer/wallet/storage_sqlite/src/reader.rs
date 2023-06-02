@@ -10,20 +10,13 @@ use serde::de::DeserializeOwned;
 use tari_common_types::types::{Commitment, FixedHash};
 use tari_dan_wallet_sdk::{
     models::{
-        Account,
-        ConfidentialOutputModel,
-        ConfidentialProofId,
-        Config,
-        OutputStatus,
-        SubstateModel,
-        TransactionStatus,
-        VaultModel,
-        WalletTransaction,
+        Account, ConfidentialOutputModel, ConfidentialProofId, Config, NonFungibleToken, OutputStatus, SubstateModel,
+        TransactionStatus, VaultModel, WalletTransaction,
     },
     storage::{WalletStorageError, WalletStoreReader},
 };
 use tari_engine_types::substate::{InvalidSubstateAddressFormat, SubstateAddress};
-use tari_template_lib::models::ResourceAddress;
+use tari_template_lib::{models::ResourceAddress, prelude::NonFungibleId};
 use tari_utilities::hex::Hex;
 
 use crate::{diesel::ExpressionMethods, models, serialization::deserialize_json};
@@ -626,6 +619,23 @@ impl WalletStoreReader for ReadTransaction<'_> {
         })?;
 
         Ok(proof_id as u64)
+    }
+
+    fn get_non_fungible_token(&mut self, nft_id: NonFungibleId) -> Result<NonFungibleToken, WalletStorageError> {
+        use crate::schema::non_fungible_tokens;
+
+        let non_fungible_token = non_fungible_tokens::table
+            .filter(non_fungible_tokens::nft_id.eq(nft_id.to_string()))
+            .first::<crate::models::NonFungibleToken>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("get_non_fungible_token", e))?;
+        let non_fungible_token = non_fungible_token.ok_or_else(|| WalletStorageError::NotFound {
+            operation: "get_non_fungible_token",
+            entity: "non_fungible_tokens".to_string(),
+            key: nft_id.to_string(),
+        })?;
+
+        non_fungible_token.try_into_non_fungible_token()
     }
 }
 
