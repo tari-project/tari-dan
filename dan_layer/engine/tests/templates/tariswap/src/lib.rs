@@ -31,20 +31,21 @@ mod tariswap {
     pub struct TariSwapPool {
         pools: HashMap<ResourceAddress, Vault>,
         lp_resource: ResourceAddress,
-        fee: f64,
+        fee: u16,
     }
 
     impl TariSwapPool {
 
         // Initialises a new pool component for for the pool A - B
-        pub fn new(a_addr: ResourceAddress, b_addr: ResourceAddress, fee: f64) -> Self {
+        // the fees is represented as a per-mil quantity (e.g. "1" represents "0.1%")
+        pub fn new(a_addr: ResourceAddress, b_addr: ResourceAddress, fee: u16) -> Self {
             // check that the the resource pair is correct
             assert!(a_addr != b_addr, "The resources of the pair must be different");
             Self::check_resource_is_fungible(a_addr);
             Self::check_resource_is_fungible(b_addr);
 
             // the fee represents a percentage, so it must be between 0 and 100
-            let valid_fee_range = 0.0..100.0;
+            let valid_fee_range = 0..1000;
             assert!(valid_fee_range.contains(&fee), "Invalid fee {}", fee);
 
             // create the vaults to store the funds
@@ -79,9 +80,8 @@ mod tariswap {
 
             // apply the fee to the input bucket
             // so the user will get a lesser amout of tokens than the theoritical (for the gain of the LP holders)
-            let input_bucket_balance = input_bucket.amount().value() as f64;
-            let effective_input_balance = input_bucket_balance - (input_bucket_balance * self.fee) / 100.0;
-            let effective_input_balance = effective_input_balance.ceil() as i64;
+            let input_bucket_balance = input_bucket.amount().value();
+            let effective_input_balance = input_bucket_balance - (input_bucket_balance * (self.fee as i64)) / 1000;
             let effective_input_balance = Amount::new(effective_input_balance);
 
             // recalculate the new vault balances for the swap
@@ -189,7 +189,7 @@ mod tariswap {
             ResourceManager::get(self.lp_resource).total_supply()
         }
 
-        pub fn fee(&self) -> f64 {
+        pub fn fee(&self) -> u16 {
             self.fee
         }
 
