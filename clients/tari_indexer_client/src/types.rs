@@ -12,10 +12,8 @@ use tari_engine_types::{
 };
 use tari_transaction::Transaction;
 
-// #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateRequest {
-    // #[serde_as(as = "DisplayFromStr")]
     #[serde(with = "serde_tools::string")]
     pub address: SubstateAddress,
     pub version: Option<u32>,
@@ -23,10 +21,8 @@ pub struct GetSubstateRequest {
     pub local_search_only: bool,
 }
 
-// #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateResponse {
-    // #[serde_as(as = "DisplayFromStr")]
     #[serde(with = "serde_tools::string")]
     pub address: SubstateAddress,
     pub version: u32,

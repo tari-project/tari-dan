@@ -19,7 +19,7 @@ struct TariSwapTest {
     account_proof: NonFungibleAddress,
 }
 
-fn setup(fee: f64) -> TariSwapTest {
+fn setup(fee: u16) -> TariSwapTest {
     let mut template_test = TemplateTest::new(vec!["tests/templates/tariswap", "tests/templates/faucet"]);
 
     // create the token pair for the swap pool
@@ -60,7 +60,7 @@ fn create_tariswap_component(
     template_test: &mut TemplateTest,
     a_resource: ResourceAddress,
     b_resource: ResourceAddress,
-    fee: f64,
+    fee: u16,
 ) -> (ComponentAddress, ResourceAddress) {
     let module_name = "TariSwapPool";
     let tariswap_template = template_test.get_template_address(module_name);
@@ -187,7 +187,7 @@ fn add_liquidity(test: &mut TariSwapTest, a_amount: Amount, b_amount: Amount) {
                 Instruction::CallMethod {
                     component_address: test.account_address,
                     method: "deposit".to_string(),
-                    args: args![Variable("lp_bucket"),],
+                    args: args![Variable("lp_bucket")],
                 },
             ],
             // proof needed to withdraw
@@ -335,7 +335,7 @@ fn assert_remove_liquidity(
 #[test]
 fn tariswap() {
     // init the test
-    let fee = 5.0; // 5% market fee
+    let fee = 50; // 5% market fee
     let mut test = setup(fee);
 
     // save the resource addreses to keep the compiler happy

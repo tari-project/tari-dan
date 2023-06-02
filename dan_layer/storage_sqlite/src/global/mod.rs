@@ -22,6 +22,6 @@
 
 mod backend_adapter;
 pub mod models;
-pub mod schema;
+pub(crate) mod schema;
 
 pub use backend_adapter::SqliteGlobalDbAdapter;

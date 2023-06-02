@@ -23,11 +23,28 @@
 use std::sync::Arc;
 
 use super::{validator_node_db::ValidatorNodeDb, EpochDb};
-use crate::global::{backend_adapter::GlobalDbAdapter, metadata_db::MetadataDb, template_db::TemplateDb};
+use crate::{
+    global::{backend_adapter::GlobalDbAdapter, metadata_db::MetadataDb, template_db::TemplateDb},
+    StorageError,
+};
+
+pub trait DbFactory: Sync + Send + 'static {
+    type GlobalDbAdapter: GlobalDbAdapter;
+
+    fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError>;
+
+    fn migrate(&self) -> Result<(), StorageError>;
+}
 
 #[derive(Debug, Clone)]
 pub struct GlobalDb<TGlobalDbBackendAdapter> {
     adapter: Arc<TGlobalDbBackendAdapter>,
+}
+
+impl<TGlobalDbBackendAdapter> GlobalDb<TGlobalDbBackendAdapter> {
+    pub fn adapter(&self) -> &TGlobalDbBackendAdapter {
+        &self.adapter
+    }
 }
 
 impl<TGlobalDbAdapter: GlobalDbAdapter> GlobalDb<TGlobalDbAdapter> {

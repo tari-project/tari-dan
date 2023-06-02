@@ -23,6 +23,12 @@
 use std::time::Duration;
 
 use log::*;
+use tari_base_node_client::{
+    grpc::GrpcBaseNodeClient,
+    types::{BaseLayerMetadata, BlockInfo},
+    BaseNodeClient,
+    BaseNodeClientError,
+};
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
     CodeTemplateRegistration,
@@ -32,22 +38,13 @@ use tari_core::transactions::transaction_components::{
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{optional::Optional, ShardId};
-use tari_dan_core::{
-    consensus_constants::ConsensusConstants,
-    models::BaseLayerMetadata,
-    services::{
-        base_node_error::BaseNodeError,
-        epoch_manager::{EpochManager, EpochManagerError},
-        BaseNodeClient,
-        BlockInfo,
-    },
-    storage::{
-        shard_store::{ShardStore, ShardStoreWriteTransaction},
-        StorageError,
-    },
-    DigitalAssetError,
+use tari_dan_core::consensus_constants::ConsensusConstants;
+use tari_dan_storage::{
+    global::{GlobalDb, MetadataKey},
+    ShardStore,
+    ShardStoreWriteTransaction,
+    StorageError,
 };
-use tari_dan_storage::global::{GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::{
     error::SqliteStorageError,
     global::SqliteGlobalDbAdapter,
@@ -57,15 +54,15 @@ use tari_engine_types::{
     confidential::UnclaimedConfidentialOutput,
     substate::{Substate, SubstateAddress, SubstateValue},
 };
+use tari_epoch_manager::{
+    base_layer::{EpochManagerError, EpochManagerHandle},
+    EpochManager,
+};
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::models::{EncryptedValue, TemplateAddress, UnclaimedConfidentialOutputAddress};
 use tokio::{task, task::JoinHandle, time};
 
-use crate::{
-    base_node_client::GrpcBaseNodeClient,
-    epoch_manager::EpochManagerHandle,
-    template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration},
-};
+use crate::template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration};
 
 const LOG_TARGET: &str = "tari::dan::base_layer_scanner";
 
@@ -284,14 +281,11 @@ impl BaseLayerScanner {
                 target: LOG_TARGET,
                 "⛓️ Scanning base layer block {} of {}", block_info.height, end_height
             );
-            self.epoch_manager
-                .update_epoch(block_info.height, block_info.hash)
-                .await?;
 
             for output in utxos.outputs {
                 let output_hash = output.hash();
                 let Some(sidechain_feature) = output.features.sidechain_feature.as_ref() else {
-                    warn!(target: LOG_TARGET, "Validator node registration output must have sidechain features");
+                    warn!(target: LOG_TARGET, "Base node returned invalid data: Sidechain utxo output must have sidechain features");
                     continue;
                 };
                 match sidechain_feature {
@@ -329,6 +323,11 @@ impl BaseLayerScanner {
                     },
                 }
             }
+
+            // Once we have all the UTXO data, we "activate" the new epoch if applicable.
+            self.epoch_manager
+                .update_epoch(block_info.height, block_info.hash)
+                .await?;
 
             self.set_last_scanned_block(tip.tip_hash, &block_info)?;
 
@@ -444,14 +443,12 @@ pub enum BaseLayerScannerError {
     FixedHashSizeError(#[from] FixedHashSizeError),
     #[error("Storage error: {0}")]
     SqliteStorageError(#[from] SqliteStorageError),
-    #[error("DigitalAsset error: {0}")]
-    DigitalAssetError(#[from] DigitalAssetError),
     #[error("Epoch manager error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
     #[error("Template manager error: {0}")]
     TemplateManagerError(#[from] TemplateManagerError),
     #[error("Base node client error: {0}")]
-    BaseNodeError(#[from] BaseNodeError),
+    BaseNodeError(#[from] BaseNodeClientError),
     #[error("Invalid side chain utxo response: {0}")]
     InvalidSideChainUtxoResponse(String),
     #[error("Could not register burnt UTXO because {source}")]

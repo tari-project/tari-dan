@@ -43,7 +43,8 @@ use tari_comms::{
     UnspawnedCommsNode,
 };
 use tari_comms_logging::SqliteMessageLog;
-use tari_dan_core::{message::DanMessage, models::TariDanPayload};
+use tari_dan_core::message::DanMessage;
+use tari_dan_storage::models::TariDanPayload;
 use tari_p2p::{
     initialization::CommsInitializationError,
     peer_seeds::SeedPeer,

@@ -28,12 +28,9 @@ use std::{
 
 use log::*;
 use tari_comms::NodeIdentity;
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::{ShardId, TreeNodeHash};
-use tari_dan_core::{
-    message::DanMessage,
-    services::{epoch_manager::EpochManager, infrastructure_services::OutboundService},
-};
+use tari_dan_core::{message::DanMessage, services::infrastructure_services::OutboundService};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManager};
 use tari_template_lib::Hash;
 use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -179,6 +176,8 @@ where V: Validator<Transaction, Error = MempoolError>
                 .insert(*transaction.hash(), (transaction.clone(), None));
         }
 
+        // TODO: if we're in the committee for this transaction, check if the transaction is in-progress/finalized
+        //       locally. If so, do not propagate.
         if let Err(e) = self.propagate_transaction(&transaction, &shards).await {
             error!(
                 target: LOG_TARGET,

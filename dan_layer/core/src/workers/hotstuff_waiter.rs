@@ -45,13 +45,29 @@ use tari_dan_common_types::{
     TreeNodeHash,
 };
 use tari_dan_engine::runtime::ConsensusContext;
+use tari_dan_storage::{
+    models::{
+        HotStuffMessage,
+        HotStuffMessageType,
+        HotStuffTreeNode,
+        HotstuffPhase,
+        Payload,
+        PayloadResult,
+        VoteMessage,
+    },
+    ShardStore,
+    ShardStoreReadTransaction,
+    ShardStoreWriteTransaction,
+};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
+use tari_epoch_manager::{base_layer::EpochManagerError, Committee, EpochManager};
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;
+use tari_utilities::ByteArray;
 use tokio::{
     sync::{
         broadcast,
@@ -64,18 +80,7 @@ use tokio::{
 use super::pacemaker_worker::PacemakerHandle;
 use crate::{
     consensus_constants::ConsensusConstants,
-    models::{
-        vote_message::VoteMessage,
-        Committee,
-        HotStuffMessage,
-        HotStuffMessageType,
-        HotStuffTreeNode,
-        HotstuffPhase,
-        Payload,
-        PayloadResult,
-    },
-    services::{epoch_manager::EpochManager, leader_strategy::LeaderStrategy, PayloadProcessor, SigningService},
-    storage::shard_store::{ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction},
+    services::{leader_strategy::LeaderStrategy, vote_signature, PayloadProcessor, SigningService},
     workers::{
         events::HotStuffEvent,
         hotstuff_error::{HotStuffError, ProposalValidationError},
@@ -161,7 +166,7 @@ where
     TPayload: Payload + 'static,
     TAddr: NodeAddressable + Serialize + 'static,
     TLeaderStrategy: LeaderStrategy<TAddr> + 'static + Send + Sync,
-    TEpochManager: EpochManager<TAddr> + 'static + Send + Sync,
+    TEpochManager: EpochManager<TAddr, Error = EpochManagerError> + 'static + Send + Sync,
     TPayloadProcessor: PayloadProcessor<TPayload> + 'static + Send + Sync,
     TShardStore: ShardStore<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
     TSigningService: SigningService + Sync + Send + 'static,
@@ -480,7 +485,7 @@ where
             from,
         );
 
-        self.validate_proposal(&node)?;
+        self.validate_proposal(&from, &node)?;
 
         // We remove the shard from pacemaker, so it will not trigger. We don't have to check if it's local shard or
         // not, we just remove them both, one of them will not exists, but pacemaker will take care of that.
@@ -903,7 +908,11 @@ where
         Ok(())
     }
 
-    fn validate_proposal(&self, node: &HotStuffTreeNode<TAddr, TPayload>) -> Result<(), ProposalValidationError> {
+    fn validate_proposal(
+        &self,
+        from: &TAddr,
+        node: &HotStuffTreeNode<TAddr, TPayload>,
+    ) -> Result<(), ProposalValidationError> {
         let payload_height = node.justify().payload_height() + NodeHeight(1);
         if !node.is_genesis() && node.payload_height() != payload_height {
             return Err(ProposalValidationError::NodePayloadHeightIncorrect {
@@ -950,6 +959,15 @@ where
         //     return Err(HotStuffError::JustifyIsNotAccepted);
         // }
 
+        let calculated_node_hash = node.calculate_hash();
+        if calculated_node_hash != *node.hash() {
+            return Err(ProposalValidationError::NodeHashMismatch {
+                proposed_by: from.to_string(),
+                node_hash: *node.hash(),
+                calculated_node_hash,
+            });
+        }
+
         Ok(())
     }
 
@@ -973,9 +991,9 @@ where
             .epoch_manager
             .filter_to_local_shards(epoch, &self.public_key, &involved_shards)
             .await?;
-        let vn_shard_key = self
+        let vn = self
             .epoch_manager
-            .get_validator_shard_key(epoch, self.public_key.clone())
+            .get_validator_node(epoch, self.public_key.clone())
             .await?;
         let vn_bmt = self.epoch_manager.get_validator_node_bmt(epoch).await?;
 
@@ -1051,7 +1069,7 @@ where
                 *node.hash(),
                 shard_pledges.clone(),
                 &finalize_result.result,
-                vn_shard_key,
+                vn.shard_key,
                 &vn_bmt,
             )?;
 
@@ -1394,13 +1412,18 @@ where
             // Collect votes
             tx.save_received_vote_for(from, msg.local_node_hash(), msg.clone())?;
 
-            let votes = tx.get_received_votes_for(msg.local_node_hash())?;
+            let votes: Vec<VoteMessage> = tx.get_received_votes_for(msg.local_node_hash())?;
 
             if votes.len() == valid_committee.consensus_threshold() {
                 let validator_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
-                let proofs = votes.iter().map(|v| v.merkle_proof().unwrap()).collect();
+                let proofs = votes
+                    .iter()
+                    .map(|v| v.merkle_proof().unwrap().clone())
+                    .collect::<Vec<_>>();
+
                 let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(proofs).unwrap();
-                let leaves_hashes = votes.iter().map(|v| v.node_hash()).collect();
+                let leaf_hashes = votes.iter().map(|v| v.node_hash()).collect::<Vec<_>>();
+
                 // TODO: Check all votes
                 let main_vote = votes.get(0).unwrap();
 
@@ -1416,7 +1439,7 @@ where
                     main_vote.all_shard_pledges().clone(),
                     validator_metadata,
                     Some(merged_proof),
-                    leaves_hashes,
+                    leaf_hashes,
                 );
                 self.update_high_qc(&mut tx, node.proposed_by().clone(), qc)?;
 
@@ -1501,17 +1524,21 @@ where
         let validator_node_root = self.epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
         if !qc.is_genesis() {
             // Check the proof only for non-genesis blocks
-            let res = qc
+            let is_valid = qc
                 .merged_proof()
+                .cloned()
                 .ok_or(HotStuffError::MerkleProofMissing)?
                 .verify_consume(
                     &validator_node_root,
-                    qc.leave_hashes().iter().map(|hash| hash.to_vec()).collect(),
+                    qc.leaf_hashes().iter().map(|hash| hash.to_vec()).collect(),
                 )?;
-            if !res {
-                return Err(HotStuffError::InvalidQuorumCertificate(
-                    "invalid merkle proof".to_string(),
-                ));
+
+            if !is_valid {
+                return Err(HotStuffError::InvalidQuorumCertificate(format!(
+                    "invalid validator node merkle proof in QC for tree node {} ({} leaf hashes)",
+                    qc.node_hash(),
+                    qc.leaf_hashes().len()
+                )));
             }
         }
 
@@ -1538,7 +1565,7 @@ where
 
     fn validate_vote(&self, qc: &QuorumCertificate<TAddr>, public_key: &PublicKey, signature: &Signature) -> bool {
         let vote = VoteMessage::new(qc.node_hash(), *qc.decision(), qc.all_shard_pledges().clone());
-        let challenge = vote.construct_challenge();
+        let challenge = vote_signature::construct_challenge(&vote);
         self.signing_service
             .verify_for_public_key(public_key, signature, &*challenge)
     }
@@ -1671,10 +1698,11 @@ where
                         TransactionResult::Accept(_) => {
                             tx.complete_pledges(node.shard(), node.payload_id(), node.hash())?;
                         },
-                        TransactionResult::Reject(_) => {
+                        TransactionResult::Reject(reason) => {
                             info!(
                                 target: LOG_TARGET,
-                                "🔥 on_commit ABANDON pledge for payload {}, shard{}",
+                                "🔥 on_commit ABANDON({}) pledge for payload {}, shard {}",
+                                reason,
                                 node.payload_id(),
                                 node.shard()
                             );
@@ -1821,7 +1849,7 @@ where
             },
         };
 
-        vote_msg.sign_vote(&self.signing_service, vn_shard_key, vn_bmt)?;
+        vote_signature::sign_vote(&mut vote_msg, &self.signing_service, vn_shard_key, vn_bmt)?;
 
         Ok(vote_msg)
     }
@@ -1909,7 +1937,7 @@ where
                 Some((from, msg)) = self.rx_votes.recv() => {
                     debug!(target: LOG_TARGET, "Received vote from {}", from);
                     if let Err(e) = self.leader_on_receive_vote(from, msg).await {
-                        error!(target: LOG_TARGET, "Error while processing vote (on_receive_vote): {}", e);
+                        error!(target: LOG_TARGET, "Error while processing vote (leader_on_receive_vote): {}", e);
                     }
                 },
                 Some((from,msg)) = self.rx_recovery_message.recv() => {

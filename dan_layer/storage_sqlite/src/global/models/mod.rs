@@ -26,5 +26,8 @@ pub use metadata::*;
 mod template;
 pub use template::*;
 
-pub mod epoch;
-pub mod validator_node;
+mod epoch;
+pub use epoch::*;
+
+mod validator_node;
+pub use validator_node::*;

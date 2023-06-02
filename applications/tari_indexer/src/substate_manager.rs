@@ -32,12 +32,12 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::PayloadId;
 use tari_engine_types::{
     events::Event,
     substate::{Substate, SubstateAddress},
 };
+use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_indexer_lib::{
     substate_decoder::find_related_substates,
     substate_scanner::SubstateScanner,
@@ -390,21 +390,21 @@ impl SubstateManager {
         // because the same component address with different version
         // can be processed in the same transaction, we need to avoid
         // duplicates
-        for (version, event) in &network_events {
+        for (version, event) in network_events {
             let template_address = event.template_address();
             let tx_hash = PayloadId::from_array(event.tx_hash().into_array());
             let topic = event.topic();
-            let payload = event.get_full_payload();
+            let payload = event.payload().clone();
             self.save_event_to_db(
                 component_address,
                 template_address,
                 tx_hash,
                 topic,
                 payload,
-                u64::from(*version),
+                u64::from(version),
             )?;
+            events.push(event);
         }
-        events.extend(network_events.into_iter().map(|(_, e)| e).collect::<Vec<_>>());
 
         Ok(events)
     }
