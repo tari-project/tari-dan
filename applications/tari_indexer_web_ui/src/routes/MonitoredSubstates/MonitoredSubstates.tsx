@@ -27,16 +27,16 @@ import MonitoredSubstates from '../VN/Components/MonitoredSubstates';
 
 function MonitoredSubstatesLayout() {
   return (
-    <div>
-      <Grid container spacing={5}>
+    <>
+      <Grid item sm={12} md={12} xs={12}>
         <PageHeading>Monitored Substates</PageHeading>
-        <Grid item xs={12}>
-          <StyledPaper>
-            <MonitoredSubstates />
-          </StyledPaper>
-        </Grid>
       </Grid>
-    </div>
+      <Grid item sm={12} md={12} xs={12}>
+        <StyledPaper>
+          <MonitoredSubstates />
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 

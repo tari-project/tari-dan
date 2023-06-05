@@ -30,6 +30,43 @@ import NftGallery from './routes/NftGallery/NftGallery';
 import ErrorPage from './routes/ErrorPage';
 import Layout from './theme/LayoutMain';
 
+export const breadcrumbRoutes = [
+  {
+    label: 'Home',
+    path: '/',
+    dynamic: false,
+  },
+  {
+    label: 'Connections',
+    path: '/connections',
+    dynamic: false,
+  },
+  {
+    label: 'Transactions',
+    path: '/transactions',
+    dynamic: false,
+  },
+  {
+    label: 'Monitored Substates',
+    path: '/monitored_substates',
+    dynamic: false,
+  },
+  {
+    label: 'Monitored NFTs',
+    path: '/nfts',
+    dynamic: false,
+  },
+  {
+    label: 'NFT Gallery',
+    path: '/nfts/:resourceAddress',
+    dynamic: true,
+  },
+  {
+    label: 'Error',
+    path: '*',
+    dynamic: false,
+  },
+];
 export default function App() {
   return (
     <div>
