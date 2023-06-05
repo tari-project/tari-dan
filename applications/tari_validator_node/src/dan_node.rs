@@ -24,15 +24,19 @@ use std::time::Duration;
 
 use log::*;
 use tari_comms::{connection_manager::LivenessStatus, connectivity::ConnectivityEvent, peer_manager::NodeId};
-use tari_dan_core::{
-    services::epoch_manager::{EpochManager, EpochManagerError},
-    workers::events::HotStuffEvent,
+use tari_dan_core::workers::events::HotStuffEvent;
+use tari_epoch_manager::{
+    base_layer::{EpochManagerError, EpochManagerEvent},
+    EpochManager,
 };
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::Hash;
-use tokio::{time, time::MissedTickBehavior};
+use tokio::{task, time, time::MissedTickBehavior};
 
-use crate::{p2p::services::networking::NetworkingService, Services};
+use crate::{
+    p2p::services::{committee_state_sync::CommitteeStateSync, networking::NetworkingService},
+    Services,
+};
 
 const LOG_TARGET: &str = "tari::validator_node::dan_node";
 
@@ -63,6 +67,8 @@ impl DanNode {
         let mut tick = time::interval(Duration::from_secs(10));
         tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
+        let mut epoch_manager_events = self.services.epoch_manager.subscribe().await?;
+
         loop {
             tokio::select! {
                 // Wait until killed
@@ -89,6 +95,10 @@ impl DanNode {
                     }
                 }
 
+                Ok(event) = epoch_manager_events.recv() => {
+                    self.handle_epoch_manager_event(event).await?;
+                }
+
                 Err(err) = self.services.on_any_exit() => {
                     error!(target: LOG_TARGET, "Error in service: {}", err);
                     return Err(err);
@@ -113,16 +123,43 @@ impl DanNode {
         Ok(())
     }
 
+    async fn handle_epoch_manager_event(&self, event: EpochManagerEvent) -> Result<(), anyhow::Error> {
+        match event {
+            EpochManagerEvent::EpochChanged(epoch) => {
+                info!(target: LOG_TARGET, "📅 Epoch changed to {}", epoch);
+                let sync_service = CommitteeStateSync::new(
+                    self.services.epoch_manager.clone(),
+                    self.services.validator_node_client_factory.clone(),
+                    self.services.shard_store.clone(),
+                    self.services.global_db.clone(),
+                    self.services.comms.node_identity().public_key().clone(),
+                );
+
+                // EpochChanged should only happen once per epoch and the event is not emitted during initial sync. So
+                // spawning state sync for each event should be ok.
+                task::spawn(async move {
+                    if let Err(e) = sync_service.sync_state(epoch).await {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to sync peers state for epoch {}: {}", epoch, e
+                        );
+                    }
+                });
+            },
+        }
+        Ok(())
+    }
+
     async fn dial_local_shard_peers(&mut self) -> Result<(), anyhow::Error> {
         let epoch = self.services.epoch_manager.current_epoch().await?;
         let res = self
             .services
             .epoch_manager
-            .get_validator_shard_key(epoch, self.services.comms.node_identity().public_key().clone())
+            .get_validator_node(epoch, self.services.comms.node_identity().public_key().clone())
             .await;
 
         let shard_id = match res {
-            Ok(shard_id) => shard_id,
+            Ok(vn) => vn.shard_key,
             Err(EpochManagerError::BaseLayerConsensusConstantsNotSet) => {
                 info!(target: LOG_TARGET, "Epoch manager has not synced with base layer yet");
                 return Ok(());

@@ -25,4 +25,6 @@ pub use temp_shard_store_factory::TempShardStoreFactory;
 
 pub mod harness;
 #[cfg(test)]
+mod range_epoch_manager;
+#[cfg(test)]
 mod test_consensus;

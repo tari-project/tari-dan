@@ -1,0 +1,21 @@
+[package]
+name = "tari_base_node_client"
+version = "0.50.0-pre.0"
+authors = ["The Tari Development Community"]
+edition = "2021"
+license = "BSD-3-Clause"
+
+[dependencies]
+tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", default-features = false, features = ["transactions"] }
+tari_utilities = "0.4"
+
+tari_dan_common_types = { path = "../../dan_layer/common_types" }
+
+async-trait = "0.1"
+log = "0.4.8"
+serde = "1.0"
+thiserror = "^1.0.20"
+tonic = "0.6"

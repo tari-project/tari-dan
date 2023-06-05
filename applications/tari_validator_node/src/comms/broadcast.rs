@@ -36,7 +36,8 @@ use tari_comms::{
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_core::{message::DanMessage, models::TariDanPayload};
+use tari_dan_core::message::DanMessage;
+use tari_dan_storage::models::TariDanPayload;
 use tari_validator_node_rpc::proto;
 use tonic::codegen::futures_core::future::BoxFuture;
 use tower::{Service, ServiceExt};

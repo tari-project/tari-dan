@@ -16,7 +16,6 @@ tari_crypto = "0.16"
 newtype-ops = "0.1.4"
 serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
 serde-big-array = "0.5.1"
-serde_bytes = "0.11.9"
 generic-array = { version="0.14.7", features = ["serde"] }
 lazy_static = "1.4.0"
 base64 = "0.13.0"

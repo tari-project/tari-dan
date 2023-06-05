@@ -29,28 +29,26 @@ use std::{
 use futures::StreamExt;
 use log::info;
 use tari_comms::{protocol::rpc::RpcStatus, NodeIdentity};
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::{Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
-use tari_dan_core::{
-    models::{Payload, TariDanPayload},
-    services::{
-        epoch_manager::{EpochManager, EpochManagerError},
-        PayloadProcessor,
-        PayloadProcessorError,
-        ValidatorNodeClientError,
-    },
-    storage::{
-        shard_store::{ShardStore, ShardStoreReadTransaction},
-        StorageError,
-    },
-};
+use tari_dan_core::services::{PayloadProcessor, PayloadProcessorError};
 use tari_dan_engine::runtime::ConsensusContext;
+use tari_dan_storage::{
+    models::{Payload, TariDanPayload},
+    ShardStore,
+    ShardStoreReadTransaction,
+    StorageError,
+};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason, TransactionResult},
     substate::{Substate, SubstateAddress},
 };
+use tari_epoch_manager::{
+    base_layer::{EpochManagerError, EpochManagerHandle},
+    EpochManager,
+};
 use tari_transaction::{SubstateChange, Transaction};
+use tari_validator_node_client::ValidatorNodeClientError;
 use tari_validator_node_rpc::{
     client::{TariCommsValidatorNodeClientFactory, ValidatorNodeClientFactory},
     proto::rpc::VnStateSyncResponse,

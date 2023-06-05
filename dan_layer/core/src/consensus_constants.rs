@@ -20,9 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{Deserialize, Serialize};
-use tari_core::transactions::tari_amount::MicroTari;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::NodeHeight;
 
 #[derive(Clone, Debug)]
 pub struct ConsensusConstants {
@@ -42,34 +40,5 @@ impl ConsensusConstants {
 
     pub fn max_payload_height(&self) -> NodeHeight {
         NodeHeight(self.hotstuff_rounds)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BaseLayerConsensusConstants {
-    pub validator_node_registration_expiry: u64,
-    pub epoch_length: u64,
-    pub validator_node_registration_min_deposit_amount: MicroTari,
-}
-
-impl BaseLayerConsensusConstants {
-    pub fn height_to_epoch(&self, height: u64) -> Epoch {
-        Epoch(height / self.epoch_length)
-    }
-
-    pub fn epoch_to_height(&self, epoch: Epoch) -> u64 {
-        epoch.0 * self.epoch_length
-    }
-
-    pub fn validator_node_registration_expiry(&self) -> Epoch {
-        Epoch(self.validator_node_registration_expiry)
-    }
-
-    pub fn validator_node_registration_min_deposit_amount(&self) -> MicroTari {
-        self.validator_node_registration_min_deposit_amount
-    }
-
-    pub fn epoch_length(&self) -> u64 {
-        self.epoch_length
     }
 }
