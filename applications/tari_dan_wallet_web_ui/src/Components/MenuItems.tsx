@@ -20,57 +20,79 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import * as React from 'react';
+import { NavLink } from 'react-router-dom';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import PeopleOutlinedIcon from '@mui/icons-material/PeopleOutlined';
-import WebhookOutlinedIcon from '@mui/icons-material/WebhookOutlined';
-import AssessmentOutlinedIcon from '@mui/icons-material/AssessmentOutlined';
-import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
-import CopyAllOutlinedIcon from '@mui/icons-material/CopyAllOutlined';
-import CottageOutlinedIcon from '@mui/icons-material/CottageOutlined';
-import AddchartIcon from '@mui/icons-material/Addchart';
-import { Link } from 'react-router-dom';
-
+import {
+  IoHomeOutline,
+  IoHome,
+  IoBarChartOutline,
+  IoBarChart,
+  IoKeyOutline,
+  IoKey,
+} from 'react-icons/io5';
 import Tooltip from '@mui/material/Tooltip';
 import Fade from '@mui/material/Fade';
+import theme from '../theme/theme';
+
+const iconStyle = {
+  height: 22,
+  width: 22,
+};
+
+const activeIconStyle = {
+  height: 22,
+  width: 22,
+  color: theme.palette.primary.main,
+};
 
 const mainItems = [
   {
     title: 'Home',
-    icon: <CottageOutlinedIcon />,
+    icon: <IoHomeOutline style={iconStyle} />,
+    activeIcon: <IoHome style={activeIconStyle} />,
     link: '/',
   },
   {
     title: 'Accounts',
-    icon: <AssessmentOutlinedIcon />,
+    icon: <IoBarChartOutline style={iconStyle} />,
+    activeIcon: <IoBarChart style={activeIconStyle} />,
     link: '/accounts',
   },
   {
     title: 'Keys',
-    icon: <PeopleOutlinedIcon />,
+    icon: <IoKeyOutline style={iconStyle} />,
+    activeIcon: <IoKey style={activeIconStyle} />,
     link: 'keys',
   },
 ];
 
-const mainMenu = mainItems.map((data) => (
-  <Link to={data.link} key={data.title} style={{ textDecoration: 'none' }}>
-    <ListItemButton
-      sx={{ paddingLeft: '22px', paddingRight: '22px' }}
-      disableRipple
-    >
-      <Tooltip
-        TransitionComponent={Fade}
-        TransitionProps={{ timeout: 300 }}
-        title={data.title}
-        followCursor={true}
-      >
-        <ListItemIcon>{data.icon}</ListItemIcon>
-      </Tooltip>
-      <ListItemText primary={data.title} />
-    </ListItemButton>
-  </Link>
-));
+const MainMenu = mainItems.map(({ title, icon, activeIcon, link }) => {
+  return (
+    <NavLink to={link} key={title} style={{ textDecoration: 'none' }}>
+      {({ isActive }) => (
+        <ListItemButton
+          sx={{
+            paddingLeft: '22px',
+            paddingRight: '22px',
+          }}
+          disableRipple
+        >
+          <Tooltip
+            TransitionComponent={Fade}
+            TransitionProps={{ timeout: 300 }}
+            title={title}
+            followCursor={true}
+            placement="right"
+          >
+            <ListItemIcon>{isActive ? activeIcon : icon}</ListItemIcon>
+          </Tooltip>
+          <ListItemText primary={title} />
+        </ListItemButton>
+      )}
+    </NavLink>
+  );
+});
 
-export const mainListItems = <React.Fragment>{mainMenu}</React.Fragment>;
+export const mainListItems = <>{MainMenu}</>;
