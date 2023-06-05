@@ -24,7 +24,7 @@ use tokio::sync::broadcast;
 
 use super::context::HandlerContext;
 use crate::{
-    handlers::get_account_or_default,
+    handlers::{get_account, get_account_or_default},
     services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
     DEFAULT_FEE,
 };
@@ -40,7 +40,7 @@ pub async fn handle_mint_account_nft(
     let key_manager_api = sdk.key_manager_api();
     sdk.jwt_api().check_auth(token.clone(), &[JrpcPermission::Admin])?;
 
-    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
+    let account = get_account(&req.account.unwrap(), &sdk.accounts_api())?;
     let inputs = sdk
         .substate_api()
         .locate_dependent_substates(&[&account.address])
