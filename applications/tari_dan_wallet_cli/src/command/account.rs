@@ -22,7 +22,8 @@
 
 use std::{
     convert::{TryFrom, TryInto},
-    fs, io,
+    fs,
+    io,
     io::Read,
     path::PathBuf,
 };
@@ -34,10 +35,16 @@ use tari_template_lib::models::Amount;
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
-        AccountInfo, AccountsCreateFreeTestCoinsRequest, AccountsCreateRequest, AccountsGetBalancesRequest,
-        AccountsInvokeRequest, ClaimBurnRequest, RevealFundsRequest,
+        AccountInfo,
+        AccountsCreateFreeTestCoinsRequest,
+        AccountsCreateRequest,
+        AccountsGetBalancesRequest,
+        AccountsInvokeRequest,
+        ClaimBurnRequest,
+        RevealFundsRequest,
     },
-    ComponentAddressOrName, WalletDaemonClient,
+    ComponentAddressOrName,
+    WalletDaemonClient,
 };
 
 use crate::{

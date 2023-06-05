@@ -32,12 +32,11 @@ use tokio::{
     time::MissedTickBehavior,
 };
 
+use super::NewAccountNFTInfo;
 use crate::{
     notify::Notify,
     services::{AccountChangedEvent, NewAccountInfo, Reply, WalletEvent},
 };
-
-use super::NewAccountNFTInfo;
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::account_monitor";
 
@@ -482,12 +481,12 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
         }
 
         // Is an account component
-        if !a.is_component()
-            || v.substate_value()
+        if !a.is_component() ||
+            v.substate_value()
                 .component()
                 .expect("Value was not component for component address")
-                .template_address
-                != *ACCOUNT_TEMPLATE_ADDRESS
+                .template_address !=
+                *ACCOUNT_TEMPLATE_ADDRESS
         {
             return None;
         }

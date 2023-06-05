@@ -8,8 +8,18 @@ use lazy_static::lazy_static;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{
-    MessageEvent, Request, RequestInit, Response, RtcConfiguration, RtcDataChannel, RtcIceCandidate, RtcIceServer,
-    RtcPeerConnection, RtcPeerConnectionIceEvent, RtcSdpType, RtcSessionDescriptionInit,
+    MessageEvent,
+    Request,
+    RequestInit,
+    Response,
+    RtcConfiguration,
+    RtcDataChannel,
+    RtcIceCandidate,
+    RtcIceServer,
+    RtcPeerConnection,
+    RtcPeerConnectionIceEvent,
+    RtcSdpType,
+    RtcSessionDescriptionInit,
 };
 
 macro_rules! console_log {

@@ -4,11 +4,11 @@
 use std::{collections::BTreeMap, str::FromStr};
 
 use chrono::NaiveDateTime;
+use tari_dan_wallet_sdk::storage::WalletStorageError;
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::prelude::{Metadata, NonFungibleId, ResourceAddress};
 
 use crate::schema::non_fungible_tokens;
-use tari_dan_wallet_sdk::storage::WalletStorageError;
 
 #[derive(Debug, Clone, Identifiable, Queryable)]
 #[diesel(table_name = non_fungible_tokens)]

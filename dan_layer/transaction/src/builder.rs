@@ -17,14 +17,22 @@ use tari_template_lib::{
     args,
     args::Arg,
     models::{
-        Amount, ComponentAddress, ConfidentialWithdrawProof, NonFungibleAddress, NonFungibleId,
-        NonFungibleIndexAddress, ResourceAddress,
+        Amount,
+        ComponentAddress,
+        ConfidentialWithdrawProof,
+        NonFungibleAddress,
+        NonFungibleId,
+        NonFungibleIndexAddress,
+        ResourceAddress,
     },
 };
 
 use super::Transaction;
 use crate::{
-    change::SubstateChange, id_provider::IdProvider, transaction::TransactionMeta, InstructionSignature,
+    change::SubstateChange,
+    id_provider::IdProvider,
+    transaction::TransactionMeta,
+    InstructionSignature,
     SubstateRequirement,
 };
 

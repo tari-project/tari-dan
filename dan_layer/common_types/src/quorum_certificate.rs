@@ -13,7 +13,14 @@ use tari_engine_types::{
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 
 use crate::{
-    Epoch, NodeAddressable, NodeHeight, PayloadId, ShardId, ShardPledgeCollection, TreeNodeHash, ValidatorMetadata,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    PayloadId,
+    ShardId,
+    ShardPledgeCollection,
+    TreeNodeHash,
+    ValidatorMetadata,
 };
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]

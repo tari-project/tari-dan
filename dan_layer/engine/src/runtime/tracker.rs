@@ -52,8 +52,15 @@ use tari_template_lib::{
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{
-        Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, NonFungibleIndexAddress, ResourceAddress,
-        UnclaimedConfidentialOutputAddress, VaultId,
+        Amount,
+        BucketId,
+        ComponentAddress,
+        Metadata,
+        NonFungibleAddress,
+        NonFungibleIndexAddress,
+        ResourceAddress,
+        UnclaimedConfidentialOutputAddress,
+        VaultId,
     },
     resource::ResourceType,
     Hash,
@@ -664,11 +671,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn take_substates_to_persist(&self) -> HashMap<SubstateAddress, SubstateValue> {
         self.write_with(|state| {
-            let total_items = state.new_resources.len()
-                + state.new_components.len()
-                + state.new_vaults.len()
-                + state.new_non_fungibles.len()
-                + state.new_non_fungible_indexes.len();
+            let total_items = state.new_resources.len() +
+                state.new_components.len() +
+                state.new_vaults.len() +
+                state.new_non_fungibles.len() +
+                state.new_non_fungible_indexes.len();
             let mut up_states = HashMap::with_capacity(total_items);
 
             for (component_addr, substate) in state.new_components.drain() {

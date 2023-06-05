@@ -10,12 +10,11 @@ use tari_template_lib::{
 };
 use thiserror::Error;
 
+use super::accounts::AccountsApi;
 use crate::{
     models::{Account, NonFungibleToken, VaultModel},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
-
-use super::accounts::AccountsApi;
 
 pub struct NonFungibleTokensApi<'a, TStore> {
     store: &'a TStore,
@@ -23,8 +22,7 @@ pub struct NonFungibleTokensApi<'a, TStore> {
 }
 
 impl<'a, TStore> NonFungibleTokensApi<'a, TStore>
-where
-    TStore: WalletStore,
+where TStore: WalletStore
 {
     pub fn new(store: &'a TStore, accounts_api: AccountsApi<'a, TStore>) -> Self {
         Self { store, accounts_api }

@@ -41,14 +41,10 @@ fn get_and_insert_substates() {
     let child_address =
         SubstateAddress::from_str("component_d9e4a7ce7dbaa73ce10aabf309dd702054756a813f454ef13564f298887bb69d")
             .unwrap();
-    tx.substates_insert_child(
-        hash,
-        address.clone(),
-        VersionedSubstateAddress {
-            address: child_address.clone(),
-            version: 0,
-        },
-    )
+    tx.substates_insert_child(hash, address.clone(), VersionedSubstateAddress {
+        address: child_address.clone(),
+        version: 0,
+    })
     .unwrap();
 
     tx.commit().unwrap();

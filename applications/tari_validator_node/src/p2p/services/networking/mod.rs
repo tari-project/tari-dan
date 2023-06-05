@@ -24,7 +24,10 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use tari_comms::{
-    connectivity::ConnectivityRequester, peer_manager::PeerFeatures, types::CommsPublicKey, NodeIdentity,
+    connectivity::ConnectivityRequester,
+    peer_manager::PeerFeatures,
+    types::CommsPublicKey,
+    NodeIdentity,
 };
 use tari_dan_core::message::NetworkAnnounce;
 use tokio::{sync::mpsc, task::JoinHandle};

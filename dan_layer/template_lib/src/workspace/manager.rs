@@ -31,13 +31,10 @@ pub struct WorkspaceManager {}
 
 impl WorkspaceManager {
     pub fn list_buckets() -> Vec<BucketId> {
-        let resp: InvokeResult = call_engine(
-            EngineOp::WorkspaceInvoke,
-            &WorkspaceInvokeArg {
-                action: WorkspaceAction::ListBuckets,
-                args: vec![],
-            },
-        );
+        let resp: InvokeResult = call_engine(EngineOp::WorkspaceInvoke, &WorkspaceInvokeArg {
+            action: WorkspaceAction::ListBuckets,
+            args: vec![],
+        });
 
         let bucket_ids = resp.decode().expect("Failed to decode list of BucketIds");
         bucket_ids

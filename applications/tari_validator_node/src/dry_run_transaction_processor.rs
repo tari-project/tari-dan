@@ -34,7 +34,9 @@ use tari_dan_core::services::{PayloadProcessor, PayloadProcessorError};
 use tari_dan_engine::runtime::ConsensusContext;
 use tari_dan_storage::{
     models::{Payload, TariDanPayload},
-    ShardStore, ShardStoreReadTransaction, StorageError,
+    ShardStore,
+    ShardStoreReadTransaction,
+    StorageError,
 };
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::{

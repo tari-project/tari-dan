@@ -31,7 +31,11 @@ use lazy_static::lazy_static;
 use log::*;
 use tari_core::transactions::transaction_components::TemplateType;
 use tari_dan_app_utilities::template_manager::{
-    Template, TemplateExecutable, TemplateManagerError, TemplateMetadata, TemplateRegistration,
+    Template,
+    TemplateExecutable,
+    TemplateManagerError,
+    TemplateMetadata,
+    TemplateRegistration,
 };
 use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_dan_engine::{

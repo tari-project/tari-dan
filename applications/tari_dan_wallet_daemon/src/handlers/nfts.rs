@@ -16,7 +16,9 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::{
-    commit_result::FinalizeResult, component::new_component_address_from_parts, substate::SubstateAddress,
+    commit_result::FinalizeResult,
+    component::new_component_address_from_parts,
+    substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -181,11 +183,10 @@ async fn handle_create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(
-            *ACCOUNT_NFT_TEMPLATE_ADDRESS,
-            "create",
-            args![owner_token, token_symbol],
-        )
+        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
+            owner_token,
+            token_symbol
+        ])
         .sign(owner_sk)
         .build();
 
