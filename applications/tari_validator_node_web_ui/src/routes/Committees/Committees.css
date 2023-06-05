@@ -1,0 +1,30 @@
+.committees {
+  display: grid;
+}
+
+.committee-container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: stretch;
+  width: 100%;
+  gap: 10px;
+}
+.committee-container > * {
+  padding: 1rem;
+}
+
+@media screen and (max-width: 767px) {
+  .committee-container > * {
+    width: 100%;
+  }
+}
+
+@media screen and (min-width: 768px) {
+  .committee-container {
+    flex-direction: row;
+  }
+  .committee-container > *:first-child {
+    width: 200px;
+  }
+}

@@ -20,24 +20,54 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import PageHeading from '../../Components/PageHeading';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import RecentTransactions from '../VN/Components/RecentTransactions';
+import React from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+import { Breadcrumbs, Link } from '@mui/material';
+import useBreadcrumbs from 'use-react-router-breadcrumbs';
 
-function RecentTransactionsLayout() {
-  return (
-    <>
-      <Grid item sm={12} md={12} xs={12}>
-        <PageHeading>Recent Transactions</PageHeading>
-      </Grid>
-      <Grid item sm={12} md={12} xs={12}>
-        <StyledPaper>
-          <RecentTransactions />
-        </StyledPaper>
-      </Grid>
-    </>
-  );
+interface BreadcrumbsItem {
+  label: string;
+  path: string;
+  dynamic: boolean;
 }
 
-export default RecentTransactionsLayout;
+interface BreadcrumbsProps {
+  items: BreadcrumbsItem[];
+}
+
+const BreadcrumbsComponent: React.FC<BreadcrumbsProps> = ({ items }) => {
+  const breadcrumbs = useBreadcrumbs(items);
+
+  const links = breadcrumbs.map(({ match, breadcrumb }: any) => {
+    const breadcrumbLabel = breadcrumb.props.children;
+    const { label, path, dynamic } = match.route;
+    return (
+      <Link
+        key={breadcrumbLabel}
+        component={RouterLink}
+        to={path}
+        underline="none"
+        color="inherit"
+      >
+        {dynamic ? breadcrumbLabel.toLowerCase() : label}
+      </Link>
+    );
+  });
+
+  return (
+    <>
+      <Breadcrumbs
+        aria-label="breadcrumb"
+        separator="›"
+        style={{
+          fontSize: '0.8rem',
+          paddingBottom: '1rem',
+        }}
+      >
+        {links}
+      </Breadcrumbs>
+    </>
+  );
+};
+
+export default BreadcrumbsComponent;

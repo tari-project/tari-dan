@@ -23,14 +23,14 @@
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = 'localhost:18022';
+  let address = 'localhost:3333';
   try {
     let text = await (await fetch('/json_rpc_address')).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }
   } catch {}
-  console.log("jsonRpc ", method, params);
+  console.log('jsonRpc ', method, params);
   let response = await fetch(`http://${address}`, {
     method: 'POST',
     body: JSON.stringify({
@@ -67,36 +67,48 @@ async function getConnections() {
   return await jsonRpc('get_connections');
 }
 async function addPeer(public_key: string, addresses: string[]) {
-  return await jsonRpc('add_peer', {public_key, addresses, wait_for_dial: false});
+  return await jsonRpc('add_peer', {
+    public_key,
+    addresses,
+    wait_for_dial: false,
+  });
 }
 async function getRecentTransactions() {
   return await jsonRpc('get_recent_transactions');
 }
-async function getSubstate(address:string, version?:number) {
-  return await jsonRpc("get_substate",{address,version})
+async function getSubstate(address: string, version?: number) {
+  return await jsonRpc('get_substate', { address, version });
 }
-async function inspectSubstate(address:string, version?:number) {
-  return await jsonRpc("inspect_substate",{address,version})
+async function inspectSubstate(address: string, version?: number) {
+  return await jsonRpc('inspect_substate', { address, version });
 }
 async function getAddresses() {
-  return await jsonRpc("get_addresses",)
+  return await jsonRpc('get_addresses');
 }
-async function addAddress(address:string) {
-  return await jsonRpc("add_address", [address])
+async function addAddress(address: string) {
+  return await jsonRpc('add_address', [address]);
 }
-async function deleteAddress(address:string) {
-  return await jsonRpc("delete_address", [address])
+async function deleteAddress(address: string) {
+  return await jsonRpc('delete_address', [address]);
 }
 async function clearAddresses() {
-  return await jsonRpc("clear_addresses")
+  return await jsonRpc('clear_addresses');
 }
 async function getNonFungibleCollections() {
   return await jsonRpc('get_non_fungible_collections');
 }
-async function getNonFungibles(address:string, start_index: number, end_index: number) {
-  return await jsonRpc('get_non_fungibles',{address,start_index,end_index});
+async function getNonFungibles(
+  address: string,
+  start_index: number,
+  end_index: number
+) {
+  return await jsonRpc('get_non_fungibles', {
+    address,
+    start_index,
+    end_index,
+  });
 }
-async function getNonFungibleCount(address:string) {
+async function getNonFungibleCount(address: string) {
   return await jsonRpc('get_non_fungible_count', [address]);
 }
 
