@@ -20,47 +20,38 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import Committee from './Committee';
+import { useState } from 'react';
+import TableRow from '@mui/material/TableRow';
+import {
+  DataTableCell,
+  BoxHeading,
+  BoxHeading2,
+} from '../../Components/StyledComponents';
+import { Typography } from '@mui/material';
 import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
-import TableBody from '@mui/material/TableBody';
-import TableRow from '@mui/material/TableRow';
 import TablePagination from '@mui/material/TablePagination';
-import { Typography } from '@mui/material';
-import CommitteesWaterfall from './CommitteesWaterfall';
-import { get_all_committees } from './helpers';
+import './Committees.css';
 
-function Committees({
-  currentEpoch,
-  shardKey,
+function Committee({
+  begin,
+  end,
+  members,
   publicKey,
 }: {
-  currentEpoch: number;
-  shardKey: string;
+  begin: string;
+  end: string;
+  members: Array<string>;
   publicKey: string;
 }) {
-  const [committees, setCommittees] = useState<
-    Array<[string, string, Array<string>]>
-  >([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  useEffect(() => {
-    if (publicKey !== null) {
-      get_all_committees(currentEpoch, shardKey, publicKey).then((response) => {
-        if (response) setCommittees(response);
-      });
-    }
-  }, [currentEpoch, shardKey, publicKey]);
-  if (!committees) {
-    return <Typography>Committees are loading</Typography>;
-  }
-
   const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - committees.length) : 0;
+    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - members.length) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -72,43 +63,60 @@ function Committees({
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
+
   return (
     <>
-      <CommitteesWaterfall committees={committees} />
       <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Range</TableCell>
-              <TableCell style={{ textAlign: 'center' }}>Members</TableCell>
-              <TableCell style={{ textAlign: 'center' }}>Details</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {committees.map(([begin, end, committee]) => (
-              <Committee
-                key={begin}
-                begin={begin}
-                end={end}
-                members={committee}
-                publicKey={publicKey}
-              />
-            ))}
-            {emptyRows > 0 && (
-              <TableRow
-                style={{
-                  height: 67 * emptyRows,
-                }}
-              >
-                <TableCell colSpan={2} />
+        <div className="committee-container">
+          <Typography variant="h6">Range</Typography>
+          <Table>
+            <TableBody>
+              <TableRow>
+                <DataTableCell>
+                  {end < begin ? (
+                    <>
+                      [<span>{begin}</span>,{' '}
+                      <span>
+                        ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+                      </span>
+                      ] [
+                      <span>
+                        0000000000000000000000000000000000000000000000000000000000000000
+                      </span>
+                      , <span>{end}</span>]
+                    </>
+                  ) : (
+                    <div>
+                      [<span>{begin}</span>, <span>{end}</span>]
+                    </div>
+                  )}
+                </DataTableCell>
               </TableRow>
-            )}
-          </TableBody>
-        </Table>
+            </TableBody>
+          </Table>
+        </div>
+        <div className="committee-container">
+          <Typography variant="h6">Public Keys</Typography>
+          <Table>
+            <TableBody>
+              {members
+                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map((member) => (
+                  <TableRow key={member}>
+                    <DataTableCell
+                      className={`member ${member === publicKey ? 'me' : ''}`}
+                    >
+                      {member}
+                    </DataTableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+        </div>
         <TablePagination
           rowsPerPageOptions={[10, 25, 50]}
           component="div"
-          count={committees.length}
+          count={members.length}
           rowsPerPage={rowsPerPage}
           page={page}
           onPageChange={handleChangePage}
@@ -119,4 +127,4 @@ function Committees({
   );
 }
 
-export default Committees;
+export default Committee;
