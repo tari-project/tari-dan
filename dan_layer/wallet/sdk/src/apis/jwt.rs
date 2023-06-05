@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::prelude::{ComponentAddress, ResourceAddress};
 
-use crate::storage::{WalletStorageError, WalletStore, WalletStoreWriter};
+use crate::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
 
 pub struct JwtApi<'a, TStore> {
     store: &'a TStore,
@@ -102,6 +102,7 @@ impl JrpcPermissions {
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
     id: u64,
+    name: String,
     permissions: JrpcPermissions,
     exp: usize,
 }
@@ -161,19 +162,29 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         Ok(auth_token_data.claims)
     }
 
-    fn get_permissions(&self, token: &str) -> Result<JrpcPermissions, JwtApiError> {
-        let token_data = decode::<Claims>(
+    fn get_token_claims(&self, token: &str) -> Result<Claims, JwtApiError> {
+        let claims = decode::<Claims>(
             token,
             &DecodingKey::from_secret(self.jwt_secret_key.as_ref()),
             &Validation::default(),
-        )?;
-        Ok(token_data.claims.permissions)
+        )
+        .map(|token_data| token_data.claims)?;
+        Ok(claims)
     }
 
-    pub fn grant(&self, auth_token: String) -> Result<String, JwtApiError> {
+    fn get_permissions(&self, token: &str) -> Result<JrpcPermissions, JwtApiError> {
+        self.get_token_claims(token).map(|claims| claims.permissions)
+    }
+
+    fn get_name(&self, token: &str) -> Result<String, JwtApiError> {
+        self.get_token_claims(token).map(|claims| claims.name)
+    }
+
+    pub fn grant(&self, name: String, auth_token: String) -> Result<String, JwtApiError> {
         let auth_claims = self.check_auth_token(auth_token.as_ref())?;
         let my_claims = Claims {
             id: auth_claims.id,
+            name,
             permissions: auth_claims.permissions,
             exp: auth_claims.exp,
         };
@@ -221,6 +232,18 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         tx.jwt_revoke(token)?;
         tx.commit()?;
         Ok(())
+    }
+
+    pub fn get_tokens(&self) -> Result<Vec<(i32, String)>, JwtApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let tokens = tx.jwt_get_all()?;
+        let mut res = Vec::new();
+        for (id, token) in &tokens {
+            if let Ok(name) = self.get_name(token.as_str()) {
+                res.push((*id, name));
+            }
+        }
+        Ok(res)
     }
 }
 

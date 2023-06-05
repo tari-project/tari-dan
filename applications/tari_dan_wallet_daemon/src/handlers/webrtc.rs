@@ -64,7 +64,7 @@ pub fn handle_start(
             ),
         )
     })?;
-    let permissions_token = jwt.grant(auth_token.0).map_err(|e| {
+    let permissions_token = jwt.grant("webrtc".to_string(), auth_token.0).map_err(|e| {
         JsonRpcResponse::error(
             answer_id,
             JsonRpcError::new(

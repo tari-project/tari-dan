@@ -26,7 +26,11 @@ use tari_engine_types::substate::{InvalidSubstateAddressFormat, SubstateAddress}
 use tari_template_lib::models::ResourceAddress;
 use tari_utilities::hex::Hex;
 
-use crate::{diesel::ExpressionMethods, models, serialization::deserialize_json};
+use crate::{
+    diesel::ExpressionMethods,
+    models,
+    serialization::deserialize_json,
+};
 
 const LOG_TARGET: &str = "tari::dan::wallet_sdk::storage_sqlite::reader";
 
@@ -148,6 +152,17 @@ impl WalletStoreReader for ReadTransaction<'_> {
             created_at: 0,
             updated_at: 0,
         })
+    }
+
+    // -------------------------------- JWT -------------------------------- //
+    fn jwt_get_all(&mut self) -> Result<Vec<(i32, String)>, WalletStorageError> {
+        use crate::schema::auth_status;
+        let res = auth_status::table
+            .select((auth_status::id, auth_status::token))
+            .filter(auth_status::granted.eq(true))
+            .get_results::<(i32, String)>(self.connection())
+            .map_err(|e| WalletStorageError::general("jwt_get_all", e))?;
+        Ok(res)
     }
 
     // -------------------------------- Transactions -------------------------------- //

@@ -476,6 +476,7 @@ pub struct AuthLoginResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginAcceptRequest {
     pub auth_token: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -498,3 +499,11 @@ pub struct AuthRevokeTokenRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthRevokeTokenResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthGetAllJwtRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthGetAllJwtResponse {
+    pub jwt: Vec<(i32, String)>,
+}
