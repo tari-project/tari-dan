@@ -42,8 +42,11 @@ mod node_addressable;
 pub use node_addressable::NodeAddressable;
 
 pub mod services;
+
 mod shard_id;
 pub use shard_id::ShardId;
+
+pub mod uint;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum SubstateState {

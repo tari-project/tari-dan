@@ -47,13 +47,14 @@ use http_ui::server::run_http_ui_server;
 use log::*;
 use substate_manager::SubstateManager;
 use tari_app_utilities::identity_management::setup_node_identity;
+use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::peer_manager::PeerFeatures;
-use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
-use tari_dan_core::{consensus_constants::ConsensusConstants, services::BaseNodeClient, storage::DbFactory};
+use tari_dan_core::consensus_constants::ConsensusConstants;
+use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_indexer_lib::substate_scanner::SubstateScanner;
 use tari_shutdown::ShutdownSignal;
@@ -115,7 +116,13 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let jrpc_address = config.indexer.json_rpc_address;
     if let Some(address) = jrpc_address {
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
+        let consensus_constants = services
+            .epoch_manager
+            .get_base_layer_consensus_constants()
+            .await
+            .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
         let handlers = JsonRpcHandlers::new(
+            consensus_constants,
             &services,
             base_node_client,
             substate_manager.clone(),
@@ -160,14 +167,10 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
 }
 
 async fn create_base_layer_clients(config: &ApplicationConfig) -> Result<GrpcBaseNodeClient, ExitError> {
-    let mut base_node_client = GrpcBaseNodeClient::new(config.indexer.base_node_grpc_address.unwrap_or_else(|| {
+    GrpcBaseNodeClient::connect(config.indexer.base_node_grpc_address.unwrap_or_else(|| {
         let port = grpc_default_port(ApplicationType::BaseNode, config.network);
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-    }));
-    base_node_client
-        .test_connection()
-        .await
-        .map_err(|error| ExitError::new(ExitCode::ConfigError, error))?;
-
-    Ok(base_node_client)
+    }))
+    .await
+    .map_err(|err| ExitError::new(ExitCode::ConfigError, format!("Could not connect to base node {}", err)))
 }

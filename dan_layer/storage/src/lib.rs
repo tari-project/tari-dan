@@ -24,3 +24,10 @@ mod atomic;
 pub use atomic::AtomicDb;
 
 pub mod global;
+pub mod models;
+
+mod error;
+pub use error::StorageError;
+
+mod shard_store;
+pub use shard_store::*;

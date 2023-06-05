@@ -20,26 +20,36 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::Epoch;
-use tari_dan_storage::global::DbValidatorNode;
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_storage::global::models::ValidatorNode;
+use tari_utilities::ByteArray;
 
-use crate::global::schema::*;
+use crate::{error::SqliteStorageError, global::schema::*};
 
 #[derive(Queryable, Identifiable)]
-pub struct ValidatorNode {
+#[diesel(table_name = validator_nodes)]
+pub struct DbValidatorNode {
     pub id: i32,
     pub public_key: Vec<u8>,
     pub shard_key: Vec<u8>,
     pub epoch: i64,
+    pub committee_bucket: Option<i64>,
 }
+impl TryFrom<DbValidatorNode> for ValidatorNode {
+    type Error = SqliteStorageError;
 
-impl From<ValidatorNode> for DbValidatorNode {
-    fn from(vn: ValidatorNode) -> Self {
-        Self {
-            shard_key: vn.shard_key,
-            public_key: vn.public_key,
+    fn try_from(vn: DbValidatorNode) -> Result<Self, Self::Error> {
+        Ok(Self {
+            shard_key: ShardId::try_from(vn.shard_key).map_err(|_| {
+                SqliteStorageError::MalformedDbData(format!("Invalid shard id in validator node record id={}", vn.id))
+            })?,
+            public_key: PublicKey::from_bytes(&vn.public_key).map_err(|_| {
+                SqliteStorageError::MalformedDbData(format!("Invalid public key in validator node record id={}", vn.id))
+            })?,
             epoch: Epoch(vn.epoch as u64),
-        }
+            committee_bucket: vn.committee_bucket.map(|v| v as u64),
+        })
     }
 }
 
@@ -51,12 +61,12 @@ pub struct NewValidatorNode {
     pub epoch: i64,
 }
 
-impl From<DbValidatorNode> for NewValidatorNode {
-    fn from(vn: DbValidatorNode) -> Self {
-        Self {
-            shard_key: vn.shard_key,
-            public_key: vn.public_key,
-            epoch: vn.epoch.as_u64() as i64,
-        }
-    }
-}
+// impl From<ValidatorNode> for NewValidatorNode {
+//     fn from(vn: ValidatorNode) -> Self {
+//         Self {
+//             shard_key: vn.shard_key.as_bytes().to_vec(),
+//             public_key: vn.public_key.to_vec(),
+//             epoch: vn.epoch.as_u64() as i64,
+//         }
+//     }
+// }

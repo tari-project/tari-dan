@@ -34,9 +34,9 @@ use tari_comms::{
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_core::{
     message::{DanMessage, NetworkAnnounce},
-    models::TariDanPayload,
     workers::hotstuff_waiter::RecoveryMessage,
 };
+use tari_dan_storage::models::TariDanPayload;
 
 use crate::proto;
 

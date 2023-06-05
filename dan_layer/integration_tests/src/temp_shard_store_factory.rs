@@ -23,10 +23,7 @@
 use std::sync::Arc;
 
 use tari_common_types::types::PublicKey;
-use tari_dan_core::{
-    models::TariDanPayload,
-    storage::{shard_store::ShardStore, StorageError},
-};
+use tari_dan_storage::{models::TariDanPayload, ShardStore, StorageError};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::{
     SqliteShardStore,
     SqliteShardStoreReadTransaction,

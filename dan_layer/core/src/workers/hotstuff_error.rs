@@ -20,17 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId};
+use tari_dan_common_types::{Epoch, NodeHeight, PayloadId, ShardId, TreeNodeHash};
+use tari_dan_storage::StorageError;
 use tari_engine_types::{commit_result::RejectReason, substate::SubstateAddress};
+use tari_epoch_manager::base_layer::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::SubstateChange;
 use thiserror::Error;
 use tokio::sync::mpsc;
 
-use crate::{
-    services::{epoch_manager::EpochManagerError, PayloadProcessorError},
-    storage::{shard_store::StoreError, StorageError},
-};
+use crate::services::PayloadProcessorError;
 
 #[derive(Error, Debug)]
 pub enum HotStuffError {
@@ -38,8 +37,6 @@ pub enum HotStuffError {
     EpochManagerError(#[from] EpochManagerError),
     #[error("Received message from a node that is not in the committee")]
     ReceivedMessageFromNonCommitteeMember,
-    #[error("Store error: {0}")]
-    StoreError(#[from] StoreError),
     #[error("Received invalid vote: {0}")]
     InvalidVote(String),
     #[error("Received invalid proposal: {0}")]
@@ -131,4 +128,12 @@ pub enum ProposalValidationError {
     LocalPledgeIsNone,
     #[error("Received proposal pledge for a different payload {pledged_payload} for shard {shard}")]
     PledgePayloadMismatch { shard: ShardId, pledged_payload: PayloadId },
+    #[error(
+        "Node proposed by {proposed_by} with hash {node_hash} does not match calculated hash {calculated_node_hash}"
+    )]
+    NodeHashMismatch {
+        proposed_by: String,
+        node_hash: TreeNodeHash,
+        calculated_node_hash: TreeNodeHash,
+    },
 }

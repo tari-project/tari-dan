@@ -23,7 +23,7 @@
 use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
+use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc},
