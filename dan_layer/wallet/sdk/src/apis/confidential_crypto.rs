@@ -5,9 +5,7 @@ use chacha20poly1305::aead;
 use rand::rngs::OsRng;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
 use tari_crypto::{
-    commitment::HomomorphicCommitmentFactory,
-    dhke::DiffieHellmanSharedSecret,
-    keys::PublicKey as _,
+    commitment::HomomorphicCommitmentFactory, dhke::DiffieHellmanSharedSecret, keys::PublicKey as _,
     ristretto::RistrettoPublicKey,
 };
 use tari_engine_types::confidential::{challenges, ConfidentialOutput};
@@ -20,13 +18,8 @@ use tari_utilities::ByteArray;
 use crate::{
     byte_utils::copy_fixed,
     confidential::{
-        decrypt_value,
-        encrypt_value,
-        generate_confidential_proof,
-        get_commitment_factory,
-        kdfs,
-        ConfidentialProofError,
-        ConfidentialProofStatement,
+        decrypt_value, encrypt_value, generate_confidential_proof, get_commitment_factory, kdfs,
+        ConfidentialProofError, ConfidentialProofStatement,
     },
     models::ConfidentialOutputWithMask,
 };
@@ -78,8 +71,8 @@ impl ConfidentialCryptoApi {
             .iter()
             .fold(PrivateKey::default(), |acc, output| acc + &output.mask);
 
-        let revealed_amount = output_proof.output_statement.revealed_amount +
-            output_proof
+        let revealed_amount = output_proof.output_statement.revealed_amount
+            + output_proof
                 .change_statement
                 .as_ref()
                 .map(|st| st.revealed_amount)

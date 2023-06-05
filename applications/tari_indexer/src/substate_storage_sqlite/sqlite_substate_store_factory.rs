@@ -35,9 +35,9 @@ use diesel::{
     SqliteConnection,
 };
 use diesel_migrations::EmbeddedMigrations;
-use log::{info, warn};
+use log::*;
 use tari_dan_common_types::PayloadId;
-use tari_dan_core::storage::StorageError;
+use tari_dan_storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::prelude::ComponentAddress;
@@ -98,15 +98,19 @@ impl SqliteSubstateStore {
 }
 pub trait SubstateStore {
     type ReadTransaction<'a>: SubstateStoreReadTransaction
-    where Self: 'a;
+    where
+        Self: 'a;
     type WriteTransaction<'a>: SubstateStoreWriteTransaction + Deref<Target = Self::ReadTransaction<'a>>
-    where Self: 'a;
+    where
+        Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError>;
 
     fn with_write_tx<F: FnOnce(&mut Self::WriteTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let mut tx = self.create_write_tx()?;
         match f(&mut tx) {
             Ok(r) => {
@@ -123,7 +127,9 @@ pub trait SubstateStore {
     }
 
     fn with_read_tx<F: FnOnce(&Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let tx = self.create_read_tx()?;
         let ret = f(&tx)?;
         Ok(ret)

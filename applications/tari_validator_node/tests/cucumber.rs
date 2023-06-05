@@ -25,25 +25,19 @@ mod utils;
 use std::{
     collections::{BTreeMap, HashMap},
     convert::TryFrom,
-    fs,
-    future,
-    io,
-    panic,
+    fs, future, io, panic,
     str::FromStr,
     time::{Duration, Instant},
 };
 
 use cucumber::{
     gherkin::{Scenario, Step},
-    given,
-    then,
-    when,
-    writer,
+    given, then, when, writer,
     writer::Verbosity,
-    World,
-    WriterExt,
+    World, WriterExt,
 };
 use indexmap::IndexMap;
+use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_common::initialize_logging;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::multiaddr::Multiaddr;
@@ -51,19 +45,13 @@ use tari_crypto::{
     ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::hex::Hex,
 };
-use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
-use tari_dan_core::services::BaseNodeClient;
 use tari_dan_engine::abi::Type;
 use tari_shutdown::Shutdown;
 use tari_template_lib::Hash;
 use tari_validator_node_cli::versioned_substate_address::VersionedSubstateAddress;
 use tari_validator_node_client::types::{
-    AddPeerRequest,
-    GetIdentityResponse,
-    GetRecentTransactionsRequest,
-    GetTemplateRequest,
-    GetTransactionResultRequest,
+    AddPeerRequest, GetIdentityResponse, GetRecentTransactionsRequest, GetTemplateRequest, GetTransactionResultRequest,
 };
 use utils::{
     indexer::spawn_indexer,

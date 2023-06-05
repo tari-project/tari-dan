@@ -18,7 +18,7 @@ use tari_dan_wallet_sdk::{
     DanWalletSdk,
 };
 use tari_engine_types::{
-    indexed_value::{IndexedValue, ValueVisitorError},
+    indexed_value::{IndexedValue, IndexedValueVisitorError},
     resource::Resource,
     substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
     vault::Vault,
@@ -37,6 +37,8 @@ use crate::{
     services::{AccountChangedEvent, NewAccountInfo, Reply, WalletEvent},
 };
 
+use super::NewAccountNFTInfo;
+
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::account_monitor";
 
 pub struct AccountMonitor<TStore, TNetworkInterface> {
@@ -44,6 +46,7 @@ pub struct AccountMonitor<TStore, TNetworkInterface> {
     wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
     request_rx: mpsc::Receiver<AccountMonitorRequest>,
     pending_accounts: HashMap<FixedHash, NewAccountInfo>,
+    pending_account_nfts: HashMap<FixedHash, NewAccountNFTInfo>,
     shutdown_signal: ShutdownSignal,
 }
 
@@ -66,6 +69,7 @@ where
                 wallet_sdk,
                 request_rx,
                 pending_accounts: HashMap::new(),
+                pending_account_nfts: HashMap::new(),
                 shutdown_signal,
             },
             AccountMonitorHandle { sender: request_tx },
@@ -459,7 +463,7 @@ pub enum AccountMonitorError {
     #[error("Outputs API error: {0}")]
     ConfidentialOutputs(#[from] ConfidentialOutputsApiError),
     #[error("Failed to decode binary value: {0}")]
-    DecodeValueFailed(#[from] ValueVisitorError),
+    DecodeValueFailed(#[from] IndexedValueVisitorError),
     #[error("Unexpected substate: {0}")]
     UnexpectedSubstate(String),
     #[error("Monitor service is not running")]
@@ -478,12 +482,12 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
         }
 
         // Is an account component
-        if !a.is_component() ||
-            v.substate_value()
+        if !a.is_component()
+            || v.substate_value()
                 .component()
                 .expect("Value was not component for component address")
-                .template_address !=
-                *ACCOUNT_TEMPLATE_ADDRESS
+                .template_address
+                != *ACCOUNT_TEMPLATE_ADDRESS
         {
             return None;
         }

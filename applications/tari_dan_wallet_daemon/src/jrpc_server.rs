@@ -13,10 +13,7 @@ use axum::{
 };
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcAnswer,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcAnswer, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};

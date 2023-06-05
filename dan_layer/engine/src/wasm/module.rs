@@ -27,19 +27,8 @@ use std::sync::{
 
 use tari_template_abi::{FunctionDef, TemplateDef};
 use wasmer::{
-    BaseTunables,
-    CompilerConfig,
-    Cranelift,
-    CraneliftOptLevel,
-    Engine,
-    Extern,
-    Function,
-    Instance,
-    Module,
-    Store,
-    Universal,
-    Val,
-    WasmerEnv,
+    BaseTunables, CompilerConfig, Cranelift, CraneliftOptLevel, Engine, Extern, Function, Instance, Module, Store,
+    Universal, Val, WasmerEnv,
 };
 
 use crate::{

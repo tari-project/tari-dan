@@ -25,10 +25,8 @@ use std::convert::{TryFrom, TryInto};
 use log::*;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::{optional::Optional, NodeAddressable, PayloadId, ShardId};
-use tari_dan_core::{
-    services::PeerProvider,
-    storage::shard_store::{ShardStore, ShardStoreReadTransaction},
-};
+use tari_dan_core::services::PeerProvider;
+use tari_dan_storage::{ShardStore, ShardStoreReadTransaction};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::encode;
@@ -36,14 +34,8 @@ use tari_transaction::Transaction;
 use tari_validator_node_rpc::{
     proto,
     proto::rpc::{
-        GetSubstateRequest,
-        GetSubstateResponse,
-        GetTransactionResultRequest,
-        GetTransactionResultResponse,
-        PayloadResultStatus,
-        SubstateStatus,
-        VnStateSyncRequest,
-        VnStateSyncResponse,
+        GetSubstateRequest, GetSubstateResponse, GetTransactionResultRequest, GetTransactionResultResponse,
+        PayloadResultStatus, SubstateStatus, VnStateSyncRequest, VnStateSyncResponse,
     },
     rpc_service::ValidatorNodeRpcService,
 };
@@ -71,7 +63,8 @@ impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
 
 #[tari_comms::async_trait]
 impl<TPeerProvider> ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl<TPeerProvider>
-where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
+where
+    TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
 {
     async fn submit_transaction(
         &self,
@@ -139,11 +132,11 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         let start_shard_id = msg
             .start_shard_id
             .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: start_shard_id not provided"))?;
+            .ok_or_else(|| RpcStatus::bad_request("start_shard_id malformed or not provided"))?;
         let end_shard_id = msg
             .end_shard_id
             .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("Invalid gRPC request: end_shard_id not provided"))?;
+            .ok_or_else(|| RpcStatus::bad_request("end_shard_id malformed or not provided"))?;
 
         let excluded_shards = msg
             .inventory

@@ -24,49 +24,33 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::{error, warn};
 use serde::Serialize;
 use serde_json::{self as json, json, Value};
+use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
     types::CommsPublicKey,
-    CommsNode,
-    NodeIdentity,
+    CommsNode, NodeIdentity,
 };
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
-use tari_dan_common_types::optional::Optional;
-use tari_dan_core::services::BaseNodeClient;
+use tari_dan_common_types::{optional::Optional, Epoch};
+use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_indexer_client::types::{
-    AddAddressRequest,
-    DeleteAddressRequest,
-    GetNonFungibleCountRequest,
-    GetNonFungiblesRequest,
-    GetNonFungiblesResponse,
-    GetSubstateRequest,
-    GetSubstateResponse,
-    GetTransactionResultRequest,
-    GetTransactionResultResponse,
-    InspectSubstateRequest,
-    InspectSubstateResponse,
-    NonFungibleSubstate,
-    SubmitTransactionRequest,
-    SubmitTransactionResponse,
+    AddAddressRequest, DeleteAddressRequest, GetNonFungibleCountRequest, GetNonFungiblesRequest,
+    GetNonFungiblesResponse, GetSubstateRequest, GetSubstateResponse, GetTransactionResultRequest,
+    GetTransactionResultResponse, InspectSubstateRequest, InspectSubstateResponse, NonFungibleSubstate,
+    SubmitTransactionRequest, SubmitTransactionResponse,
 };
-use tari_indexer_lib::substate_decoder::encode_substate_into_json;
 use tari_validator_node_client::types::{AddPeerRequest, AddPeerResponse, GetIdentityResponse};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::{
-    bootstrap::Services,
-    substate_manager::SubstateManager,
-    transaction_manager::TransactionManager,
-    GrpcBaseNodeClient,
+    bootstrap::Services, json_rpc::special_substate_encoding::encode_substate_into_json,
+    substate_manager::SubstateManager, transaction_manager::TransactionManager,
 };
 
 const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
@@ -86,6 +70,7 @@ struct GetConnectionsResponse {
 }
 
 pub struct JsonRpcHandlers {
+    consensus_constants: BaseLayerConsensusConstants,
     node_identity: Arc<NodeIdentity>,
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
@@ -95,18 +80,24 @@ pub struct JsonRpcHandlers {
 
 impl JsonRpcHandlers {
     pub fn new(
+        consensus_constants: BaseLayerConsensusConstants,
         services: &Services,
         base_node_client: GrpcBaseNodeClient,
         substate_manager: Arc<SubstateManager>,
         transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
     ) -> Self {
         Self {
+            consensus_constants,
             node_identity: services.comms.node_identity(),
             comms: services.comms.clone(),
             base_node_client,
             substate_manager,
             transaction_manager,
         }
+    }
+
+    pub fn base_node_client(&self) -> GrpcBaseNodeClient {
+        self.base_node_client.clone()
     }
 }
 
@@ -142,7 +133,8 @@ impl JsonRpcHandlers {
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let epoch: u64 = value.parse_params()?;
-        match self.base_node_client.clone().get_validator_nodes(epoch * 10).await {
+        let epoch_blocks = self.consensus_constants.epoch_to_height(Epoch(epoch));
+        match self.base_node_client().get_validator_nodes(epoch_blocks).await {
             Ok(vns) => {
                 let response = json!({ "vns": vns });
                 Ok(JsonRpcResponse::success(answer_id, response))
@@ -255,12 +247,15 @@ impl JsonRpcHandlers {
                 warn!(target: LOG_TARGET, "Error getting substate: {}", e);
                 Self::generic_error_response(answer_id)
             })? {
-            Some(substate_resp) => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                address: substate_resp.address,
-                version: substate_resp.version,
-                substate: substate_resp.substate,
-                created_by_transaction: substate_resp.created_by_transaction,
-            })),
+            Some(substate_resp) => Ok(JsonRpcResponse::success(
+                answer_id,
+                GetSubstateResponse {
+                    address: substate_resp.address,
+                    version: substate_resp.version,
+                    substate: substate_resp.substate,
+                    created_by_transaction: substate_resp.created_by_transaction,
+                },
+            )),
             None => {
                 if request.local_search_only {
                     Err(JsonRpcResponse::error(
@@ -308,12 +303,15 @@ impl JsonRpcHandlers {
                         SubstateResult::Up {
                             substate,
                             created_by_tx,
-                        } => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                            address: request.address,
-                            version: request.version.unwrap_or_default(),
-                            substate,
-                            created_by_transaction: created_by_tx,
-                        })),
+                        } => Ok(JsonRpcResponse::success(
+                            answer_id,
+                            GetSubstateResponse {
+                                address: request.address,
+                                version: request.version.unwrap_or_default(),
+                                substate,
+                                created_by_transaction: created_by_tx,
+                            },
+                        )),
                         SubstateResult::Down { version, .. } => Err(JsonRpcResponse::error(
                             answer_id,
                             JsonRpcError::new(
@@ -361,13 +359,16 @@ impl JsonRpcHandlers {
                 )
             })?;
 
-        Ok(JsonRpcResponse::success(answer_id, InspectSubstateResponse {
-            address: resp.address,
-            version: resp.version,
-            substate_contents: encode_substate_into_json(&resp.substate)
-                .map_err(|e| Self::internal_error(answer_id, e))?,
-            created_by_transaction: resp.created_by_transaction,
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            InspectSubstateResponse {
+                address: resp.address,
+                version: resp.version,
+                substate_contents: encode_substate_into_json(&resp.substate)
+                    .map_err(|e| Self::internal_error(answer_id, e))?,
+                created_by_transaction: resp.created_by_transaction,
+            },
+        ))
     }
 
     pub async fn get_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -465,16 +466,19 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| Self::internal_error(answer_id, e))?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetNonFungiblesResponse {
-            non_fungibles: res
-                .into_iter()
-                .map(|v| NonFungibleSubstate {
-                    index: v.index,
-                    address: v.address,
-                    substate: v.substate,
-                })
-                .collect(),
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            GetNonFungiblesResponse {
+                non_fungibles: res
+                    .into_iter()
+                    .map(|v| NonFungibleSubstate {
+                        index: v.index,
+                        address: v.address,
+                        substate: v.substate,
+                    })
+                    .collect(),
+            },
+        ))
     }
 
     pub async fn submit_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -487,9 +491,12 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| Self::internal_error(answer_id, e))?;
 
-        Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-            transaction_hash: payload_id.into_array().into(),
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            SubmitTransactionResponse {
+                transaction_hash: payload_id.into_array().into(),
+            },
+        ))
     }
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -505,9 +512,12 @@ impl JsonRpcHandlers {
 
         let result = maybe_result.ok_or_else(|| Self::not_found(answer_id, "Transaction not found"))?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetTransactionResultResponse {
-            execution_result: result.into_finalized(),
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            GetTransactionResultResponse {
+                execution_result: result.into_finalized(),
+            },
+        ))
     }
 
     fn error_response<T: Display>(answer_id: i64, reason: JsonRpcErrorReason, message: T) -> JsonRpcResponse {

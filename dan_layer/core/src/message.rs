@@ -23,12 +23,10 @@
 use serde::Serialize;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
 use tari_dan_common_types::NodeAddressable;
+use tari_dan_storage::models::{HotStuffMessage, VoteMessage};
 use tari_transaction::Transaction;
 
-use crate::{
-    models::{vote_message::VoteMessage, HotStuffMessage},
-    workers::hotstuff_waiter::RecoveryMessage,
-};
+use crate::workers::hotstuff_waiter::RecoveryMessage;
 
 #[derive(Debug, Clone, Serialize)]
 pub enum DanMessage<TPayload, TAddr> {

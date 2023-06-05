@@ -21,8 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fs,
-    io,
+    fs, io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     ops::DerefMut,
     sync::Arc,
@@ -32,35 +31,31 @@ use anyhow::anyhow;
 use futures::{future, FutureExt};
 use log::info;
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
+use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
 use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
-use tari_dan_app_utilities::{
-    base_layer_scanner,
-    base_node_client::GrpcBaseNodeClient,
-    epoch_manager::EpochManagerHandle,
-    template_manager::TemplateManagerHandle,
-};
+use tari_dan_app_utilities::{base_layer_scanner, template_manager::TemplateManagerHandle};
 use tari_dan_common_types::{NodeAddressable, NodeHeight, PayloadId, ShardId, TreeNodeHash};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    models::{Payload, SubstateShardData},
-    storage::{
-        shard_store::{ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction},
-        StorageError,
-    },
     workers::events::{EventSubscription, HotStuffEvent},
 };
 use tari_dan_engine::fees::FeeTable;
-use tari_dan_storage::global::GlobalDb;
+use tari_dan_storage::{
+    global::GlobalDb,
+    models::{Payload, SubstateShardData},
+    ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction, StorageError,
+};
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_engine_types::{
     resource::Resource,
     substate::{Substate, SubstateAddress},
 };
+use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::{
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
@@ -77,9 +72,7 @@ use crate::{
         create_tari_validator_node_rpc_service,
         services::{
             comms_peer_provider::CommsPeerProvider,
-            epoch_manager,
-            hotstuff,
-            mempool,
+            hotstuff, mempool,
             mempool::{FeeTransactionValidator, MempoolHandle, TemplateExistsValidator, Validator},
             messaging,
             messaging::DanMessageReceivers,
@@ -90,8 +83,7 @@ use crate::{
         },
     },
     payload_processor::TariDanPayloadProcessor,
-    registration,
-    ApplicationConfig,
+    registration, ApplicationConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::bootstrap";
@@ -153,15 +145,17 @@ pub async fn spawn_services(
     shard_store.with_write_tx(|tx| bootstrap_state(tx))?;
 
     // Epoch manager
-    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
-    let (epoch_manager, join_handle) = epoch_manager::spawn(
+    let (epoch_manager, join_handle) = tari_epoch_manager::base_layer::spawn_service(
+        // TODO: We should be able to pass consensus constants here. However, these are currently located in dan_core
+        // which depends on epoch_manager, so would be a circular dependency.
+        EpochManagerConfig {
+            base_layer_confirmations: consensus_constants.base_layer_confirmations,
+            committee_size: consensus_constants.committee_size,
+        },
         global_db.clone(),
-        shard_store.clone(),
         base_node_client.clone(),
-        consensus_constants.clone(),
+        node_identity.public_key().clone(),
         shutdown.clone(),
-        node_identity.clone(),
-        validator_node_client_factory.clone(),
     );
     handles.push(join_handle);
 
@@ -178,12 +172,13 @@ pub async fn spawn_services(
     };
     let payload_processor = TariDanPayloadProcessor::new(template_manager.clone(), fee_table);
 
+    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
     // Dry run transaction processor
     let dry_run_transaction_processor = DryRunTransactionProcessor::new(
         epoch_manager.clone(),
         payload_processor.clone(),
         shard_store.clone(),
-        validator_node_client_factory,
+        validator_node_client_factory.clone(),
         node_identity.clone(),
     );
 
@@ -204,7 +199,7 @@ pub async fn spawn_services(
 
     // Base Node scanner
     let join_handle = base_layer_scanner::spawn(
-        global_db,
+        global_db.clone(),
         base_node_client.clone(),
         epoch_manager.clone(),
         template_manager_service.clone(),
@@ -235,7 +230,12 @@ pub async fn spawn_services(
     let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store.clone(), mempool.clone());
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
-        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
+        .map_err(|e| {
+            ExitError::new(
+                ExitCode::NetworkError,
+                format!("Could not spawn using transport: {}", e),
+            )
+        })?;
 
     // Save final node identity after comms has initialized. This is required because the public_address can be
     // changed by comms during initialization when using tor.
@@ -256,9 +256,11 @@ pub async fn spawn_services(
         epoch_manager,
         template_manager: template_manager_service,
         hotstuff_events,
+        global_db,
         shard_store,
         dry_run_transaction_processor,
         handles,
+        validator_node_client_factory,
     })
 }
 
@@ -286,8 +288,11 @@ pub struct Services {
     pub epoch_manager: EpochManagerHandle,
     pub template_manager: TemplateManagerHandle,
     pub hotstuff_events: EventSubscription<HotStuffEvent<PublicKey>>,
+    pub global_db: GlobalDb<SqliteGlobalDbAdapter>,
     pub shard_store: SqliteShardStore,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
+    pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
 }
 

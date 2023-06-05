@@ -28,7 +28,7 @@ mod server;
 
 use serde::Serialize;
 pub use server::spawn_json_rpc;
-use tari_dan_core::models::{SQLTransaction, TariDanPayload};
+use tari_dan_storage::models::{SQLTransaction, TariDanPayload};
 
 #[derive(Debug, Serialize)]
 pub struct JsonTransactionResult {

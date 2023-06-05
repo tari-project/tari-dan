@@ -8,7 +8,7 @@ use tari_dan_common_types::{
     PayloadId,
 };
 use tari_engine_types::{
-    indexed_value::{IndexedValue, ValueVisitorError},
+    indexed_value::{IndexedValue, IndexedValueVisitorError},
     substate::SubstateDiff,
 };
 use tari_transaction::Transaction;
@@ -233,13 +233,17 @@ where
 
             let value = IndexedValue::from_raw(&header.state.state)?;
 
-            for owned_addr in value.owned_substates() {
+            for owned_addr in value.referenced_substates() {
                 if let Some(pos) = rest.iter().position(|(addr, _)| addr == &owned_addr) {
                     let (_, s) = rest.swap_remove(pos);
-                    tx.substates_insert_child(tx_hash, component_addr.clone(), VersionedSubstateAddress {
-                        address: owned_addr,
-                        version: s.version(),
-                    })?;
+                    tx.substates_insert_child(
+                        tx_hash,
+                        component_addr.clone(),
+                        VersionedSubstateAddress {
+                            address: owned_addr,
+                            version: s.version(),
+                        },
+                    )?;
                 }
             }
         }
@@ -267,7 +271,7 @@ pub enum TransactionApiError {
     #[error("Network interface error: {0}")]
     NetworkInterfaceError(String),
     #[error("Failed to extract known type data from value: {0}")]
-    ValueVisitorError(#[from] ValueVisitorError),
+    ValueVisitorError(#[from] IndexedValueVisitorError),
 }
 
 impl IsNotFoundError for TransactionApiError {

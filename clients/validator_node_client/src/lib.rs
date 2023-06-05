@@ -31,28 +31,11 @@ use tari_comms_logging::LoggedMessage;
 use types::{GetClaimableFeesRequest, GetClaimableFeesResponse};
 
 use crate::types::{
-    AddPeerRequest,
-    AddPeerResponse,
-    GetEpochManagerStatsResponse,
-    GetIdentityResponse,
-    GetRecentTransactionsRequest,
-    GetRecentTransactionsResponse,
-    GetStateRequest,
-    GetStateResponse,
-    GetSubstateRequest,
-    GetSubstateResponse,
-    GetTemplateRequest,
-    GetTemplateResponse,
-    GetTemplatesRequest,
-    GetTemplatesResponse,
-    GetTransactionQcsRequest,
-    GetTransactionQcsResponse,
-    GetTransactionResultRequest,
-    GetTransactionResultResponse,
-    SubmitTransactionRequest,
-    SubmitTransactionResponse,
-    TemplateRegistrationRequest,
-    TemplateRegistrationResponse,
+    AddPeerRequest, AddPeerResponse, GetEpochManagerStatsResponse, GetIdentityResponse, GetRecentTransactionsRequest,
+    GetRecentTransactionsResponse, GetStateRequest, GetStateResponse, GetSubstateRequest, GetSubstateResponse,
+    GetTemplateRequest, GetTemplateResponse, GetTemplatesRequest, GetTemplatesResponse, GetTransactionQcsRequest,
+    GetTransactionQcsResponse, GetTransactionResultRequest, GetTransactionResultResponse, SubmitTransactionRequest,
+    SubmitTransactionResponse, TemplateRegistrationRequest, TemplateRegistrationResponse,
 };
 
 #[derive(Debug, Clone)]
@@ -62,7 +45,6 @@ pub struct ValidatorNodeClient {
     request_id: i64,
 }
 
-// TODO: the client should return a proper error type
 impl ValidatorNodeClient {
     pub fn connect<T: IntoUrl>(endpoint: T) -> Result<Self, ValidatorNodeClientError> {
         let client = reqwest::Client::builder()

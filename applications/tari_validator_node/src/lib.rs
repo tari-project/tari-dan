@@ -25,7 +25,6 @@ pub mod cli;
 mod comms;
 mod config;
 mod dan_node;
-mod default_service_specification;
 mod dry_run_transaction_processor;
 mod grpc;
 mod http_ui;
@@ -36,8 +35,7 @@ mod registration;
 mod template_registration_signing;
 
 use std::{
-    fs,
-    io,
+    fs, io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     process,
 };
@@ -45,32 +43,26 @@ use std::{
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_app_utilities::identity_management::setup_node_identity;
+use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClientError};
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::ShardId;
-use tari_dan_core::{
-    consensus_constants::ConsensusConstants,
-    services::{base_node_error::BaseNodeError, BaseNodeClient},
-    storage::DbFactory,
-    DigitalAssetError,
-};
+use tari_dan_core::consensus_constants::ConsensusConstants;
+use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
 use tokio::task;
 
+pub use crate::config::{ApplicationConfig, ValidatorNodeConfig};
 use crate::{
     bootstrap::{spawn_services, Services},
     dan_node::DanNode,
+    grpc::base_layer_wallet::{GrpcWalletClient, WalletGrpcError},
     http_ui::server::run_http_ui_server,
     json_rpc::{spawn_json_rpc, JsonRpcHandlers},
     p2p::services::networking::DAN_PEER_FEATURES,
-};
-pub use crate::{
-    config::{ApplicationConfig, ValidatorNodeConfig},
-    grpc::services::wallet_client::GrpcWalletClient,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -90,9 +82,9 @@ pub enum ShardKeyError {
     #[error("Registration failed")]
     RegistrationFailed,
     #[error("Registration error {0}")]
-    RegistrationError(#[from] DigitalAssetError),
+    RegistrationError(#[from] WalletGrpcError),
     #[error("Base node error: {0}")]
-    BaseNodeError(#[from] BaseNodeError),
+    BaseNodeError(#[from] BaseNodeClientError),
 }
 
 #[derive(Serialize, Deserialize)]
@@ -172,13 +164,11 @@ async fn run_dan_node(services: Services, shutdown_signal: ShutdownSignal) -> Re
 async fn create_base_layer_clients(
     config: &ApplicationConfig,
 ) -> Result<(GrpcBaseNodeClient, GrpcWalletClient), ExitError> {
-    let mut base_node_client =
-        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+    let base_node_client =
+        GrpcBaseNodeClient::connect(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
             let port = grpc_default_port(ApplicationType::BaseNode, config.network);
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-        }));
-    base_node_client
-        .test_connection()
+        }))
         .await
         .map_err(|error| ExitError::new(ExitCode::ConfigError, error))?;
 

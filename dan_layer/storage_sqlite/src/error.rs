@@ -25,7 +25,7 @@ use std::error::Error;
 use diesel;
 use tari_common_types::types::FixedHashSizeError;
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_dan_core::{models::ModelError, storage::StorageError};
+use tari_dan_storage::StorageError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -49,8 +49,8 @@ pub enum SqliteStorageError {
     MalformedHashData,
     #[error("Malformed DB data: {0}")]
     MalformedDbData(String),
-    #[error(transparent)]
-    ModelError(#[from] ModelError),
+    // #[error(transparent)]
+    // ModelError(#[from] ModelError),
     #[error("Conversion error:{reason}")]
     ConversionError { reason: String },
     #[error("Malformed metadata for key '{key}'")]

@@ -31,10 +31,7 @@ use quote::quote;
 use syn::{parse2, Result};
 
 use self::{
-    abi::generate_abi,
-    ast::TemplateAst,
-    definition::generate_definition,
-    dependencies::generate_dependencies,
+    abi::generate_abi, ast::TemplateAst, definition::generate_definition, dependencies::generate_dependencies,
     dispatcher::generate_dispatcher,
 };
 

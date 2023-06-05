@@ -23,19 +23,14 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
+use tari_bor::{decode_exact, encode};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{
-    ObjectPledge,
-    QuorumCertificate,
-    QuorumDecision,
-    ShardPledge,
-    SubstateState,
-    TreeNodeHash,
-    ValidatorMetadata,
+    ObjectPledge, QuorumCertificate, QuorumDecision, ShardPledge, SubstateState, TreeNodeHash, ValidatorMetadata,
 };
-use tari_dan_core::models::{vote_message::VoteMessage, HotStuffMessage, HotStuffTreeNode, Node, TariDanPayload};
+use tari_dan_storage::models::{HotStuffMessage, HotStuffTreeNode, Node, TariDanPayload, VoteMessage};
 use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::proto;
@@ -49,7 +44,8 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
             decision: i32::from(msg.decision().as_u8()),
             all_shard_pledges: msg.all_shard_pledges().iter().map(|n| n.clone().into()).collect(),
             validator_metadata: Some(msg.validator_metadata().clone().into()),
-            merkle_proof: msg.encode_merkle_proof(),
+            // TOOD: unwrap
+            merkle_proof: encode(&msg.merkle_proof()).unwrap(),
             node_hash: msg.node_hash().to_vec(),
         }
     }
@@ -71,7 +67,7 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
                 .map(|n| n.try_into())
                 .collect::<Result<_, _>>()?,
             metadata.try_into()?,
-            VoteMessage::decode_merkle_proof(&value.merkle_proof)?,
+            decode_exact(&value.merkle_proof)?,
             FixedHash::try_from(value.node_hash)?,
         ))
     }
@@ -153,7 +149,8 @@ impl From<HotStuffTreeNode<CommsPublicKey, TariDanPayload>> for proto::consensus
 
 impl From<QuorumCertificate<PublicKey>> for proto::consensus::QuorumCertificate {
     fn from(source: QuorumCertificate<PublicKey>) -> Self {
-        let merged_merkle_proof = source.encode_merged_merkle_proof();
+        // TODO: unwrap
+        let merged_merkle_proof = encode(&source.merged_proof()).unwrap();
         Self {
             payload_id: source.payload_id().as_bytes().to_vec(),
             payload_height: source.payload_height().as_u64(),
@@ -169,7 +166,7 @@ impl From<QuorumCertificate<PublicKey>> for proto::consensus::QuorumCertificate 
             all_shard_pledges: source.all_shard_pledges().iter().map(|p| p.clone().into()).collect(),
             validators_metadata: source.validators_metadata().iter().map(|p| p.clone().into()).collect(),
             merged_merkle_proof,
-            leaves_hashes: source.leave_hashes().iter().map(|hash| hash.to_vec()).collect(),
+            leaves_hashes: source.leaf_hashes().iter().map(|hash| hash.to_vec()).collect(),
         }
     }
 }
@@ -197,7 +194,7 @@ impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate<PublicKe
                 .iter()
                 .map(|v| v.clone().try_into())
                 .collect::<Result<_, _>>()?,
-            QuorumCertificate::<PublicKey>::decode_merged_merkle_proof(&value.merged_merkle_proof)?,
+            decode_exact(&value.merged_merkle_proof)?,
             value
                 .leaves_hashes
                 .into_iter()

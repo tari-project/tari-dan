@@ -23,14 +23,13 @@
 use std::{
     env,
     error::Error,
-    fs,
-    io,
+    fs, io,
     io::ErrorKind,
     path::{Path, PathBuf},
     process::Command,
 };
 
-const TEMPLATE_BUILTINS: &[&str] = &["templates/account"];
+const TEMPLATE_BUILTINS: &[&str] = &["templates/account", "templates/account_nfts"];
 
 fn main() -> Result<(), Box<dyn Error>> {
     // Rebuild templates if abi or lib changes

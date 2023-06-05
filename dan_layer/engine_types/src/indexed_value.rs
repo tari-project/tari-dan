@@ -29,7 +29,7 @@ pub struct IndexedValue {
 }
 
 impl IndexedValue {
-    pub fn from_raw(bytes: &[u8]) -> Result<Self, ValueVisitorError> {
+    pub fn from_raw(bytes: &[u8]) -> Result<Self, IndexedValueVisitorError> {
         let mut visitor = IndexedValueVisitor::new();
         let value: tari_bor::Value = decode(bytes)?;
         tari_bor::walk_all(&value, &mut visitor)?;
@@ -58,7 +58,7 @@ impl IndexedValue {
         }
     }
 
-    pub fn owned_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
         self.component_addresses
             .iter()
             .map(|a| (*a).into())
@@ -103,11 +103,13 @@ pub enum TariValue {
 }
 
 impl FromTagAndValue for TariValue {
-    type Error = ValueVisitorError;
+    type Error = IndexedValueVisitorError;
 
     fn try_from_tag_and_value(tag: u64, value: &tari_bor::Value) -> Result<Self, Self::Error>
-    where Self: Sized {
-        let tag = BinaryTag::from_u64(tag).ok_or(ValueVisitorError::InvalidTag(tag))?;
+    where
+        Self: Sized,
+    {
+        let tag = BinaryTag::from_u64(tag).ok_or(IndexedValueVisitorError::InvalidTag(tag))?;
         match tag {
             BinaryTag::ComponentAddress => {
                 let component_address: Hash = value.deserialized().map_err(BorError::from)?;
@@ -167,7 +169,7 @@ impl IndexedValueVisitor {
 }
 
 impl ValueVisitor<TariValue> for IndexedValueVisitor {
-    type Error = ValueVisitorError;
+    type Error = IndexedValueVisitorError;
 
     fn visit(&mut self, value: TariValue) -> Result<(), Self::Error> {
         match value {
@@ -198,7 +200,7 @@ impl ValueVisitor<TariValue> for IndexedValueVisitor {
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum ValueVisitorError {
+pub enum IndexedValueVisitorError {
     #[error("Bor error: {0}")]
     BorError(#[from] tari_bor::BorError),
     #[error("Invalid tag: {0}")]

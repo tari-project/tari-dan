@@ -24,15 +24,12 @@ use std::{fmt::Display, sync::Arc};
 
 use log::*;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     message::DanMessage,
-    models::{vote_message::VoteMessage, HotStuffMessage, TariDanPayload},
     services::{
-        infrastructure_services::OutboundService,
-        leader_strategy::PayloadSpecificLeaderStrategy,
+        infrastructure_services::OutboundService, leader_strategy::PayloadSpecificLeaderStrategy,
         NodeIdentitySigningService,
     },
     workers::{
@@ -41,7 +38,9 @@ use tari_dan_core::{
         pacemaker_worker::Pacemaker,
     },
 };
+use tari_dan_storage::models::{HotStuffMessage, TariDanPayload, VoteMessage};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
+use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::Transaction;
 use tokio::{

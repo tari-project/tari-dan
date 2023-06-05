@@ -21,32 +21,29 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fs,
-    io,
+    fs, io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     sync::Arc,
 };
 
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
+use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::{CommsNode, NodeIdentity};
-use tari_dan_app_utilities::{
-    base_layer_scanner,
-    base_node_client::GrpcBaseNodeClient,
-    epoch_manager::EpochManagerHandle,
-};
+use tari_dan_app_utilities::base_layer_scanner;
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
+use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_shutdown::ShutdownSignal;
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
 use crate::{
     comms,
-    p2p::services::{comms_peer_provider::CommsPeerProvider, epoch_manager, networking, template_manager},
+    p2p::services::{comms_peer_provider::CommsPeerProvider, networking, template_manager},
     substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore,
     ApplicationConfig,
 };
@@ -65,7 +62,7 @@ pub async fn spawn_services(
         load_from_json(&config.indexer.tor_identity_file).map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
     ensure_directories_exist(config)?;
 
-    // Connection to base node
+    // GRPC client connection to base node
     let base_node_client = GrpcBaseNodeClient::new(config.indexer.base_node_grpc_address.unwrap_or_else(|| {
         let port = grpc_default_port(ApplicationType::BaseNode, config.network);
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
@@ -84,12 +81,15 @@ pub async fn spawn_services(
 
     // Epoch manager
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
-    let epoch_manager = epoch_manager::spawn(
+    let (epoch_manager, _) = tari_epoch_manager::base_layer::spawn_service(
+        EpochManagerConfig {
+            base_layer_confirmations: consensus_constants.base_layer_confirmations,
+            committee_size: consensus_constants.committee_size,
+        },
         global_db.clone(),
         base_node_client.clone(),
-        consensus_constants.clone(),
+        node_identity.public_key().clone(),
         shutdown.clone(),
-        validator_node_client_factory.clone(),
     );
 
     // Mock template manager

@@ -29,13 +29,8 @@ use serde::{Deserialize, Serialize};
 use tari_bor::{decode, decode_exact, encode, BorError};
 use tari_template_lib::{
     models::{
-        ComponentAddress,
-        NonFungibleAddress,
-        NonFungibleId,
-        NonFungibleIndexAddress,
-        ResourceAddress,
-        UnclaimedConfidentialOutputAddress,
-        VaultId,
+        ComponentAddress, NonFungibleAddress, NonFungibleId, NonFungibleIndexAddress, ResourceAddress,
+        UnclaimedConfidentialOutputAddress, VaultId,
     },
     Hash,
 };

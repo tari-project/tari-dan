@@ -22,7 +22,7 @@
 
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
-use tari_template_abi::rust::collections::BTreeMap;
+use tari_template_abi::rust::{collections::BTreeMap, fmt::Display};
 
 use super::BinaryTag;
 const TAG: u64 = BinaryTag::Metadata as u64;
@@ -56,5 +56,15 @@ impl From<BTreeMap<String, String>> for Metadata {
 impl Default for Metadata {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Display for Metadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Metadata: ")?;
+        for (key, value) in self.0.iter() {
+            write!(f, "key = {}, value = {} ", key, value)?;
+        }
+        Ok(())
     }
 }

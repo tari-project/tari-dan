@@ -47,7 +47,7 @@ export default function ErrorPage() {
               <Typography variant="h3">Oops!</Typography>
               <Typography>Sorry, an unexpected error has occurred.</Typography>
               <Typography>
-                <i>{error.statusText || error.message}</i>
+                <i>{error ? error.statusText || error.message : null}</i>
               </Typography>{' '}
             </StyledPaper>
           </Grid>

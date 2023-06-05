@@ -49,7 +49,7 @@ impl Event {
             template_address: event.template_address().into_array(),
             tx_hash: event.tx_hash().into_array(),
             topic: event.topic(),
-            payload: event.get_full_payload().into_iter().collect(),
+            payload: event.into_payload().into_iter().collect(),
         })
     }
 }

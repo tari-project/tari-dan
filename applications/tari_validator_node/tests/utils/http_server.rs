@@ -7,6 +7,8 @@ use httpmock::MockServer;
 use tari_shutdown::ShutdownSignal;
 use tokio::task;
 
+use crate::utils::helpers::get_os_assigned_port;
+
 pub struct MockHttpServer {
     server: MockServer,
     base_url: SocketAddr,
@@ -57,7 +59,7 @@ pub struct Mock<'a> {
 // }
 
 pub async fn spawn_template_http_server(signal: ShutdownSignal) -> u16 {
-    let mock_port = 12345; // get_os_assigned_port();
+    let mock_port = get_os_assigned_port();
     task::spawn(async move {
         httpmock::standalone::start_standalone_server(mock_port, false, None, false, 5, signal)
             .await

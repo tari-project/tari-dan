@@ -1,0 +1,105 @@
+//   Copyright 2023 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
+use diesel::{Connection, SqliteConnection};
+use rand::rngs::OsRng;
+use tari_common_types::types::PublicKey;
+use tari_crypto::keys::PublicKey as _;
+use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_storage::global::{GlobalDb, ValidatorNodeDb};
+use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
+use tari_utilities::ByteArray;
+
+fn create_db() -> GlobalDb<SqliteGlobalDbAdapter> {
+    let conn = SqliteConnection::establish(":memory:").unwrap();
+    let db = GlobalDb::new(SqliteGlobalDbAdapter::new(conn));
+    db.adapter().migrate().unwrap();
+    db
+}
+
+fn new_public_key() -> PublicKey {
+    PublicKey::random_keypair(&mut OsRng).1
+}
+
+fn derived_shard_id(public_key: &PublicKey) -> ShardId {
+    ShardId::from_bytes(public_key.as_bytes()).unwrap()
+}
+
+fn insert_vns(validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter>, num: usize, epoch: Epoch) {
+    for _ in 0..num {
+        insert_vn_with_public_key(validator_nodes, new_public_key(), epoch)
+    }
+}
+
+fn insert_vn_with_public_key(
+    validator_nodes: &mut ValidatorNodeDb<'_, '_, SqliteGlobalDbAdapter>,
+    public_key: PublicKey,
+    epoch: Epoch,
+) {
+    validator_nodes
+        .insert_validator_node(public_key.clone(), derived_shard_id(&public_key), epoch)
+        .unwrap()
+}
+
+#[test]
+fn insert_and_get_within_epoch() {
+    let db = create_db();
+    let mut tx = db.create_transaction().unwrap();
+    let mut validator_nodes = db.validator_nodes(&mut tx);
+    insert_vns(&mut validator_nodes, 2, Epoch(0));
+    insert_vns(&mut validator_nodes, 1, Epoch(10));
+
+    let vns = validator_nodes.get_all_within_epochs(Epoch(0), Epoch(10)).unwrap();
+    assert_eq!(vns.len(), 3);
+}
+
+#[test]
+fn insert_and_get_within_epoch_duplicate_public_keys() {
+    let db = create_db();
+    let mut tx = db.create_transaction().unwrap();
+    let mut validator_nodes = db.validator_nodes(&mut tx);
+    insert_vns(&mut validator_nodes, 2, Epoch(0));
+    insert_vns(&mut validator_nodes, 1, Epoch(10));
+    let pk = new_public_key();
+    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0));
+    insert_vn_with_public_key(&mut validator_nodes, pk, Epoch(1));
+
+    let vns = validator_nodes.get_all_within_epochs(Epoch(0), Epoch(10)).unwrap();
+    assert_eq!(vns.len(), 4);
+}
+
+#[test]
+fn insert_and_get_within_shard_range_duplicate_public_keys() {
+    // Testing fetching within a shard range. Specifically, the ability for Sqlite to compare blob columns
+    let db = create_db();
+    let mut tx = db.create_transaction().unwrap();
+    let mut validator_nodes = db.validator_nodes(&mut tx);
+    // Insert lower shard key
+    insert_vn_with_public_key(&mut validator_nodes, PublicKey::default(), Epoch(0));
+
+    let pk = new_public_key();
+    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(0));
+    insert_vn_with_public_key(&mut validator_nodes, pk.clone(), Epoch(1));
+    let pk2 = new_public_key();
+    insert_vn_with_public_key(&mut validator_nodes, pk2.clone(), Epoch(1));
+
+    let shard_id = derived_shard_id(&pk);
+    let shard_id2 = derived_shard_id(&pk2);
+    let (start, end) = if shard_id > shard_id2 {
+        (shard_id2, shard_id)
+    } else {
+        (shard_id, shard_id2)
+    };
+
+    let vns = validator_nodes
+        .get_by_shard_range(Epoch(0), Epoch(10), start..=end)
+        .unwrap();
+    if shard_id > shard_id2 {
+        assert_eq!(vns[0].public_key, pk2);
+        assert_eq!(vns[1].public_key, pk);
+    } else {
+        assert_eq!(vns[0].public_key, pk);
+        assert_eq!(vns[1].public_key, pk2);
+    }
+    assert_eq!(vns.len(), 2);
+}
