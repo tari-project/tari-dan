@@ -26,11 +26,7 @@ use tari_engine_types::substate::{InvalidSubstateAddressFormat, SubstateAddress}
 use tari_template_lib::models::ResourceAddress;
 use tari_utilities::hex::Hex;
 
-use crate::{
-    diesel::ExpressionMethods,
-    models,
-    serialization::deserialize_json,
-};
+use crate::{diesel::ExpressionMethods, models, serialization::deserialize_json};
 
 const LOG_TARGET: &str = "tari::dan::wallet_sdk::storage_sqlite::reader";
 
