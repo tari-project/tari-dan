@@ -1,7 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    fmt::Display,
+    str::FromStr,
+};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
@@ -9,6 +13,8 @@ use tari_dan_common_types::ShardId;
 use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
     instruction::Instruction,
+    serde_with,
+    substate::SubstateAddress,
 };
 use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
@@ -104,6 +110,7 @@ impl Transaction {
             .chain(self.signature.signature().get_signature())
             .chain(&self.fee_instructions)
             .chain(&self.instructions)
+            .chain(&self.meta.required_inputs())
             .result()
     }
 
@@ -146,16 +153,34 @@ impl Eq for Transaction {}
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, Eq, PartialEq)]
 pub struct TransactionMeta {
+    required_inputs: Vec<SubstateRequirement>,
     involved_objects: HashMap<ShardId, SubstateChange>,
     max_outputs: u32,
 }
 
 impl TransactionMeta {
-    pub fn new(involved_objects: HashMap<ShardId, SubstateChange>, max_outputs: u32) -> Self {
+    pub fn new(
+        required_inputs: Vec<SubstateRequirement>,
+        involved_objects: HashMap<ShardId, SubstateChange>,
+        max_outputs: u32,
+    ) -> Self {
         Self {
+            required_inputs,
             involved_objects,
             max_outputs,
         }
+    }
+
+    pub fn required_inputs_iter(&self) -> impl Iterator<Item = &SubstateRequirement> + '_ {
+        self.required_inputs.iter()
+    }
+
+    pub fn required_inputs(&self) -> &[SubstateRequirement] {
+        &self.required_inputs
+    }
+
+    pub fn required_inputs_mut(&mut self) -> &mut Vec<SubstateRequirement> {
+        &mut self.required_inputs
     }
 
     pub fn involved_objects_iter(&self) -> impl Iterator<Item = (&ShardId, &SubstateChange)> + '_ {
@@ -182,4 +207,67 @@ impl TransactionMeta {
     pub fn max_outputs(&self) -> u32 {
         self.max_outputs
     }
+
+    pub fn includes_substate(&self, address: &SubstateAddress) -> bool {
+        self.required_inputs.iter().any(|r| r.address() == address)
+    }
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+pub struct SubstateRequirement {
+    #[serde(with = "serde_with::string")]
+    address: SubstateAddress,
+    version: Option<u32>,
+}
+
+impl SubstateRequirement {
+    pub fn new(address: SubstateAddress, version: Option<u32>) -> Self {
+        Self { address, version }
+    }
+
+    pub fn address(&self) -> &SubstateAddress {
+        &self.address
+    }
+
+    pub fn version(&self) -> Option<u32> {
+        self.version
+    }
+}
+
+impl FromStr for SubstateRequirement {
+    type Err = SubstateRequirementParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.split(':');
+
+        // parse the substate address
+        let address = parts
+            .next()
+            .ok_or_else(|| SubstateRequirementParseError(s.to_string()))?;
+        let address = SubstateAddress::from_str(address).map_err(|_| SubstateRequirementParseError(s.to_string()))?;
+
+        // parse the version (optional)
+        let version = match parts.next() {
+            Some(v) => {
+                let parse_version = v.parse().map_err(|_| SubstateRequirementParseError(s.to_string()))?;
+                Some(parse_version)
+            },
+            None => None,
+        };
+
+        Ok(Self { address, version })
+    }
+}
+
+impl Display for SubstateRequirement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.version {
+            Some(v) => write!(f, "{}:{}", self.address, v),
+            None => write!(f, "{}", self.address),
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("Failed to parse substate requirement {0}")]
+pub struct SubstateRequirementParseError(String);

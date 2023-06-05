@@ -100,8 +100,9 @@ impl<TAddr: NodeAddressable, TPayload: Payload> MockOutboundService<TAddr, TPayl
 use std::fmt::Debug;
 
 use tari_dan_common_types::NodeAddressable;
+use tari_dan_storage::models::Payload;
 
-use crate::{message::DanMessage, models::Payload};
+use crate::message::DanMessage;
 
 #[async_trait]
 impl<TAddr: NodeAddressable + Send + Sync + Debug, TPayload: Payload> OutboundService

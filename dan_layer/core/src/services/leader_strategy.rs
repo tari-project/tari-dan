@@ -24,8 +24,7 @@ use digest::Digest;
 use tari_common_types::types::FixedHash;
 use tari_crypto::hash::blake2::Blake256;
 use tari_dan_common_types::{NodeAddressable, PayloadId, ShardId};
-
-use crate::models::Committee;
+use tari_epoch_manager::Committee;
 
 pub trait LeaderStrategy<TAddr: NodeAddressable> {
     fn calculate_leader(&self, committee: &Committee<TAddr>, payload: PayloadId, shard: ShardId, round: u32) -> u32;

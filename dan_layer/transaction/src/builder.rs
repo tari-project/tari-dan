@@ -28,7 +28,13 @@ use tari_template_lib::{
 };
 
 use super::Transaction;
-use crate::{change::SubstateChange, id_provider::IdProvider, transaction::TransactionMeta, InstructionSignature};
+use crate::{
+    change::SubstateChange,
+    id_provider::IdProvider,
+    transaction::TransactionMeta,
+    InstructionSignature,
+    SubstateRequirement,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
@@ -194,6 +200,20 @@ impl TransactionBuilder {
         new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
     ) -> Self {
         self.new_non_fungible_index_outputs = new_non_fungible_index_outputs;
+        self
+    }
+
+    pub fn add_required_input(mut self, address: SubstateAddress, version: Option<u32>) -> Self {
+        self.meta
+            .required_inputs_mut()
+            .push(SubstateRequirement::new(address, version));
+        self
+    }
+
+    pub fn with_required_inputs(mut self, inputs: Vec<SubstateRequirement>) -> Self {
+        for input in inputs {
+            self.meta.required_inputs_mut().push(input);
+        }
         self
     }
 

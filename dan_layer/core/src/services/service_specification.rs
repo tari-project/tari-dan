@@ -20,22 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_base_node_client::BaseNodeClient;
 use tari_dan_common_types::NodeAddressable;
-use tari_dan_storage::global::GlobalDbAdapter;
+use tari_dan_storage::{
+    global::{DbFactory, GlobalDbAdapter},
+    models::Payload,
+};
 
 use super::WalletClient;
-use crate::{
-    models::{domain_events::ConsensusWorkerDomainEvent, Payload},
-    services::{
-        infrastructure_services::OutboundService,
-        BaseNodeClient,
-        EventsPublisher,
-        PayloadProcessor,
-        PeerProvider,
-        SigningService,
-    },
-    storage::DbFactory,
-};
+use crate::services::{infrastructure_services::OutboundService, PayloadProcessor, PeerProvider, SigningService};
 
 /// A trait to describe a specific configuration of services. This type allows other services to
 /// simply reference types.
@@ -44,7 +37,6 @@ pub trait ServiceSpecification: Default + Clone {
     type Addr: NodeAddressable;
     type BaseNodeClient: BaseNodeClient + Clone;
     type DbFactory: DbFactory<GlobalDbAdapter = Self::GlobalDbAdapter> + Clone;
-    type EventsPublisher: EventsPublisher<ConsensusWorkerDomainEvent>;
     type GlobalDbAdapter: GlobalDbAdapter;
     type OutboundService: OutboundService<Addr = Self::Addr, Payload = Self::Payload>;
     type PeerProvider: PeerProvider<Addr = Self::Addr>;

@@ -15,7 +15,6 @@ tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
 tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
 tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", default-features = false, features = ["transactions"] }
 tari_crypto ={ version = "0.16" }
 tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
@@ -36,6 +35,8 @@ tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_base_node_client = { path = "../../clients/base_node_client" }
+tari_epoch_manager = { path = "../../dan_layer/epoch_manager", features = ["base_layer"] }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"

@@ -44,6 +44,7 @@ use cucumber::{
     WriterExt,
 };
 use indexmap::IndexMap;
+use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_common::initialize_logging;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::multiaddr::Multiaddr;
@@ -51,9 +52,7 @@ use tari_crypto::{
     ristretto::{RistrettoComSig, RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::hex::Hex,
 };
-use tari_dan_app_utilities::base_node_client::GrpcBaseNodeClient;
 use tari_dan_common_types::QuorumDecision;
-use tari_dan_core::services::BaseNodeClient;
 use tari_dan_engine::abi::Type;
 use tari_shutdown::Shutdown;
 use tari_template_lib::Hash;
@@ -238,7 +237,7 @@ async fn main() {
             Box::pin(future::ready(()))
         })
         .fail_on_skipped()
-        .run("tests/features/")
+        .filter_run("tests/features/", |_, _, sc| !sc.tags.iter().any(|t| t == "ignore"))
         .await;
 
     shutdown.trigger();

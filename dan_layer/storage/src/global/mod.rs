@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 mod global_db;
-pub use global_db::GlobalDb;
+pub use global_db::{DbFactory, GlobalDb};
 
 mod backend_adapter;
 pub use backend_adapter::GlobalDbAdapter;
@@ -32,7 +32,9 @@ mod template_db;
 pub use template_db::{DbTemplate, DbTemplateType, DbTemplateUpdate, TemplateDb, TemplateStatus};
 
 mod validator_node_db;
-pub use validator_node_db::{DbValidatorNode, ValidatorNodeDb};
+pub use validator_node_db::ValidatorNodeDb;
 
 mod epoch_db;
 pub use epoch_db::{DbEpoch, EpochDb};
+
+pub mod models;

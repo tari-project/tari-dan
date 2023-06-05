@@ -18,7 +18,7 @@ use tari_comms::{
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{NodeAddressable, PayloadId};
-use tari_dan_core::services::{DanPeer, ValidatorNodeClientError};
+use tari_dan_core::services::DanPeer;
 use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateAddress},
@@ -35,6 +35,7 @@ use crate::{
         SubstateStatus,
     },
     rpc_service,
+    ValidatorNodeRpcClientError,
 };
 
 pub trait ValidatorNodeClientFactory: Send + Sync {
@@ -96,7 +97,9 @@ pub struct TariCommsValidatorNodeRpcClient {
 }
 
 impl TariCommsValidatorNodeRpcClient {
-    pub async fn client_connection(&mut self) -> Result<rpc_service::ValidatorNodeRpcClient, ValidatorNodeClientError> {
+    pub async fn client_connection(
+        &mut self,
+    ) -> Result<rpc_service::ValidatorNodeRpcClient, ValidatorNodeRpcClientError> {
         if let Some((_, ref client)) = self.connection {
             if client.is_connected() {
                 return Ok(client.clone());
@@ -114,9 +117,9 @@ impl TariCommsValidatorNodeRpcClient {
 #[async_trait]
 impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
     type Addr = CommsPublicKey;
-    type Error = ValidatorNodeClientError;
+    type Error = ValidatorNodeRpcClientError;
 
-    async fn submit_transaction(&mut self, transaction: Transaction) -> Result<PayloadId, ValidatorNodeClientError> {
+    async fn submit_transaction(&mut self, transaction: Transaction) -> Result<PayloadId, ValidatorNodeRpcClientError> {
         let mut client = self.client_connection().await?;
         let request = SubmitTransactionRequest {
             transaction: Some(transaction.into()),
@@ -124,13 +127,13 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
         let response = client.submit_transaction(request).await?;
 
         let payload_id = response.transaction_hash.try_into().map_err(|_| {
-            ValidatorNodeClientError::InvalidResponse(anyhow!("Node returned an invalid or empty payload id"))
+            ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Node returned an invalid or empty payload id"))
         })?;
 
         Ok(payload_id)
     }
 
-    async fn get_peers(&mut self) -> Result<Vec<DanPeer<Self::Addr>>, ValidatorNodeClientError> {
+    async fn get_peers(&mut self) -> Result<Vec<DanPeer<Self::Addr>>, ValidatorNodeRpcClientError> {
         let mut client = self.client_connection().await?;
         // TODO(perf): This doesnt scale, find a nice way to wrap up the stream
         let peers = client
@@ -143,7 +146,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                     .into_iter()
                     .map(|a| {
                         Multiaddr::try_from(a)
-                            .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid address")))
+                            .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Invalid address")))
                     })
                     .collect::<Result<_, _>>()?;
                 let claims: Vec<PeerIdentityClaim> = p
@@ -151,12 +154,12 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                     .into_iter()
                     .map(|c| {
                         PeerIdentityClaim::try_from(c)
-                            .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid claim")))
+                            .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Invalid claim")))
                     })
                     .collect::<Result<_, _>>()?;
-                Result::<_, ValidatorNodeClientError>::Ok(DanPeer {
+                Result::<_, ValidatorNodeRpcClientError>::Ok(DanPeer {
                     identity: CommsPublicKey::from_bytes(&p.identity)
-                        .map_err(|_| ValidatorNodeClientError::InvalidResponse(anyhow!("Invalid identity")))?,
+                        .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Invalid identity")))?,
                     addresses: addresses.into_iter().zip(claims).collect(),
                 })
             })
@@ -175,7 +178,10 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
 
         let resp = client.get_substate(request).await?;
         let status = SubstateStatus::from_i32(resp.status).ok_or_else(|| {
-            ValidatorNodeClientError::InvalidResponse(anyhow!("Node returned invalid substate status {}", resp.status))
+            ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                "Node returned invalid substate status {}",
+                resp.status
+            ))
         })?;
 
         // TODO: verify the quorum certificates
@@ -186,12 +192,12 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
         match status {
             SubstateStatus::Up => {
                 let tx_hash = resp.created_transaction_hash.try_into().map_err(|_| {
-                    ValidatorNodeClientError::InvalidResponse(anyhow!(
+                    ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
                         "Node returned an invalid or empty transaction hash"
                     ))
                 })?;
                 let substate = Substate::from_bytes(&resp.substate)
-                    .map_err(|e| ValidatorNodeClientError::InvalidResponse(anyhow!(e)))?;
+                    .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?;
                 Ok(SubstateResult::Up {
                     substate,
                     created_by_tx: tx_hash,
@@ -199,12 +205,12 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
             },
             SubstateStatus::Down => {
                 let created_by_tx = resp.created_transaction_hash.try_into().map_err(|_| {
-                    ValidatorNodeClientError::InvalidResponse(anyhow!(
+                    ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
                         "Node returned an invalid or empty created transaction hash"
                     ))
                 })?;
                 let deleted_by_tx = resp.destroyed_transaction_hash.try_into().map_err(|_| {
-                    ValidatorNodeClientError::InvalidResponse(anyhow!(
+                    ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
                         "Node returned an invalid or empty destroyed transaction hash"
                     ))
                 })?;
@@ -221,7 +227,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
     async fn get_finalized_transaction_result(
         &mut self,
         payload_id: PayloadId,
-    ) -> Result<TransactionResultStatus, ValidatorNodeClientError> {
+    ) -> Result<TransactionResultStatus, ValidatorNodeRpcClientError> {
         let mut client = self.client_connection().await?;
         let request = GetTransactionResultRequest {
             payload_id: payload_id.as_bytes().to_vec(),
@@ -232,11 +238,13 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
             Some(PayloadResultStatus::Pending) => Ok(TransactionResultStatus::Pending),
             Some(PayloadResultStatus::Finalized) => {
                 let execution_result = decode(&response.execution_result).map_err(|_| {
-                    ValidatorNodeClientError::InvalidResponse(anyhow!("Node returned an invalid or empty payload id"))
+                    ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                        "Node returned an invalid or empty payload id"
+                    ))
                 })?;
                 Ok(TransactionResultStatus::Finalized(execution_result))
             },
-            None => Err(ValidatorNodeClientError::InvalidResponse(anyhow!(
+            None => Err(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
                 "Node returned invalid payload status {}",
                 response.status
             ))),

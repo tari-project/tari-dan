@@ -31,6 +31,7 @@ use axum_jrpc::{
 use log::{error, warn};
 use serde::Serialize;
 use serde_json::{self as json, json, Value};
+use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
@@ -39,9 +40,8 @@ use tari_comms::{
     NodeIdentity,
 };
 use tari_crypto::tari_utilities::hex::Hex;
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
-use tari_dan_common_types::optional::Optional;
-use tari_dan_core::services::BaseNodeClient;
+use tari_dan_common_types::{optional::Optional, Epoch};
+use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_indexer_client::types::{
     AddAddressRequest,
     DeleteAddressRequest,
@@ -63,10 +63,9 @@ use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClie
 
 use crate::{
     bootstrap::Services,
-    substate_decoder::encode_substate_into_json,
+    json_rpc::special_substate_encoding::encode_substate_into_json,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
-    GrpcBaseNodeClient,
 };
 
 const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
@@ -86,6 +85,7 @@ struct GetConnectionsResponse {
 }
 
 pub struct JsonRpcHandlers {
+    consensus_constants: BaseLayerConsensusConstants,
     node_identity: Arc<NodeIdentity>,
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
@@ -95,18 +95,24 @@ pub struct JsonRpcHandlers {
 
 impl JsonRpcHandlers {
     pub fn new(
+        consensus_constants: BaseLayerConsensusConstants,
         services: &Services,
         base_node_client: GrpcBaseNodeClient,
         substate_manager: Arc<SubstateManager>,
         transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
     ) -> Self {
         Self {
+            consensus_constants,
             node_identity: services.comms.node_identity(),
             comms: services.comms.clone(),
             base_node_client,
             substate_manager,
             transaction_manager,
         }
+    }
+
+    pub fn base_node_client(&self) -> GrpcBaseNodeClient {
+        self.base_node_client.clone()
     }
 }
 
@@ -142,7 +148,8 @@ impl JsonRpcHandlers {
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let epoch: u64 = value.parse_params()?;
-        match self.base_node_client.clone().get_validator_nodes(epoch * 10).await {
+        let epoch_blocks = self.consensus_constants.epoch_to_height(Epoch(epoch));
+        match self.base_node_client().get_validator_nodes(epoch_blocks).await {
             Ok(vns) => {
                 let response = json!({ "vns": vns });
                 Ok(JsonRpcResponse::success(answer_id, response))

@@ -8,7 +8,7 @@ use tari_common_types::types::FixedHash;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
     commit_result::TransactionReceiptAddress,
-    indexed_value::{IndexedValue, ValueVisitorError},
+    indexed_value::{IndexedValue, IndexedValueVisitorError},
     substate::{SubstateAddress, SubstateValue},
 };
 
@@ -85,7 +85,7 @@ where
                     match substate {
                         SubstateValue::Component(data) => {
                             let value = IndexedValue::from_raw(&data.state.state)?;
-                            for addr in value.owned_substates() {
+                            for addr in value.referenced_substates() {
                                 if substate_addresses.contains_key(&addr) {
                                     continue;
                                 }
@@ -217,7 +217,7 @@ pub enum SubstateApiError {
     #[error("Substate {address} does not exist")]
     SubstateDoesNotExist { address: SubstateAddress },
     #[error("ValueVisitorError: {0}")]
-    ValueVisitorError(#[from] ValueVisitorError),
+    ValueVisitorError(#[from] IndexedValueVisitorError),
 }
 
 impl IsNotFoundError for SubstateApiError {

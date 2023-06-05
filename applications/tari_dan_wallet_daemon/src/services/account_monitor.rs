@@ -18,7 +18,7 @@ use tari_dan_wallet_sdk::{
     DanWalletSdk,
 };
 use tari_engine_types::{
-    indexed_value::{IndexedValue, ValueVisitorError},
+    indexed_value::{IndexedValue, IndexedValueVisitorError},
     resource::Resource,
     substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
     vault::Vault,
@@ -459,7 +459,7 @@ pub enum AccountMonitorError {
     #[error("Outputs API error: {0}")]
     ConfidentialOutputs(#[from] ConfidentialOutputsApiError),
     #[error("Failed to decode binary value: {0}")]
-    DecodeValueFailed(#[from] ValueVisitorError),
+    DecodeValueFailed(#[from] IndexedValueVisitorError),
     #[error("Unexpected substate: {0}")]
     UnexpectedSubstate(String),
     #[error("Monitor service is not running")]

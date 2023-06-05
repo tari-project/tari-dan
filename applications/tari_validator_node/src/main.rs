@@ -50,7 +50,10 @@ async fn main() {
         eprintln!("{:?}", err);
         error!(
             target: LOG_TARGET,
-            "Exiting with code ({}): {:?}", exit_code as i32, exit_code
+            "Exiting with code ({}) {:?}: {}",
+            exit_code as i32,
+            exit_code,
+            err.details.unwrap_or_default()
         );
         process::exit(exit_code as i32);
     }

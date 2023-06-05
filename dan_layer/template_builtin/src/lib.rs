@@ -24,11 +24,16 @@ use tari_engine_types::TemplateAddress;
 
 lazy_static! {
     pub static ref ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
+    pub static ref ACCOUNT_NFT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
+    ]);
 }
 
 pub fn get_template_builtin(address: TemplateAddress) -> &'static [u8] {
     if address == *ACCOUNT_TEMPLATE_ADDRESS {
         include_bytes!("../templates/account/account.wasm")
+    } else if address == *ACCOUNT_NFT_TEMPLATE_ADDRESS {
+        include_bytes!("../templates/account_nfts/account_nfts.wasm")
     } else {
         panic!("Unknown builtin template address")
     }

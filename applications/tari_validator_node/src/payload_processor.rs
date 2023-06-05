@@ -24,10 +24,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, ObjectPledge, ShardId, SubstateState};
-use tari_dan_core::{
-    models::TariDanPayload,
-    services::{PayloadProcessor, PayloadProcessorError},
-};
+use tari_dan_core::services::{PayloadProcessor, PayloadProcessorError};
 use tari_dan_engine::{
     bootstrap_state,
     fees::{FeeModule, FeeTable},
@@ -36,6 +33,7 @@ use tari_dan_engine::{
     state_store::{memory::MemoryStateStore, AtomicDb, StateStoreError, StateWriter},
     transaction::TransactionProcessor,
 };
+use tari_dan_storage::models::TariDanPayload;
 use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
@@ -116,7 +114,7 @@ fn create_populated_state_store<I: IntoIterator<Item = ObjectPledge>>(
     for input in inputs {
         match input.current_state {
             SubstateState::Up { address, data, .. } => {
-                log::debug!(target: "tari::dan_layer::payload_processor",
+                log::debug!(target: "tari::dan::payload_processor",
                     "State store input substate: {} v{}",
                     address,
                     data.version()

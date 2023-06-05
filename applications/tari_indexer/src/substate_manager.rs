@@ -24,6 +24,7 @@ use std::{
     collections::{BTreeMap, HashMap},
     convert::TryInto,
     str::FromStr,
+    sync::Arc,
 };
 
 use anyhow::anyhow;
@@ -31,27 +32,28 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_app_utilities::epoch_manager::EpochManagerHandle;
 use tari_dan_common_types::PayloadId;
 use tari_engine_types::{
     events::Event,
     substate::{Substate, SubstateAddress},
 };
-use tari_indexer_lib::{substate_scanner::SubstateScanner, NonFungibleSubstate};
+use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_indexer_lib::{
+    substate_decoder::find_related_substates,
+    substate_scanner::SubstateScanner,
+    NonFungibleSubstate,
+};
 use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
-use crate::{
-    substate_decoder::find_related_substates,
-    substate_storage_sqlite::{
-        models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
-        sqlite_substate_store_factory::{
-            SqliteSubstateStore,
-            SqliteSubstateStoreWriteTransaction,
-            SubstateStore,
-            SubstateStoreReadTransaction,
-            SubstateStoreWriteTransaction,
-        },
+use crate::substate_storage_sqlite::{
+    models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
+    sqlite_substate_store_factory::{
+        SqliteSubstateStore,
+        SqliteSubstateStoreWriteTransaction,
+        SubstateStore,
+        SubstateStoreReadTransaction,
+        SubstateStoreWriteTransaction,
     },
 };
 
@@ -79,13 +81,13 @@ pub struct EventResponse {
 }
 
 pub struct SubstateManager {
-    substate_scanner: SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+    substate_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
     substate_store: SqliteSubstateStore,
 }
 
 impl SubstateManager {
     pub fn new(
-        dan_layer_scanner: SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+        dan_layer_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
         substate_store: SqliteSubstateStore,
     ) -> Self {
         Self {
@@ -119,6 +121,7 @@ impl SubstateManager {
             if let SubstateResult::Up {
                 substate: related_substate,
                 ..
+            // TODO: substate fetching could be done in parallel (tokio)
             } = self.substate_scanner.get_substate(&address, None).await?
             {
                 related_substates.insert(address, related_substate);
@@ -387,21 +390,21 @@ impl SubstateManager {
         // because the same component address with different version
         // can be processed in the same transaction, we need to avoid
         // duplicates
-        for (version, event) in &network_events {
+        for (version, event) in network_events {
             let template_address = event.template_address();
             let tx_hash = PayloadId::from_array(event.tx_hash().into_array());
             let topic = event.topic();
-            let payload = event.get_full_payload();
+            let payload = event.payload().clone();
             self.save_event_to_db(
                 component_address,
                 template_address,
                 tx_hash,
                 topic,
                 payload,
-                u64::from(*version),
+                u64::from(version),
             )?;
+            events.push(event);
         }
-        events.extend(network_events.into_iter().map(|(_, e)| e).collect::<Vec<_>>());
 
         Ok(events)
     }

@@ -22,8 +22,9 @@
 
 use async_trait::async_trait;
 use tari_dan_common_types::NodeAddressable;
+use tari_dan_storage::models::Payload;
 
-use crate::{message::DanMessage, models::Payload};
+use crate::message::DanMessage;
 
 #[async_trait]
 pub trait OutboundService {
