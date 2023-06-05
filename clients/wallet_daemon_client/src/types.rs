@@ -505,7 +505,8 @@ pub struct MintAccountNFTRequest {
     pub owner_token: NonFungibleAddress,
     pub token_symbol: String,
     pub metadata: serde_json::Value,
-    pub fee: Option<Amount>,
+    pub mint_fee: Option<Amount>,
+    pub create_account_nft_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
