@@ -498,3 +498,9 @@ pub struct AuthRevokeTokenRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthRevokeTokenResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct CreateAccountNFT {
+    owner_token: String,
+    token_symbol: String,
+}
