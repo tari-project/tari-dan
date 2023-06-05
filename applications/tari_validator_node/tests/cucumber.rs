@@ -865,6 +865,16 @@ async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
     .await;
 }
 
+#[when(expr = "I mint a new non fungible token {word} on {word} using wallet daemon {}")]
+async fn mint_new_nft_on_account(
+    world: &mut TariWorld,
+    nft_name: String,
+    account_name: String,
+    wallet_daemon_name: String,
+) {
+    wallet_daemon_cli::mint_new_nft_on_account(world, nft_name, account_name, wallet_daemon_name).await;
+}
+
 fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
     // define all templates
     let template_defs = world.templates.iter().fold(String::new(), |acc, (name, template)| {

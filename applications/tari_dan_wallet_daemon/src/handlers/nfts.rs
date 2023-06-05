@@ -1,40 +1,31 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{arch::aarch64::vreinterpret_f32_s16, str::FromStr};
-
 use anyhow::anyhow;
-use axum::http::version;
 use log::info;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_crypto::{keys::PublicKey as PK, ristretto::RistrettoSecretKey};
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
-    models::{Account, VersionedSubstateAddress},
-    DanWalletSdk,
+    models::Account,
 };
-use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
-use tari_engine_types::{
-    commit_result::FinalizeResult,
-    component::new_component_address_from_parts,
-    substate::SubstateAddress,
-};
+use tari_engine_types::{component::new_component_address_from_parts, substate::SubstateAddress};
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
     crypto::RistrettoPublicKeyBytes,
-    prelude::{Amount, ComponentAddress, NonFungibleAddress, ResourceAddress},
+    prelude::{Amount, ComponentAddress, NonFungibleAddress},
 };
 use tari_transaction::Transaction;
-use tari_utilities::{ByteArray, Hashable};
-use tari_wallet_daemon_client::types::{MintAccountNFTRequest, MintAccountNFTResponse};
+use tari_utilities::ByteArray;
+use tari_wallet_daemon_client::types::MintAccountNFTRequest;
 use tokio::sync::broadcast;
 
 use super::context::HandlerContext;
 use crate::{
     handlers::get_account_or_default,
-    services::{NewAccountNFTInfo, TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
+    services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
     DEFAULT_FEE,
 };
 
@@ -47,7 +38,7 @@ pub async fn handle_mint_account_nft(
 ) -> Result<(), anyhow::Error> {
     let sdk = context.wallet_sdk();
     let key_manager_api = sdk.key_manager_api();
-    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+    sdk.jwt_api().check_auth(token.clone(), &[JrpcPermission::Admin])?;
 
     let account = get_account_or_default(req.account, &sdk.accounts_api())?;
     let inputs = sdk
@@ -81,25 +72,30 @@ pub async fn handle_mint_account_nft(
             .unwrap_or_else(|| panic!("owner_token is not a valid public key: {}", owner_token))
             .as_hash(),
     );
-    let component_address =
-        if let Ok(versioned_addr) = sdk.substate_api().scan_for_substate(&account.address, None).await {
-            versioned_addr
-                .address
-                .address
-                .as_component_address()
-                .expect("Failed to parse component address")
-        } else {
-            handle_create_account_nft(
-                context,
-                &account,
-                inputs,
-                &owner_key.k,
-                req.owner_token,
-                &req.token_symbol,
-                req.create_account_nft_fee.unwrap_or(DEFAULT_FEE),
-            )
-            .await?
-        };
+
+    let component_address = if let Ok(versioned_addr) = sdk
+        .substate_api()
+        .scan_for_substate(&SubstateAddress::Component(component_address), None)
+        .await
+    {
+        versioned_addr
+            .address
+            .address
+            .as_component_address()
+            .expect("Failed to parse component address")
+    } else {
+        handle_create_account_nft(
+            context,
+            &account,
+            inputs,
+            &owner_key.k,
+            req.owner_token,
+            &req.token_symbol,
+            req.create_account_nft_fee.unwrap_or(DEFAULT_FEE),
+            token,
+        )
+        .await?
+    };
 
     Ok(())
     // let fee = req.mint_fee.unwrap_or(DEFAULT_FEE);
@@ -177,16 +173,19 @@ async fn handle_create_account_nft(
     owner_token: NonFungibleAddress,
     token_symbol: &str,
     fee: Amount,
+    token: Option<String>,
 ) -> Result<ComponentAddress, anyhow::Error> {
     let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
-            owner_token,
-            token_symbol
-        ])
+        .call_function(
+            *ACCOUNT_NFT_TEMPLATE_ADDRESS,
+            "create",
+            args![owner_token, token_symbol],
+        )
         .sign(owner_sk)
         .build();
 

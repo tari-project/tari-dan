@@ -446,6 +446,7 @@ pub struct AccountsCreateFreeTestCoinsResponse {
     pub amount: Amount,
     pub fee: Amount,
     pub result: FinalizeResult,
+    pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

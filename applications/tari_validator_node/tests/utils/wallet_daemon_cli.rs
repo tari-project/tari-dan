@@ -35,8 +35,9 @@ use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+    crypto::RistrettoPublicKeyBytes,
     models::Amount,
-    prelude::{NonFungibleId, ResourceAddress},
+    prelude::{NonFungibleAddress, NonFungibleId, ResourceAddress},
 };
 use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -53,6 +54,7 @@ use tari_wallet_daemon_client::{
         ClaimBurnRequest,
         ClaimBurnResponse,
         ConfidentialTransferRequest,
+        MintAccountNFTRequest,
         ProofsGenerateRequest,
         RevealFundsRequest,
         TransactionSubmitRequest,
@@ -303,7 +305,11 @@ pub async fn create_account_with_free_coins(
     };
 
     let resp = client.create_free_test_coins(request).await.unwrap();
-
+    // TODO: store the secret key in the world, but we don't have a need for it at the moment
+    world.account_keys.insert(
+        account_name.clone(),
+        (RistrettoSecretKey::default(), resp.public_key.clone()),
+    );
     let wait_req = TransactionWaitResultRequest {
         hash: FixedHash::from(resp.result.transaction_hash.into_array()),
         timeout_secs: Some(120),
@@ -315,6 +321,56 @@ pub async fn create_account_with_free_coins(
         account_name,
         &resp.result.result.expect("Failed to obtain substate diffs"),
     );
+}
+
+pub async fn mint_new_nft_on_account(
+    world: &mut TariWorld,
+    nft_name: String,
+    account_name: String,
+    wallet_daemon_name: String,
+) {
+    let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
+    let account_keys = world
+        .account_keys
+        .get(&account_name)
+        .expect("Failed to get account key pair");
+    let owner_token = NonFungibleAddress::from_public_key(
+        RistrettoPublicKeyBytes::from_bytes(account_keys.1.as_bytes()).expect("Failed to parse public key"),
+    );
+    let token_symbol = "MY_NFT".to_string();
+    let metadata = serde_json::json!({
+        "name": "TariProject",
+        "departure": "Now",
+        "landing_on": "Moon"
+    });
+
+    let request = MintAccountNFTRequest {
+        account: Some(ComponentAddressOrName::Name(account_name.clone())),
+        metadata,
+        token_symbol,
+        owner_token,
+        mint_fee: Some(Amount::new(1_000)),
+        create_account_nft_fee: None,
+    };
+    let resp = client
+        .mint_account_nft(request)
+        .await
+        .expect("Failed to mint new account NFT");
+
+    // let wait_req = TransactionWaitResultRequest {
+    //     hash: FixedHash::from(resp.result.transaction_hash.into_array()),
+    //     timeout_secs: Some(120),
+    // };
+    // let _wait_resp = client
+    //     .wait_transaction_result(wait_req)
+    //     .await
+    //     .expect("Wait response failed");
+
+    // add_substate_addresses(
+    //     world,
+    //     account_name,
+    //     &resp.result.result.expect("Failed to obtain substate diffs"),
+    // );
 }
 
 pub async fn get_balance(world: &mut TariWorld, account_name: &str, wallet_daemon_name: &str) -> i64 {

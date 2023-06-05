@@ -73,8 +73,8 @@ Feature: Wallet Daemon
         # Check balances
         # Notice that `take_free_coins` extracts precisely 1000 faucet tokens
         When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 1000
-        # TODO: Figure out why this is taking more than 10 seconds to update
-#        When I wait for ACC_2 on wallet daemon WALLET_D to have balance eq 50
+    # TODO: Figure out why this is taking more than 10 seconds to update
+    #        When I wait for ACC_2 on wallet daemon WALLET_D to have balance eq 50
 
     @serial
     Scenario: Claim and transfer confidential assets via wallet daemon
@@ -115,3 +115,34 @@ Feature: Wallet Daemon
         When I check the confidential balance of ACCOUNT_1 on wallet daemon WALLET_D the amount is at least 1000
         # When account ACCOUNT_1 reveals 100 burned tokens via wallet daemon WALLET_D
         Then I make a confidential transfer with amount 5 from ACCOUNT_1 to ACCOUNT_2 creating output OUTPUT_TX1 via the wallet_daemon WALLET_D
+
+    @serial
+    Scenario: Create and mint account NFT
+        # Initialize a base node, wallet, miner and VN
+        Given a base node BASE
+        Given a wallet WALLET connected to base node BASE
+        Given a miner MINER connected to base node BASE and wallet WALLET
+
+        # Initialize a VN
+        Given a validator node VAL_1 connected to base node BASE and wallet WALLET
+
+        # The wallet must have some funds before the VN sends transactions
+        When miner MINER mines 6 new blocks
+        When wallet WALLET has at least 20000000 uT
+
+        # VN registration
+        When validator node VAL_1 sends a registration transaction
+        When miner MINER mines 16 new blocks
+        Then the validator node VAL_1 is listed as registered
+
+        # Initialize an indexer
+        Given an indexer IDX connected to base node BASE
+
+        # Initialize the wallet daemon
+        Given a wallet daemon WALLET_D connected to indexer IDX
+
+        # Create two accounts to test sending the tokens
+        When I create an account ACC via the wallet daemon WALLET_D with 1000 free coins
+
+        # Mint a new account NFT
+        When I mint a new non fungible token NFT on ACC using wallet daemon WALLET_D
