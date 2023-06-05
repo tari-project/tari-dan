@@ -89,7 +89,6 @@ impl AuthSubcommand {
                 }
             },
             Grant(args) => {
-                println!("Grant {:?}", args);
                 let resp = client
                     .auth_accept(AuthLoginAcceptRequest {
                         auth_token: args.auth_token,
