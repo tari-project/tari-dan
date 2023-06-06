@@ -57,6 +57,64 @@ export const VNContext = createContext<IContext>({
   error: '',
 });
 
+export const breadcrumbRoutes = [
+  {
+    label: 'Home',
+    path: '/',
+    dynamic: false,
+  },
+  {
+    label: 'Committees',
+    path: '/committees',
+    dynamic: false,
+  },
+  {
+    label: 'Connections',
+    path: '/connections',
+    dynamic: false,
+  },
+  {
+    label: 'Fees',
+    path: '/fees',
+    dynamic: false,
+  },
+  {
+    label: 'Transactions',
+    path: '/transactions',
+    dynamic: false,
+  },
+  {
+    label: 'Templates',
+    path: '/templates',
+    dynamic: false,
+  },
+  {
+    label: 'Validator Nodes',
+    path: '/vns',
+    dynamic: false,
+  },
+  {
+    label: 'Mempool',
+    path: '/mempool',
+    dynamic: false,
+  },
+  {
+    label: 'Transaction',
+    path: '/transactions/:payloadId',
+    dynamic: true,
+  },
+  {
+    label: 'Template',
+    path: '/templates/:address',
+    dynamic: true,
+  },
+  {
+    label: 'Committee',
+    path: '/committees/:address',
+    dynamic: true,
+  },
+];
+
 export default function App() {
   const [epoch, setEpoch] = useState<IEpoch | undefined>(undefined);
   const [identity, setIdentity] = useState<IIdentity | undefined>(undefined);
@@ -124,8 +182,8 @@ export default function App() {
             <Route path="templates" element={<Templates />} />
             <Route path="vns" element={<ValidatorNodes />} />
             <Route path="mempool" element={<Mempool />} />
-            <Route path="transaction/:payloadId" element={<Transaction />} />
-            <Route path="template/:address" element={<TemplateFunctions />} />
+            <Route path="transactions/:payloadId" element={<Transaction />} />
+            <Route path="templates/:address" element={<TemplateFunctions />} />
             <Route path="committees/:address" element={<CommitteeMembers />} />
             <Route path="*" element={<ErrorPage />} />
           </Route>

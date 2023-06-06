@@ -42,7 +42,6 @@ import HeadingMenu from '../../../Components/HeadingMenu';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import TablePagination from '@mui/material/TablePagination';
-import { urlToHttpOptions } from 'url';
 import SearchFilter from '../../../Components/SearchFilter';
 import Typography from '@mui/material/Typography';
 import Fade from '@mui/material/Fade';
@@ -218,7 +217,7 @@ function Templates() {
                 <TableRow key={id}>
                   <DataTableCell>
                     <Link
-                      to={`/template/${toHex(address)}`}
+                      to={`/templates/${toHex(address)}`}
                       state={[address]}
                       style={{ textDecoration: 'none' }}
                     >
@@ -232,6 +231,7 @@ function Templates() {
                         <a
                           href={url}
                           target="_blank"
+                          rel="noreferrer"
                           style={{
                             textDecoration: 'none',
                             display: 'inline-flex',
@@ -260,7 +260,7 @@ function Templates() {
                     Active
                   </DataTableCell>
                   <DataTableCell style={{ textAlign: 'center' }}>
-                    <Link to={`/template/${toHex(address)}`} state={[address]}>
+                    <Link to={`/templates/${toHex(address)}`} state={[address]}>
                       <IconButton>
                         <KeyboardArrowRightIcon color="primary" />
                       </IconButton>

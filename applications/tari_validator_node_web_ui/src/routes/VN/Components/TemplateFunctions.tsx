@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState, useEffect } from 'react';
-import { useParams, useLocation, useLoaderData } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { ITemplate } from '../../../utils/interfaces';
 import { getTemplate } from '../../../utils/json_rpc';
 import Table from '@mui/material/Table';
@@ -54,7 +54,7 @@ function TemplateFunctions() {
 
   useEffect(() => {
     load(data);
-  }, []);
+  }, [data]);
 
   const renderFunctions = (template: ITemplate) => {
     return (
@@ -74,7 +74,13 @@ function TemplateFunctions() {
                 <DataTableCell style={{ textAlign: 'left' }}>
                   {fn.name}
                 </DataTableCell>
-                <DataTableCell>{fn.arguments.map((a:any) => { return a.name + ":" + a.arg_type;}).join(', ')}</DataTableCell>
+                <DataTableCell>
+                  {fn.arguments
+                    .map((a: any) => {
+                      return a.name + ':' + a.arg_type;
+                    })
+                    .join(', ')}
+                </DataTableCell>
                 <DataTableCell>{fn.output}</DataTableCell>
               </TableRow>
             ))}
@@ -85,7 +91,7 @@ function TemplateFunctions() {
   };
 
   return (
-    <Grid container spacing={5}>
+    <>
       <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Template Functions</PageHeading>
       </Grid>
@@ -95,7 +101,7 @@ function TemplateFunctions() {
           {info ? renderFunctions(info) : ''}
         </StyledPaper>
       </Grid>
-    </Grid>
+    </>
   );
 }
 

@@ -20,13 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { toHexString } from "../routes/VN/Components/helpers";
+import { toHexString } from '../routes/VN/Components/helpers';
 
 const renderJson = (json: any) => {
   if (!json) {
-      return <span>Null</span>
+    return <span>Null</span>;
   }
   if (Array.isArray(json)) {
+    //eslint-disable-next-line eqeqeq
     if (json.length == 32) {
       return <span className="string">"{toHexString(json)}"</span>;
     }
