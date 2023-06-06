@@ -364,18 +364,19 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
 
     let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
 
+    let fee = common.fee.map(|f| f.try_into()).transpose()?.unwrap_or(Amount(1000));
     let resp = client
         .accounts_transfer(TransferRequest {
             account: source_account_name,
             amount: Amount::from(amount),
             resource_address,
             destination_public_key,
-            fee: common.fee.map(|f| f.try_into()).transpose()?,
+            fee: Some(fee),
         })
         .await?;
 
     println!("Transaction: {}", resp.hash);
-    println!("Fee: {}", resp.fee);
+    println!("Fee: {} ({} refunded)", resp.fee, fee - resp.fee);
     println!();
     summarize_finalize_result(&resp.result);
 
