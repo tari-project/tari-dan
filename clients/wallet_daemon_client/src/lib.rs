@@ -313,7 +313,7 @@ impl WalletDaemonClient {
     pub async fn mint_account_nft<T: Borrow<MintAccountNFTRequest>>(
         &mut self,
         req: T,
-    ) -> Result<(), WalletDaemonClientError> {
+    ) -> Result<MintAccountNFTResponse, WalletDaemonClientError> {
         self.send_request("nfts.mint_account_nft", req.borrow()).await
     }
 

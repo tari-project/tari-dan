@@ -325,9 +325,10 @@ pub async fn create_account_with_free_coins(
 
 pub async fn mint_new_nft_on_account(
     world: &mut TariWorld,
-    nft_name: String,
+    _nft_name: String,
     account_name: String,
     wallet_daemon_name: String,
+    metadata: Option<serde_json::Value>,
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
     let account_keys = world
@@ -338,14 +339,14 @@ pub async fn mint_new_nft_on_account(
         RistrettoPublicKeyBytes::from_bytes(account_keys.1.as_bytes()).expect("Failed to parse public key"),
     );
     let token_symbol = "MY_NFT".to_string();
-    let metadata = serde_json::json!({
+    let metadata = metadata.unwrap_or(serde_json::json!({
         "name": "TariProject",
         "departure": "Now",
         "landing_on": "Moon"
-    });
+    }));
 
     let request = MintAccountNFTRequest {
-        account: Some(ComponentAddressOrName::Name(account_name.clone())),
+        account: ComponentAddressOrName::Name(account_name.clone()),
         metadata,
         token_symbol,
         owner_token,
@@ -357,20 +358,20 @@ pub async fn mint_new_nft_on_account(
         .await
         .expect("Failed to mint new account NFT");
 
-    // let wait_req = TransactionWaitResultRequest {
-    //     hash: FixedHash::from(resp.result.transaction_hash.into_array()),
-    //     timeout_secs: Some(120),
-    // };
-    // let _wait_resp = client
-    //     .wait_transaction_result(wait_req)
-    //     .await
-    //     .expect("Wait response failed");
+    let wait_req = TransactionWaitResultRequest {
+        hash: FixedHash::from(resp.result.transaction_hash.into_array()),
+        timeout_secs: Some(120),
+    };
+    let _wait_resp = client
+        .wait_transaction_result(wait_req)
+        .await
+        .expect("Wait response failed");
 
-    // add_substate_addresses(
-    //     world,
-    //     account_name,
-    //     &resp.result.result.expect("Failed to obtain substate diffs"),
-    // );
+    add_substate_addresses(
+        world,
+        account_name,
+        &resp.result.result.expect("Failed to obtain substate diffs"),
+    );
 }
 
 pub async fn get_balance(world: &mut TariWorld, account_name: &str, wallet_daemon_name: &str) -> i64 {

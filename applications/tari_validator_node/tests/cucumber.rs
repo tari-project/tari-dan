@@ -865,14 +865,26 @@ async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
     .await;
 }
 
-#[when(expr = "I mint a new non fungible token {word} on {word} using wallet daemon {}")]
+#[when(expr = "I mint a new non fungible token {word} on {word} using wallet daemon {word}")]
 async fn mint_new_nft_on_account(
     world: &mut TariWorld,
     nft_name: String,
     account_name: String,
     wallet_daemon_name: String,
 ) {
-    wallet_daemon_cli::mint_new_nft_on_account(world, nft_name, account_name, wallet_daemon_name).await;
+    wallet_daemon_cli::mint_new_nft_on_account(world, nft_name, account_name, wallet_daemon_name, None).await;
+}
+
+#[when(expr = "I mint a new non fungible token {word} on {word} using wallet daemon with metadata {word}")]
+async fn mint_new_nft_on_account_with_metadata(
+    world: &mut TariWorld,
+    nft_name: String,
+    account_name: String,
+    wallet_daemon_name: String,
+    metadata: String,
+) {
+    let metadata = serde_json::from_str::<serde_json::Value>(&metadata).expect("Failed to parse metadata");
+    wallet_daemon_cli::mint_new_nft_on_account(world, nft_name, account_name, wallet_daemon_name, Some(metadata)).await;
 }
 
 fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {

@@ -18,30 +18,25 @@ use tari_template_lib::{
 use tari_transaction::Transaction;
 
 use crate::models::{
-    Account,
-    ConfidentialOutputModel,
-    ConfidentialProofId,
-    Config,
-    NonFungibleToken,
-    OutputStatus,
-    SubstateModel,
-    TransactionStatus,
-    VaultModel,
-    VersionedSubstateAddress,
-    WalletTransaction,
+    Account, ConfidentialOutputModel, ConfidentialProofId, Config, NonFungibleToken, OutputStatus, SubstateModel,
+    TransactionStatus, VaultModel, VersionedSubstateAddress, WalletTransaction,
 };
 
 pub trait WalletStore {
     type ReadTransaction<'a>: WalletStoreReader
-    where Self: 'a;
+    where
+        Self: 'a;
     type WriteTransaction<'a>: WalletStoreWriter + Deref<Target = Self::ReadTransaction<'a>> + DerefMut
-    where Self: 'a;
+    where
+        Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, WalletStorageError>;
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, WalletStorageError>;
 
     fn with_write_tx<F: FnOnce(&mut Self::WriteTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<WalletStorageError> {
+    where
+        E: From<WalletStorageError>,
+    {
         let mut tx = self.create_write_tx()?;
         match f(&mut tx) {
             Ok(r) => {
@@ -58,7 +53,9 @@ pub trait WalletStore {
     }
 
     fn with_read_tx<F: FnOnce(&mut Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<WalletStorageError> {
+    where
+        E: From<WalletStorageError>,
+    {
         let mut tx = self.create_read_tx()?;
         let ret = f(&mut tx)?;
         Ok(ret)
@@ -167,6 +164,8 @@ pub trait WalletStoreReader {
 
     // Non fungible tokens
     fn get_non_fungible_token(&mut self, nft_id: NonFungibleId) -> Result<NonFungibleToken, WalletStorageError>;
+
+    fn get_resource_address(&mut self, token_symbol: String) -> Result<ResourceAddress, WalletStorageError>;
 }
 
 pub trait WalletStoreWriter {

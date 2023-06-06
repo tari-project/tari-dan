@@ -72,6 +72,9 @@ pub struct NewAccountInfo {
 
 #[derive(Debug, Clone)]
 pub struct NewAccountNFTInfo {
+    pub account_address: SubstateAddress,
+    pub metadata: Metadata,
+    pub nft_id: NonFungibleId,
     pub token_symbol: String,
     pub resource_address: ResourceAddress,
 }

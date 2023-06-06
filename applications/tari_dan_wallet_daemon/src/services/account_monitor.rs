@@ -10,9 +10,11 @@ use tari_dan_wallet_sdk::{
     apis::{
         accounts::AccountsApiError,
         confidential_outputs::ConfidentialOutputsApiError,
+        non_fungible_tokens::NonFungibleTokensApiError,
         substate::{SubstateApiError, ValidatorScanResult},
         transaction::TransactionApiError,
     },
+    models::NonFungibleToken,
     storage::WalletStore,
     substate_provider::WalletNetworkInterface,
     DanWalletSdk,
@@ -255,6 +257,7 @@ where
     async fn process_result(&mut self, tx_hash: FixedHash, diff: &SubstateDiff) -> Result<(), AccountMonitorError> {
         let substate_api = self.wallet_sdk.substate_api();
         let accounts_api = self.wallet_sdk.accounts_api();
+        let non_fungibles_api = self.wallet_sdk.non_fungible_api();
 
         if let Some(new_account) = self.pending_accounts.remove(&tx_hash) {
             // Filter for a _new_ account created in this transaction
@@ -270,6 +273,17 @@ where
                 new_account.key_index,
                 new_account.is_default,
             )?;
+        }
+
+        if let Some(new_account_nft) = self.pending_account_nfts.remove(&tx_hash) {
+            let non_fungible = NonFungibleToken {
+                account_address: new_account_nft.account_address,
+                nft_id: new_account_nft.nft_id,
+                metadata: new_account_nft.metadata,
+                resource_address: new_account_nft.resource_address,
+                token_symbol: new_account_nft.token_symbol.clone(),
+            };
+            non_fungibles_api.store_new_nft(non_fungible)?;
         }
 
         let mut vaults = diff
@@ -461,6 +475,8 @@ pub enum AccountMonitorError {
     Substate(#[from] SubstateApiError),
     #[error("Outputs API error: {0}")]
     ConfidentialOutputs(#[from] ConfidentialOutputsApiError),
+    #[error("Non Fungibles API error: {0}")]
+    NonFungibleTokens(#[from] NonFungibleTokensApiError),
     #[error("Failed to decode binary value: {0}")]
     DecodeValueFailed(#[from] IndexedValueVisitorError),
     #[error("Unexpected substate: {0}")]
@@ -481,12 +497,12 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
         }
 
         // Is an account component
-        if !a.is_component() ||
-            v.substate_value()
+        if !a.is_component()
+            || v.substate_value()
                 .component()
                 .expect("Value was not component for component address")
-                .template_address !=
-                *ACCOUNT_TEMPLATE_ADDRESS
+                .template_address
+                != *ACCOUNT_TEMPLATE_ADDRESS
         {
             return None;
         }

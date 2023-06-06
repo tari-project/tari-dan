@@ -10,16 +10,8 @@ use serde::de::DeserializeOwned;
 use tari_common_types::types::{Commitment, FixedHash};
 use tari_dan_wallet_sdk::{
     models::{
-        Account,
-        ConfidentialOutputModel,
-        ConfidentialProofId,
-        Config,
-        NonFungibleToken,
-        OutputStatus,
-        SubstateModel,
-        TransactionStatus,
-        VaultModel,
-        WalletTransaction,
+        Account, ConfidentialOutputModel, ConfidentialProofId, Config, NonFungibleToken, OutputStatus, SubstateModel,
+        TransactionStatus, VaultModel, WalletTransaction,
     },
     storage::{WalletStorageError, WalletStoreReader},
 };
@@ -644,6 +636,27 @@ impl WalletStoreReader for ReadTransaction<'_> {
         })?;
 
         non_fungible_token.try_into_non_fungible_token()
+    }
+
+    fn get_resource_address(&mut self, token_symbol: String) -> Result<ResourceAddress, WalletStorageError> {
+        use crate::schema::non_fungible_tokens;
+
+        let resource_address = non_fungible_tokens::table
+            .filter(non_fungible_tokens::token_symbol.eq(token_symbol.as_str()))
+            .select(non_fungible_tokens::resource_address)
+            .first::<String>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("get_resource_address", e))?;
+        let resource_address = resource_address.ok_or_else(|| WalletStorageError::NotFound {
+            operation: "get_resource_address",
+            entity: "non_fungible_tokens".to_string(),
+            key: token_symbol.clone(),
+        })?;
+        ResourceAddress::from_str(&resource_address).map_err(|e| WalletStorageError::DecodingError {
+            item: "non_fungible_tokens",
+            operation: "get_resource_address",
+            details: e.to_string(),
+        })
     }
 }
 

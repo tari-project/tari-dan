@@ -1,41 +1,31 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::optional::{IsNotFoundError, Optional};
-use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::{
-    models::{Amount, ResourceAddress},
-    prelude::{NonFungibleId, ResourceType},
-    resource::TOKEN_SYMBOL,
-};
+use tari_template_lib::{models::ResourceAddress, prelude::NonFungibleId};
 use thiserror::Error;
 
-use super::accounts::AccountsApi;
 use crate::{
-    models::{Account, NonFungibleToken, VaultModel},
+    models::NonFungibleToken,
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
 pub struct NonFungibleTokensApi<'a, TStore> {
     store: &'a TStore,
-    accounts_api: AccountsApi<'a, TStore>,
 }
 
 impl<'a, TStore> NonFungibleTokensApi<'a, TStore>
-where TStore: WalletStore
+where
+    TStore: WalletStore,
 {
-    pub fn new(store: &'a TStore, accounts_api: AccountsApi<'a, TStore>) -> Self {
-        Self { store, accounts_api }
+    pub fn new(store: &'a TStore) -> Self {
+        Self { store }
     }
 
-    pub fn store_new_nft(
-        &mut self,
-        resource_address: ResourceAddress,
-        non_fungible: NonFungibleToken,
-    ) -> Result<(), NonFungibleTokensApiError> {
+    pub fn store_new_nft(&self, non_fungible: NonFungibleToken) -> Result<(), NonFungibleTokensApiError> {
         let mut tx = self.store.create_write_tx()?;
         let nft_id = non_fungible.nft_id;
         let metadata = non_fungible.metadata;
+        let resource_address = non_fungible.resource_address;
         tx.store_non_fungible_token(
             nft_id,
             resource_address,
@@ -46,13 +36,16 @@ where TStore: WalletStore
         Ok(())
     }
 
-    pub fn get_non_fungible_token(
-        &mut self,
-        nft_id: NonFungibleId,
-    ) -> Result<NonFungibleToken, NonFungibleTokensApiError> {
+    pub fn get_non_fungible_token(&self, nft_id: NonFungibleId) -> Result<NonFungibleToken, NonFungibleTokensApiError> {
         let mut tx = self.store.create_read_tx()?;
         let non_fungible_token = tx.get_non_fungible_token(nft_id)?;
         Ok(non_fungible_token)
+    }
+
+    pub fn get_resource_address(&self, token_symbol: String) -> Result<ResourceAddress, NonFungibleTokensApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let resource_address = tx.get_resource_address(token_symbol)?;
+        Ok(resource_address)
     }
 }
 

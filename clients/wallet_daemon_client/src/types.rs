@@ -502,7 +502,7 @@ pub struct AuthRevokeTokenResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MintAccountNFTRequest {
-    pub account: Option<ComponentAddressOrName>,
+    pub account: ComponentAddressOrName,
     pub owner_token: NonFungibleAddress,
     pub token_symbol: String,
     pub metadata: serde_json::Value,
