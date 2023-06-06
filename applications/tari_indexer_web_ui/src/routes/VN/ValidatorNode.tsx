@@ -24,9 +24,7 @@ import { useEffect, useState } from 'react';
 import Connections from './Components/Connections';
 import Info from './Components/Info';
 import { IIdentity } from '../../utils/interfaces';
-import {
-  getIdentity,
-} from '../../utils/json_rpc';
+import { getIdentity } from '../../utils/json_rpc';
 import RecentTransactions from './Components/RecentTransactions';
 import './ValidatorNode.css';
 import { StyledPaper } from '../../Components/StyledComponents';
@@ -57,38 +55,48 @@ function ValidatorNode() {
   }
   if (identity === undefined) return <div>Loading</div>;
   return (
-    <Grid container spacing={5}>
-      <SecondaryHeading>Info</SecondaryHeading>
+    <>
+      <Grid item sm={12} md={12} xs={12}>
+        <SecondaryHeading>Info</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Info identity={identity} />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Monitored Substates</SecondaryHeading>
+      <Grid item sm={12} md={12} xs={12}>
+        <SecondaryHeading>Monitored Substates</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <MonitoredSubstates />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Monitored NFT collections</SecondaryHeading>
+      <Grid item sm={12} md={12} xs={12}>
+        <SecondaryHeading>Monitored NFT collections</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <MonitoredNftCollections />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Connections</SecondaryHeading>
+      <Grid item sm={12} md={12} xs={12}>
+        <SecondaryHeading>Connections</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Connections />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Recent Transactions</SecondaryHeading>
+      <Grid item sm={12} md={12} xs={12}>
+        <SecondaryHeading>Recent Transactions</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <RecentTransactions />
         </StyledPaper>
       </Grid>
-    </Grid>
+    </>
   );
 }
 

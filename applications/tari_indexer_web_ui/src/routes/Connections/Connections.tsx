@@ -27,14 +27,16 @@ import Connections from '../VN/Components/Connections';
 
 function ConnectionsLayout() {
   return (
-    <Grid container spacing={5}>
-      <PageHeading>Connections</PageHeading>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
+        <PageHeading>Connections</PageHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Connections />
         </StyledPaper>
       </Grid>
-    </Grid>
+    </>
   );
 }
 

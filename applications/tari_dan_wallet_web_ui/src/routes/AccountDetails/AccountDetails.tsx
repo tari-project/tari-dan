@@ -22,109 +22,112 @@
 
 import PageHeading from '../../Components/PageHeading';
 import Grid from '@mui/material/Grid';
-import {StyledPaper} from '../../Components/StyledComponents';
+import { StyledPaper } from '../../Components/StyledComponents';
 import Accounts from '../Wallet/Components/Accounts';
-import TableContainer from "@mui/material/TableContainer";
-import Table from "@mui/material/Table";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
-import TableCell from "@mui/material/TableCell";
-import TableBody from "@mui/material/TableBody";
-import {useEffect, useState} from "react";
-import {useParams} from 'react-router-dom';
-import {accountsGetBalances, accountsGet} from "../../utils/json_rpc";
+import TableContainer from '@mui/material/TableContainer';
+import Table from '@mui/material/Table';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TableCell from '@mui/material/TableCell';
+import TableBody from '@mui/material/TableBody';
+import { useEffect, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { accountsGetBalances, accountsGet } from '../../utils/json_rpc';
 import Alert from '@mui/material/Alert';
-import {removeTagged, toHexString} from '../../utils/helpers';
+import { removeTagged, toHexString } from '../../utils/helpers';
 
 function BalanceRow(props: any) {
-    return (
-        <TableRow>
-            <TableCell>{toHexString(props.resource_address)}</TableCell>
-            <TableCell>{removeTagged(props.balance)}</TableCell>
-            <TableCell>{removeTagged(props.confidential_balance)}</TableCell>
-        </TableRow>
-    );
+  return (
+    <TableRow>
+      <TableCell>{toHexString(props.resource_address)}</TableCell>
+      <TableCell>{removeTagged(props.balance)}</TableCell>
+      <TableCell>{removeTagged(props.confidential_balance)}</TableCell>
+    </TableRow>
+  );
 }
 
-
 function AccountDetailsLayout() {
-    const {name} = useParams<{ name: string }>();
-    let [state, setState] = useState(null);
-    let [balances, setBalances] = useState(null);
-    let [error, setError] = useState(null);
+  const { name } = useParams<{ name: string }>();
+  let [state, setState] = useState(null);
+  let [balances, setBalances] = useState(null);
+  let [error, setError] = useState(null);
 
-    const loadAccount = () => {
-        accountsGet(name).then((response: any) => {
-            setState(response);
-        }).catch((error: any) => {
-            console.error(error);
-            setError(error.message);
-        });
-    }
+  const loadAccount = () => {
+    accountsGet(name)
+      .then((response: any) => {
+        setState(response);
+      })
+      .catch((error: any) => {
+        console.error(error);
+        setError(error.message);
+      });
+  };
 
-    const loadBalances = () => {
-        accountsGetBalances(name).then((response: any) => {
-            setBalances(response);
-        }).catch((error: any) => {
-            console.error(error);
-            setError(error.message);
-        });
-    }
+  const loadBalances = () => {
+    accountsGetBalances(name)
+      .then((response: any) => {
+        setBalances(response);
+      })
+      .catch((error: any) => {
+        console.error(error);
+        setError(error.message);
+      });
+  };
 
+  useEffect(() => loadAccount(), []);
+  useEffect(() => loadBalances(), []);
 
-    useEffect(() => loadAccount(), []);
-    useEffect(() => loadBalances(), []);
-
-    return (
-        <>
-            <Grid container spacing={5}>
-                <PageHeading>Account Details</PageHeading>
-                <Grid item xs={12} md={12} lg={12}>
-                    {error ? (<Alert severity="error">{error}</Alert>) : null}
-                    <StyledPaper>
-                        <TableContainer>
-                            <Table>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Name</TableCell>
-                                        <TableCell>Address</TableCell>
-                                        <TableCell>Public key</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    <TableRow>
-                                        <TableCell>{state?.account.name}
-                                        </TableCell>
-                                        <TableCell>{toHexString(state?.account.address.Component)}</TableCell>
-                                        <TableCell>{state?.public_key}</TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </StyledPaper>
-                </Grid>
-                <Grid item xs={12} md={12} lg={12}>
-                    <StyledPaper>
-                        Balances
-                        <TableContainer>
-                            <Table>
-                                <TableHead>
-                                    <TableRow>
-                                        <TableCell>Resource</TableCell>
-                                        <TableCell>Revealed Balance</TableCell>
-                                        <TableCell>Confidential Balance</TableCell>
-                                    </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                    {balances?.balances.map((balance: any) => BalanceRow(balance))}
-                                </TableBody>
-                            </Table>
-                        </TableContainer>
-                    </StyledPaper>
-                </Grid>
-            </Grid>
-        </>
-    );
+  return (
+    <>
+      <Grid item xs={12} md={12} lg={12}>
+        <PageHeading>Account Details</PageHeading>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        {error ? <Alert severity="error">{error}</Alert> : null}
+        <StyledPaper>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Address</TableCell>
+                  <TableCell>Public key</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                <TableRow>
+                  <TableCell>{state?.account.name}</TableCell>
+                  <TableCell>
+                    {toHexString(state?.account.address.Component)}
+                  </TableCell>
+                  <TableCell>{state?.public_key}</TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </StyledPaper>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          Balances
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Resource</TableCell>
+                  <TableCell>Revealed Balance</TableCell>
+                  <TableCell>Confidential Balance</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {balances?.balances.map((balance: any) => BalanceRow(balance))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </StyledPaper>
+      </Grid>
+    </>
+  );
 }
 
 export default AccountDetailsLayout;

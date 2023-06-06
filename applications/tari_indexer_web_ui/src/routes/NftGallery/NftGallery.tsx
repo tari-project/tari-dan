@@ -27,16 +27,16 @@ import NftGallery from '../VN/Components/NftGallery';
 
 function NftGalleryLayout() {
   return (
-    <div>
-      <Grid container spacing={5}>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
         <PageHeading>NFT collection</PageHeading>
-        <Grid item xs={12}>
-          <StyledPaper>
-            <NftGallery />
-          </StyledPaper>
-        </Grid>
       </Grid>
-    </div>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <NftGallery />
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 

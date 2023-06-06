@@ -20,24 +20,44 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import PageHeading from '../../Components/PageHeading';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import RecentTransactions from '../VN/Components/RecentTransactions';
+import { getCommittee, getShardKey } from '../../utils/json_rpc';
+import { U256 } from '../VN/Components/helpers';
 
-function RecentTransactionsLayout() {
-  return (
-    <>
-      <Grid item sm={12} md={12} xs={12}>
-        <PageHeading>Recent Transactions</PageHeading>
-      </Grid>
-      <Grid item sm={12} md={12} xs={12}>
-        <StyledPaper>
-          <RecentTransactions />
-        </StyledPaper>
-      </Grid>
-    </>
-  );
+async function get_all_committees(
+  currentEpoch: number,
+  shardKey: string,
+  publicKey: string
+) {
+  let shardKeyMap: { [id: string]: string } = { [publicKey]: shardKey };
+  let committee = await getCommittee(currentEpoch, shardKey);
+  if (committee?.committee?.members === undefined) {
+    return;
+  }
+  let nextShardSpace = new U256(shardKey).inc();
+  let nextCommittee = await getCommittee(currentEpoch, nextShardSpace.n);
+  let lastMemberShardKey;
+  let shardSpaces: Array<[string, string, Array<string>]> = [];
+  for (const member of committee.committee.members.concat(
+    nextCommittee.committee.members[nextCommittee.committee.members.length - 1]
+  )) {
+    if (!(member in shardKeyMap)) {
+      shardKeyMap[member] = (
+        await getShardKey(currentEpoch * 10, member)
+      ).shard_key;
+    }
+    if (lastMemberShardKey !== undefined) {
+      let end = new U256(shardKeyMap[member]).dec();
+      shardSpaces.push([
+        lastMemberShardKey,
+        end.n,
+        (await getCommittee(currentEpoch, lastMemberShardKey)).committee
+          .members,
+      ]);
+    }
+    lastMemberShardKey = shardKeyMap[member];
+  }
+
+  return shardSpaces;
 }
 
-export default RecentTransactionsLayout;
+export { get_all_committees };
