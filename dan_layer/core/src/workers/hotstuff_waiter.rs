@@ -31,6 +31,7 @@ use serde::Serialize;
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
 use tari_core::ValidatorNodeBMT;
 use tari_dan_common_types::{
+    committee::Committee,
     optional::Optional,
     Epoch,
     NodeAddressable,
@@ -63,7 +64,7 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     substate::SubstateDiff,
 };
-use tari_epoch_manager::{base_layer::EpochManagerError, Committee, EpochManager};
+use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::SubstateChange;

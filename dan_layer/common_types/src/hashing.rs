@@ -23,64 +23,30 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{io, io::Write};
+use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparatedHasher};
+use tari_mmr::BalancedBinaryMerkleTree;
 
-use digest::Digest;
-use serde::Serialize;
-use tari_bor::encode_into;
-use tari_common_types::types::FixedHash;
-use tari_crypto::{hash::blake2::Blake256, hashing::DomainSeparation};
+use crate::hasher::{tari_hasher, TariHasher};
 
-pub fn tari_hasher<D: DomainSeparation>(label: &'static str) -> TariHasher {
-    TariHasher::new_with_label::<D>(label)
+hash_domain!(TariDanConsensusHashDomain, "tari.dan.consensus", 0);
+
+pub fn block_hasher() -> TariHasher {
+    dan_hasher("block")
 }
 
-#[derive(Debug, Clone)]
-pub struct TariHasher {
-    hasher: Blake256,
+pub fn quorum_certificate_hasher() -> TariHasher {
+    dan_hasher("quorum_certificate")
 }
 
-impl TariHasher {
-    pub fn new_with_label<D: DomainSeparation>(label: &'static str) -> Self {
-        let mut hasher = Blake256::new();
-        D::add_domain_separation_tag(&mut hasher, label);
-        Self { hasher }
-    }
-
-    pub fn update<T: Serialize + ?Sized>(&mut self, data: &T) {
-        // Binary encoding does not make any contract to say that if the writer is infallible (as it is here) then
-        // encoding in infallible. However this should be the case. Since it is very unergonomic to return an
-        // error in hash chain functions, and therefore all usages of the hasher, we assume all types implement
-        // infallible encoding.
-        encode_into(data, &mut self.hash_writer()).expect("encoding failed")
-    }
-
-    pub fn chain<T: Serialize + ?Sized>(mut self, data: &T) -> Self {
-        self.update(data);
-        self
-    }
-
-    pub fn digest<T: Serialize + ?Sized>(self, data: &T) -> FixedHash {
-        self.chain(data).result()
-    }
-
-    pub fn result(self) -> FixedHash {
-        let hash: [u8; 32] = self.hasher.finalize().into();
-        hash.into()
-    }
-
-    fn hash_writer(&mut self) -> impl Write + '_ {
-        struct HashWriter<'a>(&'a mut Blake256);
-        impl Write for HashWriter<'_> {
-            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-                self.0.update(buf);
-                Ok(buf.len())
-            }
-
-            fn flush(&mut self) -> io::Result<()> {
-                Ok(())
-            }
-        }
-        HashWriter(&mut self.hasher)
-    }
+fn dan_hasher(label: &'static str) -> TariHasher {
+    tari_hasher::<TariDanConsensusHashDomain>(label)
 }
+
+// From tari_core
+hash_domain!(
+    ValidatorNodeBmtHashDomain,
+    "com.tari.tari_project.base_layer.core.validator_node_mmr",
+    1
+);
+pub type ValidatorNodeBmtHasherBlake256 = DomainSeparatedHasher<Blake256, ValidatorNodeBmtHashDomain>;
+pub type ValidatorNodeBMT = BalancedBinaryMerkleTree<ValidatorNodeBmtHasherBlake256>;
