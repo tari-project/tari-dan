@@ -313,7 +313,7 @@ pub async fn handle_get_default(
     _req: AccountGetDefaultRequest,
 ) -> Result<AccountGetResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::AccountInfo])?;
     let account = get_account_or_default(None, &sdk.accounts_api())?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;

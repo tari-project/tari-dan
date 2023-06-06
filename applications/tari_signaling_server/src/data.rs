@@ -7,6 +7,7 @@ use anyhow::Result;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, Validation};
 use serde::{Deserialize, Serialize};
+use tari_dan_wallet_sdk::apis::jwt::JrpcPermissions;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
 
 pub struct Data {
@@ -24,6 +25,7 @@ pub struct Data {
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
     id: u64,
+    permissions: JrpcPermissions,
     exp: usize,
 }
 
@@ -35,15 +37,16 @@ impl Data {
             offer_ice_candidates: HashMap::new(),
             answer_ice_candidates: HashMap::new(),
             expiration: Duration::minutes(5),
-            secret_key: "secret_key".into(),
+            secret_key: "jwt-secret_key".into(),
             low_id: 0,
             id: 0,
         }
     }
 
-    pub fn generate_jwt(&mut self) -> Result<String> {
+    pub fn generate_jwt(&mut self, permissions: JrpcPermissions) -> Result<String> {
         let my_claims = Claims {
             id: self.id,
+            permissions,
             exp: (Utc::now() + self.expiration).timestamp() as usize,
         };
         self.id += 1;

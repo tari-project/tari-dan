@@ -88,7 +88,9 @@ pub async fn handle_submit(
     req: TransactionSubmitRequest,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+    // TODO: fine-grained checks of individual addresses involved (resources, components, etc)
+    sdk.jwt_api()
+        .check_auth(token, &[JrpcPermission::TransactionSend(None)])?;
     let key_api = sdk.key_manager_api();
     // Fetch the key to sign the transaction
     // TODO: Ideally the SDK should take care of signing the transaction internally
@@ -165,7 +167,7 @@ pub async fn handle_get(
     context
         .wallet_sdk()
         .jwt_api()
-        .check_auth(token, &[JrpcPermission::Admin])?;
+        .check_auth(token, &[JrpcPermission::TransactionGet])?;
     let transaction = context
         .wallet_sdk()
         .transaction_api()
@@ -190,7 +192,7 @@ pub async fn handle_get_result(
     context
         .wallet_sdk()
         .jwt_api()
-        .check_auth(token, &[JrpcPermission::Admin])?;
+        .check_auth(token, &[JrpcPermission::TransactionGet])?;
     let transaction = context
         .wallet_sdk()
         .transaction_api()
