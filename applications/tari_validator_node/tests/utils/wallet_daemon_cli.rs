@@ -717,7 +717,13 @@ pub(crate) async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daem
         })
         .await
         .unwrap();
-    let auth_response = client.auth_accept(AuthLoginAcceptRequest { auth_token }).await.unwrap();
+    let auth_response = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token,
+            name: "Testing Token".to_string(),
+        })
+        .await
+        .unwrap();
     client.set_auth_token(auth_response.permissions_token);
     client
 }
