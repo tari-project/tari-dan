@@ -70,25 +70,23 @@ export default function CommitteeMembers() {
 
   return (
     <>
-      <Grid container spacing={5}>
-        <Grid item xs={12} md={12} lg={12}>
-          <PageHeading>Committee Members</PageHeading>
-        </Grid>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            {addresses && (
-              <>
-                <Committee
-                  key={addresses[0]}
-                  begin={addresses[0]}
-                  end={addresses[1]}
-                  members={members}
-                  publicKey={identity.public_key}
-                />
-              </>
-            )}
-          </StyledPaper>
-        </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <PageHeading>Committee Members</PageHeading>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          {addresses && (
+            <>
+              <Committee
+                key={addresses[0]}
+                begin={addresses[0]}
+                end={addresses[1]}
+                members={members}
+                publicKey={identity.public_key}
+              />
+            </>
+          )}
+        </StyledPaper>
       </Grid>
     </>
   );

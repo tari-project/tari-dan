@@ -60,34 +60,34 @@ function CommitteesLayout() {
   }
 
   return (
-    <div>
-      <Grid container spacing={5}>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Committees</PageHeading>
-        <Grid item xs={12} md={12} lg={8}>
-          <StyledPaper>
-            <CommitteesPieChart chartData={committees} />
-          </StyledPaper>
-        </Grid>
-        <Grid item xs={12} md={12} lg={4}>
-          <StyledPaper>
-            <CommitteesRadial committees={committees} />
-          </StyledPaper>
-        </Grid>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Typography>
-              {shardKey ? (
-                <Committees
-                  currentEpoch={epoch.current_epoch}
-                  shardKey={shardKey}
-                  publicKey={identity.public_key}
-                />
-              ) : null}
-            </Typography>
-          </StyledPaper>
-        </Grid>
       </Grid>
-    </div>
+      <Grid item xs={12} md={12} lg={8}>
+        <StyledPaper>
+          <CommitteesPieChart chartData={committees} />
+        </StyledPaper>
+      </Grid>
+      <Grid item xs={12} md={12} lg={4}>
+        <StyledPaper>
+          <CommitteesRadial committees={committees} />
+        </StyledPaper>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Typography>
+            {shardKey ? (
+              <Committees
+                currentEpoch={epoch.current_epoch}
+                shardKey={shardKey}
+                publicKey={identity.public_key}
+              />
+            ) : null}
+          </Typography>
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 

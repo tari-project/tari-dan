@@ -91,7 +91,7 @@ function TemplateFunctions() {
   };
 
   return (
-    <Grid container spacing={5}>
+    <>
       <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Template Functions</PageHeading>
       </Grid>
@@ -101,7 +101,7 @@ function TemplateFunctions() {
           {info ? renderFunctions(info) : ''}
         </StyledPaper>
       </Grid>
-    </Grid>
+    </>
   );
 }
 

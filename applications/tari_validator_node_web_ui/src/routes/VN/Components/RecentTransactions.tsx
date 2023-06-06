@@ -85,7 +85,7 @@ function RowData({
         >
           <Link
             style={{ textDecoration: 'none' }}
-            to={`transaction/${payload_id}`}
+            to={`/transactions/${payload_id}`}
           >
             {payload_id}
           </Link>

@@ -27,14 +27,16 @@ import Fees from '../VN/Components/Fees';
 
 function FeesLayout() {
   return (
-    <Grid container spacing={5}>
-      <PageHeading>Fees</PageHeading>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
+        <PageHeading>Fees</PageHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Fees />
         </StyledPaper>
       </Grid>
-    </Grid>
+    </>
   );
 }
 

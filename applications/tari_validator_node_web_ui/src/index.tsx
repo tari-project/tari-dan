@@ -79,12 +79,12 @@ const router = createBrowserRouter([
         element: <Committees />,
       },
       {
-        path: 'transaction/:payloadId',
+        path: 'transactions/:payloadId',
         element: <Transaction />,
         loader: transactionLoader,
       },
       {
-        path: 'template/:address',
+        path: 'templates/:address',
         element: <TemplateFunctions />,
       },
       {

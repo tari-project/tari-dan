@@ -27,16 +27,16 @@ import Templates from '../VN/Components/Templates';
 
 function TemplatesLayout() {
   return (
-    <div>
-      <Grid container spacing={5}>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Templates</PageHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Templates />
-          </StyledPaper>
-        </Grid>
       </Grid>
-    </div>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Templates />
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 

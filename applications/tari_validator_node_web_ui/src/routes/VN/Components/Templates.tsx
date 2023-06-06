@@ -217,7 +217,7 @@ function Templates() {
                 <TableRow key={id}>
                   <DataTableCell>
                     <Link
-                      to={`/template/${toHex(address)}`}
+                      to={`/templates/${toHex(address)}`}
                       state={[address]}
                       style={{ textDecoration: 'none' }}
                     >
@@ -260,7 +260,7 @@ function Templates() {
                     Active
                   </DataTableCell>
                   <DataTableCell style={{ textAlign: 'center' }}>
-                    <Link to={`/template/${toHex(address)}`} state={[address]}>
+                    <Link to={`/templates/${toHex(address)}`} state={[address]}>
                       <IconButton>
                         <KeyboardArrowRightIcon color="primary" />
                       </IconButton>
