@@ -153,13 +153,14 @@ function RowData({ substate }: any) {
 }
 
 export default function Substates({ substates }: any) {
+  // eslint-disable-next-line eqeqeq
   if (substates.size == 0) {
     return <div className="caption">No substates</div>;
   }
-  console.log(substates);
-  substates.map((substate: any) => {
-    // console.log("parsing json", substate.justify, JSON.parse(substate.justify));
-  });
+  // console.log(substates);
+  // substates.map((substate: any) => {
+  //   // console.log("parsing json", substate.justify, JSON.parse(substate.justify));
+  // });
   return (
     <>
       {substates.map((substate: any) => (

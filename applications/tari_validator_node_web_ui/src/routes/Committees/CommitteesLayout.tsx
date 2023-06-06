@@ -28,7 +28,6 @@ import { StyledPaper } from '../../Components/StyledComponents';
 import { VNContext } from '../../App';
 import Committees from './Committees';
 import CommitteesRadial from './CommitteesRadial';
-import CommitteesWaterfall from './CommitteesWaterfall';
 import CommitteesPieChart from './CommitteesPieChart';
 import { get_all_committees } from './helpers';
 
@@ -49,7 +48,7 @@ function CommitteesLayout() {
         if (response) setCommittees(response);
       });
     }
-  }, [epoch?.current_epoch, shardKey, identity?.public_key]);
+  }, [epoch?.current_epoch, shardKey, identity?.public_key, epoch]);
 
   if (error !== '') {
     return <div className="error">{error}</div>;

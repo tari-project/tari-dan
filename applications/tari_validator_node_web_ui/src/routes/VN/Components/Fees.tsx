@@ -23,10 +23,8 @@
 import React, { useCallback, useState } from 'react';
 import { getFees } from '../../../utils/json_rpc';
 import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import { DataTableCell } from '../../../Components/StyledComponents';
 import Button from '@mui/material/Button';
@@ -36,99 +34,95 @@ import Fade from '@mui/material/Fade';
 import Divider from '@mui/material/Divider';
 
 interface IFees {
-    epoch: number;
-    claimablePublicKey: string;
-    totalAccruedFee: number;
+  epoch: number;
+  claimablePublicKey: string;
+  totalAccruedFee: number;
 }
 
 function Fees() {
-    const [fees, setFees] = useState<IFees>({
-        epoch: 0,
-        claimablePublicKey: '',
-        totalAccruedFee: 0,
+  const [fees, setFees] = useState<IFees>({
+    epoch: 0,
+    claimablePublicKey: '',
+    totalAccruedFee: 0,
+  });
+  const [showFees, setShowFees] = useState(false);
+  const [formState, setFormState] = useState({ epoch: '', publicKey: '' });
+
+  let fetchFees = useCallback(async () => {
+    const resp = await getFees(parseInt(formState.epoch), formState.publicKey);
+    setFees({
+      epoch: parseInt(formState.epoch),
+      claimablePublicKey: formState.publicKey,
+      totalAccruedFee: resp.totalAccruedFee,
     });
-    const [showFees, setShowFees] = useState(false);
-    const [formState, setFormState] = useState({ epoch: '', publicKey: '' });
+  }, [formState.epoch, formState.publicKey]);
 
-    let fetchFees = useCallback(async () => {
-        const resp = await getFees(parseInt(formState.epoch), formState.publicKey);
-        setFees({
-            epoch: parseInt(formState.epoch),
-            claimablePublicKey: formState.publicKey,
-            totalAccruedFee: resp.totalAccruedFee,
-        });
-    }, []);
+  const getVNFees = () => {
+    fetchFees();
+    setShowFees(true);
+  };
 
-    // fetchFees should actually be called here, but I don't have access to the method on the mock server to test it
-    // so you can delete the setFees call underneath, uncomment the fetchFees method and then try connecting to the
-    // VN for real data for totalAccruedFee
-    // if we want to later display various searches, we can just change fees to an array of objects and then map over it
-    const getVNFees = () => {
-        fetchFees();
-        setShowFees(true);
-    };
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    setFormState({ ...formState, [e.target.name]: e.target.value });
+  };
 
-    const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        e.preventDefault();
-        setFormState({ ...formState, [e.target.name]: e.target.value });
-    };
+  const onCancel = () => {
+    setFormState({ epoch: '', publicKey: '' });
+    setShowFees(false);
+  };
 
-    const onCancel = () => {
-        setFormState({ epoch: '', publicKey: '' });
-        setShowFees(false);
-    };
-
-    return (
+  return (
+    <>
+      <Form onSubmit={getVNFees} className="flex-container">
+        <TextField
+          name="epoch"
+          label="Epoch"
+          value={formState.epoch}
+          onChange={onChange}
+          style={{ flexGrow: 1 }}
+        />
+        <TextField
+          name="publicKey"
+          label="VN Public Key"
+          value={formState.publicKey}
+          onChange={onChange}
+          style={{ flexGrow: 10 }}
+        />
         <>
-            <Form onSubmit={getVNFees} className="flex-container">
-                <TextField
-                    name="epoch"
-                    label="Epoch"
-                    value={formState.epoch}
-                    onChange={onChange}
-                    style={{ flexGrow: 1 }}
-                />
-                <TextField
-                    name="publicKey"
-                    label="VN Public Key"
-                    value={formState.publicKey}
-                    onChange={onChange}
-                    style={{ flexGrow: 10 }}
-                />
-                <>
-                    <Button variant="contained" type="submit">
-                        Calculate Fees
-                    </Button>
-                    <Button variant="outlined" onClick={onCancel}>
-                        Clear
-                    </Button>
-                </>
-            </Form>
-            {showFees && (
-                <Fade in={showFees}>
-                    <div>
-                        <Divider style={{ marginBottom: '10px', marginTop: '20px' }} />
-                        <TableContainer>
-                            <Table>
-                                <TableRow>
-                                    <TableCell width={200}>Epoch</TableCell>
-                                    <DataTableCell>{fees.epoch}</DataTableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>Public Key</TableCell>
-                                    <DataTableCell>{fees.claimablePublicKey}</DataTableCell>
-                                </TableRow>
-                                <TableRow>
-                                    <TableCell>Fees</TableCell>
-                                    <DataTableCell>{fees.totalAccruedFee} Tari</DataTableCell>
-                                </TableRow>
-                            </Table>
-                        </TableContainer>
-                    </div>
-                </Fade>
-            )}
+          <Button variant="contained" type="submit">
+            Calculate Fees
+          </Button>
+          <Button variant="outlined" onClick={onCancel}>
+            Clear
+          </Button>
         </>
-    );
+      </Form>
+      {showFees && (
+        <Fade in={showFees}>
+          <div>
+            <Divider style={{ marginBottom: '10px', marginTop: '20px' }} />
+            <TableContainer>
+              <Table>
+                <TableRow>
+                  <TableCell width={200}>Epoch</TableCell>
+                  <DataTableCell>{fees.epoch}</DataTableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>Public Key</TableCell>
+                  <DataTableCell>{fees.claimablePublicKey}</DataTableCell>
+                </TableRow>
+                <TableRow>
+                  <TableCell>Fees</TableCell>
+                  <DataTableCell>{fees.totalAccruedFee} Tari</DataTableCell>
+                </TableRow>
+              </Table>
+            </TableContainer>
+          </div>
+        </Fade>
+      )}
+    </>
+  );
 }
 
 export default Fees;

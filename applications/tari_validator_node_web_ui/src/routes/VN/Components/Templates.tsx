@@ -42,7 +42,6 @@ import HeadingMenu from '../../../Components/HeadingMenu';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import TablePagination from '@mui/material/TablePagination';
-import { urlToHttpOptions } from 'url';
 import SearchFilter from '../../../Components/SearchFilter';
 import Typography from '@mui/material/Typography';
 import Fade from '@mui/material/Fade';
@@ -232,6 +231,7 @@ function Templates() {
                         <a
                           href={url}
                           target="_blank"
+                          rel="noreferrer"
                           style={{
                             textDecoration: 'none',
                             display: 'inline-flex',

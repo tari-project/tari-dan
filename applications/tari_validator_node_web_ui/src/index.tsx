@@ -25,7 +25,6 @@ import ReactDOM from 'react-dom/client';
 import './theme/theme.css';
 import reportWebVitals from './reportWebVitals';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import ValidatorNode from './routes/VN/ValidatorNode';
 import Transaction, {
   transactionLoader,
 } from './routes/Transaction/Transaction';

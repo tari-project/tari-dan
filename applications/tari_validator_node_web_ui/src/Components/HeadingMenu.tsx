@@ -33,7 +33,7 @@ import IconButton from '@mui/material/IconButton';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 
-interface MenuItem {
+interface IMenuItem {
   title: string;
   fn: () => void;
   icon?: any;
@@ -41,7 +41,7 @@ interface MenuItem {
 
 interface Props {
   menuTitle: string;
-  menuItems: MenuItem[];
+  menuItems: IMenuItem[];
   showArrow?: boolean;
   lastSort?: any;
   columnName?: string;

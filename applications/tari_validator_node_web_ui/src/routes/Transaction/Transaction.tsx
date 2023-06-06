@@ -21,18 +21,22 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useEffect, useState } from 'react';
-import { Form, useLoaderData } from 'react-router-dom';
-import { getSubstates, getTransaction, getCurrentLeaderState } from '../../utils/json_rpc';
+import { useLoaderData } from 'react-router-dom';
 import {
-  fromHexString,
-  toHexString,
-  shortenString,
-} from '../VN/Components/helpers';
+  getSubstates,
+  getTransaction,
+  getCurrentLeaderState,
+} from '../../utils/json_rpc';
+import { toHexString } from '../VN/Components/helpers';
 import Output from './Components/Output';
 import Substates from './Components/Substates';
 import './Transaction.css';
 import mermaid from 'mermaid';
-import { AccordionIconButton, CodeBlock, StyledPaper } from '../../Components/StyledComponents';
+import {
+  AccordionIconButton,
+  CodeBlock,
+  StyledPaper,
+} from '../../Components/StyledComponents';
 import PageHeading from '../../Components/PageHeading';
 import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Grid';
@@ -43,13 +47,18 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import TablePagination from '@mui/material/TablePagination';
-import { renderJson } from "../../utils/helpers";
-import Collapse from "@mui/material/Collapse";
-import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
-import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import { renderJson } from '../../utils/helpers';
+import Collapse from '@mui/material/Collapse';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 
-type loaderData = [string, Map<string, any[]>, Map<string, any[]>, Map<string, [string, number, string]>, any];
+type loaderData = [
+  string,
+  Map<string, any[]>,
+  Map<string, any[]>,
+  Map<string, [string, number, string]>,
+  any
+];
 
 mermaid.initialize({
   startOnLoad: true,
@@ -80,14 +89,22 @@ function splitToShards(current_leader_states: any[]) {
   let states = new Map<string, [string, number, string]>();
   for (let current_leader_state of current_leader_states) {
     let shard = toHexString(current_leader_state.shard_id);
-    states.set(shard, [toHexString(current_leader_state.leader), current_leader_state.leader_round, current_leader_state.timestamp]);
+    states.set(shard, [
+      toHexString(current_leader_state.leader),
+      current_leader_state.leader_round,
+      current_leader_state.timestamp,
+    ]);
   }
   return states;
 }
 
 export async function transactionLoader({ params }: { params: any }) {
-  const { payload, outputs } = splitToOutputs(await getTransaction(params.payloadId));
-  const current_leader_states = splitToShards(await getCurrentLeaderState(params.payloadId));
+  const { payload, outputs } = splitToOutputs(
+    await getTransaction(params.payloadId)
+  );
+  const current_leader_states = splitToShards(
+    await getCurrentLeaderState(params.payloadId)
+  );
   let substates = new Map<string, any[]>();
   await Promise.all(
     Array.from(outputs.entries()).map(async ([shard, _]) => {
@@ -115,25 +132,30 @@ function mapHeight(height: number) {
 export default function Transaction() {
   const [open1, setOpen1] = useState(false);
   const [open2, setOpen2] = useState(false);
-  const [payloadId, substates, outputs, current_leader_states, payload] = useLoaderData() as loaderData;
+  const [payloadId, substates, outputs, current_leader_states, payload] =
+    useLoaderData() as loaderData;
   console.log('Substates: ', substates);
   console.log('Outputs: ', outputs);
   console.log('Current states: ', current_leader_states);
-  console.log("Payload:", payload);
+  console.log('Payload:', payload);
   let mermaid = 'gantt\ndateFormat YYYY-MM-DDTHH:mm:ss\naxisFormat  %Hh%M:%S';
   let shardNo = 0;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   for (let [shard, output] of Array.from(outputs.entries())) {
     mermaid += `\nsection shard_${shardNo}`;
     for (let node of output) {
       let justify = JSON.parse(node.justify);
-      mermaid += `\n[QC - ${justify.local_node_height === 0
-        ? 'Genesis'
-        : justify.decision.Reject || justify.decision
-        } ${justify.local_node_height === 0
+      mermaid += `\n[QC - ${
+        justify.local_node_height === 0
+          ? 'Genesis'
+          : justify.decision.Reject || justify.decision
+      } ${
+        justify.local_node_height === 0
           ? ''
           : ' w ' + justify.validators_metadata.length + ' votes'
-        }] ${mapHeight(node.height)}  :done, s${shardNo}h${node.height}, ${node.timestamp
-        } , 1s`;
+      }] ${mapHeight(node.height)}  :done, s${shardNo}h${node.height}, ${
+        node.timestamp
+      } , 1s`;
     }
     shardNo++;
   }
@@ -155,7 +177,8 @@ export default function Transaction() {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell>Instructions
+                      <TableCell>
+                        Instructions
                         <AccordionIconButton
                           open={open1}
                           aria-label="expand row"
@@ -164,33 +187,52 @@ export default function Transaction() {
                             setOpen1(!open1);
                           }}
                         >
-                          {open1 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                          {open1 ? (
+                            <KeyboardArrowUpIcon />
+                          ) : (
+                            <KeyboardArrowDownIcon />
+                          )}
                         </AccordionIconButton>
                       </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {payload?.transaction?.instructions.map((instruction: any, index: number) => {
-                      if (instruction.length > 0) {
-                        const key = Object.keys(instruction)[0];
-                        return (
-                          <TableRow key={index}>
-                            <TableCell>
-                              <Typography>
-                                {key}: {instruction[key].template_address || (instruction[key].component_address ? instruction[key].component_address["@@TAGGED@@"][1] : "")}:{instruction[key].function || instruction[key].method}
-                                <Collapse in={open1} timeout="auto" unmountOnExit>
-                                  <CodeBlock style={{ marginBottom: '10px' }}>
-                                    <pre>{renderJson(instruction)}</pre>
-                                  </CodeBlock>
-                                </Collapse>
-                              </Typography>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      } else {
-                        return <></>
+                    {payload?.transaction?.instructions.map(
+                      (instruction: any, index: number) => {
+                        if (instruction.length > 0) {
+                          const key = Object.keys(instruction)[0];
+                          return (
+                            <TableRow key={index}>
+                              <TableCell>
+                                <Typography>
+                                  {key}:{' '}
+                                  {instruction[key].template_address ||
+                                    (instruction[key].component_address
+                                      ? instruction[key].component_address[
+                                          '@@TAGGED@@'
+                                        ][1]
+                                      : '')}
+                                  :
+                                  {instruction[key].function ||
+                                    instruction[key].method}
+                                  <Collapse
+                                    in={open1}
+                                    timeout="auto"
+                                    unmountOnExit
+                                  >
+                                    <CodeBlock style={{ marginBottom: '10px' }}>
+                                      <pre>{renderJson(instruction)}</pre>
+                                    </CodeBlock>
+                                  </Collapse>
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        } else {
+                          return <></>;
+                        }
                       }
-                    })}
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -205,7 +247,8 @@ export default function Transaction() {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell>Fee Instructions
+                      <TableCell>
+                        Fee Instructions
                         <AccordionIconButton
                           open={open2}
                           aria-label="expand row"
@@ -214,33 +257,52 @@ export default function Transaction() {
                             setOpen2(!open2);
                           }}
                         >
-                          {open2 ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                          {open2 ? (
+                            <KeyboardArrowUpIcon />
+                          ) : (
+                            <KeyboardArrowDownIcon />
+                          )}
                         </AccordionIconButton>
                       </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {payload?.transaction?.fee_instructions.map((instruction: any, index: number) => {
-                      if (instruction.length > 0) {
-                        const key = Object.keys(instruction)[0];
-                        return (
-                          <TableRow key={index}>
-                            <TableCell>
-                              <Typography>
-                                {key}: {instruction[key].template_address || (instruction[key].component_address ? instruction[key].component_address["@@TAGGED@@"][1] : "")}:{instruction[key].function || instruction[key].method}
-                                <Collapse in={open2} timeout="auto" unmountOnExit>
-                                  <CodeBlock style={{ marginBottom: '10px' }}>
-                                    <pre>{renderJson(instruction)}</pre>
-                                  </CodeBlock>
-                                </Collapse>
-                              </Typography>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      } else {
-                        return <></>
+                    {payload?.transaction?.fee_instructions.map(
+                      (instruction: any, index: number) => {
+                        if (instruction.length > 0) {
+                          const key = Object.keys(instruction)[0];
+                          return (
+                            <TableRow key={index}>
+                              <TableCell>
+                                <Typography>
+                                  {key}:{' '}
+                                  {instruction[key].template_address ||
+                                    (instruction[key].component_address
+                                      ? instruction[key].component_address[
+                                          '@@TAGGED@@'
+                                        ][1]
+                                      : '')}
+                                  :
+                                  {instruction[key].function ||
+                                    instruction[key].method}
+                                  <Collapse
+                                    in={open2}
+                                    timeout="auto"
+                                    unmountOnExit
+                                  >
+                                    <CodeBlock style={{ marginBottom: '10px' }}>
+                                      <pre>{renderJson(instruction)}</pre>
+                                    </CodeBlock>
+                                  </Collapse>
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        } else {
+                          return <></>;
+                        }
                       }
-                    })}
+                    )}
                   </TableBody>
                 </Table>
               </TableContainer>
@@ -289,7 +351,12 @@ export default function Transaction() {
           <>
             <Grid item xs={12} md={12} lg={12}>
               <StyledPaper>
-                <Output key={shard} shard={shard} output={output} current_state={current_leader_states.get(shard)} />
+                <Output
+                  key={shard}
+                  shard={shard}
+                  output={output}
+                  current_state={current_leader_states.get(shard)}
+                />
               </StyledPaper>
             </Grid>
           </>
