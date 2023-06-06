@@ -20,13 +20,36 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Routes, Route, Outlet, Link } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Accounts from './routes/Accounts/Accounts';
 import AccountDetails from './routes/AccountDetails/AccountDetails';
 import Keys from './routes/Keys/Keys';
 import ErrorPage from './routes/ErrorPage';
 import Wallet from './routes/Wallet/Wallet';
 import Layout from './theme/LayoutMain';
+
+export const breadcrumbRoutes = [
+  {
+    label: 'Home',
+    path: '/',
+    dynamic: false,
+  },
+  {
+    label: 'Accounts',
+    path: '/accounts',
+    dynamic: false,
+  },
+  {
+    label: 'Keys',
+    path: '/keys',
+    dynamic: false,
+  },
+  {
+    label: 'Account Details',
+    path: '/accounts/:name',
+    dynamic: true,
+  },
+];
 
 function App() {
   return (

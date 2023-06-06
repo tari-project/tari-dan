@@ -78,6 +78,8 @@ use crate::{
         AccountsInvokeResponse,
         AccountsListRequest,
         AccountsListResponse,
+        AuthGetAllJwtRequest,
+        AuthGetAllJwtResponse,
         AuthRevokeTokenRequest,
         AuthRevokeTokenResponse,
         ConfidentialCreateOutputProofRequest,
@@ -379,6 +381,13 @@ impl WalletDaemonClient {
         req: T,
     ) -> Result<AuthRevokeTokenResponse, WalletDaemonClientError> {
         self.send_request("auth.revoke", req.borrow()).await
+    }
+
+    pub async fn auth_get_all_jwt<T: Borrow<AuthGetAllJwtRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AuthGetAllJwtResponse, WalletDaemonClientError> {
+        self.send_request("auth.get_all_jwt", req.borrow()).await
     }
 
     pub async fn webrtc_start<T: Borrow<WebRtcStartRequest>>(

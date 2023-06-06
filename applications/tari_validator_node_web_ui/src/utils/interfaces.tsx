@@ -47,4 +47,23 @@ interface ITemplate {
   abi: { template_name: string; functions: Array<IFunction> };
 }
 
-export { type IEpoch, type IIdentity, type ITemplate };
+type ICommittees = [string, string, string[]][];
+
+type ICommitteeMap = [number, number, string[]];
+
+interface ICommitteeChart {
+  activeleft: number[];
+  inactiveleft: number[];
+  activemiddle: number[];
+  inactiveright: number[];
+  activeright: number[];
+}
+
+export {
+  type IEpoch,
+  type IIdentity,
+  type ITemplate,
+  type ICommittees,
+  type ICommitteeChart,
+  type ICommitteeMap,
+};

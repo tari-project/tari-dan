@@ -210,10 +210,8 @@ impl TransactionBuilder {
         self
     }
 
-    pub fn with_required_inputs(mut self, inputs: Vec<SubstateRequirement>) -> Self {
-        for input in inputs {
-            self.meta.required_inputs_mut().push(input);
-        }
+    pub fn with_required_inputs<I: IntoIterator<Item = SubstateRequirement>>(mut self, inputs: I) -> Self {
+        self.meta.required_inputs_mut().extend(inputs);
         self
     }
 

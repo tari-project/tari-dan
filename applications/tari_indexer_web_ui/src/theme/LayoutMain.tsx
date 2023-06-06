@@ -37,6 +37,10 @@ import theme from './theme';
 import { Outlet, Link } from 'react-router-dom';
 import Logo from '../assets/Logo';
 import Container from '@mui/material/Container';
+import Breadcrumbs from '../Components/Breadcrumbs';
+import { breadcrumbRoutes } from '../App';
+import Grid from '@mui/material/Grid';
+import Switch from '@mui/material/Switch';
 
 const drawerWidth = 300;
 
@@ -163,11 +167,25 @@ export default function Layout() {
           <Container
             maxWidth="xl"
             style={{
-              paddingTop: theme.spacing(5),
+              paddingTop: theme.spacing(3),
               paddingBottom: theme.spacing(5),
             }}
           >
-            <Outlet />
+            <Grid container spacing={3}>
+              <Grid item sm={12} md={12} lg={12}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderBottom: `1px solid #EAEAEA`,
+                  }}
+                >
+                  <Breadcrumbs items={breadcrumbRoutes} />
+                </div>
+              </Grid>
+              <Outlet />
+            </Grid>
           </Container>
         </Box>
       </Box>

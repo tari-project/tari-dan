@@ -869,14 +869,6 @@ pub async fn handle_transfer(
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let account = get_account_or_default(req.account, &sdk.accounts_api())?;
-    context
-        .account_monitor()
-        .refresh_account(account.address.clone())
-        .await?;
-
-    let account_secret_key = sdk
-        .key_manager_api()
-        .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
 
     let mut instructions = vec![];
     let mut inputs = vec![];
@@ -913,17 +905,6 @@ pub async fn handle_transfer(
     let destination_account_address =
         get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
-    // calculate inputs and outputs shard ids
-    let outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
-
-    let inputs = inputs
-        .into_iter()
-        .map(|s| ShardId::from_address(&s.address, s.version))
-        .collect();
-
     // build the transaction
     let fee = req.fee.unwrap_or(DEFAULT_FEE);
     instructions.append(&mut vec![
@@ -946,12 +927,14 @@ pub async fn handle_transfer(
             args: args![fee],
         },
     ]);
+
+    let account_secret_key = sdk
+        .key_manager_api()
+        .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+
     let transaction = Transaction::builder()
+        .with_required_inputs(inputs.into_iter().map(Into::into))
         .with_fee_instructions(instructions)
-        .with_inputs(inputs)
-        .with_outputs(outputs)
-        // potentially we can create new outputs for the destination account with its vault
-        .with_new_outputs(2)
         .sign(&account_secret_key.k)
         .build();
 
@@ -965,6 +948,7 @@ pub async fn handle_transfer(
     });
 
     let finalized = wait_for_result(&mut events, tx_hash).await?;
+
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
@@ -974,10 +958,17 @@ pub async fn handle_transfer(
             reason
         ));
     }
+    info!(
+        target: LOG_TARGET,
+        "✅ Transfer transaction {} finalized by {} QCs. Fee: {}",
+        finalized.hash,
+        finalized.qcs.len(),
+        finalized.final_fee
+    );
 
     Ok(TransferResponse {
         hash: tx_hash,
-        fee,
+        fee: finalized.final_fee,
         result: finalized.finalize,
     })
 }
@@ -1001,10 +992,12 @@ async fn get_or_create_account_address(
     match account_scan {
         Some(res) => {
             // the account already exists in the network, so we must add the substate address to the inputs
+            debug!(target: LOG_TARGET, "Account {} exists. Adding input.", res.address);
             inputs.push(res.address);
         },
         None => {
             // the account does not exists, so we must add a instruction to create it, matching the public key
+            debug!(target: LOG_TARGET, "Account does not exist. Adding create instruction");
             let owner_token = NonFungibleAddress::from_public_key(
                 RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
             );

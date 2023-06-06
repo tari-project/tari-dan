@@ -27,16 +27,16 @@ import Keys from '../Wallet/Components/Keys';
 
 function KeysLayout() {
   return (
-    <div>
-      <Grid container spacing={5}>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Keys</PageHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Keys />
-          </StyledPaper>
-        </Grid>
       </Grid>
-    </div>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Keys />
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 
