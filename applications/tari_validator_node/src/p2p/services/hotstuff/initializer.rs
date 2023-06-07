@@ -33,7 +33,9 @@ use tokio::sync::mpsc;
 use super::hotstuff_service::HotstuffServiceSpawnOutput;
 use crate::{
     p2p::services::{
-        hotstuff::hotstuff_service::HotstuffService, mempool::MempoolHandle, messaging::OutboundMessaging,
+        hotstuff::hotstuff_service::HotstuffService,
+        mempool::MempoolHandle,
+        messaging::OutboundMessaging,
         template_manager::TemplateManager,
     },
     payload_processor::TariDanPayloadProcessor,

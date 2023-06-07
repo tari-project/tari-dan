@@ -23,15 +23,31 @@
 use std::ops::{Deref, DerefMut};
 
 use tari_dan_common_types::{
-    NodeAddressable, NodeHeight, ObjectPledge, ObjectPledgeInfo, PayloadId, QuorumCertificate, ShardId, SubstateState,
+    NodeAddressable,
+    NodeHeight,
+    ObjectPledge,
+    ObjectPledgeInfo,
+    PayloadId,
+    QuorumCertificate,
+    ShardId,
+    SubstateState,
     TreeNodeHash,
 };
 use tari_engine_types::substate::{Substate, SubstateAddress};
 
 use crate::{
     models::{
-        ClaimLeaderFees, CurrentLeaderStates, HotStuffTreeNode, LeafNode, Payload, PayloadResult, RecentTransaction,
-        SQLSubstate, SQLTransaction, SubstateShardData, VoteMessage,
+        ClaimLeaderFees,
+        CurrentLeaderStates,
+        HotStuffTreeNode,
+        LeafNode,
+        Payload,
+        PayloadResult,
+        RecentTransaction,
+        SQLSubstate,
+        SQLTransaction,
+        SubstateShardData,
+        VoteMessage,
     },
     StorageError,
 };
@@ -43,21 +59,17 @@ pub trait ShardStore {
     type Payload: Payload;
 
     type ReadTransaction<'a>: ShardStoreReadTransaction<Self::Addr, Self::Payload>
-    where
-        Self: 'a;
+    where Self: 'a;
     type WriteTransaction<'a>: ShardStoreWriteTransaction<Self::Addr, Self::Payload>
         + Deref<Target = Self::ReadTransaction<'a>>
         + DerefMut
-    where
-        Self: 'a;
+    where Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError>;
 
     fn with_write_tx<F: FnOnce(&mut Self::WriteTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where
-        E: From<StorageError>,
-    {
+    where E: From<StorageError> {
         let mut tx = self.create_write_tx()?;
         match f(&mut tx) {
             Ok(r) => {
@@ -74,9 +86,7 @@ pub trait ShardStore {
     }
 
     fn with_read_tx<F: FnOnce(&mut Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where
-        E: From<StorageError>,
-    {
+    where E: From<StorageError> {
         let mut tx = self.create_read_tx()?;
         let ret = f(&mut tx)?;
         Ok(ret)

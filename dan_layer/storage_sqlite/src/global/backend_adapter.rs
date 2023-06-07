@@ -31,7 +31,8 @@ use diesel::{
     prelude::*,
     sql_query,
     sql_types::{BigInt, Integer},
-    RunQueryDsl, SqliteConnection,
+    RunQueryDsl,
+    SqliteConnection,
 };
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use serde::{de::DeserializeOwned, Serialize};
@@ -39,7 +40,13 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
     global::{
-        models::ValidatorNode, DbEpoch, DbTemplate, DbTemplateUpdate, GlobalDbAdapter, MetadataKey, TemplateStatus,
+        models::ValidatorNode,
+        DbEpoch,
+        DbTemplate,
+        DbTemplateUpdate,
+        GlobalDbAdapter,
+        MetadataKey,
+        TemplateStatus,
     },
     AtomicDb,
 };

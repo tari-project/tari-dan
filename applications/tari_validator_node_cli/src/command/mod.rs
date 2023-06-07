@@ -32,7 +32,10 @@ mod vn;
 pub use vn::VnSubcommand;
 
 use crate::command::{
-    account::AccountsSubcommand, debug::DebugSubcommand, manifest::ManifestSubcommand, peer::PeersSubcommand,
+    account::AccountsSubcommand,
+    debug::DebugSubcommand,
+    manifest::ManifestSubcommand,
+    peer::PeersSubcommand,
     transaction::TransactionSubcommand,
 };
 

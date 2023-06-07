@@ -15,8 +15,12 @@ use tari_dan_wallet_sdk::{
 };
 use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::types::{
-    ConfidentialCreateOutputProofRequest, ConfidentialCreateOutputProofResponse, ProofsCancelRequest,
-    ProofsCancelResponse, ProofsGenerateRequest, ProofsGenerateResponse,
+    ConfidentialCreateOutputProofRequest,
+    ConfidentialCreateOutputProofResponse,
+    ProofsCancelRequest,
+    ProofsCancelResponse,
+    ProofsGenerateRequest,
+    ProofsGenerateResponse,
 };
 
 use crate::handlers::{get_account_or_default, HandlerContext};

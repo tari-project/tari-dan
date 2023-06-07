@@ -44,12 +44,25 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::command::transaction::CliArg;
 use tari_wallet_daemon_client::{
     types::{
-        AccountGetResponse, AccountsCreateFreeTestCoinsRequest, AccountsCreateRequest, AccountsGetBalancesRequest,
-        AuthLoginAcceptRequest, AuthLoginRequest, AuthLoginResponse, ClaimBurnRequest, ClaimBurnResponse,
-        ConfidentialTransferRequest, MintAccountNFTRequest, ProofsGenerateRequest, RevealFundsRequest,
-        TransactionSubmitRequest, TransactionWaitResultRequest, TransferRequest,
+        AccountGetResponse,
+        AccountsCreateFreeTestCoinsRequest,
+        AccountsCreateRequest,
+        AccountsGetBalancesRequest,
+        AuthLoginAcceptRequest,
+        AuthLoginRequest,
+        AuthLoginResponse,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
+        ConfidentialTransferRequest,
+        MintAccountNFTRequest,
+        ProofsGenerateRequest,
+        RevealFundsRequest,
+        TransactionSubmitRequest,
+        TransactionWaitResultRequest,
+        TransferRequest,
     },
-    ComponentAddressOrName, WalletDaemonClient,
+    ComponentAddressOrName,
+    WalletDaemonClient,
 };
 
 use super::wallet_daemon::get_walletd_client;

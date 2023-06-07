@@ -27,7 +27,9 @@ use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusC
 use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
 use tari_core::{
-    blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT,
+    blocks::BlockHeader,
+    transactions::transaction_components::ValidatorNodeRegistration,
+    ValidatorNodeBMT,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{optional::Optional, Epoch, ShardId};
@@ -38,7 +40,8 @@ use tokio::sync::broadcast;
 use crate::{
     base_layer::{config::EpochManagerConfig, error::EpochManagerError, types::EpochManagerEvent},
     validator_node::ValidatorNode,
-    Committee, ShardCommitteeAllocation,
+    Committee,
+    ShardCommitteeAllocation,
 };
 
 const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";

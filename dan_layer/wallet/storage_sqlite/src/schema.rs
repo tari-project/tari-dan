@@ -17,7 +17,7 @@ diesel::table! {
         id -> Integer,
         user_decided -> Bool,
         granted -> Bool,
-        token -> Nullable<Text>,
+        token -> Text,
         revoked -> Bool,
     }
 }

@@ -18,7 +18,8 @@ use crate::{
     },
     traits::EpochManager,
     validator_node::ValidatorNode,
-    Committee, ShardCommitteeAllocation,
+    Committee,
+    ShardCommitteeAllocation,
 };
 
 #[derive(Clone, Debug)]

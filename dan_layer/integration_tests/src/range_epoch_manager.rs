@@ -10,7 +10,11 @@ use tari_comms::async_trait;
 use tari_core::ValidatorNodeBMT;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_epoch_manager::{
-    base_layer::EpochManagerError, Committee, EpochManager, ShardCommitteeAllocation, ValidatorNode,
+    base_layer::EpochManagerError,
+    Committee,
+    EpochManager,
+    ShardCommitteeAllocation,
+    ValidatorNode,
 };
 
 #[derive(Debug, Clone)]

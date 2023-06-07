@@ -28,14 +28,19 @@ use log::*;
 use rand::{rngs::OsRng, seq::SliceRandom};
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
-    NodeAddressable, PayloadId, ShardId,
+    NodeAddressable,
+    PayloadId,
+    ShardId,
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
 use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller};
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::{
-    SubstateResult, TransactionResultStatus, ValidatorNodeClientFactory, ValidatorNodeRpcClient,
+    SubstateResult,
+    TransactionResultStatus,
+    ValidatorNodeClientFactory,
+    ValidatorNodeRpcClient,
 };
 
 use crate::transaction_manager::error::TransactionManagerError;

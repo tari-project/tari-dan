@@ -38,8 +38,11 @@ use tari_shutdown::ShutdownSignal;
 use tari_template_lib::models::Amount;
 
 use crate::{
-    config::ApplicationConfig, handlers::HandlerContext, indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
-    notify::Notify, services::spawn_services,
+    config::ApplicationConfig,
+    handlers::HandlerContext,
+    indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
+    notify::Notify,
+    services::spawn_services,
 };
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon";

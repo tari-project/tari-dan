@@ -272,17 +272,30 @@ where
                     },
                 };
 
-                let is_burned = if nft.contents().is_none() { false } else { true };
+                let is_burned = if nft.contents().is_none() { true } else { false };
+                let nft_contents = if let Some(contents) = nft.contents() {
+                    contents
+                } else {
+                    // TODO: in this case, we are burning an nft, make sure to update the database in that case`
+                    continue;
+                };
+                let metadata = match nft_contents.decode_data() {
+                    Ok(data) => data,
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to decode non fungible metadata, with error: {}", e
+                        );
+                        continue;
+                    },
+                };
                 let non_fungible = NonFungibleToken {
                     is_burned,
                     vault_id: *vault.vault_id(),
                     nft_id: id.clone(),
-                    metadata: nft
-                        .contents()
-                        .unwrap()
-                        .decode_mutable_data::<tari_template_lib::prelude::Metadata>()
-                        .unwrap(),
+                    metadata,
                 };
+
                 non_fungibles_api.store_new_nft(&non_fungible)?;
             }
         }
@@ -342,14 +355,8 @@ where
             })
             .collect::<HashMap<_, _>>();
 
-        info!(target: LOG_TARGET, "FLAG: CUCUMBER accounts = {:?}", accounts);
-        info!(target: LOG_TARGET, "FLAG: CUCUMBER vaults = {:?}", vaults);
-        info!(target: LOG_TARGET, "FLAG: CUCUMBER nfts = {:?}", nfts);
-        info!(target: LOG_TARGET, "FLAG: CUCUMBER");
-
         // Find and process all new vaults
         for (account_addr, value) in accounts {
-            info!(target: LOG_TARGET, "FLAG: CUCUMBER");
             for vault_id in value.vault_ids() {
                 // Any vaults we process here do not need to be reprocesed later
                 if let Some(vault) = vaults.remove(vault_id).and_then(|s| s.substate_value().vault()) {
@@ -358,12 +365,9 @@ where
                 }
             }
         }
-        info!(target: LOG_TARGET, "FLAG: CUCUMBER");
 
         // Process all existing vaults that belong to an account
         for (vault_addr, substate) in vaults {
-            info!(target: LOG_TARGET, "FLAG: CUCUMBER");
-
             let vault_addr = SubstateAddress::Vault(vault_addr);
             let SubstateValue::Vault(vault) = substate.substate_value() else {
                 error!(target: LOG_TARGET, "👁️‍🗨️ Substate {} is not a vault. This should be impossible.", vault_addr);
@@ -396,7 +400,6 @@ where
             self.add_vault_to_account_if_not_exist(&account_addr, vault).await?;
 
             // Update the vault balance / confidential outputs
-            info!(target: LOG_TARGET, "FLAG: CUCUMBER vault: {:?}", vault);
             self.refresh_vault(&account_addr, vault, &nfts)?;
         }
         Ok(())
@@ -540,12 +543,12 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
         }
 
         // Is an account component
-        if !a.is_component()
-            || v.substate_value()
+        if !a.is_component() ||
+            v.substate_value()
                 .component()
                 .expect("Value was not component for component address")
-                .template_address
-                != *ACCOUNT_TEMPLATE_ADDRESS
+                .template_address !=
+                *ACCOUNT_TEMPLATE_ADDRESS
         {
             return None;
         }

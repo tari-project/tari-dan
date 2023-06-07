@@ -62,8 +62,7 @@ pub struct Pacemaker<T> {
 }
 
 impl<T> Pacemaker<T>
-where
-    T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static,
+where T: Clone + Debug + PartialEq + Eq + Hash + Send + Sync + 'static
 {
     pub fn spawn(shutdown: ShutdownSignal) -> PacemakerHandle<T> {
         let (tx_timeout_status, rx_timeout_status) = channel(100);
