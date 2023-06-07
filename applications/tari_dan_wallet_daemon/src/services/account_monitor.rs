@@ -347,12 +347,7 @@ where
 
         let nfts = diff
             .up_iter()
-            .filter_map(|(address, s)| {
-                Some((
-                    address.as_non_fungible_address()?.id(),
-                    s.substate_value().non_fungible()?,
-                ))
-            })
+            .filter_map(|(addr, s)| Some((addr.as_non_fungible_address()?.id(), s.substate_value().non_fungible()?)))
             .collect::<HashMap<_, _>>();
 
         // Find and process all new vaults
