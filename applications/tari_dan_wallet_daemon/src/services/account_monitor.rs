@@ -21,20 +21,23 @@ use tari_dan_wallet_sdk::{
 };
 use tari_engine_types::{
     indexed_value::{IndexedValue, IndexedValueVisitorError},
+    non_fungible::NonFungibleContainer,
     resource::Resource,
     substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
     vault::Vault,
 };
 use tari_shutdown::ShutdownSignal;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{prelude::ResourceAddress, resource::TOKEN_SYMBOL};
+use tari_template_lib::{
+    prelude::{NonFungibleId, ResourceAddress},
+    resource::TOKEN_SYMBOL,
+};
 use tokio::{
     sync::{mpsc, oneshot},
     time,
     time::MissedTickBehavior,
 };
 
-use super::NewAccountNFTInfo;
 use crate::{
     notify::Notify,
     services::{AccountChangedEvent, NewAccountInfo, Reply, WalletEvent},
@@ -47,7 +50,6 @@ pub struct AccountMonitor<TStore, TNetworkInterface> {
     wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
     request_rx: mpsc::Receiver<AccountMonitorRequest>,
     pending_accounts: HashMap<FixedHash, NewAccountInfo>,
-    pending_account_nfts: HashMap<FixedHash, NewAccountNFTInfo>,
     shutdown_signal: ShutdownSignal,
 }
 
@@ -70,7 +72,6 @@ where
                 wallet_sdk,
                 request_rx,
                 pending_accounts: HashMap::new(),
-                pending_account_nfts: HashMap::new(),
                 shutdown_signal,
             },
             AccountMonitorHandle { sender: request_tx },
@@ -203,14 +204,20 @@ where
 
             self.add_vault_to_account_if_not_exist(&versioned_account_address.address, &vault)
                 .await?;
-            self.refresh_vault(&versioned_account_address.address, &vault)?;
+            self.refresh_vault(&versioned_account_address.address, &vault, &HashMap::new())?;
         }
 
         Ok(is_updated)
     }
 
-    fn refresh_vault(&self, account_addr: &SubstateAddress, vault: &Vault) -> Result<(), AccountMonitorError> {
+    fn refresh_vault(
+        &self,
+        account_addr: &SubstateAddress,
+        vault: &Vault,
+        nfts: &HashMap<&NonFungibleId, &NonFungibleContainer>,
+    ) -> Result<(), AccountMonitorError> {
         let accounts_api = self.wallet_sdk.accounts_api();
+        let non_fungibles_api = self.wallet_sdk.non_fungible_api();
 
         let balance = vault.balance();
         let vault_addr = SubstateAddress::Vault(*vault.vault_id());
@@ -251,13 +258,40 @@ where
                 .confidential_outputs_api()
                 .verify_and_update_confidential_outputs(account_addr, &vault_addr, outputs)?;
         }
+
+        if let Some(nft_ids) = vault.get_non_fungible_ids() {
+            for id in nft_ids {
+                let nft = match nfts.get(id) {
+                    Some(nft) => *nft,
+                    None => {
+                        error!(
+                            target: LOG_TARGET,
+                            "NonFungible ID {} is found in the vault, but not found in substate diff", id
+                        );
+                        continue;
+                    },
+                };
+
+                let is_burned = if nft.contents().is_none() { false } else { true };
+                let non_fungible = NonFungibleToken {
+                    is_burned,
+                    vault_id: *vault.vault_id(),
+                    nft_id: id.clone(),
+                    metadata: nft
+                        .contents()
+                        .unwrap()
+                        .decode_mutable_data::<tari_template_lib::prelude::Metadata>()
+                        .unwrap(),
+                };
+                non_fungibles_api.store_new_nft(&non_fungible)?;
+            }
+        }
         Ok(())
     }
 
     async fn process_result(&mut self, tx_hash: FixedHash, diff: &SubstateDiff) -> Result<(), AccountMonitorError> {
         let substate_api = self.wallet_sdk.substate_api();
         let accounts_api = self.wallet_sdk.accounts_api();
-        let non_fungibles_api = self.wallet_sdk.non_fungible_api();
 
         if let Some(new_account) = self.pending_accounts.remove(&tx_hash) {
             // Filter for a _new_ account created in this transaction
@@ -273,17 +307,6 @@ where
                 new_account.key_index,
                 new_account.is_default,
             )?;
-        }
-
-        if let Some(new_account_nft) = self.pending_account_nfts.remove(&tx_hash) {
-            let non_fungible = NonFungibleToken {
-                account_address: new_account_nft.account_address,
-                nft_id: new_account_nft.nft_id,
-                metadata: new_account_nft.metadata,
-                resource_address: new_account_nft.resource_address,
-                token_symbol: new_account_nft.token_symbol.clone(),
-            };
-            non_fungibles_api.store_new_nft(non_fungible)?;
         }
 
         let mut vaults = diff
@@ -309,19 +332,38 @@ where
             )
             .collect::<Vec<_>>();
 
+        let nfts = diff
+            .up_iter()
+            .filter_map(|(address, s)| {
+                Some((
+                    address.as_non_fungible_address()?.id(),
+                    s.substate_value().non_fungible()?,
+                ))
+            })
+            .collect::<HashMap<_, _>>();
+
+        info!(target: LOG_TARGET, "FLAG: CUCUMBER accounts = {:?}", accounts);
+        info!(target: LOG_TARGET, "FLAG: CUCUMBER vaults = {:?}", vaults);
+        info!(target: LOG_TARGET, "FLAG: CUCUMBER nfts = {:?}", nfts);
+        info!(target: LOG_TARGET, "FLAG: CUCUMBER");
+
         // Find and process all new vaults
         for (account_addr, value) in accounts {
+            info!(target: LOG_TARGET, "FLAG: CUCUMBER");
             for vault_id in value.vault_ids() {
                 // Any vaults we process here do not need to be reprocesed later
                 if let Some(vault) = vaults.remove(vault_id).and_then(|s| s.substate_value().vault()) {
                     self.add_vault_to_account_if_not_exist(account_addr, vault).await?;
-                    self.refresh_vault(account_addr, vault)?;
+                    self.refresh_vault(account_addr, vault, &nfts)?;
                 }
             }
         }
+        info!(target: LOG_TARGET, "FLAG: CUCUMBER");
 
         // Process all existing vaults that belong to an account
         for (vault_addr, substate) in vaults {
+            info!(target: LOG_TARGET, "FLAG: CUCUMBER");
+
             let vault_addr = SubstateAddress::Vault(vault_addr);
             let SubstateValue::Vault(vault) = substate.substate_value() else {
                 error!(target: LOG_TARGET, "👁️‍🗨️ Substate {} is not a vault. This should be impossible.", vault_addr);
@@ -354,7 +396,8 @@ where
             self.add_vault_to_account_if_not_exist(&account_addr, vault).await?;
 
             // Update the vault balance / confidential outputs
-            self.refresh_vault(&account_addr, vault)?;
+            info!(target: LOG_TARGET, "FLAG: CUCUMBER vault: {:?}", vault);
+            self.refresh_vault(&account_addr, vault, &nfts)?;
         }
         Ok(())
     }
@@ -497,12 +540,12 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
         }
 
         // Is an account component
-        if !a.is_component()
-            || v.substate_value()
+        if !a.is_component() ||
+            v.substate_value()
                 .component()
                 .expect("Value was not component for component address")
-                .template_address
-                != *ACCOUNT_TEMPLATE_ADDRESS
+                .template_address !=
+                *ACCOUNT_TEMPLATE_ADDRESS
         {
             return None;
         }

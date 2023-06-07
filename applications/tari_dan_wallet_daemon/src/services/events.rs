@@ -10,10 +10,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     substate::SubstateAddress,
 };
-use tari_template_lib::{
-    models::Amount,
-    prelude::{Metadata, NonFungibleId, ResourceAddress},
-};
+use tari_template_lib::models::Amount;
 
 #[derive(Debug, Clone)]
 pub enum WalletEvent {
@@ -59,8 +56,6 @@ pub struct TransactionSubmittedEvent {
     pub hash: FixedHash,
     /// Set to Some if this transaction results in a new account
     pub new_account: Option<NewAccountInfo>,
-    /// Set to Some if this transaction results in a new account NFT
-    pub new_account_nft: Option<NewAccountNFTInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,15 +63,6 @@ pub struct NewAccountInfo {
     pub name: Option<String>,
     pub key_index: u64,
     pub is_default: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct NewAccountNFTInfo {
-    pub account_address: SubstateAddress,
-    pub metadata: Metadata,
-    pub nft_id: NonFungibleId,
-    pub token_symbol: String,
-    pub resource_address: ResourceAddress,
 }
 
 #[derive(Debug, Clone)]

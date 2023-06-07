@@ -151,7 +151,6 @@ pub async fn handle_submit(
         context.notifier().notify(TransactionSubmittedEvent {
             hash,
             new_account: None,
-            new_account_nft: None,
         });
     }
 

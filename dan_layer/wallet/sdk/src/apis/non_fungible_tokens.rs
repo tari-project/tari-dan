@@ -14,25 +14,16 @@ pub struct NonFungibleTokensApi<'a, TStore> {
 }
 
 impl<'a, TStore> NonFungibleTokensApi<'a, TStore>
-where
-    TStore: WalletStore,
+where TStore: WalletStore
 {
     pub fn new(store: &'a TStore) -> Self {
         Self { store }
     }
 
-    pub fn store_new_nft(&self, non_fungible: NonFungibleToken) -> Result<(), NonFungibleTokensApiError> {
+    pub fn store_new_nft(&self, non_fungible: &NonFungibleToken) -> Result<(), NonFungibleTokensApiError> {
         let mut tx = self.store.create_write_tx()?;
-        let nft_id = non_fungible.nft_id;
-        let metadata = non_fungible.metadata;
-        let resource_address = non_fungible.resource_address;
-        tx.store_non_fungible_token(
-            nft_id,
-            resource_address,
-            metadata,
-            non_fungible.token_symbol,
-            &non_fungible.account_address,
-        )?;
+        tx.non_fungible_token_insert(non_fungible)?;
+        tx.commit()?;
         Ok(())
     }
 
@@ -42,9 +33,9 @@ where
         Ok(non_fungible_token)
     }
 
-    pub fn get_resource_address(&self, token_symbol: String) -> Result<ResourceAddress, NonFungibleTokensApiError> {
+    pub fn get_resource_address(&self, nft_id: NonFungibleId) -> Result<ResourceAddress, NonFungibleTokensApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let resource_address = tx.get_resource_address(token_symbol)?;
+        let resource_address = tx.get_resource_address(nft_id)?;
         Ok(resource_address)
     }
 }

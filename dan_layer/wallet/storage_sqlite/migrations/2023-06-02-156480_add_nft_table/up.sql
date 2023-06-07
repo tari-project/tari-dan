@@ -2,14 +2,12 @@
 CREATE TABLE non_fungible_tokens
 (
     id               INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-    account_id       INTEGER  NOT NULL REFERENCES accounts (id),
-    account_address  TEXT     NOT NULL,
-    resource_address TEXT     NOT NULL,
-    token_symbol     TEXT     NOT NULL,
-    nft_id           Text     NOT NULL,
+    vault_id         INTEGER  NOT NULL REFERENCES vaults (id),
+    nft_id           TEXT     NOT NULL,
     metadata         TEXT     NOT NULL,
+    is_burned        BOOLEAN     NOT NULL,  
     created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE UNIQUE INDEX nfts_uniq_address ON non_fungible_tokens (resource_address);
+CREATE UNIQUE INDEX nfts_uniq_address ON non_fungible_tokens (nft_id);

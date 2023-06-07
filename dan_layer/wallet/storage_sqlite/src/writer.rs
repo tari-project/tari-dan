@@ -37,17 +37,13 @@ use tari_engine_types::{
     substate::SubstateAddress,
     TemplateAddress,
 };
-use tari_template_lib::{
-    models::Amount,
-    prelude::{NonFungibleId, ResourceAddress},
-    Hash,
-};
+use tari_template_lib::{models::Amount, Hash};
 use tari_transaction::Transaction;
 use tari_utilities::hex::Hex;
 
 use crate::{
     diesel::ExpressionMethods,
-    models,
+    models::{self},
     reader::ReadTransaction,
     schema::auth_status,
     serialization::serialize_json,
@@ -715,32 +711,34 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     }
 
     // -------------------------------- Non fungible tokens -------------------------------- //
-    fn store_non_fungible_token(
+    fn non_fungible_token_insert(
         &mut self,
-        nft_id: NonFungibleId,
-        resource_address: ResourceAddress,
-        metadata: tari_template_lib::models::Metadata,
-        token_symbol: String,
-        account_address: &SubstateAddress,
+        non_fungible_token: &tari_dan_wallet_sdk::models::NonFungibleToken,
     ) -> Result<(), WalletStorageError> {
-        use crate::schema::non_fungible_tokens;
+        use crate::schema::{non_fungible_tokens, vaults};
 
-        let metadata = serde_json::to_string(&metadata).map_err(|e| WalletStorageError::DecodingError {
-            operation: "store_non_fungible_token",
-            item: "non_fungible_tokens",
-            details: e.to_string(),
-        })?;
+        let metadata =
+            serde_json::to_string(&non_fungible_token.metadata).map_err(|e| WalletStorageError::DecodingError {
+                operation: "non_fungible_token_insert",
+                item: "non_fungible_tokens",
+                details: e.to_string(),
+            })?;
+
+        let vault_id = vaults::table
+            .select(vaults::id)
+            .filter(vaults::address.eq(non_fungible_token.vault_id.to_string()))
+            .first::<i32>(self.connection())
+            .map_err(|e| WalletStorageError::general("proof_insert", e))?;
 
         diesel::insert_into(non_fungible_tokens::table)
             .values((
-                non_fungible_tokens::nft_id.eq(nft_id.to_canonical_string()),
-                non_fungible_tokens::resource_address.eq(resource_address.to_string()),
+                non_fungible_tokens::nft_id.eq(non_fungible_token.nft_id.to_canonical_string()),
                 non_fungible_tokens::metadata.eq(metadata),
-                non_fungible_tokens::token_symbol.eq(token_symbol),
-                non_fungible_tokens::account_address.eq(account_address.to_address_string()),
+                non_fungible_tokens::vault_id.eq(vault_id),
+                non_fungible_tokens::is_burned.eq(non_fungible_token.is_burned),
             ))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("store_non_fungible_token", e))?;
+            .map_err(|e| WalletStorageError::general("non_fungible_token_insert", e))?;
 
         Ok(())
     }

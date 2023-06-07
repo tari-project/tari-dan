@@ -13,7 +13,9 @@ use tari_dan_wallet_sdk::{
     models::Account,
 };
 use tari_engine_types::{
-    component::new_component_address_from_parts, instruction::Instruction, substate::SubstateAddress,
+    component::new_component_address_from_parts,
+    instruction::Instruction,
+    substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -29,7 +31,7 @@ use tokio::sync::broadcast;
 use super::context::HandlerContext;
 use crate::{
     handlers::get_account,
-    services::{NewAccountNFTInfo, TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
+    services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
     DEFAULT_FEE,
 };
 
@@ -94,7 +96,6 @@ pub async fn handle_mint_account_nft(
         component_address,
         &signing_key.k,
         req.mint_fee.unwrap_or(DEFAULT_FEE),
-        req.token_symbol,
         metadata,
     )
     .await
@@ -107,7 +108,6 @@ async fn mint_account_nft(
     component_address: ComponentAddress,
     owner_sk: &RistrettoSecretKey,
     fee: Amount,
-    token_symbol: String,
     metadata: Metadata,
 ) -> Result<MintAccountNFTResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
@@ -155,6 +155,10 @@ async fn mint_account_nft(
 
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
     let mut events = context.notifier().subscribe();
+    context.notifier().notify(TransactionSubmittedEvent {
+        hash: tx_hash,
+        new_account: None,
+    });
 
     let event = wait_for_result(&mut events, tx_hash).await?;
     if let Some(reject) = event.finalize.result.reject() {
@@ -190,18 +194,6 @@ async fn mint_account_nft(
     let nft_id = NonFungibleId::try_from_canonical_string(nft_id.as_str())
         .map_err(|e| anyhow!("Failed to parse non fungible id, with error: {:?}", e))?;
 
-    context.notifier().notify(TransactionSubmittedEvent {
-        hash: tx_hash,
-        new_account: None,
-        new_account_nft: Some(NewAccountNFTInfo {
-            account_address: account.address,
-            metadata: metadata.clone(),
-            nft_id: nft_id.clone(),
-            token_symbol,
-            resource_address,
-        }),
-    });
-
     Ok(MintAccountNFTResponse {
         result: event.finalize,
         resource_address,
@@ -234,11 +226,10 @@ async fn create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(
-            *ACCOUNT_NFT_TEMPLATE_ADDRESS,
-            "create",
-            args![owner_token, token_symbol],
-        )
+        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
+            owner_token,
+            token_symbol
+        ])
         .sign(owner_sk)
         .build();
 
@@ -247,7 +238,6 @@ async fn create_account_nft(
     context.notifier().notify(TransactionSubmittedEvent {
         hash: tx_hash,
         new_account: None,
-        new_account_nft: None,
     });
 
     let event = wait_for_result(&mut events, tx_hash).await?;
