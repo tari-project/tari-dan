@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Mutex } from "async-mutex";
-import { json } from "react-router-dom";
+import {Mutex} from "async-mutex";
+import {json} from "react-router-dom";
 
 let token: String | null = null;
 let json_id = 0;
@@ -40,8 +40,9 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }
-  } catch { }
-  let headers: { [key: string]: string } = { "Content-Type": "application/json" };
+  } catch {
+  }
+  let headers: { [key: string]: string } = {"Content-Type": "application/json"};
   if (token) {
     headers["Authorization"] = `Bearer ${token}`
   }
@@ -68,7 +69,7 @@ export async function jsonRpc(method: string, params: any = null) {
     if (token === null) {
       let auth_response = await internalJsonRpc("auth.request", null, [["Admin"], null]);
       let auth_token = auth_response["auth_token"];
-      let accept_response = await internalJsonRpc("auth.accept", null, [auth_token]);
+      let accept_response = await internalJsonRpc("auth.accept", null, [auth_token, "AdminToken"]);
       token = accept_response.permissions_token
     }
   })
@@ -125,7 +126,7 @@ export const transactionsWaitResult = (hash: string, timeoutSecs: number | null)
 // accounts
 export const accountsClaimBurn = (account: string, claimProof: any, fee: number) =>
   // Fees are passed as strings because Amount is tagged
-  jsonRpc("accounts.claim_burn", { account, claim_proof: claimProof, fee: fee });
+  jsonRpc("accounts.claim_burn", {account, claim_proof: claimProof, fee: fee});
 export const accountsCreate = (
   accountName: string | undefined,
   signingKeyIndex: number | undefined,
@@ -158,4 +159,4 @@ export const confidentialFinalize = (proofId: number) => jsonRpc("confidential.f
 export const confidentialCancel = (proofId: number) => jsonRpc("confidential.cancel", [proofId]);
 export const confidentialCreateOutputProof = (amount: number) => jsonRpc("confidential.create_output_proof", [amount]);
 
-export const webrtc = (signalingServerToken: string, permissions: string) => jsonRpc("webrtc.start", [signalingServerToken, permissions]);
+export const webrtc = (signalingServerToken: string, permissions: string, name: string) => jsonRpc("webrtc.start", [signalingServerToken, permissions, name]);
