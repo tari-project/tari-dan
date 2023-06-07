@@ -857,6 +857,7 @@ pub async fn handle_create_free_test_coins(
         amount: req.amount,
         fee,
         result: finalized.finalize,
+        public_key: account_public_key,
     })
 }
 

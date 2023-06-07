@@ -6,6 +6,7 @@ pub mod confidential;
 mod context;
 pub mod error;
 pub mod keys;
+pub mod nfts;
 pub mod rpc;
 pub mod transaction;
 pub mod webrtc;

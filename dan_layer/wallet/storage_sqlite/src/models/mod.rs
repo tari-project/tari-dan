@@ -18,3 +18,6 @@ pub use transaction::Transaction;
 
 mod vault;
 pub use vault::Vault;
+
+mod non_fungible_tokens;
+pub use non_fungible_tokens::NonFungibleToken;

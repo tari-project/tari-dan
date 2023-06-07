@@ -26,7 +26,7 @@ use tari_shutdown::ShutdownSignal;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use super::handlers::HandlerContext;
-use crate::handlers::{accounts, confidential, error::HandlerError, keys, rpc, transaction, webrtc, Handler};
+use crate::handlers::{accounts, confidential, error::HandlerError, keys, nfts, rpc, transaction, webrtc, Handler};
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc";
 
@@ -135,6 +135,7 @@ async fn handler(
             },
             _ => Ok(value.method_not_found(&value.method)),
         },
+        Some(("nfts", "mint_account_nft")) => call_handler(context, value, token, nfts::handle_mint_account_nft).await,
         _ => Ok(value.method_not_found(&value.method)),
     }
 }
