@@ -44,25 +44,12 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::command::transaction::CliArg;
 use tari_wallet_daemon_client::{
     types::{
-        AccountGetResponse,
-        AccountsCreateFreeTestCoinsRequest,
-        AccountsCreateRequest,
-        AccountsGetBalancesRequest,
-        AuthLoginAcceptRequest,
-        AuthLoginRequest,
-        AuthLoginResponse,
-        ClaimBurnRequest,
-        ClaimBurnResponse,
-        ConfidentialTransferRequest,
-        MintAccountNFTRequest,
-        ProofsGenerateRequest,
-        RevealFundsRequest,
-        TransactionSubmitRequest,
-        TransactionWaitResultRequest,
-        TransferRequest,
+        AccountGetResponse, AccountsCreateFreeTestCoinsRequest, AccountsCreateRequest, AccountsGetBalancesRequest,
+        AuthLoginAcceptRequest, AuthLoginRequest, AuthLoginResponse, ClaimBurnRequest, ClaimBurnResponse,
+        ConfidentialTransferRequest, MintAccountNFTRequest, ProofsGenerateRequest, RevealFundsRequest,
+        TransactionSubmitRequest, TransactionWaitResultRequest, TransferRequest,
     },
-    ComponentAddressOrName,
-    WalletDaemonClient,
+    ComponentAddressOrName, WalletDaemonClient,
 };
 
 use super::wallet_daemon::get_walletd_client;
@@ -774,7 +761,13 @@ pub(crate) async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daem
         })
         .await
         .unwrap();
-    let auth_response = client.auth_accept(AuthLoginAcceptRequest { auth_token }).await.unwrap();
+    let auth_response = client
+        .auth_accept(AuthLoginAcceptRequest {
+            auth_token,
+            name: "Testing Token".to_string(),
+        })
+        .await
+        .unwrap();
     client.set_auth_token(auth_response.permissions_token);
     client
 }

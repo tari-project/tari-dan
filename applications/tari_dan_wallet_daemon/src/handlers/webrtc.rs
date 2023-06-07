@@ -5,9 +5,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::*;
 use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
@@ -64,7 +62,7 @@ pub fn handle_start(
             ),
         )
     })?;
-    let permissions_token = jwt.grant(auth_token.0).map_err(|e| {
+    let permissions_token = jwt.grant(webrtc_start_request.name, auth_token.0).map_err(|e| {
         JsonRpcResponse::error(
             answer_id,
             JsonRpcError::new(

@@ -13,10 +13,7 @@ use axum::{
 };
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcAnswer,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcAnswer, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
@@ -86,6 +83,7 @@ async fn handler(
             "accept" => call_handler(context, value, token, rpc::handle_login_accept).await,
             "deny" => call_handler(context, value, token, rpc::handle_login_deny).await,
             "revoke" => call_handler(context, value, token, rpc::handle_revoke).await,
+            "get_all_jwt" => call_handler(context, value, token, rpc::handle_get_all_jwt).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("webrtc", "start")) => webrtc::handle_start(context, value, token, shutdown_signal, addresses),

@@ -128,13 +128,16 @@ pub struct Vault {
 
 impl Vault {
     pub fn new_empty(resource_address: ResourceAddress) -> Self {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: VaultRef::Vault {
-                address: resource_address,
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: VaultRef::Vault {
+                    address: resource_address,
+                },
+                action: VaultAction::Create,
+                args: args![],
             },
-            action: VaultAction::Create,
-            args: args![],
-        });
+        );
 
         Self {
             vault_id: resp.decode().unwrap(),
@@ -149,126 +152,162 @@ impl Vault {
     }
 
     pub fn deposit(&mut self, bucket: Bucket) {
-        let result: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::Deposit,
-            args: invoke_args![bucket.id()],
-        });
+        let result: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::Deposit,
+                args: invoke_args![bucket.id()],
+            },
+        );
 
         result.decode::<()>().expect("deposit failed");
     }
 
     pub fn withdraw(&mut self, amount: Amount) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::Withdraw,
-            args: invoke_args![VaultWithdrawArg::Fungible { amount }],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::Withdraw,
+                args: invoke_args![VaultWithdrawArg::Fungible { amount }],
+            },
+        );
 
         resp.decode().expect("failed to decode Bucket")
     }
 
     pub fn withdraw_non_fungibles<I: IntoIterator<Item = NonFungibleId>>(&mut self, ids: I) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::Withdraw,
-            args: invoke_args![VaultWithdrawArg::NonFungible {
-                ids: ids.into_iter().collect()
-            }],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::Withdraw,
+                args: invoke_args![VaultWithdrawArg::NonFungible {
+                    ids: ids.into_iter().collect()
+                }],
+            },
+        );
 
         resp.decode().expect("failed to decode Bucket")
     }
 
     pub fn withdraw_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::Withdraw,
-            args: invoke_args![VaultWithdrawArg::Confidential { proof: Box::new(proof) }],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::Withdraw,
+                args: invoke_args![VaultWithdrawArg::Confidential { proof: Box::new(proof) }],
+            },
+        );
 
         resp.decode().expect("failed to decode Bucket")
     }
 
     pub fn withdraw_all(&mut self) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::WithdrawAll,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::WithdrawAll,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode().expect("failed to decode Bucket")
     }
 
     pub fn balance(&self) -> Amount {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::GetBalance,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::GetBalance,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode().expect("failed to decode Amount")
     }
 
     pub fn commitment_count(&self) -> u32 {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::GetCommitmentCount,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::GetCommitmentCount,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode().expect("failed to decode commitment count")
     }
 
     pub fn get_non_fungible_ids(&self) -> Vec<NonFungibleId> {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::GetNonFungibleIds,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::GetNonFungibleIds,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode()
             .expect("get_non_fungible_ids returned invalid non fungible ids")
     }
 
     pub fn resource_address(&self) -> ResourceAddress {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::GetResourceAddress,
-            args: invoke_args![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::GetResourceAddress,
+                args: invoke_args![],
+            },
+        );
 
         resp.decode()
             .expect("GetResourceAddress returned invalid resource address")
     }
 
     pub fn reveal_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::ConfidentialReveal,
-            args: invoke_args![ConfidentialRevealArg { proof }],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::ConfidentialReveal,
+                args: invoke_args![ConfidentialRevealArg { proof }],
+            },
+        );
 
         Bucket::from_id(resp.decode().expect("reveal_confidential returned invalid bucket"))
     }
 
     pub fn pay_fee(&mut self, amount: Amount) {
-        let _resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::PayFee,
-            args: invoke_args![PayFeeArg { amount, proof: None }],
-        });
+        let _resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::PayFee,
+                args: invoke_args![PayFeeArg { amount, proof: None }],
+            },
+        );
     }
 
     pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
-        let _resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::PayFee,
-            args: invoke_args![PayFeeArg {
-                amount: Amount::zero(),
-                proof: Some(proof)
-            }],
-        });
+        let _resp: InvokeResult = call_engine(
+            EngineOp::VaultInvoke,
+            &VaultInvokeArg {
+                vault_ref: self.vault_ref(),
+                action: VaultAction::PayFee,
+                args: invoke_args![PayFeeArg {
+                    amount: Amount::zero(),
+                    proof: Some(proof)
+                }],
+            },
+        );
     }
 
     pub fn join_confidential(&mut self, proof: ConfidentialWithdrawProof) {

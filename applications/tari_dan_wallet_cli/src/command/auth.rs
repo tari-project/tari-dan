@@ -25,7 +25,9 @@ use std::time::Duration;
 use clap::{Args, Subcommand};
 use tari_dan_wallet_sdk::apis::jwt::JrpcPermissions;
 use tari_wallet_daemon_client::{
-    types::{AuthLoginAcceptRequest, AuthLoginDenyRequest, AuthLoginRequest, AuthRevokeTokenRequest},
+    types::{
+        AuthGetAllJwtRequest, AuthLoginAcceptRequest, AuthLoginDenyRequest, AuthLoginRequest, AuthRevokeTokenRequest,
+    },
     WalletDaemonClient,
 };
 
@@ -35,6 +37,7 @@ pub enum AuthSubcommand {
     Grant(GrantArgs),
     Deny(DenyArgs),
     Revoke(RevokeArgs),
+    List,
 }
 
 // TODO: Add permissions
@@ -50,6 +53,7 @@ pub struct RequestArgs {
 #[derive(Debug, Args, Clone)]
 pub struct GrantArgs {
     auth_token: String,
+    name: String,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -84,6 +88,7 @@ impl AuthSubcommand {
                 let resp = client
                     .auth_accept(AuthLoginAcceptRequest {
                         auth_token: args.auth_token,
+                        name: args.name,
                     })
                     .await?;
                 println!("Access granted. Your JRPC token : {}", resp.permissions_token);
@@ -103,6 +108,12 @@ impl AuthSubcommand {
                     })
                     .await?;
                 println!("Token revoked!");
+            },
+            List => {
+                let tokens = client.auth_get_all_jwt(AuthGetAllJwtRequest {}).await?;
+                for (id, name) in &tokens.jwt {
+                    println!("Id {id} name {name}");
+                }
             },
         }
         Ok(())

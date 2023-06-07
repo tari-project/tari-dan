@@ -27,16 +27,16 @@ import RecentTransactions from '../VN/Components/RecentTransactions';
 
 function RecentTransactionsLayout() {
   return (
-    <div>
-      <Grid container spacing={5}>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Recent Transactions</PageHeading>
-        <Grid item xs={12}>
-          <StyledPaper>
-            <RecentTransactions />
-          </StyledPaper>
-        </Grid>
       </Grid>
-    </div>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <RecentTransactions />
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 

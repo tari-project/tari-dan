@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { fromHexString, toHexString } from '../routes/VN/Components/helpers';
+import { fromHexString } from '../routes/VN/Components/helpers';
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
@@ -31,7 +31,7 @@ async function jsonRpc(method: string, params: any = null) {
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }
-  } catch { }
+  } catch {}
   let response = await fetch(`http://${address}`, {
     method: 'POST',
     body: JSON.stringify({
@@ -75,7 +75,11 @@ async function getConnections() {
   return await jsonRpc('get_connections');
 }
 async function addPeer(public_key: string, addresses: string[]) {
-  return await jsonRpc('add_peer', { public_key, addresses, wait_for_dial: false });
+  return await jsonRpc('add_peer', {
+    public_key,
+    addresses,
+    wait_for_dial: false,
+  });
 }
 async function registerValidatorNode() {
   return await jsonRpc('register_validator_node');
@@ -87,7 +91,10 @@ async function getTransaction(payload_id: string) {
   return await jsonRpc('get_transaction', [fromHexString(payload_id)]);
 }
 async function getFees(epoch: number, claim_leader_public_key: string) {
-  return await jsonRpc('get_fees', [fromHexString(claim_leader_public_key), epoch]);
+  return await jsonRpc('get_fees', [
+    fromHexString(claim_leader_public_key),
+    epoch,
+  ]);
 }
 async function getCurrentLeaderState(payload_id: string) {
   return await jsonRpc('get_current_leader_state', [fromHexString(payload_id)]);

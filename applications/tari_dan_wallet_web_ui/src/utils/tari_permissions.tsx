@@ -260,6 +260,17 @@ export class TariPermissionAccountBalance {
     return { AccountBalance: this.value };
   }
 }
+
+export class TariPermissionAccountInfo {
+  constructor() {}
+  toString() {
+    return `AccountInfo`;
+  }
+  toJSON() {
+    return "AccountInfo"
+  }
+}
+
 export class TariPermissionAccountList {
   private value?: ComponentAddress;
   constructor(value?: any) {
@@ -280,16 +291,34 @@ export class TariPermissionAccountList {
     }
   }
 }
-export class TariPermissionTransactionSend {
-  private value: SubstateAddress;
-  constructor(value: any) {
-    this.value = new SubstateAddress(value);
-  }
+export class TariPermissionTransactionGet {
+  constructor() {}
   toString() {
-    return `TransactionSend(${this.value.toString()})`;
+    return `TransactionGet`;
   }
   toJSON() {
-    return { TransactionSend: this.value };
+    return "TransactionGet"
+  }
+}
+export class TariPermissionTransactionSend {
+  private value?: SubstateAddress;
+  constructor(value?: SubstateAddress) {
+    this.value = value;
+  }
+  toString() {
+    if (this.value === undefined) {
+      return "TransactionSend(any)";
+    } else {
+      return `TransactionSend(${this.value?.toString()})`;
+    }
+  }
+  toJSON() {
+    console.log('JSON TariPermissionTransactionSend', this.value)
+    if (this.value === undefined) {
+      return { "TransactionSend": null }
+    } else {
+      return { "TransactionSend": this.value }
+    }
   }
 }
 
@@ -342,7 +371,9 @@ export class TariPermissionNftGetOwnershipProof {
 export type TariPermission =
   | TariPermissionNftGetOwnershipProof
   | TariPermissionAccountBalance
+  | TariPermissionAccountInfo
   | TariPermissionAccountList
+  | TariPermissionTransactionGet
   | TariPermissionTransactionSend
   | TariPermissionGetNft;
 
@@ -365,10 +396,14 @@ export class TariPermissions {
 export function parse(permission: any) {
   if (permission.hasOwnProperty("AccountBalance")) {
     return new TariPermissionAccountBalance(permission.AccountBalance);
+  } else if (permission === "AccountInfo") {
+    return new TariPermissionAccountInfo();
   } else if (permission.hasOwnProperty("AccountList")) {
     return new TariPermissionAccountList(permission.AccountList);
   } else if (permission.hasOwnProperty("TransactionSend")) {
     return new TariPermissionTransactionSend(permission.TransactionSend);
+  } else if (permission === "TransactionGet") {
+    return new TariPermissionTransactionGet();
   } else if (permission.hasOwnProperty("GetNft")) {
     return new TariPermissionGetNft(permission.GetNft);
   } else if (permission.hasOwnProperty("NftGetOwnershipProof")) {

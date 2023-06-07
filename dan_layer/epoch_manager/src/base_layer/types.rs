@@ -11,10 +11,7 @@ use tari_dan_common_types::{Epoch, ShardId};
 use tokio::sync::{broadcast, oneshot};
 
 use crate::{
-    base_layer::error::EpochManagerError,
-    traits::ShardCommitteeAllocation,
-    validator_node::ValidatorNode,
-    Committee,
+    base_layer::error::EpochManagerError, traits::ShardCommitteeAllocation, validator_node::ValidatorNode, Committee,
 };
 
 type Reply<T> = oneshot::Sender<Result<T, EpochManagerError>>;

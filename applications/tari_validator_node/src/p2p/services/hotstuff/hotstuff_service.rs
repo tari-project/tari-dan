@@ -29,8 +29,7 @@ use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     message::DanMessage,
     services::{
-        infrastructure_services::OutboundService,
-        leader_strategy::PayloadSpecificLeaderStrategy,
+        infrastructure_services::OutboundService, leader_strategy::PayloadSpecificLeaderStrategy,
         NodeIdentitySigningService,
     },
     workers::{

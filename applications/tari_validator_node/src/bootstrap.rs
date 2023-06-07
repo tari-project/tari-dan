@@ -21,8 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    fs,
-    io,
+    fs, io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     ops::DerefMut,
     sync::Arc,
@@ -49,10 +48,7 @@ use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::{
     global::GlobalDb,
     models::{Payload, SubstateShardData},
-    ShardStore,
-    ShardStoreReadTransaction,
-    ShardStoreWriteTransaction,
-    StorageError,
+    ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction, StorageError,
 };
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
 use tari_engine_types::{
@@ -76,8 +72,7 @@ use crate::{
         create_tari_validator_node_rpc_service,
         services::{
             comms_peer_provider::CommsPeerProvider,
-            hotstuff,
-            mempool,
+            hotstuff, mempool,
             mempool::{FeeTransactionValidator, MempoolHandle, TemplateExistsValidator, Validator},
             messaging,
             messaging::DanMessageReceivers,
@@ -88,8 +83,7 @@ use crate::{
         },
     },
     payload_processor::TariDanPayloadProcessor,
-    registration,
-    ApplicationConfig,
+    registration, ApplicationConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::bootstrap";

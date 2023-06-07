@@ -25,7 +25,6 @@ import ReactDOM from 'react-dom/client';
 import './theme/theme.css';
 import reportWebVitals from './reportWebVitals';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import ValidatorNode from './routes/VN/ValidatorNode';
 import Transaction, {
   transactionLoader,
 } from './routes/Transaction/Transaction';
@@ -80,12 +79,12 @@ const router = createBrowserRouter([
         element: <Committees />,
       },
       {
-        path: 'transaction/:payloadId',
+        path: 'transactions/:payloadId',
         element: <Transaction />,
         loader: transactionLoader,
       },
       {
-        path: 'template/:address',
+        path: 'templates/:address',
         element: <TemplateFunctions />,
       },
       {

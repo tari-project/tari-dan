@@ -20,40 +20,54 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod abi;
-mod ast;
-mod definition;
-mod dependencies;
-mod dispatcher;
+import React from 'react';
+import { Link as RouterLink } from 'react-router-dom';
+import { Breadcrumbs, Link } from '@mui/material';
+import useBreadcrumbs from 'use-react-router-breadcrumbs';
 
-use proc_macro2::TokenStream;
-use quote::quote;
-use syn::{parse2, Result};
+interface BreadcrumbsItem {
+  label: string;
+  path: string;
+  dynamic: boolean;
+}
 
-use self::{
-    abi::generate_abi, ast::TemplateAst, definition::generate_definition, dependencies::generate_dependencies,
-    dispatcher::generate_dispatcher,
+interface BreadcrumbsProps {
+  items: BreadcrumbsItem[];
+}
+
+const BreadcrumbsComponent: React.FC<BreadcrumbsProps> = ({ items }) => {
+  const breadcrumbs = useBreadcrumbs(items);
+
+  const links = breadcrumbs.map(({ match, breadcrumb }: any) => {
+    const breadcrumbLabel = breadcrumb.props.children;
+    const { label, path, dynamic } = match.route;
+    return (
+      <Link
+        key={breadcrumbLabel}
+        component={RouterLink}
+        to={path}
+        underline="none"
+        color="inherit"
+      >
+        {dynamic ? breadcrumbLabel.toLowerCase() : label}
+      </Link>
+    );
+  });
+
+  return (
+    <>
+      <Breadcrumbs
+        aria-label="breadcrumb"
+        separator="›"
+        style={{
+          fontSize: '0.8rem',
+          paddingBottom: '1rem',
+        }}
+      >
+        {links}
+      </Breadcrumbs>
+    </>
+  );
 };
 
-pub fn generate_template(input: TokenStream) -> Result<TokenStream> {
-    let ast = parse2::<TemplateAst>(input).unwrap();
-
-    let dependencies = generate_dependencies();
-    let definition = generate_definition(&ast);
-    let abi = generate_abi(&ast)?;
-    let dispatcher = generate_dispatcher(&ast)?;
-
-    let output = quote! {
-        #dependencies
-
-        #definition
-
-        #abi
-
-        #dispatcher
-    };
-
-    // eprintln!("output = {}", output);
-
-    Ok(output)
-}
+export default BreadcrumbsComponent;

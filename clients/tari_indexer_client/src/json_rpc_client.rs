@@ -29,15 +29,8 @@ use tari_engine_types::substate::SubstateAddress;
 use crate::{
     error::IndexerClientError,
     types::{
-        AddAddressRequest,
-        DeleteAddressRequest,
-        GetNonFungiblesRequest,
-        GetNonFungiblesResponse,
-        GetSubstateRequest,
-        GetSubstateResponse,
-        GetTransactionResultRequest,
-        GetTransactionResultResponse,
-        SubmitTransactionRequest,
+        AddAddressRequest, DeleteAddressRequest, GetNonFungiblesRequest, GetNonFungiblesResponse, GetSubstateRequest,
+        GetSubstateResponse, GetTransactionResultRequest, GetTransactionResultResponse, SubmitTransactionRequest,
         SubmitTransactionResponse,
     },
 };

@@ -43,35 +43,15 @@ use log::{debug, error, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{
-    Epoch,
-    NodeHeight,
-    ObjectPledge,
-    ObjectPledgeInfo,
-    PayloadId,
-    QuorumCertificate,
-    ShardId,
-    SubstateState,
+    Epoch, NodeHeight, ObjectPledge, ObjectPledgeInfo, PayloadId, QuorumCertificate, ShardId, SubstateState,
     TreeNodeHash,
 };
 use tari_dan_storage::{
     models::{
-        ClaimLeaderFees,
-        CurrentLeaderStates,
-        HotStuffTreeNode,
-        LeafNode,
-        Payload,
-        PayloadResult,
-        RecentTransaction,
-        SQLSubstate,
-        SQLTransaction,
-        SubstateShardData,
-        TariDanPayload,
-        VoteMessage,
+        ClaimLeaderFees, CurrentLeaderStates, HotStuffTreeNode, LeafNode, Payload, PayloadResult, RecentTransaction,
+        SQLSubstate, SQLTransaction, SubstateShardData, TariDanPayload, VoteMessage,
     },
-    ShardStore,
-    ShardStoreReadTransaction,
-    ShardStoreWriteTransaction,
-    StorageError,
+    ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction, StorageError,
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_transaction::{InstructionSignature, Transaction, TransactionMeta};
@@ -859,7 +839,10 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         claim_leader_public_key: Vec<u8>,
     ) -> Result<Vec<ClaimLeaderFees>, StorageError> {
         let res = sql_query(
-            "select * from substates where (created_justify_leader == ? and created_at_epoch == ?) or
+            "select COALESCE(NULLIF(created_justify_leader, ''), destroyed_justify_leader) as \
+             justify_leader_public_key, created_at_epoch, destroyed_at_epoch, fee_paid_for_created_justify, \
+             fee_paid_for_deleted_justify as fee_paid_for_destroyed_justify from substates where \
+             (created_justify_leader == ? and created_at_epoch == ?) or
                 (destroyed_justify_leader == ? and destroyed_at_epoch == ?);",
         )
         .bind::<Text, _>(claim_leader_public_key.to_hex())

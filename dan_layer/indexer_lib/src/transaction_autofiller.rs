@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use log::warn;
+use log::*;
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_engine_types::{
     indexed_value::IndexedValueVisitorError,
@@ -54,7 +54,7 @@ where
         for r in autofilled_transaction.meta().required_inputs() {
             let scan_res = match r.version() {
                 Some(version) => {
-                    // if the client specifyied a version, we need to retrieve it
+                    // if the client specified a version, we need to retrieve it
                     self.substate_scanner
                         .get_specific_substate_from_committee(r.address(), version)
                         .await?
@@ -71,11 +71,12 @@ where
             } else {
                 warn!(
                     target: LOG_TARGET,
-                    "The substate for input requirement {} is not in UP status, skipping", r
+                    "🖋️ The substate for input requirement {} is not in UP status, skipping", r
                 );
             }
         }
 
+        info!(target: LOG_TARGET, "🖋️ Found {} input substates", input_substates.len());
         Self::add_involved_objects(&mut autofilled_transaction, &input_addresses, SubstateChange::Exists);
 
         // add all substates related to the inputs
@@ -92,17 +93,30 @@ where
             .into_iter()
             .flatten()
             .filter(|s| !original_transaction.meta().includes_substate(s));
+
+        if let (_, Some(size)) = related_addresses.size_hint() {
+            info!(target: LOG_TARGET, "🖋️ Found {} related substates", size);
+        }
+
         for address in related_addresses {
+            info!(target: LOG_TARGET, "🖋️ Found {} related substate", address);
+
             // we need to fetch the latest version of all the related substates
             // note that if the version specified is "None", the scanner will fetch the latest version
             let scan_res = self.substate_scanner.get_substate(&address, None).await?;
 
             if let SubstateResult::Up { substate, .. } = scan_res {
+                info!(
+                    target: LOG_TARGET,
+                    "Adding related substate {}:v{}",
+                    address,
+                    substate.version()
+                );
                 autofilled_inputs.push((address, substate.version()));
             } else {
                 warn!(
                     target: LOG_TARGET,
-                    "The related substate {} is not in UP status, skipping", address
+                    "🖋️ The related substate {} is not in UP status, skipping", address
                 );
             }
         }

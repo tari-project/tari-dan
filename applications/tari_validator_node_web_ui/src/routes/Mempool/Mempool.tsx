@@ -27,16 +27,16 @@ import Mempool from '../VN/Components/Mempool';
 
 function MempoolLayout() {
   return (
-    <div>
-      <Grid container spacing={5}>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Mempool</PageHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Mempool />
-          </StyledPaper>
-        </Grid>
       </Grid>
-    </div>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Mempool />
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 

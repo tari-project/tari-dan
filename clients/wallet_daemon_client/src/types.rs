@@ -458,6 +458,7 @@ pub struct WebRtcStart {
 pub struct WebRtcStartRequest {
     pub signaling_server_token: String,
     pub permissions: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -477,6 +478,7 @@ pub struct AuthLoginResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginAcceptRequest {
     pub auth_token: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -515,4 +517,12 @@ pub struct MintAccountNFTResponse {
     pub nft_id: NonFungibleId,
     pub resource_address: ResourceAddress,
     pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthGetAllJwtRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthGetAllJwtResponse {
+    pub jwt: Vec<(i32, String)>,
 }

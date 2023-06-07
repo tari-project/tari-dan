@@ -20,17 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from "react";
-import { renderJson } from "../utils/helpers";
+import { renderJson } from '../utils/helpers';
 
-export default function JsonTooltip({ jsonText, children }: { jsonText: string; children: string }) {
+export default function JsonTooltip({
+  jsonText,
+  children,
+}: {
+  jsonText: string;
+  children: string;
+}) {
   if (jsonText === null) {
     return <>No data</>;
   }
   return (
     <div className="tooltip">
       {children}
-      <span className="tooltiptext json">{renderJson(JSON.parse(jsonText))}</span>
+      <span className="tooltiptext json">
+        {renderJson(JSON.parse(jsonText))}
+      </span>
     </div>
   );
 }

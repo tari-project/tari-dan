@@ -32,76 +32,33 @@ use std::{
 use json::Value;
 use reqwest::{
     header::{self, HeaderMap, AUTHORIZATION},
-    IntoUrl,
-    Url,
+    IntoUrl, Url,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_template_lib::models::ComponentAddress;
 use types::{
-    AccountsCreateFreeTestCoinsRequest,
-    AccountsCreateFreeTestCoinsResponse,
-    AuthLoginAcceptRequest,
-    AuthLoginAcceptResponse,
-    AuthLoginDenyRequest,
-    AuthLoginDenyResponse,
-    AuthLoginRequest,
-    AuthLoginResponse,
-    ClaimBurnRequest,
-    ClaimBurnResponse,
-    MintAccountNFTRequest,
-    MintAccountNFTResponse,
-    ProofsCancelRequest,
-    ProofsCancelResponse,
-    ProofsFinalizeRequest,
-    ProofsFinalizeResponse,
-    ProofsGenerateRequest,
-    ProofsGenerateResponse,
-    TransferRequest,
-    TransferResponse,
-    WebRtcStartRequest,
-    WebRtcStartResponse,
+    AccountsCreateFreeTestCoinsRequest, AccountsCreateFreeTestCoinsResponse, AuthLoginAcceptRequest,
+    AuthLoginAcceptResponse, AuthLoginDenyRequest, AuthLoginDenyResponse, AuthLoginRequest, AuthLoginResponse,
+    ClaimBurnRequest, ClaimBurnResponse, MintAccountNFTRequest, MintAccountNFTResponse, ProofsCancelRequest,
+    ProofsCancelResponse, ProofsFinalizeRequest, ProofsFinalizeResponse, ProofsGenerateRequest, ProofsGenerateResponse,
+    TransferRequest, TransferResponse, WebRtcStartRequest, WebRtcStartResponse,
 };
 
 use crate::{
     error::WalletDaemonClientError,
     types::{
-        AccountGetDefaultRequest,
-        AccountGetRequest,
-        AccountGetResponse,
-        AccountSetDefaultRequest,
-        AccountSetDefaultResponse,
-        AccountsCreateRequest,
-        AccountsCreateResponse,
-        AccountsGetBalancesRequest,
-        AccountsGetBalancesResponse,
-        AccountsInvokeRequest,
-        AccountsInvokeResponse,
-        AccountsListRequest,
-        AccountsListResponse,
-        AuthRevokeTokenRequest,
-        AuthRevokeTokenResponse,
-        ConfidentialCreateOutputProofRequest,
-        ConfidentialCreateOutputProofResponse,
-        ConfidentialTransferRequest,
-        ConfidentialTransferResponse,
-        KeysCreateRequest,
-        KeysCreateResponse,
-        KeysListRequest,
-        KeysListResponse,
-        KeysSetActiveRequest,
-        KeysSetActiveResponse,
-        RevealFundsRequest,
-        RevealFundsResponse,
-        TransactionGetRequest,
-        TransactionGetResponse,
-        TransactionGetResultRequest,
-        TransactionGetResultResponse,
-        TransactionSubmitRequest,
-        TransactionSubmitResponse,
-        TransactionWaitResultRequest,
-        TransactionWaitResultResponse,
+        AccountGetDefaultRequest, AccountGetRequest, AccountGetResponse, AccountSetDefaultRequest,
+        AccountSetDefaultResponse, AccountsCreateRequest, AccountsCreateResponse, AccountsGetBalancesRequest,
+        AccountsGetBalancesResponse, AccountsInvokeRequest, AccountsInvokeResponse, AccountsListRequest,
+        AccountsListResponse, AuthGetAllJwtRequest, AuthGetAllJwtResponse, AuthRevokeTokenRequest,
+        AuthRevokeTokenResponse, ConfidentialCreateOutputProofRequest, ConfidentialCreateOutputProofResponse,
+        ConfidentialTransferRequest, ConfidentialTransferResponse, KeysCreateRequest, KeysCreateResponse,
+        KeysListRequest, KeysListResponse, KeysSetActiveRequest, KeysSetActiveResponse, RevealFundsRequest,
+        RevealFundsResponse, TransactionGetRequest, TransactionGetResponse, TransactionGetResultRequest,
+        TransactionGetResultResponse, TransactionSubmitRequest, TransactionSubmitResponse,
+        TransactionWaitResultRequest, TransactionWaitResultResponse,
     },
 };
 
@@ -388,6 +345,13 @@ impl WalletDaemonClient {
         req: T,
     ) -> Result<AuthRevokeTokenResponse, WalletDaemonClientError> {
         self.send_request("auth.revoke", req.borrow()).await
+    }
+
+    pub async fn auth_get_all_jwt<T: Borrow<AuthGetAllJwtRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<AuthGetAllJwtResponse, WalletDaemonClientError> {
+        self.send_request("auth.get_all_jwt", req.borrow()).await
     }
 
     pub async fn webrtc_start<T: Borrow<WebRtcStartRequest>>(

@@ -78,7 +78,9 @@ pub trait Validator<T> {
     async fn validate(&self, input: &T) -> Result<(), Self::Error>;
 
     fn boxed(self) -> BoxedValidator<T, Self::Error>
-    where Self: Sized + Send + Sync + 'static {
+    where
+        Self: Sized + Send + Sync + 'static,
+    {
         BoxedValidator { inner: Box::new(self) }
     }
 

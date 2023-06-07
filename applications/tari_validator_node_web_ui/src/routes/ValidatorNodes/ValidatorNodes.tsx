@@ -27,16 +27,16 @@ import { StyledPaper } from '../../Components/StyledComponents';
 
 function ValidatorNodes() {
   return (
-    <div>
-      <Grid container spacing={5}>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Validator Nodes</PageHeading>
-        <Grid item xs={12} md={12} lg={12}>
-          <StyledPaper>
-            <Typography>Info goes in here</Typography>
-          </StyledPaper>
-        </Grid>
       </Grid>
-    </div>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Typography>Info goes in here</Typography>
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 

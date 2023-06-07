@@ -11,17 +11,9 @@ use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{args, models::Amount, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
-    AccountGetRequest,
-    AccountGetResponse,
-    CallInstructionRequest,
-    TransactionGetRequest,
-    TransactionGetResponse,
-    TransactionGetResultRequest,
-    TransactionGetResultResponse,
-    TransactionSubmitRequest,
-    TransactionSubmitResponse,
-    TransactionWaitResultRequest,
-    TransactionWaitResultResponse,
+    AccountGetRequest, AccountGetResponse, CallInstructionRequest, TransactionGetRequest, TransactionGetResponse,
+    TransactionGetResultRequest, TransactionGetResultResponse, TransactionSubmitRequest, TransactionSubmitResponse,
+    TransactionWaitResultRequest, TransactionWaitResultResponse,
 };
 use tokio::time;
 
@@ -45,9 +37,13 @@ pub async fn handle_submit_instruction(
         });
         let AccountGetResponse {
             account: dump_account, ..
-        } = accounts::handle_get(context, token.clone(), AccountGetRequest {
-            name_or_address: dump_account,
-        })
+        } = accounts::handle_get(
+            context,
+            token.clone(),
+            AccountGetRequest {
+                name_or_address: dump_account,
+            },
+        )
         .await?;
         instructions.push(Instruction::CallMethod {
             component_address: dump_account.address.as_component_address().unwrap(),
@@ -57,9 +53,13 @@ pub async fn handle_submit_instruction(
     }
     let AccountGetResponse {
         account: fee_account, ..
-    } = accounts::handle_get(context, token.clone(), AccountGetRequest {
-        name_or_address: req.fee_account,
-    })
+    } = accounts::handle_get(
+        context,
+        token.clone(),
+        AccountGetRequest {
+            name_or_address: req.fee_account,
+        },
+    )
     .await?;
     let request = TransactionSubmitRequest {
         signing_key_index: None,
@@ -88,7 +88,9 @@ pub async fn handle_submit(
     req: TransactionSubmitRequest,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+    // TODO: fine-grained checks of individual addresses involved (resources, components, etc)
+    sdk.jwt_api()
+        .check_auth(token, &[JrpcPermission::TransactionSend(None)])?;
     let key_api = sdk.key_manager_api();
     // Fetch the key to sign the transaction
     // TODO: Ideally the SDK should take care of signing the transaction internally
@@ -165,7 +167,7 @@ pub async fn handle_get(
     context
         .wallet_sdk()
         .jwt_api()
-        .check_auth(token, &[JrpcPermission::Admin])?;
+        .check_auth(token, &[JrpcPermission::TransactionGet])?;
     let transaction = context
         .wallet_sdk()
         .transaction_api()
@@ -190,7 +192,7 @@ pub async fn handle_get_result(
     context
         .wallet_sdk()
         .jwt_api()
-        .check_auth(token, &[JrpcPermission::Admin])?;
+        .check_auth(token, &[JrpcPermission::TransactionGet])?;
     let transaction = context
         .wallet_sdk()
         .transaction_api()

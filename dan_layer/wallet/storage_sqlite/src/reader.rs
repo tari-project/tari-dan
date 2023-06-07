@@ -10,16 +10,8 @@ use serde::de::DeserializeOwned;
 use tari_common_types::types::{Commitment, FixedHash};
 use tari_dan_wallet_sdk::{
     models::{
-        Account,
-        ConfidentialOutputModel,
-        ConfidentialProofId,
-        Config,
-        NonFungibleToken,
-        OutputStatus,
-        SubstateModel,
-        TransactionStatus,
-        VaultModel,
-        WalletTransaction,
+        Account, ConfidentialOutputModel, ConfidentialProofId, Config, NonFungibleToken, OutputStatus, SubstateModel,
+        TransactionStatus, VaultModel, WalletTransaction,
     },
     storage::{WalletStorageError, WalletStoreReader},
 };
@@ -152,6 +144,17 @@ impl WalletStoreReader for ReadTransaction<'_> {
             created_at: 0,
             updated_at: 0,
         })
+    }
+
+    // -------------------------------- JWT -------------------------------- //
+    fn jwt_get_all(&mut self) -> Result<Vec<(i32, String)>, WalletStorageError> {
+        use crate::schema::auth_status;
+        let res = auth_status::table
+            .select((auth_status::id, auth_status::token))
+            .filter(auth_status::granted.eq(true))
+            .get_results::<(i32, String)>(self.connection())
+            .map_err(|e| WalletStorageError::general("jwt_get_all", e))?;
+        Ok(res)
     }
 
     // -------------------------------- Transactions -------------------------------- //

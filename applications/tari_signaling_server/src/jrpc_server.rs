@@ -19,12 +19,11 @@ use axum::{
 };
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::*;
 use serde_json::json;
+use tari_dan_wallet_sdk::apis::jwt::JrpcPermissions;
 use tari_shutdown::ShutdownSignal;
 use tower_http::cors::CorsLayer;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
@@ -200,7 +199,17 @@ async fn handler(
         result = match value.method() {
             "auth.login" => {
                 info!(target: LOG_TARGET, "Generating new JWT token");
-                data.generate_jwt()
+                let permissions = serde_json::from_value::<JrpcPermissions>(value.parsed).map_err(|e| {
+                    JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            JsonRpcErrorReason::InternalError,
+                            e.to_string(),
+                            serde_json::Value::Null,
+                        ),
+                    )
+                })?;
+                data.generate_jwt(permissions)
             },
             _ => {
                 error!(

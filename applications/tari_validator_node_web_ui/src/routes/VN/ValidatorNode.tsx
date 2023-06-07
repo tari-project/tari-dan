@@ -44,14 +44,18 @@ function ValidatorNode() {
   if (epoch === undefined || identity === undefined) return <div>Loading</div>;
 
   return (
-    <Grid container spacing={5}>
-      <SecondaryHeading>Info</SecondaryHeading>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Info</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Info epoch={epoch} identity={identity} shardKey={shardKey} />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Committees</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Committees</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           {shardKey ? (
@@ -63,43 +67,55 @@ function ValidatorNode() {
           ) : null}
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Connections</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Connections</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Connections />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Fees</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Fees</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Fees />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Mempool</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Mempool</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Mempool />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Recent Transactions</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Recent Transactions</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <RecentTransactions />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>Templates</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Templates</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Templates />
         </StyledPaper>
       </Grid>
-      <SecondaryHeading>VNs</SecondaryHeading>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>VNs</SecondaryHeading>
+      </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <AllVNs epoch={epoch.current_epoch} />
         </StyledPaper>
       </Grid>
-    </Grid>
+    </>
   );
 }
 

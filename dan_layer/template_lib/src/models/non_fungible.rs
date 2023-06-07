@@ -235,21 +235,27 @@ impl NonFungible {
     }
 
     pub fn get_data<T: DeserializeOwned>(&self) -> T {
-        let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
-            address: self.address.clone(),
-            action: NonFungibleAction::GetData,
-            args: vec![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::NonFungibleInvoke,
+            &NonFungibleInvokeArg {
+                address: self.address.clone(),
+                action: NonFungibleAction::GetData,
+                args: vec![],
+            },
+        );
 
         resp.decode().expect("[get_data] Failed to decode NonFungible data")
     }
 
     pub fn get_mutable_data<T: DeserializeOwned>(&self) -> T {
-        let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
-            address: self.address.clone(),
-            action: NonFungibleAction::GetMutableData,
-            args: vec![],
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::NonFungibleInvoke,
+            &NonFungibleInvokeArg {
+                address: self.address.clone(),
+                action: NonFungibleAction::GetMutableData,
+                args: vec![],
+            },
+        );
 
         resp.decode()
             .expect("[get_mutable_data] Failed to decode raw NonFungible mutable data")

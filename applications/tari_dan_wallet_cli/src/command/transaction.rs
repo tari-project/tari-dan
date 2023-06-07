@@ -23,8 +23,7 @@
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
-    fmt,
-    fs,
+    fmt, fs,
     path::PathBuf,
     str::FromStr,
     time::{Duration, Instant},
@@ -43,8 +42,7 @@ use tari_engine_types::{
     TemplateAddress,
 };
 use tari_template_lib::{
-    arg,
-    args,
+    arg, args,
     args::Arg,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{Amount, NonFungibleAddress, NonFungibleId},
@@ -55,17 +53,10 @@ use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
     types::{
-        AccountGetResponse,
-        ConfidentialTransferRequest,
-        TransactionGetResultRequest,
-        TransactionSubmitRequest,
-        TransactionSubmitResponse,
-        TransactionWaitResultRequest,
-        TransactionWaitResultResponse,
-        TransferRequest,
+        AccountGetResponse, ConfidentialTransferRequest, TransactionGetResultRequest, TransactionSubmitRequest,
+        TransactionSubmitResponse, TransactionWaitResultRequest, TransactionWaitResultResponse, TransferRequest,
     },
-    ComponentAddressOrName,
-    WalletDaemonClient,
+    ComponentAddressOrName, WalletDaemonClient,
 };
 
 use crate::from_hex::FromHex;
@@ -364,18 +355,19 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
 
     let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
 
+    let fee = common.fee.map(|f| f.try_into()).transpose()?.unwrap_or(Amount(1000));
     let resp = client
         .accounts_transfer(TransferRequest {
             account: source_account_name,
             amount: Amount::from(amount),
             resource_address,
             destination_public_key,
-            fee: common.fee.map(|f| f.try_into()).transpose()?,
+            fee: Some(fee),
         })
         .await?;
 
     println!("Transaction: {}", resp.hash);
-    println!("Fee: {}", resp.fee);
+    println!("Fee: {} ({} refunded)", resp.fee, fee - resp.fee);
     println!();
     summarize_finalize_result(&resp.result);
 

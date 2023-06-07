@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import FormControl from '@mui/material/FormControl';
@@ -73,6 +73,43 @@ const TransactionFilter: React.FC<ISearchProps> = ({
     setShowClearBtn(true);
   };
 
+  // search function
+  const requestSearch = useCallback(
+    (searchedVal: string, filter: string) => {
+      const filteredRows = stateObject.filter((row: any) => {
+        const index = filterItems.findIndex((item) => item.value === filter);
+        const filterFunction = filterItems[index].filterFn;
+        return filterFunction(searchedVal, row);
+      });
+
+      // Create a new array that is a copy of the original
+      const updatedObject = [...stateObject];
+
+      // Set the "show" property of all transactions in the copy to false
+      updatedObject.forEach((template) => {
+        template.show = false;
+      });
+
+      // Loop over the filtered array, find the matching object in the
+      // original array, and set its "show" property to true
+      filteredRows.forEach((filteredRow: any) => {
+        const index = updatedObject.findIndex(
+          (item) => item.id === filteredRow.id
+        );
+        if (index !== -1) {
+          updatedObject[index].show = true;
+        }
+      });
+
+      // Update the state with the modified copy of the original array
+      setStateObject(updatedObject);
+
+      // Set paging to first page
+      setPage(0);
+    },
+    [stateObject, filterItems, setPage, setStateObject]
+  );
+
   // when search input changes and formState has been updated
   useEffect(() => {
     if (formState.searchValue === '') {
@@ -80,7 +117,7 @@ const TransactionFilter: React.FC<ISearchProps> = ({
       setShowClearBtn(false);
     }
     requestSearch(formState.searchValue, filterBy);
-  }, [formState]);
+  }, [formState, filterBy, requestSearch]);
 
   // once selected filter, focus on input
 
@@ -90,41 +127,8 @@ const TransactionFilter: React.FC<ISearchProps> = ({
     } else {
       setInitialUpdate(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterBy]);
-
-  // search function
-  const requestSearch = (searchedVal: string, filter: string) => {
-    const filteredRows = stateObject.filter((row: any) => {
-      const index = filterItems.findIndex((item) => item.value === filter);
-      const filterFunction = filterItems[index].filterFn;
-      return filterFunction(searchedVal, row);
-    });
-
-    // Create a new array that is a copy of the original
-    const updatedObject = [...stateObject];
-
-    // Set the "show" property of all transactions in the copy to false
-    updatedObject.forEach((template) => {
-      template.show = false;
-    });
-
-    // Loop over the filtered array, find the matching object in the
-    // original array, and set its "show" property to true
-    filteredRows.forEach((filteredRow: any) => {
-      const index = updatedObject.findIndex(
-        (item) => item.id === filteredRow.id
-      );
-      if (index !== -1) {
-        updatedObject[index].show = true;
-      }
-    });
-
-    // Update the state with the modified copy of the original array
-    setStateObject(updatedObject);
-
-    // Set paging to first page
-    setPage(0);
-  };
 
   // search function when enter is pressed
   const confirmSearch = () => {

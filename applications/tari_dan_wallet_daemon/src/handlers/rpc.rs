@@ -3,14 +3,8 @@
 
 use tari_dan_wallet_sdk::apis::jwt::JrpcPermission;
 use tari_wallet_daemon_client::types::{
-    AuthLoginAcceptRequest,
-    AuthLoginAcceptResponse,
-    AuthLoginDenyRequest,
-    AuthLoginDenyResponse,
-    AuthLoginRequest,
-    AuthLoginResponse,
-    AuthRevokeTokenRequest,
-    AuthRevokeTokenResponse,
+    AuthGetAllJwtRequest, AuthGetAllJwtResponse, AuthLoginAcceptRequest, AuthLoginAcceptResponse, AuthLoginDenyRequest,
+    AuthLoginDenyResponse, AuthLoginRequest, AuthLoginResponse, AuthRevokeTokenRequest, AuthRevokeTokenResponse,
 };
 
 use crate::{handlers::HandlerContext, services::AuthLoginRequestEvent};
@@ -44,8 +38,7 @@ pub async fn handle_login_accept(
     auth_accept_request: AuthLoginAcceptRequest,
 ) -> Result<AuthLoginAcceptResponse, anyhow::Error> {
     let jwt = context.wallet_sdk().jwt_api();
-
-    let permissions_token = jwt.grant(auth_accept_request.auth_token)?;
+    let permissions_token = jwt.grant(auth_accept_request.name, auth_accept_request.auth_token)?;
     Ok(AuthLoginAcceptResponse { permissions_token })
 }
 
@@ -68,4 +61,15 @@ pub async fn handle_revoke(
     jwt.check_auth(token, &[JrpcPermission::Admin])?;
     jwt.revoke(revoke_request.permission_token.as_str())?;
     Ok(AuthRevokeTokenResponse {})
+}
+
+pub async fn handle_get_all_jwt(
+    context: &HandlerContext,
+    token: Option<String>,
+    _request: AuthGetAllJwtRequest,
+) -> Result<AuthGetAllJwtResponse, anyhow::Error> {
+    let jwt = context.wallet_sdk().jwt_api();
+    jwt.check_auth(token, &[JrpcPermission::Admin])?;
+    let tokens = jwt.get_tokens()?;
+    Ok(AuthGetAllJwtResponse { jwt: tokens })
 }

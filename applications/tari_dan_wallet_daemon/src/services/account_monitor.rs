@@ -540,12 +540,12 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
         }
 
         // Is an account component
-        if !a.is_component() ||
-            v.substate_value()
+        if !a.is_component()
+            || v.substate_value()
                 .component()
                 .expect("Value was not component for component address")
-                .template_address !=
-                *ACCOUNT_TEMPLATE_ADDRESS
+                .template_address
+                != *ACCOUNT_TEMPLATE_ADDRESS
         {
             return None;
         }

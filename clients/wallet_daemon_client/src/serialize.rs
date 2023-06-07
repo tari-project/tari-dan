@@ -6,8 +6,7 @@ use std::{fmt, marker::PhantomData, str::FromStr};
 use serde::{
     de,
     de::{MapAccess, Visitor},
-    Deserialize,
-    Deserializer,
+    Deserialize, Deserializer,
 };
 
 pub(crate) fn string_or_struct<'de, T, D, TErr>(deserializer: D) -> Result<T, D::Error>
@@ -35,12 +34,16 @@ where
         }
 
         fn visit_str<E>(self, value: &str) -> Result<T, E>
-        where E: de::Error {
+        where
+            E: de::Error,
+        {
             FromStr::from_str(value).map_err(|e| E::custom(e))
         }
 
         fn visit_map<M>(self, map: M) -> Result<T, M::Error>
-        where M: MapAccess<'de> {
+        where
+            M: MapAccess<'de>,
+        {
             // `MapAccessDeserializer` is a wrapper that turns a `MapAccess`
             // into a `Deserializer`, allowing it to be used as the input to T's
             // `Deserialize` implementation. T then deserializes itself using
@@ -72,12 +75,16 @@ where
         }
 
         fn visit_none<E>(self) -> Result<Self::Value, E>
-        where E: de::Error {
+        where
+            E: de::Error,
+        {
             Ok(None)
         }
 
         fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-        where D: Deserializer<'de> {
+        where
+            D: Deserializer<'de>,
+        {
             string_or_struct(deserializer).map(Some)
         }
     }

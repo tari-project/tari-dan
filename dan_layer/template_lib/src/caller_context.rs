@@ -9,9 +9,12 @@ pub struct CallerContext {}
 
 impl CallerContext {
     pub fn caller() -> RistrettoPublicKey {
-        let resp: InvokeResult = call_engine(EngineOp::CallerContextInvoke, &CallerContextInvokeArg {
-            action: CallerContextAction::GetCallerPublicKey,
-        });
+        let resp: InvokeResult = call_engine(
+            EngineOp::CallerContextInvoke,
+            &CallerContextInvokeArg {
+                action: CallerContextAction::GetCallerPublicKey,
+            },
+        );
 
         resp.decode().expect("Failed to decode PublicKey")
     }

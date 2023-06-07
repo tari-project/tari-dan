@@ -45,5 +45,6 @@ pub trait FromTagAndValue {
     type Error;
 
     fn try_from_tag_and_value(tag: u64, value: &Value) -> Result<Self, Self::Error>
-    where Self: Sized;
+    where
+        Self: Sized;
 }

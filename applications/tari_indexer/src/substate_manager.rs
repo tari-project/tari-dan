@@ -39,9 +39,7 @@ use tari_engine_types::{
 };
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_indexer_lib::{
-    substate_decoder::find_related_substates,
-    substate_scanner::SubstateScanner,
-    NonFungibleSubstate,
+    substate_decoder::find_related_substates, substate_scanner::SubstateScanner, NonFungibleSubstate,
 };
 use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
@@ -49,10 +47,7 @@ use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClie
 use crate::substate_storage_sqlite::{
     models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
     sqlite_substate_store_factory::{
-        SqliteSubstateStore,
-        SqliteSubstateStoreWriteTransaction,
-        SubstateStore,
-        SubstateStoreReadTransaction,
+        SqliteSubstateStore, SqliteSubstateStoreWriteTransaction, SubstateStore, SubstateStoreReadTransaction,
         SubstateStoreWriteTransaction,
     },
 };
