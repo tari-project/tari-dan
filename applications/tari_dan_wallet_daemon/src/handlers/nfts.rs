@@ -216,7 +216,6 @@ async fn create_account_nft(
         .substate_api()
         .locate_dependent_substates(&[&account.address])
         .await?;
-
     let inputs = inputs
         .iter()
         .map(|addr| ShardId::from_address(&addr.address, addr.version))
