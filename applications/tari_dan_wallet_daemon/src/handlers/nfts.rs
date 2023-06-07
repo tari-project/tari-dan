@@ -150,7 +150,7 @@ async fn mint_account_nft(
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_required_inputs(inputs)
         .with_instructions(instructions)
-        .sign(&owner_sk)
+        .sign(owner_sk)
         .build();
 
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
@@ -181,8 +181,7 @@ async fn mint_account_nft(
         .finalize
         .events
         .iter()
-        .filter(|e| e.topic().as_str() == "mint")
-        .next()
+        .find(|e| e.topic().as_str() == "mint")
         .map(|e| {
             (
                 e.get_payload("resource_address").expect("Resource address not found"),

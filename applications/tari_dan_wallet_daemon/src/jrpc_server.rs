@@ -135,10 +135,7 @@ async fn handler(
             },
             _ => Ok(value.method_not_found(&value.method)),
         },
-        Some(("nfts", method)) => match method {
-            "mint_account_nft" => call_handler(context, value, token, nfts::handle_mint_account_nft).await,
-            _ => Ok(value.method_not_found(&value.method)),
-        },
+        Some(("nfts", "mint_account_nft")) => call_handler(context, value, token, nfts::handle_mint_account_nft).await,
         _ => Ok(value.method_not_found(&value.method)),
     }
 }

@@ -272,7 +272,7 @@ where
                     },
                 };
 
-                let is_burned = if nft.contents().is_none() { true } else { false };
+                let is_burned = nft.contents().is_none();
                 let nft_contents = if let Some(contents) = nft.contents() {
                     contents
                 } else {
