@@ -11,11 +11,11 @@ table! {
 }
 
 table! {
-    auth_status(id) {
+    auth_status (id) {
         id -> Integer,
         user_decided -> Bool,
         granted -> Bool,
-        token -> Text,
+        token -> Nullable<Text>,
         revoked -> Bool,
     }
 }
@@ -89,7 +89,7 @@ table! {
         hash -> Text,
         instructions -> Text,
         signature -> Text,
-        sender_address -> Text,
+        sender_public_key -> Text,
         fee_instructions -> Text,
         meta -> Text,
         result -> Nullable<Text>,
@@ -125,6 +125,7 @@ joinable!(vaults -> accounts (account_id));
 
 allow_tables_to_appear_in_same_query!(
     accounts,
+    auth_status,
     config,
     key_manager_states,
     outputs,

@@ -111,7 +111,7 @@ pub trait WalletStoreReader {
     // Config
     fn config_get<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> Result<Config<T>, WalletStorageError>;
     // JWT
-    fn jwt_get_all(&mut self) -> Result<Vec<(i32, String)>, WalletStorageError>;
+    fn jwt_get_all(&mut self) -> Result<Vec<(i32, Option<String>)>, WalletStorageError>;
     // Transactions
     fn transaction_get(&mut self, hash: FixedHash) -> Result<WalletTransaction, WalletStorageError>;
     fn transactions_fetch_all_by_status(

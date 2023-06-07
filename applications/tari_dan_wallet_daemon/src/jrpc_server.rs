@@ -13,10 +13,7 @@ use axum::{
 };
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcAnswer,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcAnswer, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
@@ -80,6 +77,7 @@ async fn handler(
     value: JsonRpcExtractor,
 ) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
+    debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {:?}", value);
     match value.method.as_str().split_once('.') {
         Some(("auth", method)) => match method {
             "request" => call_handler(context, value, token, rpc::handle_login_request).await,
