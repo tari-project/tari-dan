@@ -10,22 +10,28 @@ use tari_dan_wallet_sdk::{
     apis::{
         accounts::AccountsApiError,
         confidential_outputs::ConfidentialOutputsApiError,
+        non_fungible_tokens::NonFungibleTokensApiError,
         substate::{SubstateApiError, ValidatorScanResult},
         transaction::TransactionApiError,
     },
+    models::NonFungibleToken,
     storage::WalletStore,
     substate_provider::WalletNetworkInterface,
     DanWalletSdk,
 };
 use tari_engine_types::{
     indexed_value::{IndexedValue, IndexedValueVisitorError},
+    non_fungible::NonFungibleContainer,
     resource::Resource,
     substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
     vault::Vault,
 };
 use tari_shutdown::ShutdownSignal;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{prelude::ResourceAddress, resource::TOKEN_SYMBOL};
+use tari_template_lib::{
+    prelude::{NonFungibleId, ResourceAddress},
+    resource::TOKEN_SYMBOL,
+};
 use tokio::{
     sync::{mpsc, oneshot},
     time,
@@ -198,14 +204,20 @@ where
 
             self.add_vault_to_account_if_not_exist(&versioned_account_address.address, &vault)
                 .await?;
-            self.refresh_vault(&versioned_account_address.address, &vault)?;
+            self.refresh_vault(&versioned_account_address.address, &vault, &HashMap::new())?;
         }
 
         Ok(is_updated)
     }
 
-    fn refresh_vault(&self, account_addr: &SubstateAddress, vault: &Vault) -> Result<(), AccountMonitorError> {
+    fn refresh_vault(
+        &self,
+        account_addr: &SubstateAddress,
+        vault: &Vault,
+        nfts: &HashMap<&NonFungibleId, &NonFungibleContainer>,
+    ) -> Result<(), AccountMonitorError> {
         let accounts_api = self.wallet_sdk.accounts_api();
+        let non_fungibles_api = self.wallet_sdk.non_fungible_api();
 
         let balance = vault.balance();
         let vault_addr = SubstateAddress::Vault(*vault.vault_id());
@@ -245,6 +257,47 @@ where
             self.wallet_sdk
                 .confidential_outputs_api()
                 .verify_and_update_confidential_outputs(account_addr, &vault_addr, outputs)?;
+        }
+
+        if let Some(nft_ids) = vault.get_non_fungible_ids() {
+            for id in nft_ids {
+                let nft = match nfts.get(id) {
+                    Some(nft) => *nft,
+                    None => {
+                        error!(
+                            target: LOG_TARGET,
+                            "NonFungible ID {} is found in the vault, but not found in substate diff", id
+                        );
+                        continue;
+                    },
+                };
+
+                let is_burned = nft.contents().is_none();
+                let nft_contents = if let Some(contents) = nft.contents() {
+                    contents
+                } else {
+                    // TODO: in this case, we are burning an nft, make sure to update the database in that case`
+                    continue;
+                };
+                let metadata = match nft_contents.decode_data() {
+                    Ok(data) => data,
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to decode non fungible metadata, with error: {}", e
+                        );
+                        continue;
+                    },
+                };
+                let non_fungible = NonFungibleToken {
+                    is_burned,
+                    vault_id: *vault.vault_id(),
+                    nft_id: id.clone(),
+                    metadata,
+                };
+
+                non_fungibles_api.store_new_nft(&non_fungible)?;
+            }
         }
         Ok(())
     }
@@ -292,13 +345,18 @@ where
             )
             .collect::<Vec<_>>();
 
+        let nfts = diff
+            .up_iter()
+            .filter_map(|(addr, s)| Some((addr.as_non_fungible_address()?.id(), s.substate_value().non_fungible()?)))
+            .collect::<HashMap<_, _>>();
+
         // Find and process all new vaults
         for (account_addr, value) in accounts {
             for vault_id in value.vault_ids() {
                 // Any vaults we process here do not need to be reprocesed later
                 if let Some(vault) = vaults.remove(vault_id).and_then(|s| s.substate_value().vault()) {
                     self.add_vault_to_account_if_not_exist(account_addr, vault).await?;
-                    self.refresh_vault(account_addr, vault)?;
+                    self.refresh_vault(account_addr, vault, &nfts)?;
                 }
             }
         }
@@ -337,7 +395,7 @@ where
             self.add_vault_to_account_if_not_exist(&account_addr, vault).await?;
 
             // Update the vault balance / confidential outputs
-            self.refresh_vault(&account_addr, vault)?;
+            self.refresh_vault(&account_addr, vault, &nfts)?;
         }
         Ok(())
     }
@@ -458,6 +516,8 @@ pub enum AccountMonitorError {
     Substate(#[from] SubstateApiError),
     #[error("Outputs API error: {0}")]
     ConfidentialOutputs(#[from] ConfidentialOutputsApiError),
+    #[error("Non Fungibles API error: {0}")]
+    NonFungibleTokens(#[from] NonFungibleTokensApiError),
     #[error("Failed to decode binary value: {0}")]
     DecodeValueFailed(#[from] IndexedValueVisitorError),
     #[error("Unexpected substate: {0}")]

@@ -65,6 +65,7 @@ mod account_non_fungible_template {
                 HashMap::from([
                     ("id".to_string(), id.to_string()),
                     ("metadata".to_string(), metadata.to_string()),
+                    ("resource_address".to_string(), self.resource_address.to_string()),
                 ]),
             );
 
