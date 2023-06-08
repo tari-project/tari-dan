@@ -32,6 +32,7 @@ pub struct SubstateShardData {
 }
 
 impl SubstateShardData {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         shard_id: ShardId,
         address: SubstateAddress,
