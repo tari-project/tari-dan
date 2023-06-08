@@ -31,6 +31,8 @@ import {
   IoBarChart,
   IoKeyOutline,
   IoKey,
+  IoTicketOutline,
+  IoTicket,
 } from 'react-icons/io5';
 import Tooltip from '@mui/material/Tooltip';
 import Fade from '@mui/material/Fade';
@@ -65,6 +67,12 @@ const mainItems = [
     icon: <IoKeyOutline style={iconStyle} />,
     activeIcon: <IoKey style={activeIconStyle} />,
     link: 'keys',
+  },
+  {
+    title: 'JWTs',
+    icon: <IoTicketOutline style={iconStyle} />,
+    activeIcon: <IoTicket style={activeIconStyle} />,
+    link: 'jwts',
   },
 ];
 

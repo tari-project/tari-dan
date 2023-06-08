@@ -63,3 +63,7 @@ code {
     flex-direction: row;
   }
 }
+
+.MuiDataGrid-columnHeaderTitle {
+  font-family: 'AvenirHeavy', sans-serif;
+}
