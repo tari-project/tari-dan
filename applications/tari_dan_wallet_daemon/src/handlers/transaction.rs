@@ -62,7 +62,7 @@ pub async fn handle_submit_instruction(
     })
     .await?;
     let request = TransactionSubmitRequest {
-        signing_key_index: None,
+        signing_key_index: Some(fee_account.key_index),
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),

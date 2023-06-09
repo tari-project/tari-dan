@@ -339,11 +339,13 @@ pub async fn mint_new_nft_on_account(
         RistrettoPublicKeyBytes::from_bytes(account_keys.1.as_bytes()).expect("Failed to parse public key"),
     );
     let token_symbol = "MY_NFT".to_string();
-    let metadata = metadata.unwrap_or(serde_json::json!({
-        "name": "TariProject",
-        "departure": "Now",
-        "landing_on": "Moon"
-    }));
+    let metadata = metadata.unwrap_or_else(|| {
+        serde_json::json!({
+            "name": "TariProject",
+            "departure": "Now",
+            "landing_on": "Moon"
+        })
+    });
 
     let request = MintAccountNFTRequest {
         account: ComponentAddressOrName::Name(account_name.clone()),
