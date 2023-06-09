@@ -14,7 +14,6 @@ use tari_dan_storage::{
         PrecommitTransactionPool,
         PrepareTransactionPool,
         QuorumCertificate,
-        ValidatorId,
     },
     StateStore,
     StateStoreWriteTransaction,
@@ -33,7 +32,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     _leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
-    tx_broadcast: mpsc::Sender<(Committee<ValidatorId>, HotstuffMessage)>,
+    tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
@@ -45,7 +44,7 @@ where
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
-        tx_broadcast: mpsc::Sender<(Committee<ValidatorId>, HotstuffMessage)>,
+        tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
     ) -> Self {
         Self {
             store,
@@ -58,10 +57,10 @@ where
     pub async fn handle(
         &self,
         epoch: Epoch,
-        local_committee: Committee<ValidatorId>,
+        local_committee: Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
     ) -> Result<(), HotStuffError> {
-        let validator_id = self.epoch_manager.get_validator_id(epoch).await?;
+        let validator_id = self.epoch_manager.get_validator_shard(epoch).await?;
 
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
         // the non-Send tx could be used after the await point, which is not possible.
@@ -70,7 +69,7 @@ where
             let high_qc = HighQc::get(&mut *tx, epoch)?;
             let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
 
-            let parent_block = leaf_block.get_block(&mut tx)?;
+            let parent_block = leaf_block.get_block(&mut *tx)?;
 
             let next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator_id)?;
             let involved_shards = next_block.find_involved_shards(&mut *tx)?;
@@ -98,12 +97,12 @@ where
         epoch: Epoch,
         next_block: Block,
         involved_shards: HashSet<ShardId>,
-        local_committee: Committee<ValidatorId>,
-        our_validator_id: ValidatorId,
+        local_committee: Committee<TConsensusSpec::Addr>,
+        our_shard_id: ShardId,
     ) -> Result<(), HotStuffError> {
         // Find non-local shard committees to include in the broadcast
         let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
-        let local_bucket = our_validator_id.shard_id().to_committee_bucket(num_committees);
+        let local_bucket = our_shard_id.to_committee_bucket(num_committees);
         let non_local_buckets = involved_shards
             .into_iter()
             .map(|shard| shard.to_committee_bucket(num_committees))
@@ -139,7 +138,7 @@ where
         epoch: Epoch,
         parent_block: &Block,
         high_qc: QuorumCertificate,
-        proposed_by: ValidatorId,
+        proposed_by: ShardId,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;

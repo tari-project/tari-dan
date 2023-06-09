@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_storage::consensus_models::ValidatorId;
 
 use crate::{hotstuff::error::HotStuffError, messages::VoteMessage, traits::ConsensusSpec};
 
@@ -17,7 +16,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveVoteHandler<TConsensusSpec> {
         Self { _store: store }
     }
 
-    pub async fn handle(&self, from: ValidatorId, message: VoteMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(&self, from: TConsensusSpec::Addr, message: VoteMessage) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
             "🔥 Receive VOTE for node {} from {}", message.block_id, from,

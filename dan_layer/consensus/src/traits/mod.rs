@@ -7,11 +7,13 @@ mod leader_strategy;
 
 pub use epoch_manager::*;
 pub use leader_strategy::*;
+use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::StateStore;
 
 pub trait ConsensusSpec {
-    type Error;
+    type Addr: NodeAddressable;
+
     type StateStore: StateStore;
-    type EpochManager: EpochManager<Error = Self::Error>;
-    type LeaderStrategy: LeaderStrategy;
+    type EpochManager: EpochManager<Addr = Self::Addr>;
+    type LeaderStrategy: LeaderStrategy<Self::Addr>;
 }

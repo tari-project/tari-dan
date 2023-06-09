@@ -20,8 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::ops::DerefMut;
-
 use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
@@ -61,11 +59,7 @@ impl LeafBlock {
         tx.leaf_block_set(self)
     }
 
-    pub fn get_block<TTx>(&self, tx: &mut TTx) -> Result<Block, StorageError>
-    where
-        TTx: DerefMut,
-        TTx::Target: StateStoreReadTransaction,
-    {
-        tx.deref_mut().blocks_get(&self.block_id)
+    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+        tx.blocks_get(&self.block_id)
     }
 }

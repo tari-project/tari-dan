@@ -10,7 +10,6 @@ mod quorum_certificate;
 mod transaction;
 mod transaction_decision;
 mod transaction_pools;
-mod validator_id;
 mod vote_signature;
 
 pub use block::*;
@@ -22,5 +21,4 @@ pub use quorum_certificate::*;
 pub use transaction::*;
 pub use transaction_decision::*;
 pub use transaction_pools::*;
-pub use validator_id::*;
 pub use vote_signature::*;

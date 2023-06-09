@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_common_types::Epoch;
-use tari_dan_storage::{consensus_models::ValidatorId, StorageError};
+use tari_dan_storage::StorageError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
@@ -15,7 +15,7 @@ pub enum HotStuffError {
     #[error("Received message from non-committee member. Epoch: {epoch}, Sender: {sender}, {context}")]
     ReceivedMessageFromNonCommitteeMember {
         epoch: Epoch,
-        sender: ValidatorId,
+        sender: String,
         context: String,
     },
 }

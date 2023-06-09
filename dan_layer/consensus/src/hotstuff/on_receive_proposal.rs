@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_storage::consensus_models::ValidatorId;
 
 use crate::{hotstuff::error::HotStuffError, messages::ProposalMessage, traits::ConsensusSpec};
 
@@ -17,7 +16,7 @@ impl<TConsensnsSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensnsSpec> {
         Self { _store: store }
     }
 
-    pub async fn handle(&self, from: ValidatorId, message: ProposalMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(&self, from: TConsensnsSpec::Addr, message: ProposalMessage) -> Result<(), HotStuffError> {
         let block = message.block;
         debug!(
             target: LOG_TARGET,
@@ -135,7 +134,7 @@ impl<TConsensnsSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensnsSpec> {
         // Ok(())
     }
 
-    // fn validate_proposed_block(&self, _from: &ValidatorId, _block: &Block) -> Result<(), HotStuffError> {
+    // fn validate_proposed_block(&self, _from: &TConsensnsSpec::Addr, _block: &Block) -> Result<(), HotStuffError> {
     //     // TODO
     //     Ok(())
     // }

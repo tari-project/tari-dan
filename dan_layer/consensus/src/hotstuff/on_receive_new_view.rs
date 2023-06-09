@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_dan_storage::{
-    consensus_models::{BlockId, QuorumCertificate, ValidatorId},
+    consensus_models::{BlockId, QuorumCertificate},
     StateStore,
 };
 
@@ -21,7 +21,7 @@ pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     _leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
-    newview_message_counts: HashMap<BlockId, HashSet<ValidatorId>>,
+    newview_message_counts: HashMap<BlockId, HashSet<TConsensusSpec::Addr>>,
 }
 
 impl<TConsensusSpec> OnReceiveNewViewHandler<TConsensusSpec>
@@ -42,7 +42,7 @@ where
         }
     }
 
-    pub async fn handle(&mut self, from: ValidatorId, message: NewViewMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: NewViewMessage) -> Result<(), HotStuffError> {
         let NewViewMessage { high_qc } = message;
         debug!(
             target: LOG_TARGET,
@@ -59,12 +59,12 @@ where
 
         if !self
             .epoch_manager
-            .is_validator_in_local_committee(from, high_qc.epoch())
+            .is_validator_in_local_committee(&from, high_qc.epoch())
             .await?
         {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: high_qc.epoch(),
-                sender: from,
+                sender: from.to_string(),
                 context: format!("Received NEWVIEW from {}", from),
             });
         }
@@ -72,7 +72,7 @@ where
         self.validate_qc(&high_qc)?;
 
         self.store
-            .with_write_tx(|tx| update_high_qc::<TConsensusSpec::StateStore>(tx, from, &high_qc))?;
+            .with_write_tx(|tx| update_high_qc::<TConsensusSpec::StateStore>(tx, &high_qc))?;
 
         // // Take note of unique NEWVIEWs so that we can count them
         let entry = self.newview_message_counts.entry(*high_qc.block_id()).or_default();

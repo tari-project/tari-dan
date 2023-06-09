@@ -14,7 +14,6 @@ use tari_dan_storage::{
         NewTransactionPool,
         TransactionDecision,
         TransactionPool,
-        ValidatorId,
     },
     StateStore,
     StateStoreWriteTransaction,
@@ -37,8 +36,10 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
+    validator_addr: TConsensusSpec::Addr,
+
     rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-    rx_hs_message: mpsc::Receiver<(ValidatorId, HotstuffMessage)>,
+    rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
 
     on_receive_proposal: OnReceiveProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
@@ -60,15 +61,17 @@ where
     HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
 {
     pub fn new(
+        validator_addr: TConsensusSpec::Addr,
         rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-        rx_hs_message: mpsc::Receiver<(ValidatorId, HotstuffMessage)>,
+        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
         state_store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
-        tx_broadcast: mpsc::Sender<(Committee<ValidatorId>, HotstuffMessage)>,
+        tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
         shutdown: ShutdownSignal,
     ) -> Self {
         Self {
+            validator_addr,
             rx_new_transactions,
             rx_hs_message,
             on_receive_proposal: OnReceiveProposalHandler::new(state_store.clone()),
@@ -174,10 +177,10 @@ where
         // Are we the leader?
         let epoch = self.epoch_manager.current_epoch().await?;
         let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
-        let (validator_id, local_committee) = self.epoch_manager.get_local_committee(epoch).await?;
+        let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let is_leader = self
             .leader_strategy
-            .is_leader(&validator_id, &local_committee, &leaf_block.block_id, 0);
+            .is_leader(&self.validator_addr, &local_committee, &leaf_block.block_id, 0);
         if is_leader {
             self.on_propose.handle(epoch, local_committee, leaf_block).await?;
         }
@@ -185,7 +188,11 @@ where
         Ok(())
     }
 
-    async fn on_new_hs_message(&mut self, from: ValidatorId, msg: HotstuffMessage) -> Result<(), HotStuffError> {
+    async fn on_new_hs_message(
+        &mut self,
+        from: TConsensusSpec::Addr,
+        msg: HotstuffMessage,
+    ) -> Result<(), HotStuffError> {
         match msg {
             HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
             HotstuffMessage::Proposal(msg) => self.on_receive_proposal.handle(from, msg).await?,

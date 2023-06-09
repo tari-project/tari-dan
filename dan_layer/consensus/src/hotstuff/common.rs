@@ -5,7 +5,7 @@ use std::ops::DerefMut;
 
 use log::*;
 use tari_dan_storage::{
-    consensus_models::{HighQc, LeafBlock, QuorumCertificate, ValidatorId},
+    consensus_models::{HighQc, LeafBlock, QuorumCertificate},
     StateStore,
 };
 
@@ -13,9 +13,8 @@ use crate::hotstuff::error::HotStuffError;
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff";
 
-pub fn update_high_qc<TTx: StateStore>(
-    tx: &mut TTx::WriteTransaction<'_>,
-    proposed_by: ValidatorId,
+pub fn update_high_qc<TStore: StateStore>(
+    tx: &mut TStore::WriteTransaction<'_>,
     qc: &QuorumCertificate,
 ) -> Result<(), HotStuffError> {
     let high_qc = HighQc::get(tx.deref_mut(), qc.epoch())?;
@@ -28,13 +27,12 @@ pub fn update_high_qc<TTx: StateStore>(
     if high_qc_block.height() < new_qc_block.height() {
         debug!(
             target: LOG_TARGET,
-            "🔥 UPDATE_HIGH_QC (node: {} {}, tx_count: {}, previous block: {} {}, proposed_by: {})",
+            "🔥 UPDATE_HIGH_QC (node: {} {}, tx_count: {}, previous block: {} {})",
             new_qc_block.id(),
             new_qc_block.height(),
             new_qc_block.transaction_count(),
             high_qc_block.id(),
             high_qc_block.height(),
-            proposed_by
         );
 
         LeafBlock {

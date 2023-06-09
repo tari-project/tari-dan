@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_dan_common_types::{hashing, optional::Optional, Epoch, NodeHeight, ShardId};
 
-use super::{QuorumCertificate, TransactionDecision, ValidatorId};
+use super::{QuorumCertificate, TransactionDecision};
 use crate::{consensus_models::TransactionId, StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -22,7 +22,7 @@ pub struct Block {
     height: NodeHeight,
     epoch: Epoch,
     round: u64,
-    proposed_by: ValidatorId,
+    proposed_by: ShardId,
 
     // Body
     merkle_root: FixedHash,
@@ -39,7 +39,7 @@ impl Block {
         height: NodeHeight,
         epoch: Epoch,
         round: u64,
-        proposed_by: ValidatorId,
+        proposed_by: ShardId,
         prepared: BTreeSet<TransactionDecision>,
         precommitted: BTreeSet<TransactionDecision>,
         committed: BTreeSet<TransactionDecision>,
@@ -69,7 +69,7 @@ impl Block {
             NodeHeight(0),
             epoch,
             0,
-            ValidatorId::zero(),
+            ShardId::zero(),
             Default::default(),
             Default::default(),
             Default::default(),
@@ -129,7 +129,7 @@ impl Block {
         self.round
     }
 
-    pub fn proposed_by(&self) -> &ValidatorId {
+    pub fn proposed_by(&self) -> &ShardId {
         &self.proposed_by
     }
 

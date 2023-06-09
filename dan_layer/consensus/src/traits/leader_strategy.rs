@@ -20,33 +20,22 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::committee::Committee;
-use tari_dan_storage::consensus_models::{BlockId, ValidatorId};
+use tari_dan_common_types::{committee::Committee, NodeAddressable};
+use tari_dan_storage::consensus_models::BlockId;
 
-pub trait LeaderStrategy {
-    fn calculate_leader(&self, committee: &Committee<ValidatorId>, block: &BlockId, round: u32) -> u32;
+pub trait LeaderStrategy<TAddr: NodeAddressable> {
+    fn calculate_leader(&self, committee: &Committee<TAddr>, block: &BlockId, round: u32) -> u32;
 
-    fn is_leader(
-        &self,
-        validator: &ValidatorId,
-        committee: &Committee<ValidatorId>,
-        block: &BlockId,
-        round: u32,
-    ) -> bool {
+    fn is_leader(&self, validator_addr: &TAddr, committee: &Committee<TAddr>, block: &BlockId, round: u32) -> bool {
         let position = self.calculate_leader(committee, block, round);
-        if let Some(index) = committee.members.iter().position(|m| m == validator) {
-            position == index as u32
+        if let Some(vn) = committee.members.get(position as usize) {
+            vn == validator_addr
         } else {
             false
         }
     }
 
-    fn get_leader<'a, 'b>(
-        &'a self,
-        committee: &'b Committee<ValidatorId>,
-        block: &BlockId,
-        round: u32,
-    ) -> &'b ValidatorId {
+    fn get_leader<'a, 'b>(&'a self, committee: &'b Committee<TAddr>, block: &BlockId, round: u32) -> &'b TAddr {
         let index = self.calculate_leader(committee, block, round);
         committee.members.get(index as usize).unwrap()
     }
@@ -54,24 +43,24 @@ pub trait LeaderStrategy {
 
 pub struct AlwaysFirstLeader;
 
-impl LeaderStrategy for AlwaysFirstLeader {
-    fn calculate_leader(&self, _committee: &Committee<ValidatorId>, _block: &BlockId, _round: u32) -> u32 {
+impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for AlwaysFirstLeader {
+    fn calculate_leader(&self, _committee: &Committee<TAddr>, _block: &BlockId, _round: u32) -> u32 {
         0
     }
 }
 
 pub struct RotatingLeader;
 
-impl LeaderStrategy for RotatingLeader {
-    fn calculate_leader(&self, committee: &Committee<ValidatorId>, _block: &BlockId, round: u32) -> u32 {
+impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for RotatingLeader {
+    fn calculate_leader(&self, committee: &Committee<TAddr>, _block: &BlockId, round: u32) -> u32 {
         round % (committee.len() as u32)
     }
 }
 
 pub struct RandomDeterministicLeaderStrategy;
 
-impl LeaderStrategy for RandomDeterministicLeaderStrategy {
-    fn calculate_leader(&self, committee: &Committee<ValidatorId>, block: &BlockId, round: u32) -> u32 {
+impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for RandomDeterministicLeaderStrategy {
+    fn calculate_leader(&self, committee: &Committee<TAddr>, block: &BlockId, round: u32) -> u32 {
         // TODO: Maybe Committee should not be able to be constructed with an empty committee
         assert!(!committee.is_empty(), "Committee was empty in calculate_leader");
         let hash = block.hash().as_slice();
