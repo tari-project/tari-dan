@@ -37,8 +37,6 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
-    validator_id: ValidatorId,
-
     rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
     rx_hs_message: mpsc::Receiver<(ValidatorId, HotstuffMessage)>,
 
@@ -62,7 +60,6 @@ where
     HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
 {
     pub fn new(
-        validator_id: ValidatorId,
         rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
         rx_hs_message: mpsc::Receiver<(ValidatorId, HotstuffMessage)>,
         state_store: TConsensusSpec::StateStore,
@@ -72,7 +69,6 @@ where
         shutdown: ShutdownSignal,
     ) -> Self {
         Self {
-            validator_id,
             rx_new_transactions,
             rx_hs_message,
             on_receive_proposal: OnReceiveProposalHandler::new(state_store.clone()),
@@ -86,7 +82,6 @@ where
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
-                validator_id,
                 tx_broadcast,
             ),
             state_store,
@@ -179,13 +174,10 @@ where
         // Are we the leader?
         let epoch = self.epoch_manager.current_epoch().await?;
         let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
-        let local_committee = self
-            .epoch_manager
-            .get_committee(epoch, self.validator_id.shard_id())
-            .await?;
+        let (validator_id, local_committee) = self.epoch_manager.get_local_committee(epoch).await?;
         let is_leader = self
             .leader_strategy
-            .is_leader(&self.validator_id, &local_committee, &leaf_block.block_id, 0);
+            .is_leader(&validator_id, &local_committee, &leaf_block.block_id, 0);
         if is_leader {
             self.on_propose.handle(epoch, local_committee, leaf_block).await?;
         }

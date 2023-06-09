@@ -33,7 +33,6 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     _leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
-    validator_id: ValidatorId,
     tx_broadcast: mpsc::Sender<(Committee<ValidatorId>, HotstuffMessage)>,
 }
 
@@ -46,14 +45,12 @@ where
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
-        validator_id: ValidatorId,
         tx_broadcast: mpsc::Sender<(Committee<ValidatorId>, HotstuffMessage)>,
     ) -> Self {
         Self {
             store,
             _leader_strategy: leader_strategy,
             epoch_manager,
-            validator_id,
             tx_broadcast,
         }
     }
@@ -64,6 +61,8 @@ where
         local_committee: Committee<ValidatorId>,
         leaf_block: LeafBlock,
     ) -> Result<(), HotStuffError> {
+        let validator_id = self.epoch_manager.get_validator_id(epoch).await?;
+
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
         // the non-Send tx could be used after the await point, which is not possible.
         let (involved_shards, next_block) = {
@@ -73,7 +72,7 @@ where
 
             let parent_block = leaf_block.get_block(&mut tx)?;
 
-            let next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc)?;
+            let next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator_id)?;
             let involved_shards = next_block.find_involved_shards(&mut *tx)?;
             next_block.insert(&mut tx)?;
 
@@ -88,7 +87,7 @@ where
             next_block.id(),
         );
 
-        self.broadcast_proposal(epoch, next_block, involved_shards, local_committee)
+        self.broadcast_proposal(epoch, next_block, involved_shards, local_committee, validator_id)
             .await?;
 
         Ok(())
@@ -100,10 +99,11 @@ where
         next_block: Block,
         involved_shards: HashSet<ShardId>,
         local_committee: Committee<ValidatorId>,
+        our_validator_id: ValidatorId,
     ) -> Result<(), HotStuffError> {
         // Find non-local shard committees to include in the broadcast
         let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
-        let local_bucket = self.validator_id.shard_id().to_committee_bucket(num_committees);
+        let local_bucket = our_validator_id.shard_id().to_committee_bucket(num_committees);
         let non_local_buckets = involved_shards
             .into_iter()
             .map(|shard| shard.to_committee_bucket(num_committees))
@@ -139,16 +139,17 @@ where
         epoch: Epoch,
         parent_block: &Block,
         high_qc: QuorumCertificate,
+        proposed_by: ValidatorId,
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
         let mut remaining_txs = TARGET_BLOCK_SIZE;
 
-        let commit_txs = PrecommitTransactionPool::move_many_to_committed(&mut *tx, remaining_txs)?;
+        let commit_txs = PrecommitTransactionPool::move_many_to_committed(tx, remaining_txs)?;
         remaining_txs -= commit_txs.len();
-        let precommit_txs = PrepareTransactionPool::move_many_to_precommit(&mut *tx, remaining_txs)?;
+        let precommit_txs = PrepareTransactionPool::move_many_to_precommit(tx, remaining_txs)?;
         remaining_txs -= precommit_txs.len();
-        let prepare_txs = NewTransactionPool::move_many_to_prepare(&mut *tx, remaining_txs)?;
+        let prepare_txs = NewTransactionPool::move_many_to_prepare(tx, remaining_txs)?;
 
         let next_block = Block::new(
             *parent_block.id(),
@@ -156,7 +157,7 @@ where
             parent_block.height() + NodeHeight(1),
             epoch,
             0,
-            self.validator_id,
+            proposed_by,
             prepare_txs,
             precommit_txs,
             commit_txs,

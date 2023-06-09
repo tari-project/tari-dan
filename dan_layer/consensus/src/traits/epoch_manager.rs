@@ -12,6 +12,7 @@ pub trait EpochManager {
     type Error;
 
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<ValidatorId>, Self::Error>;
+    async fn get_validator_id(&self, epoch: Epoch) -> Result<ValidatorId, Self::Error>;
     async fn current_epoch(&self) -> Result<Epoch, Self::Error>;
     async fn is_epoch_active(&self, epoch: Epoch) -> Result<bool, Self::Error>;
     async fn is_validator_in_local_committee(
@@ -25,6 +26,12 @@ pub trait EpochManager {
         epoch: Epoch,
         buckets: HashSet<u64>,
     ) -> Result<Committee<ValidatorId>, Self::Error>;
+
+    async fn get_local_committee(&self, epoch: Epoch) -> Result<(ValidatorId, Committee<ValidatorId>), Self::Error> {
+        let validator_id = self.get_validator_id(epoch).await?;
+        let committee = self.get_committee(epoch, validator_id.shard_id()).await?;
+        Ok((validator_id, committee))
+    }
 
     async fn is_current_epoch_active(&self) -> Result<bool, Self::Error> {
         let current_epoch = self.current_epoch().await?;
