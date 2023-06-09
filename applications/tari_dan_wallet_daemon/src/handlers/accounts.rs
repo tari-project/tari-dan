@@ -1060,13 +1060,8 @@ pub async fn handle_confidential_transfer(
         inputs.push(resource_substate.address);
 
         // get destination account information
-        let destination_account_address = get_or_create_account_address(
-            &sdk,
-            &req.destination_public_key,
-            &mut inputs,
-            &mut instructions,
-        )
-        .await?;
+        let destination_account_address =
+            get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
         // -------------------------------- Lock outputs for spending -------------------------------- //
         let total_amount = req.fee.unwrap_or(DEFAULT_FEE) + req.amount;
@@ -1120,43 +1115,6 @@ pub async fn handle_confidential_transfer(
             &output_statement,
             maybe_change_statement.as_ref(),
         )?;
-
-        // // destination account inputs
-        // let mut shard_inputs: Vec<ShardId> = destination_account_inputs
-        //     .into_iter()
-        //     .map(|s| ShardId::from_address(&s.address, s.version))
-        //     .collect();
-        //
-        // // Source account input
-        // shard_inputs.push(ShardId::from_address(
-        //     &account_substate.address.address,
-        //     account_substate.address.version,
-        // ));
-        // shard_inputs.push(ShardId::from_address(
-        //     &src_vault_substate.address.address,
-        //     src_vault_substate.address.version,
-        // ));
-
-        // let related = sdk
-        //     .substate_api()
-        //     .get_related_substates(&destination_account_address.into(), None)
-        //     .await?;
-        //
-        // for address in &related {
-        //     if let SubstateAddress::Vault(_) = address.clone() {
-        //         let vault = sdk.substate_api().scan_for_substate(address, None).await?;
-        //         shard_inputs.push(ShardId::from_address(&vault.address.address, vault.address.version));
-        //     }
-        // }
-        //
-        // let shard_outputs = vec![
-        //     // Source account mutated
-        //     ShardId::from_address(&account_substate.address.address, account_substate.address.version + 1),
-        //     ShardId::from_address(
-        //         &src_vault_substate.address.address,
-        //         src_vault_substate.address.version + 1,
-        //     ),
-        // ];
 
         instructions.append(&mut vec![
             Instruction::CallMethod {
