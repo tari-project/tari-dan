@@ -7,13 +7,14 @@ use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch};
 use tari_dan_storage::{
     consensus_models::{
+        AllTransactionPools,
         Block,
         ExecutedTransaction,
         HighQc,
         LeafBlock,
+        LockedBlock,
         NewTransactionPool,
         TransactionDecision,
-        TransactionPool,
     },
     StateStore,
     StateStoreWriteTransaction,
@@ -67,14 +68,22 @@ where
         state_store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
+        signing_service: TConsensusSpec::VoteSigningService,
         tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         shutdown: ShutdownSignal,
     ) -> Self {
         Self {
             validator_addr,
             rx_new_transactions,
             rx_hs_message,
-            on_receive_proposal: OnReceiveProposalHandler::new(state_store.clone()),
+            on_receive_proposal: OnReceiveProposalHandler::new(
+                state_store.clone(),
+                epoch_manager.clone(),
+                signing_service,
+                leader_strategy.clone(),
+                tx_leader,
+            ),
             on_receive_vote: OnReceiveVoteHandler::new(state_store.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
                 state_store.clone(),
@@ -168,7 +177,7 @@ where
         // Are there any transactions to propose?
         if !self
             .state_store
-            .with_read_tx(|tx| TransactionPool::has_ready_transactions(tx))?
+            .with_read_tx(|tx| AllTransactionPools::has_ready_transactions(tx))?
         {
             info!(target: LOG_TARGET, "[on_beat] No ready transactions");
             return Ok(());
@@ -196,17 +205,16 @@ where
         match msg {
             HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
             HotstuffMessage::Proposal(msg) => self.on_receive_proposal.handle(from, msg).await?,
-            HotstuffMessage::VoteMessage(msg) => self.on_receive_vote.handle(from, msg).await?,
+            HotstuffMessage::Vote(msg) => self.on_receive_vote.handle(from, msg).await?,
         }
         Ok(())
     }
 
-    fn create_genesis_block_if_required(&self, epoch: Epoch) -> Result<bool, HotStuffError> {
+    fn create_genesis_block_if_required(&self, epoch: Epoch) -> Result<(), HotStuffError> {
         let genesis = Block::genesis(epoch);
 
         let mut tx = self.state_store.create_write_tx()?;
-        let exists = genesis.exists(&mut *tx)?;
-        if !exists {
+        if genesis.exists(&mut *tx)? {
             genesis.insert(&mut tx)?;
             HighQc {
                 epoch,
@@ -214,8 +222,15 @@ where
                 height: genesis.height(),
             }
             .save(&mut tx)?;
+
+            LockedBlock {
+                epoch,
+                block_id: *genesis.id(),
+                height: genesis.height(),
+            }
+            .set(&mut tx)?;
         }
         tx.commit()?;
-        Ok(exists)
+        Ok(())
     }
 }

@@ -6,6 +6,7 @@ use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{
     hashing::{quorum_certificate_hasher, ValidatorNodeBmtHasherBlake256},
     Epoch,
+    NodeHeight,
 };
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 
@@ -18,7 +19,9 @@ use crate::{
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuorumCertificate {
     block_id: BlockId,
+    block_height: NodeHeight,
     epoch: Epoch,
+    view_number: u64,
     signatures: Vec<ValidatorSignature>,
     merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>,
     leaf_hashes: Vec<FixedHash>,
@@ -27,7 +30,9 @@ pub struct QuorumCertificate {
 impl QuorumCertificate {
     pub fn new(
         block: BlockId,
+        block_height: NodeHeight,
         epoch: Epoch,
+        view_number: u64,
         signatures: Vec<ValidatorSignature>,
         merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>,
         mut leaf_hashes: Vec<FixedHash>,
@@ -35,7 +40,9 @@ impl QuorumCertificate {
         leaf_hashes.sort();
         Self {
             block_id: block,
+            block_height,
             epoch,
+            view_number,
             signatures,
             merged_proof,
             leaf_hashes,
@@ -45,7 +52,9 @@ impl QuorumCertificate {
     pub fn genesis(epoch: Epoch) -> Self {
         Self {
             block_id: BlockId::genesis(),
+            block_height: NodeHeight::zero(),
             epoch,
+            view_number: 0,
             signatures: vec![],
             merged_proof: MergedBalancedBinaryMerkleProof::create_from_proofs(vec![]).unwrap(),
             leaf_hashes: vec![],
@@ -68,10 +77,23 @@ impl QuorumCertificate {
         &self.leaf_hashes
     }
 
+    pub fn signatures(&self) -> &[ValidatorSignature] {
+        &self.signatures
+    }
+
+    pub fn view_number(&self) -> u64 {
+        self.view_number
+    }
+
+    pub fn block_height(&self) -> NodeHeight {
+        self.block_height
+    }
+
     pub fn to_hash(&self) -> FixedHash {
         quorum_certificate_hasher()
             .chain(&self.epoch)
             .chain(&self.block_id)
+            .chain(&self.view_number)
             .chain(&self.signatures)
             .chain(&self.merged_proof)
             .chain(&self.leaf_hashes)

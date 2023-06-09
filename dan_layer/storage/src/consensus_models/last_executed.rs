@@ -5,18 +5,18 @@ use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{consensus_models::BlockId, StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
-pub struct LastVoted {
+pub struct LastExecuted {
     pub epoch: Epoch,
-    pub block_id: BlockId,
     pub height: NodeHeight,
+    pub block_id: BlockId,
 }
 
-impl LastVoted {
+impl LastExecuted {
     pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
-        tx.last_voted_get(epoch)
+        tx.last_executed_get(epoch)
     }
 
     pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        tx.last_voted_set(self)
+        tx.last_executed_set(self)
     }
 }

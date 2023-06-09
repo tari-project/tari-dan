@@ -6,8 +6,7 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{Epoch, ShardId};
 
 use crate::{
     consensus_models::{
@@ -15,7 +14,10 @@ use crate::{
         BlockId,
         ExecutedTransaction,
         HighQc,
+        LastExecuted,
+        LastVoted,
         LeafBlock,
+        LockedBlock,
         QuorumCertificate,
         Transaction,
         TransactionDecision,
@@ -61,12 +63,15 @@ pub trait StateStore {
 }
 
 pub trait StateStoreReadTransaction {
-    fn last_vote_height_get(&mut self, epoch: Epoch) -> Result<u64, StorageError>;
-    fn locked_block_get(&mut self, epoch: Epoch) -> Result<(NodeHeight, FixedHash), StorageError>;
+    fn last_voted_get(&mut self, epoch: Epoch) -> Result<LastVoted, StorageError>;
+    fn last_executed_get(&mut self, epoch: Epoch) -> Result<LastExecuted, StorageError>;
+    fn locked_block_get(&mut self, epoch: Epoch) -> Result<LockedBlock, StorageError>;
     fn leaf_block_get(&mut self, epoch: Epoch) -> Result<LeafBlock, StorageError>;
     fn high_qc_get(&mut self, epoch: Epoch) -> Result<HighQc, StorageError>;
     fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<Transaction, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError>;
+    fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
+    fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn quorum_certificates_get(&mut self, block_id: &BlockId) -> Result<QuorumCertificate, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
@@ -84,7 +89,11 @@ pub trait StateStoreWriteTransaction {
     // -------------------------------- Block -------------------------------- //
     fn blocks_insert(&mut self, block: &Block) -> Result<(), StorageError>;
 
+    // -------------------------------- Bookkeeping -------------------------------- //
+    fn last_voted_set(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
+    fn last_executed_set(&mut self, last_exec: &LastExecuted) -> Result<(), StorageError>;
     fn leaf_block_set(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError>;
+    fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError>;
     fn high_qc_set(&mut self, high_qc: &HighQc) -> Result<(), StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //

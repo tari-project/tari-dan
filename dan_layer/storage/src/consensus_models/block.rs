@@ -4,14 +4,20 @@
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::{Debug, Display},
+    ops::DerefMut,
 };
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_dan_common_types::{hashing, optional::Optional, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{hashing, Epoch, NodeHeight, ShardId};
 
 use super::{QuorumCertificate, TransactionDecision};
-use crate::{consensus_models::TransactionId, StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
+use crate::{
+    consensus_models::{LastExecuted, LockedBlock, TransactionId},
+    StateStoreReadTransaction,
+    StateStoreWriteTransaction,
+    StorageError,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
@@ -90,16 +96,35 @@ impl Block {
             .result()
     }
 
-    pub fn all_transaction_ids(&self) -> impl Iterator<Item = TransactionId> + '_ {
+    pub fn all_transaction_decisions(&self) -> impl Iterator<Item = &TransactionDecision> + '_ {
         self.prepared
             .iter()
-            .map(|d| d.transaction_id)
-            .chain(self.precommitted.iter().map(|d| d.transaction_id))
-            .chain(self.committed.iter().map(|d| d.transaction_id))
+            .chain(self.precommitted.iter())
+            .chain(self.committed.iter())
+    }
+
+    pub fn all_transaction_ids(&self) -> impl Iterator<Item = TransactionId> + '_ {
+        self.all_transaction_decisions().map(|d| d.transaction_id)
     }
 
     pub fn transaction_count(&self) -> usize {
         self.prepared.len() + self.precommitted.len() + self.committed.len()
+    }
+
+    pub fn as_locked(&self) -> LockedBlock {
+        LockedBlock {
+            epoch: self.epoch,
+            height: self.height,
+            block_id: self.id,
+        }
+    }
+
+    pub fn as_last_executed(&self) -> LastExecuted {
+        LastExecuted {
+            epoch: self.epoch,
+            height: self.height,
+            block_id: self.id,
+        }
     }
 }
 
@@ -155,13 +180,23 @@ impl Block {
         tx.blocks_get(id)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
-        // TODO: blocks_exist?
-        Ok(tx.blocks_get(self.id()).optional()?.is_some())
+    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+        tx.blocks_exists(self.id())
     }
 
-    pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn insert<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.blocks_insert(self)
+    }
+
+    pub fn save<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
+    where
+        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx::Target: StateStoreReadTransaction,
+    {
+        if self.exists(tx.deref_mut())? {
+            return Ok(());
+        }
+        self.insert(tx)
     }
 
     pub fn find_involved_shards<TTx: StateStoreReadTransaction>(
@@ -169,6 +204,29 @@ impl Block {
         tx: &mut TTx,
     ) -> Result<HashSet<ShardId>, StorageError> {
         tx.transaction_pools_fetch_involved_shards(self.all_transaction_ids().collect())
+    }
+
+    pub fn extends<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &mut TTx,
+        ancestor: &BlockId,
+    ) -> Result<bool, StorageError> {
+        if self.parent == *ancestor {
+            return Ok(true);
+        }
+        tx.blocks_is_ancestor(self.parent(), ancestor)
+    }
+
+    pub fn set_as_locked<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        self.as_locked().set(tx)
+    }
+
+    pub fn set_as_last_executed<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        self.as_last_executed().set(tx)
+    }
+
+    pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+        Block::get(tx, &self.parent)
     }
 }
 

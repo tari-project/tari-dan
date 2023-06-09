@@ -9,5 +9,5 @@ use super::{NewViewMessage, ProposalMessage, VoteMessage};
 pub enum HotstuffMessage {
     NewView(NewViewMessage),
     Proposal(ProposalMessage),
-    VoteMessage(VoteMessage),
+    Vote(VoteMessage),
 }

@@ -39,11 +39,41 @@ diesel::table! {
 }
 
 diesel::table! {
+    last_executed (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        block_id -> Text,
+        height -> BigInt,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    last_voted (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        block_id -> Text,
+        height -> BigInt,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     leaf_blocks (id) {
         id -> Integer,
         epoch -> BigInt,
         block_id -> Text,
         block_height -> BigInt,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    locked_block (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        block_id -> Text,
+        height -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -126,7 +156,10 @@ diesel::allow_tables_to_appear_in_same_query!(
     blocks,
     committed_transaction_pool,
     high_qcs,
+    last_executed,
+    last_voted,
     leaf_blocks,
+    locked_block,
     new_transaction_pool,
     precommitted_transaction_pool,
     prepared_transaction_pool,

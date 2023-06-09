@@ -1,23 +1,65 @@
+use std::ops::DerefMut;
+
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-
 use log::*;
+use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight};
+use tari_dan_storage::{
+    consensus_models::{
+        Block,
+        LastExecuted,
+        LastVoted,
+        LockedBlock,
+        NewTransactionPool,
+        PrecommitTransactionPool,
+        PrepareTransactionPool,
+        QuorumCertificate,
+    },
+    StateStore,
+    StateStoreReadTransaction,
+    StateStoreWriteTransaction,
+};
+use tokio::sync::mpsc;
 
-use crate::{hotstuff::error::HotStuffError, messages::ProposalMessage, traits::ConsensusSpec};
+use crate::{
+    hotstuff::{common::update_high_qc, error::HotStuffError, ProposalValidationError},
+    messages::{HotstuffMessage, ProposalMessage, QuorumDecision, QuorumRejectReason, VoteMessage},
+    traits::{ConsensusSpec, EpochManager, LeaderStrategy, VoteSigningService},
+};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose";
 
-pub struct OnReceiveProposalHandler<TConsensnsSpec: ConsensusSpec> {
-    _store: TConsensnsSpec::StateStore,
+pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
+    store: TConsensusSpec::StateStore,
+    epoch_manager: TConsensusSpec::EpochManager,
+    vote_signing_service: TConsensusSpec::VoteSigningService,
+    leader_strategy: TConsensusSpec::LeaderStrategy,
+    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
 }
 
-impl<TConsensnsSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensnsSpec> {
-    pub fn new(store: TConsensnsSpec::StateStore) -> Self {
-        Self { _store: store }
+impl<TConsensusSpec> OnReceiveProposalHandler<TConsensusSpec>
+where
+    TConsensusSpec: ConsensusSpec,
+    HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
+{
+    pub fn new(
+        store: TConsensusSpec::StateStore,
+        epoch_manager: TConsensusSpec::EpochManager,
+        vote_signing_service: TConsensusSpec::VoteSigningService,
+        leader_strategy: TConsensusSpec::LeaderStrategy,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    ) -> Self {
+        Self {
+            store,
+            epoch_manager,
+            vote_signing_service,
+            leader_strategy,
+            tx_leader,
+        }
     }
 
-    pub async fn handle(&self, from: TConsensnsSpec::Addr, message: ProposalMessage) -> Result<(), HotStuffError> {
-        let block = message.block;
+    pub async fn handle(&self, from: TConsensusSpec::Addr, message: ProposalMessage) -> Result<(), HotStuffError> {
+        let ProposalMessage { block } = message;
         debug!(
             target: LOG_TARGET,
             "🔥 Receive PROPOSAL for block {}, parent {}, height {} from {}",
@@ -26,116 +68,299 @@ impl<TConsensnsSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensnsSpec> {
             block.height(),
             from,
         );
-        todo!()
 
-        // self.validate_proposed_block(&from, &block)?;
-        //
-        // let (involved_shards, last_vote_height, locked_block) = self.store.with_read_tx(|tx| {
-        //     let last_voted = LastVoted::get(&tx, block.epoch())?;
-        //     let locked_block = LockedBlock::get(&tx, block.epoch())?;
-        //
-        //     // let shards = Block::get_involved_shards(
-        //     //     &tx,
-        //     //     block
-        //     //         .committed()
-        //     //         .iter()
-        //     //         .chain(block.precommitted())
-        //     //         .chain(block.committed()),
-        //     // )?;
-        //
-        //     Ok((vec![], last_voted, locked_block))
-        // })?;
-        //
-        // // If we have not previously voted on this payload and the node extends the current locked node, then we vote
-        // if last_vote_height.height.is_zero() ||
-        //     block.height() > last_vote_height.height ||
-        //     block.height() == last_vote_height.height &&
-        //         (block.parent() == locked_block.block_id || block.height() > locked_block.height)
-        // {
-        //     let proposed_nodes = self.store.with_write_tx(|tx| {
-        //         block.save(tx)?;
-        //
-        //         LeaderProposal {
-        //             shard_id: block.shard_id,
-        //             payload_id: block.payload_id,
-        //             payload_height: block.payload_height,
-        //             leader_round: block.leader_round,
-        //             node: block.clone(),
-        //         }
-        //         .save(tx)?;
-        //
-        //         let proposals = LeaderProposal::get_many(tx, block.hash())?;
-        //
-        //         tx.save_leader_proposals(
-        //             node.shard(),
-        //             node.payload_id(),
-        //             node.payload_height(),
-        //             node.leader_round(),
-        //             node.clone(),
-        //         )?;
-        //         tx.get_leader_proposals(node.payload_id(), node.payload_height(), &involved_shards)
-        //     })?;
-        //     // We group proposal by the shard id.
-        //     let mut proposed_nodes_grouped_by_shard_id: HashMap<ShardId, Vec<HotStuffTreeNode<TAddr, TPayload>>> =
-        //         HashMap::new();
-        //     for proposed_node in proposed_nodes {
-        //         proposed_nodes_grouped_by_shard_id
-        //             .entry(proposed_node.shard())
-        //             .or_default()
-        //             .push(proposed_node);
-        //     }
-        //     // And now for each shard id we select only one proposal
-        //     let mut proposed_nodes = Vec::new();
-        //     for (_shard_id, nodes) in proposed_nodes_grouped_by_shard_id.drain() {
-        //         proposed_nodes.push(nodes.into_iter().max_by_key(|node| node.leader_round()).unwrap());
-        //     }
-        //
-        //     // Check the number of leader proposals for <shard, payload, node height>
-        //     // i.e. all proposed nodes for the shards for the payload are on the same hotstuff phase (payload height)
-        //     if proposed_nodes.len() < involved_shards.len() {
-        //         info!(
-        //             target: LOG_TARGET,
-        //             "🔥 Waiting for more leader proposals ({}/{}) before voting on payload {}, height {}",
-        //             proposed_nodes.len(),
-        //             involved_shards.len(),
-        //             payload_id,
-        //             node.payload_height()
-        //         );
-        //
-        //         self.update_nodes(&node)?;
-        //         return Ok(());
-        //     }
-        //
-        //     match self.decide_and_vote_on_all_nodes(payload, proposed_nodes).await {
-        //         Ok(_) => {},
-        //         Err(err @ HotStuffError::AllShardsRejected { .. }) => {
-        //             self.publish_event(HotStuffEvent::Failed(payload_id, err.to_string()));
-        //         },
-        //         Err(err) => return Err(err),
-        //     }
-        //
-        //     let mut tx = self.shard_store.create_write_tx()?;
-        //     tx.set_last_voted_height(node.shard(), node.payload_id(), node.height(), node.leader_round())?;
-        //     tx.commit()?;
-        // } else {
-        //     info!(
-        //         target: LOG_TARGET,
-        //         "🔥 Not ready to vote on payload {}, height {}, last_vote_height {}, locked_height {}",
-        //         payload_id,
-        //         node.height(),
-        //         last_vote_height,
-        //         locked_height
-        //     );
-        // }
-        // self.update_nodes(&node)?;
-        // // If all pledges for all shards and complete, then we can persist the payload changes
-        // self.finalize_payload(&involved_shards, &node).await?;
-        //
-        // Ok(())
+        if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
+            return Err(HotStuffError::EpochNotActive {
+                epoch: block.epoch(),
+                context: format!("Ignoring PROPOSAL received from {}", from),
+            });
+        }
+
+        let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
+        if local_committee.contains(&from) {
+            self.handle_local_proposal(from, local_committee, block).await
+        } else {
+            self.handle_foreign_proposal(from, block).await
+        }
     }
 
-    // fn validate_proposed_block(&self, _from: &TConsensnsSpec::Addr, _block: &Block) -> Result<(), HotStuffError> {
-    //     // TODO
-    //     Ok(())
-    // }
+    async fn handle_local_proposal(
+        &self,
+        from: TConsensusSpec::Addr,
+        local_committee: Committee<TConsensusSpec::Addr>,
+        block: Block,
+    ) -> Result<(), HotStuffError> {
+        let maybe_vote = self.store.with_write_tx(|tx| {
+            self.validate_proposed_block(&mut *tx, &from, &block)?;
+
+            let should_vote = self.should_vote(&mut *tx, &block)?;
+
+            let mut maybe_vote = None;
+            if should_vote {
+                maybe_vote = Some(self.decide_and_vote(tx, &block)?);
+            }
+
+            self.update_nodes(tx, &block)?;
+            Ok::<_, HotStuffError>(maybe_vote)
+        })?;
+        // // If all pledges for all shards and complete, then we can persist the payload changes
+        // self.finalize_payload(&involved_shards, &node).await?;
+
+        if let Some(vote) = maybe_vote {
+            let leader = self.leader_strategy.get_leader(&local_committee, &vote.block_id, 0);
+            self.send_to_leader(leader, vote).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn handle_foreign_proposal(&self, from: TConsensusSpec::Addr, block: Block) -> Result<(), HotStuffError> {
+        self.store.with_write_tx(|tx| {
+            self.validate_proposed_block(&mut *tx, &from, &block)?;
+
+            Ok(())
+        })
+    }
+
+    async fn send_to_leader(&self, leader: &TConsensusSpec::Addr, vote: VoteMessage) -> Result<(), HotStuffError> {
+        self.tx_leader
+            .send((leader.clone(), HotstuffMessage::Vote(vote)))
+            .await
+            .map_err(|_| HotStuffError::InternalChannelClosed {
+                context: "tx_leader in OnReceiveProposalHandler::handle_local_proposal",
+            })
+    }
+
+    fn decide_and_vote(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        block: &Block,
+    ) -> Result<VoteMessage, HotStuffError> {
+        // Save the block if it doesnt already exist
+        block.save(tx)?;
+
+        LastVoted {
+            epoch: block.epoch(),
+            block_id: *block.id(),
+            height: block.height(),
+        }
+        .set(tx)?;
+
+        match self.try_update_transaction_pools(tx, block) {
+            Ok(()) => {
+                let vote = self.generate_vote_message(block, QuorumDecision::Accept);
+                info!(target: LOG_TARGET, "✅ Accepting block {}", block.id());
+                Ok(vote)
+            },
+            Err(e) => {
+                let vote = self.generate_vote_message(
+                    block,
+                    QuorumDecision::Reject(QuorumRejectReason::TransactionPoolsDisagree),
+                );
+                info!(target: LOG_TARGET, "❌ Rejecting block {}: {}", block.id(), e);
+                Ok(vote)
+            },
+        }
+    }
+
+    fn generate_vote_message(&self, block: &Block, decision: QuorumDecision) -> VoteMessage {
+        let signature = self.vote_signing_service.sign_vote(block.epoch(), block.id(), decision);
+        VoteMessage {
+            epoch: block.epoch(),
+            block_id: *block.id(),
+            decision,
+            signature,
+        }
+    }
+
+    fn try_update_transaction_pools<TTx: StateStoreWriteTransaction>(
+        &self,
+        tx: &mut TTx,
+        block: &Block,
+    ) -> Result<(), HotStuffError> {
+        let _to_pledge = NewTransactionPool::move_specific_to_prepare(tx, block.prepared())?;
+        // LocalPledges::create_many(tx, )
+        let _check_pledges = PrepareTransactionPool::move_specific_to_precommit(tx, block.precommitted())?;
+        let _check_pledges = PrecommitTransactionPool::move_specific_to_committed(tx, block.committed())?;
+
+        Ok(())
+    }
+
+    fn update_nodes(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        block: &Block,
+    ) -> Result<(), HotStuffError> {
+        update_high_qc::<TConsensusSpec::StateStore>(tx, block.justify())?;
+
+        // b'' <- b*.justify.node
+        let Some(commit_node) = block.justify().get_block(tx.deref_mut()).optional()? else {
+            return Ok(());
+        };
+
+        // b' <- b''.justify.node
+        let Some(precommit_node) = commit_node.justify().get_block(tx.deref_mut()).optional()? else {
+            return Ok(());
+        };
+
+        let locked_block = LockedBlock::get(tx.deref_mut(), block.epoch())?;
+        if precommit_node.height() > locked_block.height {
+            debug!(target: LOG_TARGET, "LOCKED NODE SET: {}", precommit_node.id());
+            // precommit_node is at COMMIT phase
+            precommit_node.set_as_locked(tx)?;
+        }
+
+        // b <- b'.justify.node
+        let prepare_node = precommit_node.justify().block_id();
+        if commit_node.parent() == precommit_node.id() && precommit_node.parent() == prepare_node {
+            debug!(
+                target: LOG_TARGET,
+                "✅ Node {} forms a 3-chain b'' = {}, b' = {}, b = {}",
+                block.id(),
+                commit_node.id(),
+                precommit_node.id(),
+                prepare_node,
+            );
+
+            let last_executed = LastExecuted::get(tx.deref_mut(), block.epoch())?;
+            self.on_commit(tx, &last_executed, block)?;
+            block.set_as_last_executed(tx)?;
+        } else {
+            debug!(
+                target: LOG_TARGET,
+                "Node DOES NOT form a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
+                commit_node.id(),
+                precommit_node.id(),
+                prepare_node,
+                block.id()
+            );
+        }
+
+        Ok(())
+    }
+
+    fn on_commit(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        last_executed: &LastExecuted,
+        block: &Block,
+    ) -> Result<(), HotStuffError> {
+        if last_executed.height < block.height() {
+            let parent = block.get_parent(tx.deref_mut())?;
+            self.on_commit(tx, last_executed, &parent)?;
+            self.execute(block);
+        }
+        Ok(())
+    }
+
+    fn execute(&self, _block: &Block) {
+        // TODO
+    }
+
+    fn validate_proposed_block(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        from: &TConsensusSpec::Addr,
+        candidate_block: &Block,
+        // committee: &Committee<TConsensusSpec::Addr>,
+    ) -> Result<(), ProposalValidationError> {
+        if candidate_block.height() == NodeHeight::zero() || candidate_block.id().is_genesis() {
+            return Err(ProposalValidationError::ProposingGenesisBlock {
+                proposed_by: from.to_string(),
+                hash: *candidate_block.id(),
+            });
+        }
+
+        let calculated_hash = candidate_block.calculate_hash().into();
+        if calculated_hash != *candidate_block.id() {
+            return Err(ProposalValidationError::NodeHashMismatch {
+                proposed_by: from.to_string(),
+                hash: *candidate_block.id(),
+                calculated_hash,
+            });
+        }
+
+        // Check that details included in the justify match previously added blocks
+        let Some(justify_block) = candidate_block.justify().get_block(tx).optional()? else {
+            // TODO: This may mean that we have to catch up
+            return Err(ProposalValidationError::JustifyBlockNotFound {
+                proposed_by: from.to_string(),
+                hash: *candidate_block.id(),
+                justify_block: *candidate_block.justify().block_id()
+            });
+        };
+
+        if justify_block.height() != candidate_block.justify().block_height() {
+            return Err(ProposalValidationError::JustifyBlockInvalid {
+                proposed_by: from.to_string(),
+                block_id: *candidate_block.id(),
+                details: format!(
+                    "Justify block height ({}) does not match justify block height ({})",
+                    justify_block.height(),
+                    candidate_block.justify().block_height()
+                ),
+            });
+        }
+
+        // TODO: validate justify signatures
+        // self.validate_qc(candidate_block.justify(), committee)?;
+
+        Ok(())
+    }
+
+    /// if b_new .height > vheight || (b_new extends b_lock && b_new .justify.node.height > b_lock .height)
+    ///
+    /// If we have not previously voted on this block and the node extends the current locked node, then we vote
+    fn should_vote(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        block: &Block,
+    ) -> Result<bool, HotStuffError> {
+        let Some(last_voted) = LastVoted::get(tx, block.epoch()).optional()? else {
+            // Never voted, then validated.block.height() > last_voted.height (0)
+            return Ok(true);
+        };
+
+        // if b_new .height > vheight Or ...
+        if block.height() > last_voted.height {
+            return Ok(true);
+        }
+
+        let locked = LockedBlock::get(tx, block.epoch())?;
+        let locked_qc = locked.get_quorum_certificate(tx)?;
+
+        // (b_new extends b_lock && b_new .justify.node.height > b_lock .height)
+        if !is_safe_block(tx, block, &locked_qc)? {
+            info!(
+                target: LOG_TARGET,
+                "🔥 NOT voting on block {}, height {}. Block does not satisfy safeNode predicate",
+                block.id(),
+                block.height(),
+            );
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+}
+
+/// safeNode predicate (https://arxiv.org/pdf/1803.05069v6.pdf)
+///
+/// The safeNode predicate is a core ingredient of the protocol. It examines a proposal message
+/// m carrying a QC justication m.justify, and determines whether m.node is safe to accept. The safety rule to accept
+/// a proposal is the branch of m.node extends from the currently locked node lockedQC.node. On the other hand, the
+/// liveness rule is the replica will accept m if m.justify has a higher view than the current lockedQC. The predicate
+/// is true as long as either one of two rules holds.
+fn is_safe_block<TTx: StateStoreReadTransaction>(
+    tx: &mut TTx,
+    block: &Block,
+    locked_qc: &QuorumCertificate,
+) -> Result<bool, HotStuffError> {
+    // Liveness
+    if block.justify().block_height() > locked_qc.block_height() {
+        return Ok(true);
+    }
+
+    let extends = block.extends(tx, locked_qc.block_id())?;
+    Ok(extends)
 }

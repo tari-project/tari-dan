@@ -9,7 +9,16 @@ use std::{
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::*;
 use tari_dan_storage::{
-    consensus_models::{Block, ExecutedTransaction, HighQc, LeafBlock, TransactionDecision},
+    consensus_models::{
+        Block,
+        ExecutedTransaction,
+        HighQc,
+        LastExecuted,
+        LastVoted,
+        LeafBlock,
+        LockedBlock,
+        TransactionDecision,
+    },
     StateStoreWriteTransaction,
     StorageError,
 };
@@ -82,6 +91,46 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
+    fn last_voted_set(&mut self, last_voted: &LastVoted) -> Result<(), StorageError> {
+        use crate::schema::last_voted;
+
+        let insert = (
+            last_voted::epoch.eq(last_voted.epoch.as_u64() as i64),
+            last_voted::block_id.eq(serialize_hex(last_voted.block_id)),
+            last_voted::height.eq(last_voted.height.as_u64() as i64),
+        );
+
+        diesel::insert_into(last_voted::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "last_voted_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn last_executed_set(&mut self, last_exec: &LastExecuted) -> Result<(), StorageError> {
+        use crate::schema::last_executed;
+
+        let insert = (
+            last_executed::epoch.eq(last_exec.epoch.as_u64() as i64),
+            last_executed::block_id.eq(serialize_hex(last_exec.block_id)),
+            last_executed::height.eq(last_exec.height.as_u64() as i64),
+        );
+
+        diesel::insert_into(last_executed::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "last_executed_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
     fn leaf_block_set(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError> {
         use crate::schema::leaf_blocks;
 
@@ -96,6 +145,26 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "leaf_node_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError> {
+        use crate::schema::locked_block;
+
+        let insert = (
+            locked_block::epoch.eq(locked_block.epoch.as_u64() as i64),
+            locked_block::block_id.eq(serialize_hex(locked_block.block_id)),
+            locked_block::height.eq(locked_block.height.as_u64() as i64),
+        );
+
+        diesel::insert_into(locked_block::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "locked_block_set",
                 source: e,
             })?;
 

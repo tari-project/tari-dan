@@ -3,11 +3,21 @@
 
 use std::collections::HashSet;
 
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection};
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeHeight, ShardId};
+use diesel::{sql_query, sql_types::Text, ExpressionMethods, QueryDsl, QueryableByName, RunQueryDsl, SqliteConnection};
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, HighQc, LeafBlock, QuorumCertificate, Transaction, TransactionId},
+    consensus_models::{
+        Block,
+        BlockId,
+        HighQc,
+        LastExecuted,
+        LastVoted,
+        LeafBlock,
+        LockedBlock,
+        QuorumCertificate,
+        Transaction,
+        TransactionId,
+    },
     StateStoreReadTransaction,
     StorageError,
 };
@@ -42,12 +52,49 @@ impl<'a> SqliteStateStoreReadTransaction<'a> {
 }
 
 impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
-    fn last_vote_height_get(&mut self, _epoch: Epoch) -> Result<u64, StorageError> {
-        todo!()
+    fn last_voted_get(&mut self, epoch: Epoch) -> Result<LastVoted, StorageError> {
+        use crate::schema::last_voted;
+
+        let last_voted = last_voted::table
+            .filter(last_voted::epoch.eq(epoch.as_u64() as i64))
+            .order_by(last_voted::height.desc())
+            .first::<sql_models::LastVoted>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "high_qc_get",
+                source: e,
+            })?;
+
+        last_voted.try_into()
     }
 
-    fn locked_block_get(&mut self, _epoch: Epoch) -> Result<(NodeHeight, FixedHash), StorageError> {
-        todo!()
+    fn last_executed_get(&mut self, epoch: Epoch) -> Result<LastExecuted, StorageError> {
+        use crate::schema::last_executed;
+
+        let last_executed = last_executed::table
+            .filter(last_executed::epoch.eq(epoch.as_u64() as i64))
+            .order_by(last_executed::height.desc())
+            .first::<sql_models::LastExecuted>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "last_executed_get",
+                source: e,
+            })?;
+
+        last_executed.try_into()
+    }
+
+    fn locked_block_get(&mut self, epoch: Epoch) -> Result<LockedBlock, StorageError> {
+        use crate::schema::locked_block;
+
+        let locked_block = locked_block::table
+            .filter(locked_block::epoch.eq(epoch.as_u64() as i64))
+            .order_by(locked_block::height.desc())
+            .first::<sql_models::LockedBlock>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "locked_block_get",
+                source: e,
+            })?;
+
+        locked_block.try_into()
     }
 
     fn leaf_block_get(&mut self, epoch: Epoch) -> Result<LeafBlock, StorageError> {
@@ -106,6 +153,51 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             })?;
 
         block.try_into()
+    }
+
+    fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError> {
+        use crate::schema::blocks;
+
+        let exists = blocks::table
+            .filter(blocks::block_id.eq(serialize_hex(block_id)))
+            .count()
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_exists",
+                source: e,
+            })? >
+            0;
+
+        Ok(exists)
+    }
+
+    fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError> {
+        #[derive(QueryableByName)]
+        struct Count {
+            #[diesel(sql_type = diesel::sql_types::BigInt)]
+            cnt: i64,
+        }
+
+        let is_ancestor = sql_query(
+            r#"
+            WITH RECURSIVE tree(bid, parent) AS (
+                  SELECT block_id, parent_block_id FROM blocks where block_id = ?
+                UNION ALL
+                  SELECT block_id, parent_block_id
+                    FROM blocks JOIN tree ON bid = tree.parent
+            )
+            SELECT count(1) as cnt FROM tree WHERE bid = ? LIMIT 1
+        "#,
+        )
+        .bind::<Text, _>(serialize_hex(descendant))
+        .bind::<Text, _>(serialize_hex(ancestor))
+        .get_result::<Count>(self.connection())
+        .map_err(|e| SqliteStorageError::DieselError {
+            operation: "blocks_is_ancestor",
+            source: e,
+        })?;
+
+        Ok(is_ancestor.cnt > 0)
     }
 
     fn quorum_certificates_get(&mut self, block_id: &BlockId) -> Result<QuorumCertificate, StorageError> {

@@ -65,6 +65,33 @@ create table high_qcs
 );
 create unique index high_qcs_idx_epoch_block_id_height on high_qcs (epoch, block_id, height);
 
+create table last_voted
+(
+    id         integer   not null primary key autoincrement,
+    epoch      bigint    not null,
+    block_id   text      not null,
+    height     bigint    not null,
+    created_at timestamp NOT NULL default current_timestamp
+);
+
+create table last_executed
+(
+    id         integer   not null primary key autoincrement,
+    epoch      bigint    not null,
+    block_id   text      not null,
+    height     bigint    not null,
+    created_at timestamp NOT NULL default current_timestamp
+);
+
+create table locked_block
+(
+    id         integer   not null primary key autoincrement,
+    epoch      bigint    not null,
+    block_id   text      not null,
+    height     bigint    not null,
+    created_at timestamp NOT NULL default current_timestamp
+);
+
 create table transactions
 (
     id                integer   not null primary key AUTOINCREMENT,

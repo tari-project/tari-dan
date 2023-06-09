@@ -17,9 +17,17 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
-pub struct TransactionPool;
+pub enum TransactionPool {
+    New,
+    Prepare,
+    Precommit,
+    Commit,
+}
 
-impl TransactionPool {
+#[derive(Debug, Clone, Copy)]
+pub struct AllTransactionPools;
+
+impl AllTransactionPools {
     pub fn has_ready_transactions<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<bool, StorageError> {
         Ok(tx.transaction_pools_ready_transaction_count()? > 0)
     }
