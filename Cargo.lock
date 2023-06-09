@@ -7795,6 +7795,7 @@ dependencies = [
  "config",
  "futures 0.3.28",
  "humantime-serde",
+ "include_dir",
  "libsqlite3-sys",
  "log",
  "log4rs 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",

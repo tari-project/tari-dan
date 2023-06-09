@@ -53,7 +53,7 @@ function Key(key:any,setActive:any) {
 }
 
 function Keys() {
-  const [state, setState] = useState();
+  const [state, setState] = useState<any>();
   const [error, setError] = useState<String>();
   const [showKeyDialog, setShowAddKeyDialog] = useState(false);
   const [formState, setFormState] = useState({ publicKey: '', address: '' });
@@ -140,7 +140,7 @@ function Keys() {
           </TableRow>
         </TableHead>
         <TableBody>
-          {state && state.keys.map((key)=>Key(key, setActive))}
+          {state && state.keys.map((key:any)=>Key(key, setActive))}
         </TableBody>
       </Table>
     </TableContainer>
