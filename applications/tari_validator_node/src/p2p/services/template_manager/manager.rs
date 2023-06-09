@@ -55,6 +55,9 @@ const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 lazy_static! {
     pub static ref ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
+    pub static ref ACCOUNT_NFT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
+    ]);
 }
 
 #[derive(Debug, Clone)]
@@ -89,6 +92,12 @@ impl TemplateManager {
         let compiled_code = get_template_builtin(*ACCOUNT_TEMPLATE_ADDRESS);
         let template = Self::load_builtin_template("account", *ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
         builtin_templates.insert(*ACCOUNT_TEMPLATE_ADDRESS, template);
+
+        // get the builtin WASM code of the account nft template
+        let compiled_code = get_template_builtin(*ACCOUNT_NFT_TEMPLATE_ADDRESS);
+        let template =
+            Self::load_builtin_template("account_nft", *ACCOUNT_NFT_TEMPLATE_ADDRESS, compiled_code.to_vec());
+        builtin_templates.insert(*ACCOUNT_NFT_TEMPLATE_ADDRESS, template);
 
         builtin_templates
     }

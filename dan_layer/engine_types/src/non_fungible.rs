@@ -3,6 +3,7 @@
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_bor::{decode_exact, BorError};
+use tari_template_lib::prelude::Metadata;
 
 use crate::serde_with;
 
@@ -58,6 +59,10 @@ impl NonFungible {
 
     pub fn decode_mutable_data<T: DeserializeOwned>(&self) -> Result<T, BorError> {
         decode_exact(&self.mutable_data)
+    }
+
+    pub fn decode_data(&self) -> Result<Metadata, BorError> {
+        decode_exact(&self.data)
     }
 
     pub fn set_mutable_data(&mut self, mutable_data: Vec<u8>) {
