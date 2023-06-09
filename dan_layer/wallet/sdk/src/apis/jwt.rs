@@ -241,8 +241,8 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         let mut tx = self.store.create_read_tx()?;
         let tokens = tx.jwt_get_all()?;
         let mut res = Vec::new();
-        for (id, token) in &tokens {
-            if let Ok(name) = self.get_name(token.as_str()) {
+        for (id, token) in tokens.iter().filter(|(_, token)| token.is_some()) {
+            if let Ok(name) = self.get_name(token.as_ref().unwrap().as_str()) {
                 res.push((*id, name));
             }
         }

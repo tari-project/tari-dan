@@ -258,7 +258,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 transactions::hash.eq(transaction.hash().to_string()),
                 transactions::fee_instructions.eq(serialize_json(transaction.fee_instructions())?),
                 transactions::instructions.eq(serialize_json(transaction.instructions())?),
-                transactions::sender_address.eq(transaction.sender_public_key().to_hex()),
+                transactions::sender_public_key.eq(transaction.sender_public_key().to_hex()),
                 transactions::signature.eq(serialize_json(transaction.signature())?),
                 transactions::meta.eq(serialize_json(transaction.meta())?),
                 transactions::status.eq(TransactionStatus::default().as_key_str()),
