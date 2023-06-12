@@ -36,17 +36,17 @@ use log::*;
 use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::ShutdownSignal;
-use tokio::task;
 use tari_template_lib::models::Amount;
+use tokio::task;
 
 use crate::{
     config::ApplicationConfig,
     handlers::HandlerContext,
+    http_ui::server::run_http_ui_server,
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
     notify::Notify,
     services::spawn_services,
 };
-use crate::http_ui::server::run_http_ui_server;
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon";
 
@@ -84,8 +84,8 @@ pub async fn run_tari_dan_wallet_daemon(
     let listen_fut = jrpc_server::listen(address, signaling_server_address, handlers, shutdown_signal);
 
     // Run the http ui
-    if let Some(address) = config.dan_wallet_daemon.http_ui_address {
-        task::spawn(run_http_ui_server(address, Some(address)));
+    if let Some(http_address) = config.dan_wallet_daemon.http_ui_address {
+        task::spawn(run_http_ui_server(http_address, Some(address)));
     }
 
     if let Err(e) = fs::write(config.common.base_path.join("pid"), process::id().to_string()) {

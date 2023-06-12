@@ -20,18 +20,17 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use axum::{
-    http::{Response, Uri},
+    http::{HeaderValue, Response, Uri},
     response::IntoResponse,
     routing::get,
     Router,
 };
 use include_dir::{include_dir, Dir};
 use log::{error, info};
-use reqwest::StatusCode;
-
+use reqwest::{header, StatusCode};
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::http_ui::server";
 
 pub async fn run_http_ui_server(
@@ -83,8 +82,11 @@ async fn handler(uri: Uri) -> impl IntoResponse {
         .or_else(|| PROJECT_DIR.get_file("index.html"))
         .and_then(|file| file.contents_utf8())
     {
+        let mime_type = mime_guess::from_path(path).first_or_else(|| mime_guess::Mime::from_str("text/html").unwrap());
+        let content_type = mime_type.to_string();
+        // let content_type
         return Response::builder()
-
+            .header(header::CONTENT_TYPE, HeaderValue::from_str(&content_type).unwrap())
             .status(StatusCode::OK)
             .body(body.to_owned())
             .unwrap();
