@@ -15,6 +15,7 @@ use crate::{
         config::{ConfigApi, ConfigApiError, ConfigKey},
         jwt::JwtApi,
         key_manager::KeyManagerApi,
+        non_fungible_tokens::NonFungibleTokensApi,
         substate::SubstatesApi,
         transaction::TransactionApi,
     },
@@ -95,6 +96,10 @@ where
             self.accounts_api(),
             self.confidential_crypto_api(),
         )
+    }
+
+    pub fn non_fungible_api(&self) -> NonFungibleTokensApi<'_, TStore> {
+        NonFungibleTokensApi::new(&self.store)
     }
 
     fn get_or_create_cipher_seed(store: &TStore) -> Result<CipherSeed, WalletSdkError> {

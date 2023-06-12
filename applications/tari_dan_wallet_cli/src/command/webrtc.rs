@@ -33,6 +33,7 @@ pub enum WebRtcSubcommand {
 pub struct StartArgs {
     pub signaling_server_token: String,
     pub webrtc_permissions_token: String,
+    pub token_name: String,
 }
 
 impl WebRtcSubcommand {
@@ -45,6 +46,7 @@ impl WebRtcSubcommand {
                     .webrtc_start(WebRtcStartRequest {
                         signaling_server_token: args.signaling_server_token,
                         permissions: args.webrtc_permissions_token,
+                        name: args.token_name,
                     })
                     .await?;
             },

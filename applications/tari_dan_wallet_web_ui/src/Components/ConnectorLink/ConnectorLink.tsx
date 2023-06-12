@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, {useEffect, useState, useRef} from 'react';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
@@ -34,8 +34,8 @@ import './ConnectorLink.css';
 import Permissions from './Permissions';
 import CheckMark from './CheckMark';
 import ConnectorLogo from './ConnectorLogo';
-import { parse } from '../../utils/tari_permissions';
-import { webrtc } from '../../utils/json_rpc';
+import {parse} from '../../utils/tari_permissions';
+import {webrtc} from '../../utils/json_rpc';
 import ConfirmTransaction from './ConfirmTransaction';
 
 const ConnectorDialog = () => {
@@ -46,22 +46,25 @@ const ConnectorDialog = () => {
   const [signalingServerJWT, setSignalingServerJWT] = useState('');
   const [permissions, setPermissions] = useState([]);
   const [optionalPermissions, setOptionalPermissions] = useState([]);
+  const [name, setName] = useState('');
   const [chosenOptionalPermissions, setChosenOptionalPermissions] = useState<
+
     boolean[]
   >([]);
   const linkRef = useRef<HTMLInputElement>(null);
 
   const setLink = (value: string) => {
     const re =
-      /tari:\/\/([a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+)\/(.*)\/(.*)/i;
+      /tari:\/\/([^\\]*)\/([a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+)\/(.*)\/(.*)/i;
     let groups;
     if ((groups = re.exec(value))) {
-      setSignalingServerJWT(groups[1]);
+      setName(decodeURIComponent(groups[1]))
+      setSignalingServerJWT(groups[2]);
       setPermissions(
-        JSON.parse(groups[2]).map((permission: any) => parse(permission))
+        JSON.parse(groups[3]).map((permission: any) => parse(permission))
       );
       setOptionalPermissions(
-        JSON.parse(groups[3]).map((permission: any) => parse(permission))
+        JSON.parse(groups[4]).map((permission: any) => parse(permission))
       );
     }
     _setLink(value);
@@ -107,6 +110,10 @@ const ConnectorDialog = () => {
     }, 500);
   };
 
+  const handleContinue = () => {
+    setPage(page + 1);
+  }
+
   const handleAuth = () => {
     console.log('chosenOptionalPermissions', chosenOptionalPermissions);
     let allowedPermissions = [
@@ -117,7 +124,7 @@ const ConnectorDialog = () => {
     ];
     console.log('jwt', signalingServerJWT);
     console.log('perm', JSON.stringify(allowedPermissions));
-    webrtc(signalingServerJWT, JSON.stringify(allowedPermissions)).then(
+    webrtc(signalingServerJWT, JSON.stringify(allowedPermissions), name).then(
       (resp) => {
         setPage(page + 1);
       }
@@ -144,10 +151,10 @@ const ConnectorDialog = () => {
         if (linkDetected) {
           return (
             <div className="dialog-inner">
-              <DialogContentText style={{ paddingBottom: '20px' }}>
-                A connector link was detected. <br />
+              <DialogContentText style={{paddingBottom: '20px'}}>
+                A connector link was detected. <br/>
                 Would you like to connect to{' '}
-                <code style={{ color: 'purple', fontSize: '14px' }}>
+                <code style={{color: 'purple', fontSize: '14px'}}>
                   {link}
                 </code>
                 ?
@@ -207,17 +214,31 @@ const ConnectorDialog = () => {
               <Button onClick={handleClose} variant="outlined">
                 Cancel
               </Button>
-              <Button onClick={handleAuth} variant="contained">
-                Authorize
+              <Button onClick={handleContinue} variant="contained">
+                Continue
               </Button>
             </DialogActions>
           </div>
         );
       case 3:
+        return (<div className="dialog-inner">
+          Name
+          <input name="Name" id="name" autoFocus={true} placeholder="Name the token e.g. 'that website'"
+                 defaultValue={name}/>
+          <DialogActions>
+            <Button onClick={handleClose} variant="outlined">
+              Cancel
+            </Button>
+            <Button onClick={handleAuth} variant="contained">
+              Authorize
+            </Button>
+          </DialogActions>
+        </div>)
+      case 4:
         return (
           <div className="dialog-inner">
-            <div style={{ textAlign: 'center', paddingBottom: '50px' }}>
-              <CheckMark />
+            <div style={{textAlign: 'center', paddingBottom: '50px'}}>
+              <CheckMark/>
               <Typography variant="h3">Wallet Connected</Typography>
             </div>
           </div>
@@ -234,15 +255,15 @@ const ConnectorDialog = () => {
       </Button>
       <Dialog open={isOpen} onClose={handleClose}>
         <div className="dialog-heading">
-          <div style={{ height: '24px', width: '24px' }}></div>
-          <ConnectorLogo />
+          <div style={{height: '24px', width: '24px'}}></div>
+          <ConnectorLogo/>
           <IconButton onClick={handleClose}>
-            <CloseIcon />
+            <CloseIcon/>
           </IconButton>
         </div>
         <DialogContent>{renderPage()}</DialogContent>
       </Dialog>
-      <ConfirmTransaction />
+      <ConfirmTransaction/>
     </>
   );
 };

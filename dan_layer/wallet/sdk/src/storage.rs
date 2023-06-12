@@ -10,7 +10,11 @@ use tari_engine_types::{
     substate::SubstateAddress,
     TemplateAddress,
 };
-use tari_template_lib::{models::Amount, prelude::ResourceAddress, Hash};
+use tari_template_lib::{
+    models::Amount,
+    prelude::{NonFungibleId, ResourceAddress},
+    Hash,
+};
 use tari_transaction::Transaction;
 
 use crate::models::{
@@ -18,6 +22,7 @@ use crate::models::{
     ConfidentialOutputModel,
     ConfidentialProofId,
     Config,
+    NonFungibleToken,
     OutputStatus,
     SubstateModel,
     TransactionStatus,
@@ -111,7 +116,7 @@ pub trait WalletStoreReader {
     // Config
     fn config_get<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> Result<Config<T>, WalletStorageError>;
     // JWT
-    fn jwt_get_all(&mut self) -> Result<Vec<(i32, String)>, WalletStorageError>;
+    fn jwt_get_all(&mut self) -> Result<Vec<(i32, Option<String>)>, WalletStorageError>;
     // Transactions
     fn transaction_get(&mut self, hash: FixedHash) -> Result<WalletTransaction, WalletStorageError>;
     fn transactions_fetch_all_by_status(
@@ -161,6 +166,11 @@ pub trait WalletStoreReader {
         &mut self,
         transaction_hash: FixedHash,
     ) -> Result<ConfidentialProofId, WalletStorageError>;
+
+    // Non fungible tokens
+    fn get_non_fungible_token(&mut self, nft_id: NonFungibleId) -> Result<NonFungibleToken, WalletStorageError>;
+
+    fn get_resource_address(&mut self, nft_id: NonFungibleId) -> Result<ResourceAddress, WalletStorageError>;
 }
 
 pub trait WalletStoreWriter {
@@ -253,4 +263,7 @@ pub trait WalletStoreWriter {
         proof_id: ConfidentialProofId,
         transaction_hash: Hash,
     ) -> Result<(), WalletStorageError>;
+
+    // Non fungible tokens
+    fn non_fungible_token_insert(&mut self, non_fungible_token: &NonFungibleToken) -> Result<(), WalletStorageError>;
 }

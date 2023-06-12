@@ -41,7 +41,7 @@ use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
-    prelude::{ConfidentialWithdrawProof, ResourceType},
+    prelude::{ConfidentialWithdrawProof, NonFungibleAddress, ResourceType},
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 
@@ -55,7 +55,7 @@ pub struct CallInstructionRequest {
     pub instruction: Instruction,
     #[serde(deserialize_with = "string_or_struct")]
     pub fee_account: ComponentAddressOrName,
-    #[serde(deserialize_with = "opt_string_or_struct")]
+    #[serde(default, deserialize_with = "opt_string_or_struct")]
     pub dump_outputs_into: Option<ComponentAddressOrName>,
     pub fee: u64,
     #[serde(default)]
@@ -446,6 +446,7 @@ pub struct AccountsCreateFreeTestCoinsResponse {
     pub amount: Amount,
     pub fee: Amount,
     pub result: FinalizeResult,
+    pub public_key: PublicKey,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -457,6 +458,7 @@ pub struct WebRtcStart {
 pub struct WebRtcStartRequest {
     pub signaling_server_token: String,
     pub permissions: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -499,6 +501,23 @@ pub struct AuthRevokeTokenRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthRevokeTokenResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MintAccountNFTRequest {
+    pub account: ComponentAddressOrName,
+    pub owner_token: NonFungibleAddress,
+    pub token_symbol: String,
+    pub metadata: serde_json::Value,
+    pub mint_fee: Option<Amount>,
+    pub create_account_nft_fee: Option<Amount>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MintAccountNFTResponse {
+    pub nft_id: NonFungibleId,
+    pub resource_address: ResourceAddress,
+    pub result: FinalizeResult,
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthGetAllJwtRequest {}

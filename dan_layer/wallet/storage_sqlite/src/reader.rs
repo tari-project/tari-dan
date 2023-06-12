@@ -14,6 +14,7 @@ use tari_dan_wallet_sdk::{
         ConfidentialOutputModel,
         ConfidentialProofId,
         Config,
+        NonFungibleToken,
         OutputStatus,
         SubstateModel,
         TransactionStatus,
@@ -23,7 +24,10 @@ use tari_dan_wallet_sdk::{
     storage::{WalletStorageError, WalletStoreReader},
 };
 use tari_engine_types::substate::{InvalidSubstateAddressFormat, SubstateAddress};
-use tari_template_lib::models::ResourceAddress;
+use tari_template_lib::{
+    models::{ResourceAddress, VaultId},
+    prelude::NonFungibleId,
+};
 use tari_utilities::hex::Hex;
 
 use crate::{diesel::ExpressionMethods, models, serialization::deserialize_json};
@@ -151,12 +155,12 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- JWT -------------------------------- //
-    fn jwt_get_all(&mut self) -> Result<Vec<(i32, String)>, WalletStorageError> {
+    fn jwt_get_all(&mut self) -> Result<Vec<(i32, Option<String>)>, WalletStorageError> {
         use crate::schema::auth_status;
         let res = auth_status::table
             .select((auth_status::id, auth_status::token))
             .filter(auth_status::granted.eq(true))
-            .get_results::<(i32, String)>(self.connection())
+            .get_results::<(i32, Option<String>)>(self.connection())
             .map_err(|e| WalletStorageError::general("jwt_get_all", e))?;
         Ok(res)
     }
@@ -637,6 +641,74 @@ impl WalletStoreReader for ReadTransaction<'_> {
         })?;
 
         Ok(proof_id as u64)
+    }
+
+    fn get_non_fungible_token(&mut self, nft_id: NonFungibleId) -> Result<NonFungibleToken, WalletStorageError> {
+        use crate::schema::{non_fungible_tokens, vaults};
+
+        let non_fungible_token = non_fungible_tokens::table
+            .filter(non_fungible_tokens::nft_id.eq(nft_id.to_string()))
+            .first::<crate::models::NonFungibleToken>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("get_non_fungible_token", e))?;
+        let non_fungible_token = non_fungible_token.ok_or_else(|| WalletStorageError::NotFound {
+            operation: "get_non_fungible_token",
+            entity: "non_fungible_tokens".to_string(),
+            key: nft_id.to_string(),
+        })?;
+
+        let vault_id = non_fungible_token.vault_id;
+        let vault_address = vaults::table
+            .select(vaults::address)
+            .filter(vaults::id.eq(vault_id))
+            .first::<String>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("accounts_get_by_vault", e))?
+            .ok_or_else(|| WalletStorageError::NotFound {
+                operation: "get_non_fungible_token",
+                entity: "non_fungible_tokens".to_string(),
+                key: format!("{}", vault_id),
+            })?;
+        let vault_address = VaultId::from_str(&vault_address).map_err(|e| WalletStorageError::DecodingError {
+            details: e.to_string(),
+            item: "non_fungible_tokens",
+            operation: "get_non_fungible_token",
+        })?;
+        non_fungible_token.try_into_non_fungible_token(vault_address)
+    }
+
+    fn get_resource_address(&mut self, nft_id: NonFungibleId) -> Result<ResourceAddress, WalletStorageError> {
+        use crate::schema::{non_fungible_tokens, vaults};
+
+        let vault_id = non_fungible_tokens::table
+            .filter(non_fungible_tokens::nft_id.eq(nft_id.to_string()))
+            .select(non_fungible_tokens::vault_id)
+            .first::<i32>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("get_resource_address", e))?;
+        let vault_id = vault_id.ok_or_else(|| WalletStorageError::NotFound {
+            operation: "get_resource_address",
+            entity: "non_fungible_tokens".to_string(),
+            key: nft_id.to_string(),
+        })?;
+
+        let resource_address = vaults::table
+            .filter(vaults::id.eq(vault_id))
+            .select(vaults::resource_address)
+            .first::<String>(self.connection())
+            .optional()
+            .map_err(|e| WalletStorageError::general("get_resource_address", e))?;
+        let resource_address = resource_address.ok_or_else(|| WalletStorageError::NotFound {
+            operation: "get_resource_address",
+            entity: "non_fungible_tokens".to_string(),
+            key: nft_id.to_string(),
+        })?;
+
+        ResourceAddress::from_str(&resource_address).map_err(|e| WalletStorageError::DecodingError {
+            item: "non_fungible_tokens",
+            operation: "get_resource_address",
+            details: e.to_string(),
+        })
     }
 }
 

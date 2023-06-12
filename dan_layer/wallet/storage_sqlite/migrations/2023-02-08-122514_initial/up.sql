@@ -34,7 +34,7 @@ CREATE TABLE transactions
     hash                TEXT     NOT NULL,
     instructions        TEXT     NOT NULL,
     signature           TEXT     NOT NULL,
-    sender_address      TEXT     NOT NULL,
+    sender_public_key   TEXT     NOT NULL,
     fee_instructions    TEXT     NOT NULL,
     meta                TEXT     NOT NULL,
     result              TEXT     NULL,
