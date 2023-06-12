@@ -24,6 +24,8 @@ use tari_template_lib::prelude::*;
 
 #[template]
 mod composability {
+    use super::*;
+
     pub struct Composability {
         // we assume the inner component is a "State" template component
         state_component_address: ComponentAddress

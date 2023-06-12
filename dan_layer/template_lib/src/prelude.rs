@@ -46,6 +46,7 @@ pub use crate::{
         NonFungibleAddress,
         NonFungibleId,
         ResourceAddress,
+        TemplateAddress,
         Vault,
     },
     rand,
