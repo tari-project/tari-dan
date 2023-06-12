@@ -13,7 +13,9 @@ use tari_dan_wallet_sdk::{
     models::Account,
 };
 use tari_engine_types::{
-    component::new_component_address_from_parts, instruction::Instruction, substate::SubstateAddress,
+    component::new_component_address_from_parts,
+    instruction::Instruction,
+    substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -67,14 +69,14 @@ pub async fn handle_mint_account_nft(
             .as_hash(),
     );
 
-    let accrued_fee: Amount;
+    let mut accrued_fee = Amount::new(0);
     if sdk
         .substate_api()
         .scan_for_substate(&SubstateAddress::Component(component_address), None)
         .await
         .is_err()
     {
-        acrued_fee = create_account_nft(
+        accrued_fee = create_account_nft(
             context,
             &account,
             &signing_key.k,
@@ -227,11 +229,10 @@ async fn create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(
-            *ACCOUNT_NFT_TEMPLATE_ADDRESS,
-            "create",
-            args![owner_token, token_symbol],
-        )
+        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
+            owner_token,
+            token_symbol
+        ])
         .sign(owner_sk)
         .build();
 

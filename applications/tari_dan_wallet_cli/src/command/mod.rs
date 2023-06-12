@@ -22,7 +22,7 @@
 
 use clap::Subcommand;
 
-use self::{auth::AuthSubcommand, webrtc::WebRtcSubcommand};
+use self::{auth::AuthSubcommand, nfts::AccountNFTSubcommand, webrtc::WebRtcSubcommand};
 use crate::command::{
     account::AccountsSubcommand,
     key::KeysSubcommand,
@@ -53,4 +53,6 @@ pub enum Command {
     WebRtc(WebRtcSubcommand),
     #[clap(subcommand, alias = "auth")]
     Auth(AuthSubcommand),
+    #[clap(subcommand, alias = "nfts")]
+    AccountNFT(AccountNFTSubcommand),
 }

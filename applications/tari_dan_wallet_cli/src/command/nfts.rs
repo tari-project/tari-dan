@@ -28,7 +28,7 @@ use std::{
 };
 
 use anyhow::anyhow;
-use clap::Args;
+use clap::{Args, Subcommand};
 use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     prelude::{Amount, NonFungibleAddress},
@@ -37,6 +37,12 @@ use tari_utilities::hex::Hex;
 use tari_wallet_daemon_client::{types::MintAccountNFTRequest, ComponentAddressOrName, WalletDaemonClient};
 
 use crate::command::transaction::summarize_finalize_result;
+
+#[derive(Debug, Subcommand, Clone)]
+pub enum AccountNFTSubcommand {
+    #[clap(alias = "mint")]
+    Mint(MintAccountNFTArgs),
+}
 
 #[derive(Debug, Args, Clone)]
 pub struct MintAccountNFTArgs {
@@ -54,6 +60,17 @@ pub struct MintAccountNFTArgs {
     pub mint_fee: Option<u32>,
     #[clap(long, short = 'c', alias = "create-account-nft-fee")]
     pub create_account_nft_fee: Option<u32>,
+}
+
+impl AccountNFTSubcommand {
+    pub async fn handle(self, mut client: WalletDaemonClient) -> Result<(), anyhow::Error> {
+        match self {
+            Self::Mint(args) => {
+                handle_mint_account_nft(args, &mut client).await?;
+            },
+        }
+        Ok(())
+    }
 }
 
 pub async fn handle_mint_account_nft(
@@ -74,8 +91,8 @@ pub async fn handle_mint_account_nft(
         account
     } else {
         println!(
-            "Please paste console wallet account name or respective component address from mint_account_nft call in the terminal: Press <Ctrl/Cmd + \
-             d> once done"
+            "Please paste console wallet account name or respective component address from mint_account_nft call in \
+             the terminal: Press <Ctrl/Cmd + d> once done"
         );
 
         let mut account = String::new();
