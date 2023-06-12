@@ -25,6 +25,7 @@ pub struct Data {
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
     id: u64,
+    name: String,
     permissions: JrpcPermissions,
     exp: usize,
 }
@@ -46,6 +47,7 @@ impl Data {
     pub fn generate_jwt(&mut self, permissions: JrpcPermissions) -> Result<String> {
         let my_claims = Claims {
             id: self.id,
+            name: self.id.to_string(),
             permissions,
             exp: (Utc::now() + self.expiration).timestamp() as usize,
         };

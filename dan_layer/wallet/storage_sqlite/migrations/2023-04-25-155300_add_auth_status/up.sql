@@ -7,5 +7,5 @@ CREATE TABLE auth_status
     id           INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     user_decided BOOLEAN                           NOT NULL,
     granted      BOOLEAN                           NOT NULL,
-    token        TEXT                                  NULL
+    token        TEXT                              NULL
 );

@@ -55,7 +55,7 @@ pub struct CallInstructionRequest {
     pub instruction: Instruction,
     #[serde(deserialize_with = "string_or_struct")]
     pub fee_account: ComponentAddressOrName,
-    #[serde(deserialize_with = "opt_string_or_struct")]
+    #[serde(default, deserialize_with = "opt_string_or_struct")]
     pub dump_outputs_into: Option<ComponentAddressOrName>,
     pub fee: u64,
     #[serde(default)]

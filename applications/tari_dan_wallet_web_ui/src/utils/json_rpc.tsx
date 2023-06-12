@@ -69,7 +69,7 @@ export async function jsonRpc(method: string, params: any = null) {
     if (token === null) {
       let auth_response = await internalJsonRpc("auth.request", null, [["Admin"], null]);
       let auth_token = auth_response["auth_token"];
-      let accept_response = await internalJsonRpc("auth.accept", null, [auth_token, "AdminToken"]);
+      let accept_response = await internalJsonRpc("auth.accept", null, [auth_token, auth_token]);
       token = accept_response.permissions_token
     }
   })

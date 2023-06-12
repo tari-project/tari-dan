@@ -172,6 +172,7 @@ where
     TShardStore: ShardStore<Addr = TAddr, Payload = TPayload> + 'static + Send + Sync,
     TSigningService: SigningService + Sync + Send + 'static,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn spawn(
         signing_service: TSigningService,
         public_key: TAddr,
@@ -221,6 +222,7 @@ where
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         signing_service: TSigningService,
         public_key: TAddr,

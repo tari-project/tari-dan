@@ -17,7 +17,7 @@ diesel::table! {
         id -> Integer,
         user_decided -> Bool,
         granted -> Bool,
-        token -> Text,
+        token -> Nullable<Text>,
         revoked -> Bool,
     }
 }
@@ -103,7 +103,7 @@ diesel::table! {
         hash -> Text,
         instructions -> Text,
         signature -> Text,
-        sender_address -> Text,
+        sender_public_key -> Text,
         fee_instructions -> Text,
         meta -> Text,
         result -> Nullable<Text>,
