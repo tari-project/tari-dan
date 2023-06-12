@@ -33,7 +33,7 @@ mod composability {
         // function-to-function call
         // both "composability" and "state" components are created
         pub fn new(state_template_address: TemplateAddress) -> Self {
-            let state_component_address = TemplateManager::get(other_template_address)
+            let state_component_address = TemplateManager::get(state_template_address)
                 .call("new".to_string(), vec![]);
             Self { state_component_address }
         }
@@ -60,7 +60,7 @@ mod composability {
 
         // function-to-component call
         pub fn replace_state_component(&mut self, state_template_address: TemplateAddress) {
-            self.state_component_address = TemplateManager::get(other_template_address)
+            self.state_component_address = TemplateManager::get(state_template_address)
                 .call("new".to_string(), vec![]);
         }
 
