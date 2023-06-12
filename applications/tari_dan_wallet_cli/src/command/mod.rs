@@ -33,6 +33,7 @@ use crate::command::{
 mod account;
 mod auth;
 mod key;
+mod nfts;
 mod proof;
 pub mod transaction;
 mod webrtc;

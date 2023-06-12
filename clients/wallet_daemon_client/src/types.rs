@@ -517,6 +517,7 @@ pub struct MintAccountNFTResponse {
     pub nft_id: NonFungibleId,
     pub resource_address: ResourceAddress,
     pub result: FinalizeResult,
+    pub fee: Amount,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

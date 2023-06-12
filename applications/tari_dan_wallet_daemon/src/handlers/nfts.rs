@@ -13,9 +13,7 @@ use tari_dan_wallet_sdk::{
     models::Account,
 };
 use tari_engine_types::{
-    component::new_component_address_from_parts,
-    instruction::Instruction,
-    substate::SubstateAddress,
+    component::new_component_address_from_parts, instruction::Instruction, substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -69,13 +67,14 @@ pub async fn handle_mint_account_nft(
             .as_hash(),
     );
 
+    let accrued_fee: Amount;
     if sdk
         .substate_api()
         .scan_for_substate(&SubstateAddress::Component(component_address), None)
         .await
         .is_err()
     {
-        create_account_nft(
+        acrued_fee = create_account_nft(
             context,
             &account,
             &signing_key.k,
@@ -97,6 +96,7 @@ pub async fn handle_mint_account_nft(
         &signing_key.k,
         req.mint_fee.unwrap_or(DEFAULT_FEE),
         metadata,
+        accrued_fee,
     )
     .await
 }
@@ -109,6 +109,7 @@ async fn mint_account_nft(
     owner_sk: &RistrettoSecretKey,
     fee: Amount,
     metadata: Metadata,
+    mut accrued_fee: Amount,
 ) -> Result<MintAccountNFTResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
@@ -192,11 +193,13 @@ async fn mint_account_nft(
     let resource_address = ResourceAddress::from_str(&resource_address)?;
     let nft_id = NonFungibleId::try_from_canonical_string(nft_id.as_str())
         .map_err(|e| anyhow!("Failed to parse non fungible id, with error: {:?}", e))?;
+    accrued_fee += event.final_fee;
 
     Ok(MintAccountNFTResponse {
         result: event.finalize,
         resource_address,
         nft_id,
+        fee: accrued_fee,
     })
 }
 
@@ -208,7 +211,7 @@ async fn create_account_nft(
     token_symbol: &str,
     fee: Amount,
     token: Option<String>,
-) -> Result<(), anyhow::Error> {
+) -> Result<Amount, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
@@ -224,10 +227,11 @@ async fn create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
-            owner_token,
-            token_symbol
-        ])
+        .call_function(
+            *ACCOUNT_NFT_TEMPLATE_ADDRESS,
+            "create",
+            args![owner_token, token_symbol],
+        )
         .sign(owner_sk)
         .build();
 
@@ -254,7 +258,7 @@ async fn create_account_nft(
         ));
     }
 
-    Ok(())
+    Ok(event.final_fee)
 }
 
 async fn wait_for_result(
