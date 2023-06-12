@@ -23,8 +23,8 @@ use tari_dan_storage::{
 };
 
 use crate::{
-    deser::{deserialize_json, serialize_hex},
     error::SqliteStorageError,
+    serialization::{deserialize_json, serialize_hex},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };

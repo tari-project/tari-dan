@@ -25,9 +25,9 @@ use tari_dan_storage::{
 use tari_utilities::ByteArray;
 
 use crate::{
-    deser::{serialize_hex, serialize_json},
     error::SqliteStorageError,
     reader::SqliteStateStoreReadTransaction,
+    serialization::{serialize_hex, serialize_json},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };

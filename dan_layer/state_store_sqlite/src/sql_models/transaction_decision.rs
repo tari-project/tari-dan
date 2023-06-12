@@ -5,7 +5,7 @@ use diesel::Queryable;
 use tari_dan_storage::{consensus_models, consensus_models::TransactionId, StorageError};
 use time::PrimitiveDateTime;
 
-use crate::{deser::deserialize_hex, error::SqliteStorageError};
+use crate::{error::SqliteStorageError, serialization::deserialize_hex};
 
 #[derive(Debug, Clone, Queryable)]
 pub struct TransactionDecision {

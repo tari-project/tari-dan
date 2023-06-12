@@ -6,7 +6,7 @@ use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{consensus_models, consensus_models::BlockId, StorageError};
 use time::PrimitiveDateTime;
 
-use crate::{deser::deserialize_hex, error::SqliteStorageError};
+use crate::{error::SqliteStorageError, serialization::deserialize_hex};
 
 #[derive(Debug, Clone, Queryable)]
 pub struct LeafBlock {

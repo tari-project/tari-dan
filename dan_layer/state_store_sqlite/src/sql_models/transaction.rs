@@ -8,8 +8,8 @@ use tari_utilities::ByteArray;
 use time::PrimitiveDateTime;
 
 use crate::{
-    deser::{deserialize_hex, deserialize_json},
     error::SqliteStorageError,
+    serialization::{deserialize_hex, deserialize_json},
 };
 
 #[derive(Debug, Clone, Queryable)]
