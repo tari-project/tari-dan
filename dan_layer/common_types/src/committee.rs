@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 
-use crate::NodeAddressable;
+use crate::{NodeAddressable, ShardId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 pub struct Committee<TAddr> {
@@ -65,5 +65,39 @@ impl<TAddr: NodeAddressable> FromIterator<Committee<TAddr>> for Committee<TAddr>
             acc.members.extend(committee.members);
             acc
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CommitteeShard {
+    num_committees: u64,
+    our_shard_id: ShardId,
+    bucket: u64,
+}
+
+impl CommitteeShard {
+    pub fn new(num_committees: u64, our_shard_id: ShardId) -> Self {
+        Self {
+            num_committees,
+            our_shard_id,
+            bucket: our_shard_id.to_committee_bucket(num_committees),
+        }
+    }
+
+    pub fn num_committees(&self) -> u64 {
+        self.num_committees
+    }
+
+    pub fn our_shard_id(&self) -> ShardId {
+        self.our_shard_id
+    }
+
+    pub fn includes_shard(&self, shard_id: &ShardId) -> bool {
+        self.bucket == shard_id.to_committee_bucket(self.num_committees)
+    }
+
+    pub fn filter<'a, I>(&'a self, items: I) -> impl Iterator<Item = ShardId> + '_
+    where I: IntoIterator<Item = ShardId> + 'a {
+        items.into_iter().filter(|shard_id| self.includes_shard(shard_id))
     }
 }

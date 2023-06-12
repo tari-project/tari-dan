@@ -21,7 +21,8 @@ diesel::table! {
     committed_transaction_pool (id) {
         id -> Integer,
         transaction_id -> Text,
-        decision -> Text,
+        overall_decision -> Text,
+        transaction_decision -> Text,
         fee -> BigInt,
         is_ready -> Bool,
         created_at -> Timestamp,
@@ -82,9 +83,24 @@ diesel::table! {
     new_transaction_pool (id) {
         id -> Integer,
         transaction_id -> Text,
-        decision -> Text,
+        overall_decision -> Text,
+        transaction_decision -> Text,
         fee -> BigInt,
         created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    pledges (id) {
+        id -> Integer,
+        shard_id -> Text,
+        created_by_block -> Text,
+        pledged_to_transaction_id -> Text,
+        is_active -> Bool,
+        completed_by_block -> Nullable<Text>,
+        abandoned_by_block -> Nullable<Text>,
+        created_at -> Timestamp,
+        updated_at -> Nullable<Timestamp>,
     }
 }
 
@@ -92,7 +108,8 @@ diesel::table! {
     precommitted_transaction_pool (id) {
         id -> Integer,
         transaction_id -> Text,
-        decision -> Text,
+        overall_decision -> Text,
+        transaction_decision -> Text,
         fee -> BigInt,
         is_ready -> Bool,
         created_at -> Timestamp,
@@ -103,7 +120,8 @@ diesel::table! {
     prepared_transaction_pool (id) {
         id -> Integer,
         transaction_id -> Text,
-        decision -> Text,
+        overall_decision -> Text,
+        transaction_decision -> Text,
         fee -> BigInt,
         is_ready -> Bool,
         created_at -> Timestamp,
@@ -117,6 +135,7 @@ diesel::table! {
         address -> Text,
         version -> BigInt,
         data -> Text,
+        state_hash -> Text,
         created_by_payload_id -> Binary,
         created_justify -> Nullable<Text>,
         created_node_hash -> Binary,
@@ -161,6 +180,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     leaf_blocks,
     locked_block,
     new_transaction_pool,
+    pledges,
     precommitted_transaction_pool,
     prepared_transaction_pool,
     substates,

@@ -1,13 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, ops::DerefMut};
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{commit_result::ExecuteResult, instruction::Instruction};
-use tari_transaction::{InstructionSignature, TransactionMeta};
+use tari_transaction::{InstructionSignature, SubstateChange, TransactionMeta};
 
 use crate::{
     consensus_models::{Decision, TransactionId},
@@ -24,16 +24,6 @@ pub struct Transaction {
     pub signature: InstructionSignature,
     pub sender_public_key: PublicKey,
     pub meta: TransactionMeta,
-}
-
-impl Transaction {
-    pub fn get<TTx>(tx: &mut TTx, tx_id: &TransactionId) -> Result<Self, StorageError>
-    where
-        TTx: DerefMut,
-        TTx::Target: StateStoreReadTransaction,
-    {
-        tx.deref_mut().transactions_get(tx_id)
-    }
 }
 
 impl Transaction {
@@ -72,6 +62,20 @@ impl Transaction {
     pub fn meta(&self) -> &TransactionMeta {
         &self.meta
     }
+
+    pub fn outputs(&self) -> impl Iterator<Item = &ShardId> + '_ {
+        self.meta
+            .involved_objects_iter()
+            .filter(|(_, ch)| matches!(ch, SubstateChange::Create))
+            .map(|(s, _)| s)
+    }
+
+    pub fn inputs(&self) -> impl Iterator<Item = &ShardId> + '_ {
+        self.meta
+            .involved_objects_iter()
+            .filter(|(_, ch)| matches!(ch, SubstateChange::Destroy))
+            .map(|(s, _)| s)
+    }
 }
 
 pub struct ExecutedTransaction {
@@ -87,10 +91,40 @@ impl ExecutedTransaction {
             Decision::Reject
         }
     }
+
+    pub fn transaction_decision(&self) -> Decision {
+        if self.result.transaction_failure.is_none() {
+            Decision::Accept
+        } else {
+            Decision::Reject
+        }
+    }
 }
 
 impl ExecutedTransaction {
     pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.transactions_insert(self)
+    }
+
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, tx_id: &TransactionId) -> Result<Self, StorageError> {
+        tx.transactions_get(tx_id)
+    }
+
+    pub fn get_many<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+        tx: &mut TTx,
+        tx_ids: I,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.transactions_get_many(tx_ids)
+    }
+
+    pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+        tx: &mut TTx,
+        transactions: I,
+    ) -> Result<HashMap<TransactionId, HashSet<ShardId>>, StorageError> {
+        let transactions = Self::get_many(tx, transactions)?;
+        Ok(transactions
+            .into_iter()
+            .map(|t| (t.transaction.hash, t.transaction.involved_shards()))
+            .collect())
     }
 }

@@ -1,19 +1,27 @@
-use std::ops::DerefMut;
+use std::{collections::BTreeSet, ops::DerefMut};
 
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 use log::*;
-use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeShard},
+    optional::Optional,
+    NodeHeight,
+};
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        CommittedTransactionPool,
+        ExecutedTransaction,
         LastExecuted,
         LastVoted,
         LockedBlock,
         NewTransactionPool,
+        PledgeCollection,
         PrecommitTransactionPool,
         PrepareTransactionPool,
         QuorumCertificate,
+        TransactionDecision,
     },
     StateStore,
     StateStoreReadTransaction,
@@ -90,6 +98,12 @@ where
         local_committee: Committee<TConsensusSpec::Addr>,
         block: Block,
     ) -> Result<(), HotStuffError> {
+        // TODO: We may not have all the transactions in this block.
+        //       In which case, we should request the missing transactions from the leader and pass them to the
+        //       executor. Once the executor has completed, we can vote on this block.
+
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
+
         let maybe_vote = self.store.with_write_tx(|tx| {
             self.validate_proposed_block(&mut *tx, &from, &block)?;
 
@@ -97,14 +111,12 @@ where
 
             let mut maybe_vote = None;
             if should_vote {
-                maybe_vote = Some(self.decide_and_vote(tx, &block)?);
+                maybe_vote = Some(self.decide_and_vote(tx, &block, local_committee_shard)?);
             }
 
             self.update_nodes(tx, &block)?;
             Ok::<_, HotStuffError>(maybe_vote)
         })?;
-        // // If all pledges for all shards and complete, then we can persist the payload changes
-        // self.finalize_payload(&involved_shards, &node).await?;
 
         if let Some(vote) = maybe_vote {
             let leader = self.leader_strategy.get_leader(&local_committee, &vote.block_id, 0);
@@ -117,7 +129,7 @@ where
     async fn handle_foreign_proposal(&self, from: TConsensusSpec::Addr, block: Block) -> Result<(), HotStuffError> {
         self.store.with_write_tx(|tx| {
             self.validate_proposed_block(&mut *tx, &from, &block)?;
-
+            self.on_receive_foreign_block(tx, &block)?;
             Ok(())
         })
     }
@@ -135,24 +147,20 @@ where
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
+        local_committee_shard: CommitteeShard,
     ) -> Result<VoteMessage, HotStuffError> {
-        // Save the block if it doesnt already exist
+        // Insert the block if it doesnt already exist
         block.save(tx)?;
+        block.set_as_last_voted(tx)?;
 
-        LastVoted {
-            epoch: block.epoch(),
-            block_id: *block.id(),
-            height: block.height(),
-        }
-        .set(tx)?;
-
-        match self.try_update_transaction_pools(tx, block) {
+        match self.decide_on_local_block(tx, block, local_committee_shard) {
             Ok(()) => {
                 let vote = self.generate_vote_message(block, QuorumDecision::Accept);
                 info!(target: LOG_TARGET, "✅ Accepting block {}", block.id());
                 Ok(vote)
             },
             Err(e) => {
+                // TODO: implement specific failure cases
                 let vote = self.generate_vote_message(
                     block,
                     QuorumDecision::Reject(QuorumRejectReason::TransactionPoolsDisagree),
@@ -173,15 +181,66 @@ where
         }
     }
 
-    fn try_update_transaction_pools<TTx: StateStoreWriteTransaction>(
+    /// Update the transaction pools by moving all transactions into the next pool/phase or error if this is not
+    /// possible. For new transactions, inputs are pledged to their respective transactions.
+    fn decide_on_local_block(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        block: &Block,
+        local_committee_shard: CommitteeShard,
+    ) -> Result<(), HotStuffError> {
+        if !NewTransactionPool::all_decisions_match(tx.deref_mut(), block.prepared())? {
+            return Err(HotStuffError::DecisionMismatch {
+                block_id: *block.id(),
+                pool: "new",
+            });
+        }
+        let prepared = NewTransactionPool::move_specific_to_prepare(tx, block.prepared())?;
+        self.create_local_pledges(tx, block, &prepared, local_committee_shard)?;
+
+        let _check_pledges = PrepareTransactionPool::move_specific_to_precommit(tx, block.precommitted())?;
+        let _check_pledges = PrecommitTransactionPool::move_specific_to_committed(tx, block.committed())?;
+
+        Ok(())
+    }
+
+    fn create_local_pledges(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        block: &Block,
+        transactions: &BTreeSet<TransactionDecision>,
+        local_committee_shard: CommitteeShard,
+    ) -> Result<PledgeCollection, HotStuffError> {
+        if transactions.is_empty() {
+            return Ok(PledgeCollection::new(*block.id(), vec![]));
+        }
+
+        // We only pledge for local shards that we're deciding want to commit
+        let to_pledge = transactions
+            .iter()
+            .filter(|t| t.overall_decision.is_accept())
+            .map(|t| &t.transaction_id);
+        let involved_shards = ExecutedTransaction::get_involved_shards(tx.deref_mut(), to_pledge)?;
+        let transactions_and_shards = involved_shards
+            .into_iter()
+            .map(|(t_id, shards)| (t_id, local_committee_shard.filter(shards).collect()))
+            .collect();
+
+        let pledges = PledgeCollection::pledge_many(tx, block.id(), transactions_and_shards)?;
+
+        Ok(pledges)
+    }
+
+    /// Update the transaction pools by marking all transactions as ready
+    fn on_receive_foreign_block<TTx: StateStoreWriteTransaction>(
         &self,
         tx: &mut TTx,
         block: &Block,
     ) -> Result<(), HotStuffError> {
-        let _to_pledge = NewTransactionPool::move_specific_to_prepare(tx, block.prepared())?;
-        // LocalPledges::create_many(tx, )
-        let _check_pledges = PrepareTransactionPool::move_specific_to_precommit(tx, block.precommitted())?;
-        let _check_pledges = PrecommitTransactionPool::move_specific_to_committed(tx, block.committed())?;
+        // TODO: Think we need to check local pledges here
+        PrepareTransactionPool::mark_specific_ready(tx, block.precommitted())?;
+        PrecommitTransactionPool::mark_specific_ready(tx, block.committed())?;
+        CommittedTransactionPool::mark_specific_ready(tx, block.committed())?;
 
         Ok(())
     }
@@ -248,13 +307,19 @@ where
         if last_executed.height < block.height() {
             let parent = block.get_parent(tx.deref_mut())?;
             self.on_commit(tx, last_executed, &parent)?;
-            self.execute(block);
+            self.execute(tx, block)?;
         }
         Ok(())
     }
 
-    fn execute(&self, _block: &Block) {
-        // TODO
+    fn execute(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        block: &Block,
+    ) -> Result<(), HotStuffError> {
+        CommittedTransactionPool::finalize_specific(tx, block.committed())?;
+        // TODO: commit local substates
+        Ok(())
     }
 
     fn validate_proposed_block(

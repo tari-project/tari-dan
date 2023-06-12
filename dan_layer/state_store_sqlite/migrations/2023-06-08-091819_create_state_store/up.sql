@@ -34,6 +34,7 @@ create table substates
     -- To be deleted in future
     version                      bigint    not NULL,
     data                         text      not NULL,
+    state_hash                   text      not NULL,
     created_by_payload_id        blob      not NULL,
     created_justify              text      NULL,
     created_node_hash            blob      not NULL,
@@ -53,7 +54,7 @@ create table substates
 );
 
 -- All shard ids are unique
-create unique index uniq_substates_shard_id on substates (shard_id);
+create unique index substates_uniq_shard_id on substates (shard_id);
 
 create table high_qcs
 (
@@ -102,7 +103,7 @@ create table transactions
     signature         text      not NULL,
     meta              text      not NULL,
     result            text      not NULL,
-    involved_shards  text      not NULL,
+    involved_shards   text      not NULL,
     is_finalized      boolean   NOT NULL DEFAULT '0',
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -111,23 +112,25 @@ create unique index transactions_uniq_idx_id on transactions (transaction_id);
 
 create table new_transaction_pool
 (
-    id             integer   not null primary key AUTOINCREMENT,
-    transaction_id text      not null,
-    decision       text      not null,
-    fee            bigint    not null,
-    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                   integer   not null primary key AUTOINCREMENT,
+    transaction_id       text      not null,
+    overall_decision     text      not null,
+    transaction_decision text      not null,
+    fee                  bigint    not null,
+    created_at           timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 create unique index new_transaction_pool_uniq_idx_transaction_id on new_transaction_pool (transaction_id);
 
 create table prepared_transaction_pool
 (
-    id             integer   not null primary key AUTOINCREMENT,
-    transaction_id text      not null,
-    decision       text      not null,
-    fee            bigint    not null,
-    is_ready       boolean   not null default '0',
-    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                   integer   not null primary key AUTOINCREMENT,
+    transaction_id       text      not null,
+    overall_decision     text      not null,
+    transaction_decision text      not null,
+    fee                  bigint    not null,
+    is_ready             boolean   not null default '0',
+    created_at           timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 
@@ -137,12 +140,13 @@ create index prepared_transaction_pool_idx_is_ready on prepared_transaction_pool
 
 create table precommitted_transaction_pool
 (
-    id             integer   not null primary key AUTOINCREMENT,
-    transaction_id text      not null,
-    decision       text      not null,
-    fee            bigint    not null,
-    is_ready       boolean   not null default '0',
-    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                   integer   not null primary key AUTOINCREMENT,
+    transaction_id       text      not null,
+    overall_decision     text      not null,
+    transaction_decision text      not null,
+    fee                  bigint    not null,
+    is_ready             boolean   not null default '0',
+    created_at           timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 
@@ -152,12 +156,13 @@ create index precommitted_transaction_pool_idx_is_ready on precommitted_transact
 
 create table committed_transaction_pool
 (
-    id             integer   not null primary key AUTOINCREMENT,
-    transaction_id text      not null,
-    decision       text      not null,
-    fee            bigint    not null,
-    is_ready       boolean   not null default '0',
-    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                   integer   not null primary key AUTOINCREMENT,
+    transaction_id       text      not null,
+    overall_decision     text      not null,
+    transaction_decision text      not null,
+    fee                  bigint    not null,
+    is_ready             boolean   not null default '0',
+    created_at           timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 
@@ -165,3 +170,16 @@ create unique index committed_transaction_pool_uniq_idx_transaction_id on commit
 -- fetching all by is_ready will be a very common operation
 create index committed_transaction_pool_idx_is_ready on committed_transaction_pool (is_ready);
 
+create table pledges
+(
+    id                        integer   not NULL primary key AUTOINCREMENT,
+    shard_id                  text      not NULL,
+    created_by_block          text      not NULL,
+    pledged_to_transaction_id text      not NULL,
+    is_active                 boolean   not NULL,
+    completed_by_block        text      NULL,
+    abandoned_by_block        text      NULL,
+    created_at                timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                timestamp NULL,
+    FOREIGN KEY (shard_id) REFERENCES substates (shard_id)
+);

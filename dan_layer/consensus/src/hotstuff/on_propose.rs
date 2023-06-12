@@ -60,7 +60,7 @@ where
         local_committee: Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
     ) -> Result<(), HotStuffError> {
-        let validator_id = self.epoch_manager.get_validator_shard(epoch).await?;
+        let validator_id = self.epoch_manager.get_our_validator_shard(epoch).await?;
 
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
         // the non-Send tx could be used after the await point, which is not possible.

@@ -16,7 +16,8 @@ use tari_utilities::hex::Hex;
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub struct TransactionDecision {
     pub transaction_id: TransactionId,
-    pub decision: Decision,
+    pub overall_decision: Decision,
+    pub transaction_decision: Decision,
     /// The fee for this transaction owed to this validator shard. `calculated_fee / num_shards`.
     pub per_shard_validator_fee: u64,
 }
@@ -37,6 +38,16 @@ impl PartialOrd for TransactionDecision {
 pub enum Decision {
     Accept,
     Reject,
+}
+
+impl Decision {
+    pub fn is_accept(&self) -> bool {
+        matches!(self, Decision::Accept)
+    }
+
+    pub fn is_reject(&self) -> bool {
+        matches!(self, Decision::Reject)
+    }
 }
 
 impl Display for Decision {

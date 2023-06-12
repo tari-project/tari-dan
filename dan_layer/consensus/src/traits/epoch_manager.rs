@@ -4,7 +4,12 @@
 use std::collections::HashSet;
 
 use async_trait::async_trait;
-use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, ShardId};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeShard},
+    Epoch,
+    NodeAddressable,
+    ShardId,
+};
 
 #[async_trait]
 pub trait EpochManager: Send + Sync {
@@ -12,8 +17,9 @@ pub trait EpochManager: Send + Sync {
     type Error;
 
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, Self::Error>;
-    async fn get_validator_shard(&self, epoch: Epoch) -> Result<ShardId, Self::Error>;
-    async fn get_validator_addr(&self, epoch: Epoch) -> Result<Self::Addr, Self::Error>;
+    async fn get_our_validator_shard(&self, epoch: Epoch) -> Result<ShardId, Self::Error>;
+    async fn get_our_validator_addr(&self, epoch: Epoch) -> Result<Self::Addr, Self::Error>;
+    async fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, Self::Error>;
     async fn current_epoch(&self) -> Result<Epoch, Self::Error>;
     async fn is_epoch_active(&self, epoch: Epoch) -> Result<bool, Self::Error>;
     async fn get_num_committees(&self, epoch: Epoch) -> Result<u64, Self::Error>;
@@ -24,7 +30,7 @@ pub trait EpochManager: Send + Sync {
     ) -> Result<Committee<Self::Addr>, Self::Error>;
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, Self::Error> {
-        let validator_shard_id = self.get_validator_shard(epoch).await?;
+        let validator_shard_id = self.get_our_validator_shard(epoch).await?;
         let committee = self.get_committee(epoch, validator_shard_id).await?;
         Ok(committee)
     }

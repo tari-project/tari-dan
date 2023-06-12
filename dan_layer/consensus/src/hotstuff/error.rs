@@ -20,6 +20,8 @@ pub enum HotStuffError {
     },
     #[error("Proposal validation error: {0}")]
     ProposalValidationError(#[from] ProposalValidationError),
+    #[error("Decision mismatch for block {block_id} in pool {pool}")]
+    DecisionMismatch { block_id: BlockId, pool: &'static str },
 }
 
 #[derive(Debug, thiserror::Error)]

@@ -22,16 +22,12 @@ pub enum SqliteStorageError {
         #[from]
         source: Box<dyn std::error::Error + Send + Sync>,
     },
-    #[error("Encountered malformed hash data")]
-    MalformedHashData,
     #[error("Malformed DB data in {operation}: {details}")]
     MalformedDbData { operation: &'static str, details: String },
-    #[error("Conversion error:{reason}")]
-    ConversionError { reason: String },
-    #[error("Malformed metadata for key '{key}'")]
-    MalformedMetadata { key: String },
-    #[error("Serialization failed")]
-    SerializationFailed(#[from] serde_json::Error),
+    #[error("[{operation}] Not all queried transactions were found: {details}")]
+    NotAllTransactionsFound { operation: &'static str, details: String },
+    #[error("[{operation}] Not all queried substates were found: {details}")]
+    NotAllSubstatesFound { operation: &'static str, details: String },
 }
 
 impl From<SqliteStorageError> for StorageError {

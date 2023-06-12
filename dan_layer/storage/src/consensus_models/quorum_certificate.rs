@@ -11,8 +11,9 @@ use tari_dan_common_types::{
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 
 use crate::{
-    consensus_models::{Block, BlockId, ValidatorSignature},
+    consensus_models::{Block, BlockId, HighQc, ValidatorSignature},
     StateStoreReadTransaction,
+    StateStoreWriteTransaction,
     StorageError,
 };
 
@@ -103,6 +104,14 @@ impl QuorumCertificate {
     pub fn block_id(&self) -> &BlockId {
         &self.block_id
     }
+
+    pub fn as_high_qc(&self) -> HighQc {
+        HighQc {
+            epoch: self.epoch,
+            block_id: self.block_id,
+            height: self.block_height,
+        }
+    }
 }
 
 impl QuorumCertificate {
@@ -112,5 +121,9 @@ impl QuorumCertificate {
 
     pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.block_id)
+    }
+
+    pub fn set_as_high_qc<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        self.as_high_qc().save(tx)
     }
 }

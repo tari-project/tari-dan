@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     ops::{Deref, DerefMut},
 };
 
@@ -18,8 +18,8 @@ use crate::{
         LastVoted,
         LeafBlock,
         LockedBlock,
+        PledgeCollection,
         QuorumCertificate,
-        Transaction,
         TransactionDecision,
         TransactionId,
     },
@@ -68,7 +68,11 @@ pub trait StateStoreReadTransaction {
     fn locked_block_get(&mut self, epoch: Epoch) -> Result<LockedBlock, StorageError>;
     fn leaf_block_get(&mut self, epoch: Epoch) -> Result<LeafBlock, StorageError>;
     fn high_qc_get(&mut self, epoch: Epoch) -> Result<HighQc, StorageError>;
-    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<Transaction, StorageError>;
+    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<ExecutedTransaction, StorageError>;
+    fn transactions_get_many<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        tx_ids: I,
+    ) -> Result<Vec<ExecutedTransaction>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
@@ -80,6 +84,11 @@ pub trait StateStoreReadTransaction {
         &mut self,
         transaction_ids: HashSet<TransactionId>,
     ) -> Result<HashSet<ShardId>, StorageError>;
+
+    fn new_transaction_pool_get_specific_decisions(
+        &mut self,
+        transactions: &BTreeSet<TransactionId>,
+    ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -95,6 +104,13 @@ pub trait StateStoreWriteTransaction {
     fn leaf_block_set(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError>;
     fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError>;
     fn high_qc_set(&mut self, high_qc: &HighQc) -> Result<(), StorageError>;
+
+    // -------------------------------- Pledges -------------------------------- //
+    fn create_pledges(
+        &mut self,
+        block_id: &BlockId,
+        transactions_and_shards: HashMap<TransactionId, Vec<ShardId>>,
+    ) -> Result<PledgeCollection, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
     fn transactions_insert(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError>;
@@ -161,7 +177,7 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         transaction: &BTreeSet<TransactionDecision>,
     ) -> Result<(), StorageError>;
-    fn committed_transaction_pool_mark_many_ready(
+    fn committed_transaction_pool_mark_specific_ready(
         &mut self,
         transactions: &BTreeSet<TransactionDecision>,
     ) -> Result<(), StorageError>;

@@ -38,6 +38,10 @@ pub fn quorum_certificate_hasher() -> TariHasher {
     dan_hasher("quorum_certificate")
 }
 
+pub fn pledge_hasher() -> TariHasher {
+    dan_hasher("pledges")
+}
+
 fn dan_hasher(label: &'static str) -> TariHasher {
     tari_hasher::<TariDanConsensusHashDomain>(label)
 }

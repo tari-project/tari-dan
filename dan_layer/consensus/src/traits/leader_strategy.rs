@@ -35,7 +35,7 @@ pub trait LeaderStrategy<TAddr: NodeAddressable> {
         }
     }
 
-    fn get_leader<'a, 'b>(&'a self, committee: &'b Committee<TAddr>, block: &BlockId, round: u32) -> &'b TAddr {
+    fn get_leader<'b>(&self, committee: &'b Committee<TAddr>, block: &BlockId, round: u32) -> &'b TAddr {
         let index = self.calculate_leader(committee, block, round);
         committee.members.get(index as usize).unwrap()
     }

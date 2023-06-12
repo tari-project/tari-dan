@@ -17,6 +17,7 @@ use tari_dan_storage::{
         LastVoted,
         LeafBlock,
         LockedBlock,
+        Pledge,
         TransactionDecision,
     },
     StateStoreWriteTransaction,
@@ -27,7 +28,8 @@ use tari_utilities::ByteArray;
 use crate::{
     error::SqliteStorageError,
     reader::SqliteStateStoreReadTransaction,
-    serialization::{serialize_hex, serialize_json},
+    schema::{substates::dsl::substates, transactions::dsl::transactions},
+    serialization::{deserialize_hex, deserialize_hex_try_from, serialize_hex, serialize_json},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -191,6 +193,67 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
+    fn create_pledges(&mut self, pledges: &mut [Pledge]) -> Result<(), StorageError> {
+        use crate::schema::{pledges, substates};
+
+        let insert = pledges
+            .iter()
+            .map(|pledge| {
+                (
+                    pledges::shard_id.eq(serialize_hex(&pledge.shard_id)),
+                    pledges::pledged_to_transaction_id.eq(serialize_hex(&pledge.pledged_to_transaction_id)),
+                    pledges::created_by_block.eq(serialize_hex(&pledge.created_by_block)),
+                    pledges::is_active.eq(true),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        diesel::insert_into(pledges::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pledges_insert_many",
+                source: e,
+            })?;
+
+        let substates = substates::table
+            .select((substates::shard_id, substates::state_hash))
+            .filter(substates::shard_id.eq_any(pledges.iter().map(|p| serialize_hex(&p.shard_id)).collect::<Vec<_>>()))
+            .load::<(String, String)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "pledges_insert_many",
+                source: e,
+            })?;
+
+        if substates.len() != pledges.len() {
+            return Err(SqliteStorageError::NotAllSubstatesFound {
+                operation: "pledges_insert_many",
+                details: format!("Expected {} substates, but found {}", pledges.len(), substates.len()),
+            }
+            .into());
+        }
+
+        // Populate state hashes
+        for (shard_id, state_hash) in substates {
+            let substate_shard_id =
+                deserialize_hex_try_from(&shard_id).map_err(|e| SqliteStorageError::MalformedDbData {
+                    operation: "pledges_insert_many",
+                    details: format!("Failed to deserialize shard id from db: {}", e),
+                })?;
+            let matching_pledge = pledges
+                .iter_mut()
+                .find(|pledge| pledge.shard_id == substate_shard_id)
+                .unwrap();
+            matching_pledge.state_hash =
+                deserialize_hex_try_from(&state_hash).map_err(|e| SqliteStorageError::MalformedDbData {
+                    operation: "pledges_insert_many",
+                    details: format!("Failed to deserialize state hash from db: {}", e),
+                })?;
+        }
+
+        Ok(())
+    }
+
     fn transactions_insert(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError> {
         use crate::schema::transactions;
 
@@ -243,7 +306,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
 
         let insert = (
             new_transaction_pool::transaction_id.eq(serialize_hex(transaction.transaction_id)),
-            new_transaction_pool::decision.eq(transaction.decision.to_string()),
+            new_transaction_pool::overall_decision.eq(transaction.overall_decision.to_string()),
+            new_transaction_pool::transaction_decision.eq(transaction.transaction_decision.to_string()),
             new_transaction_pool::fee.eq(transaction.per_shard_validator_fee as i64),
         );
 
@@ -300,7 +364,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             })?;
 
         if sql_transactions.len() != tx_ids.len() {
-            return Err(SqliteStorageError::MalformedDbData {
+            return Err(SqliteStorageError::NotAllTransactionsFound {
                 operation: "new_transaction_pool_remove_specific_ready",
                 details: format!(
                     "{} transactions were given to remove but only {} were found",
@@ -338,7 +402,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .map(|tx| {
                 (
                     prepared_transaction_pool::transaction_id.eq(serialize_hex(tx.transaction_id)),
-                    prepared_transaction_pool::decision.eq(tx.decision.to_string()),
+                    prepared_transaction_pool::overall_decision.eq(tx.overall_decision.to_string()),
+                    prepared_transaction_pool::transaction_decision.eq(tx.transaction_decision.to_string()),
                     prepared_transaction_pool::fee.eq(tx.per_shard_validator_fee as i64),
                     prepared_transaction_pool::is_ready.eq(false),
                 )
@@ -367,30 +432,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .map(|tx| serialize_hex(tx.transaction_id))
             .collect::<Vec<_>>();
 
-        // Check if all transactions exist in the pool - it does not matter if they are already ready, which is why we
-        // cant use rows_affected from the update to check this.
-        let num_found = prepared_transaction_pool::table
-            .filter(prepared_transaction_pool::transaction_id.eq_any(&tx_ids))
-            .count()
-            .get_result::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "prepared_transaction_pool_mark_specific_ready",
-                source: e,
-            })?;
-
-        // If there are duplicates in tx_ids (which there should never be) this will unexpectedly fail
-        if num_found as usize != tx_ids.len() {
-            return Err(SqliteStorageError::MalformedDbData {
-                operation: "prepared_transaction_pool_mark_specific_ready",
-                details: format!(
-                    "{} transactions were given to mark as ready but only {} were found",
-                    transactions.len(),
-                    num_found
-                ),
-            }
-            .into());
-        }
-
         diesel::update(prepared_transaction_pool::table)
             .filter(prepared_transaction_pool::transaction_id.eq_any(&tx_ids))
             .set(prepared_transaction_pool::is_ready.eq(true))
@@ -413,7 +454,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .select((
                 prepared_transaction_pool::id,
                 prepared_transaction_pool::transaction_id,
-                prepared_transaction_pool::decision,
+                prepared_transaction_pool::overall_decision,
+                prepared_transaction_pool::transaction_decision,
                 prepared_transaction_pool::fee,
                 prepared_transaction_pool::created_at,
             ))
@@ -489,7 +531,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .select((
                 prepared_transaction_pool::id,
                 prepared_transaction_pool::transaction_id,
-                prepared_transaction_pool::decision,
+                prepared_transaction_pool::overall_decision,
+                prepared_transaction_pool::transaction_decision,
                 prepared_transaction_pool::fee,
                 prepared_transaction_pool::created_at,
             ))
@@ -529,7 +572,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .map(|tx| {
                 (
                     precommitted_transaction_pool::transaction_id.eq(serialize_hex(tx.transaction_id)),
-                    precommitted_transaction_pool::decision.eq(tx.decision.to_string()),
+                    precommitted_transaction_pool::overall_decision.eq(tx.overall_decision.to_string()),
+                    precommitted_transaction_pool::transaction_decision.eq(tx.transaction_decision.to_string()),
                     precommitted_transaction_pool::fee.eq(tx.per_shard_validator_fee as i64),
                     precommitted_transaction_pool::is_ready.eq(false),
                 )
@@ -558,7 +602,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .map(|tx| serialize_hex(tx.transaction_id))
             .collect::<Vec<_>>();
 
-        let row_affected = diesel::update(precommitted_transaction_pool::table)
+        diesel::update(precommitted_transaction_pool::table)
             .filter(precommitted_transaction_pool::transaction_id.eq_any(&tx_ids))
             .set(precommitted_transaction_pool::is_ready.eq(true))
             .execute(self.connection())
@@ -566,18 +610,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 operation: "precommitted_transaction_pool_insert_pending",
                 source: e,
             })?;
-
-        if row_affected != tx_ids.len() {
-            return Err(SqliteStorageError::MalformedDbData {
-                operation: "precommitted_transaction_pool_mark_specific_ready",
-                details: format!(
-                    "{} transactions were given to mark as ready but only {} were found",
-                    transactions.len(),
-                    row_affected
-                ),
-            }
-            .into());
-        }
 
         Ok(())
     }
@@ -592,7 +624,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .select((
                 precommitted_transaction_pool::id,
                 precommitted_transaction_pool::transaction_id,
-                precommitted_transaction_pool::decision,
+                precommitted_transaction_pool::overall_decision,
+                precommitted_transaction_pool::transaction_decision,
                 precommitted_transaction_pool::fee,
                 precommitted_transaction_pool::created_at,
             ))
@@ -641,7 +674,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .select((
                 precommitted_transaction_pool::id,
                 precommitted_transaction_pool::transaction_id,
-                precommitted_transaction_pool::decision,
+                precommitted_transaction_pool::overall_decision,
+                precommitted_transaction_pool::transaction_decision,
                 precommitted_transaction_pool::fee,
                 precommitted_transaction_pool::created_at,
             ))
@@ -680,7 +714,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .map(|tx| {
                 (
                     committed_transaction_pool::transaction_id.eq(serialize_hex(tx.transaction_id)),
-                    committed_transaction_pool::decision.eq(tx.decision.to_string()),
+                    committed_transaction_pool::overall_decision.eq(tx.overall_decision.to_string()),
+                    committed_transaction_pool::transaction_decision.eq(tx.transaction_decision.to_string()),
                     committed_transaction_pool::fee.eq(tx.per_shard_validator_fee as i64),
                     committed_transaction_pool::is_ready.eq(false),
                 )
@@ -698,7 +733,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn committed_transaction_pool_mark_many_ready(
+    fn committed_transaction_pool_mark_specific_ready(
         &mut self,
         transactions: &BTreeSet<TransactionDecision>,
     ) -> Result<(), StorageError> {
@@ -709,7 +744,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .map(|tx| serialize_hex(tx.transaction_id))
             .collect::<Vec<_>>();
 
-        let row_affected = diesel::update(committed_transaction_pool::table)
+        diesel::update(committed_transaction_pool::table)
             .filter(committed_transaction_pool::transaction_id.eq_any(&tx_ids))
             .set(committed_transaction_pool::is_ready.eq(true))
             .execute(self.connection())
@@ -717,18 +752,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 operation: "committed_transaction_pool_mark_many_ready",
                 source: e,
             })?;
-
-        if row_affected != tx_ids.len() {
-            return Err(SqliteStorageError::MalformedDbData {
-                operation: "committed_transaction_pool_mark_many_ready",
-                details: format!(
-                    "{} transactions were given to mark as ready but only {} were found",
-                    transactions.len(),
-                    row_affected
-                ),
-            }
-            .into());
-        }
 
         Ok(())
     }
@@ -748,7 +771,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .select((
                 committed_transaction_pool::id,
                 committed_transaction_pool::transaction_id,
-                committed_transaction_pool::decision,
+                committed_transaction_pool::overall_decision,
+                committed_transaction_pool::transaction_decision,
                 committed_transaction_pool::fee,
                 committed_transaction_pool::created_at,
             ))

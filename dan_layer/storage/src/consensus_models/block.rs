@@ -13,7 +13,7 @@ use tari_dan_common_types::{hashing, Epoch, NodeHeight, ShardId};
 
 use super::{QuorumCertificate, TransactionDecision};
 use crate::{
-    consensus_models::{LastExecuted, LockedBlock, TransactionId},
+    consensus_models::{LastExecuted, LastVoted, LockedBlock, TransactionId},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -126,6 +126,14 @@ impl Block {
             block_id: self.id,
         }
     }
+
+    pub fn as_last_voted(&self) -> LastVoted {
+        LastVoted {
+            epoch: self.epoch,
+            height: self.height,
+            block_id: self.id,
+        }
+    }
 }
 
 // impl getters for Block
@@ -223,6 +231,10 @@ impl Block {
 
     pub fn set_as_last_executed<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         self.as_last_executed().set(tx)
+    }
+
+    pub fn set_as_last_voted<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        self.as_last_voted().set(tx)
     }
 
     pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {

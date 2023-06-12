@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::{
+    collections::{BTreeSet, HashMap, HashSet},
+    str::FromStr,
+};
 
 use diesel::{sql_query, sql_types::Text, ExpressionMethods, QueryDsl, QueryableByName, RunQueryDsl, SqliteConnection};
 use tari_dan_common_types::{Epoch, ShardId};
@@ -9,6 +12,7 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
+        Decision,
         HighQc,
         LastExecuted,
         LastVoted,
@@ -16,6 +20,7 @@ use tari_dan_storage::{
         LockedBlock,
         QuorumCertificate,
         Transaction,
+        TransactionDecision,
         TransactionId,
     },
     StateStoreReadTransaction,
@@ -24,7 +29,8 @@ use tari_dan_storage::{
 
 use crate::{
     error::SqliteStorageError,
-    serialization::{deserialize_json, serialize_hex},
+    schema::{new_transaction_pool::dsl::new_transaction_pool, transactions::dsl::transactions},
+    serialization::{deserialize_hex, deserialize_hex_try_from, deserialize_json, serialize_hex},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -287,5 +293,34 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             .collect();
 
         Ok(shards)
+    }
+
+    fn new_transaction_pool_get_specific_decisions(
+        &mut self,
+        transactions: &BTreeSet<TransactionId>,
+    ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
+        use crate::schema::new_transaction_pool;
+
+        let decisions = new_transaction_pool::table
+            .filter(new_transaction_pool::transaction_id.eq_any(transactions))
+            .get_results::<sql_models::TransactionDecision>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "new_transaction_pool_check_specific_decisions",
+                source: e,
+            })?;
+
+        if decisions.len() != transactions.len() {
+            return Err(SqliteStorageError::NotAllTransactionsFound {
+                operation: "new_transaction_pool_check_specific_decisions",
+                details: format!(
+                    "Expected {} transactions, found {}",
+                    transactions.len(),
+                    decisions.len()
+                ),
+            }
+            .into());
+        }
+
+        decisions.into_iter().map(TransactionDecision::try_from).collect()
     }
 }

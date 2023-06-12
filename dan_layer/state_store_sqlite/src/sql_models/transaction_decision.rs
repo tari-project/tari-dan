@@ -11,7 +11,8 @@ use crate::{error::SqliteStorageError, serialization::deserialize_hex};
 pub struct TransactionDecision {
     pub id: i32,
     pub transaction_id: String,
-    pub decision: String,
+    pub overall_decision: String,
+    pub transaction_decision: String,
     pub fee: i64,
     pub created_at: PrimitiveDateTime,
 }
@@ -27,13 +28,19 @@ impl TryFrom<TransactionDecision> for consensus_models::TransactionDecision {
                     details: e.to_string(),
                 }
             })?,
-            decision: value
-                .decision
+            overall_decision: value
+                .overall_decision
                 .parse()
                 .map_err(|_| SqliteStorageError::MalformedDbData {
                     operation: "TryFrom<TransactionDecision> decision",
-                    details: format!("{} is an invalid decision", value.decision),
+                    details: format!("{} is an invalid decision", value.overall_decision),
                 })?,
+            transaction_decision: value.transaction_decision.parse().map_err(|_| {
+                SqliteStorageError::MalformedDbData {
+                    operation: "TryFrom<TransactionDecision> decision",
+                    details: format!("{} is an invalid decision", value.transaction_decision),
+                }
+            })?,
             per_shard_validator_fee: value.fee as u64,
         })
     }

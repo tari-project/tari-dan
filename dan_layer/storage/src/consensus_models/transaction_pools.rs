@@ -54,13 +54,26 @@ impl NewTransactionPool {
         tx.new_transaction_pool_insert(transaction_decision)
     }
 
-    pub fn move_specific_to_prepare<TTx: StateStoreWriteTransaction>(
+    pub fn move_specific_to_prepare<TTx>(
         tx: &mut TTx,
         transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
+    ) -> Result<BTreeSet<TransactionDecision>, StorageError>
+    where
+        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx::Target: StateStoreReadTransaction,
+    {
         let ready_txs = tx.new_transaction_pool_remove_specific_ready(transactions)?;
         tx.prepared_transaction_pool_insert_pending(&ready_txs)?;
         Ok(ready_txs)
+    }
+
+    pub fn all_decisions_match<TTx: StateStoreReadTransaction>(
+        tx: &mut TTx,
+        transactions: &BTreeSet<TransactionDecision>,
+    ) -> Result<bool, StorageError> {
+        let decisions =
+            tx.new_transaction_pool_get_specific_decisions(&transactions.iter().map(|t| t.transaction_id).collect())?;
+        Ok(decisions == *transactions)
     }
 
     pub fn move_many_to_prepare<TTx: StateStoreWriteTransaction>(
@@ -139,11 +152,11 @@ impl PrecommitTransactionPool {
 pub struct CommittedTransactionPool;
 
 impl CommittedTransactionPool {
-    pub fn mark_many_ready<TTx: StateStoreWriteTransaction>(
+    pub fn mark_specific_ready<TTx: StateStoreWriteTransaction>(
         tx: &mut TTx,
         transactions: &BTreeSet<TransactionDecision>,
     ) -> Result<(), StorageError> {
-        tx.committed_transaction_pool_mark_many_ready(transactions)?;
+        tx.committed_transaction_pool_mark_specific_ready(transactions)?;
         Ok(())
     }
 

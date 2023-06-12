@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::Duration;
+use std::{ops::DerefMut, time::Duration};
 
 use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch};
@@ -10,14 +10,11 @@ use tari_dan_storage::{
         AllTransactionPools,
         Block,
         ExecutedTransaction,
-        HighQc,
         LeafBlock,
-        LockedBlock,
         NewTransactionPool,
         TransactionDecision,
     },
     StateStore,
-    StateStoreWriteTransaction,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::{sync::mpsc, task::JoinHandle, time, time::MissedTickBehavior};
@@ -118,8 +115,8 @@ where
         loop {
             tokio::select! {
                 Some(msg) = self.rx_new_transactions.recv() => {
-                    if let Err(e) = self.on_new_transaction(msg).await {
-                       error!(target: LOG_TARGET, "Error while processing new payload (on_new_transaction): {}", e);
+                    if let Err(e) = self.on_new_executed_transaction(msg).await {
+                       error!(target: LOG_TARGET, "Error while processing new payload (on_new_executed_transaction): {}", e);
                     }
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
@@ -145,14 +142,15 @@ where
         Ok(())
     }
 
-    async fn on_new_transaction(&mut self, executed: ExecutedTransaction) -> Result<(), HotStuffError> {
+    async fn on_new_executed_transaction(&mut self, executed: ExecutedTransaction) -> Result<(), HotStuffError> {
         debug!(target: LOG_TARGET, "Received new transaction");
         self.state_store.with_write_tx(|tx| {
             executed.insert(tx)?;
 
             NewTransactionPool::insert(tx, TransactionDecision {
                 transaction_id: *executed.transaction.hash(),
-                decision: executed.decision(),
+                overall_decision: executed.decision(),
+                transaction_decision: executed.transaction_decision(),
                 per_shard_validator_fee: executed
                     .result
                     .fee_receipt
@@ -213,24 +211,15 @@ where
     fn create_genesis_block_if_required(&self, epoch: Epoch) -> Result<(), HotStuffError> {
         let genesis = Block::genesis(epoch);
 
-        let mut tx = self.state_store.create_write_tx()?;
-        if genesis.exists(&mut *tx)? {
-            genesis.insert(&mut tx)?;
-            HighQc {
-                epoch,
-                block_id: *genesis.id(),
-                height: genesis.height(),
+        self.state_store.with_write_tx(|tx| {
+            if genesis.exists(tx.deref_mut())? {
+                genesis.insert(tx)?;
+                genesis.justify().set_as_high_qc(tx)?;
+                genesis.set_as_locked(tx)?;
             }
-            .save(&mut tx)?;
+            Ok::<_, HotStuffError>(())
+        })?;
 
-            LockedBlock {
-                epoch,
-                block_id: *genesis.id(),
-                height: genesis.height(),
-            }
-            .set(&mut tx)?;
-        }
-        tx.commit()?;
         Ok(())
     }
 }
