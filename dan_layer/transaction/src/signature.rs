@@ -31,8 +31,8 @@ impl InstructionSignature {
         Self(RistrettoSchnorr::sign_raw(secret_key, secret_nonce, &challenge).unwrap())
     }
 
-    pub fn signature(&self) -> RistrettoSchnorr {
-        self.0.clone()
+    pub fn signature(&self) -> &RistrettoSchnorr {
+        &self.0
     }
 }
 

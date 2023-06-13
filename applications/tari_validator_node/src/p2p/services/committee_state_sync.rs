@@ -6,7 +6,7 @@ use std::{convert::TryInto, ops::RangeInclusive};
 use futures::StreamExt;
 use log::info;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 use tari_dan_storage::{
     global::{GlobalDb, MetadataKey},
     models::SubstateShardData,
@@ -22,7 +22,6 @@ use tari_dan_storage_sqlite::{
 };
 use tari_epoch_manager::{
     base_layer::{EpochManagerError, EpochManagerHandle},
-    Committee,
     EpochManager,
 };
 use tari_validator_node_rpc::{

@@ -4,7 +4,7 @@
 use log::*;
 use tari_common_types::types::FixedHash;
 use tari_core::ValidatorNodeBMT;
-use tari_dan_common_types::{hashing::tari_hasher, vn_bmt_node_hash, ShardId, ValidatorMetadata};
+use tari_dan_common_types::{hasher::tari_hasher, vn_bmt_node_hash, ShardId, ValidatorMetadata};
 use tari_dan_storage::models::VoteMessage;
 use tari_mmr::BalancedBinaryMerkleProof;
 

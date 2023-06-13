@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2022, The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,4 +20,35 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub struct SqliteStorageService {}
+use tari_dan_common_types::{Epoch, NodeHeight};
+
+use crate::{
+    consensus_models::{BlockId, QuorumCertificate},
+    StateStoreReadTransaction,
+    StateStoreWriteTransaction,
+    StorageError,
+};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HighQc {
+    pub epoch: Epoch,
+    pub block_id: BlockId,
+    pub height: NodeHeight,
+}
+
+impl HighQc {
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
+        tx.high_qc_get(epoch)
+    }
+
+    pub fn get_quorum_certificate<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<QuorumCertificate, StorageError> {
+        QuorumCertificate::get(tx, &self.block_id)
+    }
+
+    pub fn save<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        tx.high_qc_set(self)
+    }
+}

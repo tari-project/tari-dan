@@ -8,14 +8,8 @@ use std::{
 
 use tari_comms::async_trait;
 use tari_core::ValidatorNodeBMT;
-use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
-use tari_epoch_manager::{
-    base_layer::EpochManagerError,
-    Committee,
-    EpochManager,
-    ShardCommitteeAllocation,
-    ValidatorNode,
-};
+use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, ShardId};
+use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager, ShardCommitteeAllocation, ValidatorNode};
 
 #[derive(Debug, Clone)]
 pub struct RangeEpochManager<TAddr> {

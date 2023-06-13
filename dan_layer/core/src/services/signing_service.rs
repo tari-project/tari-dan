@@ -27,7 +27,7 @@ use tari_comms::{
     types::{CommsPublicKey, Signature},
     NodeIdentity,
 };
-use tari_dan_common_types::{crypto::create_key_pair, hashing::tari_hasher};
+use tari_dan_common_types::{crypto::create_key_pair, hasher::tari_hasher};
 use tari_utilities::ByteArray;
 
 use crate::TariDanCoreHashDomain;
