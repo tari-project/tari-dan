@@ -5,9 +5,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::*;
 use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};

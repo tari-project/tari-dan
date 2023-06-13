@@ -43,35 +43,15 @@ use log::{debug, error, warn};
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_dan_common_types::{
-    Epoch,
-    NodeHeight,
-    ObjectPledge,
-    ObjectPledgeInfo,
-    PayloadId,
-    QuorumCertificate,
-    ShardId,
-    SubstateState,
+    Epoch, NodeHeight, ObjectPledge, ObjectPledgeInfo, PayloadId, QuorumCertificate, ShardId, SubstateState,
     TreeNodeHash,
 };
 use tari_dan_storage::{
     models::{
-        ClaimLeaderFees,
-        CurrentLeaderStates,
-        HotStuffTreeNode,
-        LeafNode,
-        Payload,
-        PayloadResult,
-        RecentTransaction,
-        SQLSubstate,
-        SQLTransaction,
-        SubstateShardData,
-        TariDanPayload,
-        VoteMessage,
+        ClaimLeaderFees, CurrentLeaderStates, HotStuffTreeNode, LeafNode, Payload, PayloadResult, RecentTransaction,
+        SQLSubstate, SQLTransaction, SubstateShardData, TariDanPayload, VoteMessage,
     },
-    ShardStore,
-    ShardStoreReadTransaction,
-    ShardStoreWriteTransaction,
-    StorageError,
+    ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction, StorageError,
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_transaction::{InstructionSignature, Transaction, TransactionMeta};

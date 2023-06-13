@@ -7,12 +7,7 @@ use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch};
 use tari_dan_storage::{
     consensus_models::{
-        AllTransactionPools,
-        Block,
-        ExecutedTransaction,
-        LeafBlock,
-        NewTransactionPool,
-        TransactionDecision,
+        AllTransactionPools, Block, ExecutedTransaction, LeafBlock, NewTransactionPool, TransactionDecision,
     },
     StateStore,
 };
@@ -21,11 +16,8 @@ use tokio::{sync::mpsc, task::JoinHandle, time, time::MissedTickBehavior};
 
 use crate::{
     hotstuff::{
-        error::HotStuffError,
-        on_propose::OnPropose,
-        on_receive_new_view::OnReceiveNewViewHandler,
-        on_receive_proposal::OnReceiveProposalHandler,
-        on_receive_vote::OnReceiveVoteHandler,
+        error::HotStuffError, on_propose::OnPropose, on_receive_new_view::OnReceiveNewViewHandler,
+        on_receive_proposal::OnReceiveProposalHandler, on_receive_vote::OnReceiveVoteHandler,
     },
     messages::HotstuffMessage,
     traits::{ConsensusSpec, EpochManager, LeaderStrategy},
@@ -147,17 +139,20 @@ where
         self.state_store.with_write_tx(|tx| {
             executed.insert(tx)?;
 
-            NewTransactionPool::insert(tx, TransactionDecision {
-                transaction_id: *executed.transaction.hash(),
-                overall_decision: executed.decision(),
-                transaction_decision: executed.transaction_decision(),
-                per_shard_validator_fee: executed
-                    .result
-                    .fee_receipt
-                    .as_ref()
-                    .and_then(|fee| fee.total_fee_payment.as_u64_checked())
-                    .unwrap_or(0),
-            })
+            NewTransactionPool::insert(
+                tx,
+                TransactionDecision {
+                    transaction_id: *executed.transaction.hash(),
+                    overall_decision: executed.decision(),
+                    transaction_decision: executed.transaction_decision(),
+                    per_shard_validator_fee: executed
+                        .result
+                        .fee_receipt
+                        .as_ref()
+                        .and_then(|fee| fee.total_fee_payment.as_u64_checked())
+                        .unwrap_or(0),
+                },
+            )
         })?;
         Ok(())
     }

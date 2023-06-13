@@ -10,15 +10,10 @@ use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 use tari_dan_storage::{
     global::{GlobalDb, MetadataKey},
     models::SubstateShardData,
-    ShardStore,
-    ShardStoreReadTransaction,
-    ShardStoreWriteTransaction,
-    StorageError,
+    ShardStore, ShardStoreReadTransaction, ShardStoreWriteTransaction, StorageError,
 };
 use tari_dan_storage_sqlite::{
-    error::SqliteStorageError,
-    global::SqliteGlobalDbAdapter,
-    sqlite_shard_store_factory::SqliteShardStore,
+    error::SqliteStorageError, global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore,
 };
 use tari_epoch_manager::{
     base_layer::{EpochManagerError, EpochManagerHandle},

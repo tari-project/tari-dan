@@ -6,9 +6,7 @@ use std::collections::HashSet;
 use async_trait::async_trait;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    Epoch,
-    NodeAddressable,
-    ShardId,
+    Epoch, NodeAddressable, ShardId,
 };
 
 #[async_trait]

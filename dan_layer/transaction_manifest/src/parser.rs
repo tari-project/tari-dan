@@ -3,29 +3,8 @@
 
 use proc_macro2::{Ident, TokenStream};
 use syn::{
-    parse::ParseStream,
-    parse2,
-    punctuated::Punctuated,
-    token::Comma,
-    Block,
-    Expr,
-    ExprCall,
-    ExprLit,
-    ExprMacro,
-    ExprMethodCall,
-    ExprPath,
-    Item,
-    ItemFn,
-    ItemUse,
-    Lit,
-    LitStr,
-    Local,
-    Macro,
-    Pat,
-    PatIdent,
-    Path,
-    Stmt,
-    UseTree,
+    parse::ParseStream, parse2, punctuated::Punctuated, token::Comma, Block, Expr, ExprCall, ExprLit, ExprMacro,
+    ExprMethodCall, ExprPath, Item, ItemFn, ItemUse, Lit, LitStr, Local, Macro, Pat, PatIdent, Path, Stmt, UseTree,
 };
 use tari_engine_types::TemplateAddress;
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;

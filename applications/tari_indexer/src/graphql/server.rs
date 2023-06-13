@@ -24,9 +24,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use async_graphql::{
     http::{playground_source, GraphQLPlaygroundConfig},
-    EmptyMutation,
-    EmptySubscription,
-    Schema,
+    EmptyMutation, EmptySubscription, Schema,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::{
@@ -34,8 +32,7 @@ use axum::{
     http::StatusCode,
     response::{Html, IntoResponse},
     routing::get,
-    Json,
-    Router,
+    Json, Router,
 };
 use log::*;
 use serde::Serialize;

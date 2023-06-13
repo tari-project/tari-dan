@@ -22,11 +22,7 @@
 
 use log::*;
 use tari_dan_app_utilities::template_manager::{
-    Template,
-    TemplateManagerError,
-    TemplateManagerRequest,
-    TemplateMetadata,
-    TemplateRegistration,
+    Template, TemplateManagerError, TemplateManagerRequest, TemplateMetadata, TemplateRegistration,
 };
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::models::TemplateAddress;

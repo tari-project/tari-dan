@@ -8,8 +8,7 @@ use tari_dan_common_types::{hasher::TariHasher, hashing::pledge_hasher, ShardId}
 
 use crate::{
     consensus_models::{BlockId, TransactionId},
-    StateStoreWriteTransaction,
-    StorageError,
+    StateStoreWriteTransaction, StorageError,
 };
 
 #[derive(Debug, Clone)]

@@ -11,21 +11,10 @@ use log::*;
 use tari_dan_common_types::ShardId;
 use tari_dan_storage::{
     consensus_models::{
-        Block,
-        BlockId,
-        ExecutedTransaction,
-        HighQc,
-        LastExecuted,
-        LastVoted,
-        LeafBlock,
-        LockedBlock,
-        Pledge,
-        PledgeCollection,
-        TransactionDecision,
-        TransactionId,
+        Block, BlockId, ExecutedTransaction, HighQc, LastExecuted, LastVoted, LeafBlock, LockedBlock, Pledge,
+        PledgeCollection, TransactionDecision, TransactionId,
     },
-    StateStoreWriteTransaction,
-    StorageError,
+    StateStoreWriteTransaction, StorageError,
 };
 use tari_utilities::ByteArray;
 

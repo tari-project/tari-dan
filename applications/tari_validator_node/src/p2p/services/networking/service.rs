@@ -28,8 +28,7 @@ use tari_comms::{
     peer_manager::{NodeId, PeerFeatures, PeerIdentityClaim},
     protocol::rpc::NamedProtocolService,
     types::CommsPublicKey,
-    NodeIdentity,
-    PeerConnection,
+    NodeIdentity, PeerConnection,
 };
 use tari_dan_common_types::optional::Optional;
 use tari_dan_core::{

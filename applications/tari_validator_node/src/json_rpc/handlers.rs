@@ -24,9 +24,7 @@ use std::{convert::TryInto, sync::Arc, time::Duration};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::*;
 use serde::Serialize;
@@ -37,8 +35,7 @@ use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
     types::CommsPublicKey,
-    CommsNode,
-    NodeIdentity,
+    CommsNode, NodeIdentity,
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
@@ -50,36 +47,13 @@ use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManager};
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
-    AddPeerRequest,
-    AddPeerResponse,
-    GetClaimableFeesRequest,
-    GetClaimableFeesResponse,
-    GetCommitteeRequest,
-    GetEpochManagerStatsResponse,
-    GetIdentityResponse,
-    GetRecentTransactionsResponse,
-    GetShardKey,
-    GetStateRequest,
-    GetStateResponse,
-    GetSubstateRequest,
-    GetSubstateResponse,
-    GetTemplateRequest,
-    GetTemplateResponse,
-    GetTemplatesRequest,
-    GetTemplatesResponse,
-    GetTransactionQcsRequest,
-    GetTransactionQcsResponse,
-    GetTransactionResultRequest,
-    GetTransactionResultResponse,
-    SubmitTransactionRequest,
-    SubmitTransactionResponse,
-    SubstateStatus,
-    SubstatesRequest,
-    TemplateMetadata,
-    TemplateRegistrationRequest,
-    TemplateRegistrationResponse,
-    TransactionFinalizeResult,
-    TransactionRequest,
+    AddPeerRequest, AddPeerResponse, GetClaimableFeesRequest, GetClaimableFeesResponse, GetCommitteeRequest,
+    GetEpochManagerStatsResponse, GetIdentityResponse, GetRecentTransactionsResponse, GetShardKey, GetStateRequest,
+    GetStateResponse, GetSubstateRequest, GetSubstateResponse, GetTemplateRequest, GetTemplateResponse,
+    GetTemplatesRequest, GetTemplatesResponse, GetTransactionQcsRequest, GetTransactionQcsResponse,
+    GetTransactionResultRequest, GetTransactionResultResponse, SubmitTransactionRequest, SubmitTransactionResponse,
+    SubstateStatus, SubstatesRequest, TemplateMetadata, TemplateRegistrationRequest, TemplateRegistrationResponse,
+    TransactionFinalizeResult, TransactionRequest,
 };
 use tokio::sync::{broadcast, broadcast::error::RecvError};
 
@@ -91,9 +65,7 @@ use crate::{
         JsonTransactionResult,
     },
     p2p::services::mempool::MempoolHandle,
-    registration,
-    Services,
-    ValidatorNodeConfig,
+    registration, Services, ValidatorNodeConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
@@ -244,10 +216,13 @@ impl JsonRpcHandlers {
                 .await;
             }
 
-            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                hash: hash.into_array().into(),
-                result: None,
-            }))
+            Ok(JsonRpcResponse::success(
+                answer_id,
+                SubmitTransactionResponse {
+                    hash: hash.into_array().into(),
+                    result: None,
+                },
+            ))
         }
     }
 
@@ -280,9 +255,12 @@ impl JsonRpcHandlers {
             ));
         }
 
-        Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
-            data: state[0].substate().to_bytes(),
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            GetStateResponse {
+                data: state[0].substate().to_bytes(),
+            },
+        ))
     }
 
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -360,10 +338,13 @@ impl JsonRpcHandlers {
         match tx.get_transaction(data.payload_id) {
             // TODO: return the transaction with the Response struct, and probably rename this jrpc method to
             // get_transaction_status
-            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, JsonTransactionResult {
-                nodes: transaction,
-                payload: dan_payload,
-            })),
+            Ok(transaction) => Ok(JsonRpcResponse::success(
+                answer_id,
+                JsonTransactionResult {
+                    nodes: transaction,
+                    payload: dan_payload,
+                },
+            )),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(
@@ -396,11 +377,14 @@ impl JsonRpcHandlers {
                         SubstateStatus::Up,
                     )
                 };
-                Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                    status,
-                    created_by_tx: tx_hash,
-                    value,
-                }))
+                Ok(JsonRpcResponse::success(
+                    answer_id,
+                    GetSubstateResponse {
+                        status,
+                        created_by_tx: tx_hash,
+                        value,
+                    },
+                ))
             },
             Err(err) => {
                 error!(target: LOG_TARGET, "[get_substate] error {}", err);
@@ -441,18 +425,21 @@ impl JsonRpcHandlers {
         let data: GetClaimableFeesRequest = value.parse_params()?;
         let mut tx = self.shard_store.create_read_tx().unwrap();
         match tx.get_fees_by_epoch(data.epoch, data.claim_leader_public_key.to_vec()) {
-            Ok(claim_fees) => Ok(JsonRpcResponse::success(answer_id, GetClaimableFeesResponse {
-                total_accrued_fees: claim_fees
-                    .iter()
-                    .map(|fees| {
-                        if fees.destroyed_at_epoch.is_none() {
-                            fees.fee_paid_for_created_justify
-                        } else {
-                            fees.fee_paid_for_destroyed_justify
-                        }
-                    })
-                    .sum::<i64>() as u64,
-            })),
+            Ok(claim_fees) => Ok(JsonRpcResponse::success(
+                answer_id,
+                GetClaimableFeesResponse {
+                    total_accrued_fees: claim_fees
+                        .iter()
+                        .map(|fees| {
+                            if fees.destroyed_at_epoch.is_none() {
+                                fees.fee_paid_for_created_justify
+                            } else {
+                                fees.fee_paid_for_destroyed_justify
+                            }
+                        })
+                        .sum::<i64>() as u64,
+                },
+            )),
             Err(err) => {
                 println!("error {:?}", err);
                 Err(JsonRpcResponse::error(
@@ -522,10 +509,13 @@ impl JsonRpcHandlers {
             .await
             .map_err(internal_error(answer_id))?;
 
-        Ok(JsonRpcResponse::success(answer_id, TemplateRegistrationResponse {
-            template_address: resp.template_address,
-            transaction_id: resp.tx_id,
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            TemplateRegistrationResponse {
+                template_address: resp.template_address,
+                transaction_id: resp.tx_id,
+            },
+        ))
     }
 
     pub async fn get_templates(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -538,18 +528,21 @@ impl JsonRpcHandlers {
             .await
             .map_err(internal_error(answer_id))?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetTemplatesResponse {
-            templates: templates
-                .into_iter()
-                .map(|t| TemplateMetadata {
-                    name: t.name,
-                    address: t.address,
-                    url: t.url,
-                    binary_sha: t.binary_sha,
-                    height: t.height,
-                })
-                .collect(),
-        }))
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            GetTemplatesResponse {
+                templates: templates
+                    .into_iter()
+                    .map(|t| TemplateMetadata {
+                        name: t.name,
+                        address: t.address,
+                        url: t.url,
+                        binary_sha: t.binary_sha,
+                        height: t.height,
+                    })
+                    .collect(),
+            },
+        ))
     }
 
     pub async fn get_template(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -568,16 +561,19 @@ impl JsonRpcHandlers {
             .await
             .map_err(internal_error(answer_id))?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetTemplateResponse {
-            registration_metadata: TemplateMetadata {
-                name: template.metadata.name,
-                address: template.metadata.address,
-                url: template.metadata.url,
-                binary_sha: template.metadata.binary_sha,
-                height: template.metadata.height,
+        Ok(JsonRpcResponse::success(
+            answer_id,
+            GetTemplateResponse {
+                registration_metadata: TemplateMetadata {
+                    name: template.metadata.name,
+                    address: template.metadata.address,
+                    url: template.metadata.url,
+                    binary_sha: template.metadata.binary_sha,
+                    height: template.metadata.height,
+                },
+                abi,
             },
-            abi,
-        }))
+        ))
     }
 
     pub async fn get_connections(&self, value: JsonRpcExtractor) -> JrpcResult {

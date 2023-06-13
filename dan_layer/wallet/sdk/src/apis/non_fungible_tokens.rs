@@ -14,7 +14,8 @@ pub struct NonFungibleTokensApi<'a, TStore> {
 }
 
 impl<'a, TStore> NonFungibleTokensApi<'a, TStore>
-where TStore: WalletStore
+where
+    TStore: WalletStore,
 {
     pub fn new(store: &'a TStore) -> Self {
         Self { store }

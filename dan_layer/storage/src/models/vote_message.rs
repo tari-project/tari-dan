@@ -24,11 +24,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_core::ValidatorNodeBmtHasherBlake256;
 use tari_dan_common_types::{
-    QuorumDecision,
-    QuorumRejectReason,
-    ShardPledgeCollection,
-    TreeNodeHash,
-    ValidatorMetadata,
+    QuorumDecision, QuorumRejectReason, ShardPledgeCollection, TreeNodeHash, ValidatorMetadata,
 };
 use tari_mmr::BalancedBinaryMerkleProof;
 

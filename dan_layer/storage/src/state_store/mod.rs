@@ -10,18 +10,8 @@ use tari_dan_common_types::{Epoch, ShardId};
 
 use crate::{
     consensus_models::{
-        Block,
-        BlockId,
-        ExecutedTransaction,
-        HighQc,
-        LastExecuted,
-        LastVoted,
-        LeafBlock,
-        LockedBlock,
-        PledgeCollection,
-        QuorumCertificate,
-        TransactionDecision,
-        TransactionId,
+        Block, BlockId, ExecutedTransaction, HighQc, LastExecuted, LastVoted, LeafBlock, LockedBlock, PledgeCollection,
+        QuorumCertificate, TransactionDecision, TransactionId,
     },
     StorageError,
 };
@@ -30,15 +20,19 @@ const LOG_TARGET: &str = "tari::dan::storage";
 
 pub trait StateStore {
     type ReadTransaction<'a>: StateStoreReadTransaction
-    where Self: 'a;
+    where
+        Self: 'a;
     type WriteTransaction<'a>: StateStoreWriteTransaction + Deref<Target = Self::ReadTransaction<'a>> + DerefMut
-    where Self: 'a;
+    where
+        Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError>;
 
     fn with_write_tx<F: FnOnce(&mut Self::WriteTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let mut tx = self.create_write_tx()?;
         match f(&mut tx) {
             Ok(r) => {
@@ -55,7 +49,9 @@ pub trait StateStore {
     }
 
     fn with_read_tx<F: FnOnce(&mut Self::ReadTransaction<'_>) -> Result<R, E>, R, E>(&self, f: F) -> Result<R, E>
-    where E: From<StorageError> {
+    where
+        E: From<StorageError>,
+    {
         let mut tx = self.create_read_tx()?;
         let ret = f(&mut tx)?;
         Ok(ret)

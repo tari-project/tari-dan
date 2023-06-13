@@ -11,9 +11,7 @@ use tari_dan_common_types::ShardId;
 
 use crate::{
     consensus_models::{TransactionDecision, TransactionId},
-    StateStoreReadTransaction,
-    StateStoreWriteTransaction,
-    StorageError,
+    StateStoreReadTransaction, StateStoreWriteTransaction, StorageError,
 };
 
 #[derive(Debug, Clone, Copy)]

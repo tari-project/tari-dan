@@ -24,9 +24,7 @@ use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
     consensus_models::{BlockId, QuorumCertificate},
-    StateStoreReadTransaction,
-    StateStoreWriteTransaction,
-    StorageError,
+    StateStoreReadTransaction, StateStoreWriteTransaction, StorageError,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
