@@ -2,15 +2,17 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     ops::{Deref, DerefMut},
 };
 
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::*;
+use tari_dan_common_types::ShardId;
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        BlockId,
         ExecutedTransaction,
         HighQc,
         LastExecuted,
@@ -18,7 +20,9 @@ use tari_dan_storage::{
         LeafBlock,
         LockedBlock,
         Pledge,
+        PledgeCollection,
         TransactionDecision,
+        TransactionId,
     },
     StateStoreWriteTransaction,
     StorageError,
@@ -28,8 +32,7 @@ use tari_utilities::ByteArray;
 use crate::{
     error::SqliteStorageError,
     reader::SqliteStateStoreReadTransaction,
-    schema::{substates::dsl::substates, transactions::dsl::transactions},
-    serialization::{deserialize_hex, deserialize_hex_try_from, serialize_hex, serialize_json},
+    serialization::{deserialize_hex_try_from, serialize_hex, serialize_json},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -193,20 +196,34 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn create_pledges(&mut self, pledges: &mut [Pledge]) -> Result<(), StorageError> {
+    fn create_pledges(
+        &mut self,
+        block_id: &BlockId,
+        transactions_and_local_shards: HashMap<TransactionId, Vec<ShardId>>,
+    ) -> Result<PledgeCollection, StorageError> {
         use crate::schema::{pledges, substates};
+        let block_id_hex = &serialize_hex(block_id);
 
-        let insert = pledges
+        let (shard_transaction_map, insert) = transactions_and_local_shards
             .iter()
-            .map(|pledge| {
-                (
-                    pledges::shard_id.eq(serialize_hex(&pledge.shard_id)),
-                    pledges::pledged_to_transaction_id.eq(serialize_hex(&pledge.pledged_to_transaction_id)),
-                    pledges::created_by_block.eq(serialize_hex(&pledge.created_by_block)),
-                    pledges::is_active.eq(true),
-                )
+            .flat_map(|(tx_id, shards)| {
+                let tx_id_hex = serialize_hex(tx_id);
+                shards
+                    .iter()
+                    .map(|shard| {
+                        (
+                            (shard, *tx_id),
+                            (
+                                pledges::shard_id.eq(serialize_hex(shard)),
+                                pledges::pledged_to_transaction_id.eq(tx_id_hex.clone()),
+                                pledges::created_by_block.eq(&block_id_hex),
+                                pledges::is_active.eq(true),
+                            ),
+                        )
+                    })
+                    .collect::<Vec<_>>()
             })
-            .collect::<Vec<_>>();
+            .unzip::<_, _, HashMap<_, _>, Vec<_>>();
 
         diesel::insert_into(pledges::table)
             .values(insert)
@@ -216,42 +233,52 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 source: e,
             })?;
 
+        let all_shards = transactions_and_local_shards
+            .values()
+            .flatten()
+            .map(serialize_hex)
+            .collect::<Vec<_>>();
+
         let substates = substates::table
             .select((substates::shard_id, substates::state_hash))
-            .filter(substates::shard_id.eq_any(pledges.iter().map(|p| serialize_hex(&p.shard_id)).collect::<Vec<_>>()))
-            .load::<(String, String)>(self.connection())
+            .filter(substates::shard_id.eq_any(&all_shards))
+            .get_results::<(String, String)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "pledges_insert_many",
                 source: e,
             })?;
 
-        if substates.len() != pledges.len() {
+        if substates.len() != all_shards.len() {
             return Err(SqliteStorageError::NotAllSubstatesFound {
                 operation: "pledges_insert_many",
-                details: format!("Expected {} substates, but found {}", pledges.len(), substates.len()),
+                details: format!("Expected {} substates, but found {}", all_shards.len(), substates.len()),
             }
             .into());
         }
 
-        // Populate state hashes
-        for (shard_id, state_hash) in substates {
-            let substate_shard_id =
-                deserialize_hex_try_from(&shard_id).map_err(|e| SqliteStorageError::MalformedDbData {
-                    operation: "pledges_insert_many",
-                    details: format!("Failed to deserialize shard id from db: {}", e),
-                })?;
-            let matching_pledge = pledges
-                .iter_mut()
-                .find(|pledge| pledge.shard_id == substate_shard_id)
-                .unwrap();
-            matching_pledge.state_hash =
-                deserialize_hex_try_from(&state_hash).map_err(|e| SqliteStorageError::MalformedDbData {
-                    operation: "pledges_insert_many",
-                    details: format!("Failed to deserialize state hash from db: {}", e),
-                })?;
-        }
+        // Generate pledge collection
+        let pledges = substates
+            .into_iter()
+            .map(|(shard_id, state_hash)| {
+                let substate_shard_id =
+                    deserialize_hex_try_from(&shard_id).map_err(|e| SqliteStorageError::MalformedDbData {
+                        operation: "pledges_insert_many",
+                        details: format!("Failed to deserialize shard id from db: {}", e),
+                    })?;
 
-        Ok(())
+                let state_hash =
+                    deserialize_hex_try_from(&state_hash).map_err(|e| SqliteStorageError::MalformedDbData {
+                        operation: "pledges_insert_many",
+                        details: format!("Failed to deserialize state hash from db: {}", e),
+                    })?;
+
+                let tx_id = shard_transaction_map.get(&substate_shard_id).unwrap();
+
+                Ok::<_, StorageError>(Pledge::new(substate_shard_id, *block_id, *tx_id, state_hash))
+            })
+            .collect::<Result<_, _>>()?;
+
+        Ok(PledgeCollection::new(*block_id, pledges))
     }
 
     fn transactions_insert(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError> {

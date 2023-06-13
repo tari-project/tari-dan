@@ -29,20 +29,19 @@ create table leaf_blocks
 create table substates
 (
     id                           integer   not NULL primary key AUTOINCREMENT,
-    shard_id                     blob      not NULL,
+    shard_id                     text      not NULL,
     address                      text      not NULL,
-    -- To be deleted in future
+    -- Most of these are not strictly required but are informational
     version                      bigint    not NULL,
     data                         text      not NULL,
     state_hash                   text      not NULL,
-    created_by_payload_id        blob      not NULL,
+    created_by_transaction       text      not NULL,
     created_justify              text      NULL,
-    created_node_hash            blob      not NULL,
+    created_block                text      not NULL,
     created_height               bigint    not NULL,
-    destroyed_by_payload_id      blob      NULL,
+    destroyed_by_transaction     text      NULL,
     destroyed_justify            text      NULL,
-    destroyed_node_hash          blob      NULL,
-    destroyed_height             bigint    NULL,
+    destroyed_by_block           blob      NULL,
     fee_paid_for_created_justify bigint    not NULL,
     fee_paid_for_deleted_justify bigint    not NULL,
     created_at_epoch             bigint    NULL,

@@ -1,10 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{BTreeSet, HashMap, HashSet},
-    str::FromStr,
-};
+use std::collections::{BTreeSet, HashSet};
 
 use diesel::{sql_query, sql_types::Text, ExpressionMethods, QueryDsl, QueryableByName, RunQueryDsl, SqliteConnection};
 use tari_dan_common_types::{Epoch, ShardId};
@@ -12,14 +9,13 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
-        Decision,
+        ExecutedTransaction,
         HighQc,
         LastExecuted,
         LastVoted,
         LeafBlock,
         LockedBlock,
         QuorumCertificate,
-        Transaction,
         TransactionDecision,
         TransactionId,
     },
@@ -29,8 +25,7 @@ use tari_dan_storage::{
 
 use crate::{
     error::SqliteStorageError,
-    schema::{new_transaction_pool::dsl::new_transaction_pool, transactions::dsl::transactions},
-    serialization::{deserialize_hex, deserialize_hex_try_from, deserialize_json, serialize_hex},
+    serialization::{deserialize_json, serialize_hex},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -133,7 +128,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         high_qc.try_into()
     }
 
-    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<Transaction, StorageError> {
+    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<ExecutedTransaction, StorageError> {
         use crate::schema::transactions;
 
         let transaction = transactions::table
@@ -145,6 +140,28 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             })?;
 
         transaction.try_into()
+    }
+
+    fn transactions_get_many<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        tx_ids: I,
+    ) -> Result<Vec<ExecutedTransaction>, StorageError> {
+        use crate::schema::transactions;
+
+        let tx_ids: Vec<String> = tx_ids.into_iter().map(serialize_hex).collect();
+
+        let transactions = transactions::table
+            .filter(transactions::transaction_id.eq_any(tx_ids))
+            .load::<sql_models::Transaction>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transactions_get_many",
+                source: e,
+            })?;
+
+        transactions
+            .into_iter()
+            .map(|transaction| transaction.try_into())
+            .collect()
     }
 
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError> {
@@ -302,7 +319,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         use crate::schema::new_transaction_pool;
 
         let decisions = new_transaction_pool::table
-            .filter(new_transaction_pool::transaction_id.eq_any(transactions))
+            .filter(new_transaction_pool::transaction_id.eq_any(transactions.iter().map(serialize_hex)))
             .get_results::<sql_models::TransactionDecision>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "new_transaction_pool_check_specific_decisions",

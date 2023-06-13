@@ -51,3 +51,15 @@ impl TryFrom<Transaction> for consensus_models::Transaction {
         })
     }
 }
+
+impl TryFrom<Transaction> for consensus_models::ExecutedTransaction {
+    type Error = StorageError;
+
+    fn try_from(value: Transaction) -> Result<Self, Self::Error> {
+        let result = deserialize_json(&value.result)?;
+        Ok(Self {
+            transaction: value.try_into()?,
+            result,
+        })
+    }
+}

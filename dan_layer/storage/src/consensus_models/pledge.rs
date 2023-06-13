@@ -20,11 +20,16 @@ pub struct Pledge {
     pub is_active: bool,
     pub completed_by_block: Option<BlockId>,
     pub abandoned_by_block: Option<BlockId>,
-    pub state_hash: Option<FixedHash>,
+    pub state_hash: FixedHash,
 }
 
 impl Pledge {
-    pub fn new(shard_id: ShardId, created_by_block: BlockId, pledged_to_transaction_id: TransactionId) -> Self {
+    pub fn new(
+        shard_id: ShardId,
+        created_by_block: BlockId,
+        pledged_to_transaction_id: TransactionId,
+        state_hash: FixedHash,
+    ) -> Self {
         Self {
             shard_id,
             created_by_block,
@@ -32,7 +37,7 @@ impl Pledge {
             is_active: true,
             completed_by_block: None,
             abandoned_by_block: None,
-            state_hash: None,
+            state_hash,
         }
     }
 }
