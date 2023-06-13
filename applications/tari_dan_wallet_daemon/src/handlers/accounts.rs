@@ -1029,6 +1029,7 @@ pub async fn handle_confidential_transfer(
         let accounts_api = sdk.accounts_api();
         let substate_api = sdk.substate_api();
         let key_manager_api = sdk.key_manager_api();
+        let mut inputs = vec![];
 
         let mut instructions = vec![];
 
@@ -1041,18 +1042,26 @@ pub async fn handle_confidential_transfer(
             .ok_or_else(|| anyhow!("Invalid component address for source address"))?;
 
         let account_substate = substate_api.get_substate(&account.address)?;
+        inputs.push(account_substate.address);
+
+        // Add all versioned account child addresses as inputs
+        let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
+        inputs.extend(child_addresses);
+
         let src_vault = accounts_api.get_vault_by_resource(&account.address, &CONFIDENTIAL_TARI_RESOURCE_ADDRESS)?;
         let src_vault_substate = substate_api.get_substate(&src_vault.address)?;
+        inputs.push(src_vault_substate.address);
+
+        // add the input for the resource address to be transfered
+        let resource_substate = sdk
+            .substate_api()
+            .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
+            .await?;
+        inputs.push(resource_substate.address);
 
         // get destination account information
-        let mut destination_account_inputs = vec![];
-        let destination_account_address = get_or_create_account_address(
-            &sdk,
-            &req.destination_public_key,
-            &mut destination_account_inputs,
-            &mut instructions,
-        )
-        .await?;
+        let destination_account_address =
+            get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
         // -------------------------------- Lock outputs for spending -------------------------------- //
         let total_amount = req.fee.unwrap_or(DEFAULT_FEE) + req.amount;
@@ -1107,31 +1116,6 @@ pub async fn handle_confidential_transfer(
             maybe_change_statement.as_ref(),
         )?;
 
-        // destination account inputs
-        let mut shard_inputs: Vec<ShardId> = destination_account_inputs
-            .into_iter()
-            .map(|s| ShardId::from_address(&s.address, s.version))
-            .collect();
-
-        // Source account input
-        shard_inputs.push(ShardId::from_address(
-            &account_substate.address.address,
-            account_substate.address.version,
-        ));
-        shard_inputs.push(ShardId::from_address(
-            &src_vault_substate.address.address,
-            src_vault_substate.address.version,
-        ));
-
-        let shard_outputs = vec![
-            // Source account mutated
-            ShardId::from_address(&account_substate.address.address, account_substate.address.version + 1),
-            ShardId::from_address(
-                &src_vault_substate.address.address,
-                src_vault_substate.address.version + 1,
-            ),
-        ];
-
         instructions.append(&mut vec![
             Instruction::CallMethod {
                 component_address: source_component_address,
@@ -1150,9 +1134,8 @@ pub async fn handle_confidential_transfer(
 
         let transaction = Transaction::builder()
             .fee_transaction_pay_from_component(source_component_address, req.fee.unwrap_or(DEFAULT_FEE))
+            .with_required_inputs(inputs.into_iter().map(Into::into))
             .with_instructions(instructions)
-            .with_inputs(shard_inputs)
-            .with_outputs(shard_outputs)
             .sign(&account_secret.k)
             .build();
 
