@@ -42,11 +42,18 @@ pub enum StorageError {
     NotFound { item: String, key: String },
     #[error("File system path does not exist")]
     FileSystemPathDoesNotExist,
-    #[error("Failed data decoding")]
-    // TODO: Add more details
-    DecodingError,
-    #[error("Failed data encoding")]
-    EncodingError,
+    #[error("Failed to decode for operation {operation} on {item}: {details}")]
+    DecodingError {
+        operation: &'static str,
+        item: &'static str,
+        details: String,
+    },
+    #[error("Failed to encode for operation {operation} on {item}: {details}")]
+    EncodingError {
+        operation: &'static str,
+        item: &'static str,
+        details: String,
+    },
     #[error("Fixed hash size error: {0}")]
     FixedHashSizeError(#[from] FixedHashSizeError),
     #[error("Invalid integer cast")]

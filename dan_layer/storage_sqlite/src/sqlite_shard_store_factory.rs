@@ -297,20 +297,44 @@ impl<'a> SqliteShardStoreReadTransaction<'a> {
     fn map_substate_to_shard_data(ss: &Substate) -> Result<SubstateShardData, StorageError> {
         Ok(SubstateShardData::new(
             ShardId::try_from(ss.shard_id.clone())?,
-            ss.address.parse().map_err(|_| StorageError::DecodingError)?,
+            ss.address.parse().map_err(|_| StorageError::DecodingError {
+                operation: "map_substate_to_shard_data",
+                item: "address",
+                details: "Could not parse address".to_string(),
+            })?,
             ss.version as u32,
             serde_json::from_str(&ss.data).unwrap(),
             NodeHeight(ss.created_height as u64),
             ss.destroyed_height.map(|v| NodeHeight(v as u64)),
-            TreeNodeHash::try_from(ss.created_node_hash.clone()).map_err(|_| StorageError::DecodingError)?,
+            TreeNodeHash::try_from(ss.created_node_hash.clone()).map_err(|e| StorageError::DecodingError {
+                operation: "map_substate_to_shard_data",
+                item: "created_node_hash",
+                details: e.to_string(),
+            })?,
             ss.destroyed_node_hash
                 .as_ref()
-                .map(|v| TreeNodeHash::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+                .map(|v| {
+                    TreeNodeHash::try_from(v.clone()).map_err(|e| StorageError::DecodingError {
+                        operation: "map_substate_to_shard_data",
+                        item: "destroyed_node_hash",
+                        details: e.to_string(),
+                    })
+                })
                 .transpose()?,
-            PayloadId::try_from(ss.created_by_payload_id.clone()).map_err(|_| StorageError::DecodingError)?,
+            PayloadId::try_from(ss.created_by_payload_id.clone()).map_err(|e| StorageError::DecodingError {
+                operation: "map_substate_to_shard_data",
+                item: "created_by_payload_id",
+                details: e.to_string(),
+            })?,
             ss.destroyed_by_payload_id
                 .as_ref()
-                .map(|v| PayloadId::try_from(v.clone()).map_err(|_| StorageError::DecodingError))
+                .map(|v| {
+                    PayloadId::try_from(v.clone()).map_err(|e| StorageError::DecodingError {
+                        operation: "map_substate_to_shard_data",
+                        item: "destroyed_by_payload_id",
+                        details: e.to_string(),
+                    })
+                })
                 .transpose()?,
             ss.created_justify
                 .as_ref()
@@ -457,7 +481,11 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
             let result_field: Option<PayloadResult> = match payload.result {
                 Some(result_json) => {
                     let result: PayloadResult =
-                        serde_json::from_str(&result_json).map_err(|_| StorageError::DecodingError)?;
+                        serde_json::from_str(&result_json).map_err(|_| StorageError::DecodingError {
+                            operation: "get_payload",
+                            item: "payload result",
+                            details: "Could not deserialize payload result".to_string(),
+                        })?;
                     Some(result)
                 },
                 None => None,
@@ -589,7 +617,13 @@ impl ShardStoreReadTransaction<PublicKey, TariDanPayload> for SqliteShardStoreRe
         if let Some(substate_states) = substate_states {
             substate_states
                 .iter()
-                .map(|ss| ShardId::from_bytes(ss.shard_id.as_slice()).map_err(|_| StorageError::DecodingError))
+                .map(|ss| {
+                    ShardId::from_bytes(ss.shard_id.as_slice()).map_err(|e| StorageError::DecodingError {
+                        operation: "get_state_inventory",
+                        item: "shard",
+                        details: e.to_string(),
+                    })
+                })
                 .collect::<Result<Vec<_>, _>>()
         } else {
             Ok(vec![])
@@ -939,7 +973,11 @@ impl<'a> SqliteShardStoreWriteTransaction<'a> {
                     }
                 } else {
                     SubstateState::Up {
-                        address: current_state.address.parse().map_err(|_| StorageError::DecodingError)?,
+                        address: current_state.address.parse().map_err(|_| StorageError::DecodingError {
+                            operation: "create_pledge",
+                            item: "current_state.address",
+                            details: "Could not parse address".to_string(),
+                        })?,
                         created_by: PayloadId::try_from(current_state.created_by_payload_id)?,
                         data: serde_json::from_str::<tari_engine_types::substate::Substate>(&current_state.data)
                             .unwrap(),
@@ -1538,7 +1576,11 @@ impl ShardStoreWriteTransaction<PublicKey, TariDanPayload> for SqliteShardStoreW
     ) -> Result<(), StorageError> {
         use crate::schema::payloads;
 
-        let result_json = serde_json::to_string_pretty(&result).map_err(|_| StorageError::EncodingError)?;
+        let result_json = serde_json::to_string_pretty(&result).map_err(|e| StorageError::EncodingError {
+            operation: "update_payload_result",
+            item: "result",
+            details: e.to_string(),
+        })?;
 
         diesel::update(payloads::table)
             .filter(payloads::payload_id.eq(requested_payload_id.as_bytes()))

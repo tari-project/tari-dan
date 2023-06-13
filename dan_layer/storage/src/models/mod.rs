@@ -27,7 +27,6 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 
 mod base_layer_metadata;
-mod committee;
 mod hot_stuff_message;
 mod hot_stuff_tree_node;
 mod leaf_node;
@@ -39,7 +38,6 @@ mod tari_dan_payload;
 mod vote_message;
 
 pub use base_layer_metadata::BaseLayerMetadata;
-pub use committee::Committee;
 pub use hot_stuff_message::HotStuffMessage;
 pub use hot_stuff_tree_node::{HotStuffTreeNode, HotstuffPhase};
 pub use leaf_node::LeafNode;
