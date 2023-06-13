@@ -126,7 +126,8 @@ const TransactionFilter: React.FC<ISearchProps> = ({
       setShowClearBtn(false);
     }
     requestSearch(formState.searchValue, filterBy);
-  }, [formState, filterBy, requestSearch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formState, filterBy]);
 
   // once selected filter, focus on input
 
