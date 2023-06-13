@@ -503,7 +503,7 @@ pub struct AuthRevokeTokenRequest {
 pub struct AuthRevokeTokenResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MintAccountNFTRequest {
+pub struct MintAccountNftRequest {
     pub account: ComponentAddressOrName,
     pub owner_token: NonFungibleAddress,
     pub token_symbol: String,
@@ -513,7 +513,7 @@ pub struct MintAccountNFTRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MintAccountNFTResponse {
+pub struct MintAccountNftResponse {
     pub nft_id: NonFungibleId,
     pub resource_address: ResourceAddress,
     pub result: FinalizeResult,

@@ -54,7 +54,7 @@ use tari_wallet_daemon_client::{
         ClaimBurnRequest,
         ClaimBurnResponse,
         ConfidentialTransferRequest,
-        MintAccountNFTRequest,
+        MintAccountNftRequest,
         ProofsGenerateRequest,
         RevealFundsRequest,
         TransactionSubmitRequest,
@@ -347,7 +347,7 @@ pub async fn mint_new_nft_on_account(
         })
     });
 
-    let request = MintAccountNFTRequest {
+    let request = MintAccountNftRequest {
         account: ComponentAddressOrName::Name(account_name.clone()),
         metadata,
         token_symbol,

@@ -34,18 +34,18 @@ use tari_template_lib::{
     prelude::{Amount, NonFungibleAddress},
 };
 use tari_utilities::hex::Hex;
-use tari_wallet_daemon_client::{types::MintAccountNFTRequest, ComponentAddressOrName, WalletDaemonClient};
+use tari_wallet_daemon_client::{types::MintAccountNftRequest, ComponentAddressOrName, WalletDaemonClient};
 
 use crate::command::transaction::summarize_finalize_result;
 
 #[derive(Debug, Subcommand, Clone)]
-pub enum AccountNFTSubcommand {
+pub enum AccountNftSubcommand {
     #[clap(alias = "mint")]
-    Mint(MintAccountNFTArgs),
+    Mint(MintAccountNftArgs),
 }
 
 #[derive(Debug, Args, Clone)]
-pub struct MintAccountNFTArgs {
+pub struct MintAccountNftArgs {
     #[clap(long, short = 'a', alias = "account")]
     pub account: Option<ComponentAddressOrName>,
     #[clap(long, short = 'o', alias = "owner-token")]
@@ -62,7 +62,7 @@ pub struct MintAccountNFTArgs {
     pub create_account_nft_fee: Option<u32>,
 }
 
-impl AccountNFTSubcommand {
+impl AccountNftSubcommand {
     pub async fn handle(self, mut client: WalletDaemonClient) -> Result<(), anyhow::Error> {
         match self {
             Self::Mint(args) => {
@@ -74,10 +74,10 @@ impl AccountNFTSubcommand {
 }
 
 pub async fn handle_mint_account_nft(
-    args: MintAccountNFTArgs,
+    args: MintAccountNftArgs,
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
-    let MintAccountNFTArgs {
+    let MintAccountNftArgs {
         account,
         owner_token,
         token_symbol,
@@ -96,7 +96,7 @@ pub async fn handle_mint_account_nft(
         );
 
         let mut account = String::new();
-        io::stdin().read_to_string(&mut account)?;
+        io::stdin().read_line(&mut account)?;
         ComponentAddressOrName::from_str(&account)
             .map_err(|e| anyhow!("Failed to parse account name or component address, with error = {}", e))?
     };
@@ -110,7 +110,7 @@ pub async fn handle_mint_account_nft(
         );
 
         let mut token_symbol = String::new();
-        io::stdin().read_to_string(&mut token_symbol)?;
+        io::stdin().read_line(&mut token_symbol)?;
         token_symbol
     };
 
@@ -142,7 +142,7 @@ pub async fn handle_mint_account_nft(
 
     println!("✅ Mint account NFT submitted");
 
-    let req = MintAccountNFTRequest {
+    let req = MintAccountNftRequest {
         account,
         owner_token,
         token_symbol,
