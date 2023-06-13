@@ -80,7 +80,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     stmts.push(parse_quote! {
         assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args);
     });
-    let func_name = ast.name.clone();
+    let func_name = &ast.name;
     // encode all arguments of the functions
     for (i, input_type) in ast.input_types.iter().enumerate() {
         let arg_ident = format_ident!("arg_{}", i);
