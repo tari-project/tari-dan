@@ -46,14 +46,14 @@ function Account(account: any) {
   return (
     <TableRow key={toHexString(account.account.address.Component)}>
       <TableCell><Link href={"accounts/" + account.account.name}>{account.account.name}</Link></TableCell>
-      <TableCell>{toHexString(account.account.address.Component)}</TableCell>
+      <TableCell>{account.account.address.Component}</TableCell>
       <TableCell>{account.account.key_index}</TableCell>
       <TableCell>{account.public_key}</TableCell>
     </TableRow>
   );
 }
 
-function Accounts() {
+function  Accounts() {
   const [state, setState] = useState();
   const [error, setError] = useState<String>();
   const [showAccountDialog, setShowAddAccountDialog] = useState(false);
