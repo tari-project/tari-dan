@@ -140,7 +140,7 @@ pub struct CreateComponentArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EmitEventArg {
     pub topic: String,
-    pub payload: HashMap<String, String>,
+    pub payload: Metadata,
 }
 
 // -------------------------------- Resource -------------------------------- //

@@ -422,7 +422,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                 template_address,
                 tx_hash,
                 "component-created".to_string(),
-                [("module_name".to_string(), module_name.to_string())],
+                Metadata::from([("module_name".to_string(), module_name.to_string())]),
             ));
 
             Ok(())
