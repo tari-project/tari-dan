@@ -97,9 +97,7 @@ impl CommitteeShard {
     }
 
     pub fn filter<'a, I>(&'a self, items: I) -> impl Iterator<Item = ShardId> + '_
-    where
-        I: IntoIterator<Item = ShardId> + 'a,
-    {
+    where I: IntoIterator<Item = ShardId> + 'a {
         items.into_iter().filter(|shard_id| self.includes_shard(shard_id))
     }
 }

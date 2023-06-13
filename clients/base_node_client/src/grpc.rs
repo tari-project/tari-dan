@@ -35,7 +35,8 @@ use tari_utilities::byte_array::ByteArray;
 
 use crate::{
     types::{BaseLayerConsensusConstants, BaseLayerMetadata, BlockInfo, SideChainUtxos, ValidatorNode},
-    BaseNodeClient, BaseNodeClientError,
+    BaseNodeClient,
+    BaseNodeClientError,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";

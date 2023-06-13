@@ -28,7 +28,13 @@ use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{
-    ObjectPledge, QuorumCertificate, QuorumDecision, ShardPledge, SubstateState, TreeNodeHash, ValidatorMetadata,
+    ObjectPledge,
+    QuorumCertificate,
+    QuorumDecision,
+    ShardPledge,
+    SubstateState,
+    TreeNodeHash,
+    ValidatorMetadata,
 };
 use tari_dan_storage::models::{HotStuffMessage, HotStuffTreeNode, Node, TariDanPayload, VoteMessage};
 use tari_engine_types::substate::{Substate, SubstateAddress};

@@ -11,7 +11,10 @@ use chrono::NaiveDateTime;
 use diesel::{
     sql_query,
     sql_types::{BigInt, Bool, Text},
-    OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection,
+    OptionalExtension,
+    QueryDsl,
+    RunQueryDsl,
+    SqliteConnection,
 };
 use log::*;
 use serde::Serialize;
@@ -19,7 +22,12 @@ use tari_common_types::types::{Commitment, FixedHash, PublicKey};
 use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::{
     models::{
-        ConfidentialOutputModel, ConfidentialProofId, OutputStatus, SubstateModel, TransactionStatus, VaultModel,
+        ConfidentialOutputModel,
+        ConfidentialProofId,
+        OutputStatus,
+        SubstateModel,
+        TransactionStatus,
+        VaultModel,
         VersionedSubstateAddress,
     },
     storage::{WalletStorageError, WalletStoreReader, WalletStoreWriter},
@@ -127,8 +135,8 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .set(auth_status::revoked.eq(true))
             .filter(auth_status::token.eq(token))
             .execute(self.connection())
-            .map_err(|e| WalletStorageError::general("jwt_revoke", e))?
-            == 0
+            .map_err(|e| WalletStorageError::general("jwt_revoke", e))? ==
+            0
         {
             diesel::insert_into(auth_status::table)
                 .values((auth_status::revoked.eq(true), auth_status::token.eq(token)))

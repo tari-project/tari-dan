@@ -7,10 +7,16 @@ use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch, NodeHeight, ShardId};
 use tari_dan_storage::{
     consensus_models::{
-        Block, HighQc, LeafBlock, NewTransactionPool, PrecommitTransactionPool, PrepareTransactionPool,
+        Block,
+        HighQc,
+        LeafBlock,
+        NewTransactionPool,
+        PrecommitTransactionPool,
+        PrepareTransactionPool,
         QuorumCertificate,
     },
-    StateStore, StateStoreWriteTransaction,
+    StateStore,
+    StateStoreWriteTransaction,
 };
 use tokio::sync::mpsc;
 

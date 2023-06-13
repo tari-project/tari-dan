@@ -36,14 +36,25 @@ use tari_comms::{
     transports::{predicate::FalsePredicate, MemoryTransport, SocksConfig, SocksTransport, TcpWithTorTransport},
     types::CommsPublicKey,
     utils::cidr::parse_cidrs,
-    CommsBuilder, CommsNode, NodeIdentity, PeerManager, UnspawnedCommsNode,
+    CommsBuilder,
+    CommsNode,
+    NodeIdentity,
+    PeerManager,
+    UnspawnedCommsNode,
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_dan_core::message::DanMessage;
 use tari_dan_storage::models::TariDanPayload;
 use tari_p2p::{
-    initialization::CommsInitializationError, peer_seeds::SeedPeer, P2pConfig, PeerSeedsConfig, TorTransportConfig,
-    TransportConfig, TransportType, MAJOR_NETWORK_VERSION, MINOR_NETWORK_VERSION,
+    initialization::CommsInitializationError,
+    peer_seeds::SeedPeer,
+    P2pConfig,
+    PeerSeedsConfig,
+    TorTransportConfig,
+    TransportConfig,
+    TransportType,
+    MAJOR_NETWORK_VERSION,
+    MINOR_NETWORK_VERSION,
 };
 use tari_shutdown::ShutdownSignal;
 use tari_storage::{

@@ -7,9 +7,7 @@ pub trait ComponentInterface {
     type Component: ComponentInstanceInterface;
 
     fn create(self) -> Self::Component
-    where
-        Self: Sized,
-    {
+    where Self: Sized {
         // TODO: What should happen if you create a component without access rules?
         self.create_with_options(AccessRules::new(), None)
     }

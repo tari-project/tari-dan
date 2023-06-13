@@ -27,7 +27,17 @@ use std::{
 };
 
 use wasmer::{
-    imports, Function, HostEnvInitError, Instance, LazyInit, Memory, NativeFunc, Pages, Resolver, Store, WasmerEnv,
+    imports,
+    Function,
+    HostEnvInitError,
+    Instance,
+    LazyInit,
+    Memory,
+    NativeFunc,
+    Pages,
+    Resolver,
+    Store,
+    WasmerEnv,
 };
 
 use crate::wasm::WasmExecutionError;

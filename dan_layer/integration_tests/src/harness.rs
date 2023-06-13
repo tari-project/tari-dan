@@ -9,7 +9,10 @@ use tari_dan_common_types::{ObjectPledge, ShardId};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
     services::{
-        leader_strategy::LeaderStrategy, NodeIdentitySigningService, PayloadProcessor, PayloadProcessorError,
+        leader_strategy::LeaderStrategy,
+        NodeIdentitySigningService,
+        PayloadProcessor,
+        PayloadProcessorError,
         SigningService,
     },
     workers::{

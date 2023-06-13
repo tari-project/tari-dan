@@ -22,7 +22,14 @@
 
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{
-    Epoch, NodeAddressable, NodeHeight, ObjectPledge, PayloadId, QuorumCertificate, ShardId, TreeNodeHash,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    ObjectPledge,
+    PayloadId,
+    QuorumCertificate,
+    ShardId,
+    TreeNodeHash,
 };
 use tari_engine_types::hashing::{hasher, EngineHashDomainLabel};
 

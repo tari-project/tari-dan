@@ -23,7 +23,8 @@
 use std::{
     env,
     error::Error,
-    fs, io,
+    fs,
+    io,
     io::ErrorKind,
     path::{Path, PathBuf},
     process::Command,

@@ -14,7 +14,9 @@ use tari_dan_common_types::{hashing, Epoch, NodeHeight, ShardId};
 use super::{QuorumCertificate, TransactionDecision};
 use crate::{
     consensus_models::{LastExecuted, LastVoted, LockedBlock, TransactionId},
-    StateStoreReadTransaction, StateStoreWriteTransaction, StorageError,
+    StateStoreReadTransaction,
+    StateStoreWriteTransaction,
+    StorageError,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

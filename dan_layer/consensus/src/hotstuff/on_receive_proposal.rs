@@ -10,10 +10,22 @@ use tari_dan_common_types::{
 };
 use tari_dan_storage::{
     consensus_models::{
-        Block, CommittedTransactionPool, ExecutedTransaction, LastExecuted, LastVoted, LockedBlock, NewTransactionPool,
-        PledgeCollection, PrecommitTransactionPool, PrepareTransactionPool, QuorumCertificate, TransactionDecision,
+        Block,
+        CommittedTransactionPool,
+        ExecutedTransaction,
+        LastExecuted,
+        LastVoted,
+        LockedBlock,
+        NewTransactionPool,
+        PledgeCollection,
+        PrecommitTransactionPool,
+        PrepareTransactionPool,
+        QuorumCertificate,
+        TransactionDecision,
     },
-    StateStore, StateStoreReadTransaction, StateStoreWriteTransaction,
+    StateStore,
+    StateStoreReadTransaction,
+    StateStoreWriteTransaction,
 };
 use tokio::sync::mpsc;
 

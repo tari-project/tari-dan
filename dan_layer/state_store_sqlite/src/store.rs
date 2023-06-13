@@ -13,7 +13,9 @@ use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
 use tari_dan_storage::{StateStore, StorageError};
 
 use crate::{
-    error::SqliteStorageError, reader::SqliteStateStoreReadTransaction, sqlite_transaction::SqliteTransaction,
+    error::SqliteStorageError,
+    reader::SqliteStateStoreReadTransaction,
+    sqlite_transaction::SqliteTransaction,
     writer::SqliteStateStoreWriteTransaction,
 };
 

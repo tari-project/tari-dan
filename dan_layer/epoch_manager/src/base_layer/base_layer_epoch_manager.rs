@@ -27,7 +27,9 @@ use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusC
 use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
 use tari_core::{
-    blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT,
+    blocks::BlockHeader,
+    transactions::transaction_components::ValidatorNodeRegistration,
+    ValidatorNodeBMT,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, ShardId};

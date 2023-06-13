@@ -5,7 +5,11 @@ use tari_common_types::types::PublicKey;
 use tari_crypto::keys::PublicKey as PublicKeyTrait;
 use tari_dan_wallet_sdk::apis::{jwt::JrpcPermission, key_manager};
 use tari_wallet_daemon_client::types::{
-    KeysCreateRequest, KeysCreateResponse, KeysListRequest, KeysListResponse, KeysSetActiveRequest,
+    KeysCreateRequest,
+    KeysCreateResponse,
+    KeysListRequest,
+    KeysListResponse,
+    KeysSetActiveRequest,
     KeysSetActiveResponse,
 };
 

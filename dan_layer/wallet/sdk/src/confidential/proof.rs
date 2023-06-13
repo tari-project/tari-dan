@@ -4,7 +4,9 @@
 use chacha20poly1305::{
     aead,
     aead::{generic_array::GenericArray, Aead, Payload},
-    ChaCha20Poly1305, KeyInit, Nonce,
+    ChaCha20Poly1305,
+    KeyInit,
+    Nonce,
 };
 use digest::FixedOutput;
 use lazy_static::lazy_static;

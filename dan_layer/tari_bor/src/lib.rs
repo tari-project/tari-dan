@@ -114,9 +114,7 @@ pub fn decode_len(input: &[u8]) -> Result<usize, BorError> {
 }
 
 fn to_bor_error<E>(e: E) -> BorError
-where
-    E: core::fmt::Display,
-{
+where E: core::fmt::Display {
     BorError(e.to_string())
 }
 

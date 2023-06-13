@@ -60,8 +60,7 @@ pub struct MempoolService<V> {
 }
 
 impl<V> MempoolService<V>
-where
-    V: Validator<Transaction, Error = MempoolError>,
+where V: Validator<Transaction, Error = MempoolError>
 {
     pub(super) fn new(
         new_transactions: mpsc::Receiver<Transaction>,

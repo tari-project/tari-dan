@@ -11,7 +11,9 @@ use tari_transaction::{InstructionSignature, SubstateChange, TransactionMeta};
 
 use crate::{
     consensus_models::{Decision, TransactionId},
-    StateStoreReadTransaction, StateStoreWriteTransaction, StorageError,
+    StateStoreReadTransaction,
+    StateStoreWriteTransaction,
+    StorageError,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -35,7 +35,8 @@ mod registration;
 mod template_registration_signing;
 
 use std::{
-    fs, io,
+    fs,
+    io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     process,
 };

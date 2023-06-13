@@ -25,7 +25,8 @@ mod fungible;
 mod non_fungible;
 
 use crate::resource::builder::{
-    confidential::ConfidentialResourceBuilder, fungible::FungibleResourceBuilder,
+    confidential::ConfidentialResourceBuilder,
+    fungible::FungibleResourceBuilder,
     non_fungible::NonFungibleResourceBuilder,
 };
 

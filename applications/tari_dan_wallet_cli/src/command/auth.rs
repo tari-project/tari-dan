@@ -26,7 +26,11 @@ use clap::{Args, Subcommand};
 use tari_dan_wallet_sdk::apis::jwt::JrpcPermissions;
 use tari_wallet_daemon_client::{
     types::{
-        AuthGetAllJwtRequest, AuthLoginAcceptRequest, AuthLoginDenyRequest, AuthLoginRequest, AuthRevokeTokenRequest,
+        AuthGetAllJwtRequest,
+        AuthLoginAcceptRequest,
+        AuthLoginDenyRequest,
+        AuthLoginRequest,
+        AuthRevokeTokenRequest,
     },
     WalletDaemonClient,
 };

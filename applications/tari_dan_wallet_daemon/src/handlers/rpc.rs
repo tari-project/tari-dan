@@ -3,8 +3,16 @@
 
 use tari_dan_wallet_sdk::apis::jwt::JrpcPermission;
 use tari_wallet_daemon_client::types::{
-    AuthGetAllJwtRequest, AuthGetAllJwtResponse, AuthLoginAcceptRequest, AuthLoginAcceptResponse, AuthLoginDenyRequest,
-    AuthLoginDenyResponse, AuthLoginRequest, AuthLoginResponse, AuthRevokeTokenRequest, AuthRevokeTokenResponse,
+    AuthGetAllJwtRequest,
+    AuthGetAllJwtResponse,
+    AuthLoginAcceptRequest,
+    AuthLoginAcceptResponse,
+    AuthLoginDenyRequest,
+    AuthLoginDenyResponse,
+    AuthLoginRequest,
+    AuthLoginResponse,
+    AuthRevokeTokenRequest,
+    AuthRevokeTokenResponse,
 };
 
 use crate::{handlers::HandlerContext, services::AuthLoginRequestEvent};

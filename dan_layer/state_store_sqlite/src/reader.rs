@@ -7,10 +7,20 @@ use diesel::{sql_query, sql_types::Text, ExpressionMethods, QueryDsl, QueryableB
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_storage::{
     consensus_models::{
-        Block, BlockId, ExecutedTransaction, HighQc, LastExecuted, LastVoted, LeafBlock, LockedBlock,
-        QuorumCertificate, TransactionDecision, TransactionId,
+        Block,
+        BlockId,
+        ExecutedTransaction,
+        HighQc,
+        LastExecuted,
+        LastVoted,
+        LeafBlock,
+        LockedBlock,
+        QuorumCertificate,
+        TransactionDecision,
+        TransactionId,
     },
-    StateStoreReadTransaction, StorageError,
+    StateStoreReadTransaction,
+    StorageError,
 };
 
 use crate::{
@@ -178,8 +188,8 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_exists",
                 source: e,
-            })?
-            > 0;
+            })? >
+            0;
 
         Ok(exists)
     }
@@ -231,7 +241,10 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
 
     fn transaction_pools_ready_transaction_count(&mut self) -> Result<usize, StorageError> {
         use crate::schema::{
-            committed_transaction_pool, new_transaction_pool, precommitted_transaction_pool, prepared_transaction_pool,
+            committed_transaction_pool,
+            new_transaction_pool,
+            precommitted_transaction_pool,
+            prepared_transaction_pool,
         };
 
         let new_count = new_transaction_pool::table

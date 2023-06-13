@@ -34,8 +34,14 @@ use tari_transaction::Transaction;
 use tari_validator_node_rpc::{
     proto,
     proto::rpc::{
-        GetSubstateRequest, GetSubstateResponse, GetTransactionResultRequest, GetTransactionResultResponse,
-        PayloadResultStatus, SubstateStatus, VnStateSyncRequest, VnStateSyncResponse,
+        GetSubstateRequest,
+        GetSubstateResponse,
+        GetTransactionResultRequest,
+        GetTransactionResultResponse,
+        PayloadResultStatus,
+        SubstateStatus,
+        VnStateSyncRequest,
+        VnStateSyncResponse,
     },
     rpc_service::ValidatorNodeRpcService,
 };
@@ -63,8 +69,7 @@ impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
 
 #[tari_comms::async_trait]
 impl<TPeerProvider> ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl<TPeerProvider>
-where
-    TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
+where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 {
     async fn submit_transaction(
         &self,

@@ -27,7 +27,8 @@ use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
     peer_manager::NodeId,
     protocol::rpc::NamedProtocolService,
-    NodeIdentity, PeerConnection,
+    NodeIdentity,
+    PeerConnection,
 };
 use tari_dan_core::services::PeerProvider;
 use tari_validator_node_rpc::peer_sync::PeerSyncProtocol;

@@ -28,12 +28,9 @@ pub struct Consensus {}
 
 impl Consensus {
     pub fn current_epoch() -> u64 {
-        let resp: InvokeResult = call_engine(
-            EngineOp::ConsensusInvoke,
-            &ConsensusInvokeArg {
-                action: ConsensusAction::GetCurrentEpoch,
-            },
-        );
+        let resp: InvokeResult = call_engine(EngineOp::ConsensusInvoke, &ConsensusInvokeArg {
+            action: ConsensusAction::GetCurrentEpoch,
+        });
         resp.decode()
             .expect("Consensus GetCurrentEpoch returned invalid resource type")
     }

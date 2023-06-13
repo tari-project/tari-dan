@@ -5,13 +5,16 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{
     hashing::{quorum_certificate_hasher, ValidatorNodeBmtHasherBlake256},
-    Epoch, NodeHeight,
+    Epoch,
+    NodeHeight,
 };
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 
 use crate::{
     consensus_models::{Block, BlockId, HighQc, ValidatorSignature},
-    StateStoreReadTransaction, StateStoreWriteTransaction, StorageError,
+    StateStoreReadTransaction,
+    StateStoreWriteTransaction,
+    StorageError,
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
