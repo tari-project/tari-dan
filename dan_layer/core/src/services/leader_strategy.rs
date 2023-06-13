@@ -44,8 +44,8 @@ pub trait LeaderStrategy<TAddr: NodeAddressable> {
         }
     }
 
-    fn get_leader<'a, 'b>(
-        &'a self,
+    fn get_leader<'b>(
+        &self,
         committee: &'b Committee<TAddr>,
         payload: PayloadId,
         shard: ShardId,

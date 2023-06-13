@@ -78,15 +78,14 @@ impl IndexerProcess {
         let address = get_address_from_output(world, output_ref);
 
         let mut jrpc_client = self.get_jrpc_indexer_client().await;
-        let resp = jrpc_client
+        jrpc_client
             .get_substate(GetSubstateRequest {
                 address: address.clone(),
                 version: Some(version),
                 local_search_only: true,
             })
             .await
-            .unwrap();
-        resp
+            .unwrap()
     }
 
     pub async fn get_non_fungibles(
