@@ -11,7 +11,7 @@ license = "BSD-3-Clause"
 tari_bor = { path = "../tari_bor" }
 tari_dan_engine = { path = "../engine" }
 tari_dan_common_types = { path = "../common_types" }
-tari_storage = {  git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_storage" }
+tari_storage = {  git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2", package = "tari_storage" }
 
 lmdb-zero = "0.4.4"
 hex = "0.4.3"

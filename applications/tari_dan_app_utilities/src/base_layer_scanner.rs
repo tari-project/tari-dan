@@ -26,29 +26,21 @@ use log::*;
 use tari_base_node_client::{
     grpc::GrpcBaseNodeClient,
     types::{BaseLayerMetadata, BlockInfo},
-    BaseNodeClient,
-    BaseNodeClientError,
+    BaseNodeClient, BaseNodeClientError,
 };
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
-    CodeTemplateRegistration,
-    SideChainFeature,
-    TransactionOutput,
-    ValidatorNodeRegistration,
+    CodeTemplateRegistration, SideChainFeature, TransactionOutput, ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::{
     global::{GlobalDb, MetadataKey},
-    ShardStore,
-    ShardStoreWriteTransaction,
-    StorageError,
+    ShardStore, ShardStoreWriteTransaction, StorageError,
 };
 use tari_dan_storage_sqlite::{
-    error::SqliteStorageError,
-    global::SqliteGlobalDbAdapter,
-    sqlite_shard_store_factory::SqliteShardStore,
+    error::SqliteStorageError, global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore,
 };
 use tari_engine_types::{
     confidential::UnclaimedConfidentialOutput,
@@ -366,7 +358,7 @@ impl BaseLayerScanner {
             0,
             SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
                 commitment: output.commitment.clone(),
-                encrypted_value: EncryptedValue(output.encrypted_value.0),
+                encrypted_value: EncryptedValue(output.encrypted_data.0),
             }),
         );
         let shard_id = ShardId::from_address(&address, 0);
