@@ -101,8 +101,17 @@ const TransactionFilter: React.FC<ISearchProps> = ({
         }
       });
 
-      // Update the state with the modified copy of the original array
-      setStateObject(updatedObject);
+      // Update the state with the modified copy of the original array, but only
+      // when it actually changes, to prevent retriggering redraw
+      let changed = updatedObject.length !== stateObject.length;
+      if (!changed) {
+        for (let i = 0; i < stateObject.length && !changed; ++i) {
+          changed = stateObject[i] !== updatedObject[i];
+        }
+      }
+      if (changed) {
+        setStateObject(updatedObject);
+      }
 
       // Set paging to first page
       setPage(0);
