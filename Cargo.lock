@@ -2019,9 +2019,9 @@ dependencies = [
 
 [[package]]
 name = "cucumber"
-version = "0.19.1"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a845da7c9fb958144700201d22e3f61f55114f9e269c13f03fe179d9da500984"
+checksum = "1b2b97b1b5763e57aeddbfc796f726daa8e561922e6438daffc5087b7bd03834"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2044,14 +2044,15 @@ dependencies = [
  "once_cell",
  "regex",
  "sealed 0.4.0",
- "smart-default",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
 name = "cucumber-codegen"
-version = "0.19.1"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0dfb841fe8742f57fbe94738a189022e7dc858f2560c7fba5da44dc945a139e1"
+checksum = "755eae3e762505d670bbf02db048d512e79118f93f8383ae1bf6235506ed3c94"
 dependencies = [
  "cucumber-expressions",
  "inflections",
@@ -2907,9 +2908,9 @@ checksum = "e825f6987101665dea6ec934c09ec6d721de7bc1bf92248e1d5810c8cd636b77"
 
 [[package]]
 name = "fixed-hash"
-version = "0.7.0"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfcf0ed7fe52a17a03854ec54a9f76d6d84508d1c0e66bc1793301c73fc8493c"
+checksum = "835c052cb0c08c1acf6ffd71c022172e18723949c8282f2b9f27efbc51e64534"
 dependencies = [
  "byteorder",
  "rand 0.8.5",
@@ -3737,6 +3738,73 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8bb03732005da905c88227371639bf1ad885cc712789c011c31c5fb3ab3ccf02"
 
 [[package]]
+name = "integration_tests"
+version = "0.50.0-pre.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axum",
+ "axum-jrpc",
+ "bytes 1.4.0",
+ "chrono",
+ "clap 3.2.25",
+ "config",
+ "cucumber",
+ "futures 0.3.28",
+ "include_dir",
+ "json5 0.2.8",
+ "lazy_static",
+ "libsqlite3-sys",
+ "lmdb-zero",
+ "log",
+ "log4rs",
+ "mini-moka",
+ "prost 0.9.0",
+ "rand 0.7.3",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tari_app_grpc",
+ "tari_app_utilities",
+ "tari_base_node_client",
+ "tari_base_node_grpc_client",
+ "tari_common",
+ "tari_common_types",
+ "tari_comms",
+ "tari_comms_logging",
+ "tari_core",
+ "tari_crypto",
+ "tari_dan_app_utilities",
+ "tari_dan_common_types",
+ "tari_dan_core",
+ "tari_dan_engine",
+ "tari_dan_storage",
+ "tari_dan_storage_sqlite",
+ "tari_engine_types",
+ "tari_epoch_manager",
+ "tari_indexer_client",
+ "tari_p2p",
+ "tari_shutdown",
+ "tari_storage",
+ "tari_template_builtin",
+ "tari_template_lib",
+ "tari_transaction",
+ "tari_validator_node",
+ "tari_validator_node_client",
+ "tari_validator_node_rpc",
+ "tari_wallet_daemon_client",
+ "tari_wallet_grpc_client",
+ "thiserror",
+ "time 0.3.22",
+ "tokio",
+ "tokio-stream",
+ "tonic 0.6.2",
+ "tower",
+ "tower-http",
+ "tower-layer",
+]
+
+[[package]]
 name = "interceptor"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4373,8 +4441,8 @@ dependencies = [
 
 [[package]]
 name = "monero"
-version = "0.17.2"
-source = "git+https://github.com/tari-project/monero-rs.git?branch=main#7aebfd0aa037025cac6cbded3f72d73bf3c18123"
+version = "0.18.2"
+source = "git+https://github.com/tari-project/monero-rs.git?branch=main#23a3c13a867d091ea9e1f65838326ae733e9bf77"
 dependencies = [
  "base58-monero 1.0.0",
  "curve25519-dalek 3.2.0",
@@ -6683,17 +6751,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
-name = "smart-default"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "133659a15339456eeeb07572eb02a91c91e9815e9cbc89566944d2c8d3efdbf6"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "smawk"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8286,7 +8343,6 @@ dependencies = [
  "chrono",
  "clap 3.2.25",
  "config",
- "cucumber",
  "futures 0.3.28",
  "httpmock",
  "include_dir",
