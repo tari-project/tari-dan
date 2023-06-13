@@ -57,13 +57,14 @@ mod composability {
                 .call("get".to_string(), vec![]);
 
             // write operation, to update the value of the inner "State" component
-            component.call("set".to_string(), vec![value + 1]);
+            let new_value = encode(&(value + 1)).unwrap();
+            component.call::<()>("set".to_string(), vec![new_value]);
         }
 
         // function-to-component call
         pub fn replace_state_component(&mut self, state_template_address: TemplateAddress) {
             self.state_component_address = TemplateManager::get(state_template_address)
-                .call("new".to_string(), vec![]);
+                .call::<ComponentAddress>("new".to_string(), vec![]);
         }
 
         pub fn get_state_component_address(&self) -> ComponentAddress {

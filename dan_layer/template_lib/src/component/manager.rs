@@ -25,7 +25,7 @@ use tari_bor::{decode_exact, encode};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
-    args::{ComponentAction, ComponentInvokeArg, ComponentRef, InvokeResult},
+    args::{CallAction, CallInvokeArg, CallMethodArg, ComponentAction, ComponentInvokeArg, ComponentRef, InvokeResult},
     auth::AccessRules,
     models::ComponentAddress,
 };
@@ -37,6 +37,29 @@ pub struct ComponentManager {
 impl ComponentManager {
     pub(crate) fn new(address: ComponentAddress) -> Self {
         Self { address }
+    }
+
+    pub fn get(address: ComponentAddress) -> Self {
+        Self { address }
+    }
+
+    pub fn call<T: DeserializeOwned>(&self, method: String, args: Vec<Vec<u8>>) -> T {
+        self.call_internal(CallMethodArg {
+            component_address: self.address,
+            method,
+            args,
+        })
+    }
+
+    fn call_internal<T: DeserializeOwned>(&self, arg: CallMethodArg) -> T {
+        let result = call_engine::<_, InvokeResult>(EngineOp::CallInvoke, &CallInvokeArg {
+            action: CallAction::CallMethod,
+            args: invoke_args![arg],
+        });
+
+        result
+            .decode()
+            .expect("failed to decode component call result from engine")
     }
 
     /// Get the component state

@@ -151,6 +151,7 @@ impl WasmProcess {
             EngineOp::EmitEvent => Self::handle(env, arg, |env, arg: EmitEventArg| {
                 env.state().interface().emit_event(arg.topic, arg.payload)
             }),
+            EngineOp::CallInvoke => todo!(),
         };
 
         result.unwrap_or_else(|err| {

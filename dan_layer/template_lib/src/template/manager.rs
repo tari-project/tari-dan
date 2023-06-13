@@ -1,4 +1,4 @@
-//   Copyright 2022. The Tari Project
+//   Copyright 2023. The Tari Project
 //
 //   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //   following conditions are met:
@@ -20,36 +20,40 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub use tari_bor::{encode, serde};
-#[cfg(feature = "macro")]
-pub use tari_template_macros::template;
+use serde::de::DeserializeOwned;
+use tari_template_abi::{call_engine, EngineOp};
 
-pub use crate::{
-    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
-    caller_context::CallerContext,
-    component::{
-        interface::{ComponentInstanceInterface, ComponentInterface},
-        ComponentManager,
-    },
-    consensus::Consensus,
-    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
-    events::emit_event,
-    models::{
-        Amount,
-        Bucket,
-        BucketId,
-        ComponentAddress,
-        ConfidentialOutputProof,
-        ConfidentialWithdrawProof,
-        Metadata,
-        NonFungible,
-        NonFungibleAddress,
-        NonFungibleId,
-        ResourceAddress,
-        TemplateAddress,
-        Vault,
-    },
-    rand,
-    resource::{ResourceBuilder, ResourceManager, ResourceType},
-    template::TemplateManager,
+use crate::{
+    args::{CallAction, CallFunctionArg, CallInvokeArg, InvokeResult},
+    prelude::TemplateAddress,
 };
+
+#[derive(Debug)]
+pub struct TemplateManager {
+    template_address: TemplateAddress,
+}
+
+impl TemplateManager {
+    pub fn get(template_address: TemplateAddress) -> Self {
+        Self { template_address }
+    }
+
+    pub fn call<T: DeserializeOwned>(&self, function: String, args: Vec<Vec<u8>>) -> T {
+        self.call_internal(CallFunctionArg {
+            template_address: self.template_address,
+            function,
+            args,
+        })
+    }
+
+    fn call_internal<T: DeserializeOwned>(&self, arg: CallFunctionArg) -> T {
+        let result = call_engine::<_, InvokeResult>(EngineOp::CallInvoke, &CallInvokeArg {
+            action: CallAction::CallFunction,
+            args: invoke_args![arg],
+        });
+
+        result
+            .decode()
+            .expect("failed to decode template function call result from engine")
+    }
+}
