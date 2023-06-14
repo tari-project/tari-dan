@@ -733,6 +733,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         // we are initializing a new runtime for the nested call
         let call_runtime_interface = RuntimeInterfaceImpl::initialize(
             self.tracker.clone(),
+            // for safety reasons we are not going to propagate proofs to the call component or template
             AuthParams {
                 initial_ownership_proofs: vec![],
             },

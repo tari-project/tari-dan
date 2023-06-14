@@ -8,12 +8,17 @@ use tari_engine_types::{
 use tari_template_lib::{
     args,
     models::{ComponentAddress, TemplateAddress},
+    prelude::{Amount, ResourceAddress},
 };
 use tari_template_test_tooling::TemplateTest;
 use tari_transaction::Transaction;
 
 fn setup() -> TemplateTest {
-    TemplateTest::new(vec!["tests/templates/composability", "tests/templates/state"])
+    TemplateTest::new(vec![
+        "tests/templates/composability",
+        "tests/templates/state",
+        "tests/templates/faucet",
+    ])
 }
 
 fn get_state_template_address(test: &TemplateTest) -> TemplateAddress {
@@ -33,6 +38,54 @@ fn extract_component_address_from_result(result: &ExecuteResult, template_name: 
         })
         .unwrap();
     substate_addr.as_component_address().unwrap()
+}
+
+fn create_resource_and_fund_account(test: &mut TemplateTest, account: ComponentAddress) -> ResourceAddress {
+    // create a new fungible resource
+    let faucet_template = test.get_template_address("TestFaucet");
+    let initial_supply = Amount(1_000_000_000_000);
+    let result = test
+        .execute_and_commit(
+            vec![Instruction::CallFunction {
+                template_address: faucet_template,
+                function: "mint".to_string(),
+                args: args![initial_supply],
+            }],
+            vec![],
+        )
+        .unwrap();
+    let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
+    let faucet_resource = result
+        .finalize
+        .result
+        .expect("Faucet mint failed")
+        .up_iter()
+        .find_map(|(address, _)| address.as_resource_address())
+        .unwrap();
+
+    // take free coins into the account
+    let _result = test
+        .execute_and_commit(
+            vec![
+                Instruction::CallMethod {
+                    component_address: faucet_component,
+                    method: "take_free_coins".to_string(),
+                    args: args![],
+                },
+                Instruction::PutLastInstructionOutputOnWorkspace {
+                    key: b"free_coins".to_vec(),
+                },
+                Instruction::CallMethod {
+                    component_address: account,
+                    method: "deposit".to_string(),
+                    args: args![Variable("free_coins")],
+                },
+            ],
+            vec![],
+        )
+        .unwrap();
+
+    faucet_resource
 }
 
 #[test]
@@ -232,6 +285,56 @@ fn it_fails_on_invalid_calls() {
         )
         .unwrap();
     let reason = result.expect_transaction_failure();
-    result.expect_finalization_success();
+
+    // TODO: inner errors are not properly propagated up, they all end up being "Engine call returned null for op
+    // CallInvoke" we should be able to assert a more specific error cause
+    assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
+}
+
+#[test]
+fn it_does_not_propagate_permissions() {
+    let mut test = setup();
+    let (account, owner_proof, private_key) = test.create_owned_account();
+    let state_template = get_state_template_address(&test);
+    let composability_template = get_composability_template_address(&test);
+
+    // the composability template "new" function should create a new "state" component as well
+    let res = test
+        .execute_and_commit(
+            vec![Instruction::CallFunction {
+                template_address: composability_template,
+                function: "new".to_string(),
+                args: args![state_template],
+            }],
+            vec![],
+        )
+        .unwrap();
+
+    // extract the newly created component addresses
+    let composability_component = extract_component_address_from_result(&res, "Composability");
+
+    // create_resource_and_fund_account
+    let fungible_resource = create_resource_and_fund_account(&mut test, account);
+
+    // try to to an account withdraw inside the composability template, it should fail as the owner proof should not be
+    // propagated
+    let result = test
+        .try_execute_and_commit(
+            Transaction::builder()
+                .call_method(composability_component, "malicious_withdraw", args![
+                    account,
+                    fungible_resource,
+                    100
+                ])
+                .sign(&private_key)
+                .build(),
+            // note that we are actually passing a valid proof
+            vec![owner_proof],
+        )
+        .unwrap();
+    let reason = result.expect_transaction_failure();
+
+    // TODO: inner errors are not properly propagated up, they all end up being "Engine call returned null for op
+    // CallInvoke" we should be able to assert a more specific error cause
     assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
 }

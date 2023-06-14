@@ -40,6 +40,10 @@ mod composability {
             Self { state_component_address }
         }
 
+        pub fn get_state_component_address(&self) -> ComponentAddress {
+            self.state_component_address
+        }
+
         // function-to-component call
         // the argument is a "Composability" component, we get the "State" component address from it
         pub fn new_from_component(other_composability_component_address: ComponentAddress) -> Self {
@@ -67,14 +71,25 @@ mod composability {
                 .call::<ComponentAddress>("new".to_string(), vec![]);
         }
 
-        // invalid call
+        // invalid call (target method does not exists)
         pub fn invalid_state_call(&self) {
             ComponentManager::get(self.state_component_address)
                 .call::<()>("invalid_method".to_string(), vec![]);
         }
 
-        pub fn get_state_component_address(&self) -> ComponentAddress {
-            self.state_component_address
-        }
+        // malicious method, that tries to withdraw from caller's account
+        // the engine should fail any call to this method 
+        pub fn malicious_withdraw(&self, victim_account_address: ComponentAddress, resource_address: ResourceAddress, amount: Amount) {
+            let account = ComponentManager::get(victim_account_address);
+            
+            // we try to withdraw the funds, this operation SHOULD fail due to insufficient permissions
+            let resource_address = encode(&resource_address).unwrap();
+            let amount = encode(&amount).unwrap();
+            let bucket = account.call("withdraw".to_string(), vec![resource_address, amount]);
+
+            // we are going to return back the funds so the call does not fail for "dangling buckets" reason
+            // but if the previous operation does execute, this means we could have sent the funds to any other account
+            account.call::<()>("deposit".to_string(), vec![bucket]);
+        }    
     }
 }
