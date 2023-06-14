@@ -62,3 +62,48 @@ fn it_allows_function_to_function_calls() {
     let value: u32 = test.call_method(state_component, "get", args![], vec![]);
     assert_eq!(value, 0);
 }
+
+#[test]
+fn it_allows_function_to_component_calls() {
+    let mut test = setup();
+    let state_template = get_state_template_address(&test);
+    let composability_template = get_composability_template_address(&test);
+
+    // the composability template "new" function should create a new "state" component as well
+    let res = test
+        .execute_and_commit(
+            vec![Instruction::CallFunction {
+                template_address: composability_template,
+                function: "new".to_string(),
+                args: args![state_template],
+            }],
+            vec![],
+        )
+        .unwrap();
+
+    // extract the newly created component addresses
+    let composability_a_component = extract_component_address_from_result(&res, "Composability");
+    let state_component = extract_component_address_from_result(&res, "State");
+
+    // create a new composability component, this time using a constructor that gets information from a method call
+    let res = test
+        .execute_and_commit(
+            vec![Instruction::CallFunction {
+                template_address: composability_template,
+                function: "new_from_component".to_string(),
+                args: args![composability_a_component],
+            }],
+            vec![],
+        )
+        .unwrap();
+    let composability_b_component = extract_component_address_from_result(&res, "Composability");
+
+    // the composability component exists in the network and is correctly initialized
+    let inner_component_address: ComponentAddress = test.call_method(
+        composability_b_component,
+        "get_state_component_address",
+        args![],
+        vec![],
+    );
+    assert_eq!(inner_component_address, state_component);
+}
