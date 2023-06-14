@@ -67,6 +67,12 @@ mod composability {
                 .call::<ComponentAddress>("new".to_string(), vec![]);
         }
 
+        // invalid call
+        pub fn invalid_state_call(&self) {
+            ComponentManager::get(self.state_component_address)
+                .call::<()>("invalid_method".to_string(), vec![]);
+        }
+
         pub fn get_state_component_address(&self) -> ComponentAddress {
             self.state_component_address
         }

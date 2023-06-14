@@ -1,12 +1,16 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_engine_types::{commit_result::ExecuteResult, instruction::Instruction};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, RejectReason},
+    instruction::Instruction,
+};
 use tari_template_lib::{
     args,
     models::{ComponentAddress, TemplateAddress},
 };
 use tari_template_test_tooling::TemplateTest;
+use tari_transaction::Transaction;
 
 fn setup() -> TemplateTest {
     TemplateTest::new(vec!["tests/templates/composability", "tests/templates/state"])
@@ -193,4 +197,41 @@ fn it_allows_method_to_function_calls() {
     assert_ne!(new_state_component, initial_state_component);
     let value: u32 = test.call_method(new_state_component, "get", args![], vec![]);
     assert_eq!(value, 0);
+}
+
+#[test]
+fn it_fails_on_invalid_calls() {
+    let mut test = setup();
+    let (_, _, private_key) = test.create_owned_account();
+    let state_template = get_state_template_address(&test);
+    let composability_template = get_composability_template_address(&test);
+
+    // the composability template "new" function should create a new "state" component as well
+    let res = test
+        .execute_and_commit(
+            vec![Instruction::CallFunction {
+                template_address: composability_template,
+                function: "new".to_string(),
+                args: args![state_template],
+            }],
+            vec![],
+        )
+        .unwrap();
+
+    // extract the newly created component addresses
+    let composability_component = extract_component_address_from_result(&res, "Composability");
+
+    // the "invalid_state_call" method tries to call a non-existent method in the inner state component
+    let result = test
+        .try_execute_and_commit(
+            Transaction::builder()
+                .call_method(composability_component, "invalid_state_call", args![])
+                .sign(&private_key)
+                .build(),
+            vec![],
+        )
+        .unwrap();
+    let reason = result.expect_transaction_failure();
+    result.expect_finalization_success();
+    assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
 }
