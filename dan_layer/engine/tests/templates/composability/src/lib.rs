@@ -68,8 +68,7 @@ mod composability {
                 .call("get".to_string(), vec![]);
 
             // write operation, to update the value of the inner "State" component
-            let new_value = encode(&(value + 1)).unwrap();
-            component.call::<()>("set".to_string(), vec![new_value]);
+            component.call::<()>("set".to_string(), invoke_args![value+1]);
         }
 
         // function-to-component call
@@ -90,13 +89,11 @@ mod composability {
             let account = ComponentManager::get(victim_account_address);
             
             // we try to withdraw the funds, this operation SHOULD fail due to insufficient permissions
-            let resource_address = encode(&resource_address).unwrap();
-            let amount = encode(&amount).unwrap();
-            let bucket = account.call("withdraw".to_string(), vec![resource_address, amount]);
+            let bucket: Bucket = account.call("withdraw".to_string(), invoke_args![resource_address, amount]);
 
             // we are going to return back the funds so the call does not fail for "dangling buckets" reason
             // but if the previous operation does execute, this means we could have sent the funds to any other account
-            account.call::<()>("deposit".to_string(), vec![bucket]);
+            account.call::<()>("deposit".to_string(), invoke_args![bucket]);
         }
 
         // recursive function used to test recursion depth limits
