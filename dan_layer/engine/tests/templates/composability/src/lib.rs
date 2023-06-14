@@ -28,7 +28,10 @@ mod composability {
 
     pub struct Composability {
         // we assume the inner component is a "State" template component
-        state_component_address: ComponentAddress
+        state_component_address: ComponentAddress,
+
+        // we optionally store other composability components just to test recursion limits
+        nested_composability: Option<ComponentAddress>,
     }
 
     impl Composability {
@@ -37,11 +40,7 @@ mod composability {
         pub fn new(state_template_address: TemplateAddress) -> Self {
             let state_component_address = TemplateManager::get(state_template_address)
                 .call("new".to_string(), vec![]);
-            Self { state_component_address }
-        }
-
-        pub fn get_state_component_address(&self) -> ComponentAddress {
-            self.state_component_address
+            Self { state_component_address, nested_composability: None }
         }
 
         // function-to-component call
@@ -49,7 +48,15 @@ mod composability {
         pub fn new_from_component(other_composability_component_address: ComponentAddress) -> Self {
             let state_component_address = ComponentManager::get(other_composability_component_address)
                 .call("get_state_component_address".to_string(), vec![]);
-            Self { state_component_address }
+            Self { state_component_address, nested_composability: None }
+        }
+
+        pub fn get_state_component_address(&self) -> ComponentAddress {
+            self.state_component_address
+        }
+
+        pub fn set_nested_composability(&mut self, address: ComponentAddress) {
+            self.nested_composability = Some(address);
         }
 
         // component-to-component call
@@ -90,6 +97,22 @@ mod composability {
             // we are going to return back the funds so the call does not fail for "dangling buckets" reason
             // but if the previous operation does execute, this means we could have sent the funds to any other account
             account.call::<()>("deposit".to_string(), vec![bucket]);
-        }    
+        }
+
+        // recursive function used to test recursion depth limits
+        pub fn get_nested_value(&self) -> u32 {
+            match self.nested_composability {
+                Some(addr) => {
+                    // recursive call to the nested composability component
+                    ComponentManager::get(addr)
+                        .call("get_nested_value".to_string(), vec![])
+                },
+                None => {
+                    // base case that will end a recursive call chain
+                    ComponentManager::get(self.state_component_address)
+                        .call("get".to_string(), vec![])
+                }
+            }
+        }
     }
 }

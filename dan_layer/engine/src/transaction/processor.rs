@@ -215,7 +215,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 &function,
                 args,
                 0,
-                1,
+                10,
             ),
             Instruction::CallMethod {
                 component_address,
@@ -229,7 +229,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 &method,
                 args,
                 0,
-                1,
+                10,
             ),
             // Basically names an output on the workspace so that you can refer to it as an
             // Arg::Variable

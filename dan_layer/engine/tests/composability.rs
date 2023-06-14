@@ -338,3 +338,103 @@ fn it_does_not_propagate_permissions() {
     // CallInvoke" we should be able to assert a more specific error cause
     assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
 }
+
+#[test]
+fn it_allows_multiple_recursion_levels() {
+    let mut test = setup();
+    let state_template = get_state_template_address(&test);
+    let composability_template = get_composability_template_address(&test);
+
+    // composability_0
+    let res = test
+        .execute_and_commit(
+            vec![Instruction::CallFunction {
+                template_address: composability_template,
+                function: "new".to_string(),
+                args: args![state_template],
+            }],
+            vec![],
+        )
+        .unwrap();
+    let composability_0 = extract_component_address_from_result(&res, "Composability");
+
+    // composability_1 has composability_0 nested
+    let res = test
+        .execute_and_commit(
+            vec![Instruction::CallFunction {
+                template_address: composability_template,
+                function: "new".to_string(),
+                args: args![state_template],
+            }],
+            vec![],
+        )
+        .unwrap();
+    let composability_1 = extract_component_address_from_result(&res, "Composability");
+    test.call_method::<()>(
+        composability_1,
+        "set_nested_composability",
+        args![composability_0],
+        vec![],
+    );
+
+    // we have now: composability_1 -> composability_0 -> state
+    // we want to access the innermost level from the outermost level
+    let value: u32 = test.call_method(composability_1, "get_nested_value", args![], vec![]);
+    assert_eq!(value, 0);
+}
+
+#[test]
+fn it_fails_when_surpassing_recursion_limit() {
+    let mut test = setup();
+    let (_, _, private_key) = test.create_owned_account();
+    let state_template = get_state_template_address(&test);
+    let composability_template = get_composability_template_address(&test);
+
+    let max_recursion_depth = 10;
+
+    // innermost composability component
+    let res = test
+        .execute_and_commit(
+            vec![Instruction::CallFunction {
+                template_address: composability_template,
+                function: "new".to_string(),
+                args: args![state_template],
+            }],
+            vec![],
+        )
+        .unwrap();
+    let mut last_component = extract_component_address_from_result(&res, "Composability");
+
+    for _ in 0..max_recursion_depth {
+        let res = test
+            .execute_and_commit(
+                vec![Instruction::CallFunction {
+                    template_address: composability_template,
+                    function: "new".to_string(),
+                    args: args![state_template],
+                }],
+                vec![],
+            )
+            .unwrap();
+        let component = extract_component_address_from_result(&res, "Composability");
+        test.call_method::<()>(component, "set_nested_composability", args![last_component], vec![]);
+        last_component = component;
+    }
+
+    // we have now nested more components than the recursion depth limit allows
+    // se when we do a call that goes from the outermost to the innermost, it must fail
+    let result = test
+        .try_execute_and_commit(
+            Transaction::builder()
+                .call_method(last_component, "get_nested_value", args![])
+                .sign(&private_key)
+                .build(),
+            vec![],
+        )
+        .unwrap();
+    let reason = result.expect_transaction_failure();
+
+    // TODO: inner errors are not properly propagated up, they all end up being "Engine call returned null for op
+    // CallInvoke" we should be able to assert a more specific error cause
+    assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
+}
