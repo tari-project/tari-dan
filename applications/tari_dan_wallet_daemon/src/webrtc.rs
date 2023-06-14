@@ -1,7 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{net::SocketAddr, pin::Pin, sync::Arc};
+use std::{
+    collections::VecDeque,
+    fmt::Formatter,
+    net::SocketAddr,
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
 
 use anyhow::Result;
 use axum_jrpc::{JsonRpcAnswer, JsonRpcRequest, JsonRpcResponse};
@@ -22,7 +28,7 @@ use webrtc::{
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::webrtc";
 
 #[derive(Deserialize, Debug)]
-struct Request {
+pub struct Request {
     id: u64,
     method: String,
     params: String,
@@ -33,6 +39,19 @@ struct Request {
 struct Response {
     id: u64,
     payload: String,
+}
+
+pub struct UserConfirmationRequest {
+    pub req: Request,
+    pub dc: Arc<RTCDataChannel>,
+}
+
+impl std::fmt::Debug for UserConfirmationRequest {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("UserConfirmationRequest")
+            .field("Request", &self.req)
+            .finish()
+    }
 }
 
 async fn make_request<T: Serialize>(
@@ -99,9 +118,31 @@ pub fn on_ice_candidate(
     Box::pin(async {})
 }
 
+pub async fn process_request(address: SocketAddr, req: UserConfirmationRequest) {
+    let result = match serde_json::from_str::<serde_json::Value>(&req.req.params) {
+        Ok(params) => match make_request(address, Some(req.req.token), req.req.method, params).await {
+            Ok(response) => response.to_string(),
+            Err(e) => e.to_string(),
+        },
+        Err(e) => e.to_string(),
+    };
+    let response = Response {
+        payload: result,
+        id: req.req.id,
+    };
+    let text = match serde_json::to_string(&response) {
+        Ok(response) => response,
+        Err(e) => e.to_string(),
+    };
+    if let Err(e) = req.dc.send_text(text).await {
+        log::error!(target: LOG_TARGET, "{}", e.to_string())
+    };
+}
+
 pub fn on_message(
     msg: DataChannelMessage,
     d_on_message: Arc<RTCDataChannel>,
+    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
     permissions_token: String,
     address: SocketAddr,
 ) -> Pin<Box<impl futures::Future<Output = ()>>> {
@@ -123,28 +164,20 @@ pub fn on_message(
                                 return;
                             },
                         }
-                    } else {
-                        let result = match serde_json::from_str::<serde_json::Value>(&request.params) {
-                            Ok(params) => {
-                                match make_request(address, Some(request.token), request.method, params).await {
-                                    Ok(response) => response.to_string(),
-                                    Err(e) => e.to_string(),
-                                }
-                            },
+                        let text = match serde_json::to_string(&response) {
+                            Ok(response) => response,
                             Err(e) => e.to_string(),
                         };
-                        response = Response {
-                            payload: result,
-                            id: request.id,
+                        if let Err(e) = d_on_message.send_text(text).await {
+                            log::error!(target: LOG_TARGET, "{}", e.to_string())
                         };
+                    } else {
+                        let mut queue = message_queue.lock().unwrap();
+                        queue.push_back(UserConfirmationRequest {
+                            req: request,
+                            dc: Arc::clone(&d_on_message),
+                        });
                     }
-                    let text = match serde_json::to_string(&response) {
-                        Ok(response) => response,
-                        Err(e) => e.to_string(),
-                    };
-                    if let Err(e) = d_on_message.send_text(text).await {
-                        log::error!(target: LOG_TARGET, "{}", e.to_string())
-                    };
                 },
                 Err(e) => log::error!(target: LOG_TARGET, "{}", e.to_string()),
             },
@@ -156,12 +189,19 @@ pub fn on_message(
 pub fn on_data_channel(
     d: Arc<RTCDataChannel>,
     permissions_token: String,
+    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
     address: SocketAddr,
 ) -> Pin<Box<impl futures::Future<Output = ()>>> {
     Box::pin(async move {
         let d_on_message = d.clone();
         d.on_message(Box::new(move |msg: DataChannelMessage| {
-            on_message(msg, d_on_message.clone(), permissions_token.clone(), address)
+            on_message(
+                msg,
+                d_on_message.clone(),
+                message_queue.clone(),
+                permissions_token.clone(),
+                address,
+            )
         }))
     })
 }
@@ -172,12 +212,13 @@ pub async fn webrtc_start_session(
     address: SocketAddr,
     signaling_server_address: SocketAddr,
     shutdown_signal: ShutdownSignal,
+    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
 ) -> Result<()> {
     let api = APIBuilder::new().build();
 
     let pc = api.new_peer_connection(get_rtc_configuration()).await?;
     pc.on_data_channel(Box::new(move |d: Arc<RTCDataChannel>| {
-        on_data_channel(d, permissions_token.clone(), address)
+        on_data_channel(d, permissions_token.clone(), message_queue.clone(), address)
     }));
 
     let signaling_server_token_clone = signaling_server_token.clone();

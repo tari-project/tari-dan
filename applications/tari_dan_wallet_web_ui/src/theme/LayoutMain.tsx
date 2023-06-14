@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
+import {useEffect, useState} from 'react';
 import { styled } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import MuiDrawer from '@mui/material/Drawer';
@@ -41,6 +41,7 @@ import ConnectorLink from '../Components/ConnectorLink';
 import Breadcrumbs from '../Components/Breadcrumbs';
 import { breadcrumbRoutes } from '../App';
 import Grid from '@mui/material/Grid';
+import {getPendingRequestsCount} from "../utils/json_rpc";
 
 const drawerWidth = 300;
 
@@ -96,6 +97,20 @@ const Drawer = styled(MuiDrawer, {
 
 export default function Layout() {
   const [open, setOpen] = useState(false);
+  const [notification, setNotification] = useState();
+  useEffect(() => {
+    const fetchData = async () => {
+      let resp = await getPendingRequestsCount();
+      if (resp?.pending_requests_count > 0) {
+
+      }
+    };
+    const timer = setInterval(fetchData, 3000);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [])
+
   const toggleDrawer = () => {
     setOpen(!open);
   };

@@ -1,7 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    collections::VecDeque,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -12,12 +16,63 @@ use axum_jrpc::{
 use log::*;
 use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_shutdown::ShutdownSignal;
-use tari_wallet_daemon_client::types::{WebRtcStartRequest, WebRtcStartResponse};
+use tari_wallet_daemon_client::types::{WebRtcCheckNotificationsResponse, WebRtcStartRequest, WebRtcStartResponse};
 
 use super::HandlerContext;
-use crate::webrtc::webrtc_start_session;
+use crate::webrtc::{webrtc_start_session, UserConfirmationRequest};
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc";
+
+pub fn handle_check_notifications(
+    context: Arc<HandlerContext>,
+    value: JsonRpcExtractor,
+    token: Option<String>,
+    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
+) -> JrpcResult {
+    let answer_id = value.get_answer_id();
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Webrtc])
+        .map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::ApplicationError(401),
+                    format!("Not authorized: {e}"),
+                    serde_json::Value::Null,
+                ),
+            )
+        })?;
+    let queue = message_queue.lock().unwrap();
+    Ok(JsonRpcResponse::success(answer_id, WebRtcCheckNotificationsResponse {
+        pending_requests_count: queue.len(),
+    }))
+}
+
+pub fn handle_get_oldest_request(
+    context: Arc<HandlerContext>,
+    value: JsonRpcExtractor,
+    token: Option<String>,
+    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
+) -> JrpcResult {
+}
+
+pub fn handle_accept_request(
+    context: Arc<HandlerContext>,
+    value: JsonRpcExtractor,
+    token: Option<String>,
+    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
+) -> JrpcResult {
+}
+
+pub fn handle_deny_request(
+    context: Arc<HandlerContext>,
+    value: JsonRpcExtractor,
+    token: Option<String>,
+    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
+) -> JrpcResult {
+}
 
 pub fn handle_start(
     context: Arc<HandlerContext>,
@@ -25,12 +80,13 @@ pub fn handle_start(
     token: Option<String>,
     shutdown_signal: Arc<ShutdownSignal>,
     addresses: (SocketAddr, SocketAddr),
+    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
 ) -> JrpcResult {
     let answer_id = value.get_answer_id();
     context
         .wallet_sdk()
         .jwt_api()
-        .check_auth(token, &[JrpcPermission::StartWebrtc])
+        .check_auth(token, &[JrpcPermission::Webrtc])
         .map_err(|e| {
             JsonRpcResponse::error(
                 answer_id,
@@ -82,6 +138,7 @@ pub fn handle_start(
             preferred_address,
             signaling_server_address,
             shutdown_signal,
+            message_queue,
         )
         .await
         {

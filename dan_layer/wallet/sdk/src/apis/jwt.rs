@@ -11,7 +11,10 @@ use serde::{Deserialize, Serialize};
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::prelude::{ComponentAddress, ResourceAddress};
 
-use crate::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
+use crate::{
+    apis::key_manager::{KeyManagerApi, JWT_BRANCH},
+    storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
+};
 
 pub struct JwtApi<'a, TStore> {
     store: &'a TStore,
@@ -31,7 +34,7 @@ pub enum JrpcPermission {
     // This can't be set via cli, after we agree on the permissions I can add the from_str.
     GetNft(Option<SubstateAddress>, Option<ResourceAddress>),
     // User should never grant this permission, it will be generated only by the UI to start the webrtc session.
-    StartWebrtc,
+    Webrtc,
     Admin,
 }
 
@@ -65,7 +68,7 @@ impl FromStr for JrpcPermission {
                 "GetNft" => Ok(JrpcPermission::GetNft(None, None)),
                 "TransactionGet" => Ok(JrpcPermission::TransactionGet),
                 "TransactionSend" => Ok(JrpcPermission::TransactionSend(None)),
-                "StartWebrtc" => Ok(JrpcPermission::StartWebrtc),
+                "StartWebrtc" => Ok(JrpcPermission::Webrtc),
                 "Admin" => Ok(JrpcPermission::Admin),
                 _ => Err(InvalidJrpcPermissionsFormat(s.to_string())),
             },
@@ -119,12 +122,23 @@ pub struct AuthClaims {
 }
 
 impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
-    pub(crate) fn new(store: &'a TStore, default_expiry: Duration, secret_key: String) -> Self {
+    pub(crate) fn new(
+        store: &'a TStore,
+        default_expiry: &Duration,
+        secret_key: &String,
+        key_manager: &KeyManagerApi<'_, TStore>,
+    ) -> Self {
         Self {
             store,
-            default_expiry,
-            auth_secret_key: format!("auth-{secret_key}"),
-            jwt_secret_key: format!("jwt-{secret_key}"),
+            default_expiry: *default_expiry,
+            auth_secret_key: format!(
+                "auth-{secret_key}-{}",
+                key_manager.get_public_key(JWT_BRANCH, Some(0)).unwrap()
+            ),
+            jwt_secret_key: format!(
+                "jwt-{secret_key}-{}",
+                key_manager.get_public_key(JWT_BRANCH, Some(1)).unwrap()
+            ),
         }
     }
 

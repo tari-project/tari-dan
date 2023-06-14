@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import jwt, { Secret, JwtPayload } from 'jsonwebtoken';
 import { Routes, Route } from 'react-router-dom';
 import Accounts from './routes/Accounts/Accounts';
 import AccountDetails from './routes/AccountDetails/AccountDetails';
@@ -52,6 +53,10 @@ export const breadcrumbRoutes = [
 ];
 
 function App() {
+  // const secret_key : Secret = "jwt-secret_key-5ef032d36d6d66b038e20ae4f214cbeee315e2b71192599b1448c4d6c33b6c40";
+  // const token : string  = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpZCI6NCwibmFtZSI6IkludGVybmFsQWRtaW5Ub2tlbiIsInBlcm1pc3Npb25zIjpbIkFkbWluIl0sImV4cCI6MTAxNjg2NjQxMzAwfQ.av8a2C54-4k7DEkhch897TjtEZwTuHspg8xgDFYFNMA"
+  // const decodedToken = jwt.verify(token,secret_key);
+  // console.log('decoded', decodedToken);
   return (
     <div>
       <Routes>

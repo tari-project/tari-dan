@@ -56,6 +56,7 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
     }),
     headers: headers
   });
+  // console.log(await response.text())
   let json = await response.json();
   if (json.error) {
     console.error(json.error);
@@ -160,3 +161,8 @@ export const confidentialCancel = (proofId: number) => jsonRpc("confidential.can
 export const confidentialCreateOutputProof = (amount: number) => jsonRpc("confidential.create_output_proof", [amount]);
 
 export const webrtc = (signalingServerToken: string, permissions: string, name: string) => jsonRpc("webrtc.start", [signalingServerToken, permissions, name]);
+
+export const getPendingRequestsCount = () => jsonRpc("webrtc.check_notifications", []);
+export const getPendingRequest = () => jsonRpc("webrtc.get_oldest_request", [])
+export const acceptPendingRequest = (id: number) => jsonRpc("webrtc.accept_request", [id])
+export const denyPendingRequest = (id: number) => jsonRpc("webrtc.deny_request", [id])

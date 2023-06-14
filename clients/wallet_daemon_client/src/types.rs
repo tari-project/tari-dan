@@ -465,6 +465,14 @@ pub struct WebRtcStartRequest {
 pub struct WebRtcStartResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcCheckNotificationsRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcCheckNotificationsResponse {
+    pub pending_requests_count: usize,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginRequest {
     pub permissions: JrpcPermissions,
     pub duration: Option<Duration>,

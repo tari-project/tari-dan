@@ -86,7 +86,12 @@ where
     }
 
     pub fn jwt_api(&self) -> JwtApi<'_, TStore> {
-        JwtApi::new(&self.store, self.config.jwt_expiry, self.config.jwt_secret_key.clone())
+        JwtApi::new(
+            &self.store,
+            &self.config.jwt_expiry,
+            &self.config.jwt_secret_key,
+            &self.key_manager_api(),
+        )
     }
 
     pub fn confidential_outputs_api(&self) -> ConfidentialOutputsApi<'_, TStore> {

@@ -1,7 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{net::SocketAddr, sync::Arc};
+use std::{
+    collections::VecDeque,
+    net::SocketAddr,
+    sync::{Arc, Mutex},
+};
 
 use axum::{
     extract::Extension,
@@ -26,7 +30,10 @@ use tari_shutdown::ShutdownSignal;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use super::handlers::HandlerContext;
-use crate::handlers::{accounts, confidential, error::HandlerError, keys, nfts, rpc, transaction, webrtc, Handler};
+use crate::{
+    handlers::{accounts, confidential, error::HandlerError, keys, nfts, rpc, transaction, webrtc, Handler},
+    webrtc::UserConfirmationRequest,
+};
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc";
 
@@ -51,6 +58,7 @@ pub async fn listen(
     context: HandlerContext,
     shutdown_signal: ShutdownSignal,
 ) -> Result<(), anyhow::Error> {
+    let shutdown_signal_clone = shutdown_signal.clone();
     let router = Router::new()
         .route("/", post(handler))
         .route("/json_rpc", post(handler))
@@ -59,6 +67,7 @@ pub async fn listen(
         .layer(Extension(Arc::new(context)))
         .layer(Extension((preferred_address,signaling_server_address)))
         .layer(Extension(Arc::new(shutdown_signal.clone())))
+        .layer(Extension(Arc::new(Mutex::new(VecDeque::<UserConfirmationRequest>::new()))))
         .layer(CorsLayer::permissive())
         .layer(axum::middleware::from_fn(extract_token));
 
@@ -77,11 +86,13 @@ async fn handler(
     Extension(addresses): Extension<(SocketAddr, SocketAddr)>,
     Extension(shutdown_signal): Extension<Arc<ShutdownSignal>>,
     Extension(token): Extension<Option<String>>,
+    Extension(message_queue): Extension<Arc<Mutex<VecDeque<UserConfirmationRequest>>>>,
     value: JsonRpcExtractor,
 ) -> JrpcResult {
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {:?}", value);
     match value.method.as_str().split_once('.') {
+        // Some(("noti", "notifications")) => JsonRpcResponse::success(value.id, ),
         Some(("auth", method)) => match method {
             "request" => call_handler(context, value, token, rpc::handle_login_request).await,
             "accept" => call_handler(context, value, token, rpc::handle_login_accept).await,
@@ -90,7 +101,14 @@ async fn handler(
             "get_all_jwt" => call_handler(context, value, token, rpc::handle_get_all_jwt).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
-        Some(("webrtc", "start")) => webrtc::handle_start(context, value, token, shutdown_signal, addresses),
+        Some(("webrtc", method)) => match method {
+            "start" => webrtc::handle_start(context, value, token, shutdown_signal, addresses, message_queue),
+            "check_notifications" => webrtc::handle_check_notifications(context, value, token, message_queue),
+            "get_oldest_request" => webrtc::handle_get_oldest_request(context, value, token, message_queue),
+            "accept_request" => webrtc::handle_accept_request(context, value, token, message_queue),
+            "deny_request" => webrtc::handle_deny_request(context, value, token, message_queue),
+            _ => Ok(value.method_not_found(&value.method)),
+        },
         Some(("rpc", "discover")) => call_handler(context, value, token, rpc::handle_discover).await,
         Some(("keys", method)) => match method {
             "create" => call_handler(context, value, token, keys::handle_create).await,

@@ -46,16 +46,18 @@ pub async fn handle_login_accept(
     auth_accept_request: AuthLoginAcceptRequest,
 ) -> Result<AuthLoginAcceptResponse, anyhow::Error> {
     let jwt = context.wallet_sdk().jwt_api();
+
     let permissions_token = jwt.grant(auth_accept_request.name, auth_accept_request.auth_token)?;
     Ok(AuthLoginAcceptResponse { permissions_token })
 }
 
 pub async fn handle_login_deny(
     context: &HandlerContext,
-    _: Option<String>,
+    token: Option<String>,
     auth_deny_request: AuthLoginDenyRequest,
 ) -> Result<AuthLoginDenyResponse, anyhow::Error> {
     let jwt = context.wallet_sdk().jwt_api();
+    jwt.check_auth(token, &[JrpcPermission::Admin])?;
     jwt.deny(auth_deny_request.auth_token)?;
     Ok(AuthLoginDenyResponse {})
 }
