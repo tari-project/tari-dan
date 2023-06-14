@@ -149,8 +149,8 @@ diesel::table! {
         destroyed_at_epoch -> Nullable<BigInt>,
         created_justify_leader -> Nullable<Text>,
         destroyed_justify_leader -> Nullable<Text>,
-        created_timestamp -> Timestamp,
-        destroyed_timestamp -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+        destroyed_at -> Nullable<Timestamp>,
     }
 }
 
@@ -162,10 +162,23 @@ diesel::table! {
         instructions -> Text,
         sender_public_key -> Text,
         signature -> Text,
-        meta -> Text,
+        inputs -> Text,
+        outputs -> Text,
         result -> Text,
-        involved_shards -> Text,
         is_finalized -> Bool,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    votes (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        block_id -> Text,
+        decision -> Integer,
+        sender -> Text,
+        signature -> Text,
+        merkle_proof -> Text,
         created_at -> Timestamp,
     }
 }
@@ -184,4 +197,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     prepared_transaction_pool,
     substates,
     transactions,
+    votes,
 );

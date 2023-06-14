@@ -81,7 +81,11 @@ where
                 leader_strategy.clone(),
                 tx_leader,
             ),
-            on_receive_vote: OnReceiveVoteHandler::new(state_store.clone()),
+            on_receive_vote: OnReceiveVoteHandler::new(
+                state_store.clone(),
+                leader_strategy.clone(),
+                epoch_manager.clone(),
+            ),
             on_receive_new_view: OnReceiveNewViewHandler::new(
                 state_store.clone(),
                 leader_strategy.clone(),
@@ -110,7 +114,7 @@ where
         self.create_genesis_block_if_required(current_epoch)?;
 
         let mut on_beat = time::interval(Duration::from_secs(1));
-        on_beat.set_missed_tick_behavior(MissedTickBehavior::Delay);
+        on_beat.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
         loop {
             tokio::select! {
@@ -148,11 +152,11 @@ where
             executed.insert(tx)?;
 
             NewTransactionPool::insert(tx, TransactionDecision {
-                transaction_id: *executed.transaction.hash(),
+                transaction_id: *executed.transaction().hash(),
                 overall_decision: executed.decision(),
                 transaction_decision: executed.transaction_decision(),
                 per_shard_validator_fee: executed
-                    .result
+                    .result()
                     .fee_receipt
                     .as_ref()
                     .and_then(|fee| fee.total_fee_payment.as_u64_checked())
@@ -200,6 +204,13 @@ where
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
     ) -> Result<(), HotStuffError> {
+        if !self.epoch_manager.is_epoch_active(msg.epoch()).await? {
+            return Err(HotStuffError::EpochNotActive {
+                epoch: msg.epoch(),
+                details: "Received message for inactive epoch".to_string(),
+            });
+        }
+
         match msg {
             HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
             HotstuffMessage::Proposal(msg) => self.on_receive_proposal.handle(from, msg).await?,
