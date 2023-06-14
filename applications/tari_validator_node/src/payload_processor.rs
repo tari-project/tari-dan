@@ -73,8 +73,8 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         };
 
         let initial_cost = 0;
-        let modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>> =
-            vec![Box::new(FeeModule::new(initial_cost, self.fee_table.clone()))];
+        let modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>> =
+            vec![Arc::new(FeeModule::new(initial_cost, self.fee_table.clone()))];
 
         let processor = TransactionProcessor::new(
             self.template_provider.clone(),

@@ -37,6 +37,7 @@ use tari_template_lib::{
     args::{Arg, WorkspaceAction},
     invoke_args,
     models::ComponentAddress,
+    prelude::TemplateAddress,
 };
 use tari_transaction::{id_provider::IdProvider, Transaction};
 
@@ -68,7 +69,7 @@ pub struct TransactionProcessor<TTemplateProvider> {
     state_db: MemoryStateStore,
     auth_params: AuthParams,
     consensus: ConsensusContext,
-    modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
+    modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> TransactionProcessor<TTemplateProvider> {
@@ -77,7 +78,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         state_db: MemoryStateStore,
         auth_params: AuthParams,
         consensus: ConsensusContext,
-        modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
+        modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
     ) -> Self {
         Self {
             template_provider,
@@ -206,35 +207,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 template_address,
                 function,
                 args,
-            } => {
-                let template = template_provider
-                    .get_template_module(&template_address)
-                    .map_err(|e| TransactionError::FailedToLoadTemplate {
-                        address: template_address,
-                        details: e.to_string(),
-                    })?
-                    .ok_or(TransactionError::TemplateNotFound {
-                        address: template_address,
-                    })?;
-
-                runtime.interface().set_current_runtime_state(RuntimeState {
-                    template_name: template.template_name().to_string(),
-                    template_address,
-                    component_address: None,
-                })?;
-
-                let result = Self::invoke_template(
-                    template,
-                    template_provider,
-                    runtime.clone(),
-                    auth_scope,
-                    &function,
-                    args,
-                    0,
-                    1,
-                )?;
-                Ok(result)
-            },
+            } => Self::call_function(
+                template_provider,
+                runtime,
+                auth_scope,
+                &template_address,
+                &function,
+                args,
+                0,
+                1,
+            ),
             Instruction::CallMethod {
                 component_address,
                 method,
@@ -288,6 +270,47 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         Ok(())
     }
 
+    pub fn call_function(
+        template_provider: Arc<TTemplateProvider>,
+        runtime: &Runtime,
+        auth_scope: AuthorizationScope,
+        template_address: &TemplateAddress,
+        function: &str,
+        args: Vec<Arg>,
+        recursion_depth: usize,
+        max_recursion_depth: usize,
+    ) -> Result<InstructionResult, TransactionError> {
+        let template = template_provider
+            .get_template_module(template_address)
+            .map_err(|e| TransactionError::FailedToLoadTemplate {
+                address: *template_address,
+                details: e.to_string(),
+            })?
+            .ok_or(TransactionError::TemplateNotFound {
+                address: *template_address,
+            })?;
+
+        runtime.interface().set_current_runtime_state(RuntimeState {
+            template_name: template.template_name().to_string(),
+            template_address: *template_address,
+            component_address: None,
+            recursion_depth,
+            max_recursion_depth,
+        })?;
+
+        let result = Self::invoke_template(
+            template,
+            template_provider,
+            runtime.clone(),
+            auth_scope,
+            function,
+            args,
+            0,
+            1,
+        )?;
+        Ok(result)
+    }
+
     pub fn call_method(
         template_provider: Arc<TTemplateProvider>,
         runtime: &Runtime,
@@ -323,6 +346,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             template_name: template.template_name().to_string(),
             template_address: component.template_address,
             component_address: Some(*component_address),
+            recursion_depth,
+            max_recursion_depth,
         })?;
 
         let mut final_args = Vec::with_capacity(args.len() + 1);
