@@ -176,7 +176,8 @@ pub async fn spawn_services(
     } else {
         FeeTable::new(1, 1)
     };
-    let payload_processor = TariDanPayloadProcessor::new(template_manager.clone(), fee_table);
+    let payload_processor =
+        TariDanPayloadProcessor::new(template_manager.clone(), fee_table, consensus_constants.clone());
 
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
     // Dry run transaction processor

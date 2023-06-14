@@ -70,6 +70,7 @@ pub struct TransactionProcessor<TTemplateProvider> {
     auth_params: AuthParams,
     consensus: ConsensusContext,
     modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
+    max_call_recursion_depth: usize,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> TransactionProcessor<TTemplateProvider> {
@@ -79,6 +80,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         auth_params: AuthParams,
         consensus: ConsensusContext,
         modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
+        max_call_recursion_depth: usize,
     ) -> Self {
         Self {
             template_provider,
@@ -86,6 +88,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             auth_params,
             consensus,
             modules,
+            max_call_recursion_depth,
         }
     }
 
@@ -112,7 +115,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         let fee_exec_results = fee_instructions
             .into_iter()
             .map(|instruction| {
-                Self::process_instruction(template_provider.clone(), &runtime, auth_scope.clone(), instruction)
+                Self::process_instruction(
+                    template_provider.clone(),
+                    &runtime,
+                    auth_scope.clone(),
+                    instruction,
+                    self.max_call_recursion_depth,
+                )
             })
             .collect::<Result<Vec<_>, _>>();
 
@@ -144,7 +153,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         let instruction_result = instructions
             .into_iter()
             .map(|instruction| {
-                Self::process_instruction(template_provider.clone(), &runtime, auth_scope.clone(), instruction)
+                Self::process_instruction(
+                    template_provider.clone(),
+                    &runtime,
+                    auth_scope.clone(),
+                    instruction,
+                    self.max_call_recursion_depth,
+                )
             })
             .collect::<Result<Vec<_>, _>>();
 
@@ -200,6 +215,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         runtime: &Runtime,
         auth_scope: AuthorizationScope,
         instruction: Instruction,
+        max_recursion_depth: usize,
     ) -> Result<InstructionResult, TransactionError> {
         debug!(target: LOG_TARGET, "instruction = {:?}", instruction);
         match instruction {
@@ -215,7 +231,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 &function,
                 args,
                 0,
-                10,
+                max_recursion_depth,
             ),
             Instruction::CallMethod {
                 component_address,
@@ -229,7 +245,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 &method,
                 args,
                 0,
-                10,
+                max_recursion_depth,
             ),
             // Basically names an output on the workspace so that you can refer to it as an
             // Arg::Variable

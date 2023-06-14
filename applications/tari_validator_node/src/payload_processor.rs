@@ -24,7 +24,10 @@ use std::{collections::HashMap, sync::Arc};
 
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, ObjectPledge, ShardId, SubstateState};
-use tari_dan_core::services::{PayloadProcessor, PayloadProcessorError};
+use tari_dan_core::{
+    consensus_constants::ConsensusConstants,
+    services::{PayloadProcessor, PayloadProcessorError},
+};
 use tari_dan_engine::{
     bootstrap_state,
     fees::{FeeModule, FeeTable},
@@ -42,13 +45,19 @@ use tari_transaction::Transaction;
 pub struct TariDanPayloadProcessor<TTemplateProvider> {
     template_provider: Arc<TTemplateProvider>,
     fee_table: FeeTable,
+    consensus_constants: ConsensusConstants,
 }
 
 impl<TTemplateProvider> TariDanPayloadProcessor<TTemplateProvider> {
-    pub fn new(template_provider: TTemplateProvider, fee_table: FeeTable) -> Self {
+    pub fn new(
+        template_provider: TTemplateProvider,
+        fee_table: FeeTable,
+        consensus_constants: ConsensusConstants,
+    ) -> Self {
         Self {
             template_provider: Arc::new(template_provider),
             fee_table,
+            consensus_constants,
         }
     }
 }
@@ -60,7 +69,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         &self,
         payload: TariDanPayload,
         pledges: HashMap<ShardId, ObjectPledge>,
-        consensus: ConsensusContext,
+        consensus_context: ConsensusContext,
     ) -> Result<ExecuteResult, PayloadProcessorError> {
         let transaction = payload.into_payload();
 
@@ -80,8 +89,9 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             self.template_provider.clone(),
             state_store,
             auth_params,
-            consensus,
+            consensus_context,
             modules,
+            self.consensus_constants.max_call_recursion_depth,
         );
         let tx_hash = *transaction.hash();
         match processor.execute(transaction) {

@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
     instruction::Instruction,
@@ -12,7 +13,6 @@ use tari_template_lib::{
 };
 use tari_template_test_tooling::TemplateTest;
 use tari_transaction::Transaction;
-
 fn setup() -> TemplateTest {
     TemplateTest::new(vec![
         "tests/templates/composability",
@@ -390,7 +390,7 @@ fn it_fails_when_surpassing_recursion_limit() {
     let state_template = get_state_template_address(&test);
     let composability_template = get_composability_template_address(&test);
 
-    let max_recursion_depth = 10;
+    let max_recursion_depth = ConsensusConstants::devnet().max_call_recursion_depth;
 
     // innermost composability component
     let res = test
