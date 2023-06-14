@@ -64,7 +64,7 @@ fn it_allows_function_to_function_calls() {
 }
 
 #[test]
-fn it_allows_function_to_component_calls() {
+fn it_allows_function_to_method_calls() {
     let mut test = setup();
     let state_template = get_state_template_address(&test);
     let composability_template = get_composability_template_address(&test);
@@ -106,4 +106,43 @@ fn it_allows_function_to_component_calls() {
         vec![],
     );
     assert_eq!(inner_component_address, state_component);
+}
+
+#[test]
+fn it_allows_method_to_method_calls() {
+    let mut test = setup();
+    let state_template = get_state_template_address(&test);
+    let composability_template = get_composability_template_address(&test);
+
+    // the composability template "new" function should create a new "state" component as well
+    let res = test
+        .execute_and_commit(
+            vec![Instruction::CallFunction {
+                template_address: composability_template,
+                function: "new".to_string(),
+                args: args![state_template],
+            }],
+            vec![],
+        )
+        .unwrap();
+
+    // extract the newly created component addresses
+    let composability_component = extract_component_address_from_result(&res, "Composability");
+    let state_component = extract_component_address_from_result(&res, "State");
+
+    // the state component has an initial value of 0
+    let value: u32 = test.call_method(state_component, "get", args![], vec![]);
+    assert_eq!(value, 0);
+
+    // perform the call to the composability component that will increase the counter
+    test.call_method::<()>(
+        composability_component,
+        "increase_inner_state_component",
+        args![],
+        vec![],
+    );
+
+    // the state component has been increased
+    let value: u32 = test.call_method(state_component, "get", args![], vec![]);
+    assert_eq!(value, 1);
 }
