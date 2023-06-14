@@ -49,9 +49,9 @@ where
             "🔥 Receive VOTE for node {} from {}", message.block_id, from,
         );
 
-        let addr = self.epoch_manager.get_our_validator_addr(message.epoch).await?;
+        // Is a committee member sending us this vote?
         let committee = self.epoch_manager.get_local_committee(message.epoch).await?;
-        if !committee.contains(&addr) {
+        if !committee.contains(&from) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: message.epoch,
                 sender: from.to_string(),
@@ -59,20 +59,22 @@ where
             });
         }
 
+        // Are we the leader for the block being voted for?
+        let addr = self.epoch_manager.get_our_validator_addr(message.epoch).await?;
         if !self.leader_strategy.is_leader(&addr, &committee, &message.block_id, 0) {
             return Err(HotStuffError::NotTheLeader {
                 details: format!("Not this leader for block {}, vote sent by {}", message.block_id, addr),
             });
         }
 
-        let local_commmittee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
 
         // Get the sender shard, and check that they are in the local committee
-        let sender_shard = self
+        let sender_shard_id = self
             .epoch_manager
             .get_validator_shard(message.epoch, from.clone())
             .await?;
-        if !local_commmittee_shard.includes_shard(&sender_shard) {
+        if !local_committee_shard.includes_shard(&sender_shard_id) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: message.epoch,
                 sender: from.to_string(),
@@ -80,14 +82,15 @@ where
             });
         }
 
+        let our_validator_shard_id = self.epoch_manager.get_our_validator_shard(message.epoch).await?;
+
         let mut tx = self.store.create_write_tx()?;
         let block = Block::get(tx.deref_mut(), &message.block_id)?;
-        if block.proposed_by() != local_commmittee_shard.our_shard_id() {
+        if *block.proposed_by() != our_validator_shard_id {
             return Err(HotStuffError::NotTheLeader {
                 details: format!(
                     "Block {} was not proposed by this validator {}",
-                    message.block_id,
-                    local_commmittee_shard.our_shard_id()
+                    message.block_id, our_validator_shard_id
                 ),
             });
         }
@@ -96,7 +99,7 @@ where
             epoch: message.epoch,
             block_id: message.block_id,
             decision: message.decision,
-            sender: sender_shard,
+            sender: sender_shard_id,
             signature: message.signature,
             merkle_proof: message.merkle_proof,
         }
@@ -104,15 +107,18 @@ where
 
         let count = Vote::count_for_block(tx.deref_mut(), &message.block_id)?;
 
-        if count < local_commmittee_shard.quorum_threshold() {
+        // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
+        // in the QC.
+        if count != local_committee_shard.quorum_threshold() as usize {
             info!(
                 target: LOG_TARGET,
                 "🔥 Received vote for block {} from {} ({} of {})",
                 message.block_id,
                 from,
                 count,
-                local_commmittee_shard.quorum_threshold()
+                local_committee_shard.quorum_threshold()
             );
+            tx.commit()?;
             return Ok(());
         }
 

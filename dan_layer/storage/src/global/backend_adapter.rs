@@ -97,7 +97,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: ShardId,
-        bucket: u64,
+        bucket: u32,
     ) -> Result<(), Self::Error>;
 
     fn validator_nodes_get_by_shard_range(

@@ -68,27 +68,26 @@ impl<TAddr: NodeAddressable> FromIterator<Committee<TAddr>> for Committee<TAddr>
     }
 }
 
+/// Represents a "slice" of the 256-bit shard space
 #[derive(Debug, Clone, Copy)]
 pub struct CommitteeShard {
-    num_committees: u64,
-    num_local_members: u64,
-    our_shard_id: ShardId,
-    bucket: u64,
+    num_committees: u32,
+    num_members: u32,
+    bucket: u32,
 }
 
 impl CommitteeShard {
-    pub fn new(num_committees: u64, num_local_members: u64, our_shard_id: ShardId) -> Self {
+    pub fn new(num_committees: u32, num_members: u32, bucket: u32) -> Self {
         Self {
             num_committees,
-            num_local_members,
-            our_shard_id,
-            bucket: our_shard_id.to_committee_bucket(num_committees),
+            num_members,
+            bucket,
         }
     }
 
     /// Returns n - f where n is the number of committee members and f is the tolerated failure nodes.
-    pub fn quorum_threshold(&self) -> u64 {
-        let len = self.num_local_members;
+    pub fn quorum_threshold(&self) -> u32 {
+        let len = self.num_members;
         if len == 0 {
             return 0;
         }
@@ -96,16 +95,12 @@ impl CommitteeShard {
         len - max_failures
     }
 
-    pub fn num_committees(&self) -> u64 {
+    pub fn num_committees(&self) -> u32 {
         self.num_committees
     }
 
-    pub fn num_local_members(&self) -> u64 {
-        self.num_local_members
-    }
-
-    pub fn our_shard_id(&self) -> &ShardId {
-        &self.our_shard_id
+    pub fn num_members(&self) -> u32 {
+        self.num_members
     }
 
     pub fn includes_shard(&self, shard_id: &ShardId) -> bool {

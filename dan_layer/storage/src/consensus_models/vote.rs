@@ -71,8 +71,8 @@ impl Vote {
     pub fn count_for_block<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         block_id: &BlockId,
-    ) -> Result<u64, StorageError> {
-        tx.votes_count_for_block(block_id)
+    ) -> Result<usize, StorageError> {
+        tx.votes_count_for_block(block_id).map(|v| v as usize)
     }
 
     pub fn get_for_block<TTx: StateStoreReadTransaction>(

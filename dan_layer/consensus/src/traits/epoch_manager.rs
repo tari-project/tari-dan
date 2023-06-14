@@ -24,13 +24,13 @@ pub trait EpochManager: Send + Sync {
     async fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, Self::Error>;
     async fn current_epoch(&self) -> Result<Epoch, Self::Error>;
     async fn is_epoch_active(&self, epoch: Epoch) -> Result<bool, Self::Error>;
-    async fn get_num_committees(&self, epoch: Epoch) -> Result<u64, Self::Error>;
+    async fn get_num_committees(&self, epoch: Epoch) -> Result<u32, Self::Error>;
     async fn get_validator_node_merkle_proof(&self, epoch: Epoch) -> Result<ValidatorNodeMerkleProof, Self::Error>;
 
     async fn get_committees_by_buckets(
         &self,
         epoch: Epoch,
-        buckets: HashSet<u64>,
+        buckets: HashSet<u32>,
     ) -> Result<Committee<Self::Addr>, Self::Error>;
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, Self::Error> {
