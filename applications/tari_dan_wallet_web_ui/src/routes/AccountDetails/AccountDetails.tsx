@@ -39,7 +39,8 @@ import { removeTagged, toHexString } from '../../utils/helpers';
 function BalanceRow(props: any) {
   return (
     <TableRow>
-      <TableCell>{toHexString(props.resource_address)}</TableCell>
+      <TableCell>{props.resource_address}</TableCell>
+      <TableCell>{props.resource_type}</TableCell>
       <TableCell>{removeTagged(props.balance)}</TableCell>
       <TableCell>{removeTagged(props.confidential_balance)}</TableCell>
     </TableRow>
@@ -98,7 +99,7 @@ function AccountDetailsLayout() {
                 <TableRow>
                   <TableCell>{state?.account.name}</TableCell>
                   <TableCell>
-                    {toHexString(state?.account.address.Component)}
+                    {state?.account.address.Component}
                   </TableCell>
                   <TableCell>{state?.public_key}</TableCell>
                 </TableRow>
@@ -115,6 +116,7 @@ function AccountDetailsLayout() {
               <TableHead>
                 <TableRow>
                   <TableCell>Resource</TableCell>
+                  <TableCell>Resource Type</TableCell>
                   <TableCell>Revealed Balance</TableCell>
                   <TableCell>Confidential Balance</TableCell>
                 </TableRow>

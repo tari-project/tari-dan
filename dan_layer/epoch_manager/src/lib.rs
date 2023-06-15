@@ -23,9 +23,6 @@
 mod traits;
 pub use traits::{EpochManager, ShardCommitteeAllocation};
 
-mod committee;
-pub use committee::Committee;
-
 mod validator_node;
 pub use validator_node::ValidatorNode;
 

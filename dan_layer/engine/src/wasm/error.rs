@@ -17,7 +17,7 @@ pub enum WasmError {
 #[derive(Debug, thiserror::Error)]
 pub enum WasmExecutionError {
     #[error(transparent)]
-    InstantiationError(#[from] InstantiationError),
+    InstantiationError(Box<InstantiationError>),
     #[error(transparent)]
     ExportError(#[from] ExportError),
     #[error(transparent)]
@@ -61,4 +61,9 @@ pub enum WasmExecutionError {
     },
     #[error("Value visitor error: {0}")]
     ValueVisitorError(#[from] IndexedValueVisitorError),
+}
+impl From<wasmer::InstantiationError> for WasmExecutionError {
+    fn from(value: InstantiationError) -> Self {
+        Self::InstantiationError(Box::new(value))
+    }
 }

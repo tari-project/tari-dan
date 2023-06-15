@@ -7,15 +7,10 @@ use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT};
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 use tokio::sync::{broadcast, oneshot};
 
-use crate::{
-    base_layer::error::EpochManagerError,
-    traits::ShardCommitteeAllocation,
-    validator_node::ValidatorNode,
-    Committee,
-};
+use crate::{base_layer::error::EpochManagerError, traits::ShardCommitteeAllocation, validator_node::ValidatorNode};
 
 type Reply<T> = oneshot::Sender<Result<T, EpochManagerError>>;
 

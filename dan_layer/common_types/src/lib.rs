@@ -17,6 +17,8 @@ pub mod proto;
 mod epoch;
 pub use epoch::Epoch;
 
+pub mod committee;
+pub mod hasher;
 pub mod hashing;
 pub mod optional;
 
@@ -47,6 +49,7 @@ mod shard_id;
 pub use shard_id::ShardId;
 
 pub mod uint;
+pub use tari_engine_types::serde_with;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum SubstateState {

@@ -31,3 +31,8 @@ pub use error::StorageError;
 
 mod shard_store;
 pub use shard_store::*;
+
+pub mod consensus_models;
+
+mod state_store;
+pub use state_store::*;

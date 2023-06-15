@@ -8,7 +8,7 @@ use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
 use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT};
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 use tokio::sync::{broadcast, mpsc, oneshot};
 
 use crate::{
@@ -18,7 +18,6 @@ use crate::{
     },
     traits::EpochManager,
     validator_node::ValidatorNode,
-    Committee,
     ShardCommitteeAllocation,
 };
 
