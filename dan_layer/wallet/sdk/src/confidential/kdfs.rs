@@ -11,7 +11,7 @@ pub(crate) const AEAD_KEY_LEN: usize = std::mem::size_of::<Key>();
 hidden_type!(EncryptedValueKey, SafeArray<u8, AEAD_KEY_LEN>);
 
 /// Generate a ChaCha20-Poly1305 key from a private key and commitment using Blake2b
-pub fn encrypted_value_kdf_aead(private_key: &PrivateKey, commitment: &Commitment) -> PrivateKey {
+pub fn encrypted_data_kdf_aead(private_key: &PrivateKey, commitment: &Commitment) -> PrivateKey {
     let mut aead_key = EncryptedValueKey::from(SafeArray::default());
     encrypted_value_hasher()
         .chain(private_key)

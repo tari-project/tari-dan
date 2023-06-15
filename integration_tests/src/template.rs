@@ -82,6 +82,6 @@ pub fn get_template_wasm_path(template_name: String) -> PathBuf {
 //
 fn get_template_root_path() -> PathBuf {
     let mut template_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    template_path.push("tests/templates");
+    template_path.push("integration_tests/src/templates");
     template_path
 }

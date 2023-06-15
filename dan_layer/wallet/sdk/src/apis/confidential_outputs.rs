@@ -200,7 +200,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
     ) -> Result<ConfidentialOutputModel, ConfidentialOutputsApiError> {
         let unblinded_result = self.crypto_api.unblind_output(
             &output.commitment,
-            &output.encrypted_value,
+            &output.encrypted_data,
             &key.k,
             &output.stealth_public_nonce,
         );

@@ -51,7 +51,7 @@ use tari_epoch_manager::{
     EpochManager,
 };
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib::models::{EncryptedValue, TemplateAddress, UnclaimedConfidentialOutputAddress};
+use tari_template_lib::models::{EncryptedData, TemplateAddress, UnclaimedConfidentialOutputAddress};
 use tokio::{task, task::JoinHandle, time};
 
 use crate::template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration};
@@ -354,16 +354,25 @@ impl BaseLayerScanner {
                 // Technically impossible, but anyway
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
-        let encrypted_data_bytes = output.encrypted_data.to_byte_vec();
-        let encrypted_data_len = encrypted_data_bytes.len();
-        let mut encrypted_nonce = [0u8; EncryptedValue::size()];
-        encrypted_nonce
-            .copy_from_slice(&encrypted_data_bytes[(encrypted_data_len - EncryptedValue::size())..encrypted_data_len]);
+
+        let encrypted_data = {
+            let bytes = output.encrypted_data.to_byte_vec();
+            if bytes.len() != EncryptedData::size() {
+                return Err(BaseLayerScannerError::InvalidSideChainUtxoResponse(format!(
+                    "Invalid encrypted data size: {}. Expected {}",
+                    bytes.len(),
+                    EncryptedData::size()
+                )));
+            }
+            let mut data = [0u8; EncryptedData::size()];
+            data.copy_from_slice(&bytes);
+            EncryptedData(data)
+        };
         let substate = Substate::new(
             0,
             SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
                 commitment: output.commitment.clone(),
-                encrypted_value: EncryptedValue(encrypted_nonce),
+                encrypted_data,
             }),
         );
         let shard_id = ShardId::from_address(&address, 0);
