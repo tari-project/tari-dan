@@ -223,7 +223,7 @@ where
         let genesis = Block::genesis(epoch);
 
         self.state_store.with_write_tx(|tx| {
-            if genesis.exists(tx.deref_mut())? {
+            if !genesis.exists(tx.deref_mut())? {
                 genesis.insert(tx)?;
                 genesis.justify().set_as_high_qc(tx)?;
                 genesis.set_as_locked(tx)?;
