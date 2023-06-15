@@ -272,10 +272,10 @@ impl BalanceEntry {
         match self.resource_type {
             ResourceType::Fungible => {
                 format!("{} {}", self.balance, symbol)
-            },
+            }
             ResourceType::NonFungible => {
                 format!("{} {} tokens", self.balance, symbol)
-            },
+            }
             ResourceType::Confidential => {
                 format!(
                     "{} revealed + {} blinded = {} {}",
@@ -284,7 +284,7 @@ impl BalanceEntry {
                     self.balance + self.confidential_balance,
                     symbol
                 )
-            },
+            }
         }
     }
 }
@@ -471,6 +471,28 @@ pub struct WebRtcCheckNotificationsRequest {}
 pub struct WebRtcCheckNotificationsResponse {
     pub pending_requests_count: usize,
 }
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcGetOldestRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcGetOldestResponse {
+    pub id:u64,
+    pub method: String,
+    pub params: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcAcceptRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcAcceptResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcDenyRequest {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct WebRtcDenyResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginRequest {

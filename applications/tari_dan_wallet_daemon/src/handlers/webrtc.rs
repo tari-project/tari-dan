@@ -16,10 +16,18 @@ use axum_jrpc::{
 use log::*;
 use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_shutdown::ShutdownSignal;
-use tari_wallet_daemon_client::types::{WebRtcCheckNotificationsResponse, WebRtcStartRequest, WebRtcStartResponse};
+use tari_wallet_daemon_client::types::{
+    WebRtcAcceptResponse,
+    WebRtcCheckNotificationsResponse,
+    WebRtcDenyResponse,
+    WebRtcGetOldestResponse,
+    WebRtcStartRequest,
+    WebRtcStartResponse,
+};
+use webrtc::data_channel::RTCDataChannel;
 
 use super::HandlerContext;
-use crate::webrtc::{webrtc_start_session, UserConfirmationRequest};
+use crate::webrtc::{make_request, webrtc_start_session, Request, Response, UserConfirmationRequest};
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc";
 
@@ -56,22 +64,140 @@ pub fn handle_get_oldest_request(
     token: Option<String>,
     message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
 ) -> JrpcResult {
+    let answer_id = value.get_answer_id();
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Webrtc])
+        .map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::ApplicationError(401),
+                    format!("Not authorized: {e}"),
+                    serde_json::Value::Null,
+                ),
+            )
+        })?;
+    let queue = message_queue.lock().unwrap();
+    if queue.is_empty() {
+        Err(JsonRpcResponse::error(
+            answer_id,
+            JsonRpcError::new(
+                JsonRpcErrorReason::InvalidParams,
+                "There are no messages".to_string(),
+                serde_json::Value::Null,
+            ),
+        ))
+    } else {
+        let UserConfirmationRequest {
+            req:
+                Request {
+                    id,
+                    method,
+                    params,
+                    token: _,
+                },
+            dc: _,
+        } = queue.front().unwrap();
+        Ok(JsonRpcResponse::success(answer_id, WebRtcGetOldestResponse {
+            id: *id,
+            method: method.clone(),
+            params: params.clone(),
+        }))
+    }
 }
 
-pub fn handle_accept_request(
+pub async fn handle_accept_request(
+    context: Arc<HandlerContext>,
+    value: JsonRpcExtractor,
+    token: Option<String>,
+    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
+    jrpc_address: SocketAddr,
+) -> JrpcResult {
+    let answer_id = value.get_answer_id();
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Webrtc])
+        .map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::ApplicationError(401),
+                    format!("Not authorized: {e}"),
+                    serde_json::Value::Null,
+                ),
+            )
+        })?;
+    let req;
+    let dc;
+    {
+        let mut queue = message_queue.lock().unwrap();
+        let item = queue.pop_front().unwrap();
+        req = item.req;
+        dc = item.dc;
+    }
+    let result = match make_request(jrpc_address, Some(req.token), req.method, req.params).await {
+        Ok(response) => response.to_string(),
+        Err(e) => e.to_string(),
+    };
+    let response = Response {
+        payload: result,
+        id: req.id,
+    };
+    let text = match serde_json::to_string(&response) {
+        Ok(response) => response,
+        Err(e) => e.to_string(),
+    };
+    if let Err(e) = dc.send_text(text).await {
+        println!("Error {:?}", e);
+    }
+    Ok(JsonRpcResponse::success(answer_id, WebRtcAcceptResponse {}))
+}
+
+pub async fn handle_deny_request(
     context: Arc<HandlerContext>,
     value: JsonRpcExtractor,
     token: Option<String>,
     message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
 ) -> JrpcResult {
-}
-
-pub fn handle_deny_request(
-    context: Arc<HandlerContext>,
-    value: JsonRpcExtractor,
-    token: Option<String>,
-    message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
-) -> JrpcResult {
+    let answer_id = value.get_answer_id();
+    let answer_id = value.get_answer_id();
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::Webrtc])
+        .map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::ApplicationError(401),
+                    format!("Not authorized: {e}"),
+                    serde_json::Value::Null,
+                ),
+            )
+        })?;
+    let req;
+    let dc;
+    {
+        let mut queue = message_queue.lock().unwrap();
+        let item = queue.pop_front().unwrap();
+        req = item.req;
+        dc = item.dc;
+    }
+    let response = Response {
+        payload: "Request denied".to_string(),
+        id: req.id,
+    };
+    let text = match serde_json::to_string(&response) {
+        Ok(response) => response,
+        Err(e) => e.to_string(),
+    };
+    if let Err(e) = dc.send_text(text).await {
+        println!("Error {:?}", e);
+    }
+    Ok(JsonRpcResponse::success(answer_id, WebRtcDenyResponse {}))
 }
 
 pub fn handle_start(

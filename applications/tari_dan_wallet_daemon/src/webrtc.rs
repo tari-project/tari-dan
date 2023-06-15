@@ -29,16 +29,16 @@ const LOG_TARGET: &str = "tari::dan::wallet_daemon::webrtc";
 
 #[derive(Deserialize, Debug)]
 pub struct Request {
-    id: u64,
-    method: String,
-    params: String,
-    token: String,
+    pub id: u64,
+    pub method: String,
+    pub params: String,
+    pub token: String,
 }
 
 #[derive(Serialize, Debug)]
-struct Response {
-    id: u64,
-    payload: String,
+pub struct Response {
+    pub id: u64,
+    pub payload: String,
 }
 
 pub struct UserConfirmationRequest {
@@ -54,7 +54,7 @@ impl std::fmt::Debug for UserConfirmationRequest {
     }
 }
 
-async fn make_request<T: Serialize>(
+pub async fn make_request<T: Serialize>(
     address: SocketAddr,
     token: Option<String>,
     method: String,
@@ -93,7 +93,7 @@ pub fn on_ice_candidate(
     ice_candidate: Option<RTCIceCandidate>,
     signaling_server_token_clone: String,
     signaling_server_address: SocketAddr,
-) -> Pin<Box<impl futures::Future<Output = ()>>> {
+) -> Pin<Box<impl futures::Future<Output=()>>> {
     if let Some(ice_candidate) = ice_candidate {
         tokio::task::spawn(async move {
             match &ice_candidate.to_json() {
@@ -104,14 +104,14 @@ pub fn on_ice_candidate(
                         "add.answer_ice_candidate".to_string(),
                         ice_candidate,
                     )
-                    .await
+                        .await
                     {
                         log::error!(target: LOG_TARGET, "Error sending ice candidate: {}", err);
                     }
-                },
+                }
                 Err(e) => {
                     log::error!(target: LOG_TARGET, "Error sending ice candidate: {}", e);
-                },
+                }
             };
         });
     }
@@ -145,7 +145,7 @@ pub fn on_message(
     message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
     permissions_token: String,
     address: SocketAddr,
-) -> Pin<Box<impl futures::Future<Output = ()>>> {
+) -> Pin<Box<impl futures::Future<Output=()>>> {
     Box::pin(async move {
         match String::from_utf8(msg.data.to_vec()) {
             Ok(msg_str) => match serde_json::from_str::<Request>(&msg_str) {
@@ -158,11 +158,11 @@ pub fn on_message(
                                     payload: token,
                                     id: request.id,
                                 }
-                            },
+                            }
                             Err(e) => {
                                 log::error!(target: LOG_TARGET, "{}", e.to_string());
                                 return;
-                            },
+                            }
                         }
                         let text = match serde_json::to_string(&response) {
                             Ok(response) => response,
@@ -178,7 +178,7 @@ pub fn on_message(
                             dc: Arc::clone(&d_on_message),
                         });
                     }
-                },
+                }
                 Err(e) => log::error!(target: LOG_TARGET, "{}", e.to_string()),
             },
             Err(e) => log::error!(target: LOG_TARGET, "{}", e.to_string()),
@@ -191,7 +191,7 @@ pub fn on_data_channel(
     permissions_token: String,
     message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
     address: SocketAddr,
-) -> Pin<Box<impl futures::Future<Output = ()>>> {
+) -> Pin<Box<impl futures::Future<Output=()>>> {
     Box::pin(async move {
         let d_on_message = d.clone();
         d.on_message(Box::new(move |msg: DataChannelMessage| {
@@ -236,7 +236,7 @@ pub async fn webrtc_start_session(
         "get.offer".to_string(),
         json!({}),
     )
-    .await?;
+        .await?;
 
     let desc = RTCSessionDescription::offer(
         offer
@@ -252,7 +252,7 @@ pub async fn webrtc_start_session(
         "get.offer_ice_candidates".to_string(),
         json!({}),
     )
-    .await?;
+        .await?;
 
     let ices: Vec<RTCIceCandidateInit> = serde_json::from_str(
         ices.as_str()
@@ -272,7 +272,7 @@ pub async fn webrtc_start_session(
         "add.answer".to_string(),
         &answer.sdp,
     )
-    .await?;
+        .await?;
     shutdown_signal.await;
     // pc.close().await?;
     Ok(())

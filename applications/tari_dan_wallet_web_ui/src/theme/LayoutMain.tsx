@@ -21,27 +21,28 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import {useEffect, useState} from 'react';
-import { styled } from '@mui/material/styles';
+import {styled} from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import MuiDrawer from '@mui/material/Drawer';
 import Box from '@mui/material/Box';
-import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
+import MuiAppBar, {AppBarProps as MuiAppBarProps} from '@mui/material/AppBar';
 import Toolbar from '@mui/material/Toolbar';
 import List from '@mui/material/List';
 import IconButton from '@mui/material/IconButton';
 import MenuOpenOutlinedIcon from '@mui/icons-material/MenuOpenOutlined';
 import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined';
-import { mainListItems } from '../Components/MenuItems';
-import { ThemeProvider } from '@mui/material';
+import {mainListItems} from '../Components/MenuItems';
+import {ThemeProvider} from '@mui/material';
 import theme from './theme';
-import { Outlet, Link } from 'react-router-dom';
+import {Outlet, Link} from 'react-router-dom';
 import Logo from '../assets/Logo';
 import Container from '@mui/material/Container';
 import ConnectorLink from '../Components/ConnectorLink';
 import Breadcrumbs from '../Components/Breadcrumbs';
-import { breadcrumbRoutes } from '../App';
+import {breadcrumbRoutes} from '../App';
 import Grid from '@mui/material/Grid';
-import {getPendingRequestsCount} from "../utils/json_rpc";
+import {acceptPendingRequest, denyPendingRequest, getPendingRequest, getPendingRequestsCount} from "../utils/json_rpc";
+import Button from "@mui/material/Button";
 
 const drawerWidth = 300;
 
@@ -51,7 +52,7 @@ interface AppBarProps extends MuiAppBarProps {
 
 const AppBar = styled(MuiAppBar, {
   shouldForwardProp: (prop) => prop !== 'open',
-})<AppBarProps>(({ theme, open }) => ({
+})<AppBarProps>(({theme, open}) => ({
   zIndex: theme.zIndex.drawer + 1,
   transition: theme.transitions.create(['width', 'margin'], {
     easing: theme.transitions.easing.easeOut,
@@ -69,7 +70,7 @@ const AppBar = styled(MuiAppBar, {
 
 const Drawer = styled(MuiDrawer, {
   shouldForwardProp: (prop) => prop !== 'open',
-})(({ theme, open }) => ({
+})(({theme, open}) => ({
   '& .MuiDrawer-paper': {
     position: 'relative',
     whiteSpace: 'nowrap',
@@ -95,14 +96,25 @@ const Drawer = styled(MuiDrawer, {
   },
 }));
 
+interface Request {
+  id: number,
+  method: string,
+  params: any[],
+}
+
 export default function Layout() {
   const [open, setOpen] = useState(false);
   const [notification, setNotification] = useState();
+  const [request, setRequest] = useState<Request | null>(null);
   useEffect(() => {
     const fetchData = async () => {
       let resp = await getPendingRequestsCount();
       if (resp?.pending_requests_count > 0) {
-
+        console.log("Notifications", resp.pending_requests_count);
+        let request = await getPendingRequest();
+        setRequest(request);
+      } else {
+        setRequest(null);
       }
     };
     const timer = setInterval(fetchData, 3000);
@@ -110,116 +122,158 @@ export default function Layout() {
       clearInterval(timer);
     };
   }, [])
+  const Accept = () => {
+    if (request) {
+      setRequest(null);
+      acceptPendingRequest(request.id);
+    }
+  };
+  const Reject = () => {
+    if (request) {
+      setRequest(null);
+      denyPendingRequest(request.id);
+    }
+  }
+
+  const popup = (request:Request) => (<div
+    style={{
+      position: "fixed",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      backgroundColor: "rgba(0, 0, 0, 0.5)",
+      zIndex: 2000,
+      justifyContent: "center",
+      alignContent: "center",
+      display: "flex",
+    }}
+  >
+    <div style={{
+      backgroundColor: "white",
+      padding: "10px",
+      alignSelf: "center",
+      borderRadius: "10px"
+    }}>
+      <div>Method:{request.method}</div>
+      <div>Params: {request.params}</div>
+      <Button variant="contained" type="submit" onClick={Accept} sx={{m: 1}}>Accept</Button>
+      <Button variant="contained" type="submit" onClick={Reject} sx={{m: 1}}>Reject</Button>
+    </div>
+  </div>)
 
   const toggleDrawer = () => {
     setOpen(!open);
   };
   return (
-    <ThemeProvider theme={theme}>
-      <Box sx={{ display: 'flex' }}>
-        <CssBaseline />
-        <AppBar
-          position="absolute"
-          open={open}
-          color="secondary"
-          elevation={0}
-          sx={{
-            backgroundColor: '#FFF',
-            boxShadow: '10px 14px 28px rgb(35 11 73 / 5%)',
-          }}
-        >
-          <Toolbar
+    <div>
+      <ThemeProvider theme={theme}>
+        <Box sx={{display: 'flex'}}>
+          <CssBaseline/>
+          <AppBar
+            position="absolute"
+            open={open}
+            color="secondary"
+            elevation={0}
             sx={{
-              pr: '24px', // keep right padding when drawer closed
+              backgroundColor: '#FFF',
+              boxShadow: '10px 14px 28px rgb(35 11 73 / 5%)',
             }}
           >
-            <IconButton
-              edge="start"
-              color="inherit"
-              aria-label="open drawer"
-              onClick={toggleDrawer}
+            <Toolbar
               sx={{
-                marginRight: '36px',
-                color: '#757575',
-                ...(open && { display: 'none' }),
+                pr: '24px', // keep right padding when drawer closed
               }}
             >
-              <MenuOutlinedIcon />
-            </IconButton>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                width: '100%',
-                alignContent: 'center',
-              }}
-            >
-              <Link to="/">
-                <Logo />
-              </Link>
-              <div
-                style={{
-                  marginTop: '2px',
+              <IconButton
+                edge="start"
+                color="inherit"
+                aria-label="open drawer"
+                onClick={toggleDrawer}
+                sx={{
+                  marginRight: '36px',
+                  color: '#757575',
+                  ...(open && {display: 'none'}),
                 }}
               >
-                <ConnectorLink />
-              </div>
-            </div>
-          </Toolbar>
-        </AppBar>
-        <Drawer variant="permanent" open={open}>
-          <Toolbar
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              px: [1],
-            }}
-          >
-            <IconButton onClick={toggleDrawer}>
-              <MenuOpenOutlinedIcon />
-            </IconButton>
-          </Toolbar>
-          <List component="nav">{mainListItems}</List>
-        </Drawer>
-        <Box
-          component="main"
-          sx={{
-            backgroundColor: (theme) =>
-              theme.palette.mode === 'light'
-                ? theme.palette.grey[100]
-                : theme.palette.grey[900],
-            flexGrow: 1,
-            height: '100vh',
-            overflow: 'auto',
-          }}
-        >
-          <Toolbar />
-          <Container
-            maxWidth="xl"
-            style={{
-              paddingTop: theme.spacing(3),
-              paddingBottom: theme.spacing(5),
-            }}
-          >
-            <Grid container spacing={3}>
-              <Grid item sm={12} md={12} lg={12}>
+                <MenuOutlinedIcon/>
+              </IconButton>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                  alignContent: 'center',
+                }}
+              >
+                <Link to="/">
+                  <Logo/>
+                </Link>
                 <div
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    borderBottom: `1px solid #EAEAEA`,
+                    marginTop: '2px',
                   }}
                 >
-                  <Breadcrumbs items={breadcrumbRoutes} />
+                  <ConnectorLink/>
                 </div>
+              </div>
+            </Toolbar>
+          </AppBar>
+          <Drawer variant="permanent" open={open}>
+            <Toolbar
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                px: [1],
+              }}
+            >
+              <IconButton onClick={toggleDrawer}>
+                <MenuOpenOutlinedIcon/>
+              </IconButton>
+            </Toolbar>
+            <List component="nav">{mainListItems}</List>
+          </Drawer>
+          <Box
+            component="main"
+            sx={{
+              backgroundColor: (theme) =>
+                theme.palette.mode === 'light'
+                  ? theme.palette.grey[100]
+                  : theme.palette.grey[900],
+              flexGrow: 1,
+              height: '100vh',
+              overflow: 'auto',
+            }}
+          >
+            <Toolbar/>
+            <Container
+              maxWidth="xl"
+              style={{
+                paddingTop: theme.spacing(3),
+                paddingBottom: theme.spacing(5),
+              }}
+            >
+              <Grid container spacing={3}>
+                <Grid item sm={12} md={12} lg={12}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      borderBottom: `1px solid #EAEAEA`,
+                    }}
+                  >
+                    <Breadcrumbs items={breadcrumbRoutes}/>
+                  </div>
+                </Grid>
+                <Outlet/>
               </Grid>
-              <Outlet />
-            </Grid>
-          </Container>
+            </Container>
+          </Box>
         </Box>
-      </Box>
-    </ThemeProvider>
+      </ThemeProvider>
+      {request && popup(request)}
+    </div>
   );
 }
