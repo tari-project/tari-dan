@@ -27,7 +27,6 @@ pub struct ConsensusConstants {
     pub base_layer_confirmations: u64,
     pub committee_size: u32,
     pub hotstuff_rounds: u64,
-    pub max_call_recursion_depth: usize,
 }
 
 impl ConsensusConstants {
@@ -36,7 +35,6 @@ impl ConsensusConstants {
             base_layer_confirmations: 3,
             committee_size: 7,
             hotstuff_rounds: 4,
-            max_call_recursion_depth: 10,
         }
     }
 

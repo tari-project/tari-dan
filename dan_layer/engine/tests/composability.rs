@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_core::consensus_constants::ConsensusConstants;
+use tari_dan_engine::transaction::MAX_CALL_DEPTH;
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
     instruction::Instruction,
@@ -329,7 +329,7 @@ fn it_allows_multiple_recursion_levels() {
 fn it_fails_when_surpassing_recursion_limit() {
     let mut test = setup();
     let (_, _, private_key) = test.template_test.create_owned_account();
-    let max_recursion_depth = ConsensusConstants::devnet().max_call_recursion_depth;
+    let max_recursion_depth = MAX_CALL_DEPTH;
 
     // innermost composability component
     let mut components = initialize_composability(&mut test);

@@ -32,7 +32,6 @@ wasmer = "2.3.0"
 wasmer-middlewares = "2.3.0"
 
 [dev-dependencies]
-tari_dan_core = { path = "../core" }
 tari_template_test_tooling = { path = "../template_test_tooling" }
 tari_transaction_manifest = { path = "../transaction_manifest" }
 tari_transaction = { path = "../transaction" }

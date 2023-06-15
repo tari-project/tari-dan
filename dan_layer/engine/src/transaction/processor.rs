@@ -62,6 +62,7 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::dan::engine::instruction_processor";
+pub const MAX_CALL_DEPTH: usize = 10;
 
 pub struct TransactionProcessor<TTemplateProvider> {
     // package: Package,
@@ -70,7 +71,6 @@ pub struct TransactionProcessor<TTemplateProvider> {
     auth_params: AuthParams,
     consensus: ConsensusContext,
     modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
-    max_call_recursion_depth: usize,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> TransactionProcessor<TTemplateProvider> {
@@ -80,7 +80,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         auth_params: AuthParams,
         consensus: ConsensusContext,
         modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
-        max_call_recursion_depth: usize,
     ) -> Self {
         Self {
             template_provider,
@@ -88,7 +87,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             auth_params,
             consensus,
             modules,
-            max_call_recursion_depth,
         }
     }
 
@@ -120,7 +118,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     &runtime,
                     auth_scope.clone(),
                     instruction,
-                    self.max_call_recursion_depth,
+                    MAX_CALL_DEPTH,
                 )
             })
             .collect::<Result<Vec<_>, _>>();
@@ -158,7 +156,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     &runtime,
                     auth_scope.clone(),
                     instruction,
-                    self.max_call_recursion_depth,
+                    MAX_CALL_DEPTH,
                 )
             })
             .collect::<Result<Vec<_>, _>>();

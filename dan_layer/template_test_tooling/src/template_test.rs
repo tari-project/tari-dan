@@ -16,7 +16,6 @@ use tari_crypto::{
     tari_utilities::{hex::Hex, ByteArray},
 };
 use tari_dan_common_types::crypto::create_key_pair;
-use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_engine::{
     bootstrap_state,
     fees::{FeeModule, FeeTable},
@@ -70,7 +69,6 @@ pub struct TemplateTest {
     consensus_context: ConsensusContext,
     enable_fees: bool,
     fee_table: FeeTable,
-    consensus_constants: ConsensusConstants,
 }
 
 impl TemplateTest {
@@ -123,7 +121,6 @@ impl TemplateTest {
             consensus_context: ConsensusContext { current_epoch: 0 },
             enable_fees: false,
             fee_table: FeeTable::new(1, 1),
-            consensus_constants: ConsensusConstants::devnet(),
         }
     }
 
@@ -382,7 +379,6 @@ impl TemplateTest {
             auth_params,
             self.consensus_context.clone(),
             modules,
-            self.consensus_constants.max_call_recursion_depth,
         );
 
         let result = processor.execute(transaction)?;
