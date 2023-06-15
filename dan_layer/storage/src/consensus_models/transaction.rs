@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::ShardId;
 use tari_engine_types::{commit_result::ExecuteResult, instruction::Instruction};
-use tari_transaction::{InstructionSignature, SubstateChange, TransactionMeta};
+use tari_transaction::InstructionSignature;
 
 use crate::{
     consensus_models::{Decision, TransactionId},
@@ -18,15 +18,37 @@ use crate::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
-    pub hash: TransactionId,
-    pub fee_instructions: Vec<Instruction>,
-    pub instructions: Vec<Instruction>,
-    pub signature: InstructionSignature,
-    pub sender_public_key: PublicKey,
-    pub meta: TransactionMeta,
+    hash: TransactionId,
+    fee_instructions: Vec<Instruction>,
+    instructions: Vec<Instruction>,
+    signature: InstructionSignature,
+    sender_public_key: PublicKey,
+
+    inputs: Vec<ShardId>,
+    outputs: Vec<ShardId>,
 }
 
 impl Transaction {
+    pub fn new(
+        hash: TransactionId,
+        fee_instructions: Vec<Instruction>,
+        instructions: Vec<Instruction>,
+        signature: InstructionSignature,
+        sender_public_key: PublicKey,
+        inputs: Vec<ShardId>,
+        outputs: Vec<ShardId>,
+    ) -> Self {
+        Self {
+            hash,
+            fee_instructions,
+            instructions,
+            signature,
+            sender_public_key,
+            inputs,
+            outputs,
+        }
+    }
+
     pub fn hash(&self) -> &TransactionId {
         &self.hash
     }
@@ -47,43 +69,29 @@ impl Transaction {
         &self.sender_public_key
     }
 
-    pub fn involved_shards(&self) -> HashSet<ShardId> {
-        self.meta
-            .involved_shards()
-            .into_iter()
-            .chain(
-                self.meta
-                    .required_inputs_iter()
-                    .map(|a| ShardId::from_address(a.address(), a.version().unwrap_or(0))),
-            )
-            .collect()
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+        self.inputs().iter().chain(self.outputs())
     }
 
-    pub fn meta(&self) -> &TransactionMeta {
-        &self.meta
+    pub fn outputs(&self) -> &[ShardId] {
+        &self.outputs
     }
 
-    pub fn outputs(&self) -> impl Iterator<Item = &ShardId> + '_ {
-        self.meta
-            .involved_objects_iter()
-            .filter(|(_, ch)| matches!(ch, SubstateChange::Create))
-            .map(|(s, _)| s)
-    }
-
-    pub fn inputs(&self) -> impl Iterator<Item = &ShardId> + '_ {
-        self.meta
-            .involved_objects_iter()
-            .filter(|(_, ch)| matches!(ch, SubstateChange::Destroy))
-            .map(|(s, _)| s)
+    pub fn inputs(&self) -> &[ShardId] {
+        &self.inputs
     }
 }
 
 pub struct ExecutedTransaction {
-    pub transaction: Transaction,
-    pub result: ExecuteResult,
+    transaction: Transaction,
+    result: ExecuteResult,
 }
 
 impl ExecutedTransaction {
+    pub fn new(transaction: Transaction, result: ExecuteResult) -> Self {
+        Self { transaction, result }
+    }
+
     pub fn decision(&self) -> Decision {
         if self.result.finalize.is_accept() {
             Decision::Accept
@@ -98,6 +106,14 @@ impl ExecutedTransaction {
         } else {
             Decision::Reject
         }
+    }
+
+    pub fn transaction(&self) -> &Transaction {
+        &self.transaction
+    }
+
+    pub fn result(&self) -> &ExecuteResult {
+        &self.result
     }
 }
 
@@ -124,7 +140,12 @@ impl ExecutedTransaction {
         let transactions = Self::get_many(tx, transactions)?;
         Ok(transactions
             .into_iter()
-            .map(|t| (t.transaction.hash, t.transaction.involved_shards()))
+            .map(|t| {
+                (
+                    t.transaction.hash,
+                    t.transaction.involved_shards_iter().copied().collect(),
+                )
+            })
             .collect())
     }
 }

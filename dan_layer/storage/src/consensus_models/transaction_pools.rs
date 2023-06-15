@@ -80,6 +80,9 @@ impl NewTransactionPool {
         tx: &mut TTx,
         max_txs: usize,
     ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
+        if max_txs == 0 {
+            return Ok(BTreeSet::new());
+        }
         let ready_txs = tx.new_transaction_pool_remove_many_ready(max_txs)?;
         tx.prepared_transaction_pool_insert_pending(&ready_txs)?;
         Ok(ready_txs)
@@ -111,6 +114,9 @@ impl PrepareTransactionPool {
         tx: &mut TTx,
         max_txs: usize,
     ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
+        if max_txs == 0 {
+            return Ok(BTreeSet::new());
+        }
         let ready_txs = tx.prepared_transaction_pool_remove_many_ready(max_txs)?;
         tx.precommitted_transaction_pool_insert_pending(&ready_txs)?;
         Ok(ready_txs)
@@ -142,6 +148,9 @@ impl PrecommitTransactionPool {
         tx: &mut TTx,
         max_txs: usize,
     ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
+        if max_txs == 0 {
+            return Ok(BTreeSet::new());
+        }
         let ready_txs = tx.precommitted_transaction_pool_remove_many_ready(max_txs)?;
         tx.committed_transaction_pool_insert_pending(&ready_txs)?;
         Ok(ready_txs)

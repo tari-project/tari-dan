@@ -89,7 +89,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
     pub fn set_committee_bucket(
         &mut self,
         shard_id: ShardId,
-        committee_bucket: u64,
+        committee_bucket: u32,
     ) -> Result<(), TGlobalDbAdapter::Error> {
         self.backend
             .validator_nodes_set_committee_bucket(self.tx, shard_id, committee_bucket)
