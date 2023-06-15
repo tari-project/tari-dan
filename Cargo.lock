@@ -7351,6 +7351,7 @@ dependencies = [
  "tari_common_types",
  "tari_dan_common_types",
  "tari_dan_storage",
+ "tari_mmr",
  "tari_shutdown",
  "thiserror",
  "tokio",
@@ -7638,10 +7639,12 @@ name = "tari_dan_storage"
 version = "0.50.0-pre.0"
 dependencies = [
  "chrono",
+ "digest 0.9.0",
  "log",
  "serde",
  "tari_common_types",
  "tari_core",
+ "tari_crypto",
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_mmr",

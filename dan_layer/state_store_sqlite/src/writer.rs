@@ -23,6 +23,7 @@ use tari_dan_storage::{
         PledgeCollection,
         TransactionDecision,
         TransactionId,
+        Vote,
     },
     StateStoreWriteTransaction,
     StorageError,
@@ -284,16 +285,18 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
     fn transactions_insert(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError> {
         use crate::schema::transactions;
 
-        let ExecutedTransaction { transaction, result } = executed_transaction;
+        let transaction = executed_transaction.transaction();
+        let result = executed_transaction.result();
 
         let insert = (
             transactions::transaction_id.eq(serialize_hex(transaction.hash())),
-            transactions::fee_instructions.eq(serialize_json(&transaction.fee_instructions())?),
-            transactions::instructions.eq(serialize_json(&transaction.instructions())?),
-            transactions::result.eq(serialize_json(&result)?),
+            transactions::fee_instructions.eq(serialize_json(transaction.fee_instructions())?),
+            transactions::instructions.eq(serialize_json(transaction.instructions())?),
+            transactions::result.eq(serialize_json(result)?),
             transactions::signature.eq(serialize_json(transaction.signature())?),
             transactions::sender_public_key.eq(serialize_hex(transaction.sender_public_key().as_bytes())),
-            transactions::involved_shards.eq(serialize_json(&transaction.involved_shards())?),
+            transactions::inputs.eq(serialize_json(transaction.inputs())?),
+            transactions::outputs.eq(serialize_json(transaction.outputs())?),
             transactions::is_finalized.eq(false),
         );
 
@@ -826,6 +829,29 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .collect::<Result<_, _>>()?;
 
         Ok(txs)
+    }
+
+    fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError> {
+        use crate::schema::votes;
+
+        let insert = (
+            votes::epoch.eq(vote.epoch.as_u64() as i64),
+            votes::block_id.eq(serialize_hex(vote.block_id)),
+            votes::sender.eq(serialize_hex(vote.sender)),
+            votes::decision.eq(i32::from(vote.decision.as_u8())),
+            votes::signature.eq(serialize_json(&vote.signature)?),
+            votes::merkle_proof.eq(serialize_json(&vote.merkle_proof)?),
+        );
+
+        diesel::insert_into(votes::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "votes_insert",
+                source: e,
+            })?;
+
+        Ok(())
     }
 }
 

@@ -3,6 +3,7 @@
 
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::{consensus_models::BlockId, StorageError};
+use tari_mmr::BalancedBinaryMerkleProofError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
@@ -10,8 +11,8 @@ pub enum HotStuffError {
     StorageError(#[from] StorageError),
     #[error("Internal channel send error when {context}")]
     InternalChannelClosed { context: &'static str },
-    #[error("Epoch {epoch} is not active. {context}")]
-    EpochNotActive { epoch: Epoch, context: String },
+    #[error("Epoch {epoch} is not active. {details}")]
+    EpochNotActive { epoch: Epoch, details: String },
     #[error("Received message from non-committee member. Epoch: {epoch}, Sender: {sender}, {context}")]
     ReceivedMessageFromNonCommitteeMember {
         epoch: Epoch,
@@ -22,6 +23,10 @@ pub enum HotStuffError {
     ProposalValidationError(#[from] ProposalValidationError),
     #[error("Decision mismatch for block {block_id} in pool {pool}")]
     DecisionMismatch { block_id: BlockId, pool: &'static str },
+    #[error("Not the leader. {details}")]
+    NotTheLeader { details: String },
+    #[error("Merkle proof error: {0}")]
+    BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
 }
 
 #[derive(Debug, thiserror::Error)]
