@@ -14,9 +14,7 @@ use tari_dan_common_types::{hashing, Epoch, NodeHeight, ShardId};
 use super::{QuorumCertificate, TransactionDecision};
 use crate::{
     consensus_models::{LastExecuted, LastVoted, LockedBlock, TransactionId},
-    StateStoreReadTransaction,
-    StateStoreWriteTransaction,
-    StorageError,
+    StateStoreReadTransaction, StateStoreWriteTransaction, StorageError,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +42,7 @@ impl Block {
         justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
+        // TODO: Remove Round, height is sufficient
         round: u64,
         proposed_by: ShardId,
         prepared: BTreeSet<TransactionDecision>,

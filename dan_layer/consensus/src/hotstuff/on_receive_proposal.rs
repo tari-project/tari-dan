@@ -11,24 +11,11 @@ use tari_dan_common_types::{
 };
 use tari_dan_storage::{
     consensus_models::{
-        Block,
-        CommittedTransactionPool,
-        ExecutedTransaction,
-        LastExecuted,
-        LastVoted,
-        LockedBlock,
-        NewTransactionPool,
-        PledgeCollection,
-        PrecommitTransactionPool,
-        PrepareTransactionPool,
-        QuorumCertificate,
-        QuorumDecision,
-        QuorumRejectReason,
-        TransactionDecision,
+        Block, CommittedTransactionPool, ExecutedTransaction, LastExecuted, LastVoted, LockedBlock, NewTransactionPool,
+        PledgeCollection, PrecommitTransactionPool, PrepareTransactionPool, QuorumCertificate, QuorumDecision,
+        QuorumRejectReason, TransactionDecision,
     },
-    StateStore,
-    StateStoreReadTransaction,
-    StateStoreWriteTransaction,
+    StateStore, StateStoreReadTransaction, StateStoreWriteTransaction,
 };
 use tokio::sync::mpsc;
 
@@ -119,6 +106,7 @@ where
         })?;
 
         if let Some(vote) = maybe_vote {
+            // TODO: Should be the next leader, not the current
             let leader = self.leader_strategy.get_leader(&local_committee, &vote.block_id, 0);
             self.send_to_leader(leader, vote).await?;
         }
@@ -204,6 +192,7 @@ where
                 pool: "new",
             });
         }
+        // TODO: we should only move the transactions that are in the justify, not the proposal.
         let prepared = NewTransactionPool::move_specific_to_prepare(tx, block.prepared())?;
         self.create_local_pledges(tx, block, &prepared, local_committee_shard)?;
 
@@ -246,6 +235,17 @@ where
         tx: &mut TTx,
         block: &Block,
     ) -> Result<(), HotStuffError> {
+        // TODO: only mark ready when all votes are received.
+
+        for transaction in block.prepared() {
+            match TransactionPools::add_foreign_transaction_vote(tx, transaction, block, TransactionStage::Prepare)? {
+                TransactionPoolAddResult::Found => {},
+                TransactionPoolAddResult::NeverSeen => {},
+                TransactionPoolAddResult::AlreadyMoved => {},
+            }
+            // NewTransactionPool::mark_specific_ready(tx, transaction)?;
+        }
+
         // TODO: Think we need to check local pledges here
         PrepareTransactionPool::mark_specific_ready(tx, block.precommitted())?;
         PrecommitTransactionPool::mark_specific_ready(tx, block.committed())?;
@@ -390,10 +390,12 @@ where
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block: &Block,
     ) -> Result<bool, HotStuffError> {
-        let Some(last_voted) = LastVoted::get(tx, block.epoch()).optional()? else {
-            // Never voted, then validated.block.height() > last_voted.height (0)
-            return Ok(true);
-        };
+        // let Some(last_voted) = LastVoted::get(tx, block.epoch()).optional()? else {
+        //     Never voted, then validated.block.height() > last_voted.height (0)
+        // return Ok(true);
+        // };
+
+        // TODO: this logic is incorrect due to the OR and AND being switched around
 
         // if b_new .height > vheight And ...
         if block.height() <= last_voted.height {

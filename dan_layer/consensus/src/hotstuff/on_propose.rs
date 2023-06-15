@@ -7,16 +7,10 @@ use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch, NodeHeight, ShardId};
 use tari_dan_storage::{
     consensus_models::{
-        Block,
-        HighQc,
-        LeafBlock,
-        NewTransactionPool,
-        PrecommitTransactionPool,
-        PrepareTransactionPool,
+        Block, HighQc, LeafBlock, NewTransactionPool, PrecommitTransactionPool, PrepareTransactionPool,
         QuorumCertificate,
     },
-    StateStore,
-    StateStoreWriteTransaction,
+    StateStore, StateStoreWriteTransaction,
 };
 use tokio::sync::mpsc;
 
@@ -109,6 +103,7 @@ where
             .filter(|bucket| *bucket != local_bucket)
             .collect::<HashSet<_>>();
 
+        // TODO: We can actually just take f + 1 from each foreign committee and let them gossip it around
         let non_local_committees = self
             .epoch_manager
             .get_committees_by_buckets(epoch, non_local_buckets)
@@ -144,6 +139,7 @@ where
         const TARGET_BLOCK_SIZE: usize = 1000;
         let mut remaining_txs = TARGET_BLOCK_SIZE;
 
+        // TODO: These should not be moved until we have a valid QC that they are moved.
         let commit_txs = PrecommitTransactionPool::move_many_to_committed(tx, remaining_txs)?;
         remaining_txs -= commit_txs.len();
         let precommit_txs = PrepareTransactionPool::move_many_to_precommit(tx, remaining_txs)?;

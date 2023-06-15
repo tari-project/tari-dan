@@ -7,9 +7,7 @@ use async_trait::async_trait;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::ValidatorNodeMerkleProof,
-    Epoch,
-    NodeAddressable,
-    ShardId,
+    Epoch, NodeAddressable, ShardId,
 };
 
 #[async_trait]
@@ -48,11 +46,6 @@ pub trait EpochManager: Send + Sync {
     ) -> Result<bool, Self::Error> {
         let committee = self.get_local_committee(epoch).await?;
         Ok(committee.contains(validator_addr))
-    }
-
-    async fn is_current_epoch_active(&self) -> Result<bool, Self::Error> {
-        let current_epoch = self.current_epoch().await?;
-        self.is_epoch_active(current_epoch).await
     }
 
     async fn get_current_epoch_committee(&self, shard: ShardId) -> Result<Committee<Self::Addr>, Self::Error> {
