@@ -25,7 +25,7 @@ use tari_dan_common_types::NodeHeight;
 #[derive(Clone, Debug)]
 pub struct ConsensusConstants {
     pub base_layer_confirmations: u64,
-    pub committee_size: u64,
+    pub committee_size: u32,
     pub hotstuff_rounds: u64,
     pub max_call_recursion_depth: usize,
 }

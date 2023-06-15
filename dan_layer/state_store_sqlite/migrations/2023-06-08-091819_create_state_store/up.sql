@@ -48,8 +48,8 @@ create table substates
     destroyed_at_epoch           bigint    NULL,
     created_justify_leader       text      NULL,
     destroyed_justify_leader     text      NULL,
-    created_timestamp            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
-    destroyed_timestamp          timestamp NULL
+    created_at                   timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    destroyed_at                 timestamp NULL
 );
 
 -- All shard ids are unique
@@ -100,9 +100,9 @@ create table transactions
     instructions      text      not NULL,
     sender_public_key text      not NULL,
     signature         text      not NULL,
-    meta              text      not NULL,
+    inputs            text      not NULL,
+    outputs           text      not NULL,
     result            text      not NULL,
-    involved_shards   text      not NULL,
     is_finalized      boolean   NOT NULL DEFAULT '0',
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -181,4 +181,16 @@ create table pledges
     created_at                timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at                timestamp NULL,
     FOREIGN KEY (shard_id) REFERENCES substates (shard_id)
+);
+
+create table votes
+(
+    id           integer   not null primary key AUTOINCREMENT,
+    epoch        bigint    not null,
+    block_id     text      not NULL,
+    decision     integer   not null,
+    sender       text      not NULL,
+    signature    text      not NULL,
+    merkle_proof text      not NULL,
+    created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -1,19 +1,46 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use log::*;
+use std::ops::DerefMut;
 
-use crate::{hotstuff::error::HotStuffError, messages::VoteMessage, traits::ConsensusSpec};
+use log::*;
+use tari_dan_common_types::hashing::MergedValidatorNodeMerkleProof;
+use tari_dan_storage::{
+    consensus_models::{Block, QuorumCertificate, Vote},
+    StateStore,
+    StateStoreWriteTransaction,
+};
+
+use crate::{
+    hotstuff::{common::update_high_qc, error::HotStuffError},
+    messages::VoteMessage,
+    traits::{ConsensusSpec, EpochManager, LeaderStrategy},
+};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_vote";
 
 pub struct OnReceiveVoteHandler<TConsensusSpec: ConsensusSpec> {
-    _store: TConsensusSpec::StateStore,
+    store: TConsensusSpec::StateStore,
+    leader_strategy: TConsensusSpec::LeaderStrategy,
+    epoch_manager: TConsensusSpec::EpochManager,
 }
 
-impl<TConsensusSpec: ConsensusSpec> OnReceiveVoteHandler<TConsensusSpec> {
-    pub fn new(store: TConsensusSpec::StateStore) -> Self {
-        Self { _store: store }
+impl<TConsensusSpec> OnReceiveVoteHandler<TConsensusSpec>
+where
+    TConsensusSpec: ConsensusSpec,
+    HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
+{
+    pub fn new(
+        store: TConsensusSpec::StateStore,
+        leader_strategy: TConsensusSpec::LeaderStrategy,
+
+        epoch_manager: TConsensusSpec::EpochManager,
+    ) -> Self {
+        Self {
+            store,
+            leader_strategy,
+            epoch_manager,
+        }
     }
 
     pub async fn handle(&self, from: TConsensusSpec::Addr, message: VoteMessage) -> Result<(), HotStuffError> {
@@ -21,89 +48,101 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveVoteHandler<TConsensusSpec> {
             target: LOG_TARGET,
             "🔥 Receive VOTE for node {} from {}", message.block_id, from,
         );
-        todo!()
-        // let mut on_propose = None;
-        // let node;
-        // {
-        //     let mut tx = self.shard_store.create_read_tx()?;
-        //     // Avoid duplicates
-        //     if tx.has_vote_for(&from, msg.local_node_hash())? {
-        //         println!("🔥 Vote with node hash {} already received", msg.local_node_hash());
-        //         return Ok(());
-        //     }
-        //
-        //     node = tx
-        //         .get_node(&msg.local_node_hash())
-        //         .optional()?
-        //         .ok_or(HotStuffError::InvalidVote(format!(
-        //             "Node with hash {} not found",
-        //             msg.local_node_hash()
-        //         )))?;
-        //     if *node.proposed_by() != self.public_key {
-        //         return Err(HotStuffError::NotTheLeader);
-        //     }
-        // }
-        //
-        // let valid_committee = self.epoch_manager.get_committee(node.epoch(), node.shard()).await?;
-        // {
-        //     if !valid_committee.contains(&from) {
-        //         return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember);
-        //     }
-        //     let mut tx = self.shard_store.create_write_tx()?;
-        //
-        //     // Collect votes
-        //     tx.save_received_vote_for(from, msg.local_node_hash(), msg.clone())?;
-        //
-        //     let votes: Vec<VoteMessage> = tx.get_received_votes_for(msg.local_node_hash())?;
-        //
-        //     if votes.len() == valid_committee.consensus_threshold() {
-        //         let validator_metadata = votes.iter().map(|v| v.validator_metadata().clone()).collect();
-        //         let proofs = votes
-        //             .iter()
-        //             .map(|v| v.merkle_proof().unwrap().clone())
-        //             .collect::<Vec<_>>();
-        //
-        //         let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(proofs).unwrap();
-        //         let leaf_hashes = votes.iter().map(|v| v.node_hash()).collect::<Vec<_>>();
-        //
-        //         // TODO: Check all votes
-        //         let main_vote = votes.get(0).unwrap();
-        //
-        //         let qc = QuorumCertificate::new(
-        //             node.payload_id(),
-        //             node.payload_height(),
-        //             *node.hash(),
-        //             node.height(),
-        //             node.shard(),
-        //             node.epoch(),
-        //             self.public_key.clone(),
-        //             main_vote.decision(),
-        //             main_vote.all_shard_pledges().clone(),
-        //             validator_metadata,
-        //             Some(merged_proof),
-        //             leaf_hashes,
-        //         );
-        //         self.update_high_qc(&mut tx, node.proposed_by().clone(), qc)?;
-        //
-        //         on_propose = Some((node.shard(), node.payload_id()));
-        //     }
-        //
-        //     // commit the transaction
-        //     tx.commit()?;
-        // }
-        //
-        // // Propose the next node
-        // if let Some((shard_id, payload_id)) = on_propose {
-        //     // TODO: This should go in a some component that controls message flows and events
-        //     let epoch = self.epoch_manager.current_epoch().await?;
-        //     let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
-        //     if committee.is_empty() {
-        //         return Err(HotStuffError::NoCommitteeForShard { shard: shard_id, epoch });
-        //     }
-        //     if self.is_leader(payload_id, shard_id, &committee)? {
-        //         self.leader_on_propose(shard_id, payload_id).await?;
-        //     }
-        // }
-        // Ok(())
+
+        // Is a committee member sending us this vote?
+        let committee = self.epoch_manager.get_local_committee(message.epoch).await?;
+        if !committee.contains(&from) {
+            return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
+                epoch: message.epoch,
+                sender: from.to_string(),
+                context: "OnVoteReceived".to_string(),
+            });
+        }
+
+        // Are we the leader for the block being voted for?
+        let addr = self.epoch_manager.get_our_validator_addr(message.epoch).await?;
+        if !self.leader_strategy.is_leader(&addr, &committee, &message.block_id, 0) {
+            return Err(HotStuffError::NotTheLeader {
+                details: format!("Not this leader for block {}, vote sent by {}", message.block_id, addr),
+            });
+        }
+
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
+
+        // Get the sender shard, and check that they are in the local committee
+        let sender_shard_id = self
+            .epoch_manager
+            .get_validator_shard(message.epoch, from.clone())
+            .await?;
+        if !local_committee_shard.includes_shard(&sender_shard_id) {
+            return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
+                epoch: message.epoch,
+                sender: from.to_string(),
+                context: "OnVoteReceived".to_string(),
+            });
+        }
+
+        let our_validator_shard_id = self.epoch_manager.get_our_validator_shard(message.epoch).await?;
+
+        let mut tx = self.store.create_write_tx()?;
+        let block = Block::get(tx.deref_mut(), &message.block_id)?;
+        if *block.proposed_by() != our_validator_shard_id {
+            return Err(HotStuffError::NotTheLeader {
+                details: format!(
+                    "Block {} was not proposed by this validator {}",
+                    message.block_id, our_validator_shard_id
+                ),
+            });
+        }
+
+        Vote {
+            epoch: message.epoch,
+            block_id: message.block_id,
+            decision: message.decision,
+            sender: sender_shard_id,
+            signature: message.signature,
+            merkle_proof: message.merkle_proof,
+        }
+        .save(&mut tx)?;
+
+        let count = Vote::count_for_block(tx.deref_mut(), &message.block_id)?;
+
+        // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
+        // in the QC.
+        if count != local_committee_shard.quorum_threshold() as usize {
+            info!(
+                target: LOG_TARGET,
+                "🔥 Received vote for block {} from {} ({} of {})",
+                message.block_id,
+                from,
+                count,
+                local_committee_shard.quorum_threshold()
+            );
+            tx.commit()?;
+            return Ok(());
+        }
+
+        let votes = Vote::get_for_block(tx.deref_mut(), &message.block_id)?;
+
+        let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
+        let leaf_hashes = votes.iter().map(|v| v.signature.create_challenge()).collect::<Vec<_>>();
+        let proofs = votes.iter().map(|v| v.merkle_proof.clone()).collect();
+        let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(proofs)?;
+
+        let qc = QuorumCertificate::new(
+            *block.id(),
+            block.height(),
+            block.epoch(),
+            0,
+            signatures,
+            merged_proof,
+            leaf_hashes,
+        );
+
+        update_high_qc::<TConsensusSpec::StateStore>(&mut tx, &qc)?;
+
+        tx.commit()?;
+
+        Ok(())
     }
 }
