@@ -10,13 +10,18 @@ edition = "2021"
 [dependencies]
 tari_app_grpc = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
 tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
+tari_base_node = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2", package = "tari_base_node" }
 tari_base_node_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
 tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
 tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
+tari_comms_dht = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2", package = "tari_comms_dht" }
 tari_comms_logging = { path = "../comms/tari_comms_logging" }
+tari_console_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2", package = "tari_console_wallet" }
 tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2", default-features = false, features = ["transactions"] }
 tari_crypto ={ version = "0.16" }
+tari_indexer = { path = "../applications/tari_indexer" }
+tari_validator_node_cli = { path = "../applications/tari_validator_node_cli" }
 tari_validator_node_rpc = { path = "../dan_layer/validator_node_rpc" }
 tari_dan_app_utilities = { path = "../applications/tari_dan_app_utilities" }
 tari_dan_common_types = { path = "../dan_layer/common_types" }
@@ -24,6 +29,7 @@ tari_dan_core = { path = "../dan_layer/core" }
 tari_dan_engine = { path = "../dan_layer/engine" }
 tari_dan_storage = { path = "../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../dan_layer/storage_sqlite" }
+tari_dan_wallet_daemon = { path = "../applications/tari_dan_wallet_daemon" }
 tari_engine_types = { path = "../dan_layer/engine_types" }
 tari_indexer_client = { path = "../clients/tari_indexer_client" }
 tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
@@ -38,19 +44,25 @@ tari_wallet_daemon_client = { path = "../clients/wallet_daemon_client" }
 tari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2" }
 tari_base_node_client = { path = "../clients/base_node_client" }
 tari_epoch_manager = { path = "../dan_layer/epoch_manager", features = ["base_layer"] }
+tari_transaction_manifest = { path = "../dan_layer/transaction_manifest" }
+tari_dan_wallet_sdk = { path = "../dan_layer/wallet/sdk" }
+tari_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.2", package = "tari_wallet" }
 #tari_consensus = { path = "../../dan_layer/consensus" }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"
 axum = "0.6.0"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
+base64 = "0.21.0"
 bytes = "1"
 chrono = "0.4.22"
 clap = { version = "3.2.5", features = ["env"] }
 config = "0.13.0"
 cucumber = { version = "0.18.0", features = ["default", "libtest", "output-junit"] }
 futures = { version = "^0.3.1" }
+httpmock = { git = "https://github.com/sdbondi/httpmock.git", branch = "remove-signal-handling" }
 include_dir = "0.7.2"
+indexmap = "1.9.1"
 json5 = "0.2.2"
 lazy_static = "1.4.0"
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }

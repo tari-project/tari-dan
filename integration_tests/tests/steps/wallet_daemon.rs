@@ -8,7 +8,7 @@ use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_template_lib::prelude::Amount;
 
-use crate::{utils::wallet_daemon_cli, TariWorld};
+use integration_tests::{wallet_daemon_cli, TariWorld};
 
 #[when(
     expr = "I claim burn {word} with {word}, {word} and {word} and spend it into account {word} via the wallet daemon \

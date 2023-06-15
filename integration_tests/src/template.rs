@@ -8,7 +8,7 @@ use tari_engine_types::{hashing::template_hasher, TemplateAddress};
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{TemplateRegistrationRequest, TemplateRegistrationResponse};
 
-use crate::{utils::validator_node::get_vn_client, TariWorld};
+use crate::{validator_node::get_vn_client, TariWorld};
 
 #[derive(Debug)]
 pub struct RegisteredTemplate {

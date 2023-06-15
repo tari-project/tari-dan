@@ -11,7 +11,7 @@ use tari_template_lib::args;
 use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest, TransactionFinalizeResult};
 
-use crate::{utils::validator_node_cli::create_key, TariWorld};
+use integration_tests::{validator_node_cli::create_key, TariWorld};
 
 #[then(expr = "validator node {word} has state at {word}")]
 async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String, state_address_name: String) {

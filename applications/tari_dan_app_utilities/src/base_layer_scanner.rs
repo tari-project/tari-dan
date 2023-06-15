@@ -354,11 +354,16 @@ impl BaseLayerScanner {
                 // Technically impossible, but anyway
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
+        let encrypted_data_bytes = output.encrypted_data.to_byte_vec();
+        let encrypted_data_len = encrypted_data_bytes.len();
+        let mut encrypted_nonce = [0u8; EncryptedValue::size()];
+        encrypted_nonce
+            .copy_from_slice(&encrypted_data_bytes[(encrypted_data_len - EncryptedValue::size())..encrypted_data_len]);
         let substate = Substate::new(
             0,
             SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
                 commitment: output.commitment.clone(),
-                encrypted_value: EncryptedValue(output.encrypted_data.0),
+                encrypted_value: EncryptedValue(encrypted_nonce),
             }),
         );
         let shard_id = ShardId::from_address(&address, 0);

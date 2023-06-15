@@ -7,7 +7,7 @@ use httpmock::MockServer;
 use tari_shutdown::ShutdownSignal;
 use tokio::task;
 
-use crate::utils::helpers::get_os_assigned_port;
+use crate::helpers::get_os_assigned_port;
 
 pub struct MockHttpServer {
     server: MockServer,
