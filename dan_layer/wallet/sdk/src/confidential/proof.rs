@@ -265,7 +265,7 @@ mod tests {
             let encrypted = encrypt_value(&key, &commitment, amount).unwrap();
 
             let val = decrypt_value_and_mask(&key, &commitment, &encrypted).unwrap();
-            assert_eq!(val, 100);
+            assert_eq!(val.0, 100);
         }
     }
 }

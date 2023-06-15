@@ -53,6 +53,7 @@ pub async fn send_template_registration(
 
 pub fn compile_wasm_template(template_name: String) -> Result<Hash, anyhow::Error> {
     let mut template_path = get_template_root_path();
+
     template_path.push(template_name);
     let wasm_module = compile_template(template_path.as_path(), &[])?;
     let wasm_code = wasm_module.code();
@@ -82,6 +83,6 @@ pub fn get_template_wasm_path(template_name: String) -> PathBuf {
 //
 fn get_template_root_path() -> PathBuf {
     let mut template_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    template_path.push("integration_tests/src/templates");
+    template_path.push("src/templates");
     template_path
 }
