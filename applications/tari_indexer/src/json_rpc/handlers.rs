@@ -63,6 +63,7 @@ use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClie
 
 use crate::{
     bootstrap::Services,
+    dry_run::processor::DryRunTransactionProcessor,
     json_rpc::special_substate_encoding::encode_substate_into_json,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
@@ -91,6 +92,7 @@ pub struct JsonRpcHandlers {
     base_node_client: GrpcBaseNodeClient,
     substate_manager: Arc<SubstateManager>,
     transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+    dry_run_transaction_processor: DryRunTransactionProcessor,
 }
 
 impl JsonRpcHandlers {
@@ -100,6 +102,7 @@ impl JsonRpcHandlers {
         base_node_client: GrpcBaseNodeClient,
         substate_manager: Arc<SubstateManager>,
         transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+        dry_run_transaction_processor: DryRunTransactionProcessor,
     ) -> Self {
         Self {
             consensus_constants,
@@ -108,6 +111,7 @@ impl JsonRpcHandlers {
             base_node_client,
             substate_manager,
             transaction_manager,
+            dry_run_transaction_processor,
         }
     }
 
@@ -488,15 +492,27 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: SubmitTransactionRequest = value.parse_params()?;
 
-        let payload_id = self
-            .transaction_manager
-            .submit_transaction(request.transaction)
-            .await
-            .map_err(|e| Self::internal_error(answer_id, e))?;
+        if request.is_dry_run {
+            let exec_result = self
+                .dry_run_transaction_processor
+                .process_transaction(&request.transaction)
+                .await
+                .map_err(|e| Self::internal_error(answer_id, e))?;
 
-        Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-            transaction_hash: payload_id.into_array().into(),
-        }))
+            Ok(JsonRpcResponse::success(answer_id, GetTransactionResultResponse {
+                execution_result: Some(exec_result),
+            }))
+        } else {
+            let payload_id = self
+                .transaction_manager
+                .submit_transaction(request.transaction)
+                .await
+                .map_err(|e| Self::internal_error(answer_id, e))?;
+
+            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+                transaction_hash: payload_id.into_array().into(),
+            }))
+        }
     }
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
