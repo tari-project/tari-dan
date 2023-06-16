@@ -52,6 +52,7 @@ where
     TConsensusSpec::StateStore: Clone + Send + Sync + 'static,
     TConsensusSpec::EpochManager: Clone + Send + Sync + 'static,
     TConsensusSpec::LeaderStrategy: Clone + Send + Sync + 'static,
+    TConsensusSpec::VoteSignatureService: Clone + Send + Sync + 'static,
     HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
 {
     pub fn new(
@@ -61,20 +62,21 @@ where
         state_store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
-        signing_service: TConsensusSpec::VoteSigningService,
+        signing_service: TConsensusSpec::VoteSignatureService,
         tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         shutdown: ShutdownSignal,
     ) -> Self {
         let on_beat = OnBeat::new();
         Self {
-            validator_addr,
+            validator_addr: validator_addr.clone(),
             rx_new_transactions,
             rx_hs_message,
             on_receive_proposal: OnReceiveProposalHandler::new(
+                validator_addr,
                 state_store.clone(),
                 epoch_manager.clone(),
-                signing_service,
+                signing_service.clone(),
                 leader_strategy.clone(),
                 tx_leader,
                 on_beat.clone(),
@@ -83,6 +85,7 @@ where
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
+                signing_service,
                 on_beat.clone(),
             ),
             on_receive_new_view: OnReceiveNewViewHandler::new(

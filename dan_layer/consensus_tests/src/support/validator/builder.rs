@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
-    signing_service::TestVoteSigningService,
+    signing_service::TestVoteSignatureService,
     SelectedIndexLeaderStrategy,
     TestConsensusSpec,
     Validator,
@@ -59,7 +59,7 @@ impl ValidatorBuilder {
         let (tx_leader, rx_leader) = mpsc::channel(1);
 
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
-        let signing_service = TestVoteSigningService::new();
+        let signing_service = TestVoteSignatureService::new();
         let shutdown = Shutdown::new();
         let shutdown_signal = shutdown.to_signal();
 

@@ -5,7 +5,6 @@ use std::{collections::BTreeSet, ops::DerefMut};
 use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    hashing::ValidatorNodeMerkleProof,
     optional::Optional,
     NodeHeight,
 };
@@ -34,15 +33,16 @@ use tokio::sync::mpsc;
 use crate::{
     hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat, ProposalValidationError},
     messages::{HotstuffMessage, ProposalMessage, VoteMessage},
-    traits::{ConsensusSpec, EpochManager, LeaderStrategy, VoteSigningService},
+    traits::{ConsensusSpec, EpochManager, LeaderStrategy, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_proposal";
 
 pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
+    validator_addr: TConsensusSpec::Addr,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
-    vote_signing_service: TConsensusSpec::VoteSigningService,
+    vote_signing_service: TConsensusSpec::VoteSignatureService,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     on_beat: OnBeat,
@@ -54,14 +54,16 @@ where
     HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
 {
     pub fn new(
+        validator_addr: TConsensusSpec::Addr,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
-        vote_signing_service: TConsensusSpec::VoteSigningService,
+        vote_signing_service: TConsensusSpec::VoteSignatureService,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         on_beat: OnBeat,
     ) -> Self {
         Self {
+            validator_addr,
             store,
             epoch_manager,
             vote_signing_service,
@@ -120,25 +122,22 @@ where
             Ok::<_, HotStuffError>(())
         })?;
 
-        let merkle_proof = self
-            .epoch_manager
-            .get_validator_node_merkle_proof(block.epoch())
-            .await?;
-
-        let maybe_vote = self.store.with_write_tx(|tx| {
+        let maybe_decision = self.store.with_write_tx(|tx| {
             let should_vote = self.should_vote(&mut *tx, &block)?;
 
-            let mut maybe_vote = None;
+            let mut maybe_decision = None;
             if should_vote {
-                let vote = self.decide_and_vote(tx, &block, local_committee_shard, merkle_proof)?;
-                maybe_vote = Some(vote);
+                let decision = self.decide_and_vote(tx, &block, local_committee_shard)?;
+                maybe_decision = Some(decision);
             }
 
             self.update_nodes(tx, &block)?;
-            Ok::<_, HotStuffError>(maybe_vote)
+            Ok::<_, HotStuffError>(maybe_decision)
         })?;
 
-        if let Some(vote) = maybe_vote {
+        if let Some(decision) = maybe_decision {
+            let vote = self.generate_vote_message(&block, decision).await?;
+
             self.send_to_leader(&local_committee, vote).await?;
         }
 
@@ -176,44 +175,45 @@ where
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
         local_committee_shard: CommitteeShard,
-        merkle_proof: ValidatorNodeMerkleProof,
-    ) -> Result<VoteMessage, HotStuffError> {
+    ) -> Result<QuorumDecision, HotStuffError> {
         block.set_as_last_voted(tx)?;
 
         match self.decide_on_local_block(tx, block, local_committee_shard) {
             Ok(()) => {
-                let vote = self.generate_vote_message(block, QuorumDecision::Accept, merkle_proof);
                 info!(target: LOG_TARGET, "✅ Accepting block {}", block.id());
-                Ok(vote)
+                Ok(QuorumDecision::Accept)
             },
+            // TODO: implement specific failure cases
             Err(e) => {
-                // TODO: implement specific failure cases
-                let vote = self.generate_vote_message(
-                    block,
-                    QuorumDecision::Reject(QuorumRejectReason::TransactionPoolsDisagree),
-                    merkle_proof,
-                );
                 info!(target: LOG_TARGET, "❌ Rejecting block {}: {}", block.id(), e);
-                Ok(vote)
+                Ok(QuorumDecision::Reject(QuorumRejectReason::TransactionPoolsDisagree))
             },
         }
     }
 
-    fn generate_vote_message(
+    async fn generate_vote_message(
         &self,
         block: &Block,
         decision: QuorumDecision,
-        merkle_proof: ValidatorNodeMerkleProof,
-    ) -> VoteMessage {
-        let signature = self.vote_signing_service.sign_vote(block.id(), decision);
+    ) -> Result<VoteMessage, HotStuffError> {
+        let merkle_proof = self
+            .epoch_manager
+            .get_validator_node_merkle_proof(block.epoch())
+            .await?;
+        let leaf_hash = self
+            .epoch_manager
+            .get_validator_leaf_hash(block.epoch(), self.validator_addr.clone())
+            .await?;
 
-        VoteMessage {
+        let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
+
+        Ok(VoteMessage {
             epoch: block.epoch(),
             block_id: *block.id(),
             decision,
             signature,
             merkle_proof,
-        }
+        })
     }
 
     /// Update the transaction pools by moving all transactions into the next pool/phase or error if this is not
@@ -417,6 +417,8 @@ where
                 ),
             });
         }
+
+        // candidate_block.proposed_by()
 
         // TODO: validate justify signatures
         // self.validate_qc(candidate_block.justify(), committee)?;

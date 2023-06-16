@@ -3,9 +3,10 @@
 
 use std::fmt::Display;
 
+use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{hasher::tari_hasher, hashing::TariDanConsensusHashDomain, NodeAddressable, ShardId};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct TestAddress(pub &'static str);
 
 impl TestAddress {

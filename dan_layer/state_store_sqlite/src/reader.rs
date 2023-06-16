@@ -14,6 +14,7 @@ use diesel::{
     RunQueryDsl,
     SqliteConnection,
 };
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_storage::{
     consensus_models::{
@@ -567,12 +568,16 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         votes.into_iter().map(Vote::try_from).collect()
     }
 
-    fn votes_get_by_block_and_sender(&mut self, block_id: &BlockId, sender: &ShardId) -> Result<Vote, StorageError> {
+    fn votes_get_by_block_and_sender(
+        &mut self,
+        block_id: &BlockId,
+        sender_leaf_hash: &FixedHash,
+    ) -> Result<Vote, StorageError> {
         use crate::schema::votes;
 
         let vote = votes::table
             .filter(votes::block_id.eq(serialize_hex(block_id)))
-            .filter(votes::sender.eq(serialize_hex(sender)))
+            .filter(votes::sender_leaf_hash.eq(serialize_hex(sender_leaf_hash)))
             .first::<sql_models::Vote>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "votes_get",

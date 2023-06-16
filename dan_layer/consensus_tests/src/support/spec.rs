@@ -7,7 +7,7 @@ use tari_state_store_sqlite::SqliteStateStore;
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
-    signing_service::TestVoteSigningService,
+    signing_service::TestVoteSignatureService,
     SelectedIndexLeaderStrategy,
 };
 
@@ -18,5 +18,5 @@ impl ConsensusSpec for TestConsensusSpec {
     type EpochManager = TestEpochManager;
     type LeaderStrategy = SelectedIndexLeaderStrategy;
     type StateStore = SqliteStateStore;
-    type VoteSigningService = TestVoteSigningService;
+    type VoteSignatureService = TestVoteSignatureService;
 }

@@ -24,11 +24,11 @@ pub struct Transaction {
     signature: InstructionSignature,
     sender_public_key: PublicKey,
 
-    /// Inputs that may be downed in this transaction
+    /// Input objects that may be downed in this transaction
     inputs: Vec<ShardId>,
-    /// Inputs that must exist but cannot be downed
-    exists: Vec<ShardId>,
-    /// Outputs that will be created in this transaction
+    /// Input objects that must exist but cannot be downed
+    referenced: Vec<ShardId>,
+    /// Output objects that will be created in this transaction
     outputs: Vec<ShardId>,
 }
 
@@ -50,7 +50,7 @@ impl Transaction {
             signature,
             sender_public_key,
             inputs,
-            exists,
+            referenced: exists,
             outputs,
         }
     }
@@ -84,7 +84,7 @@ impl Transaction {
     }
 
     pub fn exists(&self) -> &[ShardId] {
-        &self.exists
+        &self.referenced
     }
 
     pub fn inputs(&self) -> &[ShardId] {
@@ -191,7 +191,7 @@ impl From<tari_transaction::Transaction> for Transaction {
                 .filter(|(_, ch)| ch.is_destroy())
                 .map(|(s, _)| *s)
                 .collect(),
-            exists: value
+            referenced: value
                 .meta()
                 .involved_objects_iter()
                 .filter(|(_, ch)| ch.is_exists())

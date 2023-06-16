@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::{consensus_models::BlockId, StorageError};
 use tari_mmr::BalancedBinaryMerkleProofError;
@@ -31,6 +32,8 @@ pub enum HotStuffError {
     BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
     #[error("Epoch manager error: {0}")]
     EpochManagerError(anyhow::Error),
+    #[error("Invalid vote signature from {signer_public_key} (unauthenticated)")]
+    InvalidVoteSignature { signer_public_key: PublicKey },
 }
 
 // This removes the need for `map_err`s for every epoch manager call

@@ -31,19 +31,23 @@ use crate::hasher::{tari_hasher, TariHasher};
 hash_domain!(TariDanConsensusHashDomain, "tari.dan.consensus", 0);
 
 pub fn block_hasher() -> TariHasher {
-    dan_hasher("block")
+    dan_hasher("Block")
 }
 
 pub fn quorum_certificate_hasher() -> TariHasher {
-    dan_hasher("quorum_certificate")
+    dan_hasher("QuorumCertificate")
 }
 
 pub fn pledge_hasher() -> TariHasher {
-    dan_hasher("pledges")
+    dan_hasher("Pledges")
 }
 
 pub fn vote_hasher() -> TariHasher {
-    dan_hasher("vote")
+    dan_hasher("Vote")
+}
+
+pub fn vote_signature_hasher() -> TariHasher {
+    dan_hasher("VoteSignature")
 }
 
 fn dan_hasher(label: &'static str) -> TariHasher {

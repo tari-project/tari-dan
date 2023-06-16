@@ -9,7 +9,6 @@ use tari_dan_common_types::{
     hashing::{vote_hasher, ValidatorNodeMerkleProof},
     optional::Optional,
     Epoch,
-    ShardId,
 };
 
 use crate::{
@@ -24,7 +23,7 @@ pub struct Vote {
     pub epoch: Epoch,
     pub block_id: BlockId,
     pub decision: QuorumDecision,
-    pub sender: ShardId,
+    pub sender_leaf_hash: FixedHash,
     pub signature: ValidatorSignature,
     pub merkle_proof: ValidatorNodeMerkleProof,
 }
@@ -42,7 +41,7 @@ impl Vote {
 impl Vote {
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
         Ok(tx
-            .votes_get_by_block_and_sender(&self.block_id, &self.sender)
+            .votes_get_by_block_and_sender(&self.block_id, &self.sender_leaf_hash)
             .optional()?
             .is_some())
     }

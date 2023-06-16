@@ -199,13 +199,13 @@ create table pledges
 
 create table votes
 (
-    id           integer   not null primary key AUTOINCREMENT,
-    hash         text      not null,
-    epoch        bigint    not null,
-    block_id     text      not NULL,
-    decision     integer   not null,
-    sender       text      not NULL,
-    signature    text      not NULL,
-    merkle_proof text      not NULL,
-    created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id               integer   not null primary key AUTOINCREMENT,
+    hash             text      not null,
+    epoch            bigint    not null,
+    block_id         text      not NULL,
+    decision         integer   not null,
+    sender_leaf_hash text      not NULL,
+    signature        text      not NULL,
+    merkle_proof     text      not NULL,
+    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

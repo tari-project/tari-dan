@@ -8,10 +8,12 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use tari_common_types::types::FixedHash;
 use tari_consensus::traits::{EpochManager, EpochManagerError};
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    hashing::{ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
+    hasher::tari_hasher,
+    hashing::{TariDanConsensusHashDomain, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     Epoch,
     ShardId,
 };
@@ -122,6 +124,19 @@ impl EpochManager for TestEpochManager {
             .filter(|(bucket, _)| buckets.contains(bucket))
             .map(|(bucket, committee)| (*bucket, committee.clone()))
             .collect())
+    }
+
+    async fn get_validator_leaf_hash(&self, epoch: Epoch, addr: Self::Addr) -> Result<FixedHash, Self::Error> {
+        let state = self.state_lock().await;
+        let shard = state
+            .validator_shards
+            .get(&addr)
+            .ok_or_else(|| anyhow!("Validator {} not found in validator_shards for epoch {}", addr, epoch))?;
+
+        Ok(tari_hasher::<TariDanConsensusHashDomain>("test-leaf-hash")
+            .chain(&addr)
+            .chain(shard)
+            .result())
     }
 }
 

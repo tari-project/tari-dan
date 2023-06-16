@@ -186,7 +186,7 @@ diesel::table! {
         epoch -> BigInt,
         block_id -> Text,
         decision -> Integer,
-        sender -> Text,
+        sender_leaf_hash -> Text,
         signature -> Text,
         merkle_proof -> Text,
         created_at -> Timestamp,

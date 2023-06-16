@@ -29,6 +29,8 @@ pub struct Block {
     epoch: Epoch,
     round: u64,
     proposed_by: ShardId,
+    // TODO: In order to support gossiping blocks, we'll need to make sure they aren't malleable
+    // proposer_signature: ValidatorSignature,
 
     // Body
     merkle_root: FixedHash,

@@ -37,7 +37,7 @@ async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
     test.with_all_validators(|vn| {
         let mut tx = vn.state_store.create_read_tx().unwrap();
         let leaf = tx.leaf_block_get(Epoch(0)).unwrap();
-        assert_eq!(leaf.height.as_u64(), 4); // 1 block per phase
+        assert_eq!(leaf.height.as_u64(), 3); // 1 block per phase
     })
 }
 
