@@ -135,6 +135,18 @@ pub enum RuntimeError {
     TransactionReceiptNotFound,
     #[error("Component already exists {address}")]
     ComponentAlreadyExists { address: ComponentAddress },
+    #[error("Call function error of function '{function}' on template '{template_address}': {details}")]
+    CallFunctionError {
+        template_address: TemplateAddress,
+        function: String,
+        details: String,
+    },
+    #[error("Call method error of method '{method}' on component '{component_address}': {details}")]
+    CallMethodError {
+        component_address: ComponentAddress,
+        method: String,
+        details: String,
+    },
 }
 
 impl RuntimeError {
