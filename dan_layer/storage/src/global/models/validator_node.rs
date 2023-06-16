@@ -9,5 +9,5 @@ pub struct ValidatorNode {
     pub public_key: PublicKey,
     pub shard_key: ShardId,
     pub epoch: Epoch,
-    pub committee_bucket: Option<u64>,
+    pub committee_bucket: Option<u32>,
 }

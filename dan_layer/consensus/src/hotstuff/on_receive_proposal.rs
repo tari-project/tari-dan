@@ -5,6 +5,7 @@ use std::{collections::BTreeSet, ops::DerefMut};
 use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
+    hashing::ValidatorNodeMerkleProof,
     optional::Optional,
     NodeHeight,
 };
@@ -21,6 +22,8 @@ use tari_dan_storage::{
         PrecommitTransactionPool,
         PrepareTransactionPool,
         QuorumCertificate,
+        QuorumDecision,
+        QuorumRejectReason,
         TransactionDecision,
     },
     StateStore,
@@ -31,7 +34,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     hotstuff::{common::update_high_qc, error::HotStuffError, ProposalValidationError},
-    messages::{HotstuffMessage, ProposalMessage, QuorumDecision, QuorumRejectReason, VoteMessage},
+    messages::{HotstuffMessage, ProposalMessage, VoteMessage},
     traits::{ConsensusSpec, EpochManager, LeaderStrategy, VoteSigningService},
 };
 
@@ -77,13 +80,6 @@ where
             from,
         );
 
-        if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
-            return Err(HotStuffError::EpochNotActive {
-                epoch: block.epoch(),
-                context: format!("Ignoring PROPOSAL received from {}", from),
-            });
-        }
-
         let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
         if local_committee.contains(&from) {
             self.handle_local_proposal(from, local_committee, block).await
@@ -103,6 +99,10 @@ where
         //       executor. Once the executor has completed, we can vote on this block.
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
+        let merkle_proof = self
+            .epoch_manager
+            .get_validator_node_merkle_proof(block.epoch())
+            .await?;
 
         let maybe_vote = self.store.with_write_tx(|tx| {
             self.validate_proposed_block(&mut *tx, &from, &block)?;
@@ -111,7 +111,7 @@ where
 
             let mut maybe_vote = None;
             if should_vote {
-                maybe_vote = Some(self.decide_and_vote(tx, &block, local_committee_shard)?);
+                maybe_vote = Some(self.decide_and_vote(tx, &block, local_committee_shard, merkle_proof)?);
             }
 
             self.update_nodes(tx, &block)?;
@@ -148,6 +148,7 @@ where
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
         local_committee_shard: CommitteeShard,
+        merkle_proof: ValidatorNodeMerkleProof,
     ) -> Result<VoteMessage, HotStuffError> {
         // Insert the block if it doesnt already exist
         block.save(tx)?;
@@ -155,7 +156,7 @@ where
 
         match self.decide_on_local_block(tx, block, local_committee_shard) {
             Ok(()) => {
-                let vote = self.generate_vote_message(block, QuorumDecision::Accept);
+                let vote = self.generate_vote_message(block, QuorumDecision::Accept, merkle_proof);
                 info!(target: LOG_TARGET, "✅ Accepting block {}", block.id());
                 Ok(vote)
             },
@@ -164,6 +165,7 @@ where
                 let vote = self.generate_vote_message(
                     block,
                     QuorumDecision::Reject(QuorumRejectReason::TransactionPoolsDisagree),
+                    merkle_proof,
                 );
                 info!(target: LOG_TARGET, "❌ Rejecting block {}: {}", block.id(), e);
                 Ok(vote)
@@ -171,13 +173,20 @@ where
         }
     }
 
-    fn generate_vote_message(&self, block: &Block, decision: QuorumDecision) -> VoteMessage {
+    fn generate_vote_message(
+        &self,
+        block: &Block,
+        decision: QuorumDecision,
+        merkle_proof: ValidatorNodeMerkleProof,
+    ) -> VoteMessage {
         let signature = self.vote_signing_service.sign_vote(block.epoch(), block.id(), decision);
+
         VoteMessage {
             epoch: block.epoch(),
             block_id: *block.id(),
             decision,
             signature,
+            merkle_proof,
         }
     }
 
@@ -373,7 +382,7 @@ where
         Ok(())
     }
 
-    /// if b_new .height > vheight || (b_new extends b_lock && b_new .justify.node.height > b_lock .height)
+    /// if b_new .height > vheight && (b_new extends b_lock || b_new .justify.node.height > b_lock .height)
     ///
     /// If we have not previously voted on this block and the node extends the current locked node, then we vote
     fn should_vote(
@@ -386,9 +395,9 @@ where
             return Ok(true);
         };
 
-        // if b_new .height > vheight Or ...
-        if block.height() > last_voted.height {
-            return Ok(true);
+        // if b_new .height > vheight And ...
+        if block.height() <= last_voted.height {
+            return Ok(false);
         }
 
         let locked = LockedBlock::get(tx, block.epoch())?;
@@ -422,8 +431,8 @@ fn is_safe_block<TTx: StateStoreReadTransaction>(
     locked_qc: &QuorumCertificate,
 ) -> Result<bool, HotStuffError> {
     // Liveness
-    if block.justify().block_height() > locked_qc.block_height() {
-        return Ok(true);
+    if block.justify().block_height() <= locked_qc.block_height() {
+        return Ok(false);
     }
 
     let extends = block.extends(tx, locked_qc.block_id())?;
