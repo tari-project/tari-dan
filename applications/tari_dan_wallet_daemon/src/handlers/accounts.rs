@@ -705,6 +705,8 @@ pub async fn handle_create_free_test_coins(
         },
     };
 
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER1");
+
     let (account_address, account_secret_key, new_account_name) = match maybe_account {
         Some(account) => {
             let account_secret_key = sdk
@@ -735,10 +737,15 @@ pub async fn handle_create_free_test_coins(
         },
     };
 
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER2");
+
     let account_public_key = PublicKey::from_secret_key(&account_secret_key.k);
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER2.5");
     let output = sdk
         .confidential_crypto_api()
         .generate_output_for_dest(&account_public_key, req.amount)?;
+
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER3");
 
     let mut instructions = vec![
         // TODO: We create double what is expected, amount confidential and amount revealed. Should let the caller
@@ -780,6 +787,7 @@ pub async fn handle_create_free_test_coins(
         method: "pay_fee".to_string(),
         args: args![fee],
     });
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER4");
 
     // Add the account component
     // let account_substate = sdk.substate_api().get_substate(&account_address)?;
@@ -810,7 +818,10 @@ pub async fn handle_create_free_test_coins(
         .sign(&account_secret_key.k)
         .build();
 
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER5");
+
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER6");
 
     let is_first_account = accounts_api.count()? == 0;
     let mut events = context.notifier().subscribe();
@@ -823,7 +834,11 @@ pub async fn handle_create_free_test_coins(
         }),
     });
 
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER7");
+
     let finalized = wait_for_result(&mut events, tx_hash).await?;
+    info!(target: LOG_TARGET, "FLAG: CUCUMBER8");
+
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
