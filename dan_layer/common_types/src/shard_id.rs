@@ -73,15 +73,16 @@ impl ShardId {
 
     /// Calculates and returns the bucket number that this ShardId belongs.
     /// A bucket is an equal division of the 256-bit shard space.
-    pub fn to_committee_bucket(&self, num_committees: u64) -> u64 {
+    pub fn to_committee_bucket(&self, num_committees: u32) -> u32 {
         if num_committees == 0 {
             return 0;
         }
         let bucket_size = U256::MAX / U256::from(num_committees);
-        u64::try_from(self.to_u256() / bucket_size).expect("too many committees")
+        // 4,294,967,295 committees.
+        u32::try_from(self.to_u256() / bucket_size).expect("num_committees is a u32, so this cannot fail")
     }
 
-    pub fn to_committee_range(&self, num_committees: u64) -> RangeInclusive<ShardId> {
+    pub fn to_committee_range(&self, num_committees: u32) -> RangeInclusive<ShardId> {
         if num_committees == 0 {
             return RangeInclusive::new(Self::zero(), Self::from_u256(U256::MAX));
         }
@@ -180,15 +181,21 @@ mod tests {
         assert_eq!(range, shard(1, 3)..=minus_one(shard(2, 3)));
     }
 
-    fn shard(bucket: u64, of: u64) -> ShardId {
+    #[test]
+    fn max_committees() {
+        let bucket = ShardId::max().to_committee_bucket(u32::MAX);
+        assert_eq!(bucket, u32::MAX);
+    }
+
+    fn shard(bucket: u32, of: u32) -> ShardId {
         ShardId::from_u256(U256::from(bucket) * (U256::MAX / U256::from(of)))
     }
 
-    fn divide_floor(shard: ShardId, by: u64) -> ShardId {
+    fn divide_floor(shard: ShardId, by: u32) -> ShardId {
         ShardId::from_u256(shard.to_u256() / U256::from(by))
     }
 
     fn minus_one(shard: ShardId) -> ShardId {
-        ShardId::from_u256(shard.to_u256() - U256::from(1u64))
+        ShardId::from_u256(shard.to_u256() - U256::from(1u32))
     }
 }

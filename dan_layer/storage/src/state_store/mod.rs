@@ -22,6 +22,7 @@ use crate::{
         QuorumCertificate,
         TransactionDecision,
         TransactionId,
+        Vote,
     },
     StorageError,
 };
@@ -89,6 +90,10 @@ pub trait StateStoreReadTransaction {
         &mut self,
         transactions: &BTreeSet<TransactionId>,
     ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
+
+    // -------------------------------- Votes -------------------------------- //
+    fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError>;
+    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -185,4 +190,7 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         transactions: &BTreeSet<TransactionDecision>,
     ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
+
+    // -------------------------------- Votes -------------------------------- //
+    fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
 }

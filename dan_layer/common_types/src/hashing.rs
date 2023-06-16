@@ -24,7 +24,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparatedHasher};
-use tari_mmr::BalancedBinaryMerkleTree;
+use tari_mmr::{BalancedBinaryMerkleProof, BalancedBinaryMerkleTree, MergedBalancedBinaryMerkleProof};
 
 use crate::hasher::{tari_hasher, TariHasher};
 
@@ -42,6 +42,10 @@ pub fn pledge_hasher() -> TariHasher {
     dan_hasher("pledges")
 }
 
+pub fn vote_hasher() -> TariHasher {
+    dan_hasher("vote")
+}
+
 fn dan_hasher(label: &'static str) -> TariHasher {
     tari_hasher::<TariDanConsensusHashDomain>(label)
 }
@@ -54,3 +58,5 @@ hash_domain!(
 );
 pub type ValidatorNodeBmtHasherBlake256 = DomainSeparatedHasher<Blake256, ValidatorNodeBmtHashDomain>;
 pub type ValidatorNodeBMT = BalancedBinaryMerkleTree<ValidatorNodeBmtHasherBlake256>;
+pub type ValidatorNodeMerkleProof = BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>;
+pub type MergedValidatorNodeMerkleProof = MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>;

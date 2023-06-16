@@ -4,5 +4,5 @@
 #[derive(Debug, Clone)]
 pub struct EpochManagerConfig {
     pub base_layer_confirmations: u64,
-    pub committee_size: u64,
+    pub committee_size: u32,
 }

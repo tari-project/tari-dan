@@ -400,13 +400,13 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: ShardId,
-        committee_bucket: u64,
+        bucket: u32,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 
         diesel::update(validator_nodes::table)
             .filter(validator_nodes::shard_key.eq(shard_key.as_bytes()))
-            .set(validator_nodes::committee_bucket.eq(committee_bucket as i64))
+            .set(validator_nodes::committee_bucket.eq(i64::from(bucket)))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,

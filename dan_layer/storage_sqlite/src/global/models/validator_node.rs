@@ -48,7 +48,7 @@ impl TryFrom<DbValidatorNode> for ValidatorNode {
                 SqliteStorageError::MalformedDbData(format!("Invalid public key in validator node record id={}", vn.id))
             })?,
             epoch: Epoch(vn.epoch as u64),
-            committee_bucket: vn.committee_bucket.map(|v| v as u64),
+            committee_bucket: vn.committee_bucket.map(|v| v as u32),
         })
     }
 }
