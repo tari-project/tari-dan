@@ -143,20 +143,32 @@ pub async fn handle_submit(
         "Submitted transaction with hash {}",
         transaction.hash()
     );
-    let hash = if req.is_dry_run {
-        sdk.transaction_api().submit_dry_run_transaction(transaction).await?
-    } else {
-        sdk.transaction_api().submit_transaction(transaction).await?
-    };
 
-    if !req.is_dry_run {
+    if req.is_dry_run {
+        let response = sdk.transaction_api().submit_dry_run_transaction(transaction).await?;
+        let result = match response.execution_result {
+            Some(res) => Some(res.finalize),
+            None => None,
+        };
+        Ok(TransactionSubmitResponse {
+            hash: response.transaction_hash,
+            inputs,
+            outputs,
+            result,
+        })
+    } else {
+        let response = sdk.transaction_api().submit_transaction(transaction).await?;
         context.notifier().notify(TransactionSubmittedEvent {
-            hash,
+            hash: response.transaction_hash,
             new_account: None,
         });
+        Ok(TransactionSubmitResponse {
+            hash: response.transaction_hash,
+            inputs,
+            outputs,
+            result: None,
+        })
     }
-
-    Ok(TransactionSubmitResponse { hash, inputs, outputs })
 }
 
 pub async fn handle_get(

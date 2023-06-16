@@ -128,7 +128,8 @@ pub async fn handle_create(
         .sign(&signing_key.k)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+    let result = sdk.transaction_api().submit_transaction(transaction).await?;
+    let tx_hash = result.transaction_hash;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
@@ -231,7 +232,8 @@ pub async fn handle_invoke(
         .sign(&signing_key.k)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+    let result = sdk.transaction_api().submit_transaction(transaction).await?;
+    let tx_hash = result.transaction_hash;
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
         hash: tx_hash,
@@ -456,7 +458,8 @@ pub async fn handle_reveal_funds(
         sdk.confidential_outputs_api()
             .proofs_set_transaction_hash(proof_id, *transaction.hash())?;
 
-        let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+        let result = sdk.transaction_api().submit_transaction(transaction).await?;
+        let tx_hash = result.transaction_hash;
 
         let mut events = notifier.subscribe();
         notifier.notify(TransactionSubmittedEvent {
@@ -671,7 +674,8 @@ pub async fn handle_claim_burn(
         .sign(&account_secret_key.k)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+    let result = sdk.transaction_api().submit_transaction(transaction).await?;
+    let tx_hash = result.transaction_hash;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
@@ -828,7 +832,8 @@ pub async fn handle_create_free_test_coins(
         .sign(&account_secret_key.k)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+    let result = sdk.transaction_api().submit_transaction(transaction).await?;
+    let tx_hash = result.transaction_hash;
 
     let is_first_account = accounts_api.count()? == 0;
     let mut events = context.notifier().subscribe();
@@ -940,7 +945,8 @@ pub async fn handle_transfer(
         .build();
 
     // send the transaction
-    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+    let result = sdk.transaction_api().submit_transaction(transaction).await?;
+    let tx_hash = result.transaction_hash;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
@@ -1141,7 +1147,8 @@ pub async fn handle_confidential_transfer(
 
         outputs_api.proofs_set_transaction_hash(proof_id, *transaction.hash())?;
 
-        let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+        let result = sdk.transaction_api().submit_transaction(transaction).await?;
+        let tx_hash = result.transaction_hash;
 
         let mut events = notifier.subscribe();
         notifier.notify(TransactionSubmittedEvent {

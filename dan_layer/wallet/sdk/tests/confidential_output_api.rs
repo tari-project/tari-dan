@@ -4,14 +4,14 @@
 use std::{convert::Infallible, time::Duration};
 
 use async_trait::async_trait;
-use tari_common_types::types::{Commitment, FixedHash};
+use tari_common_types::types::Commitment;
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_dan_common_types::{optional::Optional, PayloadId};
 use tari_dan_wallet_sdk::{
     confidential::get_commitment_factory,
     models::{ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
+    network::{SubstateQueryResult, TransactionResult, WalletNetworkInterface},
     storage::{WalletStore, WalletStoreReader},
-    substate_provider::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface},
     DanWalletSdk,
     WalletSdkConfig,
 };
@@ -234,11 +234,15 @@ impl WalletNetworkInterface for PanicIndexer {
         unimplemented!()
     }
 
-    async fn submit_transaction(&self, _transaction: Transaction, _is_dry_run: bool) -> Result<FixedHash, Self::Error> {
+    async fn submit_transaction(
+        &self,
+        _transaction: Transaction,
+        _is_dry_run: bool,
+    ) -> Result<TransactionResult, Self::Error> {
         todo!()
     }
 
-    async fn query_transaction_result(&self, _hash: PayloadId) -> Result<TransactionQueryResult, Self::Error> {
+    async fn query_transaction_result(&self, _hash: PayloadId) -> Result<TransactionResult, Self::Error> {
         todo!()
     }
 }

@@ -511,6 +511,7 @@ impl JsonRpcHandlers {
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 transaction_hash: payload_id.into_array().into(),
+                execution_result: None,
             }))
         }
     }
