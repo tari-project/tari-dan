@@ -18,6 +18,20 @@ pub enum SubstateChange {
     Destroy,
 }
 
+impl SubstateChange {
+    pub fn is_create(&self) -> bool {
+        matches!(self, SubstateChange::Create)
+    }
+
+    pub fn is_exists(&self) -> bool {
+        matches!(self, SubstateChange::Exists)
+    }
+
+    pub fn is_destroy(&self) -> bool {
+        matches!(self, SubstateChange::Destroy)
+    }
+}
+
 impl Display for SubstateChange {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {

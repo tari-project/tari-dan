@@ -57,6 +57,6 @@ hash_domain!(
     1
 );
 pub type ValidatorNodeBmtHasherBlake256 = DomainSeparatedHasher<Blake256, ValidatorNodeBmtHashDomain>;
-pub type ValidatorNodeBMT = BalancedBinaryMerkleTree<ValidatorNodeBmtHasherBlake256>;
+pub type ValidatorNodeBalancedMerkleTree = BalancedBinaryMerkleTree<ValidatorNodeBmtHasherBlake256>;
 pub type ValidatorNodeMerkleProof = BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>;
 pub type MergedValidatorNodeMerkleProof = MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>;

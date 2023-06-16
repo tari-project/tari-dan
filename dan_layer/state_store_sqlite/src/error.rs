@@ -23,6 +23,8 @@ pub enum SqliteStorageError {
     },
     #[error("Malformed DB data in {operation}: {details}")]
     MalformedDbData { operation: &'static str, details: String },
+    #[error("Database inconsistency for operation {operation}: {details}")]
+    DbInconsistency { operation: &'static str, details: String },
     #[error("[{operation}] Not all queried transactions were found: {details}")]
     NotAllTransactionsFound { operation: &'static str, details: String },
     #[error("[{operation}] Not all queried substates were found: {details}")]
@@ -34,6 +36,12 @@ impl From<SqliteStorageError> for StorageError {
         match source {
             SqliteStorageError::ConnectionError { .. } => StorageError::ConnectionError {
                 reason: source.to_string(),
+            },
+            SqliteStorageError::DieselError { source, operation } if matches!(source, diesel::NotFound) => {
+                StorageError::NotFoundDbAdapter {
+                    operation,
+                    source: anyhow::anyhow!(source),
+                }
             },
             SqliteStorageError::DieselError { .. } => StorageError::QueryError {
                 reason: source.to_string(),

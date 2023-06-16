@@ -5,6 +5,8 @@ use tari_dan_common_types::Epoch;
 use tari_dan_storage::{consensus_models::BlockId, StorageError};
 use tari_mmr::BalancedBinaryMerkleProofError;
 
+use crate::traits::EpochManagerError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
     #[error("Storage error: {0}")]
@@ -27,6 +29,15 @@ pub enum HotStuffError {
     NotTheLeader { details: String },
     #[error("Merkle proof error: {0}")]
     BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
+    #[error("Epoch manager error: {0}")]
+    EpochManagerError(anyhow::Error),
+}
+
+// This removes the need for `map_err`s for every epoch manager call
+impl<E: EpochManagerError> From<E> for HotStuffError {
+    fn from(err: E) -> Self {
+        Self::EpochManagerError(err.to_anyhow())
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -49,7 +60,7 @@ pub enum ProposalValidationError {
         hash: BlockId,
         justify_block: BlockId,
     },
-    #[error("QC in block {block_id} proposed by {proposed_by} is invalid: {details}")]
+    #[error("QC in block {block_id} that was proposed by {proposed_by} is invalid: {details}")]
     JustifyBlockInvalid {
         proposed_by: String,
         block_id: BlockId,

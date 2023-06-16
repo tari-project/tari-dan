@@ -4,7 +4,7 @@
 use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
-    consensus_models::{Block, BlockId, QuorumCertificate},
+    consensus_models::{Block, BlockId},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -24,13 +24,6 @@ impl LockedBlock {
 
     pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         tx.blocks_get(&self.block_id)
-    }
-
-    pub fn get_quorum_certificate<TTx: StateStoreReadTransaction>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<QuorumCertificate, StorageError> {
-        tx.quorum_certificates_get(&self.block_id)
     }
 
     pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {

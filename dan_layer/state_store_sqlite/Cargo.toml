@@ -16,6 +16,7 @@ tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v
 
 tari_utilities = "0.4"
 
+anyhow = "1.0"
 diesel = { version = "2", default-features = false, features = ["sqlite", "time"] }
 diesel_migrations = "2"
 log = "0.4"

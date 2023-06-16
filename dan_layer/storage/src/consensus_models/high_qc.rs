@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::Epoch;
 
 use crate::{
-    consensus_models::{BlockId, QuorumCertificate},
+    consensus_models::{QcId, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -32,8 +32,7 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighQc {
     pub epoch: Epoch,
-    pub block_id: BlockId,
-    pub height: NodeHeight,
+    pub qc_id: QcId,
 }
 
 impl HighQc {
@@ -45,10 +44,10 @@ impl HighQc {
         &self,
         tx: &mut TTx,
     ) -> Result<QuorumCertificate, StorageError> {
-        QuorumCertificate::get(tx, &self.block_id)
+        QuorumCertificate::get(tx, &self.qc_id)
     }
 
-    pub fn save<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.high_qc_set(self)
     }
 }

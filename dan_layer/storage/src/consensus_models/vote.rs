@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{
     hashing::{vote_hasher, ValidatorNodeMerkleProof},
+    optional::Optional,
     Epoch,
     ShardId,
 };
@@ -39,13 +40,11 @@ impl Vote {
 }
 
 impl Vote {
-    // pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
-    //     tx.last_voted_get(epoch)
-    // }
-
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
-        let count = tx.votes_count_for_block(&self.block_id)?;
-        Ok(count > 0)
+        Ok(tx
+            .votes_get_by_block_and_sender(&self.block_id, &self.sender)
+            .optional()?
+            .is_some())
     }
 
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>

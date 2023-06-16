@@ -12,7 +12,7 @@ use tari_dan_storage::{
 };
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError},
+    hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat},
     messages::VoteMessage,
     traits::{ConsensusSpec, EpochManager, LeaderStrategy},
 };
@@ -23,6 +23,7 @@ pub struct OnReceiveVoteHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
+    on_beat: OnBeat,
 }
 
 impl<TConsensusSpec> OnReceiveVoteHandler<TConsensusSpec>
@@ -33,13 +34,14 @@ where
     pub fn new(
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
-
         epoch_manager: TConsensusSpec::EpochManager,
+        on_beat: OnBeat,
     ) -> Self {
         Self {
             store,
             leader_strategy,
             epoch_manager,
+            on_beat,
         }
     }
 
@@ -95,7 +97,7 @@ where
             });
         }
 
-        Vote {
+        let exists = Vote {
             epoch: message.epoch,
             block_id: message.block_id,
             decision: message.decision,
@@ -104,6 +106,17 @@ where
             merkle_proof: message.merkle_proof,
         }
         .save(&mut tx)?;
+
+        if exists {
+            info!(
+                target: LOG_TARGET,
+                "🔥 Received duplicate vote for block {} from {}",
+                message.block_id,
+                from,
+            );
+            tx.commit()?;
+            return Ok(());
+        }
 
         let count = Vote::count_for_block(tx.deref_mut(), &message.block_id)?;
 
@@ -122,7 +135,7 @@ where
             return Ok(());
         }
 
-        let votes = Vote::get_for_block(tx.deref_mut(), &message.block_id)?;
+        let votes = block.get_votes(tx.deref_mut())?;
 
         let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
         let leaf_hashes = votes.iter().map(|v| v.signature.create_challenge()).collect::<Vec<_>>();
@@ -142,6 +155,8 @@ where
         update_high_qc::<TConsensusSpec::StateStore>(&mut tx, &qc)?;
 
         tx.commit()?;
+
+        self.on_beat.beat();
 
         Ok(())
     }

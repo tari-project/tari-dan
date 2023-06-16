@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::ShardId;
 use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSignature};
 
 pub trait SigningService {
@@ -13,11 +13,11 @@ pub trait SigningService {
 }
 
 pub trait VoteSigningService: SigningService {
-    fn create_challenge(epoch: Epoch, block_id: &BlockId, decision: QuorumDecision) -> FixedHash;
+    fn create_challenge(block_id: &BlockId, decision: QuorumDecision) -> FixedHash;
     fn shard_id(&self) -> ShardId;
 
-    fn sign_vote(&self, epoch: Epoch, block_id: &BlockId, decision: QuorumDecision) -> ValidatorSignature {
-        let challenge = Self::create_challenge(epoch, block_id, decision);
+    fn sign_vote(&self, block_id: &BlockId, decision: QuorumDecision) -> ValidatorSignature {
+        let challenge = Self::create_challenge(block_id, decision);
         let signature = self.sign(&*challenge);
         ValidatorSignature {
             public_key: self.public_key().clone(),

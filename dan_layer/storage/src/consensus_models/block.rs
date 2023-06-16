@@ -9,11 +9,11 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_dan_common_types::{hashing, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{hashing, serde_with, Epoch, NodeHeight, ShardId};
 
 use super::{QuorumCertificate, TransactionDecision};
 use crate::{
-    consensus_models::{LastExecuted, LastVoted, LockedBlock, TransactionId},
+    consensus_models::{LastExecuted, LastVoted, LeafBlock, LockedBlock, TransactionId, Vote},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -82,6 +82,27 @@ impl Block {
         )
     }
 
+    pub fn is_genesis(&self) -> bool {
+        self.parent == BlockId::genesis()
+    }
+
+    /// This is the parent block for all genesis blocks. Its block ID is always zero.
+    pub fn zero_block() -> Self {
+        Self {
+            id: BlockId::genesis(),
+            parent: BlockId::genesis(),
+            justify: QuorumCertificate::genesis(Epoch(0)),
+            height: NodeHeight(0),
+            epoch: Epoch(0),
+            round: 0,
+            proposed_by: ShardId::zero(),
+            merkle_root: FixedHash::zero(),
+            prepared: Default::default(),
+            precommitted: Default::default(),
+            committed: Default::default(),
+        }
+    }
+
     pub fn calculate_hash(&self) -> FixedHash {
         hashing::block_hasher()
             .chain(&self.parent)
@@ -129,6 +150,14 @@ impl Block {
 
     pub fn as_last_voted(&self) -> LastVoted {
         LastVoted {
+            epoch: self.epoch,
+            height: self.height,
+            block_id: self.id,
+        }
+    }
+
+    pub fn as_leaf_block(&self) -> LeafBlock {
+        LeafBlock {
             epoch: self.epoch,
             height: self.height,
             block_id: self.id,
@@ -201,6 +230,7 @@ impl Block {
         TTx: StateStoreWriteTransaction + DerefMut,
         TTx::Target: StateStoreReadTransaction,
     {
+        self.justify.save(tx)?;
         if self.exists(tx.deref_mut())? {
             return Ok(());
         }
@@ -237,14 +267,26 @@ impl Block {
         self.as_last_voted().set(tx)
     }
 
+    pub fn set_as_leaf<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        self.as_leaf_block().set(tx)
+    }
+
     pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.parent)
+    }
+
+    pub fn get_votes<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Vec<Vote>, StorageError> {
+        Vote::get_for_block(tx, &self.id)
+    }
+
+    pub fn get_child<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Self, StorageError> {
+        tx.blocks_get_by_parent(self.id())
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct BlockId(FixedHash);
+pub struct BlockId(#[serde(with = "serde_with::hex")] FixedHash);
 
 impl BlockId {
     pub const fn genesis() -> Self {

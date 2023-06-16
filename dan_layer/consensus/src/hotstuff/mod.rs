@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 mod common;
 mod error;
+mod on_beat;
 mod on_propose;
 mod on_receive_new_view;
 mod on_receive_proposal;

@@ -10,7 +10,7 @@ use tari_engine_types::{commit_result::ExecuteResult, instruction::Instruction};
 use tari_transaction::InstructionSignature;
 
 use crate::{
-    consensus_models::{Decision, TransactionId},
+    consensus_models::{Decision, TransactionDecision, TransactionId},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -24,7 +24,11 @@ pub struct Transaction {
     signature: InstructionSignature,
     sender_public_key: PublicKey,
 
+    /// Inputs that may be downed in this transaction
     inputs: Vec<ShardId>,
+    /// Inputs that must exist but cannot be downed
+    exists: Vec<ShardId>,
+    /// Outputs that will be created in this transaction
     outputs: Vec<ShardId>,
 }
 
@@ -36,6 +40,7 @@ impl Transaction {
         signature: InstructionSignature,
         sender_public_key: PublicKey,
         inputs: Vec<ShardId>,
+        exists: Vec<ShardId>,
         outputs: Vec<ShardId>,
     ) -> Self {
         Self {
@@ -45,6 +50,7 @@ impl Transaction {
             signature,
             sender_public_key,
             inputs,
+            exists,
             outputs,
         }
     }
@@ -77,11 +83,16 @@ impl Transaction {
         &self.outputs
     }
 
+    pub fn exists(&self) -> &[ShardId] {
+        &self.exists
+    }
+
     pub fn inputs(&self) -> &[ShardId] {
         &self.inputs
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
@@ -115,6 +126,20 @@ impl ExecutedTransaction {
     pub fn result(&self) -> &ExecuteResult {
         &self.result
     }
+
+    pub fn to_transaction_decision(&self) -> TransactionDecision {
+        TransactionDecision {
+            transaction_id: *self.transaction().hash(),
+            overall_decision: self.decision(),
+            transaction_decision: self.transaction_decision(),
+            per_shard_validator_fee: self
+                .result()
+                .fee_receipt
+                .as_ref()
+                .and_then(|fee| fee.total_fee_payment.as_u64_checked())
+                .unwrap_or(0),
+        }
+    }
 }
 
 impl ExecutedTransaction {
@@ -147,5 +172,37 @@ impl ExecutedTransaction {
                 )
             })
             .collect())
+    }
+}
+
+// TODO: Remove this once we use a final transaction type. We need to clean up the inputs/outputs,
+//       possibly replacing with <address, version> rather than shard.
+impl From<tari_transaction::Transaction> for Transaction {
+    fn from(value: tari_transaction::Transaction) -> Self {
+        Self {
+            hash: TransactionId::new(value.hash().into_array()),
+            fee_instructions: value.fee_instructions().to_vec(),
+            instructions: value.instructions().to_vec(),
+            signature: value.signature().clone(),
+            sender_public_key: value.sender_public_key().clone(),
+            inputs: value
+                .meta()
+                .involved_objects_iter()
+                .filter(|(_, ch)| ch.is_destroy())
+                .map(|(s, _)| *s)
+                .collect(),
+            exists: value
+                .meta()
+                .involved_objects_iter()
+                .filter(|(_, ch)| ch.is_exists())
+                .map(|(s, _)| *s)
+                .collect(),
+            outputs: value
+                .meta()
+                .involved_objects_iter()
+                .filter(|(_, ch)| ch.is_create())
+                .map(|(s, _)| *s)
+                .collect(),
+        }
     }
 }
