@@ -132,7 +132,9 @@ Feature: Account transfers
     acc1.deposit(faucet_bucket);
     ```
 
-    # Do the transfer from ACCOUNT_1 to another existing account 
+    When I wait 5 seconds
+
+    # Do the transfer from ACCOUNT_1 to another existing account
     When I transfer 50 tokens of resource FAUCET/resources/0 from account ACCOUNT_1 to public key ACCOUNT_2 via the wallet daemon WALLET_D named TRANSFER
 
     # Check that ACCOUNT_2 component now has funds
