@@ -20,10 +20,13 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_indexer_lib::transaction_autofiller::TransactionAutofillerError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum DryRunTransactionProcessorError {
+    #[error(transparent)]
+    TransactionAutofillerError(#[from] TransactionAutofillerError),
     #[error("Unexpected error: {message}")]
     UnexpectecError { message: String },
 }

@@ -92,7 +92,7 @@ pub struct JsonRpcHandlers {
     base_node_client: GrpcBaseNodeClient,
     substate_manager: Arc<SubstateManager>,
     transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
-    dry_run_transaction_processor: DryRunTransactionProcessor,
+    dry_run_transaction_processor: DryRunTransactionProcessor<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
 }
 
 impl JsonRpcHandlers {
@@ -102,7 +102,10 @@ impl JsonRpcHandlers {
         base_node_client: GrpcBaseNodeClient,
         substate_manager: Arc<SubstateManager>,
         transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
-        dry_run_transaction_processor: DryRunTransactionProcessor,
+        dry_run_transaction_processor: DryRunTransactionProcessor<
+            EpochManagerHandle,
+            TariCommsValidatorNodeClientFactory,
+        >,
     ) -> Self {
         Self {
             consensus_constants,

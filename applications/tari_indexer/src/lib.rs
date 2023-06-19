@@ -111,10 +111,14 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let transaction_manager = TransactionManager::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
-        dan_layer_scanner,
+        dan_layer_scanner.clone(),
     );
 
-    let dry_run_transaction_processor = DryRunTransactionProcessor::new(services.epoch_manager.clone());
+    let dry_run_transaction_processor = DryRunTransactionProcessor::new(
+        services.epoch_manager.clone(),
+        services.validator_node_client_factory.clone(),
+        dan_layer_scanner,
+    );
 
     // Run the JSON-RPC API
     let jrpc_address = config.indexer.json_rpc_address;
