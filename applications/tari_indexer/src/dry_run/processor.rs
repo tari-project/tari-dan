@@ -20,10 +20,12 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use log::info;
-use tari_dan_common_types::{optional::IsNotFoundError, NodeAddressable};
+use tari_comms::types::CommsPublicKey;
+use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
+use tari_dan_storage::models::{Payload, TariDanPayload};
 use tari_engine_types::commit_result::ExecuteResult;
 use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
 use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller};
@@ -40,11 +42,10 @@ pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory> {
     transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory>,
 }
 
-impl<TEpochManager, TClientFactory, TAddr> DryRunTransactionProcessor<TEpochManager, TClientFactory>
+impl<TEpochManager, TClientFactory> DryRunTransactionProcessor<TEpochManager, TClientFactory>
 where
-    TAddr: NodeAddressable,
-    TEpochManager: EpochManager<TAddr, Error = EpochManagerError>,
-    TClientFactory: ValidatorNodeClientFactory<Addr = TAddr>,
+    TEpochManager: EpochManager<CommsPublicKey, Error = EpochManagerError>,
+    TClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
 {
     pub fn new(
@@ -67,10 +68,62 @@ where
 
         // automatically scan the inputs and add all related involved objects
         // note that this operation does not alter the transaction hash
-        let autofilled_transaction = self.transaction_autofiller.autofill_transaction(transaction).await?;
+        let transaction = self.transaction_autofiller.autofill_transaction(transaction).await?;
+
+        // get shard pledges
+        let _pledges = self.get_shard_pledges(&transaction).await?;
 
         Err(DryRunTransactionProcessorError::UnexpectecError {
             message: "not implemented".to_string(),
+        })
+    }
+
+    async fn get_shard_pledges(
+        &self,
+        transaction: &Transaction,
+    ) -> Result<HashMap<ShardId, ObjectPledge>, DryRunTransactionProcessorError> {
+        let epoch = self.epoch_manager.current_epoch().await?;
+        let payload = TariDanPayload::new(transaction.clone());
+        let mut shard_pledges = HashMap::new();
+
+        // TODO: spawn a tokio task per pledge for better performance?
+        for shard_id in payload.involved_shards() {
+            let pledge = self.get_shard_pledge(shard_id, payload.to_id(), epoch).await?;
+            shard_pledges.insert(shard_id, pledge);
+        }
+
+        Ok(shard_pledges)
+    }
+
+    pub async fn get_shard_pledge(
+        &self,
+        shard_id: ShardId,
+        payload_id: PayloadId,
+        epoch: Epoch,
+    ) -> Result<ObjectPledge, DryRunTransactionProcessorError> {
+        let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+
+        for vn_public_key in committee.members {
+            // build a client with the VN
+            let mut sync_vn_client = self.client_provider.create_client(&vn_public_key);
+
+            match sync_vn_client.get_shard_pledge(&shard_id).await {
+                Ok(pledge) => {
+                    return Ok(pledge);
+                },
+                Err(e) => {
+                    info!(target: LOG_TARGET, "Unable to get pledge from peer: {} ", e.to_string());
+                    // we do not stop when an individual VN does not respond correctly, we try all Vns
+                    continue;
+                },
+            };
+        }
+
+        // The shard does not exist on any VN, so we pledge it to be created in this payload
+        Ok(ObjectPledge {
+            shard_id,
+            pledged_to_payload: payload_id,
+            current_state: SubstateState::DoesNotExist,
         })
     }
 }
