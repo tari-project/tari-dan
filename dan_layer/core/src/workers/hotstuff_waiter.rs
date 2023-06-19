@@ -1424,7 +1424,7 @@ where
                     .map(|v| v.merkle_proof().unwrap().clone())
                     .collect::<Vec<_>>();
 
-                let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(proofs).unwrap();
+                let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(&proofs).unwrap();
                 let leaf_hashes = votes.iter().map(|v| v.node_hash()).collect::<Vec<_>>();
 
                 // TODO: Check all votes

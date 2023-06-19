@@ -285,7 +285,7 @@ impl BaseLayerScanner {
                         self.register_validator_node_registration(current_height, reg.clone())
                             .await?;
                     },
-                    SideChainFeature::TemplateRegistration(reg) => {
+                    SideChainFeature::CodeTemplateRegistration(reg) => {
                         self.register_code_template_registration(
                             reg.template_name.to_string(),
                             (*output_hash).into(),

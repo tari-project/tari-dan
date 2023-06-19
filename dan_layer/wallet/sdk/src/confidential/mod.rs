@@ -5,5 +5,5 @@ pub mod kdfs;
 mod proof;
 
 pub use error::ConfidentialProofError;
-pub(crate) use proof::{decrypt_value_and_mask, encrypt_value, generate_confidential_proof};
+pub(crate) use proof::{decrypt_data_and_mask, encrypt_data, generate_confidential_proof};
 pub use proof::{get_commitment_factory, ConfidentialProofStatement};

@@ -84,7 +84,7 @@ pub async fn handle_create(
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
 
     let owner_key = key_manager_api.next_key(key_manager::TRANSACTION_BRANCH)?;
-    let owner_pk = PublicKey::from_secret_key(&owner_key.k);
+    let owner_pk = PublicKey::from_secret_key(&owner_key.key);
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
@@ -106,7 +106,7 @@ pub async fn handle_create(
                 .map(|addr| ShardId::from_address(&addr.address, addr.version))
                 .collect(),
         )
-        .sign(&signing_key.k)
+        .sign(&signing_key.key)
         .build();
 
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
@@ -172,7 +172,7 @@ pub async fn handle_list(
         .into_iter()
         .map(|a| {
             let key = km.derive_key(key_manager::TRANSACTION_BRANCH, a.key_index)?;
-            let pk = PublicKey::from_secret_key(&key.k);
+            let pk = PublicKey::from_secret_key(&key.key);
             Ok(AccountInfo {
                 account: a,
                 public_key: pk,
@@ -209,7 +209,7 @@ pub async fn handle_invoke(
         .fee_transaction_pay_from_component(account_address, req.fee.unwrap_or(DEFAULT_FEE))
         .call_method(account_address, &req.method, req.args)
         .with_inputs(inputs)
-        .sign(&signing_key.k)
+        .sign(&signing_key.key)
         .build();
 
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
@@ -284,7 +284,7 @@ pub async fn handle_get(
     let account = get_account(&req.name_or_address, &sdk.accounts_api())?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-    let public_key = PublicKey::from_secret_key(&key.k);
+    let public_key = PublicKey::from_secret_key(&key.key);
     Ok(AccountGetResponse { account, public_key })
 }
 
@@ -298,7 +298,7 @@ pub async fn handle_get_default(
     let account = get_account_or_default(None, &sdk.accounts_api())?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-    let public_key = PublicKey::from_secret_key(&key.k);
+    let public_key = PublicKey::from_secret_key(&key.key);
     Ok(AccountGetResponse { account, public_key })
 }
 
@@ -344,7 +344,7 @@ pub async fn handle_reveal_funds(
         let account_key = sdk
             .key_manager_api()
             .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-        let account_public_key = PublicKey::from_secret_key(&account_key.k);
+        let account_public_key = PublicKey::from_secret_key(&account_key.key);
 
         let (output_mask, public_nonce) = sdk
             .confidential_crypto_api()
@@ -432,7 +432,7 @@ pub async fn handle_reveal_funds(
         let transaction = builder
             .with_inputs(inputs)
             .with_outputs(outputs)
-            .sign(&account_key.k)
+            .sign(&account_key.key)
             .build();
 
         sdk.confidential_outputs_api()
@@ -545,7 +545,7 @@ pub async fn handle_claim_burn(
     let account_secret_key = sdk
         .key_manager_api()
         .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-    let account_public_key = PublicKey::from_secret_key(&account_secret_key.k);
+    let account_public_key = PublicKey::from_secret_key(&account_secret_key.key);
 
     info!(
         target: LOG_TARGET,
@@ -598,7 +598,7 @@ pub async fn handle_claim_burn(
     let unmasked_output = sdk.confidential_crypto_api().unblind_output(
         &output.commitment,
         &output.encrypted_data,
-        &account_secret_key.k,
+        &account_secret_key.key,
         &reciprocal_claim_public_key,
     )?;
 
@@ -650,7 +650,7 @@ pub async fn handle_claim_burn(
             },
         ])
         .with_inputs(inputs)
-        .sign(&account_secret_key.k)
+        .sign(&account_secret_key.key)
         .build();
 
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
@@ -705,8 +705,6 @@ pub async fn handle_create_free_test_coins(
         },
     };
 
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER1");
-
     let (account_address, account_secret_key, new_account_name) = match maybe_account {
         Some(account) => {
             let account_secret_key = sdk
@@ -724,7 +722,7 @@ pub async fn handle_create_free_test_coins(
                 .name()
                 .ok_or_else(|| anyhow!("Account name must be provided when creating a new account"))?;
             let account_secret_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
-            let account_pk = PublicKey::from_secret_key(&account_secret_key.k);
+            let account_pk = PublicKey::from_secret_key(&account_secret_key.key);
 
             let component_id = Hash::try_from(account_pk.as_bytes())?;
             let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
@@ -737,15 +735,10 @@ pub async fn handle_create_free_test_coins(
         },
     };
 
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER2");
-
-    let account_public_key = PublicKey::from_secret_key(&account_secret_key.k);
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER2.5");
+    let account_public_key = PublicKey::from_secret_key(&account_secret_key.key);
     let output = sdk
         .confidential_crypto_api()
         .generate_output_for_dest(&account_public_key, req.amount)?;
-
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER3");
 
     let mut instructions = vec![
         // TODO: We create double what is expected, amount confidential and amount revealed. Should let the caller
@@ -787,7 +780,6 @@ pub async fn handle_create_free_test_coins(
         method: "pay_fee".to_string(),
         args: args![fee],
     });
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER4");
 
     // Add the account component
     // let account_substate = sdk.substate_api().get_substate(&account_address)?;
@@ -815,13 +807,10 @@ pub async fn handle_create_free_test_coins(
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
         .with_outputs(outputs)
-        .sign(&account_secret_key.k)
+        .sign(&account_secret_key.key)
         .build();
 
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER5");
-
     let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER6");
 
     let is_first_account = accounts_api.count()? == 0;
     let mut events = context.notifier().subscribe();
@@ -834,11 +823,7 @@ pub async fn handle_create_free_test_coins(
         }),
     });
 
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER7");
-
     let finalized = wait_for_result(&mut events, tx_hash).await?;
-    info!(target: LOG_TARGET, "FLAG: CUCUMBER8");
-
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
@@ -933,7 +918,7 @@ pub async fn handle_transfer(
     let transaction = Transaction::builder()
         .with_required_inputs(inputs.into_iter().map(Into::into))
         .with_fee_instructions(instructions)
-        .sign(&account_secret_key.k)
+        .sign(&account_secret_key.key)
         .build();
 
     // send the transaction
@@ -1081,7 +1066,7 @@ pub async fn handle_confidential_transfer(
 
         let change_amount = total_input_value - req.amount.as_u64_checked().unwrap();
         let maybe_change_statement = if change_amount > 0 {
-            let account_pk = PublicKey::from_secret_key(&account_secret.k);
+            let account_pk = PublicKey::from_secret_key(&account_secret.key);
             let (change_mask, public_nonce) = crypto_api.derive_output_mask_for_destination(&account_pk);
 
             outputs_api.add_output(ConfidentialOutputModel {
@@ -1136,7 +1121,7 @@ pub async fn handle_confidential_transfer(
             .fee_transaction_pay_from_component(source_component_address, req.fee.unwrap_or(DEFAULT_FEE))
             .with_required_inputs(inputs.into_iter().map(Into::into))
             .with_instructions(instructions)
-            .sign(&account_secret.k)
+            .sign(&account_secret.key)
             .build();
 
         outputs_api.proofs_set_transaction_hash(proof_id, *transaction.hash())?;

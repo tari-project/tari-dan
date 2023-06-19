@@ -13,9 +13,7 @@ use tari_dan_wallet_sdk::{
     models::Account,
 };
 use tari_engine_types::{
-    component::new_component_address_from_parts,
-    instruction::Instruction,
-    substate::SubstateAddress,
+    component::new_component_address_from_parts, instruction::Instruction, substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -51,7 +49,7 @@ pub async fn handle_mint_account_nft(
     let signing_key_index = account.key_index;
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
 
-    let owner_pk = PublicKey::from_secret_key(&signing_key.k);
+    let owner_pk = PublicKey::from_secret_key(&signing_key.key);
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
@@ -78,7 +76,7 @@ pub async fn handle_mint_account_nft(
         create_account_nft(
             context,
             &account,
-            &signing_key.k,
+            &signing_key.key,
             req.owner_token,
             &req.token_symbol,
             req.create_account_nft_fee.unwrap_or(DEFAULT_FEE),
@@ -94,7 +92,7 @@ pub async fn handle_mint_account_nft(
         token,
         account,
         component_address,
-        &signing_key.k,
+        &signing_key.key,
         req.mint_fee.unwrap_or(DEFAULT_FEE),
         metadata,
     )
@@ -224,10 +222,11 @@ async fn create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
-            owner_token,
-            token_symbol
-        ])
+        .call_function(
+            *ACCOUNT_NFT_TEMPLATE_ADDRESS,
+            "create",
+            args![owner_token, token_symbol],
+        )
         .sign(owner_sk)
         .build();
 

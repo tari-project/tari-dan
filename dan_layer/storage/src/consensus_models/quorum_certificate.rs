@@ -57,7 +57,7 @@ impl QuorumCertificate {
             epoch,
             view_number: 0,
             signatures: vec![],
-            merged_proof: MergedBalancedBinaryMerkleProof::create_from_proofs(vec![]).unwrap(),
+            merged_proof: MergedBalancedBinaryMerkleProof::create_from_proofs(&[]).unwrap(),
             leaf_hashes: vec![],
         }
     }

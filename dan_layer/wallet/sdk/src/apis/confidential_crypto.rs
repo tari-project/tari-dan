@@ -7,7 +7,7 @@ use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
 use tari_crypto::{
     commitment::HomomorphicCommitmentFactory,
     dhke::DiffieHellmanSharedSecret,
-    keys::PublicKey as _,
+    keys::{PublicKey as _, SecretKey},
     ristretto::RistrettoPublicKey,
 };
 use tari_engine_types::confidential::{challenges, ConfidentialOutput};
@@ -20,8 +20,8 @@ use tari_utilities::ByteArray;
 use crate::{
     byte_utils::copy_fixed,
     confidential::{
-        decrypt_value_and_mask,
-        encrypt_value,
+        decrypt_data_and_mask,
+        encrypt_data,
         generate_confidential_proof,
         get_commitment_factory,
         kdfs,
@@ -111,7 +111,7 @@ impl ConfidentialCryptoApi {
         commitment: &Commitment,
         encrypted_value: &EncryptedData,
     ) -> Result<u64, ConfidentialCryptoApiError> {
-        let (value, _) = decrypt_value_and_mask(encryption_key, commitment, encrypted_value)
+        let (value, _) = decrypt_data_and_mask(encryption_key, commitment, encrypted_value)
             .map_err(|_| ConfidentialCryptoApiError::FailedDecryptValue)?;
         Ok(value)
     }
@@ -162,9 +162,10 @@ impl ConfidentialCryptoApi {
                 details: "[generate_output_for_dest] amount is negative".to_string(),
             })?;
         let commitment = self.create_commitment(&output_mask, amount);
+        let mask = PrivateKey::random(&mut OsRng);
         let encrypt_key = self.derive_value_encryption_key_for_receiver(&output_mask, &commitment);
         let encrypted_data =
-            encrypt_value(&encrypt_key, &commitment, amount).map_err(ConfidentialCryptoApiError::AeadError)?;
+            encrypt_data(&encrypt_key, &commitment, amount, &mask).map_err(ConfidentialCryptoApiError::AeadError)?;
 
         Ok(ConfidentialOutput {
             commitment,

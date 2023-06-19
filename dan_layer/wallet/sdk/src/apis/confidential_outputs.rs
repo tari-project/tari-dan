@@ -119,14 +119,14 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             let mask = match output.sender_public_nonce {
                 Some(nonce) => {
                     // Derive shared secret
-                    let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(&output_key.k, &nonce);
+                    let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(&output_key.key, &nonce);
                     let shared_secret = PrivateKey::from_bytes(shared_secret.as_bytes()).unwrap();
                     kdfs::output_mask_kdf(&shared_secret)
                 },
                 None => {
                     // Derive local secret
                     let output_mask = self.key_manager_api.derive_key(key_branch, output.secret_key_index)?;
-                    output_mask.k
+                    output_mask.key
                 },
             };
 
@@ -194,14 +194,14 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
     fn validate_output(
         &self,
         account: &Account,
-        key: &DerivedKey<PrivateKey>,
+        key: &DerivedKey<PublicKey>,
         vault_address: &SubstateAddress,
         output: &ConfidentialOutput,
     ) -> Result<ConfidentialOutputModel, ConfidentialOutputsApiError> {
         let unblinded_result = self.crypto_api.unblind_output(
             &output.commitment,
             &output.encrypted_data,
-            &key.k,
+            &key.key,
             &output.stealth_public_nonce,
         );
         let (value, status) = match unblinded_result {

@@ -15,12 +15,8 @@ use tari_dan_wallet_sdk::{
 };
 use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::types::{
-    ConfidentialCreateOutputProofRequest,
-    ConfidentialCreateOutputProofResponse,
-    ProofsCancelRequest,
-    ProofsCancelResponse,
-    ProofsGenerateRequest,
-    ProofsGenerateResponse,
+    ConfidentialCreateOutputProofRequest, ConfidentialCreateOutputProofResponse, ProofsCancelRequest,
+    ProofsCancelResponse, ProofsGenerateRequest, ProofsGenerateResponse,
 };
 
 use crate::handlers::{get_account_or_default, HandlerContext};
@@ -86,7 +82,7 @@ pub async fn handle_create_transfer_proof(
         let account_secret = sdk
             .key_manager_api()
             .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-        let account_pk = PublicKey::from_secret_key(&account_secret.k);
+        let account_pk = PublicKey::from_secret_key(&account_secret.key);
         let (change_mask, public_nonce) = sdk
             .confidential_crypto_api()
             .derive_output_mask_for_destination(&account_pk);
@@ -158,7 +154,7 @@ pub async fn handle_create_output_proof(
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let (_, key) = sdk.key_manager_api().get_active_key(key_manager::TRANSACTION_BRANCH)?;
-    let public_key = PublicKey::from_secret_key(&key.k);
+    let public_key = PublicKey::from_secret_key(&key.key);
     let (output_mask, nonce) = sdk
         .confidential_crypto_api()
         .derive_output_mask_for_destination(&public_key);

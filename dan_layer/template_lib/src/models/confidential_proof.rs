@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
+use tari_crypto::tari_utilities::ByteArray;
 
 use crate::{
     crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
@@ -48,10 +49,20 @@ impl EncryptedData {
     pub const fn size() -> usize {
         80
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
 }
 
 impl AsRef<[u8]> for EncryptedData {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl Default for EncryptedData {
+    fn default() -> Self {
+        Self([0u8; Self::size()])
     }
 }
