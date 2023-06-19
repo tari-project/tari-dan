@@ -20,7 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::{BTreeSet, HashMap};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+};
 
 use log::warn;
 use tari_bor::encode;
@@ -43,8 +46,12 @@ use tari_engine_types::{
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
+        Arg,
         BucketAction,
         BucketRef,
+        CallAction,
+        CallFunctionArg,
+        CallMethodArg,
         CallerContextAction,
         ComponentAction,
         ComponentRef,
@@ -72,7 +79,7 @@ use tari_template_lib::{
 };
 use tari_utilities::ByteArray;
 
-use super::tracker::FinalizeTracker;
+use super::{tracker::FinalizeTracker, AuthorizationScope, Runtime};
 use crate::{
     packager::LoadedTemplate,
     runtime::{
@@ -85,6 +92,7 @@ use crate::{
         RuntimeModule,
         RuntimeState,
     },
+    transaction::TransactionProcessor,
 };
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
@@ -94,7 +102,7 @@ pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = L
     _auth_params: AuthParams,
     consensus: ConsensusContext,
     sender_public_key: RistrettoPublicKey,
-    modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
+    modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
 }
 
 pub struct StateFinalize {
@@ -108,7 +116,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         auth_params: AuthParams,
         consensus: ConsensusContext,
         sender_public_key: RistrettoPublicKey,
-        modules: Vec<Box<dyn RuntimeModule<TTemplateProvider>>>,
+        modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
     ) -> Result<Self, RuntimeError> {
         let runtime = Self {
             tracker,
@@ -717,6 +725,125 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 Ok(InvokeResult::encode(&random)?)
             },
         }
+    }
+
+    fn call_invoke(&self, action: CallAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_modules_on_runtime_call("call_invoke")?;
+
+        // we are initializing a new runtime for the nested call
+        let call_runtime_interface = RuntimeInterfaceImpl::initialize(
+            self.tracker.clone(),
+            // for safety reasons we are not going to propagate proofs to the call component or template
+            AuthParams {
+                initial_ownership_proofs: vec![],
+            },
+            self.consensus.clone(),
+            self.sender_public_key.clone(),
+            self.modules.clone(),
+        )?;
+
+        // for safety reasons, we explicitly avoid propagating any auth scope to the template/component we are calling
+        // so all nested calls can only be done to not auth restricted template methods.
+        // this prevents, for example, to withdraw from an account in a nested call
+        let auth_scope = AuthorizationScope::new(Arc::new(vec![]));
+
+        // extract all the common required information for both types of calls
+        let template_provider = self.tracker.get_template_provider();
+        let current_runtime_state = self.tracker.runtime_state()?;
+        let max_recursion_depth = current_runtime_state.max_recursion_depth;
+
+        // a nested call starts with an increased recursion depth
+        let new_recursion_depth = current_runtime_state.recursion_depth + 1;
+
+        // the runtime state will be overriden by the call so we store a copy to revert back afterwards
+        let caller_runtime_state = self.tracker.runtime_state()?;
+
+        let exec_result = match action {
+            CallAction::CallFunction => {
+                // extract the args from the invoke operation
+                let arg: CallFunctionArg = args.get(0)?;
+                let template_address = arg.template_address;
+                let template_name = template_provider
+                    .get_template_module(&template_address)
+                    .map_err(|e| RuntimeError::FailedToLoadTemplate {
+                        address: template_address,
+                        details: e.to_string(),
+                    })?
+                    .ok_or(RuntimeError::TemplateNotFound { template_address })?
+                    .template_name()
+                    .to_string();
+                let function = arg.function;
+                let args = arg.args.into_iter().map(Arg::Literal).collect();
+
+                let new_state = RuntimeState {
+                    template_name,
+                    template_address,
+                    component_address: None,
+                    recursion_depth: new_recursion_depth,
+                    max_recursion_depth,
+                };
+                call_runtime_interface.set_current_runtime_state(new_state)?;
+                let call_runtime = Runtime::new(Arc::new(call_runtime_interface));
+
+                TransactionProcessor::call_function(
+                    template_provider,
+                    &call_runtime,
+                    auth_scope,
+                    &template_address,
+                    &function,
+                    // TODO: put in rest of args
+                    args,
+                    new_recursion_depth,
+                    max_recursion_depth,
+                )
+                .map_err(|e| RuntimeError::CallFunctionError {
+                    template_address,
+                    function,
+                    details: e.to_string(),
+                })?
+            },
+            CallAction::CallMethod => {
+                // extract the args from the invoke operation
+                let arg: CallMethodArg = args.get(0)?;
+                let component_address = arg.component_address;
+                let component_header = self.tracker.get_component(&component_address)?;
+                let template_name = component_header.module_name;
+                let template_address = component_header.template_address;
+                let method = arg.method;
+                let args = arg.args.into_iter().map(Arg::Literal).collect();
+
+                let new_state = RuntimeState {
+                    template_name,
+                    template_address,
+                    component_address: Some(component_address),
+                    recursion_depth: new_recursion_depth,
+                    max_recursion_depth,
+                };
+                call_runtime_interface.set_current_runtime_state(new_state)?;
+                let call_runtime = Runtime::new(Arc::new(call_runtime_interface));
+
+                TransactionProcessor::call_method(
+                    template_provider,
+                    &call_runtime,
+                    auth_scope,
+                    &component_address,
+                    &method,
+                    args,
+                    new_recursion_depth,
+                    max_recursion_depth,
+                )
+                .map_err(|e| RuntimeError::CallMethodError {
+                    component_address,
+                    method,
+                    details: e.to_string(),
+                })?
+            },
+        };
+
+        // the runtime state was overriden by the call so we revert
+        self.tracker.set_current_runtime_state(caller_runtime_state);
+
+        Ok(InvokeResult::raw(exec_result.raw))
     }
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError> {
