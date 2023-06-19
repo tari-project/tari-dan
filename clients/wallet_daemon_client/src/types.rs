@@ -41,7 +41,7 @@ use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
-    prelude::{ConfidentialWithdrawProof, NonFungibleAddress, ResourceType},
+    prelude::{ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 
@@ -505,7 +505,6 @@ pub struct AuthRevokeTokenResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MintAccountNftRequest {
     pub account: ComponentAddressOrName,
-    pub owner_token: NonFungibleAddress,
     pub token_symbol: String,
     pub metadata: serde_json::Value,
     pub mint_fee: Option<Amount>,

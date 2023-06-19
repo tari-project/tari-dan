@@ -29,11 +29,7 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_template_lib::{
-    crypto::RistrettoPublicKeyBytes,
-    prelude::{Amount, NonFungibleAddress},
-};
-use tari_utilities::hex::Hex;
+use tari_template_lib::prelude::Amount;
 use tari_wallet_daemon_client::{types::MintAccountNftRequest, ComponentAddressOrName, WalletDaemonClient};
 
 use crate::command::transaction::summarize_finalize_result;
@@ -48,8 +44,6 @@ pub enum AccountNftSubcommand {
 pub struct MintAccountNftArgs {
     #[clap(long, short = 'a', alias = "account")]
     pub account: Option<ComponentAddressOrName>,
-    #[clap(long, short = 'o', alias = "owner-token")]
-    pub owner_token: String,
     #[clap(long, short = 't', alias = "token-symbol")]
     pub token_symbol: Option<String>,
     #[clap(long, short = 'i', alias = "metadata-file")]
@@ -79,7 +73,6 @@ pub async fn handle_mint_account_nft(
 ) -> Result<(), anyhow::Error> {
     let MintAccountNftArgs {
         account,
-        owner_token,
         token_symbol,
         metadata_file,
         metadata,
@@ -132,19 +125,10 @@ pub async fn handle_mint_account_nft(
             .map_err(|e| anyhow!("Failed to parse metadata: {}", e))?
     };
 
-    let owner_token = NonFungibleAddress::from_public_key(
-        RistrettoPublicKeyBytes::from_bytes(
-            &Vec::<u8>::from_hex(&owner_token)
-                .map_err(|e| anyhow!("Failed to parse owner token, with error = {}", e))?,
-        )
-        .map_err(|e| anyhow!("Failed to parse owner token, with error = {}", e.to_error_string()))?,
-    );
-
     println!("✅ Mint account NFT submitted");
 
     let req = MintAccountNftRequest {
         account,
-        owner_token,
         token_symbol,
         metadata,
         mint_fee: mint_fee.map(|f| Amount::new(i64::from(f))),

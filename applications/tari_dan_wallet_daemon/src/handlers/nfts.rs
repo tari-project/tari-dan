@@ -55,10 +55,7 @@ pub async fn handle_mint_account_nft(
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
-    info!(
-        target: LOG_TARGET,
-        "Minting new NFT with owner address {} and metadata {}", req.owner_token, req.metadata
-    );
+    info!(target: LOG_TARGET, "Minting new NFT with metadata {}", req.metadata);
 
     // check if the component address already exists
     let component_address = new_component_address_from_parts(
@@ -80,7 +77,7 @@ pub async fn handle_mint_account_nft(
             context,
             &account,
             &signing_key.k,
-            req.owner_token,
+            owner_token,
             &req.token_symbol,
             req.create_account_nft_fee.unwrap_or(DEFAULT_FEE),
             token.clone(),
