@@ -125,20 +125,21 @@ export default function Layout(effect: React.EffectCallback, deps?: React.Depend
   const [request, setRequest] = useState<Request | null>(null);
   const [minimized, setMinimized] = useState(false);
   const [counter, setCounter] = useState(0);
-  const [token, setToken] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token'));
   const [error, setError] = useState(null);
   const counterRef = useRef(counter);
   const requestRef = useRef(request);
   const passwordRef = useRef("");
-  const handleConnect = () => {
+  const handleConnect = (event) => {
+    event.preventDefault();
+    console.log("here",passwordRef)
     authenticate(passwordRef.current.value).then((token) => {
       setToken(token);
+      localStorage.setItem('token',token);
     }).catch((e) => {
       setError(e);
     });
   };
-  console.log(error);
-  console.log(token);
   useEffect(() => {
     const fetchData = async () => {
       let resp = await getPendingRequestsCount();
@@ -184,6 +185,7 @@ export default function Layout(effect: React.EffectCallback, deps?: React.Depend
                 flexDirection: "column",
                 gap: "1rem",
               }}
+              onSubmit={handleConnect}
             >
               <TextField
                 name="link"
@@ -192,7 +194,7 @@ export default function Layout(effect: React.EffectCallback, deps?: React.Depend
                 fullWidth
               />
               <div className="dialog-actions">
-                <Button variant="contained" onClick={handleConnect}>
+                <Button variant="contained" type="submit">
                   Connect
                 </Button>
               </div>
