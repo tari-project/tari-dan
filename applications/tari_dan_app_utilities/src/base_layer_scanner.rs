@@ -26,21 +26,29 @@ use log::*;
 use tari_base_node_client::{
     grpc::GrpcBaseNodeClient,
     types::{BaseLayerMetadata, BlockInfo},
-    BaseNodeClient, BaseNodeClientError,
+    BaseNodeClient,
+    BaseNodeClientError,
 };
 use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
-    CodeTemplateRegistration, SideChainFeature, TransactionOutput, ValidatorNodeRegistration,
+    CodeTemplateRegistration,
+    SideChainFeature,
+    TransactionOutput,
+    ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::{
     global::{GlobalDb, MetadataKey},
-    ShardStore, ShardStoreWriteTransaction, StorageError,
+    ShardStore,
+    ShardStoreWriteTransaction,
+    StorageError,
 };
 use tari_dan_storage_sqlite::{
-    error::SqliteStorageError, global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore,
+    error::SqliteStorageError,
+    global::SqliteGlobalDbAdapter,
+    sqlite_shard_store_factory::SqliteShardStore,
 };
 use tari_engine_types::{
     confidential::UnclaimedConfidentialOutput,
@@ -355,24 +363,11 @@ impl BaseLayerScanner {
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
 
-        let encrypted_data = {
-            let bytes = output.encrypted_data.to_byte_vec();
-            if bytes.len() != EncryptedData::size() {
-                return Err(BaseLayerScannerError::InvalidSideChainUtxoResponse(format!(
-                    "Invalid encrypted data size: {}. Expected {}",
-                    bytes.len(),
-                    EncryptedData::size()
-                )));
-            }
-            let mut data = [0u8; EncryptedData::size()];
-            data.copy_from_slice(&bytes);
-            EncryptedData(data)
-        };
         let substate = Substate::new(
             0,
             SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
                 commitment: output.commitment.clone(),
-                encrypted_data,
+                encrypted_data: EncryptedData(output.encrypted_data.to_bytes()),
             }),
         );
         let shard_id = ShardId::from_address(&address, 0);

@@ -66,7 +66,7 @@ pub fn validate_confidential_proof(
             Ok(ConfidentialOutput {
                 commitment,
                 stealth_public_nonce,
-                encrypted_data: stmt.encrypted_data,
+                encrypted_data: stmt.encrypted_data.clone(),
                 minimum_value_promise: stmt.minimum_value_promise,
             })
         })
@@ -78,7 +78,7 @@ pub fn validate_confidential_proof(
         output: ConfidentialOutput {
             commitment: output_commitment,
             stealth_public_nonce: output_public_nonce,
-            encrypted_data: proof.output_statement.encrypted_data,
+            encrypted_data: proof.output_statement.encrypted_data.clone(),
             minimum_value_promise: proof.output_statement.minimum_value_promise,
         },
         change_output: change,

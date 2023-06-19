@@ -17,7 +17,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::{constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS, resource::ResourceType};
+use tari_template_lib::{constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS, models::EncryptedData, resource::ResourceType};
 use tari_transaction::Transaction;
 
 #[test]
@@ -94,6 +94,7 @@ fn outputs_locked_and_finalized() {
             value: 24,
             sender_public_nonce: None,
             secret_key_index: 0,
+            encrypted_data: EncryptedData([0; EncryptedData::size()]),
             public_asset_tag: None,
             status: OutputStatus::LockedUnconfirmed,
             locked_by_proof: Some(proof_id),
@@ -186,6 +187,7 @@ impl Test {
                 value: amount,
                 sender_public_nonce: None,
                 secret_key_index: 0,
+                encrypted_data: EncryptedData([0; EncryptedData::size()]),
                 public_asset_tag: None,
                 status: OutputStatus::Unspent,
                 locked_by_proof: None,

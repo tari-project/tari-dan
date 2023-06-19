@@ -19,14 +19,14 @@ pub struct ConfidentialOutputProof {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialStatement {
-    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    #[cfg_attr(feature = "hex_serialization", serde(with = "hex::serde"))]
     pub commitment: [u8; 32],
     /// Public nonce (R) that was used to generate the commitment mask
     // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
     pub sender_public_nonce: RistrettoPublicKeyBytes,
     /// Commitment value encrypted for the receiver. Without this it would be difficult (not impossible) for the
     /// receiver to determine the value component of the commitment.
-    // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
+    #[cfg_attr(feature = "hex_serialization", serde(with = "hex::serde"))]
     pub encrypted_data: EncryptedData,
     pub minimum_value_promise: u64,
     pub revealed_amount: Amount,
@@ -41,7 +41,7 @@ pub struct ConfidentialWithdrawProof {
     pub balance_proof: BalanceProofSignature,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct EncryptedData(#[serde(with = "serde_big_array::BigArray")] pub [u8; EncryptedData::size()]);
 
@@ -64,5 +64,29 @@ impl AsRef<[u8]> for EncryptedData {
 impl Default for EncryptedData {
     fn default() -> Self {
         Self([0u8; Self::size()])
+    }
+}
+
+impl TryFrom<&[u8]> for EncryptedData {
+    type Error = ();
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        if value.len() != Self::size() {
+            return Err(());
+        }
+        let mut out = [0_u8; Self::size()];
+        out.copy_from_slice(value);
+        Ok(Self(out))
+    }
+}
+
+#[cfg(feature = "hex_serialization")]
+impl ::hex::FromHex for EncryptedData {
+    type Error = hex::FromHexError;
+
+    fn from_hex<T: AsRef<[u8]>>(hex: T) -> Result<Self, Self::Error> {
+        let mut out = [0_u8; Self::size()];
+        hex::decode_to_slice(hex, &mut out as &mut [u8])?;
+        Ok(Self(out))
     }
 }

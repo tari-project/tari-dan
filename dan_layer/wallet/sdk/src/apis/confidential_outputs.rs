@@ -2,18 +2,16 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_common_types::types::{PrivateKey, PublicKey};
-use tari_crypto::dhke::DiffieHellmanSharedSecret;
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{confidential::ConfidentialOutput, substate::SubstateAddress};
 use tari_key_manager::key_manager::DerivedKey;
 use tari_template_lib::Hash;
-use tari_utilities::ByteArray;
 
 use crate::{
     apis::{
         accounts::{AccountsApi, AccountsApiError},
-        confidential_crypto::ConfidentialCryptoApi,
+        confidential_crypto::{ConfidentialCryptoApi, ConfidentialCryptoApiError},
         key_manager,
         key_manager::{KeyManagerApi, KeyManagerApiError},
     },
@@ -112,32 +110,36 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         outputs: Vec<ConfidentialOutputModel>,
         key_branch: &str,
     ) -> Result<Vec<ConfidentialOutputWithMask>, ConfidentialOutputsApiError> {
-        let mut output_masks = Vec::with_capacity(outputs.len());
+        let mut outputs_with_masks = Vec::with_capacity(outputs.len());
         for output in outputs {
             let output_key = self.key_manager_api.derive_key(key_branch, output.secret_key_index)?;
             // Either derive the mask from the sender's public nonce or from the local key manager
-            let mask = match output.sender_public_nonce {
+            let shared_decrypt_key = match output.sender_public_nonce {
                 Some(nonce) => {
                     // Derive shared secret
-                    let shared_secret = DiffieHellmanSharedSecret::<PublicKey>::new(&output_key.key, &nonce);
-                    let shared_secret = PrivateKey::from_bytes(shared_secret.as_bytes()).unwrap();
-                    kdfs::output_mask_kdf(&shared_secret)
+                    kdfs::encrypted_data_dh_kdf_aead(&output_key.key, &nonce)
                 },
                 None => {
                     // Derive local secret
-                    let output_mask = self.key_manager_api.derive_key(key_branch, output.secret_key_index)?;
-                    output_mask.key
+                    let output_key = self.key_manager_api.derive_key(key_branch, output.secret_key_index)?;
+                    output_key.key
                 },
             };
 
-            output_masks.push(ConfidentialOutputWithMask {
+            let (_, mask) = self.crypto_api.extract_value_and_mask(
+                &shared_decrypt_key,
+                &output.commitment,
+                &output.encrypted_data,
+            )?;
+
+            outputs_with_masks.push(ConfidentialOutputWithMask {
                 commitment: output.commitment,
                 value: output.value,
                 mask,
                 public_asset_tag: None,
             });
         }
-        Ok(output_masks)
+        Ok(outputs_with_masks)
     }
 
     pub fn get_unspent_balance(&self, vault_addr: &SubstateAddress) -> Result<u64, ConfidentialOutputsApiError> {
@@ -224,6 +226,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             value,
             sender_public_nonce: Some(output.stealth_public_nonce.clone()),
             secret_key_index: account.key_index,
+            encrypted_data: output.encrypted_data.clone(),
             public_asset_tag: None,
             status,
             locked_by_proof: None,
@@ -248,6 +251,8 @@ pub enum ConfidentialOutputsApiError {
     StoreError(#[from] WalletStorageError),
     #[error("Confidential proof error: {0}")]
     ConfidentialProof(#[from] ConfidentialProofError),
+    #[error("Confidential crypto error: {0}")]
+    ConfidentialCrypto(#[from] ConfidentialCryptoApiError),
     #[error("Insufficient funds")]
     InsufficientFunds,
     #[error("Key manager error: {0}")]

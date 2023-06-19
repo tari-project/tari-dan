@@ -6,6 +6,7 @@ use anyhow::anyhow;
 use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use base64;
 use log::*;
+use rand::rngs::OsRng;
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_crypto::{
     commitment::{HomomorphicCommitment as Commitment, HomomorphicCommitmentFactory},
@@ -38,12 +39,31 @@ use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
-        AccountGetDefaultRequest, AccountGetRequest, AccountGetResponse, AccountInfo, AccountSetDefaultRequest,
-        AccountSetDefaultResponse, AccountsCreateFreeTestCoinsRequest, AccountsCreateFreeTestCoinsResponse,
-        AccountsCreateRequest, AccountsCreateResponse, AccountsGetBalancesRequest, AccountsGetBalancesResponse,
-        AccountsInvokeRequest, AccountsInvokeResponse, AccountsListRequest, AccountsListResponse, BalanceEntry,
-        ClaimBurnRequest, ClaimBurnResponse, ConfidentialTransferRequest, ConfidentialTransferResponse,
-        RevealFundsRequest, RevealFundsResponse, TransferRequest, TransferResponse,
+        AccountGetDefaultRequest,
+        AccountGetRequest,
+        AccountGetResponse,
+        AccountInfo,
+        AccountSetDefaultRequest,
+        AccountSetDefaultResponse,
+        AccountsCreateFreeTestCoinsRequest,
+        AccountsCreateFreeTestCoinsResponse,
+        AccountsCreateRequest,
+        AccountsCreateResponse,
+        AccountsGetBalancesRequest,
+        AccountsGetBalancesResponse,
+        AccountsInvokeRequest,
+        AccountsInvokeResponse,
+        AccountsListRequest,
+        AccountsListResponse,
+        BalanceEntry,
+        ClaimBurnRequest,
+        ClaimBurnResponse,
+        ConfidentialTransferRequest,
+        ConfidentialTransferResponse,
+        RevealFundsRequest,
+        RevealFundsResponse,
+        TransferRequest,
+        TransferResponse,
     },
     ComponentAddressOrName,
 };
@@ -312,6 +332,8 @@ pub async fn handle_reveal_funds(
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let notifier = context.notifier().clone();
 
+    // If the caller aborts the request early, this async block would be aborted at any await point. To avoid this, we
+    // spawn a task that will continue running.
     task::spawn(async move {
         let mut inputs = vec![];
 
@@ -344,15 +366,13 @@ pub async fn handle_reveal_funds(
         let account_key = sdk
             .key_manager_api()
             .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-        let account_public_key = PublicKey::from_secret_key(&account_key.key);
 
-        let (output_mask, public_nonce) = sdk
-            .confidential_crypto_api()
-            .derive_output_mask_for_destination(&account_public_key);
+        let output_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+        let (_, public_nonce) = PublicKey::random_keypair(&mut OsRng);
 
         let output_statement = ConfidentialProofStatement {
             amount: input_amount - amount_to_reveal,
-            mask: output_mask,
+            mask: output_mask.key,
             sender_public_nonce: public_nonce,
             minimum_value_promise: 0,
             reveal_amount: amount_to_reveal,
@@ -401,11 +421,10 @@ pub async fn handle_reveal_funds(
         } else {
             builder = builder
                 .fee_transaction_pay_from_component(account_address, fee)
-                .call_method(
-                    account_address,
-                    "withdraw_confidential",
-                    args![*CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
-                )
+                .call_method(account_address, "withdraw_confidential", args![
+                    *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                    reveal_proof
+                ])
                 .put_last_instruction_output_on_workspace("revealed")
                 .call_method(account_address, "deposit", args![Workspace("revealed")]);
         }
@@ -602,13 +621,12 @@ pub async fn handle_claim_burn(
         &reciprocal_claim_public_key,
     )?;
 
-    let (mask, output_public_nonce) = sdk
-        .confidential_crypto_api()
-        .derive_output_mask_for_destination(&account_public_key);
+    let mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+    let (_, output_public_nonce) = PublicKey::random_keypair(&mut OsRng);
 
     let output_statement = ConfidentialProofStatement {
         amount: Amount::try_from(unmasked_output.value)? - fee,
-        mask,
+        mask: mask.key,
         sender_public_nonce: output_public_nonce,
         minimum_value_promise: 0,
         reveal_amount: fee,
@@ -984,14 +1002,11 @@ async fn get_or_create_account_address(
             let owner_token = NonFungibleAddress::from_public_key(
                 RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
             );
-            instructions.insert(
-                0,
-                Instruction::CallFunction {
-                    template_address: *ACCOUNT_TEMPLATE_ADDRESS,
-                    function: "create".to_string(),
-                    args: args![owner_token],
-                },
-            );
+            instructions.insert(0, Instruction::CallFunction {
+                template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+                function: "create".to_string(),
+                args: args![owner_token],
+            });
         },
     };
 
@@ -1054,11 +1069,12 @@ pub async fn handle_confidential_transfer(
         let (confidential_inputs, total_input_value) =
             outputs_api.lock_outputs_by_amount(&src_vault.address, total_amount.as_u64_checked().unwrap(), proof_id)?;
 
-        let (output_mask, public_nonce) = crypto_api.derive_output_mask_for_destination(&req.destination_public_key);
+        let output_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+        let (_, public_nonce) = PublicKey::random_keypair(&mut OsRng);
 
         let output_statement = ConfidentialProofStatement {
             amount: req.amount,
-            mask: output_mask,
+            mask: output_mask.key,
             sender_public_nonce: public_nonce,
             minimum_value_promise: 0,
             reveal_amount: Amount::zero(),
@@ -1066,16 +1082,24 @@ pub async fn handle_confidential_transfer(
 
         let change_amount = total_input_value - req.amount.as_u64_checked().unwrap();
         let maybe_change_statement = if change_amount > 0 {
-            let account_pk = PublicKey::from_secret_key(&account_secret.key);
-            let (change_mask, public_nonce) = crypto_api.derive_output_mask_for_destination(&account_pk);
+            let change_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+            let (_, public_nonce) = PublicKey::random_keypair(&mut OsRng);
+
+            let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
+                change_amount,
+                &change_mask.key,
+                &public_nonce,
+                &account_secret,
+            )?;
 
             outputs_api.add_output(ConfidentialOutputModel {
                 account_address: account.address,
                 vault_address: src_vault.address,
-                commitment: get_commitment_factory().commit_value(&change_mask, change_amount),
+                commitment: get_commitment_factory().commit_value(&change_mask.key, change_amount),
                 value: change_amount,
                 sender_public_nonce: Some(public_nonce.clone()),
-                secret_key_index: account.key_index,
+                secret_key_index: change_mask.key_index,
+                encrypted_data,
                 public_asset_tag: None,
                 status: OutputStatus::LockedUnconfirmed,
                 locked_by_proof: Some(proof_id),
@@ -1083,7 +1107,7 @@ pub async fn handle_confidential_transfer(
 
             Some(ConfidentialProofStatement {
                 amount: change_amount.try_into()?,
-                mask: change_mask,
+                mask: change_mask.key,
                 sender_public_nonce: public_nonce,
                 minimum_value_promise: 0,
                 reveal_amount: Amount::zero(),

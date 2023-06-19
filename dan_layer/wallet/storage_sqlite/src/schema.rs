@@ -1,6 +1,4 @@
-// @generated automatically by Diesel CLI.
-
-diesel::table! {
+table! {
     accounts (id) {
         id -> Integer,
         name -> Text,
@@ -12,7 +10,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     auth_status (id) {
         id -> Integer,
         user_decided -> Bool,
@@ -22,7 +20,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     config (id) {
         id -> Integer,
         key -> Text,
@@ -33,7 +31,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     key_manager_states (id) {
         id -> Integer,
         branch_seed -> Text,
@@ -44,7 +42,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     non_fungible_tokens (id) {
         id -> Integer,
         vault_id -> Integer,
@@ -56,7 +54,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     outputs (id) {
         id -> Integer,
         account_id -> Integer,
@@ -71,10 +69,11 @@ diesel::table! {
         locked_by_proof -> Nullable<Integer>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
+        encrypted_data -> Binary,
     }
 }
 
-diesel::table! {
+table! {
     proofs (id) {
         id -> Integer,
         account_id -> Integer,
@@ -84,7 +83,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     substates (id) {
         id -> Integer,
         module_name -> Nullable<Text>,
@@ -97,7 +96,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     transactions (id) {
         id -> Integer,
         hash -> Text,
@@ -117,7 +116,7 @@ diesel::table! {
     }
 }
 
-diesel::table! {
+table! {
     vaults (id) {
         id -> Integer,
         account_id -> Integer,
@@ -131,14 +130,14 @@ diesel::table! {
     }
 }
 
-diesel::joinable!(non_fungible_tokens -> vaults (vault_id));
-diesel::joinable!(outputs -> accounts (account_id));
-diesel::joinable!(outputs -> vaults (vault_id));
-diesel::joinable!(proofs -> accounts (account_id));
-diesel::joinable!(proofs -> vaults (vault_id));
-diesel::joinable!(vaults -> accounts (account_id));
+joinable!(non_fungible_tokens -> vaults (vault_id));
+joinable!(outputs -> accounts (account_id));
+joinable!(outputs -> vaults (vault_id));
+joinable!(proofs -> accounts (account_id));
+joinable!(proofs -> vaults (vault_id));
+joinable!(vaults -> accounts (account_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
+allow_tables_to_appear_in_same_query!(
     accounts,
     auth_status,
     config,

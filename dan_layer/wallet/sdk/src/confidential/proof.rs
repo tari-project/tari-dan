@@ -36,7 +36,7 @@ use zeroize::Zeroizing;
 
 use crate::{
     byte_utils::copy_fixed,
-    confidential::{error::ConfidentialProofError, kdfs, kdfs::EncryptedValueKey},
+    confidential::{error::ConfidentialProofError, kdfs, kdfs::EncryptedDataKey},
 };
 
 lazy_static! {
@@ -99,7 +99,9 @@ pub fn generate_confidential_proof(
         .transpose()?;
 
     let commitment = output_statement.to_commitment();
-    let encryption_key = kdfs::encrypted_data_kdf_aead(&output_statement.mask, &commitment);
+
+    let encryption_key =
+        kdfs::encrypted_data_dh_kdf_aead(&output_statement.mask, &output_statement.sender_public_nonce);
     let encrypted_data = encrypt_data(
         &encryption_key,
         &commitment,
@@ -122,8 +124,8 @@ pub fn generate_confidential_proof(
     })
 }
 
-fn inner_encrypted_data_kdf_aead(encryption_key: &PrivateKey, commitment: &Commitment) -> EncryptedValueKey {
-    let mut aead_key = EncryptedValueKey::from(SafeArray::default());
+fn inner_encrypted_data_kdf_aead(encryption_key: &PrivateKey, commitment: &Commitment) -> EncryptedDataKey {
+    let mut aead_key = EncryptedDataKey::from(SafeArray::default());
     // This has to be the same as the base layer so that burn claims are spendable
     hash_domain!(
         TransactionSecureNonceKdfDomain,
@@ -137,7 +139,7 @@ fn inner_encrypted_data_kdf_aead(encryption_key: &PrivateKey, commitment: &Commi
     aead_key
 }
 
-const ENCRYPTED_DATA_TAG: &'static [u8] = b"TARI_AAD_VALUE_AND_MASK_EXTEND_NONCE_VARIANT";
+const ENCRYPTED_DATA_TAG: &[u8] = b"TARI_AAD_VALUE_AND_MASK_EXTEND_NONCE_VARIANT";
 // Useful size constants, each in bytes
 const SIZE_NONCE: usize = size_of::<XNonce>();
 const SIZE_VALUE: usize = size_of::<u64>();
@@ -197,7 +199,7 @@ pub fn decrypt_data_and_mask(
     let mut value_bytes = [0u8; SIZE_VALUE];
     value_bytes.clone_from_slice(&bytes[0..SIZE_VALUE]);
     Ok((
-        u64::from_le_bytes(value_bytes).into(),
+        u64::from_le_bytes(value_bytes),
         PrivateKey::from_bytes(&bytes[SIZE_VALUE..]).expect("The length of bytes is exactly SIZE_MASK"),
     ))
 }

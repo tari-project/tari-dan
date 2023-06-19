@@ -191,7 +191,7 @@ pub enum MintArg {
         tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
     },
     Confidential {
-        proof: ConfidentialOutputProof,
+        proof: Box<ConfidentialOutputProof>,
     },
 }
 
