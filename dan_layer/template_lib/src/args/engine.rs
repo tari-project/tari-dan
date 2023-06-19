@@ -41,7 +41,7 @@ use crate::{
         ResourceAddress,
         VaultRef,
     },
-    prelude::{AccessRules, ConfidentialOutputProof},
+    prelude::{AccessRules, ConfidentialOutputProof, TemplateAddress},
     resource::ResourceType,
     Hash,
 };
@@ -368,4 +368,31 @@ pub struct CallerContextInvokeArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CallerContextAction {
     GetCallerPublicKey,
+}
+
+// -------------------------------- CallInvoke -------------------------------- //
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CallInvokeArg {
+    pub action: CallAction,
+    pub args: Vec<Vec<u8>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum CallAction {
+    CallFunction,
+    CallMethod,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CallFunctionArg {
+    pub template_address: TemplateAddress,
+    pub function: String,
+    pub args: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CallMethodArg {
+    pub component_address: ComponentAddress,
+    pub method: String,
+    pub args: Vec<Vec<u8>>,
 }
