@@ -58,7 +58,6 @@ pub async fn listen(
     context: HandlerContext,
     shutdown_signal: ShutdownSignal,
 ) -> Result<(), anyhow::Error> {
-    let shutdown_signal_clone = shutdown_signal.clone();
     let router = Router::new()
         .route("/", post(handler))
         .route("/json_rpc", post(handler))
@@ -89,6 +88,7 @@ async fn handler(
     Extension(message_queue): Extension<Arc<Mutex<VecDeque<UserConfirmationRequest>>>>,
     value: JsonRpcExtractor,
 ) -> JrpcResult {
+    println!("Value {value:?}");
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {:?}", value);
     match value.method.as_str().split_once('.') {
@@ -99,6 +99,7 @@ async fn handler(
             "deny" => call_handler(context, value, token, rpc::handle_login_deny).await,
             "revoke" => call_handler(context, value, token, rpc::handle_revoke).await,
             "get_all_jwt" => call_handler(context, value, token, rpc::handle_get_all_jwt).await,
+            "get_admin_token" => call_handler(context, value, token, rpc::handle_get_admin_token).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("webrtc", method)) => match method {

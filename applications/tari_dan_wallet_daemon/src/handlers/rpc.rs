@@ -1,8 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_wallet_sdk::apis::jwt::JrpcPermission;
+use std::time::Duration;
+
+use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_wallet_daemon_client::types::{
+    AuthGetAdminTokenRequest,
+    AuthGetAdminTokenResponse,
     AuthGetAllJwtRequest,
     AuthGetAllJwtResponse,
     AuthLoginAcceptRequest,
@@ -82,4 +86,20 @@ pub async fn handle_get_all_jwt(
     jwt.check_auth(token, &[JrpcPermission::Admin])?;
     let tokens = jwt.get_tokens()?;
     Ok(AuthGetAllJwtResponse { jwt: tokens })
+}
+pub async fn handle_get_admin_token(
+    context: &HandlerContext,
+    _: Option<String>,
+    request: AuthGetAdminTokenRequest,
+) -> Result<AuthGetAdminTokenResponse, anyhow::Error> {
+    let jwt = context.wallet_sdk().jwt_api();
+    jwt.is_secret_key(&request.password)?;
+    let (auth_token, _) = jwt.generate_auth_token(
+        JrpcPermissions(vec![JrpcPermission::Admin]),
+        Some(Duration::from_secs(100_000_000_000)),
+    )?;
+    let permissions_token = jwt.grant("Admin".to_string(), auth_token)?;
+    Ok(AuthGetAdminTokenResponse {
+        admin_jwt: permissions_token,
+    })
 }

@@ -272,10 +272,10 @@ impl BalanceEntry {
         match self.resource_type {
             ResourceType::Fungible => {
                 format!("{} {}", self.balance, symbol)
-            }
+            },
             ResourceType::NonFungible => {
                 format!("{} {} tokens", self.balance, symbol)
-            }
+            },
             ResourceType::Confidential => {
                 format!(
                     "{} revealed + {} blinded = {} {}",
@@ -284,7 +284,7 @@ impl BalanceEntry {
                     self.balance + self.confidential_balance,
                     symbol
                 )
-            }
+            },
         }
     }
 }
@@ -477,9 +477,10 @@ pub struct WebRtcGetOldestRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WebRtcGetOldestResponse {
-    pub id:u64,
+    pub id: u64,
     pub method: String,
     pub params: String,
+    pub website_name: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -580,4 +581,14 @@ pub struct AuthGetAllJwtRequest {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthGetAllJwtResponse {
     pub jwt: Vec<(i32, String)>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthGetAdminTokenRequest {
+    pub password: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AuthGetAdminTokenResponse {
+    pub admin_jwt: String,
 }

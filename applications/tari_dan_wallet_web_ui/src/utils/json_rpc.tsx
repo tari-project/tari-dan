@@ -56,7 +56,6 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
     }),
     headers: headers
   });
-  // console.log(await response.text())
   let json = await response.json();
   if (json.error) {
     console.error(json.error);
@@ -66,14 +65,8 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
 }
 
 export async function jsonRpc(method: string, params: any = null) {
-  await mutex_token.runExclusive(async () => {
-    if (token === null) {
-      let auth_response = await internalJsonRpc("auth.request", null, [["Admin"], null]);
-      let auth_token = auth_response["auth_token"];
-      let accept_response = await internalJsonRpc("auth.accept", null, [auth_token, auth_token]);
-      token = accept_response.permissions_token
-    }
-  })
+  if (token === null)
+    return;
   // This will fail if the token is expired
   return internalJsonRpc(method, token, params)
 }
@@ -166,3 +159,7 @@ export const getPendingRequestsCount = () => jsonRpc("webrtc.check_notifications
 export const getPendingRequest = () => jsonRpc("webrtc.get_oldest_request", [])
 export const acceptPendingRequest = (id: number) => jsonRpc("webrtc.accept_request", [id])
 export const denyPendingRequest = (id: number) => jsonRpc("webrtc.deny_request", [id])
+
+export const authenticate = async (password: string) => {
+  token = (await internalJsonRpc("auth.get_admin_token", null, [password])).admin_jwt
+}

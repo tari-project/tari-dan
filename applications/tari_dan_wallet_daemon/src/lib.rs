@@ -30,17 +30,10 @@ mod notify;
 mod services;
 mod webrtc;
 
-use std::{fs, fs::File, io::Write, panic, process, time::Duration};
+use std::{fs, panic, process};
 
 use log::*;
-use tari_dan_wallet_sdk::{
-    apis::{
-        jwt::{JrpcPermission, JrpcPermissions},
-        key_manager,
-    },
-    DanWalletSdk,
-    WalletSdkConfig,
-};
+use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::models::Amount;
@@ -81,22 +74,6 @@ pub async fn run_tari_dan_wallet_daemon(
     wallet_sdk
         .key_manager_api()
         .get_or_create_initial(key_manager::TRANSACTION_BRANCH)?;
-    {
-        let jwt = wallet_sdk.jwt_api();
-        // Validity of the admin token is ~3k years.
-        let (auth_token, _valid_till) = jwt
-            .generate_auth_token(
-                JrpcPermissions(vec![JrpcPermission::Admin]),
-                Some(Duration::from_secs(100_000_000_000)),
-            )
-            .unwrap();
-        let permissions_token = jwt.grant("InternalAdminToken".to_string(), auth_token).unwrap();
-        println!("Your admin token is {}", permissions_token);
-        let mut file = File::create(config.common.base_path.join("data/AdminToken.jwt"))
-            .expect("Admin token file can't be created");
-        file.write_all(permissions_token.as_bytes())
-            .expect("Can't write to the admin token file");
-    }
     let notify = Notify::new(100);
 
     let services = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());

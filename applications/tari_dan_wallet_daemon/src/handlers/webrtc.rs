@@ -24,7 +24,6 @@ use tari_wallet_daemon_client::types::{
     WebRtcStartRequest,
     WebRtcStartResponse,
 };
-use webrtc::data_channel::RTCDataChannel;
 
 use super::HandlerContext;
 use crate::webrtc::{make_request, webrtc_start_session, Request, Response, UserConfirmationRequest};
@@ -91,19 +90,15 @@ pub fn handle_get_oldest_request(
         ))
     } else {
         let UserConfirmationRequest {
-            req:
-                Request {
-                    id,
-                    method,
-                    params,
-                    token: _,
-                },
-            dc: _,
+            website_name,
+            req: Request { id, method, params, .. },
+            ..
         } = queue.front().unwrap();
         Ok(JsonRpcResponse::success(answer_id, WebRtcGetOldestResponse {
             id: *id,
             method: method.clone(),
             params: params.clone(),
+            website_name: website_name.clone(),
         }))
     }
 }
@@ -138,10 +133,15 @@ pub async fn handle_accept_request(
         req = item.req;
         dc = item.dc;
     }
-    let result = match make_request(jrpc_address, Some(req.token), req.method, req.params).await {
-        Ok(response) => response.to_string(),
+    println!("Calling {}", req.method);
+    let result = match serde_json::from_str::<serde_json::Value>(&req.params) {
+        Ok(params) => match make_request(jrpc_address, Some(req.token), req.method, params).await {
+            Ok(response) => response.to_string(),
+            Err(e) => e.to_string(),
+        },
         Err(e) => e.to_string(),
     };
+    println!("Resp {result}");
     let response = Response {
         payload: result,
         id: req.id,
@@ -162,7 +162,6 @@ pub async fn handle_deny_request(
     token: Option<String>,
     message_queue: Arc<Mutex<VecDeque<UserConfirmationRequest>>>,
 ) -> JrpcResult {
-    let answer_id = value.get_answer_id();
     let answer_id = value.get_answer_id();
     context
         .wallet_sdk()
@@ -246,16 +245,18 @@ pub fn handle_start(
             ),
         )
     })?;
-    let permissions_token = jwt.grant(webrtc_start_request.name, auth_token.0).map_err(|e| {
-        JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::InternalError,
-                e.to_string(),
-                serde_json::Value::Null,
-            ),
-        )
-    })?;
+    let permissions_token = jwt
+        .grant(webrtc_start_request.name.clone(), auth_token.0)
+        .map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InternalError,
+                    e.to_string(),
+                    serde_json::Value::Null,
+                ),
+            )
+        })?;
     tokio::spawn(async move {
         let (preferred_address, signaling_server_address) = addresses;
         if let Err(err) = webrtc_start_session(
@@ -265,6 +266,7 @@ pub fn handle_start(
             signaling_server_address,
             shutdown_signal,
             message_queue,
+            webrtc_start_request.name,
         )
         .await
         {

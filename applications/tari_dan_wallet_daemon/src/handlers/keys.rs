@@ -37,6 +37,7 @@ pub async fn handle_list(
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let keys = sdk.key_manager_api().get_all_keys(key_manager::TRANSACTION_BRANCH)?;
+    println!("Keys {:?}", keys);
     Ok(KeysListResponse { keys })
 }
 

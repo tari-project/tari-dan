@@ -21,6 +21,7 @@ pub struct JwtApi<'a, TStore> {
     default_expiry: Duration,
     auth_secret_key: String,
     jwt_secret_key: String,
+    secret_key: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
@@ -139,6 +140,15 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
                 "jwt-{secret_key}-{}",
                 key_manager.get_public_key(JWT_BRANCH, Some(1)).unwrap()
             ),
+            secret_key: secret_key.clone(),
+        }
+    }
+
+    pub fn is_secret_key(&self, secret_key: &String) -> Result<(), JwtApiError> {
+        if self.secret_key == *secret_key {
+            Ok(())
+        } else {
+            Err(JwtApiError::WrongPassword)
         }
     }
 
@@ -276,4 +286,6 @@ pub enum JwtApiError {
     InsufficientPermissions { required: JrpcPermission },
     #[error("Token revoked")]
     TokenRevoked,
+    #[error("Wrong password")]
+    WrongPassword,
 }
