@@ -364,10 +364,10 @@ impl TemplateTest {
         transaction: Transaction,
         proofs: Vec<NonFungibleAddress>,
     ) -> Result<ExecuteResult, TransactionError> {
-        let mut modules: Vec<Box<dyn RuntimeModule<Package>>> = vec![Box::new(self.track_calls.clone())];
+        let mut modules: Vec<Arc<dyn RuntimeModule<Package>>> = vec![Arc::new(self.track_calls.clone())];
 
         if self.enable_fees {
-            modules.push(Box::new(FeeModule::new(0, self.fee_table.clone())));
+            modules.push(Arc::new(FeeModule::new(0, self.fee_table.clone())));
         }
 
         let auth_params = AuthParams {

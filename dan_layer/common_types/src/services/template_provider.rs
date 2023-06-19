@@ -3,7 +3,7 @@
 
 use tari_engine_types::TemplateAddress;
 
-pub trait TemplateProvider: Send + Sync + 'static {
+pub trait TemplateProvider: Send + Sync + Clone + 'static {
     type Template;
     type Error: std::error::Error + Sync + Send + 'static;
 
