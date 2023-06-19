@@ -85,6 +85,7 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
     }
 
     async fn handle_request(&mut self, req: EpochManagerRequest) {
+        log::info!(target: LOG_TARGET, "FLAG: CUCUMBER WE ARE HEREEEE req = {:?}", req);
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockHeight { reply } => handle(reply, Ok(self.inner.current_block_height())),
