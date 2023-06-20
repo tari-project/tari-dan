@@ -35,9 +35,8 @@ use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-    crypto::RistrettoPublicKeyBytes,
     models::Amount,
-    prelude::{NonFungibleAddress, NonFungibleId, ResourceAddress},
+    prelude::{NonFungibleId, ResourceAddress},
 };
 use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -331,10 +330,7 @@ pub async fn mint_new_nft_on_account(
     metadata: Option<serde_json::Value>,
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
-    let account_keys = world
-        .account_keys
-        .get(&account_name)
-        .expect("Failed to get account key pair");
+
     let token_symbol = "MY_NFT".to_string();
     let metadata = metadata.unwrap_or_else(|| {
         serde_json::json!({
