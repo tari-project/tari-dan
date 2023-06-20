@@ -18,6 +18,7 @@ use tari_dan_storage::{
         QuorumCertificate,
         TransactionDecision,
         TransactionId,
+        Vote,
     },
     StateStoreReadTransaction,
     StorageError,
@@ -294,9 +295,9 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         let tx_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
 
         let involved_shards = transactions::table
-            .select(transactions::involved_shards)
+            .select((transactions::inputs, transactions::outputs))
             .filter(transactions::transaction_id.eq_any(tx_ids))
-            .load::<String>(self.connection())
+            .load::<(String, String)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pools_fetch_involved_shards",
                 source: e,
@@ -304,9 +305,14 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
 
         let shards = involved_shards
             .into_iter()
-            .flat_map(
-                |s| deserialize_json::<HashSet<ShardId>>(&s).unwrap(), // a Result is very inconvenient with flat_map
-            )
+            .map(|(inputs, outputs)| {
+                (
+                    // a Result is very inconvenient with flat_map
+                    deserialize_json::<HashSet<ShardId>>(&inputs).unwrap(),
+                    deserialize_json::<HashSet<ShardId>>(&outputs).unwrap(),
+                )
+            })
+            .flat_map(|(inputs, outputs)| inputs.into_iter().chain(outputs.into_iter()).collect::<HashSet<_>>())
             .collect();
 
         Ok(shards)
@@ -339,5 +345,34 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         }
 
         decisions.into_iter().map(TransactionDecision::try_from).collect()
+    }
+
+    fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError> {
+        use crate::schema::votes;
+
+        let count = votes::table
+            .filter(votes::block_id.eq(serialize_hex(block_id)))
+            .count()
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "votes_count_for_block",
+                source: e,
+            })?;
+
+        Ok(count as u64)
+    }
+
+    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError> {
+        use crate::schema::votes;
+
+        let votes = votes::table
+            .filter(votes::block_id.eq(serialize_hex(block_id)))
+            .get_results::<sql_models::Vote>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "votes_get_for_block",
+                source: e,
+            })?;
+
+        votes.into_iter().map(Vote::try_from).collect()
     }
 }

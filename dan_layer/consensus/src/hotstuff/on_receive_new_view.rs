@@ -50,13 +50,6 @@ where
             high_qc.block_id(),
         );
 
-        if !self.epoch_manager.is_epoch_active(high_qc.epoch()).await? {
-            return Err(HotStuffError::EpochNotActive {
-                epoch: high_qc.epoch(),
-                context: format!("Received NEWVIEW from {}", from),
-            });
-        }
-
         if !self
             .epoch_manager
             .is_validator_in_local_committee(&from, high_qc.epoch())

@@ -57,6 +57,7 @@ use tari_template_lib::{
         Arg,
         BucketAction,
         BucketRef,
+        CallAction,
         CallerContextAction,
         ComponentAction,
         ComponentRef,
@@ -141,6 +142,8 @@ pub trait RuntimeInterface: Send + Sync {
     fn finalize(&self) -> Result<StateFinalize, RuntimeError>;
 
     fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError>;
+
+    fn call_invoke(&self, action: CallAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
 }
 
 #[derive(Clone)]

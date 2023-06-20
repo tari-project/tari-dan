@@ -6,9 +6,11 @@ mod bookkeeping;
 mod leaf_block;
 mod transaction;
 mod transaction_decision;
+mod vote;
 
 pub use block::*;
 pub use bookkeeping::*;
 pub use leaf_block::*;
 pub use transaction::*;
 pub use transaction_decision::*;
+pub use vote::*;

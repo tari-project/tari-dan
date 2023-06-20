@@ -42,6 +42,8 @@ pub mod resource;
 pub mod crypto;
 pub mod events;
 
+pub mod template;
+
 // ---------------------------------------- WASM target exports ------------------------------------------------
 
 #[cfg(target_arch = "wasm32")]

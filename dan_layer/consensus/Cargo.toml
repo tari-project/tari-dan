@@ -10,6 +10,7 @@ tari_dan_storage = { path = "../storage" }
 
 # Used for PublicKey and Signature
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 
 async-trait = "0.1.68"
