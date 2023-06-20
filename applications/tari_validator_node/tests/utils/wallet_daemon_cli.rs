@@ -335,9 +335,6 @@ pub async fn mint_new_nft_on_account(
         .account_keys
         .get(&account_name)
         .expect("Failed to get account key pair");
-    let owner_token = NonFungibleAddress::from_public_key(
-        RistrettoPublicKeyBytes::from_bytes(account_keys.1.as_bytes()).expect("Failed to parse public key"),
-    );
     let token_symbol = "MY_NFT".to_string();
     let metadata = metadata.unwrap_or_else(|| {
         serde_json::json!({
@@ -351,7 +348,6 @@ pub async fn mint_new_nft_on_account(
         account: ComponentAddressOrName::Name(account_name.clone()),
         metadata,
         token_symbol,
-        owner_token,
         mint_fee: Some(Amount::new(1_000)),
         create_account_nft_fee: None,
     };
