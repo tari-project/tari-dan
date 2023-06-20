@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2023. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,38 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, path::PathBuf};
+mod error;
+mod handle;
+mod types;
 
-use serde::{Deserialize, Serialize};
-use tari_engine_types::TemplateAddress;
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TemplateConfig {
-    max_cache_size_bytes: u64,
-    debug_replacements: Vec<String>,
-}
-
-impl Default for TemplateConfig {
-    fn default() -> Self {
-        Self {
-            max_cache_size_bytes: 200 * 1024 * 1024,
-            debug_replacements: Vec::new(),
-        }
-    }
-}
-
-impl TemplateConfig {
-    pub fn debug_replacements(&self) -> HashMap<TemplateAddress, PathBuf> {
-        let mut result = HashMap::new();
-        for row in &self.debug_replacements {
-            let (template_address, path) = row.split_once('=').expect("USAGE: [templateaddress]=[path]");
-            let template_address = TemplateAddress::from_hex(template_address).expect("Not a valid template address");
-            result.insert(template_address, path.into());
-        }
-        result
-    }
-
-    pub fn max_cache_size_bytes(&self) -> u64 {
-        self.max_cache_size_bytes
-    }
-}
+pub use error::TemplateManagerError;
+pub use handle::{TemplateManagerHandle, TemplateRegistration};
+pub use types::{Template, TemplateExecutable, TemplateManagerRequest, TemplateMetadata};

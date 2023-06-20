@@ -21,6 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_comms::protocol::rpc::RpcStatus;
+use tari_dan_core::services::PayloadProcessorError;
 use tari_epoch_manager::base_layer::EpochManagerError;
 use tari_indexer_lib::transaction_autofiller::TransactionAutofillerError;
 use thiserror::Error;
@@ -33,6 +34,6 @@ pub enum DryRunTransactionProcessorError {
     EpochManager(#[from] EpochManagerError),
     #[error("Rpc error: {0}")]
     RpcRequestFailed(#[from] RpcStatus),
-    #[error("Unexpected error: {message}")]
-    UnexpectecError { message: String },
+    #[error("PayloadProcessor error: {0}")]
+    PayloadProcessor(#[from] PayloadProcessorError),
 }

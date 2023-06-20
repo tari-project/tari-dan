@@ -34,7 +34,10 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::{CommsNode, NodeIdentity};
-use tari_dan_app_utilities::base_layer_scanner;
+use tari_dan_app_utilities::{
+    base_layer_scanner,
+    template_manager::{self, implementation::TemplateManager},
+};
 use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
@@ -44,7 +47,7 @@ use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
 use crate::{
     comms,
-    p2p::services::{comms_peer_provider::CommsPeerProvider, networking, template_manager},
+    p2p::services::{comms_peer_provider::CommsPeerProvider, networking},
     substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore,
     ApplicationConfig,
 };
@@ -93,8 +96,10 @@ pub async fn spawn_services(
         shutdown.clone(),
     );
 
-    // Mock template manager
-    let (template_manager_service, _) = template_manager::spawn(shutdown.clone());
+    // Template manager
+    let template_manager = TemplateManager::new(global_db.clone(), config.indexer.templates.clone());
+    let (template_manager_service, _) =
+        template_manager::implementation::spawn(template_manager.clone(), shutdown.clone());
 
     // Base Node scanner
     base_layer_scanner::spawn(
@@ -122,6 +127,7 @@ pub async fn spawn_services(
         epoch_manager,
         validator_node_client_factory,
         substate_store,
+        template_manager,
     })
 }
 
@@ -130,6 +136,7 @@ pub struct Services {
     pub epoch_manager: EpochManagerHandle,
     pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
     pub substate_store: SqliteSubstateStore,
+    pub template_manager: TemplateManager,
 }
 
 fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {

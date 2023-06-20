@@ -62,7 +62,7 @@ use tari_shutdown::ShutdownSignal;
 use tari_template_lib::models::{EncryptedValue, TemplateAddress, UnclaimedConfidentialOutputAddress};
 use tokio::{task, task::JoinHandle, time};
 
-use crate::template_manager::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration};
+use crate::template_manager::interface::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration};
 
 const LOG_TARGET: &str = "tari::dan::base_layer_scanner";
 

@@ -54,7 +54,9 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::peer_manager::PeerFeatures;
+use tari_dan_app_utilities::payload_processor::TariDanPayloadProcessor;
 use tari_dan_core::consensus_constants::ConsensusConstants;
+use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_indexer_lib::substate_scanner::SubstateScanner;
@@ -114,10 +116,13 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         dan_layer_scanner.clone(),
     );
 
+    // dry run
+    let payload_processor = TariDanPayloadProcessor::new(services.template_manager.clone(), FeeTable::zero_rated());
     let dry_run_transaction_processor = DryRunTransactionProcessor::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
         dan_layer_scanner,
+        payload_processor,
     );
 
     // Run the JSON-RPC API

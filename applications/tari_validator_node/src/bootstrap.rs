@@ -39,7 +39,11 @@ use tari_common::{
 };
 use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
-use tari_dan_app_utilities::{base_layer_scanner, template_manager::TemplateManagerHandle};
+use tari_dan_app_utilities::{
+    base_layer_scanner,
+    payload_processor::TariDanPayloadProcessor,
+    template_manager::{self, implementation::TemplateManager, interface::TemplateManagerHandle},
+};
 use tari_dan_common_types::{NodeAddressable, NodeHeight, PayloadId, ShardId, TreeNodeHash};
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
@@ -83,11 +87,8 @@ use crate::{
             messaging::DanMessageReceivers,
             networking,
             networking::NetworkingHandle,
-            template_manager,
-            template_manager::TemplateManager,
         },
     },
-    payload_processor::TariDanPayloadProcessor,
     registration,
     ApplicationConfig,
 };
@@ -167,7 +168,8 @@ pub async fn spawn_services(
 
     // Template manager
     let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
-    let (template_manager_service, join_handle) = template_manager::spawn(template_manager.clone(), shutdown.clone());
+    let (template_manager_service, join_handle) =
+        template_manager::implementation::spawn(template_manager.clone(), shutdown.clone());
     handles.push(join_handle);
 
     // Payload processor

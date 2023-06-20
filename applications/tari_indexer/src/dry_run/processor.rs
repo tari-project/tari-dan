@@ -24,13 +24,20 @@ use std::{collections::HashMap, sync::Arc};
 
 use log::info;
 use tari_comms::types::CommsPublicKey;
+use tari_dan_app_utilities::{
+    payload_processor::TariDanPayloadProcessor,
+    template_manager::implementation::TemplateManager,
+};
 use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
+use tari_dan_core::services::PayloadProcessor;
+use tari_dan_engine::runtime::ConsensusContext;
 use tari_dan_storage::models::{Payload, TariDanPayload};
 use tari_engine_types::commit_result::ExecuteResult;
 use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
 use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller};
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::{ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+use tokio::task;
 
 use crate::dry_run::error::DryRunTransactionProcessorError;
 
@@ -40,6 +47,7 @@ pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory> {
     epoch_manager: TEpochManager,
     client_provider: TClientFactory,
     transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory>,
+    payload_processor: TariDanPayloadProcessor<TemplateManager>,
 }
 
 impl<TEpochManager, TClientFactory> DryRunTransactionProcessor<TEpochManager, TClientFactory>
@@ -52,11 +60,15 @@ where
         epoch_manager: TEpochManager,
         client_provider: TClientFactory,
         substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory>>,
+        payload_processor: TariDanPayloadProcessor<TemplateManager>,
     ) -> Self {
+        let transaction_autofiller = TransactionAutofiller::new(substate_scanner);
+
         Self {
             epoch_manager,
             client_provider,
-            transaction_autofiller: TransactionAutofiller::new(substate_scanner),
+            transaction_autofiller,
+            payload_processor,
         }
     }
 
@@ -70,25 +82,30 @@ where
         // note that this operation does not alter the transaction hash
         let transaction = self.transaction_autofiller.autofill_transaction(transaction).await?;
 
-        // get shard pledges
-        let _pledges = self.get_shard_pledges(&transaction).await?;
+        let payload = TariDanPayload::new(transaction.clone());
+        let epoch = self.epoch_manager.current_epoch().await?;
+        let pledges = self.get_shard_pledges(&payload, &epoch).await?;
 
-        Err(DryRunTransactionProcessorError::UnexpectecError {
-            message: "not implemented".to_string(),
-        })
+        // execute the payload in the WASM engine and return the result
+        let consensus_context = Self::get_consensus_context(&epoch).await?;
+        let result = task::block_in_place(|| {
+            self.payload_processor
+                .process_payload(payload, pledges, consensus_context)
+        })?;
+
+        Ok(result)
     }
 
     async fn get_shard_pledges(
         &self,
-        transaction: &Transaction,
+        payload: &TariDanPayload,
+        epoch: &Epoch,
     ) -> Result<HashMap<ShardId, ObjectPledge>, DryRunTransactionProcessorError> {
-        let epoch = self.epoch_manager.current_epoch().await?;
-        let payload = TariDanPayload::new(transaction.clone());
         let mut shard_pledges = HashMap::new();
 
         // TODO: spawn a tokio task per pledge for better performance?
         for shard_id in payload.involved_shards() {
-            let pledge = self.get_shard_pledge(shard_id, payload.to_id(), epoch).await?;
+            let pledge = self.get_shard_pledge(shard_id, payload.to_id(), *epoch).await?;
             shard_pledges.insert(shard_id, pledge);
         }
 
@@ -125,5 +142,11 @@ where
             pledged_to_payload: payload_id,
             current_state: SubstateState::DoesNotExist,
         })
+    }
+
+    async fn get_consensus_context(epoch: &Epoch) -> Result<ConsensusContext, DryRunTransactionProcessorError> {
+        let current_epoch = epoch.as_u64();
+        let consensus_context = ConsensusContext { current_epoch };
+        Ok(consensus_context)
     }
 }
