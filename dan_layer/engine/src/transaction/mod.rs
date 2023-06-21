@@ -24,4 +24,4 @@ mod error;
 pub use error::TransactionError;
 
 mod processor;
-pub use processor::TransactionProcessor;
+pub use processor::{TransactionProcessor, MAX_CALL_DEPTH};

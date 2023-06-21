@@ -9,7 +9,7 @@ diesel::table! {
         leader_round -> BigInt,
         epoch -> BigInt,
         proposed_by -> Text,
-        justify -> Text,
+        qc_id -> Text,
         prepared -> Text,
         precommitted -> Text,
         committed -> Text,
@@ -33,8 +33,7 @@ diesel::table! {
     high_qcs (id) {
         id -> Integer,
         epoch -> BigInt,
-        block_id -> Text,
-        height -> BigInt,
+        qc_id -> Text,
         created_at -> Timestamp,
     }
 }
@@ -129,6 +128,15 @@ diesel::table! {
 }
 
 diesel::table! {
+    quorum_certificates (id) {
+        id -> Integer,
+        qc_id -> Text,
+        json -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     substates (id) {
         id -> Integer,
         shard_id -> Text,
@@ -163,6 +171,7 @@ diesel::table! {
         sender_public_key -> Text,
         signature -> Text,
         inputs -> Text,
+        exists -> Text,
         outputs -> Text,
         result -> Text,
         is_finalized -> Bool,
@@ -173,10 +182,11 @@ diesel::table! {
 diesel::table! {
     votes (id) {
         id -> Integer,
+        hash -> Text,
         epoch -> BigInt,
         block_id -> Text,
         decision -> Integer,
-        sender -> Text,
+        sender_leaf_hash -> Text,
         signature -> Text,
         merkle_proof -> Text,
         created_at -> Timestamp,
@@ -195,6 +205,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     pledges,
     precommitted_transaction_pool,
     prepared_transaction_pool,
+    quorum_certificates,
     substates,
     transactions,
     votes,

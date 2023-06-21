@@ -1,0 +1,3 @@
+# Ignore the generated wasms
+account/account.wasm
+account_nfts/account_nfts.wasm

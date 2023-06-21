@@ -4,7 +4,7 @@
 use std::{collections::HashSet, iter};
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -30,7 +30,6 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose";
 
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
-    _leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
     tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
 }
@@ -42,13 +41,11 @@ where
 {
     pub fn new(
         store: TConsensusSpec::StateStore,
-        leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
         tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
     ) -> Self {
         Self {
             store,
-            _leader_strategy: leader_strategy,
             epoch_manager,
             tx_broadcast,
         }
@@ -64,26 +61,55 @@ where
 
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
         // the non-Send tx could be used after the await point, which is not possible.
-        let (involved_shards, next_block) = {
+        let involved_shards;
+        let next_block;
+        {
             let mut tx = self.store.create_write_tx()?;
             let high_qc = HighQc::get(&mut *tx, epoch)?;
             let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
 
             let parent_block = leaf_block.get_block(&mut *tx)?;
 
-            let next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator_id)?;
-            let involved_shards = next_block.find_involved_shards(&mut *tx)?;
+            // Edge case: on_beat is called again before the leaf has changed - so check that we haven't already
+            // proposed for this leaf
+            if let Some(child) = parent_block.get_child(&mut *tx).optional()? {
+                debug!(
+                    target: LOG_TARGET,
+                    "🌿 Already proposed block for current leaf {} ({}) - child {} ({})",
+                    parent_block.id(),
+                    parent_block.height(),
+                    child.id(),
+                    child.height(),
+                );
+                tx.rollback()?;
+                return Ok(());
+            }
+
+            next_block = self.build_next_block(&mut *tx, epoch, &parent_block, high_qc, validator_id)?;
+            if next_block.exists(&mut *tx)? {
+                debug!(
+                    target: LOG_TARGET,
+                    "🌿 Already proposed block {} ({})",
+                    next_block.id(),
+                    next_block.height(),
+                );
+                tx.rollback()?;
+                return Ok(());
+            }
+            involved_shards = next_block.find_involved_shards(&mut *tx)?;
             next_block.insert(&mut tx)?;
 
             tx.commit()?;
-            (involved_shards, next_block)
-        };
+        }
 
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING new block {} {}",
-            next_block.height(),
+            "🌿 PROPOSING new block {}({}) (justify: {} ({})) -> {}",
             next_block.id(),
+            next_block.height(),
+            next_block.justify().block_id(),
+            next_block.justify().block_height(),
+            next_block.parent()
         );
 
         self.broadcast_proposal(epoch, next_block, involved_shards, local_committee, validator_id)
@@ -115,8 +141,9 @@ where
             .await?;
 
         // Broadcast to local and foreign committees
+        // TODO: only broadcast to f + 1 foreign committee members. They can gossip the proposal around from there.
         let committee = iter::once(local_committee)
-            .chain(iter::once(non_local_committees))
+            .chain(non_local_committees.into_values())
             .collect();
 
         self.tx_broadcast
@@ -134,7 +161,7 @@ where
 
     fn build_next_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         epoch: Epoch,
         parent_block: &Block,
         high_qc: QuorumCertificate,
@@ -144,11 +171,14 @@ where
         const TARGET_BLOCK_SIZE: usize = 1000;
         let mut remaining_txs = TARGET_BLOCK_SIZE;
 
-        let commit_txs = PrecommitTransactionPool::move_many_to_committed(tx, remaining_txs)?;
+        // TODO: Decide if we should lock the txs to the next block somehow
+        // Fetch transactions that are ready to go into a block. They will be moved into the correct pool in
+        // OnReceiveProposal
+        let commit_txs = PrecommitTransactionPool::get_batch(tx, remaining_txs)?;
         remaining_txs -= commit_txs.len();
-        let precommit_txs = PrepareTransactionPool::move_many_to_precommit(tx, remaining_txs)?;
+        let precommit_txs = PrepareTransactionPool::get_batch(tx, remaining_txs)?;
         remaining_txs -= precommit_txs.len();
-        let prepare_txs = NewTransactionPool::move_many_to_prepare(tx, remaining_txs)?;
+        let prepare_txs = NewTransactionPool::get_batch(tx, remaining_txs)?;
 
         let next_block = Block::new(
             *parent_block.id(),

@@ -35,9 +35,8 @@ use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-    crypto::RistrettoPublicKeyBytes,
     models::Amount,
-    prelude::{NonFungibleAddress, NonFungibleId, ResourceAddress},
+    prelude::{NonFungibleId, ResourceAddress},
 };
 use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -54,7 +53,7 @@ use tari_wallet_daemon_client::{
         ClaimBurnRequest,
         ClaimBurnResponse,
         ConfidentialTransferRequest,
-        MintAccountNFTRequest,
+        MintAccountNftRequest,
         ProofsGenerateRequest,
         RevealFundsRequest,
         TransactionSubmitRequest,
@@ -331,13 +330,7 @@ pub async fn mint_new_nft_on_account(
     metadata: Option<serde_json::Value>,
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
-    let account_keys = world
-        .account_keys
-        .get(&account_name)
-        .expect("Failed to get account key pair");
-    let owner_token = NonFungibleAddress::from_public_key(
-        RistrettoPublicKeyBytes::from_bytes(account_keys.1.as_bytes()).expect("Failed to parse public key"),
-    );
+
     let token_symbol = "MY_NFT".to_string();
     let metadata = metadata.unwrap_or_else(|| {
         serde_json::json!({
@@ -347,11 +340,10 @@ pub async fn mint_new_nft_on_account(
         })
     });
 
-    let request = MintAccountNFTRequest {
+    let request = MintAccountNftRequest {
         account: ComponentAddressOrName::Name(account_name.clone()),
         metadata,
         token_symbol,
-        owner_token,
         mint_fee: Some(Amount::new(1_000)),
         create_account_nft_fee: None,
     };
