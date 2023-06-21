@@ -6,7 +6,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{confidential::ConfidentialOutput, substate::SubstateAddress};
 use tari_key_manager::key_manager::DerivedKey;
-use tari_template_lib::Hash;
+use tari_template_lib::{models::Amount, Hash};
 
 use crate::{
     apis::{
@@ -47,9 +47,16 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
     pub fn lock_outputs_by_amount(
         &self,
         vault_address: &SubstateAddress,
-        amount: u64,
+        amount: Amount,
         locked_by_proof_id: ConfidentialProofId,
     ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
+        if amount.is_negative() {
+            return Err(ConfidentialOutputsApiError::InvalidParameter {
+                param: "amount",
+                reason: "Amount cannot be negative".to_string(),
+            });
+        }
+        let amount = amount.as_u64_checked().unwrap();
         let mut tx = self.store.create_write_tx()?;
         let mut total_output_amount = 0;
         let mut outputs = Vec::new();
@@ -259,6 +266,8 @@ pub enum ConfidentialOutputsApiError {
     KeyManager(#[from] KeyManagerApiError),
     #[error("Accounts API error: {0}")]
     Accounts(#[from] AccountsApiError),
+    #[error("Invalid parameter `{param}`: {reason}")]
+    InvalidParameter { param: &'static str, reason: String },
 }
 
 impl IsNotFoundError for ConfidentialOutputsApiError {

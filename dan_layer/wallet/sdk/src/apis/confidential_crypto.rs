@@ -9,7 +9,6 @@ use tari_crypto::{
     keys::{PublicKey as _, SecretKey},
 };
 use tari_engine_types::confidential::{challenges, ConfidentialOutput};
-use tari_key_manager::key_manager::DerivedKey;
 use tari_template_lib::{
     crypto::BalanceProofSignature,
     models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedData},
@@ -93,9 +92,9 @@ impl ConfidentialCryptoApi {
         amount: u64,
         mask: &PrivateKey,
         public_nonce: &PublicKey,
-        secret: &DerivedKey<PublicKey>,
+        secret: &PrivateKey,
     ) -> Result<EncryptedData, ConfidentialCryptoApiError> {
-        let key = kdfs::encrypted_data_dh_kdf_aead(&secret.key, public_nonce);
+        let key = kdfs::encrypted_data_dh_kdf_aead(secret, public_nonce);
         let commitment = get_commitment_factory().commit_value(mask, amount);
         let encrypted_data = encrypt_data(&key, &commitment, amount, mask)?;
         Ok(encrypted_data)

@@ -126,8 +126,8 @@ where
 
         let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
         let leaf_hashes = votes.iter().map(|v| v.signature.create_challenge()).collect::<Vec<_>>();
-        let proofs = votes.iter().map(|v| v.merkle_proof.clone()).collect();
-        let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(proofs)?;
+        let proofs = votes.iter().map(|v| v.merkle_proof.clone()).collect::<Vec<_>>();
+        let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(&proofs)?;
 
         let qc = QuorumCertificate::new(
             *block.id(),

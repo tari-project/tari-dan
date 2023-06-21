@@ -17,7 +17,11 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::{constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS, models::EncryptedData, resource::ResourceType};
+use tari_template_lib::{
+    constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+    models::{Amount, EncryptedData},
+    resource::ResourceType,
+};
 use tari_transaction::Transaction;
 
 #[test]
@@ -32,7 +36,7 @@ fn outputs_locked_and_released() {
     let (inputs, total_value) = test
         .sdk()
         .confidential_outputs_api()
-        .lock_outputs_by_amount(&Test::test_vault_address(), 50, proof_id)
+        .lock_outputs_by_amount(&Test::test_vault_address(), Amount(50), proof_id)
         .unwrap();
     assert_eq!(total_value, 74);
     assert_eq!(inputs.len(), 2);
@@ -70,7 +74,7 @@ fn outputs_locked_and_finalized() {
     let proof_id = test.new_proof();
 
     let (inputs, total_value) = outputs_api
-        .lock_outputs_by_amount(&Test::test_vault_address(), 50, proof_id)
+        .lock_outputs_by_amount(&Test::test_vault_address(), Amount(50), proof_id)
         .unwrap();
     assert_eq!(total_value, 74);
     assert_eq!(inputs.len(), 2);

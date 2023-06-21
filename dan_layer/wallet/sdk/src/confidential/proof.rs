@@ -36,7 +36,7 @@ use zeroize::Zeroizing;
 
 use crate::{
     byte_utils::copy_fixed,
-    confidential::{error::ConfidentialProofError, kdfs, kdfs::EncryptedDataKey},
+    confidential::{error::ConfidentialProofError, kdfs::EncryptedDataKey},
 };
 
 lazy_static! {
@@ -69,6 +69,7 @@ pub struct ConfidentialProofStatement {
     pub mask: PrivateKey,
     pub sender_public_nonce: PublicKey,
     pub minimum_value_promise: u64,
+    pub encrypted_data: EncryptedData,
     pub reveal_amount: Amount,
 }
 
@@ -86,12 +87,11 @@ pub fn generate_confidential_proof(
         .as_ref()
         .map(|stmt| -> Result<_, ConfidentialProofError> {
             let change_commitment = stmt.to_commitment();
-            let encrypted_data = encrypt_data(&stmt.mask, &change_commitment, stmt.amount.value() as u64, &stmt.mask)?;
             Ok(ConfidentialStatement {
                 commitment: copy_fixed(change_commitment.as_bytes()),
                 sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(stmt.sender_public_nonce.as_bytes())
                     .expect("[generate_confidential_proof] change nonce"),
-                encrypted_data,
+                encrypted_data: stmt.encrypted_data.clone(),
                 minimum_value_promise: stmt.minimum_value_promise,
                 revealed_amount: stmt.reveal_amount,
             })
@@ -100,14 +100,6 @@ pub fn generate_confidential_proof(
 
     let commitment = output_statement.to_commitment();
 
-    let encryption_key =
-        kdfs::encrypted_data_dh_kdf_aead(&output_statement.mask, &output_statement.sender_public_nonce);
-    let encrypted_data = encrypt_data(
-        &encryption_key,
-        &commitment,
-        output_statement.amount.value() as u64,
-        &output_statement.mask,
-    )?;
     let output_range_proof = generate_extended_bullet_proof(output_statement, change_statement)?;
 
     Ok(ConfidentialOutputProof {
@@ -115,7 +107,7 @@ pub fn generate_confidential_proof(
             commitment: copy_fixed(commitment.as_bytes()),
             sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(output_statement.sender_public_nonce.as_bytes())
                 .expect("[generate_confidential_proof] output nonce"),
-            encrypted_data,
+            encrypted_data: output_statement.encrypted_data.clone(),
             minimum_value_promise: output_statement.minimum_value_promise,
             revealed_amount: output_statement.reveal_amount,
         },
@@ -256,6 +248,7 @@ mod tests {
                     mask,
                     sender_public_nonce: Default::default(),
                     reveal_amount: Default::default(),
+                    encrypted_data: EncryptedData([0u8; EncryptedData::size()]),
                 },
                 None,
             )

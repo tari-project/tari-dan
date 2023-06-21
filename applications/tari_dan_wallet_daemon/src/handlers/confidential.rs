@@ -24,7 +24,7 @@ use tari_wallet_daemon_client::types::{
     ProofsGenerateResponse,
 };
 
-use crate::handlers::{get_account_or_default, HandlerContext};
+use crate::handlers::{get_account_or_default, invalid_params, HandlerContext};
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc::confidential";
 
@@ -56,7 +56,7 @@ pub async fn handle_create_transfer_proof(
     // Lock inputs we're going to spend
     let (inputs, total_input_value) = sdk.confidential_outputs_api().lock_outputs_by_amount(
         &vault.address,
-        req.amount.value() as u64 + req.reveal_amount.value() as u64,
+        req.amount + req.reveal_amount,
         proof_id,
     )?;
 
@@ -70,14 +70,26 @@ pub async fn handle_create_transfer_proof(
 
     // TODO: Any errors from here need to unlock the outputs, ideally just roll back (refactor required but doable).
 
+    // TODO: Wrap up key/encrypted data handling in the wallet SDK
+    let account_secret = sdk
+        .key_manager_api()
+        .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
     let output_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
     let (_, public_nonce) = PublicKey::random_keypair(&mut OsRng);
+
+    let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
+        req.amount.as_u64_checked().unwrap(),
+        &output_mask.key,
+        &public_nonce,
+        &account_secret.key,
+    )?;
 
     let output_statement = ConfidentialProofStatement {
         amount: req.amount,
         mask: output_mask.key,
         sender_public_nonce: public_nonce,
         minimum_value_promise: 0,
+        encrypted_data,
         reveal_amount: req.reveal_amount,
     };
 
@@ -90,7 +102,7 @@ pub async fn handle_create_transfer_proof(
             change_amount,
             &change_mask.key,
             &public_nonce,
-            &change_mask,
+            &change_mask.key,
         )?;
 
         sdk.confidential_outputs_api().add_output(ConfidentialOutputModel {
@@ -100,7 +112,7 @@ pub async fn handle_create_transfer_proof(
             value: change_amount,
             sender_public_nonce: Some(public_nonce.clone()),
             secret_key_index: change_mask.key_index,
-            encrypted_data,
+            encrypted_data: encrypted_data.clone(),
             public_asset_tag: None,
             status: OutputStatus::LockedUnconfirmed,
             locked_by_proof: Some(proof_id),
@@ -110,6 +122,7 @@ pub async fn handle_create_transfer_proof(
             amount: change_amount.try_into()?,
             mask: change_mask.key,
             sender_public_nonce: public_nonce,
+            encrypted_data,
             minimum_value_promise: 0,
             reveal_amount: Amount::zero(),
         })
@@ -160,14 +173,26 @@ pub async fn handle_create_output_proof(
 ) -> Result<ConfidentialCreateOutputProofResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+
+    if req.amount.is_negative() {
+        return Err(invalid_params("amount", Some("must be positive")));
+    }
+
     let output_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
     let (_, public_nonce) = PublicKey::random_keypair(&mut OsRng);
+    let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
+        req.amount.as_u64_checked().unwrap(),
+        &output_mask.key,
+        &public_nonce,
+        &output_mask.key,
+    )?;
 
     let statement = ConfidentialProofStatement {
         amount: req.amount,
         mask: output_mask.key,
         sender_public_nonce: public_nonce,
         minimum_value_promise: 0,
+        encrypted_data,
         reveal_amount: Amount::zero(),
     };
     let proof = sdk.confidential_crypto_api().generate_output_proof(&statement)?;
