@@ -24,19 +24,28 @@ mod steps;
 use std::{
     collections::{BTreeMap, HashMap},
     convert::TryFrom,
-    fs, future, io, panic,
+    fs,
+    future,
+    io,
+    panic,
     str::FromStr,
     time::{Duration, Instant},
 };
 
 use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, World, WriterExt};
 use integration_tests::{
-    indexer::spawn_indexer,
+    base_node::{get_base_node_client, spawn_base_node},
+    http_server::{spawn_template_http_server, MockHttpServer},
+    indexer::{spawn_indexer, IndexerProcess},
+    logging::{create_log_config_file, get_base_dir},
     miner::{mine_blocks, register_miner_process},
-    validator_node::spawn_validator_node,
+    template::{send_template_registration, RegisteredTemplate},
+    validator_node::{get_vn_client, spawn_validator_node},
     validator_node_cli,
     wallet::spawn_wallet,
+    wallet_daemon::spawn_wallet_daemon,
     wallet_daemon_cli,
+    TariWorld,
 };
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_common::initialize_logging;
@@ -48,18 +57,11 @@ use tari_dan_engine::abi::Type;
 use tari_shutdown::Shutdown;
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
-    AddPeerRequest, GetIdentityResponse, GetRecentTransactionsRequest, GetTemplateRequest, GetTransactionResultRequest,
-};
-
-use integration_tests::{
-    base_node::{get_base_node_client, spawn_base_node},
-    http_server::{spawn_template_http_server, MockHttpServer},
-    indexer::IndexerProcess,
-    logging::{create_log_config_file, get_base_dir},
-    template::{send_template_registration, RegisteredTemplate},
-    validator_node::get_vn_client,
-    wallet_daemon::spawn_wallet_daemon,
-    TariWorld,
+    AddPeerRequest,
+    GetIdentityResponse,
+    GetRecentTransactionsRequest,
+    GetTemplateRequest,
+    GetTransactionResultRequest,
 };
 
 #[tokio::main]

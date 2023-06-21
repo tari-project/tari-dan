@@ -4,14 +4,13 @@
 use std::{convert::TryInto, str::FromStr};
 
 use cucumber::{then, when};
+use integration_tests::{validator_node_cli::create_key, TariWorld};
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{confidential::ConfidentialClaim, substate::SubstateAddress};
 use tari_template_lib::args;
 use tari_transaction::Transaction;
 use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest, TransactionFinalizeResult};
-
-use integration_tests::{validator_node_cli::create_key, TariWorld};
 
 #[then(expr = "validator node {word} has state at {word}")]
 async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String, state_address_name: String) {
