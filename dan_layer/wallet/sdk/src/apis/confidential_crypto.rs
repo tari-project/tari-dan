@@ -107,7 +107,7 @@ impl ConfidentialCryptoApi {
         encrypted_data: &EncryptedData,
     ) -> Result<(u64, PrivateKey), ConfidentialCryptoApiError> {
         let (value, mask) = decrypt_data_and_mask(encryption_key, commitment, encrypted_data)
-            .map_err(|_| ConfidentialCryptoApiError::FailedDecryptValue)?;
+            .map_err(|e| ConfidentialCryptoApiError::FailedDecryptData { details: e.to_string() })?;
         Ok((value, mask))
     }
 
@@ -191,8 +191,8 @@ fn generate_balance_proof(
 pub enum ConfidentialCryptoApiError {
     #[error("Confidential proof error: {0}")]
     ConfidentialProof(#[from] ConfidentialProofError),
-    #[error("Failed to decrypt value")]
-    FailedDecryptValue,
+    #[error("Failed to decrypt data: {details}")]
+    FailedDecryptData { details: String },
     #[error("Unable to open the commitment")]
     UnableToOpenCommitment,
     #[error("Invalid argument {name}: {details}")]
