@@ -40,6 +40,11 @@ pub enum StorageError {
     InvalidUnitOfWorkTrackerType,
     #[error("Not found: item: {item}, key: {key}")]
     NotFound { item: String, key: String },
+    #[error("Not found in operation {operation}: {source}")]
+    NotFoundDbAdapter {
+        operation: &'static str,
+        source: anyhow::Error,
+    },
     #[error("File system path does not exist")]
     FileSystemPathDoesNotExist,
     #[error("Failed to decode for operation {operation} on {item}: {details}")]
@@ -79,6 +84,6 @@ impl<T> From<PoisonError<T>> for StorageError {
 
 impl IsNotFoundError for StorageError {
     fn is_not_found_error(&self) -> bool {
-        matches!(self, Self::NotFound { .. })
+        matches!(self, Self::NotFound { .. }) || matches!(self, Self::NotFoundDbAdapter { .. })
     }
 }

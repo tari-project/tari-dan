@@ -5,7 +5,6 @@ use std::{collections::BTreeSet, ops::DerefMut};
 use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    hashing::ValidatorNodeMerkleProof,
     optional::Optional,
     NodeHeight,
 };
@@ -21,7 +20,6 @@ use tari_dan_storage::{
         PledgeCollection,
         PrecommitTransactionPool,
         PrepareTransactionPool,
-        QuorumCertificate,
         QuorumDecision,
         QuorumRejectReason,
         TransactionDecision,
@@ -33,19 +31,21 @@ use tari_dan_storage::{
 use tokio::sync::mpsc;
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError, ProposalValidationError},
+    hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat, ProposalValidationError},
     messages::{HotstuffMessage, ProposalMessage, VoteMessage},
-    traits::{ConsensusSpec, EpochManager, LeaderStrategy, VoteSigningService},
+    traits::{ConsensusSpec, EpochManager, LeaderStrategy, VoteSignatureService},
 };
 
-const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose";
+const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_proposal";
 
 pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
+    validator_addr: TConsensusSpec::Addr,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
-    vote_signing_service: TConsensusSpec::VoteSigningService,
+    vote_signing_service: TConsensusSpec::VoteSignatureService,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    on_beat: OnBeat,
 }
 
 impl<TConsensusSpec> OnReceiveProposalHandler<TConsensusSpec>
@@ -54,36 +54,50 @@ where
     HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
 {
     pub fn new(
+        validator_addr: TConsensusSpec::Addr,
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
-        vote_signing_service: TConsensusSpec::VoteSigningService,
+        vote_signing_service: TConsensusSpec::VoteSignatureService,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        on_beat: OnBeat,
     ) -> Self {
         Self {
+            validator_addr,
             store,
             epoch_manager,
             vote_signing_service,
             leader_strategy,
             tx_leader,
+            on_beat,
         }
     }
 
     pub async fn handle(&self, from: TConsensusSpec::Addr, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
-        debug!(
-            target: LOG_TARGET,
-            "🔥 Receive PROPOSAL for block {}, parent {}, height {} from {}",
-            block.id(),
-            block.parent(),
-            block.height(),
-            from,
-        );
 
         let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
         if local_committee.contains(&from) {
+            debug!(
+                target: LOG_TARGET,
+                "🔥 Receive LOCAL PROPOSAL for block {}, parent {}, height {} from {}",
+                block.id(),
+                block.parent(),
+                block.height(),
+                from,
+            );
+
             self.handle_local_proposal(from, local_committee, block).await
         } else {
+            debug!(
+                target: LOG_TARGET,
+                "🔥 Receive FOREIGN PROPOSAL for block {}, parent {}, height {} from {}",
+                block.id(),
+                block.parent(),
+                block.height(),
+                from,
+            );
+
             self.handle_foreign_proposal(from, block).await
         }
     }
@@ -99,28 +113,32 @@ where
         //       executor. Once the executor has completed, we can vote on this block.
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-        let merkle_proof = self
-            .epoch_manager
-            .get_validator_node_merkle_proof(block.epoch())
-            .await?;
 
-        let maybe_vote = self.store.with_write_tx(|tx| {
+        // First save the block in one db transaction
+        self.store.with_write_tx(|tx| {
             self.validate_proposed_block(&mut *tx, &from, &block)?;
+            // Insert the block if it doesnt already exist
+            block.save(tx)?;
+            Ok::<_, HotStuffError>(())
+        })?;
 
+        let maybe_decision = self.store.with_write_tx(|tx| {
             let should_vote = self.should_vote(&mut *tx, &block)?;
 
-            let mut maybe_vote = None;
+            let mut maybe_decision = None;
             if should_vote {
-                maybe_vote = Some(self.decide_and_vote(tx, &block, local_committee_shard, merkle_proof)?);
+                let decision = self.decide_and_vote(tx, &block, local_committee_shard)?;
+                maybe_decision = Some(decision);
             }
 
             self.update_nodes(tx, &block)?;
-            Ok::<_, HotStuffError>(maybe_vote)
+            Ok::<_, HotStuffError>(maybe_decision)
         })?;
 
-        if let Some(vote) = maybe_vote {
-            let leader = self.leader_strategy.get_leader(&local_committee, &vote.block_id, 0);
-            self.send_to_leader(leader, vote).await?;
+        if let Some(decision) = maybe_decision {
+            let vote = self.generate_vote_message(&block, decision).await?;
+
+            self.send_to_leader(&local_committee, vote).await?;
         }
 
         Ok(())
@@ -129,12 +147,21 @@ where
     async fn handle_foreign_proposal(&self, from: TConsensusSpec::Addr, block: Block) -> Result<(), HotStuffError> {
         self.store.with_write_tx(|tx| {
             self.validate_proposed_block(&mut *tx, &from, &block)?;
-            self.on_receive_foreign_block(tx, &block)?;
-            Ok(())
-        })
+            self.on_receive_foreign_block(tx, &block)
+        })?;
+
+        // We should have ready transactions at this point, so if we're the leader for the next block we can propose
+        self.on_beat.beat();
+
+        Ok(())
     }
 
-    async fn send_to_leader(&self, leader: &TConsensusSpec::Addr, vote: VoteMessage) -> Result<(), HotStuffError> {
+    async fn send_to_leader(
+        &self,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+        vote: VoteMessage,
+    ) -> Result<(), HotStuffError> {
+        let leader = self.leader_strategy.get_leader(local_committee, &vote.block_id, 0);
         self.tx_leader
             .send((leader.clone(), HotstuffMessage::Vote(vote)))
             .await
@@ -148,46 +175,45 @@ where
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
         local_committee_shard: CommitteeShard,
-        merkle_proof: ValidatorNodeMerkleProof,
-    ) -> Result<VoteMessage, HotStuffError> {
-        // Insert the block if it doesnt already exist
-        block.save(tx)?;
+    ) -> Result<QuorumDecision, HotStuffError> {
         block.set_as_last_voted(tx)?;
 
         match self.decide_on_local_block(tx, block, local_committee_shard) {
             Ok(()) => {
-                let vote = self.generate_vote_message(block, QuorumDecision::Accept, merkle_proof);
                 info!(target: LOG_TARGET, "✅ Accepting block {}", block.id());
-                Ok(vote)
+                Ok(QuorumDecision::Accept)
             },
+            // TODO: implement specific failure cases
             Err(e) => {
-                // TODO: implement specific failure cases
-                let vote = self.generate_vote_message(
-                    block,
-                    QuorumDecision::Reject(QuorumRejectReason::TransactionPoolsDisagree),
-                    merkle_proof,
-                );
                 info!(target: LOG_TARGET, "❌ Rejecting block {}: {}", block.id(), e);
-                Ok(vote)
+                Ok(QuorumDecision::Reject(QuorumRejectReason::TransactionPoolsDisagree))
             },
         }
     }
 
-    fn generate_vote_message(
+    async fn generate_vote_message(
         &self,
         block: &Block,
         decision: QuorumDecision,
-        merkle_proof: ValidatorNodeMerkleProof,
-    ) -> VoteMessage {
-        let signature = self.vote_signing_service.sign_vote(block.epoch(), block.id(), decision);
+    ) -> Result<VoteMessage, HotStuffError> {
+        let merkle_proof = self
+            .epoch_manager
+            .get_validator_node_merkle_proof(block.epoch())
+            .await?;
+        let leaf_hash = self
+            .epoch_manager
+            .get_validator_leaf_hash(block.epoch(), self.validator_addr.clone())
+            .await?;
 
-        VoteMessage {
+        let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
+
+        Ok(VoteMessage {
             epoch: block.epoch(),
             block_id: *block.id(),
             decision,
             signature,
             merkle_proof,
-        }
+        })
     }
 
     /// Update the transaction pools by moving all transactions into the next pool/phase or error if this is not
@@ -207,8 +233,24 @@ where
         let prepared = NewTransactionPool::move_specific_to_prepare(tx, block.prepared())?;
         self.create_local_pledges(tx, block, &prepared, local_committee_shard)?;
 
-        let _check_pledges = PrepareTransactionPool::move_specific_to_precommit(tx, block.precommitted())?;
-        let _check_pledges = PrecommitTransactionPool::move_specific_to_committed(tx, block.committed())?;
+        let precommitted = PrepareTransactionPool::move_specific_to_precommit(tx, block.precommitted())?;
+        let committed = PrecommitTransactionPool::move_specific_to_committed(tx, block.committed())?;
+
+        let involved_shards = block.find_involved_shards(tx.deref_mut())?;
+        let num_involved_shards = involved_shards.len();
+
+        let num_local_shards = local_committee_shard.filter(involved_shards).count();
+        if num_local_shards == num_involved_shards {
+            info!(
+                target: LOG_TARGET,
+                "All shards involved in block {} are local. Marking {} transaction(s) as READY",
+                block.id(),
+                prepared.len() + precommitted.len() + committed.len()
+            );
+            PrepareTransactionPool::mark_specific_ready(tx, &prepared)?;
+            PrecommitTransactionPool::mark_specific_ready(tx, &precommitted)?;
+            CommittedTransactionPool::mark_specific_ready(tx, &committed)?;
+        }
 
         Ok(())
     }
@@ -246,7 +288,7 @@ where
         tx: &mut TTx,
         block: &Block,
     ) -> Result<(), HotStuffError> {
-        // TODO: Think we need to check local pledges here
+        // TODO: count foreign proposals and only mark as ready when all shards are received
         PrepareTransactionPool::mark_specific_ready(tx, block.precommitted())?;
         PrecommitTransactionPool::mark_specific_ready(tx, block.committed())?;
         CommittedTransactionPool::mark_specific_ready(tx, block.committed())?;
@@ -376,6 +418,8 @@ where
             });
         }
 
+        // candidate_block.proposed_by()
+
         // TODO: validate justify signatures
         // self.validate_qc(candidate_block.justify(), committee)?;
 
@@ -397,17 +441,24 @@ where
 
         // if b_new .height > vheight And ...
         if block.height() <= last_voted.height {
+            info!(
+                target: LOG_TARGET,
+                "❌ NOT voting on block {}, height {}. Block height is not greater than last voted height {}",
+                block.id(),
+                block.height(),
+                last_voted.height,
+            );
             return Ok(false);
         }
 
         let locked = LockedBlock::get(tx, block.epoch())?;
-        let locked_qc = locked.get_quorum_certificate(tx)?;
+        let locked_block = locked.get_block(tx)?;
 
         // (b_new extends b_lock && b_new .justify.node.height > b_lock .height)
-        if !is_safe_block(tx, block, &locked_qc)? {
+        if !is_safe_block(tx, block, &locked_block)? {
             info!(
                 target: LOG_TARGET,
-                "🔥 NOT voting on block {}, height {}. Block does not satisfy safeNode predicate",
+                "❌ NOT voting on block {}, height {}. Block does not satisfy safeNode predicate",
                 block.id(),
                 block.height(),
             );
@@ -428,13 +479,27 @@ where
 fn is_safe_block<TTx: StateStoreReadTransaction>(
     tx: &mut TTx,
     block: &Block,
-    locked_qc: &QuorumCertificate,
+    locked_block: &Block,
 ) -> Result<bool, HotStuffError> {
     // Liveness
-    if block.justify().block_height() <= locked_qc.block_height() {
+    if block.justify().block_height() <= locked_block.height() {
+        debug!(
+            target: LOG_TARGET,
+            "❌ justify block height {} less than locked block height {}. Block does not satisfy safeNode predicate",
+            block.justify().block_height(),
+            locked_block.height(),
+        );
         return Ok(false);
     }
 
-    let extends = block.extends(tx, locked_qc.block_id())?;
+    let extends = block.extends(tx, locked_block.id())?;
+    if !extends {
+        debug!(
+            target: LOG_TARGET,
+            "❌ Block {} does not extend locked block {}. Block does not satisfy safeNode predicate",
+            block.id(),
+            locked_block.id(),
+        );
+    }
     Ok(extends)
 }

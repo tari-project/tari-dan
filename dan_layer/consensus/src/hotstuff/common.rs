@@ -5,7 +5,7 @@ use std::ops::DerefMut;
 
 use log::*;
 use tari_dan_storage::{
-    consensus_models::{HighQc, LeafBlock, QuorumCertificate},
+    consensus_models::{HighQc, QuorumCertificate},
     StateStore,
 };
 
@@ -22,32 +22,19 @@ pub fn update_high_qc<TStore: StateStore>(
     // high_qc.node
     let high_qc_block = high_qc.get_block(tx.deref_mut())?;
 
-    let new_qc_block = qc.get_block(tx.deref_mut())?;
-
-    if high_qc_block.height() < new_qc_block.height() {
+    if high_qc_block.height() < qc.block_height() {
         debug!(
             target: LOG_TARGET,
-            "🔥 UPDATE_HIGH_QC (node: {} {}, tx_count: {}, previous block: {} {})",
-            new_qc_block.id(),
-            new_qc_block.height(),
-            new_qc_block.transaction_count(),
+            "🔥 UPDATE_HIGH_QC (node: {} {}, previous high QC: {} {})",
+            qc.id(),
+            qc.block_height(),
             high_qc_block.id(),
             high_qc_block.height(),
         );
 
-        LeafBlock {
-            epoch: new_qc_block.epoch(),
-            block_id: *new_qc_block.id(),
-            height: new_qc_block.height(),
-        }
-        .save(tx)?;
-
-        HighQc {
-            epoch: new_qc_block.epoch(),
-            block_id: *new_qc_block.id(),
-            height: new_qc_block.height(),
-        }
-        .save(tx)?;
+        qc.set_block_as_leaf(tx)?;
+        qc.save(tx)?;
+        qc.set_as_high_qc(tx)?;
     }
 
     Ok(())

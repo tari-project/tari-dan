@@ -4,17 +4,17 @@
 use std::ops::DerefMut;
 
 use log::*;
+use tari_common_types::types::FixedHash;
 use tari_dan_common_types::hashing::MergedValidatorNodeMerkleProof;
 use tari_dan_storage::{
     consensus_models::{Block, QuorumCertificate, Vote},
     StateStore,
-    StateStoreWriteTransaction,
 };
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError},
+    hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat},
     messages::VoteMessage,
-    traits::{ConsensusSpec, EpochManager, LeaderStrategy},
+    traits::{ConsensusSpec, EpochManager, LeaderStrategy, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_vote";
@@ -23,6 +23,8 @@ pub struct OnReceiveVoteHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
+    vote_signature_service: TConsensusSpec::VoteSignatureService,
+    on_beat: OnBeat,
 }
 
 impl<TConsensusSpec> OnReceiveVoteHandler<TConsensusSpec>
@@ -33,13 +35,16 @@ where
     pub fn new(
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
-
         epoch_manager: TConsensusSpec::EpochManager,
+        vote_signature_service: TConsensusSpec::VoteSignatureService,
+        on_beat: OnBeat,
     ) -> Self {
         Self {
             store,
             leader_strategy,
             epoch_manager,
+            on_beat,
+            vote_signature_service,
         }
     }
 
@@ -82,30 +87,39 @@ where
             });
         }
 
+        let sender_leaf_hash = self
+            .epoch_manager
+            .get_validator_leaf_hash(message.epoch, from.clone())
+            .await?;
+
+        self.validate_vote_message(&message, &sender_leaf_hash)?;
+
         let our_validator_shard_id = self.epoch_manager.get_our_validator_shard(message.epoch).await?;
 
-        let mut tx = self.store.create_write_tx()?;
-        let block = Block::get(tx.deref_mut(), &message.block_id)?;
-        if *block.proposed_by() != our_validator_shard_id {
-            return Err(HotStuffError::NotTheLeader {
-                details: format!(
-                    "Block {} was not proposed by this validator {}",
-                    message.block_id, our_validator_shard_id
-                ),
-            });
-        }
+        let (block, count) = self.store.with_write_tx(|tx| {
+            let block = Block::get(tx.deref_mut(), &message.block_id)?;
+            if *block.proposed_by() != our_validator_shard_id {
+                return Err(HotStuffError::NotTheLeader {
+                    details: format!(
+                        "Block {} was not proposed by this validator {}",
+                        message.block_id, our_validator_shard_id
+                    ),
+                });
+            }
 
-        Vote {
-            epoch: message.epoch,
-            block_id: message.block_id,
-            decision: message.decision,
-            sender: sender_shard_id,
-            signature: message.signature,
-            merkle_proof: message.merkle_proof,
-        }
-        .save(&mut tx)?;
+            Vote {
+                epoch: message.epoch,
+                block_id: message.block_id,
+                decision: message.decision,
+                sender_leaf_hash,
+                signature: message.signature,
+                merkle_proof: message.merkle_proof,
+            }
+            .save(tx)?;
 
-        let count = Vote::count_for_block(tx.deref_mut(), &message.block_id)?;
+            let count = Vote::count_for_block(tx.deref_mut(), &message.block_id)?;
+            Ok::<_, HotStuffError>((block, count))
+        })?;
 
         // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
         // in the QC.
@@ -118,31 +132,46 @@ where
                 count,
                 local_committee_shard.quorum_threshold()
             );
-            tx.commit()?;
             return Ok(());
         }
 
-        let votes = Vote::get_for_block(tx.deref_mut(), &message.block_id)?;
+        self.store.with_write_tx(|tx| {
+            let votes = block.get_votes(tx.deref_mut())?;
 
-        let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
-        let leaf_hashes = votes.iter().map(|v| v.signature.create_challenge()).collect::<Vec<_>>();
-        let proofs = votes.iter().map(|v| v.merkle_proof.clone()).collect();
-        let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(proofs)?;
+            let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
+            let (leaf_hashes, proofs) = votes
+                .iter()
+                .map(|v| (v.sender_leaf_hash, v.merkle_proof.clone()))
+                .unzip();
+            let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(proofs)?;
 
-        let qc = QuorumCertificate::new(
-            *block.id(),
-            block.height(),
-            block.epoch(),
-            0,
-            signatures,
-            merged_proof,
-            leaf_hashes,
-        );
+            let qc = QuorumCertificate::new(
+                *block.id(),
+                block.height(),
+                block.epoch(),
+                0,
+                signatures,
+                merged_proof,
+                leaf_hashes,
+            );
 
-        update_high_qc::<TConsensusSpec::StateStore>(&mut tx, &qc)?;
+            update_high_qc::<TConsensusSpec::StateStore>(tx, &qc)
+        })?;
 
-        tx.commit()?;
+        self.on_beat.beat();
 
+        Ok(())
+    }
+
+    fn validate_vote_message(&self, message: &VoteMessage, sender_leaf_hash: &FixedHash) -> Result<(), HotStuffError> {
+        let challenge =
+            self.vote_signature_service
+                .create_challenge(sender_leaf_hash, &message.block_id, &message.decision);
+        if !message.signature.verify(challenge) {
+            return Err(HotStuffError::InvalidVoteSignature {
+                signer_public_key: message.signature.public_key().clone(),
+            });
+        }
         Ok(())
     }
 }
