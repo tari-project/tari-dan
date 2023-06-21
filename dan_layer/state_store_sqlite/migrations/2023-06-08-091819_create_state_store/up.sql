@@ -1,3 +1,14 @@
+create table quorum_certificates
+(
+    id         integer   not null primary key AUTOINCREMENT,
+    qc_id      text      not NULL,
+    json       text      not NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- fetching by qc_id will be a very common operation
+create unique index quorum_certificates_uniq_idx_id on quorum_certificates (qc_id);
+
 create table blocks
 (
     id              integer   not null primary key AUTOINCREMENT,
@@ -7,11 +18,12 @@ create table blocks
     leader_round    bigint    not NULL DEFAULT 0,
     epoch           bigint    not NULL,
     proposed_by     text      not NULL,
-    justify         text      not NULL,
+    qc_id           text      not NULL,
     prepared        text      not NULL,
     precommitted    text      not NULL,
     committed       text      not NULL,
-    created_at      timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at      timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
 
 -- fetching by block_id will be a very common operation
@@ -58,12 +70,13 @@ create unique index substates_uniq_shard_id on substates (shard_id);
 create table high_qcs
 (
     id         integer   not null primary key autoincrement,
-    epoch      bigint    not null,
-    block_id   text      not null,
-    height     bigint    not null,
-    created_at timestamp NOT NULL default current_timestamp
+    epoch      bigint    not NULL,
+    qc_id      text      not null,
+    created_at timestamp NOT NULL default current_timestamp,
+    FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
-create unique index high_qcs_idx_epoch_block_id_height on high_qcs (epoch, block_id, height);
+
+create unique index high_qcs_uniq_idx_qc_id on high_qcs (qc_id);
 
 create table last_voted
 (
@@ -101,6 +114,7 @@ create table transactions
     sender_public_key text      not NULL,
     signature         text      not NULL,
     inputs            text      not NULL,
+    "exists"          text      not NULL,
     outputs           text      not NULL,
     result            text      not NULL,
     is_finalized      boolean   NOT NULL DEFAULT '0',
@@ -185,12 +199,13 @@ create table pledges
 
 create table votes
 (
-    id           integer   not null primary key AUTOINCREMENT,
-    epoch        bigint    not null,
-    block_id     text      not NULL,
-    decision     integer   not null,
-    sender       text      not NULL,
-    signature    text      not NULL,
-    merkle_proof text      not NULL,
-    created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id               integer   not null primary key AUTOINCREMENT,
+    hash             text      not null,
+    epoch            bigint    not null,
+    block_id         text      not NULL,
+    decision         integer   not null,
+    sender_leaf_hash text      not NULL,
+    signature        text      not NULL,
+    merkle_proof     text      not NULL,
+    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

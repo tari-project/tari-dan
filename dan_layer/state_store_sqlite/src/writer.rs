@@ -21,6 +21,7 @@ use tari_dan_storage::{
         LockedBlock,
         Pledge,
         PledgeCollection,
+        QuorumCertificate,
         TransactionDecision,
         TransactionId,
         Vote,
@@ -83,7 +84,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             blocks::prepared.eq(serialize_json(block.prepared())?),
             blocks::precommitted.eq(serialize_json(block.precommitted())?),
             blocks::committed.eq(serialize_json(block.committed())?),
-            blocks::justify.eq(serialize_json(block.justify())?),
+            blocks::qc_id.eq(serialize_hex(block.justify().id())),
         );
 
         diesel::insert_into(blocks::table)
@@ -91,6 +92,25 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError> {
+        use crate::schema::quorum_certificates;
+
+        let insert = (
+            quorum_certificates::qc_id.eq(serialize_hex(qc.id())),
+            quorum_certificates::json.eq(serialize_json(qc)?),
+        );
+
+        diesel::insert_into(quorum_certificates::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "quorum_certificates_insert",
                 source: e,
             })?;
 
@@ -182,8 +202,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
 
         let insert = (
             high_qcs::epoch.eq(high_qc.epoch.as_u64() as i64),
-            high_qcs::block_id.eq(serialize_hex(high_qc.block_id)),
-            high_qcs::height.eq(high_qc.height.as_u64() as i64),
+            high_qcs::qc_id.eq(serialize_hex(high_qc.qc_id)),
         );
 
         diesel::insert_into(high_qcs::table)
@@ -296,6 +315,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             transactions::signature.eq(serialize_json(transaction.signature())?),
             transactions::sender_public_key.eq(serialize_hex(transaction.sender_public_key().as_bytes())),
             transactions::inputs.eq(serialize_json(transaction.inputs())?),
+            transactions::exists.eq(serialize_json(transaction.exists())?),
             transactions::outputs.eq(serialize_json(transaction.outputs())?),
             transactions::is_finalized.eq(false),
         );
@@ -352,28 +372,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn new_transaction_pool_remove_many_ready(
-        &mut self,
-        max_txs: usize,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
-        use crate::schema::new_transaction_pool;
-
-        let rows = new_transaction_pool::table
-            .limit(max_txs as i64)
-            .load::<sql_models::TransactionDecision>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "new_transaction_pool_remove_many_ready",
-                source: e,
-            })?;
-
-        let txs = rows
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, StorageError>>()?;
-
-        Ok(txs)
-    }
-
     fn new_transaction_pool_remove_specific_ready(
         &mut self,
         transactions: &BTreeSet<TransactionDecision>,
@@ -397,7 +395,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             return Err(SqliteStorageError::NotAllTransactionsFound {
                 operation: "new_transaction_pool_remove_specific_ready",
                 details: format!(
-                    "{} transactions were given to remove but only {} were found",
+                    "{} transactions were given to remove but {} were found",
                     transactions.len(),
                     sql_transactions.len()
                 ),
@@ -454,7 +452,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
     fn prepared_transaction_pool_mark_specific_ready(
         &mut self,
         transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<(), StorageError> {
+    ) -> Result<usize, StorageError> {
         use crate::schema::prepared_transaction_pool;
 
         let tx_ids = transactions
@@ -462,7 +460,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .map(|tx| serialize_hex(tx.transaction_id))
             .collect::<Vec<_>>();
 
-        diesel::update(prepared_transaction_pool::table)
+        let num_updated = diesel::update(prepared_transaction_pool::table)
             .filter(prepared_transaction_pool::transaction_id.eq_any(&tx_ids))
             .set(prepared_transaction_pool::is_ready.eq(true))
             .execute(self.connection())
@@ -471,54 +469,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 source: e,
             })?;
 
-        Ok(())
-    }
-
-    fn prepared_transaction_pool_remove_many_ready(
-        &mut self,
-        max_txs: usize,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
-        use crate::schema::prepared_transaction_pool;
-
-        let sql_transactions = prepared_transaction_pool::table
-            .select((
-                prepared_transaction_pool::id,
-                prepared_transaction_pool::transaction_id,
-                prepared_transaction_pool::overall_decision,
-                prepared_transaction_pool::transaction_decision,
-                prepared_transaction_pool::fee,
-                prepared_transaction_pool::created_at,
-            ))
-            .filter(prepared_transaction_pool::is_ready.eq(true))
-            .order_by(prepared_transaction_pool::id.asc())
-            .limit(max_txs as i64)
-            .load::<sql_models::TransactionDecision>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "prepared_transaction_pool_remove_many_ready",
-                source: e,
-            })?;
-
-        if sql_transactions.is_empty() {
-            return Ok(BTreeSet::new());
-        }
-
-        let row_affected = diesel::delete(prepared_transaction_pool::table)
-            .filter(prepared_transaction_pool::is_ready.eq(true))
-            .filter(prepared_transaction_pool::id.le(sql_transactions.last().unwrap().id))
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "prepared_transaction_pool_remove_many_ready",
-                source: e,
-            })?;
-
-        assert_eq!(row_affected, sql_transactions.len());
-
-        let txs = sql_transactions
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
-
-        Ok(txs)
+        Ok(num_updated)
     }
 
     fn prepared_transaction_pool_remove_specific_ready(
@@ -546,10 +497,10 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
 
         // If there are duplicates in tx_ids (which there should never be) this will unexpectedly fail
         if num_found as usize != tx_ids.len() {
-            return Err(SqliteStorageError::MalformedDbData {
+            return Err(SqliteStorageError::NotAllTransactionsFound {
                 operation: "prepared_transaction_pool_remove_specific_ready",
                 details: format!(
-                    "{} transactions were given to remove but only {} were found",
+                    "{} transactions were given to remove but {} were found",
                     transactions.len(),
                     num_found
                 ),
@@ -624,7 +575,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
     fn precommitted_transaction_pool_mark_specific_ready(
         &mut self,
         transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<(), StorageError> {
+    ) -> Result<usize, StorageError> {
         use crate::schema::precommitted_transaction_pool;
 
         let tx_ids = transactions
@@ -632,7 +583,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .map(|tx| serialize_hex(tx.transaction_id))
             .collect::<Vec<_>>();
 
-        diesel::update(precommitted_transaction_pool::table)
+        let num_updated = diesel::update(precommitted_transaction_pool::table)
             .filter(precommitted_transaction_pool::transaction_id.eq_any(&tx_ids))
             .set(precommitted_transaction_pool::is_ready.eq(true))
             .execute(self.connection())
@@ -641,52 +592,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 source: e,
             })?;
 
-        Ok(())
-    }
-
-    fn precommitted_transaction_pool_remove_many_ready(
-        &mut self,
-        max_txs: usize,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
-        use crate::schema::precommitted_transaction_pool;
-
-        let sql_transactions = precommitted_transaction_pool::table
-            .select((
-                precommitted_transaction_pool::id,
-                precommitted_transaction_pool::transaction_id,
-                precommitted_transaction_pool::overall_decision,
-                precommitted_transaction_pool::transaction_decision,
-                precommitted_transaction_pool::fee,
-                precommitted_transaction_pool::created_at,
-            ))
-            .filter(precommitted_transaction_pool::is_ready.eq(true))
-            .order(precommitted_transaction_pool::created_at.asc())
-            .limit(max_txs as i64)
-            .load::<sql_models::TransactionDecision>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "precommitted_transaction_pool_remove_many_ready",
-                source: e,
-            })?;
-
-        let tx_ids = sql_transactions
-            .iter()
-            .map(|tx| serialize_hex(&tx.transaction_id))
-            .collect::<Vec<_>>();
-
-        diesel::delete(precommitted_transaction_pool::table)
-            .filter(precommitted_transaction_pool::transaction_id.eq_any(&tx_ids))
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "precommitted_transaction_pool_remove_many_ready",
-                source: e,
-            })?;
-
-        let txs = sql_transactions
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
-
-        Ok(txs)
+        Ok(num_updated)
     }
 
     fn precommitted_transaction_pool_remove_specific_ready(
@@ -716,6 +622,18 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 operation: "precommitted_transaction_pool_remove_specific_ready",
                 source: e,
             })?;
+
+        if sql_transactions.len() != tx_ids.len() {
+            return Err(SqliteStorageError::NotAllTransactionsFound {
+                operation: "new_transaction_pool_remove_specific_ready",
+                details: format!(
+                    "{} transactions were given to remove but {} were found",
+                    transactions.len(),
+                    sql_transactions.len()
+                ),
+            }
+            .into());
+        }
 
         diesel::delete(precommitted_transaction_pool::table)
             .filter(precommitted_transaction_pool::transaction_id.eq_any(&tx_ids))
@@ -766,7 +684,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
     fn committed_transaction_pool_mark_specific_ready(
         &mut self,
         transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<(), StorageError> {
+    ) -> Result<usize, StorageError> {
         use crate::schema::committed_transaction_pool;
 
         let tx_ids = transactions
@@ -774,7 +692,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .map(|tx| serialize_hex(tx.transaction_id))
             .collect::<Vec<_>>();
 
-        diesel::update(committed_transaction_pool::table)
+        let num_updated = diesel::update(committed_transaction_pool::table)
             .filter(committed_transaction_pool::transaction_id.eq_any(&tx_ids))
             .set(committed_transaction_pool::is_ready.eq(true))
             .execute(self.connection())
@@ -783,7 +701,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 source: e,
             })?;
 
-        Ok(())
+        Ok(num_updated)
     }
 
     fn committed_transaction_pool_remove_specific_ready(
@@ -814,6 +732,18 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 source: e,
             })?;
 
+        if sql_transactions.len() != tx_ids.len() {
+            return Err(SqliteStorageError::NotAllTransactionsFound {
+                operation: "new_transaction_pool_remove_specific_ready",
+                details: format!(
+                    "{} transactions were given to remove but {} were found",
+                    transactions.len(),
+                    sql_transactions.len()
+                ),
+            }
+            .into());
+        }
+
         diesel::delete(committed_transaction_pool::table)
             .filter(committed_transaction_pool::transaction_id.eq_any(&tx_ids))
             .filter(committed_transaction_pool::is_ready.eq(true))
@@ -835,9 +765,10 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         use crate::schema::votes;
 
         let insert = (
+            votes::hash.eq(serialize_hex(vote.calculate_hash())),
             votes::epoch.eq(vote.epoch.as_u64() as i64),
             votes::block_id.eq(serialize_hex(vote.block_id)),
-            votes::sender.eq(serialize_hex(vote.sender)),
+            votes::sender_leaf_hash.eq(serialize_hex(vote.sender_leaf_hash)),
             votes::decision.eq(i32::from(vote.decision.as_u8())),
             votes::signature.eq(serialize_json(&vote.signature)?),
             votes::merkle_proof.eq(serialize_json(&vote.merkle_proof)?),

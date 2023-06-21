@@ -3,8 +3,6 @@
 
 use std::{
     fmt,
-    fs::create_dir_all,
-    path::Path,
     sync::{Arc, Mutex},
 };
 
@@ -27,11 +25,8 @@ pub struct SqliteStateStore {
 }
 
 impl SqliteStateStore {
-    pub fn connect<P: AsRef<Path>>(path: P) -> Result<Self, StorageError> {
-        create_dir_all(path.as_ref().parent().unwrap()).map_err(|_| StorageError::FileSystemPathDoesNotExist)?;
-
-        let database_url = path.as_ref().to_str().expect("database_url utf-8 error").to_string();
-        let mut connection = SqliteConnection::establish(&database_url).map_err(SqliteStorageError::from)?;
+    pub fn connect(url: &str) -> Result<Self, StorageError> {
+        let mut connection = SqliteConnection::establish(url).map_err(SqliteStorageError::from)?;
 
         const MIGRATIONS: EmbeddedMigrations = embed_migrations!("./migrations");
         connection

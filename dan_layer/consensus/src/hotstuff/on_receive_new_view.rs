@@ -10,7 +10,7 @@ use tari_dan_storage::{
 };
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError},
+    hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat},
     messages::NewViewMessage,
     traits::{ConsensusSpec, EpochManager},
 };
@@ -22,6 +22,7 @@ pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
     _leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
     newview_message_counts: HashMap<BlockId, HashSet<TConsensusSpec::Addr>>,
+    on_beat: OnBeat,
 }
 
 impl<TConsensusSpec> OnReceiveNewViewHandler<TConsensusSpec>
@@ -33,12 +34,14 @@ where
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
+        on_beat: OnBeat,
     ) -> Self {
         Self {
             store,
             _leader_strategy: leader_strategy,
             epoch_manager,
             newview_message_counts: HashMap::default(),
+            on_beat,
         }
     }
 
@@ -71,7 +74,7 @@ where
         let entry = self.newview_message_counts.entry(*high_qc.block_id()).or_default();
         entry.insert(from);
 
-        // self.on_beat()
+        self.on_beat.beat();
 
         Ok(())
     }
@@ -80,29 +83,4 @@ where
         // TODO
         Ok(())
     }
-
-    // async fn on_beat(&mut self, high_qc: HighQc) -> Result<(), HotStuffError> {
-    //     let committee = self.epoch_manager.get_committee(high_qc.epoch, shard).await?;
-    //     if committee.is_empty() {
-    //         return Err(HotStuffError::NoCommitteeForShard { shard, epoch });
-    //     }
-    //     if self.is_leader(payload_id, shard, &committee)? {
-    //         let min_required_new_views = committee.consensus_threshold();
-    //         let num_new_views = self.get_newview_count_for(shard, payload_id);
-    //         if num_new_views >= min_required_new_views {
-    //             self.newview_message_counts.remove(&(shard, payload_id));
-    //             self.leader_on_propose(shard, payload_id).await?;
-    //         } else {
-    //             info!(
-    //                 target: LOG_TARGET,
-    //                 "🔥 Waiting for more NEWVIEW messages ({}/{}) for shard {}, payload {}",
-    //                 num_new_views,
-    //                 min_required_new_views,
-    //                 shard,
-    //                 payload_id
-    //             );
-    //         }
-    //     }
-    //     Ok(())
-    // }
 }

@@ -55,7 +55,7 @@ impl LeafBlock {
         tx.leaf_block_get(epoch)
     }
 
-    pub fn save<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.leaf_block_set(self)
     }
 

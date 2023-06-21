@@ -36,7 +36,9 @@ impl PartialOrd for TransactionDecision {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum Decision {
+    /// Decision to COMMIT the transaction
     Accept,
+    /// Decision to ABORT the transaction
     Reject,
 }
 
@@ -53,8 +55,8 @@ impl Decision {
 impl Display for Decision {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Decision::Accept => write!(f, "Accept"),
-            Decision::Reject => write!(f, "Reject"),
+            Decision::Accept => write!(f, "Commit"),
+            Decision::Reject => write!(f, "Abort"),
         }
     }
 }
@@ -64,8 +66,8 @@ impl FromStr for Decision {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Accept" => Ok(Decision::Accept),
-            "Reject" => Ok(Decision::Reject),
+            "Commit" => Ok(Decision::Accept),
+            "Abort" => Ok(Decision::Reject),
             _ => Err(()),
         }
     }

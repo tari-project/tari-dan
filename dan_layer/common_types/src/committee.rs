@@ -56,15 +56,21 @@ impl<TAddr: NodeAddressable> IntoIterator for Committee<TAddr> {
     }
 }
 
+impl<TAddr: NodeAddressable> FromIterator<TAddr> for Committee<TAddr> {
+    fn from_iter<T: IntoIterator<Item = TAddr>>(iter: T) -> Self {
+        Self::new(iter.into_iter().collect())
+    }
+}
+
 impl<TAddr: NodeAddressable> FromIterator<Committee<TAddr>> for Committee<TAddr> {
     fn from_iter<T: IntoIterator<Item = Committee<TAddr>>>(iter: T) -> Self {
         let into_iter = iter.into_iter();
-        let (min, maybe_max) = into_iter.size_hint();
-        let target_size = maybe_max.unwrap_or(min);
-        into_iter.fold(Self::with_capacity(target_size), |mut acc, committee| {
-            acc.members.extend(committee.members);
+        let members = into_iter.fold(Vec::new(), |mut acc, committee| {
+            acc.extend(committee.members);
             acc
-        })
+        });
+
+        Self::new(members)
     }
 }
 

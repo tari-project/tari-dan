@@ -40,32 +40,3 @@ pub trait LeaderStrategy<TAddr: NodeAddressable> {
         committee.members.get(index as usize).unwrap()
     }
 }
-
-pub struct AlwaysFirstLeader;
-
-impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for AlwaysFirstLeader {
-    fn calculate_leader(&self, _committee: &Committee<TAddr>, _block: &BlockId, _round: u32) -> u32 {
-        0
-    }
-}
-
-pub struct RotatingLeader;
-
-impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for RotatingLeader {
-    fn calculate_leader(&self, committee: &Committee<TAddr>, _block: &BlockId, round: u32) -> u32 {
-        round % (committee.len() as u32)
-    }
-}
-
-pub struct RandomDeterministicLeaderStrategy;
-
-impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for RandomDeterministicLeaderStrategy {
-    fn calculate_leader(&self, committee: &Committee<TAddr>, block: &BlockId, round: u32) -> u32 {
-        // TODO: Maybe Committee should not be able to be constructed with an empty committee
-        assert!(!committee.is_empty(), "Committee was empty in calculate_leader");
-        let hash = block.hash().as_slice();
-        let hash = u32::from_le_bytes([hash[0], hash[1], hash[2], hash[3]]);
-        let first = hash % committee.members.len() as u32;
-        (first + round) % committee.members.len() as u32
-    }
-}
