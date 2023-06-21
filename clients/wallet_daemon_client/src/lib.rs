@@ -32,78 +32,34 @@ use std::{
 use json::Value;
 use reqwest::{
     header::{self, HeaderMap, AUTHORIZATION},
-    IntoUrl,
-    Url,
+    IntoUrl, Url,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_template_lib::models::ComponentAddress;
 use types::{
-    AccountsCreateFreeTestCoinsRequest,
-    AccountsCreateFreeTestCoinsResponse,
-    AuthLoginAcceptRequest,
-    AuthLoginAcceptResponse,
-    AuthLoginDenyRequest,
-    AuthLoginDenyResponse,
-    AuthLoginRequest,
-    AuthLoginResponse,
-    ClaimBurnRequest,
-    ClaimBurnResponse,
-    MintAccountNftRequest,
-    MintAccountNftResponse,
-    ProofsCancelRequest,
-    ProofsCancelResponse,
-    ProofsFinalizeRequest,
-    ProofsFinalizeResponse,
-    ProofsGenerateRequest,
-    ProofsGenerateResponse,
-    TransferRequest,
-    TransferResponse,
-    WebRtcStartRequest,
-    WebRtcStartResponse,
+    AccountsCreateFreeTestCoinsRequest, AccountsCreateFreeTestCoinsResponse, AuthLoginAcceptRequest,
+    AuthLoginAcceptResponse, AuthLoginDenyRequest, AuthLoginDenyResponse, AuthLoginRequest, AuthLoginResponse,
+    ClaimBurnRequest, ClaimBurnResponse, GetAccountNftRequest, GetAccountNftResponse, ListAccountNftRequest,
+    ListAccountNftResponse, MintAccountNftRequest, MintAccountNftResponse, ProofsCancelRequest, ProofsCancelResponse,
+    ProofsFinalizeRequest, ProofsFinalizeResponse, ProofsGenerateRequest, ProofsGenerateResponse, TransferRequest,
+    TransferResponse, WebRtcStartRequest, WebRtcStartResponse,
 };
 
 use crate::{
     error::WalletDaemonClientError,
     types::{
-        AccountGetDefaultRequest,
-        AccountGetRequest,
-        AccountGetResponse,
-        AccountSetDefaultRequest,
-        AccountSetDefaultResponse,
-        AccountsCreateRequest,
-        AccountsCreateResponse,
-        AccountsGetBalancesRequest,
-        AccountsGetBalancesResponse,
-        AccountsInvokeRequest,
-        AccountsInvokeResponse,
-        AccountsListRequest,
-        AccountsListResponse,
-        AuthGetAllJwtRequest,
-        AuthGetAllJwtResponse,
-        AuthRevokeTokenRequest,
-        AuthRevokeTokenResponse,
-        ConfidentialCreateOutputProofRequest,
-        ConfidentialCreateOutputProofResponse,
-        ConfidentialTransferRequest,
-        ConfidentialTransferResponse,
-        KeysCreateRequest,
-        KeysCreateResponse,
-        KeysListRequest,
-        KeysListResponse,
-        KeysSetActiveRequest,
-        KeysSetActiveResponse,
-        RevealFundsRequest,
-        RevealFundsResponse,
-        TransactionGetRequest,
-        TransactionGetResponse,
-        TransactionGetResultRequest,
-        TransactionGetResultResponse,
-        TransactionSubmitRequest,
-        TransactionSubmitResponse,
-        TransactionWaitResultRequest,
-        TransactionWaitResultResponse,
+        AccountGetDefaultRequest, AccountGetRequest, AccountGetResponse, AccountSetDefaultRequest,
+        AccountSetDefaultResponse, AccountsCreateRequest, AccountsCreateResponse, AccountsGetBalancesRequest,
+        AccountsGetBalancesResponse, AccountsInvokeRequest, AccountsInvokeResponse, AccountsListRequest,
+        AccountsListResponse, AuthGetAllJwtRequest, AuthGetAllJwtResponse, AuthRevokeTokenRequest,
+        AuthRevokeTokenResponse, ConfidentialCreateOutputProofRequest, ConfidentialCreateOutputProofResponse,
+        ConfidentialTransferRequest, ConfidentialTransferResponse, KeysCreateRequest, KeysCreateResponse,
+        KeysListRequest, KeysListResponse, KeysSetActiveRequest, KeysSetActiveResponse, RevealFundsRequest,
+        RevealFundsResponse, TransactionGetRequest, TransactionGetResponse, TransactionGetResultRequest,
+        TransactionGetResultResponse, TransactionSubmitRequest, TransactionSubmitResponse,
+        TransactionWaitResultRequest, TransactionWaitResultResponse,
     },
 };
 
@@ -361,6 +317,20 @@ impl WalletDaemonClient {
         req: T,
     ) -> Result<MintAccountNftResponse, WalletDaemonClientError> {
         self.send_request("nfts.mint_account_nft", req.borrow()).await
+    }
+
+    pub async fn get_account_nft<T: Borrow<GetAccountNftRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<GetAccountNftResponse, WalletDaemonClientError> {
+        self.send_request("nfts.get", req.borrow()).await
+    }
+
+    pub async fn list_account_nfts<T: Borrow<ListAccountNftRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ListAccountNftResponse, WalletDaemonClientError> {
+        self.send_request("nfts.list", req.borrow()).await
     }
 
     pub async fn auth_request<T: Borrow<AuthLoginRequest>>(

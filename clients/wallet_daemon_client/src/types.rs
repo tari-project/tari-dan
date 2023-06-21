@@ -521,7 +521,6 @@ pub struct MintAccountNftResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct GetAccountNftRequest {
-    pub account: ComponentAddressOrName,
     pub nft_id: NonFungibleId,
 }
 
@@ -534,10 +533,10 @@ pub struct AccountNftInfo {
 
 pub type GetAccountNftResponse = AccountNftInfo;
 
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ListAccountNftRequest {
-    pub account: ComponentAddressOrName,
+    pub limit: u64,
+    pub offset: u64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

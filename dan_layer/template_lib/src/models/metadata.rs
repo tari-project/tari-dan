@@ -50,6 +50,10 @@ impl Metadata {
     pub fn into_json(self) -> Value {
         serde_json::to_value(self.0).expect("Failed to parse to JSON")
     }
+
+    pub fn as_json(&self) -> Value {
+        serde_json::to_value(&self.0).expect("Failed to parse JSON")
+    }
 }
 
 impl From<BTreeMap<String, String>> for Metadata {

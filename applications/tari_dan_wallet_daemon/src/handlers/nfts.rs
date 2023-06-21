@@ -24,7 +24,8 @@ use tari_template_lib::{
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
-    GetAccountNftRequest, GetAccountNftResponse, MintAccountNftRequest, MintAccountNftResponse,
+    AccountNftInfo, GetAccountNftRequest, GetAccountNftResponse, ListAccountNftRequest, ListAccountNftResponse,
+    MintAccountNftRequest, MintAccountNftResponse,
 };
 use tokio::sync::broadcast;
 
@@ -48,7 +49,7 @@ pub async fn handle_get_nft(
     let non_fungible_api = sdk.non_fungible_api();
 
     let non_fungible = non_fungible_api
-        .get_non_fungible_token(req.nft_id)
+        .non_fungible_token_get_by_nft_id(req.nft_id)
         .map_err(|e| anyhow!("Failed to get non fungible token, with error: {}", e))?;
     let token_symbol = non_fungible.token_symbol.clone();
     let is_burned = non_fungible.is_burned;
@@ -60,6 +61,31 @@ pub async fn handle_get_nft(
     };
 
     Ok(resp)
+}
+
+pub async fn handle_list_nfts(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: ListAccountNftRequest,
+) -> Result<ListAccountNftResponse, anyhow::Error> {
+    let ListAccountNftRequest { limit, offset, .. } = req;
+    let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token.clone(), &[JrpcPermission::Admin])?;
+
+    let non_fungible_api = sdk.non_fungible_api();
+
+    let non_fungibles = non_fungible_api
+        .non_fungible_token_get_all(limit, offset)
+        .map_err(|e| anyhow!("Failed to list all non fungibles, with error: {}", e))?;
+    let non_fungibles = non_fungibles
+        .iter()
+        .map(|n| AccountNftInfo {
+            token_symbol: n.token_symbol.clone(),
+            is_burned: n.is_burned,
+            metadata: n.metadata.as_json(),
+        })
+        .collect();
+    Ok(ListAccountNftResponse { nfts: non_fungibles })
 }
 
 pub async fn handle_mint_account_nft(
