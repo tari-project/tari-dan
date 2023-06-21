@@ -37,6 +37,10 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::handlers::nfts";
 
+pub async handle_get_nft(
+    context: &HandlerContext
+)
+
 pub async fn handle_mint_account_nft(
     context: &HandlerContext,
     token: Option<String>,
