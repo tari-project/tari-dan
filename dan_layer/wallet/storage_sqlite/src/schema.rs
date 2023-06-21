@@ -51,6 +51,7 @@ diesel::table! {
         nft_id -> Text,
         metadata -> Text,
         is_burned -> Bool,
+        token_symbol -> Text,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }

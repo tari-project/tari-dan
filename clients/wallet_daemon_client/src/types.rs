@@ -520,6 +520,32 @@ pub struct MintAccountNftResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GetAccountNftRequest {
+    pub account: ComponentAddressOrName,
+    pub nft_id: NonFungibleId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountNftInfo {
+    pub token_symbol: String,
+    pub metadata: serde_json::Value,
+    pub is_burned: bool,
+}
+
+pub type GetAccountNftResponse = AccountNftInfo;
+
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ListAccountNftRequest {
+    pub account: ComponentAddressOrName,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ListAccountNftResponse {
+    pub nfts: Vec<AccountNftInfo>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthGetAllJwtRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

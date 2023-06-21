@@ -21,6 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tari_bor::BorTag;
 use tari_template_abi::rust::{collections::BTreeMap, fmt::Display};
 
@@ -44,6 +45,10 @@ impl Metadata {
 
     pub fn get(&self, key: &str) -> Option<&str> {
         self.0.get(key).map(|v| v.as_str())
+    }
+
+    pub fn into_json(self) -> Value {
+        serde_json::to_value(self.0).expect("Failed to parse to JSON")
     }
 }
 

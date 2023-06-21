@@ -13,10 +13,7 @@ use axum::{
 };
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult,
-    JsonRpcAnswer,
-    JsonRpcExtractor,
-    JsonRpcResponse,
+    JrpcResult, JsonRpcAnswer, JsonRpcExtractor, JsonRpcResponse,
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
@@ -136,7 +133,11 @@ async fn handler(
             },
             _ => Ok(value.method_not_found(&value.method)),
         },
-        Some(("nfts", "mint_account_nft")) => call_handler(context, value, token, nfts::handle_mint_account_nft).await,
+        Some(("nfts", method)) => match method {
+            "mint_account_nft" => call_handler(context, value, token, nfts::handle_mint_account_nft).await,
+            "get" => call_handler(context, value, token, nfts::handle_get_nft).await,
+            _ => Ok(value.method_not_found(&value.method)),
+        },
         _ => Ok(value.method_not_found(&value.method)),
     }
 }

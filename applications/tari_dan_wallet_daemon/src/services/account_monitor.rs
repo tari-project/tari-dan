@@ -204,13 +204,14 @@ where
 
             self.add_vault_to_account_if_not_exist(&versioned_account_address.address, &vault)
                 .await?;
-            self.refresh_vault(&versioned_account_address.address, &vault, &HashMap::new())?;
+            self.refresh_vault(&versioned_account_address.address, &vault, &HashMap::new())
+                .await?;
         }
 
         Ok(is_updated)
     }
 
-    fn refresh_vault(
+    async fn refresh_vault(
         &self,
         account_addr: &SubstateAddress,
         vault: &Vault,
@@ -289,11 +290,16 @@ where
                         continue;
                     },
                 };
+                let resource_address = vault.resource_address();
+                let resource = self.fetch_resource(*resource_address).await?;
+                let token_symbol = resource.token_symbol();
+
                 let non_fungible = NonFungibleToken {
                     is_burned,
                     vault_id: *vault.vault_id(),
                     nft_id: id.clone(),
                     metadata,
+                    token_symbol: String::from(token_symbol),
                 };
 
                 non_fungibles_api.store_new_nft(&non_fungible)?;
@@ -356,7 +362,7 @@ where
                 // Any vaults we process here do not need to be reprocesed later
                 if let Some(vault) = vaults.remove(vault_id).and_then(|s| s.substate_value().vault()) {
                     self.add_vault_to_account_if_not_exist(account_addr, vault).await?;
-                    self.refresh_vault(account_addr, vault, &nfts)?;
+                    self.refresh_vault(account_addr, vault, &nfts).await?;
                 }
             }
         }
@@ -395,7 +401,7 @@ where
             self.add_vault_to_account_if_not_exist(&account_addr, vault).await?;
 
             // Update the vault balance / confidential outputs
-            self.refresh_vault(&account_addr, vault, &nfts)?;
+            self.refresh_vault(&account_addr, vault, &nfts).await?;
         }
         Ok(())
     }
@@ -538,12 +544,12 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {
         }
 
         // Is an account component
-        if !a.is_component() ||
-            v.substate_value()
+        if !a.is_component()
+            || v.substate_value()
                 .component()
                 .expect("Value was not component for component address")
-                .template_address !=
-                *ACCOUNT_TEMPLATE_ADDRESS
+                .template_address
+                != *ACCOUNT_TEMPLATE_ADDRESS
         {
             return None;
         }

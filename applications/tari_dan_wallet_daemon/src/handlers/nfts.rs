@@ -13,9 +13,7 @@ use tari_dan_wallet_sdk::{
     models::Account,
 };
 use tari_engine_types::{
-    component::new_component_address_from_parts,
-    instruction::Instruction,
-    substate::SubstateAddress,
+    component::new_component_address_from_parts, instruction::Instruction, substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -25,7 +23,9 @@ use tari_template_lib::{
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_utilities::ByteArray;
-use tari_wallet_daemon_client::types::{MintAccountNftRequest, MintAccountNftResponse};
+use tari_wallet_daemon_client::types::{
+    GetAccountNftRequest, GetAccountNftResponse, MintAccountNftRequest, MintAccountNftResponse,
+};
 use tokio::sync::broadcast;
 
 use super::context::HandlerContext;
@@ -37,9 +37,30 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::handlers::nfts";
 
-pub async handle_get_nft(
-    context: &HandlerContext
-)
+pub async fn handle_get_nft(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: GetAccountNftRequest,
+) -> Result<GetAccountNftResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token.clone(), &[JrpcPermission::Admin])?;
+
+    let non_fungible_api = sdk.non_fungible_api();
+
+    let non_fungible = non_fungible_api
+        .get_non_fungible_token(req.nft_id)
+        .map_err(|e| anyhow!("Failed to get non fungible token, with error: {}", e))?;
+    let token_symbol = non_fungible.token_symbol.clone();
+    let is_burned = non_fungible.is_burned;
+    let metadata = non_fungible.metadata.into_json();
+    let resp = GetAccountNftResponse {
+        token_symbol,
+        metadata,
+        is_burned,
+    };
+
+    Ok(resp)
+}
 
 pub async fn handle_mint_account_nft(
     context: &HandlerContext,
@@ -230,10 +251,11 @@ async fn create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
-            owner_token,
-            token_symbol
-        ])
+        .call_function(
+            *ACCOUNT_NFT_TEMPLATE_ADDRESS,
+            "create",
+            args![owner_token, token_symbol],
+        )
         .sign(owner_sk)
         .build();
 
