@@ -22,6 +22,7 @@ pub enum TransactionPool {
     Prepare,
     Precommit,
     Commit,
+    All,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -76,15 +77,14 @@ impl NewTransactionPool {
         Ok(decisions == *transactions)
     }
 
-    pub fn move_many_to_prepare<TTx: StateStoreWriteTransaction>(
+    pub fn get_batch<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         max_txs: usize,
     ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
         if max_txs == 0 {
             return Ok(BTreeSet::new());
         }
-        let ready_txs = tx.new_transaction_pool_remove_many_ready(max_txs)?;
-        tx.prepared_transaction_pool_insert_pending(&ready_txs)?;
+        let ready_txs = tx.new_transaction_pool_get_many_ready(max_txs)?;
         Ok(ready_txs)
     }
 }
@@ -96,9 +96,8 @@ impl PrepareTransactionPool {
     pub fn mark_specific_ready<TTx: StateStoreWriteTransaction>(
         tx: &mut TTx,
         transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<(), StorageError> {
-        tx.prepared_transaction_pool_mark_specific_ready(transactions)?;
-        Ok(())
+    ) -> Result<usize, StorageError> {
+        tx.prepared_transaction_pool_mark_specific_ready(transactions)
     }
 
     pub fn move_specific_to_precommit<TTx: StateStoreWriteTransaction>(
@@ -110,15 +109,14 @@ impl PrepareTransactionPool {
         Ok(ready_txs)
     }
 
-    pub fn move_many_to_precommit<TTx: StateStoreWriteTransaction>(
+    pub fn get_batch<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         max_txs: usize,
     ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
         if max_txs == 0 {
             return Ok(BTreeSet::new());
         }
-        let ready_txs = tx.prepared_transaction_pool_remove_many_ready(max_txs)?;
-        tx.precommitted_transaction_pool_insert_pending(&ready_txs)?;
+        let ready_txs = tx.prepared_transaction_pool_get_many_ready(max_txs)?;
         Ok(ready_txs)
     }
 }
@@ -130,9 +128,8 @@ impl PrecommitTransactionPool {
     pub fn mark_specific_ready<TTx: StateStoreWriteTransaction>(
         tx: &mut TTx,
         transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<(), StorageError> {
-        tx.precommitted_transaction_pool_mark_specific_ready(transactions)?;
-        Ok(())
+    ) -> Result<usize, StorageError> {
+        tx.precommitted_transaction_pool_mark_specific_ready(transactions)
     }
 
     pub fn move_specific_to_committed<TTx: StateStoreWriteTransaction>(
@@ -144,15 +141,14 @@ impl PrecommitTransactionPool {
         Ok(ready_txs)
     }
 
-    pub fn move_many_to_committed<TTx: StateStoreWriteTransaction>(
+    pub fn get_batch<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         max_txs: usize,
     ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
         if max_txs == 0 {
             return Ok(BTreeSet::new());
         }
-        let ready_txs = tx.precommitted_transaction_pool_remove_many_ready(max_txs)?;
-        tx.committed_transaction_pool_insert_pending(&ready_txs)?;
+        let ready_txs = tx.precommitted_transaction_pool_get_many_ready(max_txs)?;
         Ok(ready_txs)
     }
 }
@@ -164,9 +160,8 @@ impl CommittedTransactionPool {
     pub fn mark_specific_ready<TTx: StateStoreWriteTransaction>(
         tx: &mut TTx,
         transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<(), StorageError> {
-        tx.committed_transaction_pool_mark_specific_ready(transactions)?;
-        Ok(())
+    ) -> Result<usize, StorageError> {
+        tx.committed_transaction_pool_mark_specific_ready(transactions)
     }
 
     pub fn finalize_specific<TTx: StateStoreWriteTransaction>(

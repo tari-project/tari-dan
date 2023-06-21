@@ -21,6 +21,7 @@ pub struct Transaction {
     pub sender_public_key: String,
     pub signature: String,
     pub inputs: String,
+    pub exists: String,
     pub outputs: String,
     pub result: String,
     pub is_finalized: bool,
@@ -49,6 +50,7 @@ impl TryFrom<Transaction> for consensus_models::Transaction {
         })?;
 
         let inputs = deserialize_json(&value.inputs)?;
+        let exists = deserialize_json(&value.exists)?;
         let outputs = deserialize_json(&value.outputs)?;
 
         Ok(Self::new(
@@ -58,6 +60,7 @@ impl TryFrom<Transaction> for consensus_models::Transaction {
             signature,
             sender_public_key,
             inputs,
+            exists,
             outputs,
         ))
     }

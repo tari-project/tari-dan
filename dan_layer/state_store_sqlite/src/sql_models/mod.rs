@@ -4,6 +4,7 @@
 mod block;
 mod bookkeeping;
 mod leaf_block;
+mod quorum_certificate;
 mod transaction;
 mod transaction_decision;
 mod vote;
@@ -11,6 +12,7 @@ mod vote;
 pub use block::*;
 pub use bookkeeping::*;
 pub use leaf_block::*;
+pub use quorum_certificate::*;
 pub use transaction::*;
 pub use transaction_decision::*;
 pub use vote::*;
