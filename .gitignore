@@ -57,4 +57,4 @@ buildtools/Output/
 
 clients/validator_node_grpc_client/package-lock.json
 /dan_layer/wallet/storage_sqlite/temp.sqlite
-/applications/tari_validator_node/cucumber-output-junit.xml
+/integration_tests/cucumber-output-junit.xml
