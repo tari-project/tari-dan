@@ -32,6 +32,7 @@ use log::{error, warn};
 use serde::Serialize;
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
+use tari_common_types::types::FixedHash;
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
@@ -496,14 +497,16 @@ impl JsonRpcHandlers {
         let request: SubmitTransactionRequest = value.parse_params()?;
 
         if request.is_dry_run {
+            let transaction_hash = FixedHash::from(request.transaction.hash().into_array());
             let exec_result = self
                 .dry_run_transaction_processor
                 .process_transaction(&request.transaction)
                 .await
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
-            Ok(JsonRpcResponse::success(answer_id, GetTransactionResultResponse {
+            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 execution_result: Some(exec_result),
+                transaction_hash,
             }))
         } else {
             let payload_id = self
