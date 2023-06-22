@@ -702,7 +702,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         let vault_addresses = vault_addresses
             .iter()
             .map(|va| {
-                VaultId::from_str(&va).map_err(|e| WalletStorageError::DecodingError {
+                VaultId::from_str(va).map_err(|e| WalletStorageError::DecodingError {
                     details: e.to_string(),
                     item: "non_fungible_tokens",
                     operation: "non_fungible_token_get_by_nft_id",
