@@ -15,9 +15,9 @@ tari_state_store_sqlite = { path = "../state_store_sqlite" }
 tari_transaction = { path = "../transaction" }
 tari_engine_types = { path = "../engine_types" }
 
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
 tari_crypto = "0.17"
 
 anyhow = "1.0"

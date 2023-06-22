@@ -8,11 +8,11 @@ repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_core = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
 tari_dan_common_types = { path = "../common_types" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development", optional = true }
+tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2", optional = true }
 tari_dan_storage = { path = "../storage", optional = true }
 tari_dan_storage_sqlite = { path = "../storage_sqlite", optional = true }
 tari_base_node_client = { path = "../../clients/base_node_client", optional = true }

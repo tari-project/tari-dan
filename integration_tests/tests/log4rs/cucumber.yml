@@ -64,6 +64,22 @@ appenders:
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [{X(node-public-key)},{X(node-id)}] {l:5} {m} // {f}:{L}{n}"
 
+  console_wallet:
+    kind: rolling_file
+    path: "{{log_dir}}/wallet.log"
+    policy:
+      kind: compound
+      trigger:
+        kind: size
+        limit: 10mb
+      roller:
+        kind: fixed_window
+        base: 1
+        count: 5
+        pattern: "{{log_dir}}/wallet.{}.log"
+    encoder:
+      pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} [{t}] [{X(node-public-key)},{X(node-id)}] {l:5} {m} // {f}:{L}{n}"
+
   # An appender named "other" that writes to a file with a custom pattern encoder
   other:
     kind: rolling_file
@@ -120,7 +136,7 @@ loggers:
   wallet:
     level: info
     appenders:
-      - base_layer
+      - console_wallet
   # Route log events sent to the "comms" logger to the "network" appender
   comms:
     level: info
