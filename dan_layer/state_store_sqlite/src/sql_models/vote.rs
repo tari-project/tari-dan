@@ -18,6 +18,7 @@ use crate::{
 #[derive(Debug, Clone, Queryable)]
 pub struct Vote {
     pub id: i32,
+    pub hash: String,
     pub epoch: i64,
     pub block_id: String,
     pub decision: i32,
@@ -50,7 +51,7 @@ impl TryFrom<Vote> for consensus_models::Vote {
                 operation: "TryFrom<Vote> decision",
                 details: format!("Could not convert {} to QuorumDecision", value.decision),
             })?,
-            sender: deserialize_hex_try_from(&value.sender)?,
+            sender_leaf_hash: deserialize_hex_try_from(&value.sender)?,
             signature: deserialize_json(&value.signature)?,
             merkle_proof: deserialize_json(&value.merkle_proof)?,
         })

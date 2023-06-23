@@ -15,6 +15,7 @@ members = [
     "clients/wallet_daemon_client",
     "dan_layer/core",
     "dan_layer/consensus",
+    "dan_layer/consensus_tests",
     "dan_layer/epoch_manager",
     "dan_layer/indexer_lib",
     "dan_layer/integration_tests",

@@ -19,5 +19,5 @@ pub trait ConsensusSpec {
     type StateStore: StateStore;
     type EpochManager: EpochManager<Addr = Self::Addr>;
     type LeaderStrategy: LeaderStrategy<Self::Addr> + Send + Sync;
-    type VoteSigningService: VoteSigningService + Send + Sync;
+    type VoteSignatureService: VoteSignatureService + Send + Sync;
 }

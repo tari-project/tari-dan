@@ -6,7 +6,10 @@ use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{consensus_models, StorageError};
 use time::PrimitiveDateTime;
 
-use crate::serialization::{deserialize_hex_try_from, deserialize_json};
+use crate::{
+    serialization::{deserialize_hex_try_from, deserialize_json},
+    sql_models,
+};
 
 #[derive(Debug, Clone, Queryable)]
 pub struct Block {
@@ -17,27 +20,25 @@ pub struct Block {
     pub leader_round: i64,
     pub epoch: i64,
     pub proposed_by: String,
-    pub justify: String,
+    pub qc_id: String,
     pub prepared: String,
     pub precommitted: String,
     pub committed: String,
     pub created_at: PrimitiveDateTime,
 }
 
-impl TryFrom<Block> for consensus_models::Block {
-    type Error = StorageError;
-
-    fn try_from(value: Block) -> Result<Self, Self::Error> {
-        Ok(Self::new(
-            deserialize_hex_try_from(&value.parent_block_id)?,
-            deserialize_json(&value.justify)?,
-            NodeHeight(value.height as u64),
-            Epoch(value.epoch as u64),
-            value.leader_round as u64,
-            deserialize_hex_try_from(&value.proposed_by)?,
-            deserialize_json(&value.prepared)?,
-            deserialize_json(&value.precommitted)?,
-            deserialize_json(&value.committed)?,
+impl Block {
+    pub fn try_convert(self, qc: sql_models::QuorumCertificate) -> Result<consensus_models::Block, StorageError> {
+        Ok(consensus_models::Block::new(
+            deserialize_hex_try_from(&self.parent_block_id)?,
+            qc.try_into()?,
+            NodeHeight(self.height as u64),
+            Epoch(self.epoch as u64),
+            self.leader_round as u64,
+            deserialize_hex_try_from(&self.proposed_by)?,
+            deserialize_json(&self.prepared)?,
+            deserialize_json(&self.precommitted)?,
+            deserialize_json(&self.committed)?,
         ))
     }
 }
