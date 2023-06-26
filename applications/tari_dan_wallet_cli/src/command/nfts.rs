@@ -32,8 +32,7 @@ use clap::{Args, Subcommand};
 use tari_template_lib::prelude::{Amount, NonFungibleId};
 use tari_wallet_daemon_client::{
     types::{AccountNftInfo, GetAccountNftRequest, ListAccountNftRequest, MintAccountNftRequest},
-    ComponentAddressOrName,
-    WalletDaemonClient,
+    ComponentAddressOrName, WalletDaemonClient,
 };
 
 use crate::{command::transaction::summarize_finalize_result, table::Table, table_row};
@@ -72,9 +71,9 @@ pub struct GetAccountNftArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ListAccountNftArgs {
-    #[clap(long, short = 'l', alias = "limit")]
+    #[clap(long, short = 'l')]
     pub limit: Option<u64>,
-    #[clap(long, short = 'o', alias = "offset")]
+    #[clap(long, short = 'o')]
     pub offset: Option<u64>,
 }
 

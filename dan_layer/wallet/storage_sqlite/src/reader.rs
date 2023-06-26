@@ -693,7 +693,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .load::<models::NonFungibleToken>(self.connection())
             .map_err(|e| WalletStorageError::general("non_fungible_token_get_all", e))?;
 
-        let vault_ids = non_fungibles.iter().map(|n| n.vault_id).collect::<Vec<_>>();
+        let vault_ids = non_fungibles.iter().map(|n| n.vault_id);
         let vault_addresses = vaults::table
             .select(vaults::address)
             .filter(vaults::id.eq_any(vault_ids))

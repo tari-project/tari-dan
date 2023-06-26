@@ -13,9 +13,7 @@ use tari_dan_wallet_sdk::{
     models::Account,
 };
 use tari_engine_types::{
-    component::new_component_address_from_parts,
-    instruction::Instruction,
-    substate::SubstateAddress,
+    component::new_component_address_from_parts, instruction::Instruction, substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -26,13 +24,8 @@ use tari_template_lib::{
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
-    AccountNftInfo,
-    GetAccountNftRequest,
-    GetAccountNftResponse,
-    ListAccountNftRequest,
-    ListAccountNftResponse,
-    MintAccountNftRequest,
-    MintAccountNftResponse,
+    AccountNftInfo, GetAccountNftRequest, GetAccountNftResponse, ListAccountNftRequest, ListAccountNftResponse,
+    MintAccountNftRequest, MintAccountNftResponse,
 };
 use tokio::sync::broadcast;
 
@@ -60,7 +53,7 @@ pub async fn handle_get_nft(
         .map_err(|e| anyhow!("Failed to get non fungible token, with error: {}", e))?;
     let token_symbol = non_fungible.token_symbol.clone();
     let is_burned = non_fungible.is_burned;
-    let metadata = non_fungible.metadata.into_json();
+    let metadata = serde_json::to_value(&non_fungible.metadata)?;
     let resp = GetAccountNftResponse {
         token_symbol,
         metadata,
@@ -284,10 +277,11 @@ async fn create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
-            owner_token,
-            token_symbol
-        ])
+        .call_function(
+            *ACCOUNT_NFT_TEMPLATE_ADDRESS,
+            "create",
+            args![owner_token, token_symbol],
+        )
         .sign(owner_sk)
         .build();
 

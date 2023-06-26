@@ -752,7 +752,6 @@ dependencies = [
  "newtype-ops",
  "serde",
  "serde-big-array",
- "serde_json",
  "tari_bor",
  "tari_crypto",
  "tari_template_abi",
