@@ -5,8 +5,8 @@ edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
 tari_crypto = { version = "0.17" }
 tari_dan_common_types = { path = "../common_types" }
 tari_dan_core = { path = "../core" }
@@ -15,10 +15,10 @@ tari_dan_storage = { path = "../storage" }
 tari_epoch_manager = { path = "../epoch_manager", features = ["base_layer"] }
 tari_dan_storage_sqlite = { path = "../storage_sqlite" }
 tari_engine_types = { path = "../engine_types" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
 tari_template_lib = { path = "../template_lib" }
 tari_utilities = "0.4.10"
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
+tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
 tari_transaction = { path = "../transaction" }
 
 anyhow = "1.0"

@@ -8,8 +8,8 @@ repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.2" }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 
 anyhow = "1.0.69"
