@@ -21,7 +21,6 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tari_bor::BorTag;
 use tari_template_abi::rust::{collections::BTreeMap, fmt::Display};
 
