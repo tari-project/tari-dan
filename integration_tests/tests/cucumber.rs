@@ -264,6 +264,10 @@ async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
     // retrieve the VN's public key
     let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
     let mut client = get_vn_client(jrpc_port);
+    // Wait for VN to catch up with the base node.
+    while client.get_epoch_manager_stats().await.unwrap().current_block_height != height - 3 {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
     let identity: GetIdentityResponse = client.get_identity().await.unwrap();
     let public_key: PublicKey = PublicKey::from_hex(&identity.public_key).unwrap();
 
