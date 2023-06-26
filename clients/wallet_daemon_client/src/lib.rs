@@ -50,6 +50,10 @@ use types::{
     AuthLoginResponse,
     ClaimBurnRequest,
     ClaimBurnResponse,
+    GetAccountNftRequest,
+    GetAccountNftResponse,
+    ListAccountNftRequest,
+    ListAccountNftResponse,
     MintAccountNftRequest,
     MintAccountNftResponse,
     ProofsCancelRequest,
@@ -361,6 +365,20 @@ impl WalletDaemonClient {
         req: T,
     ) -> Result<MintAccountNftResponse, WalletDaemonClientError> {
         self.send_request("nfts.mint_account_nft", req.borrow()).await
+    }
+
+    pub async fn get_account_nft<T: Borrow<GetAccountNftRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<GetAccountNftResponse, WalletDaemonClientError> {
+        self.send_request("nfts.get", req.borrow()).await
+    }
+
+    pub async fn list_account_nfts<T: Borrow<ListAccountNftRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ListAccountNftResponse, WalletDaemonClientError> {
+        self.send_request("nfts.list", req.borrow()).await
     }
 
     pub async fn auth_request<T: Borrow<AuthLoginRequest>>(

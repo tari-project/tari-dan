@@ -32,7 +32,7 @@ fn basic_nft_mint() {
         .execute_and_commit(
             vec![Instruction::CallMethod {
                 component_address: nft_component_address,
-                method: "get_resource_address".to_string(),
+                method: "non_fungible_token_get_resource_address".to_string(),
                 args: args![],
             }],
             vec![],

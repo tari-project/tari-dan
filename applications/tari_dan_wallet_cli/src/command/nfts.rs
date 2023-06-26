@@ -29,15 +29,23 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_template_lib::prelude::Amount;
-use tari_wallet_daemon_client::{types::MintAccountNftRequest, ComponentAddressOrName, WalletDaemonClient};
+use tari_template_lib::prelude::{Amount, NonFungibleId};
+use tari_wallet_daemon_client::{
+    types::{AccountNftInfo, GetAccountNftRequest, ListAccountNftRequest, MintAccountNftRequest},
+    ComponentAddressOrName,
+    WalletDaemonClient,
+};
 
-use crate::command::transaction::summarize_finalize_result;
+use crate::{command::transaction::summarize_finalize_result, table::Table, table_row};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum AccountNftSubcommand {
     #[clap(alias = "mint")]
     Mint(MintAccountNftArgs),
+    #[clap(alias = "get")]
+    Get(GetAccountNftArgs),
+    #[clap(alias = "list")]
+    List(ListAccountNftArgs),
 }
 
 #[derive(Debug, Args, Clone)]
@@ -56,12 +64,28 @@ pub struct MintAccountNftArgs {
     pub create_account_nft_fee: Option<u32>,
 }
 
+#[derive(Debug, Args, Clone)]
+pub struct GetAccountNftArgs {
+    #[clap(long, short = 'i', alias = "nft_id")]
+    pub nft_id: String,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct ListAccountNftArgs {
+    #[clap(long, short = 'l')]
+    pub limit: Option<u64>,
+    #[clap(long, short = 'o')]
+    pub offset: Option<u64>,
+}
+
 impl AccountNftSubcommand {
     pub async fn handle(self, mut client: WalletDaemonClient) -> Result<(), anyhow::Error> {
         match self {
             Self::Mint(args) => {
                 handle_mint_account_nft(args, &mut client).await?;
             },
+            Self::Get(args) => handle_get_account_nft(args, &mut client).await?,
+            Self::List(args) => handle_list_account_nfts(args, &mut client).await?,
         }
         Ok(())
     }
@@ -144,5 +168,61 @@ pub async fn handle_mint_account_nft(
     println!();
 
     summarize_finalize_result(&resp.result);
+    Ok(())
+}
+
+pub async fn handle_get_account_nft(
+    args: GetAccountNftArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<(), anyhow::Error> {
+    let GetAccountNftArgs { nft_id } = args;
+
+    let nft_id = NonFungibleId::try_from_canonical_string(&nft_id)
+        .map_err(|e| anyhow!("Failed to parse NonFungibleId from {}, with error = {:?}", nft_id, e))?;
+
+    let req = GetAccountNftRequest { nft_id };
+    println!("✅ Get account NFT submitted");
+    let resp = client
+        .get_account_nft(req)
+        .await
+        .map_err(|e| anyhow!("Failed to get account NFT with error = {}", e.to_string()))?;
+
+    println!(
+        "Account NFT token_symbol {} metadata {} is_burned: {}",
+        resp.token_symbol, resp.metadata, resp.is_burned
+    );
+    println!();
+
+    Ok(())
+}
+
+pub async fn handle_list_account_nfts(
+    args: ListAccountNftArgs,
+    client: &mut WalletDaemonClient,
+) -> Result<(), anyhow::Error> {
+    let ListAccountNftArgs { limit, offset } = args;
+    let limit = limit.unwrap_or(100);
+    let offset = offset.unwrap_or(0);
+
+    let req = ListAccountNftRequest { limit, offset };
+    println!("✅ List account NFTs submitted");
+    let resp = client
+        .list_account_nfts(req)
+        .await
+        .map_err(|e| anyhow!("Failed ot list account NFTs with error = {}", e.to_string()))?;
+
+    let mut table = Table::new();
+    table.enable_row_count();
+    table.set_titles(vec!["Name", "Address", "Public Key", "Default"]);
+    println!("Accounts:");
+    for AccountNftInfo {
+        token_symbol,
+        metadata,
+        is_burned,
+    } in resp.nfts
+    {
+        table.add_row(table_row!(token_symbol, metadata, is_burned));
+    }
+    table.print_stdout();
     Ok(())
 }
