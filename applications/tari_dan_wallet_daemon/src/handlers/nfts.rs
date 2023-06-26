@@ -13,7 +13,9 @@ use tari_dan_wallet_sdk::{
     models::Account,
 };
 use tari_engine_types::{
-    component::new_component_address_from_parts, instruction::Instruction, substate::SubstateAddress,
+    component::new_component_address_from_parts,
+    instruction::Instruction,
+    substate::SubstateAddress,
 };
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
@@ -24,8 +26,13 @@ use tari_template_lib::{
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
-    AccountNftInfo, GetAccountNftRequest, GetAccountNftResponse, ListAccountNftRequest, ListAccountNftResponse,
-    MintAccountNftRequest, MintAccountNftResponse,
+    AccountNftInfo,
+    GetAccountNftRequest,
+    GetAccountNftResponse,
+    ListAccountNftRequest,
+    ListAccountNftResponse,
+    MintAccountNftRequest,
+    MintAccountNftResponse,
 };
 use tokio::sync::broadcast;
 
@@ -277,11 +284,10 @@ async fn create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(
-            *ACCOUNT_NFT_TEMPLATE_ADDRESS,
-            "create",
-            args![owner_token, token_symbol],
-        )
+        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
+            owner_token,
+            token_symbol
+        ])
         .sign(owner_sk)
         .build();
 
