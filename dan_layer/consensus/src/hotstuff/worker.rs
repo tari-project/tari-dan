@@ -145,7 +145,11 @@ where
     }
 
     async fn on_new_executed_transaction(&mut self, executed: ExecutedTransaction) -> Result<(), HotStuffError> {
-        debug!(target: LOG_TARGET, "Received new transaction with id: {}", executed.transaction().hash());
+        debug!(
+            target: LOG_TARGET,
+            "Received new transaction with id: {}",
+            executed.transaction().hash()
+        );
         self.state_store.with_write_tx(|tx| {
             executed.insert(tx)?;
             NewTransactionPool::insert(tx, executed.to_transaction_decision())
