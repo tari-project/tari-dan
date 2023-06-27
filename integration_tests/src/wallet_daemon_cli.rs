@@ -65,7 +65,7 @@ use tari_wallet_daemon_client::{
 };
 
 use super::wallet_daemon::get_walletd_client;
-use crate::{utils::validator_node_cli::add_substate_addresses, TariWorld};
+use crate::{validator_node_cli::add_substate_addresses, TariWorld};
 
 pub async fn claim_burn(
     world: &mut TariWorld,
@@ -758,7 +758,7 @@ pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_na
     get_walletd_client(port).await
 }
 
-pub(crate) async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: &str) -> WalletDaemonClient {
+pub async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: &str) -> WalletDaemonClient {
     let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
     // authentication
     let AuthLoginResponse { auth_token } = client

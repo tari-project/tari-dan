@@ -6,7 +6,7 @@ use tari_common_types::types::{BulletRangeProof, Commitment, PrivateKey, PublicK
 use tari_crypto::commitment::HomomorphicCommitmentFactory;
 use tari_template_lib::{
     crypto::BalanceProofSignature,
-    models::{Amount, ConfidentialWithdrawProof, EncryptedValue},
+    models::{Amount, ConfidentialWithdrawProof, EncryptedData},
 };
 use tari_utilities::ByteArray;
 
@@ -26,7 +26,7 @@ pub struct ValidatedConfidentialWithdrawProof {
 pub struct ConfidentialOutput {
     pub commitment: Commitment,
     pub stealth_public_nonce: PublicKey,
-    pub encrypted_value: EncryptedValue,
+    pub encrypted_data: EncryptedData,
     pub minimum_value_promise: u64,
 }
 

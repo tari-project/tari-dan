@@ -1,15 +1,13 @@
 [workspace]
 [package]
-name = "faucet"
+name = "fees"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_template_abi = { path="../../../../../dan_layer/template_abi" }
-tari_template_lib = {path="../../../../../dan_layer/template_lib"}
-serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
+tari_template_lib = {path="../../../../dan_layer/template_lib"}
 
 [profile.release]
 opt-level = 's'     # Optimize for size.
@@ -20,3 +18,10 @@ strip = "debuginfo" # Strip debug info.
 
 [lib]
 crate-type = ["cdylib", "lib"]
+
+[dev-dependencies]
+tari_dan_engine = { path = "../../../../dan_layer/engine" }
+tari_dan_common_types = { path = "../../../../dan_layer/common_types" }
+
+tari_crypto = { version = "0.17" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3", package = "tari_common_types" }

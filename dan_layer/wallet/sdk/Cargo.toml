@@ -8,11 +8,11 @@ edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
-tari_crypto = { version = "0.16", features = ["borsh"] }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
+tari_crypto = { version = "0.17", features = ["borsh"] }
 tari_engine_types = { path = "../../engine_types" }
 tari_dan_common_types = { path = "../../common_types" }
-tari_key_manager = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_key_manager = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
 tari_transaction = { path = "../../transaction" }
 tari_template_lib = { path = "../../template_lib" }
 tari_utilities = "0.4.10"
@@ -24,7 +24,7 @@ digest = "0.9"
 jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
 log = "0.4.14"
-rand = "0.7"
+rand = "0.7.3"
 serde = "1.0.126"
 thiserror = "1.0.38"
 zeroize = "1"

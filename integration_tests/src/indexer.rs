@@ -45,10 +45,8 @@ use tari_shutdown::Shutdown;
 use tokio::task;
 
 use crate::{
-    utils::{
-        helpers::{check_join_handle, get_os_assigned_ports, wait_listener_on_local_port},
-        logging::get_base_dir_for_scenario,
-    },
+    helpers::{check_join_handle, get_os_assigned_ports, wait_listener_on_local_port},
+    logging::get_base_dir_for_scenario,
     TariWorld,
 };
 

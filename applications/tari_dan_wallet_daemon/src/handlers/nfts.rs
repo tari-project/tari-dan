@@ -112,7 +112,7 @@ pub async fn handle_mint_account_nft(
     let signing_key_index = account.key_index;
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
 
-    let owner_pk = PublicKey::from_secret_key(&signing_key.k);
+    let owner_pk = PublicKey::from_secret_key(&signing_key.key);
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
@@ -137,7 +137,7 @@ pub async fn handle_mint_account_nft(
         accrued_fee = create_account_nft(
             context,
             &account,
-            &signing_key.k,
+            &signing_key.key,
             owner_token,
             &req.token_symbol,
             req.create_account_nft_fee.unwrap_or(DEFAULT_FEE),
@@ -153,7 +153,7 @@ pub async fn handle_mint_account_nft(
         token,
         account,
         component_address,
-        &signing_key.k,
+        &signing_key.key,
         req.mint_fee.unwrap_or(DEFAULT_FEE),
         metadata,
         accrued_fee,

@@ -51,10 +51,8 @@ use tonic::{
 
 type WalletGrpcClient = WalletClient<InterceptedService<Channel, ClientAuthenticationInterceptor>>;
 use crate::{
-    utils::{
-        helpers::{get_os_assigned_ports, wait_listener_on_local_port},
-        logging::get_base_dir_for_scenario,
-    },
+    helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+    logging::get_base_dir_for_scenario,
     TariWorld,
 };
 
@@ -247,6 +245,7 @@ pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig, shutdown: &m
         grpc_enabled: true,
         grpc_address: None,
         command2: None,
+        profile_with_tokio_console: false,
     };
 
     if let Err(err) = run_wallet_with_cli(shutdown, runtime, config, cli) {
