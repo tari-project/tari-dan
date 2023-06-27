@@ -51,7 +51,7 @@ pub async fn handle_get_nft(
     req: GetAccountNftRequest,
 ) -> Result<GetAccountNftResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    sdk.jwt_api().check_auth(token.clone(), &[JrpcPermission::Admin])?;
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
     let non_fungible_api = sdk.non_fungible_api();
 
@@ -77,7 +77,7 @@ pub async fn handle_list_nfts(
 ) -> Result<ListAccountNftResponse, anyhow::Error> {
     let ListAccountNftRequest { limit, offset, .. } = req;
     let sdk = context.wallet_sdk();
-    sdk.jwt_api().check_auth(token.clone(), &[JrpcPermission::Admin])?;
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
     let non_fungible_api = sdk.non_fungible_api();
 

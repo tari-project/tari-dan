@@ -48,6 +48,7 @@ Feature: Claim Burn
     When miner MINER mines 4 new blocks
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
+    Then VN has scanned to height 17 within 10 seconds
     Then the validator node VN is listed as registered
 
     # A file-base CLI account must be created to sign future calls
@@ -82,6 +83,7 @@ Feature: Claim Burn
     When miner MINER mines 4 new blocks
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
+    Then VN has scanned to height 17 within 10 seconds
     Then the validator node VN is listed as registered
 
     # Initialize an indexer

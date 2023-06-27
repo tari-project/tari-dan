@@ -68,7 +68,7 @@ function removeTagged(obj: any) {
   return obj;
 }
 
-function toHexString(byteArray: any ) {
+function toHexString(byteArray: any ) : string {
 
   if (Array.isArray( byteArray )) {
     return Array.from(byteArray, function (byte) {

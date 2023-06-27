@@ -23,16 +23,15 @@
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
 use axum::{
-    http::{Response, Uri},
+    http::{HeaderValue, Response, Uri},
     response::IntoResponse,
     routing::get,
     Router,
 };
 use include_dir::{include_dir, Dir};
 use log::{error, info};
-use reqwest::{header, header::HeaderValue, StatusCode};
-
-const LOG_TARGET: &str = "tari::validator_node::http_ui::server";
+use reqwest::{header, StatusCode};
+const LOG_TARGET: &str = "tari::dan::wallet_daemon::http_ui::server";
 
 pub async fn run_http_ui_server(
     address: SocketAddr,
@@ -69,7 +68,7 @@ pub async fn run_http_ui_server(
     Ok(())
 }
 
-static PROJECT_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../tari_validator_node_web_ui/build");
+static PROJECT_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/../tari_dan_wallet_web_ui/dist");
 
 async fn handler(uri: Uri) -> impl IntoResponse {
     let path = uri.path();
@@ -85,6 +84,7 @@ async fn handler(uri: Uri) -> impl IntoResponse {
     {
         let mime_type = mime_guess::from_path(path).first_or_else(|| mime_guess::Mime::from_str("text/html").unwrap());
         let content_type = mime_type.to_string();
+        // let content_type
         return Response::builder()
             .header(header::CONTENT_TYPE, HeaderValue::from_str(&content_type).unwrap())
             .status(StatusCode::OK)
