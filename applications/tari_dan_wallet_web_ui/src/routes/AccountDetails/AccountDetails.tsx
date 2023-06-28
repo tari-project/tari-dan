@@ -49,30 +49,34 @@ function BalanceRow(props: any) {
 
 function AccountDetailsLayout() {
   const { name } = useParams<{ name: string }>();
-  let [state, setState] = useState(null);
-  let [balances, setBalances] = useState(null);
-  let [error, setError] = useState(null);
+  let [state, setState] = useState<any>(null);
+  let [balances, setBalances] = useState<any>(null);
+  let [error, setError] = useState<any>(null);
 
   const loadAccount = () => {
-    accountsGet(name)
-      .then((response: any) => {
-        setState(response);
-      })
-      .catch((error: any) => {
-        console.error(error);
-        setError(error.message);
-      });
+    if (name !== undefined) {
+      accountsGet(name)
+        .then((response: any) => {
+          setState(response);
+        })
+        .catch((error: any) => {
+          console.error(error);
+          setError(error.message);
+        });
+    }
   };
 
   const loadBalances = () => {
-    accountsGetBalances(name)
-      .then((response: any) => {
-        setBalances(response);
-      })
-      .catch((error: any) => {
-        console.error(error);
-        setError(error.message);
-      });
+    if (name !== undefined) {
+      accountsGetBalances(name)
+        .then((response: any) => {
+          setBalances(response);
+        })
+        .catch((error: any) => {
+          console.error(error);
+          setError(error.message);
+        });
+    }
   };
 
   useEffect(() => loadAccount(), []);

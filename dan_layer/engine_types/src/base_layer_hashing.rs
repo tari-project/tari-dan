@@ -33,16 +33,18 @@ hash_domain!(
     1
 );
 
+hash_domain!(
+    WalletOutputEncryptionKeysDomain,
+    "com.tari.tari_project.base_layer.wallet.output_encryption_keys",
+    1
+);
+
 fn confidential_hasher(label: &'static str) -> TariBaseLayerHasher {
     TariBaseLayerHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
 }
 
-pub fn encrypted_value_hasher() -> TariBaseLayerHasher {
-    confidential_hasher("encryption_key")
-}
-
-pub fn output_mask_hasher() -> TariBaseLayerHasher {
-    confidential_hasher("spend_key")
+pub fn encrypted_data_hasher() -> TariBaseLayerHasher {
+    TariBaseLayerHasher::new_with_label::<WalletOutputEncryptionKeysDomain>("")
 }
 
 pub fn ownership_proof_hasher() -> TariBaseLayerHasher {

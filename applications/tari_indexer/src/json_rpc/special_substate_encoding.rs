@@ -153,7 +153,7 @@ mod tests {
     use tari_crypto::commitment::HomomorphicCommitment;
     use tari_engine_types::{confidential::ConfidentialOutput, resource_container::ResourceContainer, vault::Vault};
     use tari_template_lib::{
-        models::{Amount, EncryptedValue, ResourceAddress, VaultId},
+        models::{Amount, ResourceAddress, VaultId},
         Hash,
     };
 
@@ -167,7 +167,7 @@ mod tests {
         let confidential_output = ConfidentialOutput {
             commitment: HomomorphicCommitment::from_public_key(&public_key),
             stealth_public_nonce: public_key.clone(),
-            encrypted_value: EncryptedValue([0; 24]),
+            encrypted_data: Default::default(),
             minimum_value_promise: 0,
         };
         let commitment = Some((public_key, confidential_output));

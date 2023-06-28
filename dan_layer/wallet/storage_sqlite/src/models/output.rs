@@ -4,6 +4,7 @@
 use chrono::NaiveDateTime;
 use tari_common_types::types::{Commitment, PublicKey};
 use tari_dan_wallet_sdk::{models::ConfidentialOutputModel, storage::WalletStorageError};
+use tari_template_lib::models::EncryptedData;
 use tari_utilities::hex::Hex;
 
 use crate::schema::outputs;
@@ -24,6 +25,7 @@ pub struct ConfidentialOutput {
     pub locked_by_proof: Option<i32>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
+    pub encrypted_data: Vec<u8>,
 }
 
 impl ConfidentialOutput {
@@ -55,6 +57,13 @@ impl ConfidentialOutput {
                 .sender_public_nonce
                 .map(|nonce| PublicKey::from_hex(&nonce).unwrap()),
             secret_key_index: self.secret_key_index as u64,
+            encrypted_data: EncryptedData::try_from(self.encrypted_data.as_slice()).map_err(|_| {
+                WalletStorageError::DecodingError {
+                    operation: "try_into_output",
+                    item: "output",
+                    details: "Corrupt db: invalid encrypted data".to_string(),
+                }
+            })?,
             public_asset_tag: self.public_asset_tag.map(|tag| PublicKey::from_hex(&tag).unwrap()),
             status: self.status.parse().map_err(|_| WalletStorageError::DecodingError {
                 operation: "try_into_output",

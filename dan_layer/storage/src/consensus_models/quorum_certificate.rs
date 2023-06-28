@@ -68,7 +68,7 @@ impl QuorumCertificate {
         // TODO: Should be easy to create an empty proof. Nice to have: decoupled proof.
         let bmt = ValidatorNodeBalancedMerkleTree::create(vec![]);
         let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, 0).unwrap();
-        let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(vec![proof]).unwrap();
+        let merged_proof = MergedBalancedBinaryMerkleProof::create_from_proofs(&[proof]).unwrap();
         Self::new(
             BlockId::genesis(),
             NodeHeight::zero(),

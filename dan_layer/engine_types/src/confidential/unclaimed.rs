@@ -23,10 +23,10 @@
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::Commitment;
-use tari_template_lib::models::EncryptedValue;
+use tari_template_lib::models::EncryptedData;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnclaimedConfidentialOutput {
     pub commitment: Commitment,
-    pub encrypted_value: EncryptedValue,
+    pub encrypted_data: EncryptedData,
 }

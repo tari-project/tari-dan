@@ -25,7 +25,7 @@ pub async fn handle_create(
     let key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
     Ok(KeysCreateResponse {
         id: key.key_index,
-        public_key: PublicKey::from_secret_key(&key.k),
+        public_key: PublicKey::from_secret_key(&key.key),
     })
 }
 
@@ -52,6 +52,6 @@ pub async fn handle_set_active(
     let (_, key) = km.get_active_key(key_manager::TRANSACTION_BRANCH)?;
 
     Ok(KeysSetActiveResponse {
-        public_key: PublicKey::from_secret_key(&key.k),
+        public_key: PublicKey::from_secret_key(&key.key),
     })
 }

@@ -898,7 +898,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 ConfidentialOutput {
                     commitment: unclaimed_output.commitment,
                     stealth_public_nonce: diffie_hellman_public_key,
-                    encrypted_value: unclaimed_output.encrypted_value,
+                    encrypted_data: unclaimed_output.encrypted_data,
                     minimum_value_promise: 0,
                 },
             )),

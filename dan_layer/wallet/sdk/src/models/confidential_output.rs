@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_engine_types::substate::SubstateAddress;
+use tari_template_lib::models::EncryptedData;
 
 use crate::models::ConfidentialProofId;
 
@@ -16,6 +17,7 @@ pub struct ConfidentialOutputModel {
     pub value: u64,
     pub sender_public_nonce: Option<PublicKey>,
     pub secret_key_index: u64,
+    pub encrypted_data: EncryptedData,
     pub public_asset_tag: Option<PublicKey>,
     pub status: OutputStatus,
     pub locked_by_proof: Option<ConfidentialProofId>,
