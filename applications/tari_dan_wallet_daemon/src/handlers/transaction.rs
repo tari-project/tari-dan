@@ -217,7 +217,7 @@ pub async fn handle_wait_result(
     context
         .wallet_sdk()
         .jwt_api()
-        .check_auth(token, &[JrpcPermission::Admin])?;
+        .check_auth(token, &[JrpcPermission::TransactionGet])?;
     let mut events = context.notifier().subscribe();
     let transaction = context
         .wallet_sdk()
