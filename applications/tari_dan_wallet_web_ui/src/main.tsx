@@ -26,6 +26,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom';
 import App from './App';
 import './theme/theme.css';
 import Accounts from './routes/Accounts/Accounts';
+import TransactionDetails from './routes/Transactions/TransactionDetails';
 
 const router = createBrowserRouter([
   {
@@ -36,6 +37,11 @@ const router = createBrowserRouter([
       {
         path: 'accounts',
         element: <Accounts />,
+      },
+      {
+        path: 'transactions/:id',
+        element: <TransactionDetails />,
+        // loader: transactionLoader,
       },
     ],
   },

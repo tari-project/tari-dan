@@ -114,6 +114,15 @@ const theme = createTheme({
         },
       },
     },
+    MuiCircularProgress: {
+      defaultProps: {
+        // size: 20,
+        thickness: 4,
+        sx: {
+          color: '#EAEAEA',
+        },
+      },
+    },
   },
 });
 

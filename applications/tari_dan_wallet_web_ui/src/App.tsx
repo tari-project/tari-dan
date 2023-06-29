@@ -27,6 +27,8 @@ import Keys from './routes/Keys/Keys';
 import ErrorPage from './routes/ErrorPage';
 import Wallet from './routes/Wallet/Wallet';
 import Layout from './theme/LayoutMain';
+import TransactionsLayout from './routes/Transactions/TransactionsLayout';
+import TransactionDetails from './routes/Transactions/TransactionDetails';
 
 export const breadcrumbRoutes = [
   {
@@ -45,8 +47,18 @@ export const breadcrumbRoutes = [
     dynamic: false,
   },
   {
+    label: 'Transactions',
+    path: '/transactions',
+    dynamic: false,
+  },
+  {
     label: 'Account Details',
     path: '/accounts/:name',
+    dynamic: true,
+  },
+  {
+    label: 'Transaction Details',
+    path: '/transactions/:id',
     dynamic: true,
   },
 ];
@@ -60,6 +72,12 @@ function App() {
           <Route path="accounts" element={<Accounts />} />
           <Route path="accounts/:name" element={<AccountDetails />} />
           <Route path="keys" element={<Keys />} />
+          <Route path="transactions" element={<TransactionsLayout />} />
+          <Route
+            path="transactions/:id"
+            element={<TransactionDetails />}
+            // loader={transactionLoader}
+          />
           <Route path="*" element={<ErrorPage />} />
         </Route>
       </Routes>

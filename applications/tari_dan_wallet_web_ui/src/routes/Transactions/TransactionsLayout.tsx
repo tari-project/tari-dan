@@ -20,40 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import Accounts from './Components/Accounts';
-import Keys from './Components/Keys';
-import './Wallet.css';
-import { StyledPaper } from '../../Components/StyledComponents';
+import PageHeading from '../../Components/PageHeading';
 import Grid from '@mui/material/Grid';
-import SecondaryHeading from '../../Components/SecondaryHeading';
-import Transactions from '../Transactions/Transactions';
+import { StyledPaper } from '../../Components/StyledComponents';
+import Transactions from './Transactions';
 
-function Wallet() {
-  const [error, setError] = useState('');
-  if (error !== '') {
-    return <div className="error">{error}</div>;
-  }
+function TransactionsLayout() {
   return (
     <>
       <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Accounts</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <Accounts />
-        </StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Keys</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <Keys />
-        </StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Transactions</SecondaryHeading>
+        <PageHeading>Transactions</PageHeading>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
@@ -64,4 +40,4 @@ function Wallet() {
   );
 }
 
-export default Wallet;
+export default TransactionsLayout;

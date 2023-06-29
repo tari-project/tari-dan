@@ -20,48 +20,51 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import Accounts from './Components/Accounts';
-import Keys from './Components/Keys';
-import './Wallet.css';
-import { StyledPaper } from '../../Components/StyledComponents';
-import Grid from '@mui/material/Grid';
-import SecondaryHeading from '../../Components/SecondaryHeading';
-import Transactions from '../Transactions/Transactions';
+import { Chip, Avatar } from '@mui/material';
+import { IoCheckmarkOutline } from 'react-icons/io5';
 
-function Wallet() {
-  const [error, setError] = useState('');
-  if (error !== '') {
-    return <div className="error">{error}</div>;
-  }
-  return (
-    <>
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Accounts</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <Accounts />
-        </StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Keys</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <Keys />
-        </StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Transactions</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <Transactions />
-        </StyledPaper>
-      </Grid>
-    </>
-  );
+interface StatusChipProps {
+  status:
+    | 'Accepted'
+    | 'Pending'
+    | 'DryRun'
+    | 'New'
+    | 'Rejected'
+    | 'InvalidTransaction';
+  showTitle?: boolean;
 }
 
-export default Wallet;
+const colorList: Record<string, string> = {
+  Accepted: '#5F9C91',
+  Pending: '#ECA86A',
+  DryRun: '#318EFA',
+  New: '#9D5CF9',
+  Rejected: '#DB7E7E',
+  InvalidTransaction: '#DB7E7E',
+};
+
+export default function StatusChip({
+  status,
+  showTitle = true,
+}: StatusChipProps) {
+  if (!showTitle) {
+    return (
+      <Avatar sx={{ bgcolor: colorList[status], height: 22, width: 22 }}>
+        <IoCheckmarkOutline color="white" style={{ height: 14, width: 14 }} />
+      </Avatar>
+    );
+  } else {
+    return (
+      <Chip
+        avatar={
+          <Avatar sx={{ bgcolor: colorList[status] }}>
+            <IoCheckmarkOutline color="white" />
+          </Avatar>
+        }
+        label={status}
+        style={{ color: colorList[status], borderColor: colorList[status] }}
+        variant="outlined"
+      />
+    );
+  }
+}

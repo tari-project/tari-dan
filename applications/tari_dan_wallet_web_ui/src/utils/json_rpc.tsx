@@ -20,41 +20,46 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {Mutex} from "async-mutex";
-import {json} from "react-router-dom";
+import { Mutex } from 'async-mutex';
 
 let token: String | null = null;
 let json_id = 0;
 const mutex_token = new Mutex();
 const mutex_id = new Mutex();
 
-async function internalJsonRpc(method: string, token: any = null, params: any = null) {
+async function internalJsonRpc(
+  method: string,
+  token: any = null,
+  params: any = null
+) {
   let id;
   await mutex_id.runExclusive(() => {
     id = json_id;
     json_id += 1;
-  })
-  let address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || "localhost:9000";
+  });
+  let address =
+    import.meta.env.VITE_DAEMON_JRPC_ADDRESS || 'http://178.143.44.185:1504';
   try {
-    let text = await (await fetch("/json_rpc_address")).text();
+    let text = await (await fetch('json_rpc_address')).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }
-  } catch {
-  }
-  let headers: { [key: string]: string } = {"Content-Type": "application/json"};
+  } catch {}
+  let headers: { [key: string]: string } = {
+    'Content-Type': 'application/json',
+  };
   if (token) {
-    headers["Authorization"] = `Bearer ${token}`
+    headers['Authorization'] = `Bearer ${token}`;
   }
-  let response = await fetch(`http://${address}`, {
-    method: "POST",
+  let response = await fetch(address, {
+    method: 'POST',
     body: JSON.stringify({
       method: method,
-      jsonrpc: "2.0",
+      jsonrpc: '2.0',
       id: id,
       params: params,
     }),
-    headers: headers
+    headers: headers,
   });
   let json = await response.json();
   if (json.error) {
@@ -67,29 +72,35 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
 export async function jsonRpc(method: string, params: any = null) {
   await mutex_token.runExclusive(async () => {
     if (token === null) {
-      let auth_response = await internalJsonRpc("auth.request", null, [["Admin"], null]);
-      let auth_token = auth_response["auth_token"];
-      let accept_response = await internalJsonRpc("auth.accept", null, [auth_token, auth_token]);
-      token = accept_response.permissions_token
+      let auth_response = await internalJsonRpc('auth.request', null, [
+        ['Admin'],
+        null,
+      ]);
+      let auth_token = auth_response['auth_token'];
+      let accept_response = await internalJsonRpc('auth.accept', null, [
+        auth_token,
+        auth_token,
+      ]);
+      token = accept_response.permissions_token;
     }
-  })
+  });
   // This will fail if the token is expired
-  return internalJsonRpc(method, token, params)
+  return internalJsonRpc(method, token, params);
 }
-
 
 // The 'any' types are structs I don't define them here, but we can add them later.
 
 // auth
-export const authLogin = () => jsonRpc("auth.login");
+export const authLogin = () => jsonRpc('auth.login');
 
 // rpc
-export const rpcDiscover = () => jsonRpc("rpc.discover");
+export const rpcDiscover = () => jsonRpc('rpc.discover');
 
 // keys
-export const keysCreate = () => jsonRpc("keys.create", []);
-export const keysList = () => jsonRpc("keys.list", []);
-export const keysSetActive = (index: number) => jsonRpc("keys.set_active", [index]);
+export const keysCreate = () => jsonRpc('keys.create', []);
+export const keysList = () => jsonRpc('keys.list', []);
+export const keysSetActive = (index: number) =>
+  jsonRpc('keys.set_active', [index]);
 
 // transactions
 export const transactionsSubmit = (
@@ -105,7 +116,7 @@ export const transactionsSubmit = (
   isDryRun: boolean,
   proofId: any | undefined
 ) =>
-  jsonRpc("transactions.submit", [
+  jsonRpc('transactions.submit', [
     signingKeyIndex,
     instructions,
     fee,
@@ -118,27 +129,54 @@ export const transactionsSubmit = (
     isDryRun,
     proofId,
   ]);
-export const transactionsGet = (hash: string) => jsonRpc("transactions.get", [hash]);
-export const transactionsGetResult = (hash: string) => jsonRpc("transactions.get_result", [hash]);
-export const transactionsWaitResult = (hash: string, timeoutSecs: number | null) =>
-  jsonRpc("transactions.wait_result", [hash, timeoutSecs]);
+export const transactionsGet = (hash: string) =>
+  jsonRpc('transactions.get', [hash]);
+export const transactionsGetResult = (hash: string) =>
+  jsonRpc('transactions.get_result', [hash]);
+export const transactionsWaitResult = (
+  hash: string,
+  timeoutSecs: number | null
+) => jsonRpc('transactions.wait_result', [hash, timeoutSecs]);
+export const getAllTransactionByStatus = (status: string | null | undefined) =>
+  jsonRpc('transactions.get_all_by_status', [status]);
 
 // accounts
-export const accountsClaimBurn = (account: string, claimProof: any, fee: number) =>
+export const accountsClaimBurn = (
+  account: string,
+  claimProof: any,
+  fee: number
+) =>
   // Fees are passed as strings because Amount is tagged
-  jsonRpc("accounts.claim_burn", {account, claim_proof: claimProof, fee: fee});
+  jsonRpc('accounts.claim_burn', {
+    account,
+    claim_proof: claimProof,
+    fee: fee,
+  });
 export const accountsCreate = (
   accountName: string | undefined,
   signingKeyIndex: number | undefined,
   customAccessRules: any | undefined,
   fee: number | undefined,
   is_default: boolean | false
-) => jsonRpc("accounts.create", [accountName, signingKeyIndex, customAccessRules, fee, is_default]);
-export const accountsList = (offset: number, limit: number) => jsonRpc("accounts.list", [offset, limit]);
-export const accountsGetBalances = (accountName: string) => jsonRpc("accounts.get_balances", [accountName]);
-export const accountsInvoke = (accountName: string, method: string, args: any[]) =>
-  jsonRpc("accounts.invoke", [accountName, method, args]);
-export const accountsGet = (nameOrAddress: string) => jsonRpc("accounts.get", [nameOrAddress]);
+) =>
+  jsonRpc('accounts.create', [
+    accountName,
+    signingKeyIndex,
+    customAccessRules,
+    fee,
+    is_default,
+  ]);
+export const accountsList = (offset: number, limit: number) =>
+  jsonRpc('accounts.list', [offset, limit]);
+export const accountsGetBalances = (accountName: string) =>
+  jsonRpc('accounts.get_balances', [accountName]);
+export const accountsInvoke = (
+  accountName: string,
+  method: string,
+  args: any[]
+) => jsonRpc('accounts.invoke', [accountName, method, args]);
+export const accountsGet = (nameOrAddress: string) =>
+  jsonRpc('accounts.get', [nameOrAddress]);
 
 // confidential
 export const confidentialCreateTransferProof = (
@@ -148,15 +186,22 @@ export const confidentialCreateTransferProof = (
   destinationAccount: string,
   destinationStealthPublicKey: string
 ) =>
-  jsonRpc("confidential.create_transfer_proof", [
+  jsonRpc('confidential.create_transfer_proof', [
     amount,
     source_accountName,
     resourceAddress,
     destinationAccount,
     destinationStealthPublicKey,
   ]);
-export const confidentialFinalize = (proofId: number) => jsonRpc("confidential.finalize", [proofId]);
-export const confidentialCancel = (proofId: number) => jsonRpc("confidential.cancel", [proofId]);
-export const confidentialCreateOutputProof = (amount: number) => jsonRpc("confidential.create_output_proof", [amount]);
+export const confidentialFinalize = (proofId: number) =>
+  jsonRpc('confidential.finalize', [proofId]);
+export const confidentialCancel = (proofId: number) =>
+  jsonRpc('confidential.cancel', [proofId]);
+export const confidentialCreateOutputProof = (amount: number) =>
+  jsonRpc('confidential.create_output_proof', [amount]);
 
-export const webrtc = (signalingServerToken: string, permissions: string, name: string) => jsonRpc("webrtc.start", [signalingServerToken, permissions, name]);
+export const webrtc = (
+  signalingServerToken: string,
+  permissions: string,
+  name: string
+) => jsonRpc('webrtc.start', [signalingServerToken, permissions, name]);
