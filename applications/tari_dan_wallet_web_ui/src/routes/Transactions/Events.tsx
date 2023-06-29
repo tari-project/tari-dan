@@ -60,6 +60,18 @@ function RowData({
   return (
     <>
       <TableRow>
+        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+          <AccordionIconButton
+            open={open}
+            aria-label="expand row"
+            size="small"
+            onClick={() => {
+              setOpen(!open);
+            }}
+          >
+            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+          </AccordionIconButton>
+        </DataTableCell>
         <DataTableCell>{topic}</DataTableCell>
         <DataTableCell>
           {shortenString(component_address)}
@@ -72,18 +84,6 @@ function RowData({
         <DataTableCell>
           {shortenString(tx_hash)}
           <CopyToClipboard copy={tx_hash} />
-        </DataTableCell>
-        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
-          <AccordionIconButton
-            open={open}
-            aria-label="expand row"
-            size="small"
-            onClick={() => {
-              setOpen(!open);
-            }}
-          >
-            {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-          </AccordionIconButton>
         </DataTableCell>
       </TableRow>
       <TableRow>
@@ -105,11 +105,11 @@ export default function Events({ data }: { data: Event[] }) {
       <Table>
         <TableHead>
           <TableRow>
+            <TableCell width={90}>Payload</TableCell>
             <TableCell>Topic</TableCell>
             <TableCell>Component Address</TableCell>
             <TableCell>Template Address</TableCell>
             <TableCell>Transaction Hash</TableCell>
-            <TableCell>Payload</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
