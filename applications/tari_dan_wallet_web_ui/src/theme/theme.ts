@@ -30,6 +30,7 @@ const theme = createTheme({
     secondary: {
       main: '#40388A',
     },
+    divider: '#f5f5f5',
   },
   shape: {
     borderRadius: 10,

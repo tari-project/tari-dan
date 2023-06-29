@@ -21,68 +21,74 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState, useEffect } from 'react';
-import { useLoaderData, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { transactionsGet } from '../../utils/json_rpc';
+import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
+} from '../../Components/Accordion';
 import {
   Grid,
   Table,
   TableContainer,
-  TableHead,
   TableBody,
   TableRow,
   TableCell,
   Button,
-  Chip,
-  Avatar,
-  Box,
+  Fade,
 } from '@mui/material';
-import Accordion from '@mui/material/Accordion';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import AccordionDetails from '@mui/material/AccordionDetails';
 import Typography from '@mui/material/Typography';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { DataTableCell, StyledPaper } from '../../Components/StyledComponents';
 import PageHeading from '../../Components/PageHeading';
-import { demoTransactionDetail } from '../../assets/transactionDetail';
 import Events from './Events';
 import Logs from './Logs';
 import FeeInstructions from './FeeInstructions';
 import Instructions from './Instructions';
 import Substates from './Substates';
-import { IoCheckmarkOutline } from 'react-icons/io5';
-import SecondaryHeading from '../../Components/SecondaryHeading';
 import StatusChip from '../../Components/StatusChip';
-
-// type loaderData = any;
-
-// export async function transactionLoader({ params }: any) {
-//   const { id } = params;
-//   const result = await transactionsGet(id);
-//   console.log('result', result);
-//   return result;
-// }
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import Loading from '../../Components/Loading';
 
 export default function TransactionDetails() {
   const [state, setState] = useState<any>([]);
+  const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<String>();
-  const [expanded, setExpanded] = useState<boolean>(true);
   const { hash, status, result, transaction, transaction_failure } = state;
   const location = useLocation();
-  //   const loaderData = useLoaderData() as loaderData;
-  //   console.log('loaderData', loaderData);
 
   const getTransactionByHash = async () => {
     const path = location.pathname.split('/')[2];
     const result = await transactionsGet(path);
     console.log('result', result);
     setState(result);
+    setLoading(false);
   };
 
   useEffect(() => {
     getTransactionByHash();
-    // console.log(demoTransactionDetail);
-    // setState(demoTransactionDetail);
   }, []);
+
+  const handleChange =
+    (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
+      setExpandedPanels((prevExpandedPanels) => {
+        if (isExpanded) {
+          return [...prevExpandedPanels, panel];
+        } else {
+          return prevExpandedPanels.filter((p) => p !== panel);
+        }
+      });
+    };
+
+  const expandAll = () => {
+    setExpandedPanels(['panel1', 'panel2', 'panel3', 'panel4', 'panel5']);
+  };
+
+  const collapseAll = () => {
+    setExpandedPanels([]);
+  };
 
   return (
     <>
@@ -91,162 +97,156 @@ export default function TransactionDetails() {
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
-          <TableContainer>
-            <Table>
-              <TableBody>
-                <TableRow>
-                  <TableCell>Transaction Hash</TableCell>
-                  <DataTableCell>{hash}</DataTableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Timestamp</TableCell>
-                  <DataTableCell>Timestamp</DataTableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Amount</TableCell>
-                  <DataTableCell>Amount</DataTableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Total Fees</TableCell>
-                  <DataTableCell>
-                    {result && result.cost_breakdown.total_fees_charged}
-                  </DataTableCell>
-                </TableRow>
-                <TableRow>
-                  <TableCell>Status</TableCell>
-                  <DataTableCell>
-                    <StatusChip status={status} />
-                  </DataTableCell>
-                </TableRow>
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </StyledPaper>
-      </Grid>
-      {/* <Grid item xs={12} md={12} lg={12}>
-        <Box
-          style={{
-            display: 'flex',
-            width: '100%',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '0 1rem',
-          }}
-        >
-          <Typography variant="h4">More Info</Typography>
-          <Button onClick={() => setExpanded(!expanded)}>
-            {!expanded ? 'Expand All' : 'Collapse All'}
-          </Button>
-        </Box>
-        {transaction?.fee_instructions && (
-          <Accordion expanded={expanded} square>
-            <AccordionSummary
-              expandIcon={<ExpandMoreIcon />}
-              aria-controls="panel1a-content"
-              id="panel1a-header"
-            >
-              <Typography>Fee Instructions</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <FeeInstructions data={transaction.fee_instructions} />
-            </AccordionDetails>
-          </Accordion>
-        )}
-        {transaction?.instructions && (
-          <Accordion expanded={expanded} square>
-            <AccordionSummary
-              expandIcon={<ExpandMoreIcon />}
-              aria-controls="panel1a-content"
-              id="panel1a-header"
-            >
-              <Typography>Instructions</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Instructions data={transaction.instructions} />
-            </AccordionDetails>
-          </Accordion>
-        )}
-        {result && (
-          <Accordion expanded={expanded} square>
-            <AccordionSummary
-              expandIcon={<ExpandMoreIcon />}
-              aria-controls="panel1a-content"
-              id="panel1a-header"
-            >
-              <Typography>Events</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Events data={result.events} />
-            </AccordionDetails>
-          </Accordion>
-        )}
-        {result && (
-          <Accordion expanded={expanded} square>
-            <AccordionSummary
-              expandIcon={<ExpandMoreIcon />}
-              aria-controls="panel2a-content"
-              id="panel2a-header"
-            >
-              <Typography>Logs</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Logs data={result.logs} />
-            </AccordionDetails>
-          </Accordion>
-        )}
-        {result && (
-          <Accordion expanded={expanded} square>
-            <AccordionSummary
-              expandIcon={<ExpandMoreIcon />}
-              aria-controls="panel1a-content"
-              id="panel1a-header"
-            >
-              <Typography>Substates</Typography>
-            </AccordionSummary>
-            <AccordionDetails>
-              <Substates data={result.result} />
-            </AccordionDetails>
-          </Accordion>
-        )}
-      </Grid> */}
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Fee Instructions</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          {transaction?.fee_instructions && (
-            <FeeInstructions data={transaction.fee_instructions} />
+          {loading && <Loading />}
+          {!loading && (
+            <Fade in={!loading}>
+              <div>
+                <TableContainer>
+                  <Table>
+                    <TableBody>
+                      <TableRow>
+                        <TableCell>Transaction Hash</TableCell>
+                        <DataTableCell>{hash}</DataTableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Timestamp</TableCell>
+                        <DataTableCell>Timestamp</DataTableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Total Fees</TableCell>
+                        <DataTableCell>
+                          {result && result.cost_breakdown.total_fees_charged}
+                        </DataTableCell>
+                      </TableRow>
+                      <TableRow>
+                        <TableCell>Status</TableCell>
+                        <DataTableCell>
+                          <StatusChip status={status} />
+                        </DataTableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '2rem 1rem 0.5rem 1rem',
+                  }}
+                >
+                  <Typography variant="h5">More Information</Typography>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      gap: '1rem',
+                    }}
+                  >
+                    <Button
+                      onClick={expandAll}
+                      style={{
+                        fontSize: '0.85rem',
+                      }}
+                      startIcon={<KeyboardArrowDownIcon />}
+                    >
+                      Expand All
+                    </Button>
+                    <Button
+                      onClick={collapseAll}
+                      style={{
+                        fontSize: '0.85rem',
+                      }}
+                      startIcon={<KeyboardArrowUpIcon />}
+                      disabled={expandedPanels.length === 0 ? true : false}
+                    >
+                      Collapse All
+                    </Button>
+                  </div>
+                </div>
+                {transaction?.fee_instructions && (
+                  <Accordion
+                    expanded={expandedPanels.includes('panel1')}
+                    onChange={handleChange('panel1')}
+                  >
+                    <AccordionSummary
+                      aria-controls="panel1bh-content"
+                      id="panel1bh-header"
+                    >
+                      <Typography>Fee Instructions</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <FeeInstructions data={transaction.fee_instructions} />
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+                {transaction?.instructions && (
+                  <Accordion
+                    expanded={expandedPanels.includes('panel2')}
+                    onChange={handleChange('panel2')}
+                  >
+                    <AccordionSummary
+                      aria-controls="panel2bh-content"
+                      id="panel1bh-header"
+                    >
+                      <Typography>Instructions</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Instructions data={transaction.instructions} />
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+                {result && (
+                  <Accordion
+                    expanded={expandedPanels.includes('panel3')}
+                    onChange={handleChange('panel3')}
+                  >
+                    <AccordionSummary
+                      aria-controls="panel3bh-content"
+                      id="panel1bh-header"
+                    >
+                      <Typography>Events</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Events data={result.events} />
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+                {result && (
+                  <Accordion
+                    expanded={expandedPanels.includes('panel4')}
+                    onChange={handleChange('panel4')}
+                  >
+                    <AccordionSummary
+                      aria-controls="panel4bh-content"
+                      id="panel1bh-header"
+                    >
+                      <Typography>Logs</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Logs data={result.logs} />
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+                {result && (
+                  <Accordion
+                    expanded={expandedPanels.includes('panel5')}
+                    onChange={handleChange('panel5')}
+                  >
+                    <AccordionSummary
+                      aria-controls="panel5bh-content"
+                      id="panel1bh-header"
+                    >
+                      <Typography>Substates</Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Substates data={result.result} />
+                    </AccordionDetails>
+                  </Accordion>
+                )}
+              </div>
+            </Fade>
           )}
-        </StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Instructions</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          {transaction?.instructions && (
-            <Instructions data={transaction.instructions} />
-          )}
-        </StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Events</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>{result && <Events data={result.events} />}</StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Logs</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>{result && <Logs data={result.logs} />}</StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Substates</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          {result && <Substates data={result.result} />}
         </StyledPaper>
       </Grid>
     </>

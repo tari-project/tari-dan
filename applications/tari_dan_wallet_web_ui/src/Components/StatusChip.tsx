@@ -43,6 +43,23 @@ const colorList: Record<string, string> = {
   InvalidTransaction: '#DB7E7E',
 };
 
+const iconList: Record<string, JSX.Element> = {
+  Accepted: (
+    <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
+  ),
+  Pending: (
+    <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
+  ),
+  DryRun: <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />,
+  New: <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />,
+  Rejected: (
+    <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
+  ),
+  InvalidTransaction: (
+    <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
+  ),
+};
+
 export default function StatusChip({
   status,
   showTitle = true,
@@ -50,7 +67,8 @@ export default function StatusChip({
   if (!showTitle) {
     return (
       <Avatar sx={{ bgcolor: colorList[status], height: 22, width: 22 }}>
-        <IoCheckmarkOutline color="white" style={{ height: 14, width: 14 }} />
+        {/* <IoCheckmarkOutline color="white" style={{ height: 14, width: 14 }} /> */}
+        {iconList[status]}
       </Avatar>
     );
   } else {
@@ -58,7 +76,8 @@ export default function StatusChip({
       <Chip
         avatar={
           <Avatar sx={{ bgcolor: colorList[status] }}>
-            <IoCheckmarkOutline color="white" />
+            {/* <IoCheckmarkOutline color="white" /> */}
+            {iconList[status]}
           </Avatar>
         }
         label={status}

@@ -53,8 +53,7 @@ export default function Transactions() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const loadTransactions = () => {
-    setLoading(true); // Set loading to true before making the API call
-
+    setLoading(true);
     getAllTransactionByStatus(null)
       .then((response) => {
         console.log('response', response.transactions);

@@ -44,8 +44,10 @@ function RowData({ title, data }: any) {
   return (
     <>
       <TableRow>
-        <DataTableCell>{title}</DataTableCell>
-        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+        <DataTableCell
+          width={90}
+          sx={{ borderBottom: 'none', textAlign: 'center' }}
+        >
           <AccordionIconButton
             open={open}
             aria-label="expand row"
@@ -57,6 +59,7 @@ function RowData({ title, data }: any) {
             {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
           </AccordionIconButton>
         </DataTableCell>
+        <DataTableCell>{title}</DataTableCell>
       </TableRow>
       <TableRow>
         <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={2}>
@@ -75,13 +78,6 @@ export default function Instructions({ data }: any) {
   return (
     <TableContainer>
       <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>Instructions</TableCell>
-            <TableCell width={90}>Expand</TableCell>
-          </TableRow>
-        </TableHead>
-
         <TableBody>
           {data &&
             data.map((item: any) => {
