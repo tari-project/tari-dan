@@ -129,7 +129,7 @@ pub async fn handle_submit(
         .with_new_resources(req.new_resources)
         .with_new_non_fungible_outputs(req.new_non_fungible_outputs)
         .with_new_non_fungible_index_outputs(req.new_non_fungible_index_outputs)
-        .sign(&key.k)
+        .sign(&key.key)
         .build();
 
     for proof_id in req.proof_ids {

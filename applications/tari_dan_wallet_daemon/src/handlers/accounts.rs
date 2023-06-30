@@ -3,9 +3,9 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use axum_jrpc::error::{JsonRpcError, JsonRpcErrorReason};
 use base64;
 use log::*;
+use rand::rngs::OsRng;
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_crypto::{
     commitment::{HomomorphicCommitment as Commitment, HomomorphicCommitmentFactory},
@@ -70,7 +70,7 @@ use tokio::{sync::broadcast, task};
 
 use super::context::HandlerContext;
 use crate::{
-    handlers::{get_account, get_account_or_default},
+    handlers::{get_account, get_account_or_default, invalid_params},
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
     services::{NewAccountInfo, TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
     DEFAULT_FEE,
@@ -103,7 +103,7 @@ pub async fn handle_create(
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
 
     let owner_key = key_manager_api.next_key(key_manager::TRANSACTION_BRANCH)?;
-    let owner_pk = PublicKey::from_secret_key(&owner_key.k);
+    let owner_pk = PublicKey::from_secret_key(&owner_key.key);
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
@@ -125,7 +125,7 @@ pub async fn handle_create(
                 .map(|addr| ShardId::from_address(&addr.address, addr.version))
                 .collect(),
         )
-        .sign(&signing_key.k)
+        .sign(&signing_key.key)
         .build();
 
     let result = sdk.transaction_api().submit_transaction(transaction).await?;
@@ -192,7 +192,7 @@ pub async fn handle_list(
         .into_iter()
         .map(|a| {
             let key = km.derive_key(key_manager::TRANSACTION_BRANCH, a.key_index)?;
-            let pk = PublicKey::from_secret_key(&key.k);
+            let pk = PublicKey::from_secret_key(&key.key);
             Ok(AccountInfo {
                 account: a,
                 public_key: pk,
@@ -229,7 +229,7 @@ pub async fn handle_invoke(
         .fee_transaction_pay_from_component(account_address, req.fee.unwrap_or(DEFAULT_FEE))
         .call_method(account_address, &req.method, req.args)
         .with_inputs(inputs)
-        .sign(&signing_key.k)
+        .sign(&signing_key.key)
         .build();
 
     let result = sdk.transaction_api().submit_transaction(transaction).await?;
@@ -305,7 +305,7 @@ pub async fn handle_get(
     let account = get_account(&req.name_or_address, &sdk.accounts_api())?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-    let public_key = PublicKey::from_secret_key(&key.k);
+    let public_key = PublicKey::from_secret_key(&key.key);
     Ok(AccountGetResponse { account, public_key })
 }
 
@@ -319,7 +319,7 @@ pub async fn handle_get_default(
     let account = get_account_or_default(None, &sdk.accounts_api())?;
     let km = sdk.key_manager_api();
     let key = km.derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-    let public_key = PublicKey::from_secret_key(&key.k);
+    let public_key = PublicKey::from_secret_key(&key.key);
     Ok(AccountGetResponse { account, public_key })
 }
 
@@ -333,6 +333,8 @@ pub async fn handle_reveal_funds(
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let notifier = context.notifier().clone();
 
+    // If the caller aborts the request early, this async block would be aborted at any await point. To avoid this, we
+    // spawn a task that will continue running.
     task::spawn(async move {
         let mut inputs = vec![];
 
@@ -355,27 +357,32 @@ pub async fn handle_reveal_funds(
 
         let proof_id = sdk.confidential_outputs_api().add_proof(&vault.address)?;
 
-        let (inputs, input_value) = sdk.confidential_outputs_api().lock_outputs_by_amount(
-            &vault.address,
-            amount_to_reveal.as_u64_checked().unwrap(),
-            proof_id,
-        )?;
+        let (inputs, input_value) =
+            sdk.confidential_outputs_api()
+                .lock_outputs_by_amount(&vault.address, amount_to_reveal, proof_id)?;
         let input_amount = Amount::try_from(input_value)?;
 
         let account_key = sdk
             .key_manager_api()
             .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-        let account_public_key = PublicKey::from_secret_key(&account_key.k);
 
-        let (output_mask, public_nonce) = sdk
-            .confidential_crypto_api()
-            .derive_output_mask_for_destination(&account_public_key);
+        let output_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+        let (_, public_nonce) = PublicKey::random_keypair(&mut OsRng);
+
+        let remaining_confidential_amount = input_amount - amount_to_reveal;
+        let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
+            remaining_confidential_amount.as_u64_checked().unwrap(),
+            &output_mask.key,
+            &public_nonce,
+            &account_key.key,
+        )?;
 
         let output_statement = ConfidentialProofStatement {
-            amount: input_amount - amount_to_reveal,
-            mask: output_mask,
+            amount: remaining_confidential_amount,
+            mask: output_mask.key,
             sender_public_nonce: public_nonce,
             minimum_value_promise: 0,
+            encrypted_data,
             reveal_amount: amount_to_reveal,
         };
 
@@ -452,7 +459,7 @@ pub async fn handle_reveal_funds(
         let transaction = builder
             .with_inputs(inputs)
             .with_outputs(outputs)
-            .sign(&account_key.k)
+            .sign(&account_key.key)
             .build();
 
         sdk.confidential_outputs_api()
@@ -496,53 +503,57 @@ pub async fn handle_claim_burn(
         claim_proof,
         fee,
     } = req;
+
     let fee = fee.unwrap_or(DEFAULT_FEE);
+    if fee.is_negative() {
+        return Err(invalid_params("fee", Some("cannot be negative")));
+    }
 
     let reciprocal_claim_public_key = PublicKey::from_bytes(
         &base64::decode(
             claim_proof["reciprocal_claim_public_key"]
                 .as_str()
-                .ok_or_else(|| invalid_params("reciprocal_claim_public_key", None))?,
+                .ok_or_else(|| invalid_params::<&str>("reciprocal_claim_public_key", None))?,
         )
-        .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e.to_string())))?,
+        .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e)))?,
     )?;
     let commitment = base64::decode(
         claim_proof["commitment"]
             .as_str()
-            .ok_or_else(|| invalid_params("commitment", None))?,
+            .ok_or_else(|| invalid_params::<&str>("commitment", None))?,
     )
-    .map_err(|e| invalid_params("commitment", Some(e.to_string())))?;
+    .map_err(|e| invalid_params("commitment", Some(e)))?;
     let range_proof = base64::decode(
         claim_proof["range_proof"]
             .as_str()
             .or_else(|| claim_proof["rangeproof"].as_str())
-            .ok_or_else(|| invalid_params("range_proof", None))?,
+            .ok_or_else(|| invalid_params::<&str>("range_proof", None))?,
     )
-    .map_err(|e| invalid_params("range_proof", Some(e.to_string())))?;
+    .map_err(|e| invalid_params("range_proof", Some(e)))?;
 
     let public_nonce = PublicKey::from_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["public_nonce"]
                 .as_str()
-                .ok_or_else(|| invalid_params("ownership_proof.public_nonce", None))?,
+                .ok_or_else(|| invalid_params::<&str>("ownership_proof.public_nonce", None))?,
         )
-        .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e.to_string())))?,
+        .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?,
     )?;
     let u = PrivateKey::from_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["u"]
                 .as_str()
-                .ok_or_else(|| invalid_params("ownership_proof.u", None))?,
+                .ok_or_else(|| invalid_params::<&str>("ownership_proof.u", None))?,
         )
-        .map_err(|e| invalid_params("ownership_proof.u", Some(e.to_string())))?,
+        .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?,
     )?;
     let v = PrivateKey::from_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["v"]
                 .as_str()
-                .ok_or_else(|| invalid_params("ownership_proof.v", None))?,
+                .ok_or_else(|| invalid_params::<&str>("ownership_proof.v", None))?,
         )
-        .map_err(|e| invalid_params("ownership_proof.v", Some(e.to_string())))?,
+        .map_err(|e| invalid_params("ownership_proof.v", Some(e)))?,
     )?;
 
     let sdk = context.wallet_sdk();
@@ -566,7 +577,7 @@ pub async fn handle_claim_burn(
     let account_secret_key = sdk
         .key_manager_api()
         .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
-    let account_public_key = PublicKey::from_secret_key(&account_secret_key.k);
+    let account_public_key = PublicKey::from_secret_key(&account_secret_key.key);
 
     info!(
         target: LOG_TARGET,
@@ -583,14 +594,6 @@ pub async fn handle_claim_burn(
     // Add all versioned account child addresses as inputs
     let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
     inputs.extend(child_addresses);
-
-    // // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when
-    // the //       object is mutated
-    // let outputs = inputs
-    //     .iter()
-    //     .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-    //     .collect::<Vec<_>>();
-
     // add the commitment substate address as input to the claim burn transaction
     let commitment_substate_address = VersionedSubstateAddress {
         address: SubstateAddress::UnclaimedConfidentialOutput(UnclaimedConfidentialOutputAddress::try_from(
@@ -618,20 +621,36 @@ pub async fn handle_claim_burn(
     let output = output.into_unclaimed_confidential_output().unwrap();
     let unmasked_output = sdk.confidential_crypto_api().unblind_output(
         &output.commitment,
-        &output.encrypted_value,
-        &account_secret_key.k,
+        &output.encrypted_data,
+        &account_secret_key.key,
         &reciprocal_claim_public_key,
     )?;
 
-    let (mask, output_public_nonce) = sdk
-        .confidential_crypto_api()
-        .derive_output_mask_for_destination(&account_public_key);
+    let mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+    let (nonce, output_public_nonce) = PublicKey::random_keypair(&mut OsRng);
+
+    let final_amount = Amount::try_from(unmasked_output.value)? - fee;
+    if final_amount.is_negative() {
+        return Err(anyhow::anyhow!(
+            "Fee ({}) is greater than the claimed output amount ({})",
+            fee,
+            unmasked_output.value
+        ));
+    }
+
+    let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
+        final_amount.as_u64_checked().unwrap(),
+        &mask.key,
+        &account_public_key,
+        &nonce,
+    )?;
 
     let output_statement = ConfidentialProofStatement {
-        amount: Amount::try_from(unmasked_output.value)? - fee,
-        mask,
+        amount: final_amount,
+        mask: mask.key,
         sender_public_nonce: output_public_nonce,
         minimum_value_promise: 0,
+        encrypted_data,
         reveal_amount: fee,
     };
 
@@ -671,7 +690,7 @@ pub async fn handle_claim_burn(
             },
         ])
         .with_inputs(inputs)
-        .sign(&account_secret_key.k)
+        .sign(&account_secret_key.key)
         .build();
 
     let result = sdk.transaction_api().submit_transaction(transaction).await?;
@@ -744,7 +763,7 @@ pub async fn handle_create_free_test_coins(
                 .name()
                 .ok_or_else(|| anyhow!("Account name must be provided when creating a new account"))?;
             let account_secret_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
-            let account_pk = PublicKey::from_secret_key(&account_secret_key.k);
+            let account_pk = PublicKey::from_secret_key(&account_secret_key.key);
 
             let component_id = Hash::try_from(account_pk.as_bytes())?;
             let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
@@ -757,7 +776,7 @@ pub async fn handle_create_free_test_coins(
         },
     };
 
-    let account_public_key = PublicKey::from_secret_key(&account_secret_key.k);
+    let account_public_key = PublicKey::from_secret_key(&account_secret_key.key);
     let output = sdk
         .confidential_crypto_api()
         .generate_output_for_dest(&account_public_key, req.amount)?;
@@ -829,7 +848,7 @@ pub async fn handle_create_free_test_coins(
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
         .with_outputs(outputs)
-        .sign(&account_secret_key.k)
+        .sign(&account_secret_key.key)
         .build();
 
     let result = sdk.transaction_api().submit_transaction(transaction).await?;
@@ -941,7 +960,7 @@ pub async fn handle_transfer(
     let transaction = Transaction::builder()
         .with_required_inputs(inputs.into_iter().map(Into::into))
         .with_fee_instructions(instructions)
-        .sign(&account_secret_key.k)
+        .sign(&account_secret_key.key)
         .build();
 
     // send the transaction
@@ -1029,6 +1048,10 @@ pub async fn handle_confidential_transfer(
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
     let notifier = context.notifier().clone();
 
+    if req.amount.is_negative() {
+        return Err(invalid_params("amount", Some("must be positive")));
+    }
+
     task::spawn(async move {
         let outputs_api = sdk.confidential_outputs_api();
         let crypto_api = sdk.confidential_crypto_api();
@@ -1073,30 +1096,47 @@ pub async fn handle_confidential_transfer(
         let total_amount = req.fee.unwrap_or(DEFAULT_FEE) + req.amount;
         let proof_id = outputs_api.add_proof(&src_vault.address)?;
         let (confidential_inputs, total_input_value) =
-            outputs_api.lock_outputs_by_amount(&src_vault.address, total_amount.as_u64_checked().unwrap(), proof_id)?;
+            outputs_api.lock_outputs_by_amount(&src_vault.address, total_amount, proof_id)?;
 
-        let (output_mask, public_nonce) = crypto_api.derive_output_mask_for_destination(&req.destination_public_key);
+        let output_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+        let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
+
+        let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
+            req.amount.as_u64_checked().unwrap(),
+            &output_mask.key,
+            &req.destination_public_key,
+            &nonce,
+        )?;
 
         let output_statement = ConfidentialProofStatement {
             amount: req.amount,
-            mask: output_mask,
+            mask: output_mask.key,
             sender_public_nonce: public_nonce,
+            encrypted_data,
             minimum_value_promise: 0,
             reveal_amount: Amount::zero(),
         };
 
         let change_amount = total_input_value - req.amount.as_u64_checked().unwrap();
         let maybe_change_statement = if change_amount > 0 {
-            let account_pk = PublicKey::from_secret_key(&account_secret.k);
-            let (change_mask, public_nonce) = crypto_api.derive_output_mask_for_destination(&account_pk);
+            let change_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+            let (_, public_nonce) = PublicKey::random_keypair(&mut OsRng);
+
+            let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
+                change_amount,
+                &change_mask.key,
+                &public_nonce,
+                &account_secret.key,
+            )?;
 
             outputs_api.add_output(ConfidentialOutputModel {
                 account_address: account.address,
                 vault_address: src_vault.address,
-                commitment: get_commitment_factory().commit_value(&change_mask, change_amount),
+                commitment: get_commitment_factory().commit_value(&change_mask.key, change_amount),
                 value: change_amount,
                 sender_public_nonce: Some(public_nonce.clone()),
-                secret_key_index: account.key_index,
+                secret_key_index: change_mask.key_index,
+                encrypted_data: encrypted_data.clone(),
                 public_asset_tag: None,
                 status: OutputStatus::LockedUnconfirmed,
                 locked_by_proof: Some(proof_id),
@@ -1104,9 +1144,10 @@ pub async fn handle_confidential_transfer(
 
             Some(ConfidentialProofStatement {
                 amount: change_amount.try_into()?,
-                mask: change_mask,
+                mask: change_mask.key,
                 sender_public_nonce: public_nonce,
                 minimum_value_promise: 0,
+                encrypted_data,
                 reveal_amount: Amount::zero(),
             })
         } else {
@@ -1142,7 +1183,7 @@ pub async fn handle_confidential_transfer(
             .fee_transaction_pay_from_component(source_component_address, req.fee.unwrap_or(DEFAULT_FEE))
             .with_required_inputs(inputs.into_iter().map(Into::into))
             .with_instructions(instructions)
-            .sign(&account_secret.k)
+            .sign(&account_secret.key)
             .build();
 
         outputs_api.proofs_set_transaction_hash(proof_id, *transaction.hash())?;
@@ -1187,18 +1228,6 @@ async fn wait_for_result(
             _ => {},
         }
     }
-}
-
-fn invalid_params(field: &str, details: Option<String>) -> JsonRpcError {
-    JsonRpcError::new(
-        JsonRpcErrorReason::InvalidParams,
-        format!(
-            "Invalid param '{}'{}",
-            field,
-            details.map(|d| format!(": {}", d)).unwrap_or_default()
-        ),
-        serde_json::Value::Null,
-    )
 }
 
 fn is_account_substate(substate: &Substate) -> bool {

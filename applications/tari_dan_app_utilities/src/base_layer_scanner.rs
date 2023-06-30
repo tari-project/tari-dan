@@ -59,7 +59,7 @@ use tari_epoch_manager::{
     EpochManager,
 };
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib::models::{EncryptedValue, TemplateAddress, UnclaimedConfidentialOutputAddress};
+use tari_template_lib::models::{EncryptedData, TemplateAddress, UnclaimedConfidentialOutputAddress};
 use tokio::{task, task::JoinHandle, time};
 
 use crate::template_manager::interface::{TemplateManagerError, TemplateManagerHandle, TemplateRegistration};
@@ -293,7 +293,7 @@ impl BaseLayerScanner {
                         self.register_validator_node_registration(current_height, reg.clone())
                             .await?;
                     },
-                    SideChainFeature::TemplateRegistration(reg) => {
+                    SideChainFeature::CodeTemplateRegistration(reg) => {
                         self.register_code_template_registration(
                             reg.template_name.to_string(),
                             (*output_hash).into(),
@@ -362,11 +362,12 @@ impl BaseLayerScanner {
                 // Technically impossible, but anyway
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
         );
+
         let substate = Substate::new(
             0,
             SubstateValue::UnclaimedConfidentialOutput(UnclaimedConfidentialOutput {
                 commitment: output.commitment.clone(),
-                encrypted_value: EncryptedValue(output.encrypted_value.0),
+                encrypted_data: EncryptedData(output.encrypted_data.to_bytes()),
             }),
         );
         let shard_id = ShardId::from_address(&address, 0);

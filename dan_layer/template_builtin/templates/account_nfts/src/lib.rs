@@ -47,7 +47,7 @@ mod account_non_fungible_template {
             // only the owner of the token will be able to withdraw funds from the account
             let mint_rule = AccessRule::Restricted(Require(owner_token));
             let rules = AccessRules::new()
-                .add_method_rule("get_resource_address", AccessRule::AllowAll)
+                .add_method_rule("non_fungible_token_get_resource_address", AccessRule::AllowAll)
                 .default(mint_rule);
 
             Self { resource_address }.create_with_options(rules, Some(component_id))
@@ -73,7 +73,7 @@ mod account_non_fungible_template {
             ResourceManager::get(self.resource_address).mint_non_fungible(id, &metadata, &{})
         }
 
-        pub fn get_resource_address(&self) -> ResourceAddress {
+        pub fn non_fungible_token_get_resource_address(&self) -> ResourceAddress {
             self.resource_address
         }
     }

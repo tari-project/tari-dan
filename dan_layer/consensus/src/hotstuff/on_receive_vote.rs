@@ -142,8 +142,8 @@ where
             let (leaf_hashes, proofs) = votes
                 .iter()
                 .map(|v| (v.sender_leaf_hash, v.merkle_proof.clone()))
-                .unzip();
-            let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(proofs)?;
+                .unzip::<_, _, _, Vec<_>>();
+            let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(&proofs)?;
 
             let qc = QuorumCertificate::new(
                 *block.id(),

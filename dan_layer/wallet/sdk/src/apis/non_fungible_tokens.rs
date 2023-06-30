@@ -27,15 +27,31 @@ where TStore: WalletStore
         Ok(())
     }
 
-    pub fn get_non_fungible_token(&self, nft_id: NonFungibleId) -> Result<NonFungibleToken, NonFungibleTokensApiError> {
+    pub fn non_fungible_token_get_by_nft_id(
+        &self,
+        nft_id: NonFungibleId,
+    ) -> Result<NonFungibleToken, NonFungibleTokensApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let non_fungible_token = tx.get_non_fungible_token(nft_id)?;
+        let non_fungible_token = tx.non_fungible_token_get_by_nft_id(nft_id)?;
         Ok(non_fungible_token)
     }
 
-    pub fn get_resource_address(&self, nft_id: NonFungibleId) -> Result<ResourceAddress, NonFungibleTokensApiError> {
+    pub fn non_fungible_token_get_all(
+        &self,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<NonFungibleToken>, NonFungibleTokensApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let resource_address = tx.get_resource_address(nft_id)?;
+        let non_fungibles = tx.non_fungible_token_get_all(limit, offset)?;
+        Ok(non_fungibles)
+    }
+
+    pub fn non_fungible_token_get_resource_address(
+        &self,
+        nft_id: NonFungibleId,
+    ) -> Result<ResourceAddress, NonFungibleTokensApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let resource_address = tx.non_fungible_token_get_resource_address(nft_id)?;
         Ok(resource_address)
     }
 }

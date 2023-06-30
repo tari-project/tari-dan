@@ -11,7 +11,7 @@ pub mod rpc;
 pub mod transaction;
 pub mod webrtc;
 
-use std::future::Future;
+use std::{fmt::Display, future::Future};
 
 use axum::async_trait;
 pub use context::HandlerContext;
@@ -88,4 +88,17 @@ where
             .ok_or_else(|| anyhow::anyhow!("No default account found. Please set a default account."))?;
     }
     Ok(result)
+}
+
+pub(self) fn invalid_params<T: Display>(field: &str, details: Option<T>) -> anyhow::Error {
+    axum_jrpc::error::JsonRpcError::new(
+        axum_jrpc::error::JsonRpcErrorReason::InvalidParams,
+        format!(
+            "Invalid param '{}'{}",
+            field,
+            details.map(|d| format!(": {}", d)).unwrap_or_default()
+        ),
+        serde_json::Value::Null,
+    )
+    .into()
 }

@@ -79,4 +79,8 @@ impl Resource {
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
     }
+
+    pub fn token_symbol(&self) -> &str {
+        &self.token_symbol
+    }
 }

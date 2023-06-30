@@ -8,11 +8,11 @@ version = "0.50.0-pre.0"
 edition = "2021"
 
 [dependencies]
-tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1", package = "tari_app_utilities" }
-tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
-tari_crypto ={ version = "0.16" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.50.0-pre.1" }
+tari_app_utilities = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3", package = "tari_app_utilities" }
+tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
+tari_crypto = { version = "0.17" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.3" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
 tari_transaction = { path = "../../dan_layer/transaction" }
@@ -33,7 +33,9 @@ clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"
 humantime-serde = "1.1.1"
 futures = "0.3.26"
+include_dir = "0.7.2"
 log = "0.4.17"
+rand = "0.7"
 reqwest = "0.11.16"
 serde = "1.0.152"
 serde_json = "1.0.92"
@@ -44,6 +46,7 @@ webrtc = "0.7.1"
 
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
+mime_guess = "2.0.4"
 
 [dev-dependencies]
 tari_utilities = "0.4.10"
