@@ -123,6 +123,7 @@ pub trait WalletStoreReader {
         &mut self,
         status: TransactionStatus,
     ) -> Result<Vec<WalletTransaction>, WalletStorageError>;
+    fn transactions_fetch_all(&mut self) -> Result<Vec<WalletTransaction>, WalletStorageError>;
     // Substates
     fn substates_get(&mut self, address: &SubstateAddress) -> Result<SubstateModel, WalletStorageError>;
     fn substates_get_children(&mut self, parent: &SubstateAddress) -> Result<Vec<SubstateModel>, WalletStorageError>;

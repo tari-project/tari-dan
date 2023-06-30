@@ -110,7 +110,7 @@ pub struct TransactionGetRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetAllRequest {
-    pub status: TransactionStatus,
+    pub status: Option<TransactionStatus>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
