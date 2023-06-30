@@ -10,7 +10,7 @@ use tari_dan_common_types::{optional::Optional, PayloadId};
 use tari_dan_wallet_sdk::{
     confidential::get_commitment_factory,
     models::{ConfidentialOutputModel, ConfidentialProofId, OutputStatus},
-    network::{SubstateQueryResult, TransactionResult, WalletNetworkInterface},
+    network::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface},
     storage::{WalletStore, WalletStoreReader},
     DanWalletSdk,
     WalletSdkConfig,
@@ -244,11 +244,11 @@ impl WalletNetworkInterface for PanicIndexer {
         &self,
         _transaction: Transaction,
         _is_dry_run: bool,
-    ) -> Result<TransactionResult, Self::Error> {
+    ) -> Result<TransactionQueryResult, Self::Error> {
         todo!()
     }
 
-    async fn query_transaction_result(&self, _hash: PayloadId) -> Result<TransactionResult, Self::Error> {
+    async fn query_transaction_result(&self, _hash: PayloadId) -> Result<TransactionQueryResult, Self::Error> {
         todo!()
     }
 }

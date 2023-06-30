@@ -15,7 +15,7 @@ use tari_transaction::Transaction;
 
 use crate::{
     models::{TransactionStatus, VersionedSubstateAddress, WalletTransaction},
-    network::{TransactionResult, WalletNetworkInterface},
+    network::{TransactionQueryResult, WalletNetworkInterface},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
@@ -45,14 +45,17 @@ where
         Ok(transaction)
     }
 
-    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<TransactionResult, TransactionApiError> {
+    pub async fn submit_transaction(
+        &self,
+        transaction: Transaction,
+    ) -> Result<TransactionQueryResult, TransactionApiError> {
         self.submit_transaction_internal(transaction, false).await
     }
 
     pub async fn submit_dry_run_transaction(
         &self,
         transaction: Transaction,
-    ) -> Result<TransactionResult, TransactionApiError> {
+    ) -> Result<TransactionQueryResult, TransactionApiError> {
         self.submit_transaction_internal(transaction, true).await
     }
 
@@ -60,7 +63,7 @@ where
         &self,
         transaction: Transaction,
         is_dry_run: bool,
-    ) -> Result<TransactionResult, TransactionApiError> {
+    ) -> Result<TransactionQueryResult, TransactionApiError> {
         self.store
             .with_write_tx(|tx| tx.transactions_insert(&transaction, is_dry_run))?;
 
