@@ -37,8 +37,7 @@ async function internalJsonRpc(
     id = json_id;
     json_id += 1;
   });
-  let address =
-    import.meta.env.VITE_DAEMON_JRPC_ADDRESS || 'http://178.143.44.185:1504';
+  let address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || 'localhost:9000';
   try {
     let text = await (await fetch('json_rpc_address')).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
