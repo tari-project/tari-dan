@@ -15,8 +15,8 @@ use tari_dan_wallet_sdk::{
         transaction::TransactionApiError,
     },
     models::NonFungibleToken,
+    network::WalletNetworkInterface,
     storage::WalletStore,
-    substate_provider::WalletNetworkInterface,
     DanWalletSdk,
 };
 use tari_engine_types::{

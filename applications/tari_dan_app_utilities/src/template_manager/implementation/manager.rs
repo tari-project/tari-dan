@@ -1,4 +1,4 @@
-//  Copyright 2022, The Tari Project
+//  Copyright 2023, The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -30,13 +30,6 @@ use chrono::Utc;
 use lazy_static::lazy_static;
 use log::*;
 use tari_core::transactions::transaction_components::TemplateType;
-use tari_dan_app_utilities::template_manager::{
-    Template,
-    TemplateExecutable,
-    TemplateManagerError,
-    TemplateMetadata,
-    TemplateRegistration,
-};
 use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_dan_engine::{
     flow::FlowFactory,
@@ -50,7 +43,15 @@ use tari_engine_types::calculate_template_binary_hash;
 use tari_template_builtin::get_template_builtin;
 use tari_template_lib::models::TemplateAddress;
 
-use crate::p2p::services::template_manager::TemplateConfig;
+use super::TemplateConfig;
+use crate::template_manager::interface::{
+    Template,
+    TemplateExecutable,
+    TemplateManagerError,
+    TemplateMetadata,
+    TemplateRegistration,
+};
+
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
 lazy_static! {

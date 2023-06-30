@@ -214,7 +214,8 @@ async fn mint_account_nft(
         .sign(owner_sk)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+    let result = sdk.transaction_api().submit_transaction(transaction).await?;
+    let tx_hash = result.transaction_hash;
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
         hash: tx_hash,
@@ -294,7 +295,8 @@ async fn create_account_nft(
         .sign(owner_sk)
         .build();
 
-    let tx_hash = sdk.transaction_api().submit_transaction(transaction).await?;
+    let result = sdk.transaction_api().submit_transaction(transaction).await?;
+    let tx_hash = result.transaction_hash;
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
         hash: tx_hash,

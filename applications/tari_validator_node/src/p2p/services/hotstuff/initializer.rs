@@ -23,6 +23,10 @@
 use std::sync::Arc;
 
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_dan_app_utilities::{
+    payload_processor::TariDanPayloadProcessor,
+    template_manager::implementation::TemplateManager,
+};
 use tari_dan_core::workers::hotstuff_waiter::RecoveryMessage;
 use tari_dan_storage::models::{HotStuffMessage, TariDanPayload, VoteMessage};
 use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
@@ -31,14 +35,10 @@ use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
 use super::hotstuff_service::HotstuffServiceSpawnOutput;
-use crate::{
-    p2p::services::{
-        hotstuff::hotstuff_service::HotstuffService,
-        mempool::MempoolHandle,
-        messaging::OutboundMessaging,
-        template_manager::TemplateManager,
-    },
-    payload_processor::TariDanPayloadProcessor,
+use crate::p2p::services::{
+    hotstuff::hotstuff_service::HotstuffService,
+    mempool::MempoolHandle,
+    messaging::OutboundMessaging,
 };
 
 pub fn try_spawn(

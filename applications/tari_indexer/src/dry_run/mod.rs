@@ -20,6 +20,5 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod base_layer_scanner;
-pub mod payload_processor;
-pub mod template_manager;
+pub mod error;
+pub mod processor;

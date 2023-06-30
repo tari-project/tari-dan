@@ -260,13 +260,19 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         });
     }
 
-    let request = TransactionSubmitRequest {
-        signing_key_index: None,
-        fee_instructions: vec![Instruction::CallMethod {
+    let fee_instructions = if common.dry_run {
+        vec![]
+    } else {
+        vec![Instruction::CallMethod {
             component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
             args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
-        }],
+        }]
+    };
+
+    let request = TransactionSubmitRequest {
+        signing_key_index: None,
+        fee_instructions,
         instructions,
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
@@ -294,7 +300,6 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         is_dry_run: common.dry_run,
         proof_ids: vec![],
     };
-
     submit_transaction(request, client).await?;
     Ok(())
 }
@@ -422,27 +427,32 @@ pub async fn submit_transaction(
     let timer = Instant::now();
 
     let resp = client.submit_transaction(&request).await?;
+
     println!();
     println!("✅ Transaction {} submitted.", resp.hash);
     println!();
     // TODO: Would be great if we could display the Substate addresses as well as shard ids
     summarize_request(&request, &resp.inputs, &resp.outputs);
 
-    println!();
-    println!("⏳️ Waiting for transaction result...");
-    println!();
-    let wait_resp = client
-        .wait_transaction_result(TransactionWaitResultRequest {
-            hash: resp.hash,
-            // Never timeout, you can ctrl+c to exit
-            timeout_secs: None,
-        })
-        .await?;
-    if wait_resp.timed_out {
-        println!("⏳️ Transaction result timed out.",);
-        println!();
+    if let Some(result) = &resp.result {
+        summarize_finalize_result(result);
     } else {
-        summarize(&wait_resp, timer.elapsed());
+        println!();
+        println!("⏳️ Waiting for transaction result...");
+        println!();
+        let wait_resp = client
+            .wait_transaction_result(TransactionWaitResultRequest {
+                hash: resp.hash,
+                // Never timeout, you can ctrl+c to exit
+                timeout_secs: None,
+            })
+            .await?;
+        if wait_resp.timed_out {
+            println!("⏳️ Transaction result timed out.",);
+            println!();
+        } else {
+            summarize(&wait_resp, timer.elapsed());
+        }
     }
 
     Ok(resp)

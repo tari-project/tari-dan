@@ -20,10 +20,5 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod error;
-mod handle;
-mod types;
-
-pub use error::TemplateManagerError;
-pub use handle::{TemplateManagerHandle, TemplateRegistration};
-pub use types::{Template, TemplateExecutable, TemplateManagerRequest, TemplateMetadata};
+pub mod implementation;
+pub mod interface;
