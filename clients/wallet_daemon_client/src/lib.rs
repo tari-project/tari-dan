@@ -50,8 +50,12 @@ use types::{
     AuthLoginResponse,
     ClaimBurnRequest,
     ClaimBurnResponse,
-    MintAccountNFTRequest,
-    MintAccountNFTResponse,
+    GetAccountNftRequest,
+    GetAccountNftResponse,
+    ListAccountNftRequest,
+    ListAccountNftResponse,
+    MintAccountNftRequest,
+    MintAccountNftResponse,
     ProofsCancelRequest,
     ProofsCancelResponse,
     ProofsFinalizeRequest,
@@ -356,11 +360,25 @@ impl WalletDaemonClient {
         self.send_request("accounts.create_free_test_coins", req.borrow()).await
     }
 
-    pub async fn mint_account_nft<T: Borrow<MintAccountNFTRequest>>(
+    pub async fn mint_account_nft<T: Borrow<MintAccountNftRequest>>(
         &mut self,
         req: T,
-    ) -> Result<MintAccountNFTResponse, WalletDaemonClientError> {
+    ) -> Result<MintAccountNftResponse, WalletDaemonClientError> {
         self.send_request("nfts.mint_account_nft", req.borrow()).await
+    }
+
+    pub async fn get_account_nft<T: Borrow<GetAccountNftRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<GetAccountNftResponse, WalletDaemonClientError> {
+        self.send_request("nfts.get", req.borrow()).await
+    }
+
+    pub async fn list_account_nfts<T: Borrow<ListAccountNftRequest>>(
+        &mut self,
+        req: T,
+    ) -> Result<ListAccountNftResponse, WalletDaemonClientError> {
+        self.send_request("nfts.list", req.borrow()).await
     }
 
     pub async fn auth_request<T: Borrow<AuthLoginRequest>>(

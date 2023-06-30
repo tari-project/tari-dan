@@ -14,9 +14,12 @@ members = [
     "clients/validator_node_client",
     "clients/wallet_daemon_client",
     "dan_layer/core",
+    "dan_layer/consensus",
+    "dan_layer/consensus_tests",
     "dan_layer/epoch_manager",
     "dan_layer/indexer_lib",
     "dan_layer/integration_tests",
+    "dan_layer/state_store_sqlite",
     "dan_layer/storage_lmdb",
     "dan_layer/storage_sqlite",
     "dan_layer/storage",
@@ -31,6 +34,7 @@ members = [
     "dan_layer/validator_node_rpc",
     "dan_layer/wallet/sdk",
     "dan_layer/wallet/storage_sqlite",
+    "integration_tests"
 ]
 #
 resolver = "2"

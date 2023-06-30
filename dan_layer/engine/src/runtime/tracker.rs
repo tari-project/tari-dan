@@ -96,6 +96,8 @@ pub struct RuntimeState {
     pub template_name: String,
     pub template_address: TemplateAddress,
     pub component_address: Option<ComponentAddress>,
+    pub recursion_depth: usize,
+    pub max_recursion_depth: usize,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracker<TTemplateProvider> {
@@ -127,6 +129,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn take_logs(&self) -> Vec<LogEntry> {
         self.write_with(|state| mem::take(&mut state.logs))
+    }
+
+    pub fn get_template_provider(&self) -> Arc<TTemplateProvider> {
+        self.template_provider.clone()
     }
 
     pub fn get_template_def(&self) -> Result<TemplateDef, RuntimeError> {
@@ -235,7 +241,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                         target: LOG_TARGET,
                         "Minting confidential tokens on resource: {}", resource_address
                     );
-                    ResourceContainer::validate_confidential_mint(resource_address, proof)?
+                    ResourceContainer::validate_confidential_mint(resource_address, *proof)?
                 },
             };
 
@@ -476,7 +482,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         self.write_with(|state| state.borrow_vault_mut(vault_id, f))
     }
 
-    fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
+    pub fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
         self.read_with(|state| state.runtime_state.clone().ok_or(RuntimeError::IllegalRuntimeState))
     }
 

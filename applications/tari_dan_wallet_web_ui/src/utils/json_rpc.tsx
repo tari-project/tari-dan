@@ -34,9 +34,9 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
     id = json_id;
     json_id += 1;
   })
-  let address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || "http://localhost:9000";
+  let address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || "localhost:9000";
   try {
-    let text = await (await fetch("json_rpc_address")).text();
+    let text = await (await fetch("/json_rpc_address")).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }
@@ -46,7 +46,7 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
   if (token) {
     headers["Authorization"] = `Bearer ${token}`
   }
-  let response = await fetch(address, {
+  let response = await fetch(`http://${address}`, {
     method: "POST",
     body: JSON.stringify({
       method: method,
@@ -69,7 +69,7 @@ export async function jsonRpc(method: string, params: any = null) {
     if (token === null) {
       let auth_response = await internalJsonRpc("auth.request", null, [["Admin"], null]);
       let auth_token = auth_response["auth_token"];
-      let accept_response = await internalJsonRpc("auth.accept", null, [auth_token, "AdminToken"]);
+      let accept_response = await internalJsonRpc("auth.accept", null, [auth_token, auth_token]);
       token = accept_response.permissions_token
     }
   })

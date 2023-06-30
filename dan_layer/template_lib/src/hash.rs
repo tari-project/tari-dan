@@ -84,13 +84,7 @@ impl FromStr for Hash {
     type Err = HashParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match Hash::from_hex(s) {
-            Ok(v) => Ok(v),
-            Err(_) => {
-                let v = base64::decode(s).map_err(|_| HashParseError)?;
-                Ok(Hash::try_from_vec(v)?)
-            },
-        }
+        Hash::from_hex(s)
     }
 }
 

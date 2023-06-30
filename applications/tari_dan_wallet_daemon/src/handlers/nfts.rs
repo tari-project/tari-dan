@@ -25,7 +25,15 @@ use tari_template_lib::{
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_utilities::ByteArray;
-use tari_wallet_daemon_client::types::{MintAccountNFTRequest, MintAccountNFTResponse};
+use tari_wallet_daemon_client::types::{
+    AccountNftInfo,
+    GetAccountNftRequest,
+    GetAccountNftResponse,
+    ListAccountNftRequest,
+    ListAccountNftResponse,
+    MintAccountNftRequest,
+    MintAccountNftResponse,
+};
 use tokio::sync::broadcast;
 
 use super::context::HandlerContext;
@@ -37,11 +45,64 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::handlers::nfts";
 
+pub async fn handle_get_nft(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: GetAccountNftRequest,
+) -> Result<GetAccountNftResponse, anyhow::Error> {
+    let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+
+    let non_fungible_api = sdk.non_fungible_api();
+
+    let non_fungible = non_fungible_api
+        .non_fungible_token_get_by_nft_id(req.nft_id)
+        .map_err(|e| anyhow!("Failed to get non fungible token, with error: {}", e))?;
+    let token_symbol = non_fungible.token_symbol.clone();
+    let is_burned = non_fungible.is_burned;
+    let metadata = serde_json::to_value(&non_fungible.metadata)?;
+    let resp = GetAccountNftResponse {
+        token_symbol,
+        metadata,
+        is_burned,
+    };
+
+    Ok(resp)
+}
+
+pub async fn handle_list_nfts(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: ListAccountNftRequest,
+) -> Result<ListAccountNftResponse, anyhow::Error> {
+    let ListAccountNftRequest { limit, offset, .. } = req;
+    let sdk = context.wallet_sdk();
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+
+    let non_fungible_api = sdk.non_fungible_api();
+
+    let non_fungibles = non_fungible_api
+        .non_fungible_token_get_all(limit, offset)
+        .map_err(|e| anyhow!("Failed to list all non fungibles, with error: {}", e))?;
+    let non_fungibles = non_fungibles
+        .iter()
+        .map(|n| {
+            let metadata = serde_json::to_value(&n.metadata).expect("failed to parse metadata to JSON format");
+            AccountNftInfo {
+                token_symbol: n.token_symbol.clone(),
+                is_burned: n.is_burned,
+                metadata,
+            }
+        })
+        .collect();
+    Ok(ListAccountNftResponse { nfts: non_fungibles })
+}
+
 pub async fn handle_mint_account_nft(
     context: &HandlerContext,
     token: Option<String>,
-    req: MintAccountNFTRequest,
-) -> Result<MintAccountNFTResponse, anyhow::Error> {
+    req: MintAccountNftRequest,
+) -> Result<MintAccountNftResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     let key_manager_api = sdk.key_manager_api();
     sdk.jwt_api().check_auth(token.clone(), &[JrpcPermission::Admin])?;
@@ -51,14 +112,11 @@ pub async fn handle_mint_account_nft(
     let signing_key_index = account.key_index;
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
 
-    let owner_pk = PublicKey::from_secret_key(&signing_key.k);
+    let owner_pk = PublicKey::from_secret_key(&signing_key.key);
     let owner_token =
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(owner_pk.as_bytes()).unwrap());
 
-    info!(
-        target: LOG_TARGET,
-        "Minting new NFT with owner address {} and metadata {}", req.owner_token, req.metadata
-    );
+    info!(target: LOG_TARGET, "Minting new NFT with metadata {}", req.metadata);
 
     // check if the component address already exists
     let component_address = new_component_address_from_parts(
@@ -69,17 +127,18 @@ pub async fn handle_mint_account_nft(
             .as_hash(),
     );
 
+    let mut accrued_fee = Amount::new(0);
     if sdk
         .substate_api()
         .scan_for_substate(&SubstateAddress::Component(component_address), None)
         .await
         .is_err()
     {
-        create_account_nft(
+        accrued_fee = create_account_nft(
             context,
             &account,
-            &signing_key.k,
-            req.owner_token,
+            &signing_key.key,
+            owner_token,
             &req.token_symbol,
             req.create_account_nft_fee.unwrap_or(DEFAULT_FEE),
             token.clone(),
@@ -94,9 +153,10 @@ pub async fn handle_mint_account_nft(
         token,
         account,
         component_address,
-        &signing_key.k,
+        &signing_key.key,
         req.mint_fee.unwrap_or(DEFAULT_FEE),
         metadata,
+        accrued_fee,
     )
     .await
 }
@@ -109,7 +169,8 @@ async fn mint_account_nft(
     owner_sk: &RistrettoSecretKey,
     fee: Amount,
     metadata: Metadata,
-) -> Result<MintAccountNFTResponse, anyhow::Error> {
+    mut accrued_fee: Amount,
+) -> Result<MintAccountNftResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
@@ -192,11 +253,13 @@ async fn mint_account_nft(
     let resource_address = ResourceAddress::from_str(&resource_address)?;
     let nft_id = NonFungibleId::try_from_canonical_string(nft_id.as_str())
         .map_err(|e| anyhow!("Failed to parse non fungible id, with error: {:?}", e))?;
+    accrued_fee += event.final_fee;
 
-    Ok(MintAccountNFTResponse {
+    Ok(MintAccountNftResponse {
         result: event.finalize,
         resource_address,
         nft_id,
+        fee: accrued_fee,
     })
 }
 
@@ -208,7 +271,7 @@ async fn create_account_nft(
     token_symbol: &str,
     fee: Amount,
     token: Option<String>,
-) -> Result<(), anyhow::Error> {
+) -> Result<Amount, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
 
@@ -254,7 +317,7 @@ async fn create_account_nft(
         ));
     }
 
-    Ok(())
+    Ok(event.final_fee)
 }
 
 async fn wait_for_result(

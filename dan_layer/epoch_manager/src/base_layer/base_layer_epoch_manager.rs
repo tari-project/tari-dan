@@ -32,7 +32,7 @@ use tari_core::{
     ValidatorNodeBMT,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{optional::Optional, Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, ShardId};
 use tari_dan_storage::global::{DbEpoch, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tokio::sync::broadcast;
@@ -40,7 +40,6 @@ use tokio::sync::broadcast;
 use crate::{
     base_layer::{config::EpochManagerConfig, error::EpochManagerError, types::EpochManagerEvent},
     validator_node::ValidatorNode,
-    Committee,
     ShardCommitteeAllocation,
 };
 
@@ -367,7 +366,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         }
     }
 
-    fn get_number_of_committees(&self, epoch: Epoch) -> Result<u64, EpochManagerError> {
+    pub fn get_number_of_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
 
         let mut tx = self.global_db.create_transaction()?;
@@ -530,7 +529,8 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
     }
 }
 
-fn calculate_num_committees(num_vns: u64, committee_size: u64) -> u64 {
-    // Number of committees is proportional to the number of validators available
-    cmp::max(1, num_vns / committee_size)
+fn calculate_num_committees(num_vns: u64, committee_size: u32) -> u32 {
+    // Number of committees is proportional to the number of validators available.
+    // We cap the number of committees to u32::MAX (for a committee_size of 10 that's over 42 billion validators)
+    cmp::min(cmp::max(1, num_vns / u64::from(committee_size)), u64::from(u32::MAX)) as u32
 }

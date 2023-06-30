@@ -40,13 +40,25 @@ pub enum StorageError {
     InvalidUnitOfWorkTrackerType,
     #[error("Not found: item: {item}, key: {key}")]
     NotFound { item: String, key: String },
+    #[error("Not found in operation {operation}: {source}")]
+    NotFoundDbAdapter {
+        operation: &'static str,
+        source: anyhow::Error,
+    },
     #[error("File system path does not exist")]
     FileSystemPathDoesNotExist,
-    #[error("Failed data decoding")]
-    // TODO: Add more details
-    DecodingError,
-    #[error("Failed data encoding")]
-    EncodingError,
+    #[error("Failed to decode for operation {operation} on {item}: {details}")]
+    DecodingError {
+        operation: &'static str,
+        item: &'static str,
+        details: String,
+    },
+    #[error("Failed to encode for operation {operation} on {item}: {details}")]
+    EncodingError {
+        operation: &'static str,
+        item: &'static str,
+        details: String,
+    },
     #[error("Fixed hash size error: {0}")]
     FixedHashSizeError(#[from] FixedHashSizeError),
     #[error("Invalid integer cast")]
@@ -72,6 +84,6 @@ impl<T> From<PoisonError<T>> for StorageError {
 
 impl IsNotFoundError for StorageError {
     fn is_not_found_error(&self) -> bool {
-        matches!(self, Self::NotFound { .. })
+        matches!(self, Self::NotFound { .. }) || matches!(self, Self::NotFoundDbAdapter { .. })
     }
 }

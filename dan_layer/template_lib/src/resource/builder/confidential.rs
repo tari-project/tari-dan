@@ -45,9 +45,10 @@ impl ConfidentialResourceBuilder {
 
     pub fn build_bucket(self) -> Bucket {
         let mint_args = MintArg::Confidential {
-            proof: self
-                .initial_supply_proof
-                .expect("[build_bucket] initial supply not set"),
+            proof: Box::new(
+                self.initial_supply_proof
+                    .expect("[build_bucket] initial supply not set"),
+            ),
         };
 
         let (_, bucket) = Self::build_internal(self.token_symbol, self.metadata, Some(mint_args));

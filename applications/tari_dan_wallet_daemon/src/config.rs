@@ -58,6 +58,8 @@ pub struct WalletDaemonConfig {
     pub jwt_expiry: Option<Duration>,
     /// Secret key for the JWT token.
     pub jwt_secret_key: Option<String>,
+    /// The address of the HTTP UI
+    pub http_ui_address: Option<SocketAddr>,
 }
 
 impl Default for WalletDaemonConfig {
@@ -72,6 +74,7 @@ impl Default for WalletDaemonConfig {
             // TODO: Generate a random secret key at start if not set by hand. Otherwise anyone can generate a JWT token
             // when they know the secret_key.
             jwt_secret_key: Some("secret_key".to_string()),
+            http_ui_address: Some("127.0.0.1:5100".parse().unwrap()),
         }
     }
 }

@@ -116,7 +116,7 @@ pub trait WalletStoreReader {
     // Config
     fn config_get<T: serde::de::DeserializeOwned>(&mut self, key: &str) -> Result<Config<T>, WalletStorageError>;
     // JWT
-    fn jwt_get_all(&mut self) -> Result<Vec<(i32, String)>, WalletStorageError>;
+    fn jwt_get_all(&mut self) -> Result<Vec<(i32, Option<String>)>, WalletStorageError>;
     // Transactions
     fn transaction_get(&mut self, hash: FixedHash) -> Result<WalletTransaction, WalletStorageError>;
     fn transactions_fetch_all_by_status(
@@ -168,9 +168,21 @@ pub trait WalletStoreReader {
     ) -> Result<ConfidentialProofId, WalletStorageError>;
 
     // Non fungible tokens
-    fn get_non_fungible_token(&mut self, nft_id: NonFungibleId) -> Result<NonFungibleToken, WalletStorageError>;
+    fn non_fungible_token_get_by_nft_id(
+        &mut self,
+        nft_id: NonFungibleId,
+    ) -> Result<NonFungibleToken, WalletStorageError>;
 
-    fn get_resource_address(&mut self, nft_id: NonFungibleId) -> Result<ResourceAddress, WalletStorageError>;
+    fn non_fungible_token_get_all(
+        &mut self,
+        limit: u64,
+        offset: u64,
+    ) -> Result<Vec<NonFungibleToken>, WalletStorageError>;
+
+    fn non_fungible_token_get_resource_address(
+        &mut self,
+        nft_id: NonFungibleId,
+    ) -> Result<ResourceAddress, WalletStorageError>;
 }
 
 pub trait WalletStoreWriter {

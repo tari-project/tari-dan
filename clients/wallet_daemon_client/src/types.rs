@@ -41,7 +41,7 @@ use tari_template_lib::{
     args::Arg,
     auth::AccessRules,
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
-    prelude::{ConfidentialWithdrawProof, NonFungibleAddress, ResourceType},
+    prelude::{ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::{SubstateRequirement, Transaction};
 
@@ -55,7 +55,7 @@ pub struct CallInstructionRequest {
     pub instruction: Instruction,
     #[serde(deserialize_with = "string_or_struct")]
     pub fee_account: ComponentAddressOrName,
-    #[serde(deserialize_with = "opt_string_or_struct")]
+    #[serde(default, deserialize_with = "opt_string_or_struct")]
     pub dump_outputs_into: Option<ComponentAddressOrName>,
     pub fee: u64,
     #[serde(default)]
@@ -503,9 +503,8 @@ pub struct AuthRevokeTokenRequest {
 pub struct AuthRevokeTokenResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MintAccountNFTRequest {
+pub struct MintAccountNftRequest {
     pub account: ComponentAddressOrName,
-    pub owner_token: NonFungibleAddress,
     pub token_symbol: String,
     pub metadata: serde_json::Value,
     pub mint_fee: Option<Amount>,
@@ -513,10 +512,36 @@ pub struct MintAccountNFTRequest {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct MintAccountNFTResponse {
+pub struct MintAccountNftResponse {
     pub nft_id: NonFungibleId,
     pub resource_address: ResourceAddress,
     pub result: FinalizeResult,
+    pub fee: Amount,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GetAccountNftRequest {
+    pub nft_id: NonFungibleId,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct AccountNftInfo {
+    pub token_symbol: String,
+    pub metadata: serde_json::Value,
+    pub is_burned: bool,
+}
+
+pub type GetAccountNftResponse = AccountNftInfo;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ListAccountNftRequest {
+    pub limit: u64,
+    pub offset: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ListAccountNftResponse {
+    pub nfts: Vec<AccountNftInfo>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

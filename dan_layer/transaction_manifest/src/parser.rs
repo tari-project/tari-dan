@@ -285,12 +285,10 @@ impl ManifestParser {
                 let mac = &path.segments[0].ident;
                 macro_call(mac, tokens)
             },
-            _ => {
-                return Err(syn::Error::new_spanned(
-                    expr.clone(),
-                    format!("Only function calls are supported in let statements. {:?}", expr),
-                ))
-            },
+            _ => Err(syn::Error::new_spanned(
+                expr.clone(),
+                format!("Only function calls are supported in let statements. {:?}", expr),
+            )),
         }
     }
 }

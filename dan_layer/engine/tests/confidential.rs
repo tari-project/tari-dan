@@ -377,7 +377,7 @@ pub mod utilities {
     use tari_engine_types::confidential::{challenges, get_commitment_factory, get_range_proof_service};
     use tari_template_lib::{
         crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
-        models::{Amount, ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedValue},
+        models::{Amount, ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData},
     };
     use tari_utilities::ByteArray;
 
@@ -458,14 +458,14 @@ pub mod utilities {
                     output_statement: ConfidentialStatement {
                         commitment: output_statement.commitment,
                         sender_public_nonce: Default::default(),
-                        encrypted_value: EncryptedValue::default(),
+                        encrypted_data: EncryptedData::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
                         revealed_amount,
                     },
                     change_statement: Some(ConfidentialStatement {
                         commitment: change_statement.commitment,
                         sender_public_nonce: Default::default(),
-                        encrypted_value: EncryptedValue::default(),
+                        encrypted_data: EncryptedData::default(),
                         minimum_value_promise: change_statement.minimum_value_promise,
                         revealed_amount: Amount::zero(),
                     }),
@@ -513,14 +513,14 @@ pub mod utilities {
                         commitment: output_statement.commitment,
                         // R and encrypted value are informational and can be left out as far as the VN is concerned
                         sender_public_nonce: Default::default(),
-                        encrypted_value: Default::default(),
+                        encrypted_data: Default::default(),
                         minimum_value_promise: output_statement.minimum_value_promise,
                         revealed_amount,
                     },
                     change_statement: change_statement.map(|change| ConfidentialStatement {
                         commitment: change.commitment,
                         sender_public_nonce: Default::default(),
-                        encrypted_value: Default::default(),
+                        encrypted_data: Default::default(),
                         minimum_value_promise: change.minimum_value_promise,
                         revealed_amount: Amount::zero(),
                     }),
@@ -545,7 +545,7 @@ pub mod utilities {
             commitment: commitment_to_bytes(&statement.mask, statement.amount),
             sender_public_nonce: RistrettoPublicKeyBytes::from_bytes(statement.sender_public_nonce.as_bytes())
                 .expect("[generate_confidential_proof] change nonce"),
-            encrypted_value: Default::default(),
+            encrypted_data: Default::default(),
             minimum_value_promise: statement.minimum_value_promise,
             revealed_amount: Amount::zero(),
         });
@@ -559,7 +559,7 @@ pub mod utilities {
                     output_statement.sender_public_nonce.as_bytes(),
                 )
                 .expect("[generate_confidential_proof] output nonce"),
-                encrypted_value: Default::default(),
+                encrypted_data: Default::default(),
                 minimum_value_promise: output_statement.minimum_value_promise,
                 revealed_amount: Amount::zero(),
             },
