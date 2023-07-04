@@ -260,15 +260,11 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         });
     }
 
-    let fee_instructions = if common.dry_run {
-        vec![]
-    } else {
-        vec![Instruction::CallMethod {
-            component_address: fee_account.address.as_component_address().unwrap(),
-            method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
-        }]
-    };
+    let fee_instructions = vec![Instruction::CallMethod {
+        component_address: fee_account.address.as_component_address().unwrap(),
+        method: "pay_fee".to_string(),
+        args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
+    }];
 
     let request = TransactionSubmitRequest {
         signing_key_index: None,
@@ -435,7 +431,7 @@ pub async fn submit_transaction(
     summarize_request(&request, &resp.inputs, &resp.outputs);
 
     if let Some(result) = &resp.result {
-        summarize_finalize_result(result);
+        summarize_finalize_result(&result.finalize);
     } else {
         println!();
         println!("⏳️ Waiting for transaction result...");

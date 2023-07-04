@@ -30,7 +30,7 @@ use tari_dan_wallet_sdk::{
     models::{Account, ConfidentialProofId, TransactionStatus},
 };
 use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectReason},
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     instruction::Instruction,
     instruction_result::InstructionResult,
     serde_with,
@@ -100,7 +100,7 @@ pub struct TransactionSubmitResponse {
     pub hash: FixedHash,
     pub inputs: Vec<SubstateRequirement>,
     pub outputs: Vec<ShardId>,
-    pub result: Option<FinalizeResult>,
+    pub result: Option<ExecuteResult>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -146,15 +146,11 @@ pub async fn handle_submit(
 
     if req.is_dry_run {
         let response = sdk.transaction_api().submit_dry_run_transaction(transaction).await?;
-        let result = match response.execution_result {
-            Some(res) => Some(res.finalize),
-            None => None,
-        };
         Ok(TransactionSubmitResponse {
             hash: response.transaction_hash,
+            result: response.execution_result,
             inputs,
             outputs,
-            result,
         })
     } else {
         let response = sdk.transaction_api().submit_transaction(transaction).await?;

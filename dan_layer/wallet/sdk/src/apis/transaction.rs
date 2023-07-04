@@ -64,8 +64,11 @@ where
         transaction: Transaction,
         is_dry_run: bool,
     ) -> Result<TransactionQueryResult, TransactionApiError> {
-        self.store
-            .with_write_tx(|tx| tx.transactions_insert(&transaction, is_dry_run))?;
+        // we don't have any need to store a dry run transaction
+        if !is_dry_run {
+            self.store
+                .with_write_tx(|tx| tx.transactions_insert(&transaction, is_dry_run))?;
+        }
 
         let result = self
             .network_interface
@@ -73,7 +76,6 @@ where
             .await
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
-        // we don't have any need to store dry run transaction results
         if !is_dry_run {
             self.store.with_write_tx(|tx| {
                 tx.transactions_set_result_and_status(
