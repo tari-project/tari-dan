@@ -1,7 +1,8 @@
-use std::{collections::BTreeSet, ops::DerefMut};
-
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
+
+use std::ops::DerefMut;
+
 use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
@@ -11,27 +12,31 @@ use tari_dan_common_types::{
 use tari_dan_storage::{
     consensus_models::{
         Block,
-        CommittedTransactionPool,
+        Command,
         ExecutedTransaction,
         LastExecuted,
         LastVoted,
         LockedBlock,
-        NewTransactionPool,
-        PledgeCollection,
-        PrecommitTransactionPool,
-        PrepareTransactionPool,
         QuorumDecision,
-        QuorumRejectReason,
-        TransactionDecision,
+        SubstateLockFlag,
+        SubstateRecord,
+        Transaction,
+        TransactionPool,
+        TransactionPoolStage,
     },
     StateStore,
     StateStoreReadTransaction,
-    StateStoreWriteTransaction,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat, ProposalValidationError},
+    hotstuff::{
+        common::update_high_qc,
+        error::HotStuffError,
+        event::HotstuffEvent,
+        on_beat::OnBeat,
+        ProposalValidationError,
+    },
     messages::{HotstuffMessage, ProposalMessage, VoteMessage},
     traits::{ConsensusSpec, EpochManager, LeaderStrategy, VoteSignatureService},
 };
@@ -44,7 +49,9 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     vote_signing_service: TConsensusSpec::VoteSignatureService,
     leader_strategy: TConsensusSpec::LeaderStrategy,
+    transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    tx_events: broadcast::Sender<HotstuffEvent>,
     on_beat: OnBeat,
 }
 
@@ -59,7 +66,9 @@ where
         epoch_manager: TConsensusSpec::EpochManager,
         vote_signing_service: TConsensusSpec::VoteSignatureService,
         leader_strategy: TConsensusSpec::LeaderStrategy,
+        transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        tx_events: broadcast::Sender<HotstuffEvent>,
         on_beat: OnBeat,
     ) -> Self {
         Self {
@@ -68,7 +77,9 @@ where
             epoch_manager,
             vote_signing_service,
             leader_strategy,
+            transaction_pool,
             tx_leader,
+            tx_events,
             on_beat,
         }
     }
@@ -108,16 +119,13 @@ where
         local_committee: Committee<TConsensusSpec::Addr>,
         block: Block,
     ) -> Result<(), HotStuffError> {
-        // TODO: We may not have all the transactions in this block.
-        //       In which case, we should request the missing transactions from the leader and pass them to the
-        //       executor. Once the executor has completed, we can vote on this block.
-
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
 
         // First save the block in one db transaction
         self.store.with_write_tx(|tx| {
-            self.validate_proposed_block(&mut *tx, &from, &block)?;
+            self.validate_local_proposed_block(&mut *tx, &from, &block)?;
             // Insert the block if it doesnt already exist
+            block.justify().save(tx)?;
             block.save(tx)?;
             Ok::<_, HotStuffError>(())
         })?;
@@ -127,8 +135,7 @@ where
 
             let mut maybe_decision = None;
             if should_vote {
-                let decision = self.decide_and_vote(tx, &block, local_committee_shard)?;
-                maybe_decision = Some(decision);
+                maybe_decision = self.decide_what_to_vote(tx, &block, &local_committee_shard)?;
             }
 
             self.update_nodes(tx, &block)?;
@@ -137,7 +144,15 @@ where
 
         if let Some(decision) = maybe_decision {
             let vote = self.generate_vote_message(&block, decision).await?;
-
+            debug!(
+                target: LOG_TARGET,
+                "🔥 Send {:?} VOTE for block {}, parent {}, height {} to {}",
+                decision,
+                block.id(),
+                block.parent(),
+                block.height(),
+                from,
+            );
             self.send_to_leader(&local_committee, vote).await?;
         }
 
@@ -145,12 +160,13 @@ where
     }
 
     async fn handle_foreign_proposal(&self, from: TConsensusSpec::Addr, block: Block) -> Result<(), HotStuffError> {
-        self.store.with_write_tx(|tx| {
-            self.validate_proposed_block(&mut *tx, &from, &block)?;
-            self.on_receive_foreign_block(tx, &block)
-        })?;
+        let vn_shard = self.epoch_manager.get_validator_shard(block.epoch(), &from).await?;
+        let committee_shard = self.epoch_manager.get_committee_shard(block.epoch(), vn_shard).await?;
+        self.validate_proposed_block(&from, &block)?;
+        self.store
+            .with_write_tx(|tx| self.on_receive_foreign_block(tx, &block, &committee_shard))?;
 
-        // We should have ready transactions at this point, so if we're the leader for the next block we can propose
+        // We could have ready transactions at this point, so if we're the leader for the next block we can propose
         self.on_beat.beat();
 
         Ok(())
@@ -170,25 +186,74 @@ where
             })
     }
 
-    fn decide_and_vote(
+    fn decide_what_to_vote(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
-        local_committee_shard: CommitteeShard,
-    ) -> Result<QuorumDecision, HotStuffError> {
+        local_committee_shard: &CommitteeShard,
+    ) -> Result<Option<QuorumDecision>, HotStuffError> {
         block.set_as_last_voted(tx)?;
 
-        match self.decide_on_local_block(tx, block, local_committee_shard) {
-            Ok(()) => {
-                info!(target: LOG_TARGET, "✅ Accepting block {}", block.id());
-                Ok(QuorumDecision::Accept)
-            },
-            // TODO: implement specific failure cases
-            Err(e) => {
-                info!(target: LOG_TARGET, "❌ Rejecting block {}: {}", block.id(), e);
-                Ok(QuorumDecision::Reject(QuorumRejectReason::TransactionPoolsDisagree))
-            },
+        for cmd in block.commands() {
+            let transaction = ExecutedTransaction::get(tx.deref_mut(), cmd.transaction_id())?;
+            let mut tx_rec = self.transaction_pool.get(tx, cmd.transaction_id())?;
+            // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
+            //       part of the proposal DanMessage so that there is no race condition between receiving the
+            //       AllProposed and receiving the foreign proposals
+            tx_rec.update_evidence(tx, local_committee_shard, *block.justify().id())?;
+
+            match cmd {
+                Command::Prepare(t) => {
+                    if transaction.as_decision() == t.decision {
+                        if transaction.as_decision().is_commit() {
+                            // Lock all inputs for the transaction as part of LocalPrepare
+                            self.lock_objects(tx, transaction.transaction(), local_committee_shard)?;
+                        }
+
+                        tx_rec.transition(tx, TransactionPoolStage::LocalPrepared, false)?;
+                    } else {
+                        // If we disagree with any local decision we abstain from voting
+                        warn!(target: LOG_TARGET, "❌ Prepare decision disagreement for block {}. Leader proposed {}, we decided {}", block.id(), t.decision, transaction.as_decision());
+                        return Ok(None);
+                    }
+                },
+                // TODO: Check these against what we have
+                Command::LocalPrepared(t) => {
+                    if transaction.as_decision() != t.decision {
+                        warn!(target: LOG_TARGET, "❌ Prepare decision disagreement for block {}. Leader proposed {}, we decided {}", block.id(), t.decision, transaction.as_decision());
+                        return Ok(None);
+                    }
+                },
+                Command::Accept(t) => {
+                    if transaction.as_decision() != t.decision {
+                        warn!(target: LOG_TARGET, "❌ Prepare decision disagreement for block {}. Leader proposed {}, we decided {}", block.id(), t.decision, transaction.as_decision());
+                        return Ok(None);
+                    }
+                },
+            }
         }
+
+        info!(target: LOG_TARGET, "✅ Accepting block {}", block.id());
+        Ok(Some(QuorumDecision::Accept))
+    }
+
+    fn lock_objects(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        transaction: &Transaction,
+        local_committee_shard: &CommitteeShard,
+    ) -> Result<(), HotStuffError> {
+        SubstateRecord::try_lock_many(
+            tx,
+            local_committee_shard.filter(transaction.inputs()),
+            SubstateLockFlag::Write,
+        )?;
+        SubstateRecord::try_lock_many(
+            tx,
+            local_committee_shard.filter(transaction.input_refs()),
+            SubstateLockFlag::Read,
+        )?;
+        Ok(())
     }
 
     async fn generate_vote_message(
@@ -202,7 +267,7 @@ where
             .await?;
         let leaf_hash = self
             .epoch_manager
-            .get_validator_leaf_hash(block.epoch(), self.validator_addr.clone())
+            .get_validator_leaf_hash(block.epoch(), &self.validator_addr)
             .await?;
 
         let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
@@ -216,82 +281,22 @@ where
         })
     }
 
-    /// Update the transaction pools by moving all transactions into the next pool/phase or error if this is not
-    /// possible. For new transactions, inputs are pledged to their respective transactions.
-    fn decide_on_local_block(
+    fn on_receive_foreign_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
-        local_committee_shard: CommitteeShard,
+        committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
-        if !NewTransactionPool::all_decisions_match(tx.deref_mut(), block.prepared())? {
-            return Err(HotStuffError::DecisionMismatch {
-                block_id: *block.id(),
-                pool: "new",
-            });
+        // Save the QCs if it doesnt exist already, we'll reference the QC in subsequent blocks
+        block.justify().save(tx)?;
+
+        // TODO(perf): n queries
+        for cmd in block.commands() {
+            let Some(mut tx_rec) = self.transaction_pool.get(tx, cmd.transaction_id()).optional()? else {
+                continue;
+            };
+            tx_rec.update_evidence(tx, committee_shard, *block.justify().id())?;
         }
-        let prepared = NewTransactionPool::move_specific_to_prepare(tx, block.prepared())?;
-        self.create_local_pledges(tx, block, &prepared, local_committee_shard)?;
-
-        let precommitted = PrepareTransactionPool::move_specific_to_precommit(tx, block.precommitted())?;
-        let committed = PrecommitTransactionPool::move_specific_to_committed(tx, block.committed())?;
-
-        let involved_shards = block.find_involved_shards(tx.deref_mut())?;
-        let num_involved_shards = involved_shards.len();
-
-        let num_local_shards = local_committee_shard.filter(involved_shards).count();
-        if num_local_shards == num_involved_shards {
-            info!(
-                target: LOG_TARGET,
-                "All shards involved in block {} are local. Marking {} transaction(s) as READY",
-                block.id(),
-                prepared.len() + precommitted.len() + committed.len()
-            );
-            PrepareTransactionPool::mark_specific_ready(tx, &prepared)?;
-            PrecommitTransactionPool::mark_specific_ready(tx, &precommitted)?;
-            CommittedTransactionPool::mark_specific_ready(tx, &committed)?;
-        }
-
-        Ok(())
-    }
-
-    fn create_local_pledges(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block,
-        transactions: &BTreeSet<TransactionDecision>,
-        local_committee_shard: CommitteeShard,
-    ) -> Result<PledgeCollection, HotStuffError> {
-        if transactions.is_empty() {
-            return Ok(PledgeCollection::new(*block.id(), vec![]));
-        }
-
-        // We only pledge for local shards that we're deciding want to commit
-        let to_pledge = transactions
-            .iter()
-            .filter(|t| t.overall_decision.is_accept())
-            .map(|t| &t.transaction_id);
-        let involved_shards = ExecutedTransaction::get_involved_shards(tx.deref_mut(), to_pledge)?;
-        let transactions_and_shards = involved_shards
-            .into_iter()
-            .map(|(t_id, shards)| (t_id, local_committee_shard.filter(shards).collect()))
-            .collect();
-
-        let pledges = PledgeCollection::pledge_many(tx, block.id(), transactions_and_shards)?;
-
-        Ok(pledges)
-    }
-
-    /// Update the transaction pools by marking all transactions as ready
-    fn on_receive_foreign_block<TTx: StateStoreWriteTransaction>(
-        &self,
-        tx: &mut TTx,
-        block: &Block,
-    ) -> Result<(), HotStuffError> {
-        // TODO: count foreign proposals and only mark as ready when all shards are received
-        PrepareTransactionPool::mark_specific_ready(tx, block.precommitted())?;
-        PrecommitTransactionPool::mark_specific_ready(tx, block.committed())?;
-        CommittedTransactionPool::mark_specific_ready(tx, block.committed())?;
 
         Ok(())
     }
@@ -357,10 +362,16 @@ where
     ) -> Result<(), HotStuffError> {
         if last_executed.height < block.height() {
             let parent = block.get_parent(tx.deref_mut())?;
+            // Recurse to "catch up" any parent parent blocks we may not have executed
             self.on_commit(tx, last_executed, &parent)?;
             self.execute(tx, block)?;
+            self.publish_event(HotstuffEvent::BlockCommitted { block_id: *block.id() });
         }
         Ok(())
+    }
+
+    fn publish_event(&self, event: HotstuffEvent) {
+        let _ = self.tx_events.send(event);
     }
 
     fn execute(
@@ -368,33 +379,41 @@ where
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
     ) -> Result<(), HotStuffError> {
-        CommittedTransactionPool::finalize_specific(tx, block.committed())?;
-        // TODO: commit local substates
+        for cmd in block.commands() {
+            let tx_rec = self.transaction_pool.get(tx, cmd.transaction_id())?;
+            match cmd {
+                // At this point, all local replicas have voted to prepare (including us). We mark this transaction as
+                // ready so that it can be proposed as LocalPrepared in the next block.
+                Command::Prepare(_t) => {
+                    tx_rec.transition(tx, TransactionPoolStage::LocalPrepared, true)?;
+                },
+
+                // All local replicas have voted LocalPrepared. If we have localprepared for all shards, we mark this as
+                // AllPrepared and ready.
+                Command::LocalPrepared(_t) => {
+                    if tx_rec.transaction.evidence.all_shards_complete() {
+                        tx_rec.transition(tx, TransactionPoolStage::AllPrepared, true)?;
+                    }
+                },
+                Command::Accept(t) => {
+                    tx_rec.remove(tx)?;
+                    if t.decision.is_commit() {
+                        // TODO: commit local substates
+                    }
+                },
+            }
+        }
+
         Ok(())
     }
 
-    fn validate_proposed_block(
+    fn validate_local_proposed_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         from: &TConsensusSpec::Addr,
         candidate_block: &Block,
-        // committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), ProposalValidationError> {
-        if candidate_block.height() == NodeHeight::zero() || candidate_block.id().is_genesis() {
-            return Err(ProposalValidationError::ProposingGenesisBlock {
-                proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
-            });
-        }
-
-        let calculated_hash = candidate_block.calculate_hash().into();
-        if calculated_hash != *candidate_block.id() {
-            return Err(ProposalValidationError::NodeHashMismatch {
-                proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
-                calculated_hash,
-            });
-        }
+        self.validate_proposed_block(from, candidate_block)?;
 
         // Check that details included in the justify match previously added blocks
         let Some(justify_block) = candidate_block.justify().get_block(tx).optional()? else {
@@ -418,7 +437,29 @@ where
             });
         }
 
-        // candidate_block.proposed_by()
+        Ok(())
+    }
+
+    fn validate_proposed_block(
+        &self,
+        from: &TConsensusSpec::Addr,
+        candidate_block: &Block,
+    ) -> Result<(), ProposalValidationError> {
+        if candidate_block.height() == NodeHeight::zero() || candidate_block.id().is_genesis() {
+            return Err(ProposalValidationError::ProposingGenesisBlock {
+                proposed_by: from.to_string(),
+                hash: *candidate_block.id(),
+            });
+        }
+
+        let calculated_hash = candidate_block.calculate_hash().into();
+        if calculated_hash != *candidate_block.id() {
+            return Err(ProposalValidationError::NodeHashMismatch {
+                proposed_by: from.to_string(),
+                hash: *candidate_block.id(),
+                calculated_hash,
+            });
+        }
 
         // TODO: validate justify signatures
         // self.validate_qc(candidate_block.justify(), committee)?;

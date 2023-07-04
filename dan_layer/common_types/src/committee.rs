@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::borrow::Borrow;
+
 use serde::Serialize;
 
 use crate::{NodeAddressable, ShardId};
@@ -53,6 +55,15 @@ impl<TAddr: NodeAddressable> IntoIterator for Committee<TAddr> {
 
     fn into_iter(self) -> Self::IntoIter {
         self.members.into_iter()
+    }
+}
+
+impl<'a, TAddr: NodeAddressable> IntoIterator for &'a Committee<TAddr> {
+    type IntoIter = std::slice::Iter<'a, TAddr>;
+    type Item = &'a TAddr;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.members.iter()
     }
 }
 
@@ -109,12 +120,18 @@ impl CommitteeShard {
         self.num_members
     }
 
+    pub fn bucket(&self) -> u32 {
+        self.bucket
+    }
+
     pub fn includes_shard(&self, shard_id: &ShardId) -> bool {
         self.bucket == shard_id.to_committee_bucket(self.num_committees)
     }
 
-    pub fn filter<'a, I>(&'a self, items: I) -> impl Iterator<Item = ShardId> + '_
-    where I: IntoIterator<Item = ShardId> + 'a {
-        items.into_iter().filter(|shard_id| self.includes_shard(shard_id))
+    pub fn filter<'a, I, B: Borrow<ShardId>>(&'a self, items: I) -> impl Iterator<Item = B> + '_
+    where I: IntoIterator<Item = B> + 'a {
+        items
+            .into_iter()
+            .filter(|shard_id| self.includes_shard(shard_id.borrow()))
     }
 }

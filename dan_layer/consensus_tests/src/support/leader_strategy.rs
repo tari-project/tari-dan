@@ -60,7 +60,9 @@ impl LeaderStrategy<TestAddress> for SelectedIndexLeaderStrategy {
         let index = self.0.load(Ordering::SeqCst);
         assert!(
             (index as usize) < committee.len(),
-            "SelectedIndexLeaderStrategy index out of bounds"
+            "SelectedIndexLeaderStrategy index out of bounds index={} len={}",
+            index,
+            committee.len()
         );
         index
     }

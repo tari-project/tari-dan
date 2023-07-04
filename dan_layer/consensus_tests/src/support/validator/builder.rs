@@ -2,9 +2,11 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::hotstuff::HotstuffWorker;
+use tari_dan_common_types::ShardId;
+use tari_dan_storage::consensus_models::TransactionPool;
 use tari_shutdown::Shutdown;
 use tari_state_store_sqlite::SqliteStateStore;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 
 use crate::support::{
     address::TestAddress,
@@ -13,10 +15,13 @@ use crate::support::{
     SelectedIndexLeaderStrategy,
     TestConsensusSpec,
     Validator,
+    ValidatorChannels,
 };
 
 pub struct ValidatorBuilder {
     pub address: TestAddress,
+    pub shard: ShardId,
+    pub bucket: u32,
     pub sql_url: String,
     pub leader_strategy: SelectedIndexLeaderStrategy,
     pub epoch_manager: TestEpochManager,
@@ -26,6 +31,8 @@ impl ValidatorBuilder {
     pub fn new() -> Self {
         Self {
             address: TestAddress("default"),
+            shard: ShardId::zero(),
+            bucket: 0,
             sql_url: ":memory".to_string(),
             leader_strategy: SelectedIndexLeaderStrategy::new(0),
             epoch_manager: TestEpochManager::new(),
@@ -34,6 +41,16 @@ impl ValidatorBuilder {
 
     pub fn with_address(&mut self, address: TestAddress) -> &mut Self {
         self.address = address;
+        self
+    }
+
+    pub fn with_bucket(&mut self, bucket: u32) -> &mut Self {
+        self.bucket = bucket;
+        self
+    }
+
+    pub fn with_shard(&mut self, shard: ShardId) -> &mut Self {
+        self.shard = shard;
         self
     }
 
@@ -52,44 +69,55 @@ impl ValidatorBuilder {
         self
     }
 
-    pub fn spawn(&self) -> Validator {
-        let (tx_broadcast, rx_broadcast) = mpsc::channel(1);
+    pub fn spawn(&self) -> (ValidatorChannels, Validator) {
+        let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
         let (tx_new_transactions, rx_new_transactions) = mpsc::channel(100);
-        let (tx_hs_message, rx_hs_message) = mpsc::channel(1);
-        let (tx_leader, rx_leader) = mpsc::channel(1);
+        let (tx_hs_message, rx_hs_message) = mpsc::channel(10);
+        let (tx_leader, rx_leader) = mpsc::channel(10);
 
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
         let signing_service = TestVoteSignatureService::new();
         let shutdown = Shutdown::new();
         let shutdown_signal = shutdown.to_signal();
+        let transaction_pool = TransactionPool::new();
+        let (tx_events, _) = broadcast::channel(100);
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address,
             rx_new_transactions,
             rx_hs_message,
             store.clone(),
-            self.epoch_manager.copy_for(self.address),
+            self.epoch_manager.clone_for(self.address, self.shard),
             self.leader_strategy.clone(),
             signing_service,
+            transaction_pool,
             tx_broadcast,
             tx_leader,
+            tx_events.clone(),
             shutdown_signal,
         );
         let handle = tokio::spawn(async move {
             worker.run().await.unwrap();
         });
 
-        Validator {
+        let channels = ValidatorChannels {
             address: self.address,
             tx_new_transactions,
             tx_hs_message,
             rx_broadcast,
             rx_leader,
+        };
+
+        let validator = Validator {
+            address: self.address,
+            shard: self.shard,
             state_store: store,
-            epoch_manager: self.epoch_manager.copy_for(self.address),
+            epoch_manager: self.epoch_manager.clone_for(self.address, self.shard),
             shutdown,
             leader_strategy: self.leader_strategy.clone(),
+            events: tx_events.subscribe(),
             handle,
-        }
+        };
+        (channels, validator)
     }
 }

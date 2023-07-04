@@ -7,12 +7,15 @@
 mod address;
 pub mod epoch_manager;
 mod harness;
+mod helpers;
 mod leader_strategy;
+mod network;
 pub mod signing_service;
 mod spec;
 mod transaction;
 mod validator;
 
+pub use address::*;
 pub use harness::*;
 pub use leader_strategy::*;
 pub use spec::*;
