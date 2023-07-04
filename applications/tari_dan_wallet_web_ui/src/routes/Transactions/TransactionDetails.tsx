@@ -37,6 +37,7 @@ import {
   TableCell,
   Button,
   Fade,
+  Alert,
 } from '@mui/material';
 import Typography from '@mui/material/Typography';
 import { DataTableCell, StyledPaper } from '../../Components/StyledComponents';
@@ -59,17 +60,32 @@ export default function TransactionDetails() {
   const { hash, status, result, transaction, transaction_failure } = state;
   const location = useLocation();
 
-  const getTransactionByHash = async () => {
+  const getTransactionByHash = () => {
+    setLoading(true);
     const path = location.pathname.split('/')[2];
-    const result = await transactionsGet(path);
-    console.log('result', result);
-    setState(result);
-    setLoading(false);
+    transactionsGet(path)
+      .then((response) => {
+        console.log('transaction details: ', response);
+        setState(response);
+        setError(undefined);
+      })
+      .catch((err) => {
+        setError(
+          err && err.message
+            ? err.message
+            : `Unknown error: ${JSON.stringify(err)}`
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
     getTransactionByHash();
   }, []);
+
+  console.log('state: ', state);
 
   const handleChange =
     (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
@@ -97,73 +113,82 @@ export default function TransactionDetails() {
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
-          {loading && <Loading />}
-          {!loading && (
+          {loading ? (
+            <Loading />
+          ) : (
             <Fade in={!loading}>
               <div>
-                <TableContainer>
-                  <Table>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell>Transaction Hash</TableCell>
-                        <DataTableCell>{hash}</DataTableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell>Timestamp</TableCell>
-                        <DataTableCell>Timestamp</DataTableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell>Total Fees</TableCell>
-                        <DataTableCell>
-                          {result && result.cost_breakdown.total_fees_charged}
-                        </DataTableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell>Status</TableCell>
-                        <DataTableCell>
-                          <StatusChip status={status} />
-                        </DataTableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '2rem 1rem 0.5rem 1rem',
-                  }}
-                >
-                  <Typography variant="h5">More Information</Typography>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'flex-end',
-                      gap: '1rem',
-                    }}
-                  >
-                    <Button
-                      onClick={expandAll}
+                {error ? (
+                  <Alert severity="error">{error}</Alert>
+                ) : (
+                  <>
+                    <TableContainer>
+                      <Table>
+                        <TableBody>
+                          <TableRow>
+                            <TableCell>Transaction Hash</TableCell>
+                            <DataTableCell>{hash}</DataTableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell>Timestamp</TableCell>
+                            <DataTableCell>Timestamp</DataTableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell>Total Fees</TableCell>
+                            <DataTableCell>
+                              {/* {result &&
+                                result.cost_breakdown.total_fees_charged} */}
+                            </DataTableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell>Status</TableCell>
+                            <DataTableCell>
+                              <StatusChip status={status} />
+                            </DataTableCell>
+                          </TableRow>
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                    <div
                       style={{
-                        fontSize: '0.85rem',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '2rem 1rem 0.5rem 1rem',
                       }}
-                      startIcon={<KeyboardArrowDownIcon />}
+                      // className="flex-container"
                     >
-                      Expand All
-                    </Button>
-                    <Button
-                      onClick={collapseAll}
-                      style={{
-                        fontSize: '0.85rem',
-                      }}
-                      startIcon={<KeyboardArrowUpIcon />}
-                      disabled={expandedPanels.length === 0 ? true : false}
-                    >
-                      Collapse All
-                    </Button>
-                  </div>
-                </div>
+                      <Typography variant="h5">More Info</Typography>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'flex-end',
+                          gap: '1rem',
+                        }}
+                      >
+                        <Button
+                          onClick={expandAll}
+                          style={{
+                            fontSize: '0.85rem',
+                          }}
+                          startIcon={<KeyboardArrowDownIcon />}
+                        >
+                          Expand All
+                        </Button>
+                        <Button
+                          onClick={collapseAll}
+                          style={{
+                            fontSize: '0.85rem',
+                          }}
+                          startIcon={<KeyboardArrowUpIcon />}
+                          disabled={expandedPanels.length === 0 ? true : false}
+                        >
+                          Collapse All
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                )}
                 {transaction?.fee_instructions && (
                   <Accordion
                     expanded={expandedPanels.includes('panel1')}
@@ -228,7 +253,7 @@ export default function TransactionDetails() {
                     </AccordionDetails>
                   </Accordion>
                 )}
-                {result && (
+                {transaction_failure === null && (
                   <Accordion
                     expanded={expandedPanels.includes('panel5')}
                     onChange={handleChange('panel5')}

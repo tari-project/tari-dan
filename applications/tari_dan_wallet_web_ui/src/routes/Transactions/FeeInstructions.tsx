@@ -38,6 +38,7 @@ import {
 import { renderJson } from '../../utils/helpers';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import CodeBlockExpand from '../../Components/CodeBlock';
 
 function RowData({ title, data }: any) {
   const [open, setOpen] = useState(false);
@@ -64,9 +65,7 @@ function RowData({ title, data }: any) {
       <TableRow>
         <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={2}>
           <Collapse in={open} timeout="auto" unmountOnExit>
-            <CodeBlock style={{ marginBottom: '10px' }}>
-              {renderJson(data)}
-            </CodeBlock>
+            <CodeBlockExpand title={title}>{renderJson(data)}</CodeBlockExpand>
           </Collapse>
         </DataTableCell>
       </TableRow>

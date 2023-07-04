@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import { ChangeEvent } from 'react';
+
 const renderJson = (json: any) => {
   if (Array.isArray(json)) {
     if (json.length == 32) {
@@ -57,32 +59,30 @@ const renderJson = (json: any) => {
   }
 };
 
-
 function removeTagged(obj: any) {
   if (obj === undefined) {
-    return "undefined";
+    return 'undefined';
   }
-  if (obj["@@TAGGED@@"] !== undefined) {
-    return obj["@@TAGGED@@"][1];
+  if (obj['@@TAGGED@@'] !== undefined) {
+    return obj['@@TAGGED@@'][1];
   }
   return obj;
 }
 
-function toHexString(byteArray: any ) : string {
-
-  if (Array.isArray( byteArray )) {
+function toHexString(byteArray: any): string {
+  if (Array.isArray(byteArray)) {
     return Array.from(byteArray, function (byte) {
       return ('0' + (byte & 0xff).toString(16)).slice(-2);
     }).join('');
   }
   if (byteArray === undefined) {
-    return "undefined";
+    return 'undefined';
   }
   // object might be a tagged object
-  if (byteArray["@@TAGGED@@"] !== undefined) {
-    return toHexString(byteArray["@@TAGGED@@"][1]);
+  if (byteArray['@@TAGGED@@'] !== undefined) {
+    return toHexString(byteArray['@@TAGGED@@'][1]);
   }
-  return "Unsupported type";
+  return 'Unsupported type';
 }
 
 function fromHexString(hexString: string) {
@@ -97,4 +97,34 @@ function shortenString(string: string, start: number = 8, end: number = 8) {
   return string.substring(0, start) + '...' + string.slice(-end);
 }
 
-export {renderJson, toHexString, fromHexString, shortenString, removeTagged};
+function emptyRows(page: number, rowsPerPage: number, array: any[]) {
+  return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
+}
+
+function handleChangePage(
+  event: unknown,
+  newPage: number,
+  setPage: React.Dispatch<React.SetStateAction<number>>
+) {
+  setPage(newPage);
+}
+
+function handleChangeRowsPerPage(
+  event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  setRowsPerPage: React.Dispatch<React.SetStateAction<number>>,
+  setPage: React.Dispatch<React.SetStateAction<number>>
+) {
+  setRowsPerPage(parseInt(event.target.value, 10));
+  setPage(0);
+}
+
+export {
+  renderJson,
+  toHexString,
+  fromHexString,
+  shortenString,
+  removeTagged,
+  emptyRows,
+  handleChangePage,
+  handleChangeRowsPerPage,
+};

@@ -21,7 +21,13 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { Chip, Avatar } from '@mui/material';
-import { IoCheckmarkOutline } from 'react-icons/io5';
+import {
+  IoCheckmarkOutline,
+  IoDiamondOutline,
+  IoReload,
+  IoHourglassOutline,
+  IoCloseOutline,
+} from 'react-icons/io5';
 
 interface StatusChipProps {
   status:
@@ -48,15 +54,13 @@ const iconList: Record<string, JSX.Element> = {
     <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
   ),
   Pending: (
-    <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
+    <IoHourglassOutline style={{ height: 14, width: 14 }} color="#FFF" />
   ),
-  DryRun: <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />,
-  New: <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />,
-  Rejected: (
-    <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
-  ),
+  DryRun: <IoReload style={{ height: 14, width: 14 }} color="#FFF" />,
+  New: <IoDiamondOutline style={{ height: 14, width: 14 }} color="#FFF" />,
+  Rejected: <IoCloseOutline style={{ height: 14, width: 14 }} color="#FFF" />,
   InvalidTransaction: (
-    <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
+    <IoCloseOutline style={{ height: 14, width: 14 }} color="#FFF" />
   ),
 };
 
@@ -67,7 +71,6 @@ export default function StatusChip({
   if (!showTitle) {
     return (
       <Avatar sx={{ bgcolor: colorList[status], height: 22, width: 22 }}>
-        {/* <IoCheckmarkOutline color="white" style={{ height: 14, width: 14 }} /> */}
         {iconList[status]}
       </Avatar>
     );
@@ -76,7 +79,6 @@ export default function StatusChip({
       <Chip
         avatar={
           <Avatar sx={{ bgcolor: colorList[status] }}>
-            {/* <IoCheckmarkOutline color="white" /> */}
             {iconList[status]}
           </Avatar>
         }

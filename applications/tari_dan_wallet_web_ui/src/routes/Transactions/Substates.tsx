@@ -39,6 +39,7 @@ import {
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { IoArrowDownCircle, IoArrowUpCircle } from 'react-icons/io5';
+import CodeBlockDialog from '../../Components/CodeBlock';
 
 function RowData({ info, index, state }: any) {
   const [open, setOpen] = useState(false);
@@ -90,9 +91,9 @@ function RowData({ info, index, state }: any) {
       <TableRow>
         <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={4}>
           <Collapse in={open} timeout="auto" unmountOnExit>
-            <CodeBlock style={{ marginBottom: '10px' }}>
+            <CodeBlockDialog title="Substate">
               {renderJson(info)}
-            </CodeBlock>
+            </CodeBlockDialog>
           </Collapse>
         </DataTableCell>
       </TableRow>

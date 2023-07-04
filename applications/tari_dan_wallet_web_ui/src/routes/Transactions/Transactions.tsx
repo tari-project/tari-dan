@@ -24,6 +24,12 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getAllTransactionByStatus } from '../../utils/json_rpc';
 import {
+  emptyRows,
+  handleChangePage,
+  handleChangeRowsPerPage,
+  toHexString,
+} from '../../utils/helpers';
+import {
   TableContainer,
   TablePagination,
   Table,
@@ -32,6 +38,7 @@ import {
   TableHead,
   TableCell,
   Fade,
+  Alert,
 } from '@mui/material';
 import { DataTableCell } from '../../Components/StyledComponents';
 import Loading from '../../Components/Loading';
@@ -62,9 +69,12 @@ export default function Transactions() {
             return {
               id: t[0].sender_public_key,
               sender_public_key: t[0].sender_public_key,
-              total_fees_charged: t[1].cost_breakdown.total_fees_charged,
+              total_fees_charged:
+                t[1]?.cost_breakdown === null
+                  ? 0
+                  : t[1]?.cost_breakdown.total_fees_charged,
               status: t[2],
-              transaction_hash: t[1].transaction_hash,
+              transaction_hash: toHexString(t[0].hash),
             };
           })
         );
@@ -86,20 +96,6 @@ export default function Transactions() {
     loadTransactions();
   }, []);
 
-  const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - transactions.length) : 0;
-
-  const handleChangePage = (event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
   console.log('state', transactions);
 
   return (
@@ -119,33 +115,42 @@ export default function Transactions() {
               {transactions &&
                 transactions
                   .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                  .map((s: any) => {
-                    return (
-                      <TableRow key={s.transaction_hash}>
-                        <DataTableCell>
-                          <Link
-                            to={`/transactions/${s.transaction_hash}`}
-                            style={{ textDecoration: 'none' }}
-                          >
-                            {s.transaction_hash}
-                          </Link>
-                        </DataTableCell>
-                        <DataTableCell>
-                          <StatusChip status={s.status} showTitle={false} />
-                        </DataTableCell>
-                        <DataTableCell>{s.total_fees_charged}</DataTableCell>
-                      </TableRow>
-                    );
-                  })}
-              {emptyRows > 0 && (
+                  .map(
+                    ({ transaction_hash, status, total_fees_charged }: any) => {
+                      return (
+                        <TableRow key={transaction_hash}>
+                          <DataTableCell>
+                            <Link
+                              to={`/transactions/${transaction_hash}`}
+                              style={{ textDecoration: 'none' }}
+                            >
+                              {transaction_hash}
+                            </Link>
+                          </DataTableCell>
+                          <DataTableCell>
+                            <StatusChip status={status} showTitle />
+                          </DataTableCell>
+                          <DataTableCell>{total_fees_charged}</DataTableCell>
+                        </TableRow>
+                      );
+                    }
+                  )}
+              {emptyRows(page, rowsPerPage, transactions) > 0 && (
                 <TableRow
                   style={{
-                    height: 57 * emptyRows,
+                    height: 57 * emptyRows(page, rowsPerPage, transactions),
                   }}
                 >
-                  <TableCell colSpan={4} />
+                  <TableCell colSpan={3} />
                 </TableRow>
               )}
+              {error ? (
+                <TableRow>
+                  <TableCell colSpan={3}>
+                    <Alert severity="error">{error}</Alert>
+                  </TableCell>
+                </TableRow>
+              ) : null}
             </TableBody>
           </Table>
           <TablePagination
@@ -154,8 +159,12 @@ export default function Transactions() {
             count={transactions.length}
             rowsPerPage={rowsPerPage}
             page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
+            onPageChange={(event, newPage) =>
+              handleChangePage(event, newPage, setPage)
+            }
+            onRowsPerPageChange={(event) =>
+              handleChangeRowsPerPage(event, setRowsPerPage, setPage)
+            }
           />
         </TableContainer>
       </Fade>
