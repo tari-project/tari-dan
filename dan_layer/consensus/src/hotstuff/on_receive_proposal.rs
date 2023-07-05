@@ -38,7 +38,7 @@ use crate::{
         ProposalValidationError,
     },
     messages::{HotstuffMessage, ProposalMessage, VoteMessage},
-    traits::{ConsensusSpec, EpochManager, LeaderStrategy, VoteSignatureService},
+    traits::{ConsensusSpec, EpochManager, LeaderStrategy, StateManager, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_proposal";
@@ -49,6 +49,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     vote_signing_service: TConsensusSpec::VoteSignatureService,
     leader_strategy: TConsensusSpec::LeaderStrategy,
+    state_manager: TConsensusSpec::StateManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     tx_events: broadcast::Sender<HotstuffEvent>,
@@ -66,6 +67,7 @@ where
         epoch_manager: TConsensusSpec::EpochManager,
         vote_signing_service: TConsensusSpec::VoteSignatureService,
         leader_strategy: TConsensusSpec::LeaderStrategy,
+        state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
@@ -77,6 +79,7 @@ where
             epoch_manager,
             vote_signing_service,
             leader_strategy,
+            state_manager,
             transaction_pool,
             tx_leader,
             tx_events,
@@ -398,7 +401,10 @@ where
                 Command::Accept(t) => {
                     tx_rec.remove(tx)?;
                     if t.decision.is_commit() {
-                        // TODO: commit local substates
+                        let executed_tx = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
+                        self.state_manager
+                            .commit_transaction(tx, &executed_tx)
+                            .map_err(|e| HotStuffError::StateManagerError(e.into()))?;
                     }
                 },
             }

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use futures::{stream::FuturesUnordered, StreamExt};
 use tari_consensus::{hotstuff::HotstuffEvent, traits::EpochManager};
-use tari_dan_common_types::{committee::Committee, NodeHeight};
+use tari_dan_common_types::committee::Committee;
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, Decision, TransactionPoolStage},
     StateStore,
@@ -26,18 +26,13 @@ use crate::support::{
 pub struct Test {
     validators: HashMap<TestAddress, Validator>,
     network: TestNetwork,
-    leader_strategy: SelectedIndexLeaderStrategy,
+    _leader_strategy: SelectedIndexLeaderStrategy,
     epoch_manager: TestEpochManager,
-    messages_sent: HashMap<DanMessageType, usize>,
 }
 
 impl Test {
     pub fn builder() -> TestBuilder {
         TestBuilder::new()
-    }
-
-    pub fn total_messages_sent(&self) -> usize {
-        self.messages_sent.values().sum()
     }
 
     pub async fn send_transaction_to_all(&self, decision: Decision, fee: u64, num_shards: usize) {
@@ -72,6 +67,7 @@ impl Test {
         &mut self.network
     }
 
+    #[allow(dead_code)]
     pub fn get_validator_mut(&mut self, addr: &TestAddress) -> &mut Validator {
         self.validators.get_mut(addr).unwrap()
     }
@@ -98,20 +94,6 @@ impl Test {
                 .with_read_tx(|tx| tx.transaction_pool_count(None, None))
                 .unwrap() >=
                 count
-        })
-        .await;
-    }
-
-    pub async fn wait_for_all_to_have_leaf_height(&self, height: NodeHeight) {
-        let epoch = self.epoch_manager.current_epoch().await.unwrap();
-        self.wait_all_for_predicate(format!("leaf height to be {}", height), |v| {
-            let leaf_height = v
-                .state_store
-                .with_read_tx(|tx| tx.leaf_block_get(epoch))
-                .unwrap()
-                .height;
-
-            leaf_height >= height
         })
         .await;
     }
@@ -215,6 +197,7 @@ impl TestBuilder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_sql_url<T: Into<String>>(&mut self, sql_address: T) -> &mut Self {
         self.sql_address = sql_address.into();
         self
@@ -263,16 +246,8 @@ impl TestBuilder {
         Test {
             validators,
             network,
-            leader_strategy,
-            messages_sent: Default::default(),
+            _leader_strategy: leader_strategy,
             epoch_manager,
         }
     }
-}
-
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
-pub enum DanMessageType {
-    Proposal,
-    Vote,
-    NewView,
 }

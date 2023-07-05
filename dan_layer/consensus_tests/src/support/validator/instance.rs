@@ -1,8 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::Duration;
-
 use tari_consensus::{hotstuff::HotstuffEvent, messages::HotstuffMessage};
 use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 use tari_dan_storage::{
@@ -15,7 +13,6 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
-    time::timeout,
 };
 
 use crate::support::{
@@ -52,6 +49,7 @@ impl Validator {
         ValidatorBuilder::new()
     }
 
+    #[allow(dead_code)]
     pub fn leader_strategy(&self) -> &SelectedIndexLeaderStrategy {
         &self.leader_strategy
     }
@@ -62,6 +60,7 @@ impl Validator {
             .unwrap()
     }
 
+    #[allow(dead_code)]
     pub async fn on_block_committed(&mut self) -> BlockId {
         #[allow(clippy::never_loop)]
         loop {
@@ -78,8 +77,4 @@ impl Validator {
             .with_read_tx(|tx| LeafBlock::get(tx, Epoch(0)))
             .unwrap()
     }
-}
-
-async fn recv_timeout<T>(rx: &mut mpsc::Receiver<T>) -> Option<T> {
-    timeout(Duration::from_secs(10), rx.recv()).await.ok()?
 }

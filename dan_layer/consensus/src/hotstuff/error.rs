@@ -35,6 +35,8 @@ pub enum HotStuffError {
     BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
     #[error("Epoch manager error: {0}")]
     EpochManagerError(anyhow::Error),
+    #[error("State manager error: {0}")]
+    StateManagerError(anyhow::Error),
     #[error("Invalid vote signature from {signer_public_key} (unauthenticated)")]
     InvalidVoteSignature { signer_public_key: PublicKey },
     #[error("Transaction pool error: {0}")]

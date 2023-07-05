@@ -85,7 +85,7 @@ async fn multi_validator_propose_blocks_with_new_transactions_until_all_committe
 
     test.assert_all_validators_at_same_height().await;
 
-    log::info!("total messages sent: {}", test.total_messages_sent());
+    log::info!("total messages sent: {}", test.network().total_messages_sent());
     test.assert_clean_shutdown().await;
 }
 
@@ -124,6 +124,6 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
 
     test.assert_all_validators_at_same_height().await;
 
-    log::info!("total messages sent: {}", test.total_messages_sent());
+    log::info!("total messages sent: {}", test.network().total_messages_sent());
     test.assert_clean_shutdown().await;
 }

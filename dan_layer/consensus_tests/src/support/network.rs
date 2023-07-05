@@ -1,7 +1,10 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{atomic::AtomicUsize, Arc},
+};
 
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use tari_consensus::messages::HotstuffMessage;
@@ -24,6 +27,7 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>) -> TestNetwork {
     let (tx_new_transaction, rx_new_transaction) = mpsc::channel(100);
     let (tx_network_status, network_status) = watch::channel(NetworkStatus::Paused);
     let (tx_on_message, rx_on_message) = watch::channel(None);
+    let num_sent_messages = Arc::new(AtomicUsize::new(0));
 
     TestNetworkWorker {
         network_status,
@@ -33,13 +37,15 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>) -> TestNetwork {
         rx_broadcast: Some(rx_broadcast),
         rx_leader: Some(rx_leader),
         on_message: tx_on_message,
+        num_sent_messages: num_sent_messages.clone(),
     }
     .spawn();
 
     TestNetwork {
         tx_new_transaction,
         network_status: tx_network_status,
-        on_message: rx_on_message,
+        num_sent_messages,
+        _on_message: rx_on_message,
     }
 }
 
@@ -50,10 +56,6 @@ pub enum NetworkStatus {
 }
 
 impl NetworkStatus {
-    pub fn is_started(self) -> bool {
-        matches!(self, NetworkStatus::Started)
-    }
-
     pub fn is_paused(self) -> bool {
         matches!(self, NetworkStatus::Paused)
     }
@@ -62,7 +64,8 @@ impl NetworkStatus {
 pub struct TestNetwork {
     tx_new_transaction: mpsc::Sender<ExecutedTransaction>,
     network_status: watch::Sender<NetworkStatus>,
-    on_message: watch::Receiver<Option<HotstuffMessage>>,
+    num_sent_messages: Arc<AtomicUsize>,
+    _on_message: watch::Receiver<Option<HotstuffMessage>>,
 }
 
 impl TestNetwork {
@@ -70,17 +73,23 @@ impl TestNetwork {
         self.network_status.send(NetworkStatus::Started).unwrap();
     }
 
+    #[allow(dead_code)]
     pub async fn on_message(&mut self) -> Option<HotstuffMessage> {
-        self.on_message.changed().await.unwrap();
-        self.on_message.borrow().clone()
+        self._on_message.changed().await.unwrap();
+        self._on_message.borrow().clone()
     }
 
+    #[allow(dead_code)]
     pub async fn pause(&self) {
         self.network_status.send(NetworkStatus::Paused).unwrap();
     }
 
     pub async fn send_transaction(&self, tx: ExecutedTransaction) {
         self.tx_new_transaction.send(tx).await.unwrap();
+    }
+
+    pub fn total_messages_sent(&self) -> usize {
+        self.num_sent_messages.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -93,6 +102,7 @@ pub struct TestNetworkWorker {
     rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage)>>>,
     network_status: watch::Receiver<NetworkStatus>,
     on_message: watch::Sender<Option<HotstuffMessage>>,
+    num_sent_messages: Arc<AtomicUsize>,
 }
 
 impl TestNetworkWorker {
@@ -155,6 +165,8 @@ impl TestNetworkWorker {
     }
 
     pub async fn handle_broadcast(&mut self, from: TestAddress, to: Committee<TestAddress>, msg: HotstuffMessage) {
+        self.num_sent_messages
+            .fetch_add(to.len(), std::sync::atomic::Ordering::Relaxed);
         for vn in to {
             self.tx_hs_message
                 .get(&vn)
@@ -168,6 +180,8 @@ impl TestNetworkWorker {
 
     pub async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage) {
         self.on_message.send(Some(msg.clone())).unwrap();
+        self.num_sent_messages
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
     }
 }

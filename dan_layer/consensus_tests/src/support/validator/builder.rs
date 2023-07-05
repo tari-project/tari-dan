@@ -12,6 +12,7 @@ use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
     signing_service::TestVoteSignatureService,
+    NoopStateManager,
     SelectedIndexLeaderStrategy,
     TestConsensusSpec,
     Validator,
@@ -21,7 +22,6 @@ use crate::support::{
 pub struct ValidatorBuilder {
     pub address: TestAddress,
     pub shard: ShardId,
-    pub bucket: u32,
     pub sql_url: String,
     pub leader_strategy: SelectedIndexLeaderStrategy,
     pub epoch_manager: TestEpochManager,
@@ -32,7 +32,6 @@ impl ValidatorBuilder {
         Self {
             address: TestAddress("default"),
             shard: ShardId::zero(),
-            bucket: 0,
             sql_url: ":memory".to_string(),
             leader_strategy: SelectedIndexLeaderStrategy::new(0),
             epoch_manager: TestEpochManager::new(),
@@ -41,11 +40,6 @@ impl ValidatorBuilder {
 
     pub fn with_address(&mut self, address: TestAddress) -> &mut Self {
         self.address = address;
-        self
-    }
-
-    pub fn with_bucket(&mut self, bucket: u32) -> &mut Self {
-        self.bucket = bucket;
         self
     }
 
@@ -80,6 +74,7 @@ impl ValidatorBuilder {
         let shutdown = Shutdown::new();
         let shutdown_signal = shutdown.to_signal();
         let transaction_pool = TransactionPool::new();
+        let noop_state_manager = NoopStateManager::new();
         let (tx_events, _) = broadcast::channel(100);
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
@@ -90,6 +85,7 @@ impl ValidatorBuilder {
             self.epoch_manager.clone_for(self.address, self.shard),
             self.leader_strategy.clone(),
             signing_service,
+            noop_state_manager,
             transaction_pool,
             tx_broadcast,
             tx_leader,
