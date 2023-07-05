@@ -20,7 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_template_lib::prelude::*;
 
 #[template]
@@ -28,7 +27,7 @@ mod caller_context_template {
     use super::*;
 
     pub struct CallerContextTest {
-        caller_pub_key: RistrettoPublicKey,
+        caller_pub_key: RistrettoPublicKeyBytes,
     }
 
     impl CallerContextTest {
@@ -37,7 +36,7 @@ mod caller_context_template {
             Self { caller_pub_key }
         }
 
-        pub fn caller_pub_key(&self) -> RistrettoPublicKey {
+        pub fn caller_pub_key(&self) -> RistrettoPublicKeyBytes {
             self.caller_pub_key.clone()
         }
     }
