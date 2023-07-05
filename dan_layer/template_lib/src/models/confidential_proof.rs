@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
-use tari_crypto::tari_utilities::ByteArray;
 
 use crate::{
     crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
@@ -49,7 +48,7 @@ impl EncryptedData {
     }
 
     pub fn as_bytes(&self) -> &[u8] {
-        self.0.as_bytes()
+        &self.0
     }
 }
 

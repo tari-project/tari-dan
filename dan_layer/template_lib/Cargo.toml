@@ -11,7 +11,6 @@ license = "BSD-3-Clause"
 tari_template_abi = { path = "../template_abi" }
 tari_template_macros = { path = "../template_macros", optional = true }
 tari_bor = { path = "../tari_bor" }
-tari_crypto = "0.17"
 
 newtype-ops = "0.1.4"
 serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
