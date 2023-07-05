@@ -23,7 +23,7 @@ appenders:
   # An appender named "signaling_server" that writes to a file with a custom pattern encoder
   signaling_server:
     kind: rolling_file
-    path: "log/signaling_server.log"
+    path: "{{log_dir}}/log/signaling_server.log"
     policy:
       kind: compound
       trigger:
@@ -33,7 +33,7 @@ appenders:
         kind: fixed_window
         base: 1
         count: 5
-        pattern: "log/signaling_server.{}.log"
+        pattern: "{{log_dir}}/log/signaling_server.{}.log"
     encoder:
       pattern: "{d(%Y-%m-%d %H:%M:%S.%f)} {l:5} {m} // {f}:{L}{n}"
 
