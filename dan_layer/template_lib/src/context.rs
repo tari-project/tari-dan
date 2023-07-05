@@ -26,7 +26,7 @@ use tari_template_abi::CallInfo;
 
 #[cfg(target_arch = "wasm32")]
 mod with_thread_local {
-    use std::{borrow::Borrow, cell::RefCell};
+    use std::cell::RefCell;
 
     use super::*;
 
@@ -35,7 +35,7 @@ mod with_thread_local {
     }
 
     pub fn with_context<R, F: FnOnce(&mut Option<SystemContext>) -> R>(f: F) -> R {
-        CONTEXT.borrow().with(|c| f(&mut c.borrow_mut()))
+        CONTEXT.with(|c| f(&mut c.borrow_mut()))
     }
 }
 
