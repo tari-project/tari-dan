@@ -101,6 +101,7 @@ jobs:
           libssl-dev \
           sqlite3 \
           libsqlite3-dev
+      - uses: rui314/setup-mold@v1
       - name: wasm target install
         run: rustup target add wasm32-unknown-unknown
       - name: Install cargo-lints
@@ -148,6 +149,7 @@ jobs:
           libssl-dev \
           sqlite3 \
           libsqlite3-dev
+      - uses: rui314/setup-mold@v1
       - name: wasm target install
         run: rustup target add wasm32-unknown-unknown
       - name: cargo check
@@ -191,6 +193,7 @@ jobs:
           libssl-dev \
           sqlite3 \
           libsqlite3-dev
+      - uses: rui314/setup-mold@v1
       - name: wasm target install
         run: rustup target add wasm32-unknown-unknown
       - name: rustup show
@@ -243,6 +246,7 @@ jobs:
           librsvg2-dev \
           libprotobuf-dev \
           protobuf-compiler
+      - uses: rui314/setup-mold@v1
       - name: wasm target install
         run: rustup target add wasm32-unknown-unknown
       - name: cargo test compile
