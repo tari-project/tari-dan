@@ -8229,7 +8229,6 @@ dependencies = [
  "serde-big-array 0.5.1",
  "serde_json",
  "tari_bor",
- "tari_crypto",
  "tari_template_abi",
  "tari_template_macros",
 ]
