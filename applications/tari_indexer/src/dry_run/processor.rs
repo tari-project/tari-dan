@@ -30,7 +30,7 @@ use tari_dan_app_utilities::{
 };
 use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
 use tari_dan_core::services::PayloadProcessor;
-use tari_dan_engine::runtime::ConsensusContext;
+use tari_dan_engine::{fees::FeeTable, runtime::ConsensusContext};
 use tari_dan_storage::models::{Payload, TariDanPayload};
 use tari_engine_types::commit_result::ExecuteResult;
 use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
@@ -47,7 +47,7 @@ pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory> {
     epoch_manager: TEpochManager,
     client_provider: TClientFactory,
     transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory>,
-    payload_processor: TariDanPayloadProcessor<TemplateManager>,
+    template_manager: TemplateManager,
 }
 
 impl<TEpochManager, TClientFactory> DryRunTransactionProcessor<TEpochManager, TClientFactory>
@@ -60,7 +60,7 @@ where
         epoch_manager: TEpochManager,
         client_provider: TClientFactory,
         substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory>>,
-        payload_processor: TariDanPayloadProcessor<TemplateManager>,
+        template_manager: TemplateManager,
     ) -> Self {
         let transaction_autofiller = TransactionAutofiller::new(substate_scanner);
 
@@ -68,7 +68,7 @@ where
             epoch_manager,
             client_provider,
             transaction_autofiller,
-            payload_processor,
+            template_manager,
         }
     }
 
@@ -85,15 +85,29 @@ where
         let payload = TariDanPayload::new(transaction.clone());
         let epoch = self.epoch_manager.current_epoch().await?;
         let pledges = self.get_shard_pledges(&payload, &epoch).await?;
+        let payload_processor = self.build_payload_processor(&transaction);
 
         // execute the payload in the WASM engine and return the result
         let consensus_context = Self::get_consensus_context(&epoch).await?;
-        let result = task::block_in_place(|| {
-            self.payload_processor
-                .process_payload(payload, pledges, consensus_context)
-        })?;
+        let result = task::block_in_place(|| payload_processor.process_payload(payload, pledges, consensus_context))?;
 
         Ok(result)
+    }
+
+    fn build_payload_processor(&self, transaction: &Transaction) -> TariDanPayloadProcessor<TemplateManager> {
+        // simulate fees if the transaction requires it
+        let fee_table = if Self::transaction_includes_fees(transaction) {
+            // TODO: should match the VN fee table, should the fee table values be a consensus constant?
+            FeeTable::new(1, 1)
+        } else {
+            FeeTable::zero_rated()
+        };
+
+        TariDanPayloadProcessor::new(self.template_manager.clone(), fee_table)
+    }
+
+    fn transaction_includes_fees(transaction: &Transaction) -> bool {
+        !transaction.fee_instructions().is_empty()
     }
 
     async fn get_shard_pledges(
