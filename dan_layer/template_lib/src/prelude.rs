@@ -33,6 +33,7 @@ pub use crate::{
     },
     consensus::Consensus,
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
+    crypto::RistrettoPublicKeyBytes,
     events::emit_event,
     invoke_args,
     models::{
