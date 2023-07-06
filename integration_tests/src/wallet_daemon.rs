@@ -62,7 +62,7 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
     let shutdown = Shutdown::new();
     let shutdown_signal = shutdown.to_signal();
 
-    let listen_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), json_rpc_port);
+    let json_rpc_address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), json_rpc_port);
     let signaling_server_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), signaling_server_port);
     let indexer_url = format!("http://127.0.0.1:{}/json_rpc", indexer_jrpc_port);
 
@@ -72,8 +72,8 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
     };
 
     config.common.base_path = base_dir.clone();
-    config.dan_wallet_daemon.listen_addr = Some(listen_addr);
-    config.dan_wallet_daemon.signaling_server_addr = Some(signaling_server_addr);
+    config.dan_wallet_daemon.json_rpc_address = Some(json_rpc_address);
+    config.dan_wallet_daemon.signaling_server_address = Some(signaling_server_addr);
     config.dan_wallet_daemon.indexer_node_json_rpc_url = indexer_url;
 
     let handle = task::spawn(run_tari_dan_wallet_daemon(config, shutdown_signal));

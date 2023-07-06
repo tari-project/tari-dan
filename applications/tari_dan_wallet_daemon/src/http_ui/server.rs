@@ -33,22 +33,10 @@ use log::{error, info};
 use reqwest::{header, StatusCode};
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::http_ui::server";
 
-pub async fn run_http_ui_server(
-    address: SocketAddr,
-    json_rpc_address: Option<SocketAddr>,
-) -> Result<(), anyhow::Error> {
+pub async fn run_http_ui_server(address: SocketAddr, json_rpc_address: SocketAddr) -> Result<(), anyhow::Error> {
     let json_rpc_address = Arc::new(json_rpc_address);
     let router = Router::new()
-        .route(
-            "/json_rpc_address",
-            get(|| async move {
-                json_rpc_address
-                    .as_ref()
-                    .as_ref()
-                    .map(|s| s.to_string())
-                    .unwrap_or_else(|| "NOT CONFIGURED".to_string())
-            }),
-        )
+        .route("/json_rpc_address", get(|| async move { json_rpc_address.to_string() }))
         .fallback(handler);
 
     info!(target: LOG_TARGET, "🕸️ HTTP UI started at {}", address);
