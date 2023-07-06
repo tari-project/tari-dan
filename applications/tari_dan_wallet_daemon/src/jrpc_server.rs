@@ -88,7 +88,6 @@ async fn handler(
     Extension(message_queue): Extension<Arc<Mutex<VecDeque<UserConfirmationRequest>>>>,
     value: JsonRpcExtractor,
 ) -> JrpcResult {
-    println!("Value {value:?}");
     info!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
     debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {:?}", value);
     match value.method.as_str().split_once('.') {

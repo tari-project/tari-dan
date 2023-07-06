@@ -133,7 +133,6 @@ pub async fn handle_accept_request(
         req = item.req;
         dc = item.dc;
     }
-    println!("Calling {}", req.method);
     let result = match serde_json::from_str::<serde_json::Value>(&req.params) {
         Ok(params) => match make_request(jrpc_address, Some(req.token), req.method, params).await {
             Ok(response) => response.to_string(),
@@ -141,7 +140,6 @@ pub async fn handle_accept_request(
         },
         Err(e) => e.to_string(),
     };
-    println!("Resp {result}");
     let response = Response {
         payload: result,
         id: req.id,
