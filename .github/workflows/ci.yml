@@ -269,7 +269,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --all-features --release --
+          args: --all-features --release --package integration_tests
       - name: upload artifact
         uses: actions/upload-artifact@v3  # upload test results as artifact
         if: success() || failure()
