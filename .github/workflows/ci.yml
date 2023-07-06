@@ -261,7 +261,7 @@ jobs:
         run: cargo nextest run --all-features --release -E "not package(integration_tests)" --profile ci
       - name: upload artifact
         uses: actions/upload-artifact@v3  # upload test results as artifact
-        if: always()
+        if: success() || failure()
         with:
           name: test-results
           path: ${{ github.workspace }}/target/nextest/ci/junit.xml
