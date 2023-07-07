@@ -20,7 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::rust::collections::HashMap;
 use tari_template_lib::prelude::*;
 
 #[template]
@@ -62,11 +61,11 @@ mod account_non_fungible_template {
         pub fn mint_specific(&mut self, id: NonFungibleId, metadata: Metadata) -> Bucket {
             emit_event(
                 "mint",
-                HashMap::from([
+                [
                     ("id".to_string(), id.to_string()),
                     ("metadata".to_string(), metadata.to_string()),
                     ("resource_address".to_string(), self.resource_address.to_string()),
-                ]),
+                ],
             );
 
             // Mint the NFT, this will fail if the token ID already exists
