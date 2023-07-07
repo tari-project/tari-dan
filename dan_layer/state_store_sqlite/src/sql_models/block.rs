@@ -21,9 +21,7 @@ pub struct Block {
     pub epoch: i64,
     pub proposed_by: String,
     pub qc_id: String,
-    pub prepared: String,
-    pub precommitted: String,
-    pub committed: String,
+    pub commands: String,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -36,9 +34,7 @@ impl Block {
             Epoch(self.epoch as u64),
             self.leader_round as u64,
             deserialize_hex_try_from(&self.proposed_by)?,
-            deserialize_json(&self.prepared)?,
-            deserialize_json(&self.precommitted)?,
-            deserialize_json(&self.committed)?,
+            deserialize_json(&self.commands)?,
         ))
     }
 }

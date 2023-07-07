@@ -128,14 +128,14 @@ impl EventQuery {
         let template_address = Hash::from_str(&template_address)?;
         let tx_hash = PayloadId::new(Hash::from_hex(&tx_hash)?);
 
-        let payload: BTreeMap<String, String> = serde_json::from_str(&payload)?;
+        let payload = serde_json::from_str(&payload)?;
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         substate_manager.save_event_to_db(
             component_address,
             template_address,
             tx_hash,
             topic.clone(),
-            payload.clone().into_iter().collect(),
+            &payload,
             version,
         )?;
 
@@ -144,7 +144,7 @@ impl EventQuery {
             template_address: template_address.into_array(),
             tx_hash: tx_hash.into_array(),
             topic,
-            payload,
+            payload: payload.into_iter().collect(),
         })
     }
 }
