@@ -33,9 +33,11 @@ pub struct Cli {
     #[clap(flatten)]
     pub common: CommonCliArgs,
     #[clap(long, alias = "endpoint", env = "JRPC_ENDPOINT")]
-    pub listen_addr: Option<SocketAddr>,
-    #[clap(long, alias = "signaling_server_address", env = "SIGNALING_SERVER_ADDRESS")]
-    pub signaling_server_addr: Option<SocketAddr>,
+    pub json_rpc_address: Option<SocketAddr>,
+    #[clap(long, env = "TARI_DAN_WALLET_UI_CONNECT_ADDRESS")]
+    pub ui_connect_address: Option<SocketAddr>,
+    #[clap(long, env = "SIGNALING_SERVER_ADDRESS")]
+    pub signaling_server_address: Option<SocketAddr>,
     #[clap(long, alias = "indexer_url")]
     pub indexer_node_json_rpc_url: Option<String>,
 }
@@ -49,16 +51,25 @@ impl Cli {
 impl ConfigOverrideProvider for Cli {
     fn get_config_property_overrides(&self, default_network: Network) -> Vec<(String, String)> {
         let mut overrides = self.common.get_config_property_overrides(default_network);
-        if let Some(listen_addr) = self.listen_addr {
-            overrides.push(("dan_wallet_daemon.listen_addr".to_string(), listen_addr.to_string()));
-        }
-        if let Some(signaling_server_addr) = self.signaling_server_addr {
+        if let Some(json_rpc_address) = self.json_rpc_address {
             overrides.push((
-                "dan_wallet_daemon.signaling_server_addr".to_string(),
-                signaling_server_addr.to_string(),
+                "dan_wallet_daemon.json_rpc_address".to_string(),
+                json_rpc_address.to_string(),
             ));
         }
-        if let Some(indexer_node_json_rpc_url) = &self.indexer_node_json_rpc_url {
+        if let Some(ref ui_connect_address) = self.ui_connect_address {
+            overrides.push((
+                "dan_wallet_daemon.ui_connect_address".to_string(),
+                ui_connect_address.to_string(),
+            ));
+        }
+        if let Some(ref signaling_server_address) = self.signaling_server_address {
+            overrides.push((
+                "dan_wallet_daemon.signaling_server_address".to_string(),
+                signaling_server_address.to_string(),
+            ));
+        }
+        if let Some(ref indexer_node_json_rpc_url) = &self.indexer_node_json_rpc_url {
             overrides.push((
                 "dan_wallet_daemon.indexer_node_json_rpc_url".to_string(),
                 indexer_node_json_rpc_url.clone(),
