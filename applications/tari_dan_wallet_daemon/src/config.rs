@@ -48,9 +48,12 @@ impl ApplicationConfig {
 pub struct WalletDaemonConfig {
     override_from: Option<String>,
     /// The wallet daemon listening address
-    pub listen_addr: Option<SocketAddr>,
+    pub json_rpc_address: Option<SocketAddr>,
+    /// The jrpc address where the UI should connect (it can be the same as the json_rpc_addr, but doesn't have to be),
+    /// if this will be None, then the listen_addr will be used.
+    pub ui_connect_address: Option<SocketAddr>,
     /// The signaling server address for the webrtc
-    pub signaling_server_addr: Option<SocketAddr>,
+    pub signaling_server_address: Option<SocketAddr>,
     /// The validator nodes jrpc endpoint url
     pub indexer_node_json_rpc_url: String,
     /// Expiration duration of the JWT token
@@ -66,8 +69,9 @@ impl Default for WalletDaemonConfig {
     fn default() -> Self {
         Self {
             override_from: None,
-            listen_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9000))),
-            signaling_server_addr: Some(SocketAddr::from(([127u8, 0, 0, 1], 9100))),
+            json_rpc_address: Some(SocketAddr::from(([127u8, 0, 0, 1], 9000))),
+            ui_connect_address: None,
+            signaling_server_address: Some(SocketAddr::from(([127u8, 0, 0, 1], 9100))),
             indexer_node_json_rpc_url: "http://127.0.0.1:18300/json_rpc".to_string(),
             // TODO: Come up with a reasonable default value
             jwt_expiry: Some(Duration::from_secs(500 * 60)),
