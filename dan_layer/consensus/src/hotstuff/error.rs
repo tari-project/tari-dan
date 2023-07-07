@@ -3,7 +3,10 @@
 
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::Epoch;
-use tari_dan_storage::{consensus_models::BlockId, StorageError};
+use tari_dan_storage::{
+    consensus_models::{BlockId, TransactionPoolError},
+    StorageError,
+};
 use tari_mmr::BalancedBinaryMerkleProofError;
 
 use crate::traits::EpochManagerError;
@@ -32,8 +35,12 @@ pub enum HotStuffError {
     BalancedBinaryMerkleProofError(#[from] BalancedBinaryMerkleProofError),
     #[error("Epoch manager error: {0}")]
     EpochManagerError(anyhow::Error),
+    #[error("State manager error: {0}")]
+    StateManagerError(anyhow::Error),
     #[error("Invalid vote signature from {signer_public_key} (unauthenticated)")]
     InvalidVoteSignature { signer_public_key: PublicKey },
+    #[error("Transaction pool error: {0}")]
+    TransactionPoolError(#[from] TransactionPoolError),
 }
 
 // This removes the need for `map_err`s for every epoch manager call

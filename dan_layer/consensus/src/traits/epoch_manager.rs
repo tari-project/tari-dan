@@ -19,13 +19,14 @@ pub trait EpochManager: Send + Sync {
     type Error: EpochManagerError;
 
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, Self::Error>;
-    async fn get_validator_shard(&self, epoch: Epoch, addr: Self::Addr) -> Result<ShardId, Self::Error>;
-    async fn get_validator_leaf_hash(&self, epoch: Epoch, addr: Self::Addr) -> Result<FixedHash, Self::Error>;
+    async fn get_validator_shard(&self, epoch: Epoch, addr: &Self::Addr) -> Result<ShardId, Self::Error>;
+    async fn get_validator_leaf_hash(&self, epoch: Epoch, addr: &Self::Addr) -> Result<FixedHash, Self::Error>;
     async fn get_validator_node_merkle_proof(&self, epoch: Epoch) -> Result<ValidatorNodeMerkleProof, Self::Error>;
 
     async fn get_our_validator_shard(&self, epoch: Epoch) -> Result<ShardId, Self::Error>;
     async fn get_our_validator_addr(&self, epoch: Epoch) -> Result<Self::Addr, Self::Error>;
     async fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, Self::Error>;
+    async fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, Self::Error>;
 
     async fn current_epoch(&self) -> Result<Epoch, Self::Error>;
     async fn is_epoch_active(&self, epoch: Epoch) -> Result<bool, Self::Error>;

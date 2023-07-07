@@ -11,9 +11,9 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_dan_common_types::{hashing, serde_with, Epoch, NodeHeight, ShardId};
 
-use super::{QuorumCertificate, TransactionDecision};
+use super::QuorumCertificate;
 use crate::{
-    consensus_models::{LastExecuted, LastVoted, LeafBlock, LockedBlock, TransactionId, Vote},
+    consensus_models::{Command, LastExecuted, LastVoted, LeafBlock, LockedBlock, TransactionId, Vote},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -29,15 +29,11 @@ pub struct Block {
     epoch: Epoch,
     round: u64,
     proposed_by: ShardId,
-    // TODO: In order to support gossiping blocks, we'll need to make sure they aren't malleable
-    // proposer_signature: ValidatorSignature,
 
     // Body
     merkle_root: FixedHash,
     // BTreeSet is used for the deterministic block hash, that is, transactions are always ordered by TransactionId.
-    prepared: BTreeSet<TransactionDecision>,
-    precommitted: BTreeSet<TransactionDecision>,
-    committed: BTreeSet<TransactionDecision>,
+    commands: BTreeSet<Command>,
 }
 
 impl Block {
@@ -48,9 +44,7 @@ impl Block {
         epoch: Epoch,
         round: u64,
         proposed_by: ShardId,
-        prepared: BTreeSet<TransactionDecision>,
-        precommitted: BTreeSet<TransactionDecision>,
-        committed: BTreeSet<TransactionDecision>,
+        commands: BTreeSet<Command>,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
@@ -62,9 +56,7 @@ impl Block {
             proposed_by,
             // TODO
             merkle_root: FixedHash::zero(),
-            prepared,
-            precommitted,
-            committed,
+            commands,
         };
         block.id = block.calculate_hash().into();
         block
@@ -78,8 +70,6 @@ impl Block {
             epoch,
             0,
             ShardId::zero(),
-            Default::default(),
-            Default::default(),
             Default::default(),
         )
     }
@@ -99,9 +89,7 @@ impl Block {
             round: 0,
             proposed_by: ShardId::zero(),
             merkle_root: FixedHash::zero(),
-            prepared: Default::default(),
-            precommitted: Default::default(),
-            committed: Default::default(),
+            commands: Default::default(),
         }
     }
 
@@ -113,25 +101,16 @@ impl Block {
             .chain(&self.epoch)
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
-            .chain(&self.prepared)
-            .chain(&self.precommitted)
-            .chain(&self.committed)
+            .chain(&self.commands)
             .result()
     }
 
-    pub fn all_transaction_decisions(&self) -> impl Iterator<Item = &TransactionDecision> + '_ {
-        self.prepared
-            .iter()
-            .chain(self.precommitted.iter())
-            .chain(self.committed.iter())
+    pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
+        self.commands.iter().map(|d| d.transaction_id())
     }
 
-    pub fn all_transaction_ids(&self) -> impl Iterator<Item = TransactionId> + '_ {
-        self.all_transaction_decisions().map(|d| d.transaction_id)
-    }
-
-    pub fn transaction_count(&self) -> usize {
-        self.prepared.len() + self.precommitted.len() + self.committed.len()
+    pub fn command_count(&self) -> usize {
+        self.commands.len()
     }
 
     pub fn as_locked(&self) -> LockedBlock {
@@ -201,22 +180,18 @@ impl Block {
         &self.merkle_root
     }
 
-    pub fn prepared(&self) -> &BTreeSet<TransactionDecision> {
-        &self.prepared
-    }
-
-    pub fn precommitted(&self) -> &BTreeSet<TransactionDecision> {
-        &self.precommitted
-    }
-
-    pub fn committed(&self) -> &BTreeSet<TransactionDecision> {
-        &self.committed
+    pub fn commands(&self) -> &BTreeSet<Command> {
+        &self.commands
     }
 }
 
 impl Block {
     pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, id: &BlockId) -> Result<Self, StorageError> {
         tx.blocks_get(id)
+    }
+
+    pub fn get_tip<TTx: StateStoreReadTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
+        tx.blocks_get_tip(epoch)
     }
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
@@ -232,7 +207,6 @@ impl Block {
         TTx: StateStoreWriteTransaction + DerefMut,
         TTx::Target: StateStoreReadTransaction,
     {
-        self.justify.save(tx)?;
         if self.exists(tx.deref_mut())? {
             return Ok(());
         }
@@ -243,7 +217,7 @@ impl Block {
         &self,
         tx: &mut TTx,
     ) -> Result<HashSet<ShardId>, StorageError> {
-        tx.transaction_pools_fetch_involved_shards(self.all_transaction_ids().collect())
+        tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
     }
 
     pub fn extends<TTx: StateStoreReadTransaction>(
