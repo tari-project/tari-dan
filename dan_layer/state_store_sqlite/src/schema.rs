@@ -106,6 +106,7 @@ diesel::table! {
     transaction_pool (id) {
         id -> Integer,
         transaction_id -> Text,
+        involved_shards -> Text,
         overall_decision -> Text,
         evidence -> Text,
         fee -> BigInt,

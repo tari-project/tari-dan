@@ -127,6 +127,7 @@ create table transaction_pool
 (
     id               integer   not null primary key AUTOINCREMENT,
     transaction_id   text      not null,
+    involved_shards  text      not null,
     overall_decision text      not null,
     evidence         text      not null,
     fee              bigint    not null,

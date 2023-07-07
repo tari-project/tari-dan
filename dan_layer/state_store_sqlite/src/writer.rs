@@ -250,6 +250,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
 
         let insert = (
             transaction_pool::transaction_id.eq(serialize_hex(transaction.id)),
+            transaction_pool::involved_shards.eq(serialize_json(&transaction.involved_shards)?),
             transaction_pool::overall_decision.eq(transaction.decision.to_string()),
             transaction_pool::fee.eq(transaction.fee as i64),
             transaction_pool::evidence.eq(serialize_json(&transaction.evidence)?),

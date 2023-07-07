@@ -11,6 +11,7 @@ use crate::serialization::{deserialize_hex_try_from, deserialize_json};
 pub struct TransactionPoolRecord {
     pub id: i32,
     pub transaction_id: String,
+    pub involved_shards: String,
     pub overall_decision: String,
     pub evidence: String,
     pub fee: i64,
@@ -26,6 +27,7 @@ impl TryFrom<TransactionPoolRecord> for consensus_models::TransactionPoolRecord 
         Ok(Self {
             transaction: TransactionAtom {
                 id: deserialize_hex_try_from(&value.transaction_id)?,
+                involved_shards: deserialize_json(&value.involved_shards)?,
                 decision: value
                     .overall_decision
                     .parse()

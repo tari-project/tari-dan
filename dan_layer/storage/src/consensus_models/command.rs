@@ -40,6 +40,7 @@ impl FromIterator<(ShardId, Vec<QcId>)> for Evidence {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TransactionAtom {
     pub id: TransactionId,
+    pub involved_shards: Vec<ShardId>,
     pub decision: Decision,
     pub evidence: Evidence,
     pub fee: u64,

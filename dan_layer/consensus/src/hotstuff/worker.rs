@@ -174,6 +174,7 @@ where
 
             self.transaction_pool.insert(tx, TransactionAtom {
                 id: *executed.transaction().hash(),
+                involved_shards: executed.transaction().involved_shards_iter().copied().collect(),
                 decision: executed.as_decision(),
                 evidence: executed.to_initial_evidence(),
                 fee: executed
