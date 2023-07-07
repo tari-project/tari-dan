@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_template_abi::rust::collections::HashMap;
+use tari_template_abi::rust::collections::BTreeMap;
 use tari_template_lib::prelude::*;
 
 #[template]
@@ -29,7 +29,7 @@ mod account_template {
 
     pub struct Account {
         // TODO: Lazy key value map/store
-        vaults: HashMap<ResourceAddress, Vault>,
+        vaults: BTreeMap<ResourceAddress, Vault>,
     }
 
     impl Account {
@@ -62,7 +62,7 @@ mod account_template {
                 .default(withdraw_rule);
 
             // add the funds from the (optional) bucket
-            let mut vaults = HashMap::new();
+            let mut vaults = BTreeMap::new();
             if let Some(b) = bucket {
                 vaults.insert(b.resource_address(), Vault::from_bucket(b));
             }
@@ -87,10 +87,7 @@ mod account_template {
             // TODO: clean up hashmap api in emit_event
             emit_event(
                 "withdraw",
-                HashMap::from([
-                    ("amount".to_string(), amount.to_string()),
-                    ("resource".to_string(), resource.to_string()),
-                ]),
+                [("amount", amount.to_string()), ("resource", resource.to_string())],
             );
             let v = self.get_vault_mut(resource);
             v.withdraw(amount)
@@ -100,10 +97,7 @@ mod account_template {
         pub fn withdraw_non_fungible(&mut self, resource: ResourceAddress, nf_id: NonFungibleId) -> Bucket {
             emit_event(
                 "withdraw_non_fungible",
-                HashMap::from([
-                    ("id".to_string(), nf_id.to_string()),
-                    ("resource".to_string(), resource.to_string()),
-                ]),
+                [("id", nf_id.to_string()), ("resource", resource.to_string())],
             );
             let v = self.get_vault_mut(resource);
             v.withdraw_non_fungibles([nf_id])
@@ -117,10 +111,10 @@ mod account_template {
         ) -> Bucket {
             emit_event(
                 "withdraw_confidential",
-                HashMap::from([
-                    ("num_inputs".to_string(), withdraw_proof.inputs.len().to_string()),
-                    ("resource".to_string(), resource.to_string()),
-                ]),
+                [
+                    ("num_inputs", withdraw_proof.inputs.len().to_string()),
+                    ("resource", resource.to_string()),
+                ],
             );
 
             let v = self.get_vault_mut(resource);
@@ -131,10 +125,10 @@ mod account_template {
         pub fn deposit(&mut self, bucket: Bucket) {
             emit_event(
                 "deposit",
-                HashMap::from([
-                    ("amount".to_string(), bucket.amount().to_string()),
-                    ("resource".to_string(), bucket.resource_address().to_string()),
-                ]),
+                [
+                    ("amount", bucket.amount().to_string()),
+                    ("resource", bucket.resource_address().to_string()),
+                ],
             );
             let resource_address = bucket.resource_address();
             let vault_mut = self
@@ -175,10 +169,10 @@ mod account_template {
         pub fn reveal_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) -> Bucket {
             emit_event(
                 "reveal_confidential",
-                HashMap::from([
-                    ("num_inputs".to_string(), proof.inputs.len().to_string()),
-                    ("resource".to_string(), resource.to_string()),
-                ]),
+                [
+                    ("num_inputs", proof.inputs.len().to_string()),
+                    ("resource", resource.to_string()),
+                ],
             );
             let v = self.get_vault_mut(resource);
             v.reveal_confidential(proof)
@@ -187,10 +181,10 @@ mod account_template {
         pub fn join_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) {
             emit_event(
                 "join_confidential",
-                HashMap::from([
-                    ("num_inputs".to_string(), proof.inputs.len().to_string()),
-                    ("resource".to_string(), resource.to_string()),
-                ]),
+                [
+                    ("num_inputs", proof.inputs.len().to_string()),
+                    ("resource", resource.to_string()),
+                ],
             );
             self.get_vault_mut(resource).join_confidential(proof);
         }
@@ -199,16 +193,13 @@ mod account_template {
 
         /// Pay fees from previously revealed confidential resource.
         pub fn pay_fee(&mut self, amount: Amount) {
-            emit_event("pay_fee", HashMap::from([("amount".to_string(), amount.to_string())]));
+            emit_event("pay_fee", [("amount", amount.to_string())]);
             self.get_vault_mut(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS).pay_fee(amount);
         }
 
         /// Reveal confidential tokens and return the revealed bucket to pay fees.
         pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
-            emit_event(
-                "pay_fee_confidential",
-                HashMap::from([("num_inputs".to_string(), proof.inputs.len().to_string())]),
-            );
+            emit_event("pay_fee_confidential", [("num_inputs", proof.inputs.len().to_string())]);
             self.get_vault_mut(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS)
                 .pay_fee_confidential(proof);
         }
