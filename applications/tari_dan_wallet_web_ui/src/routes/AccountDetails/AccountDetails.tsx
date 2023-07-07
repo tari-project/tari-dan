@@ -32,14 +32,14 @@ import TableCell from '@mui/material/TableCell';
 import TableBody from '@mui/material/TableBody';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { accountsGetBalances, accountsGet } from '../../utils/json_rpc';
+import { accountsGetBalances, accountsGet, accountNFTsList } from '../../utils/json_rpc';
 import Alert from '@mui/material/Alert';
 import { removeTagged, toHexString } from '../../utils/helpers';
 
 function BalanceRow(props: any) {
   return (
     <TableRow>
-      <TableCell>{props.resource_address}</TableCell>
+      <TableCell>{props.token_symbol || props.resource_address}</TableCell>
       <TableCell>{props.resource_type}</TableCell>
       <TableCell>{removeTagged(props.balance)}</TableCell>
       <TableCell>{removeTagged(props.confidential_balance)}</TableCell>
@@ -47,11 +47,22 @@ function BalanceRow(props: any) {
   );
 }
 
+function NftsList(props: any) {
+  return (
+    <TableRow>
+      <TableCell>{props.token_symbol}</TableCell>
+      <TableCell>{props.metadata}</TableCell>
+      <TableCell>{props.is_burned}</TableCell>
+    </TableRow>
+  )
+}
+
 function AccountDetailsLayout() {
   const { name } = useParams<{ name: string }>();
   let [state, setState] = useState<any>(null);
   let [balances, setBalances] = useState<any>(null);
   let [error, setError] = useState<any>(null);
+  let [nftsList, setNFTsList] = useState<any>(null);
 
   const loadAccount = () => {
     if (name !== undefined) {
@@ -79,8 +90,23 @@ function AccountDetailsLayout() {
     }
   };
 
+  const listAccountsNfts = () => {
+    if (name !== undefined) {
+      accountNFTsList(0, 10)
+        .then((response: any) => {
+          console.log(response);
+          setNFTsList(response);
+        })
+        .catch((error: any) => {
+          console.error(error);
+          setError(error.message)
+        });
+    }
+  };
+
   useEffect(() => loadAccount(), []);
   useEffect(() => loadBalances(), []);
+  useEffect(() => listAccountsNfts(), []);
 
   return (
     <>
@@ -127,6 +153,25 @@ function AccountDetailsLayout() {
               </TableHead>
               <TableBody>
                 {balances?.balances.map((balance: any) => BalanceRow(balance))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </StyledPaper>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          Account NFTs
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Token Symbol</TableCell>
+                  <TableCell>Resource Type</TableCell>
+                  <TableCell>Is Burned</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {nftsList?.nfts.map((nft: any) => NftsList(nft))}
               </TableBody>
             </Table>
           </TableContainer>

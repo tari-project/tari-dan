@@ -34,7 +34,7 @@ mod event {
         pub fn test_function() {
             println!("Emitting a new event");
             let topic = "Hello world !";
-            let payload: HashMap<String, String> = HashMap::from([("my".to_string(), "event".to_string())]);
+            let payload = [("my", "event")];
             emit_event(topic, payload);
         }
     }

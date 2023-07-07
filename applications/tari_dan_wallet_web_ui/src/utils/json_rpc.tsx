@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import {Mutex} from "async-mutex";
-import {json} from "react-router-dom";
+import { Mutex } from "async-mutex";
+import { json } from "react-router-dom";
 
 let token: String | null = null;
 let json_id = 0;
@@ -42,7 +42,7 @@ async function internalJsonRpc(method: string, token: any = null, params: any = 
     }
   } catch {
   }
-  let headers: { [key: string]: string } = {"Content-Type": "application/json"};
+  let headers: { [key: string]: string } = { "Content-Type": "application/json" };
   if (token) {
     headers["Authorization"] = `Bearer ${token}`
   }
@@ -126,7 +126,7 @@ export const transactionsWaitResult = (hash: string, timeoutSecs: number | null)
 // accounts
 export const accountsClaimBurn = (account: string, claimProof: any, fee: number) =>
   // Fees are passed as strings because Amount is tagged
-  jsonRpc("accounts.claim_burn", {account, claim_proof: claimProof, fee: fee});
+  jsonRpc("accounts.claim_burn", { account, claim_proof: claimProof, fee: fee });
 export const accountsCreate = (
   accountName: string | undefined,
   signingKeyIndex: number | undefined,
@@ -162,4 +162,7 @@ export const confidentialCreateOutputProof = (amount: number) => jsonRpc("confid
 export const getAllTransactionByStatus = (status: string) => jsonRpc("transactions.get_all_by_status", [status])
 
 export const webrtc = (signalingServerToken: string, permissions: string, name: string) => jsonRpc("webrtc.start", [signalingServerToken, permissions, name]);
+
+// nfts
+export const accountNFTsList = (offset: number, limit: number) => jsonRpc("nfts.list", [offset, limit]);
 

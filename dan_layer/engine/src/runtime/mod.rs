@@ -46,7 +46,7 @@ mod tracker;
 mod working_state;
 mod workspace;
 
-use std::{collections::HashMap, fmt::Debug, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
 use tari_engine_types::{
     component::ComponentHeader,
@@ -72,14 +72,14 @@ use tari_template_lib::{
         WorkspaceAction,
     },
     invoke_args,
-    models::{Amount, BucketId, ComponentAddress, NonFungibleAddress, VaultRef},
+    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, VaultRef},
 };
 pub use tracker::{RuntimeState, StateTracker};
 
 pub trait RuntimeInterface: Send + Sync {
     fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError>;
 
-    fn emit_event(&self, topic: String, payload: HashMap<String, String>) -> Result<(), RuntimeError>;
+    fn emit_event(&self, topic: String, payload: Metadata) -> Result<(), RuntimeError>;
 
     fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError>;
 
