@@ -29,6 +29,10 @@ pub enum SqliteStorageError {
     NotAllTransactionsFound { operation: &'static str, details: String },
     #[error("[{operation}] Not all queried substates were found: {details}")]
     NotAllSubstatesFound { operation: &'static str, details: String },
+    #[error("[{operation}] One or more substates were are write locked")]
+    SubstatesWriteLocked { operation: &'static str },
+    #[error("[{operation}] lock error: {details}")]
+    SubstatesUnlock { operation: &'static str, details: String },
 }
 
 impl From<SqliteStorageError> for StorageError {

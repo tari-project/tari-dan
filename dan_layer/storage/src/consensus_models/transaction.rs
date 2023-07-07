@@ -10,7 +10,7 @@ use tari_engine_types::{commit_result::ExecuteResult, instruction::Instruction};
 use tari_transaction::InstructionSignature;
 
 use crate::{
-    consensus_models::{Decision, TransactionDecision, TransactionId},
+    consensus_models::{Decision, Evidence, TransactionId},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -24,11 +24,11 @@ pub struct Transaction {
     signature: InstructionSignature,
     sender_public_key: PublicKey,
 
-    /// Input objects that may be downed in this transaction
+    /// Input objects that may be downed by this transaction
     inputs: Vec<ShardId>,
-    /// Input objects that must exist but cannot be downed
-    referenced: Vec<ShardId>,
-    /// Output objects that will be created in this transaction
+    /// Input objects that must exist but cannot be downed by this transaction
+    input_refs: Vec<ShardId>,
+    /// Output objects that will be created by this transaction
     outputs: Vec<ShardId>,
 }
 
@@ -40,7 +40,7 @@ impl Transaction {
         signature: InstructionSignature,
         sender_public_key: PublicKey,
         inputs: Vec<ShardId>,
-        exists: Vec<ShardId>,
+        input_refs: Vec<ShardId>,
         outputs: Vec<ShardId>,
     ) -> Self {
         Self {
@@ -50,7 +50,7 @@ impl Transaction {
             signature,
             sender_public_key,
             inputs,
-            referenced: exists,
+            input_refs,
             outputs,
         }
     }
@@ -76,15 +76,15 @@ impl Transaction {
     }
 
     pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
-        self.inputs().iter().chain(self.outputs())
+        self.inputs().iter().chain(self.input_refs()).chain(self.outputs())
     }
 
     pub fn outputs(&self) -> &[ShardId] {
         &self.outputs
     }
 
-    pub fn exists(&self) -> &[ShardId] {
-        &self.referenced
+    pub fn input_refs(&self) -> &[ShardId] {
+        &self.input_refs
     }
 
     pub fn inputs(&self) -> &[ShardId] {
@@ -103,19 +103,19 @@ impl ExecutedTransaction {
         Self { transaction, result }
     }
 
-    pub fn decision(&self) -> Decision {
+    pub fn as_decision(&self) -> Decision {
         if self.result.finalize.is_accept() {
-            Decision::Accept
+            Decision::Commit
         } else {
-            Decision::Reject
+            Decision::Abort
         }
     }
 
     pub fn transaction_decision(&self) -> Decision {
         if self.result.transaction_failure.is_none() {
-            Decision::Accept
+            Decision::Commit
         } else {
-            Decision::Reject
+            Decision::Abort
         }
     }
 
@@ -127,18 +127,11 @@ impl ExecutedTransaction {
         &self.result
     }
 
-    pub fn to_transaction_decision(&self) -> TransactionDecision {
-        TransactionDecision {
-            transaction_id: *self.transaction().hash(),
-            overall_decision: self.decision(),
-            transaction_decision: self.transaction_decision(),
-            per_shard_validator_fee: self
-                .result()
-                .fee_receipt
-                .as_ref()
-                .and_then(|fee| fee.total_fee_payment.as_u64_checked())
-                .unwrap_or(0),
-        }
+    pub fn to_initial_evidence(&self) -> Evidence {
+        self.transaction
+            .involved_shards_iter()
+            .map(|shard| (*shard, vec![]))
+            .collect()
     }
 }
 
@@ -191,7 +184,7 @@ impl From<tari_transaction::Transaction> for Transaction {
                 .filter(|(_, ch)| ch.is_destroy())
                 .map(|(s, _)| *s)
                 .collect(),
-            referenced: value
+            input_refs: value
                 .meta()
                 .involved_objects_iter()
                 .filter(|(_, ch)| ch.is_exists())

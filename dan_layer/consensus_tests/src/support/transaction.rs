@@ -9,20 +9,25 @@ use tari_engine_types::{
     resource_container::ResourceContainer,
     substate::SubstateDiff,
 };
-use tari_transaction::Transaction;
 
-pub fn build_transaction(decision: Decision, fee: u64) -> ExecutedTransaction {
-    // TODO: generic payload would be nice
+use crate::support::helpers::random_shard;
+
+pub fn build_transaction(decision: Decision, fee: u64, num_shards: usize) -> ExecutedTransaction {
     let k = PrivateKey::default();
 
-    let tx = Transaction::builder().sign(&k).build();
+    let mut builder = tari_transaction::Transaction::builder();
+    for _ in 0..num_shards {
+        builder = builder.add_output(random_shard());
+    }
+    let tx = builder.sign(&k).build();
+
     let tx_hash = *tx.hash();
     ExecutedTransaction::new(tx.into(), ExecuteResult {
         finalize: FinalizeResult::new(
             tx_hash,
             vec![],
             vec![],
-            if decision.is_accept() {
+            if decision.is_commit() {
                 TransactionResult::Accept(SubstateDiff::new())
             } else {
                 TransactionResult::Reject(RejectReason::ExecutionFailure("Test failure".to_string()))

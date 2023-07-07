@@ -60,7 +60,7 @@ where
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: message.epoch,
                 sender: from.to_string(),
-                context: "OnVoteReceived".to_string(),
+                context: "OnReceiveVote".to_string(),
             });
         }
 
@@ -75,22 +75,16 @@ where
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
 
         // Get the sender shard, and check that they are in the local committee
-        let sender_shard_id = self
-            .epoch_manager
-            .get_validator_shard(message.epoch, from.clone())
-            .await?;
+        let sender_shard_id = self.epoch_manager.get_validator_shard(message.epoch, &from).await?;
         if !local_committee_shard.includes_shard(&sender_shard_id) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: message.epoch,
                 sender: from.to_string(),
-                context: "OnVoteReceived".to_string(),
+                context: "OnReceiveVote".to_string(),
             });
         }
 
-        let sender_leaf_hash = self
-            .epoch_manager
-            .get_validator_leaf_hash(message.epoch, from.clone())
-            .await?;
+        let sender_leaf_hash = self.epoch_manager.get_validator_leaf_hash(message.epoch, &from).await?;
 
         self.validate_vote_message(&message, &sender_leaf_hash)?;
 

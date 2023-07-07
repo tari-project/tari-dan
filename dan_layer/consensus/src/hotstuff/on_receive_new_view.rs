@@ -70,7 +70,7 @@ where
         self.store
             .with_write_tx(|tx| update_high_qc::<TConsensusSpec::StateStore>(tx, &high_qc))?;
 
-        // // Take note of unique NEWVIEWs so that we can count them
+        // Take note of unique NEWVIEWs so that we can count them
         let entry = self.newview_message_counts.entry(*high_qc.block_id()).or_default();
         entry.insert(from);
 

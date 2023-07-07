@@ -50,6 +50,7 @@ impl SelectedIndexLeaderStrategy {
         Self(Arc::new(AtomicU32::new(index)))
     }
 
+    #[allow(dead_code)]
     pub fn set_index(&self, index: u32) {
         self.0.store(index, Ordering::SeqCst);
     }
@@ -60,7 +61,9 @@ impl LeaderStrategy<TestAddress> for SelectedIndexLeaderStrategy {
         let index = self.0.load(Ordering::SeqCst);
         assert!(
             (index as usize) < committee.len(),
-            "SelectedIndexLeaderStrategy index out of bounds"
+            "SelectedIndexLeaderStrategy index out of bounds index={} len={}",
+            index,
+            committee.len()
         );
         index
     }
