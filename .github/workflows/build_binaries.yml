@@ -191,12 +191,6 @@ jobs:
       - name: Cache cargo files and outputs
         uses: Swatinem/rust-cache@v1
 
-      - name: Compile collectibles GUI
-        run: |
-          cd applications/tari_collectibles/web-app
-          npm install
-          npm run build
-
         # Fix me soon!
       - name: Build rust binaries - hardcoded (linux-arm64)
         if: ${{ matrix.builds.name == 'linux-arm64' }}
