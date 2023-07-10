@@ -106,7 +106,9 @@ jobs:
           toolchain: ${{ matrix.builds.rust }}
           target: ${{ matrix.builds.target }}
           override: true
-
+      - uses: rui314/setup-mold@v1
+      - name: wasm target install
+        run: rustup target add wasm32-unknown-unknown
       - name: Install Linux dependencies - Ubuntu
         if: startsWith(runner.os,'Linux')
         run: |
