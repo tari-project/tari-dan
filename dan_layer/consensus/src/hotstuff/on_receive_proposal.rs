@@ -12,6 +12,7 @@ use tari_dan_common_types::{
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        BlockId,
         Command,
         Decision,
         ExecutedTransaction,
@@ -26,6 +27,7 @@ use tari_dan_storage::{
     },
     StateStore,
     StateStoreReadTransaction,
+    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::Transaction;
@@ -116,14 +118,45 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
+    async fn block_has_missing_transaction(
+        &self,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+        block: &Block,
+    ) -> Result<bool, HotStuffError> {
+        let mut missing_tx_ids = Vec::new();
+        self.store.with_read_tx(|tx| {
+            for tx_id in block.all_transaction_ids() {
+                if tx.transactions_get(tx_id).is_err() {
+                    missing_tx_ids.push(*tx_id);
+                }
+            }
+            Ok::<_, HotStuffError>(())
+        })?;
+        if missing_tx_ids.is_empty() {
+            Ok(false)
+        } else {
+            self.store
+                .with_write_tx(|tx| tx.insert_missing_transactions(block.id(), missing_tx_ids.clone()))?;
+            self.send_to_leader(
+                local_committee,
+                block.id(),
+                HotstuffMessage::RequestMissingTx(RequestMissingTransactionsMessage {
+                    block_id: *block.id(),
+                    epoch: block.epoch(),
+                    transactions: missing_tx_ids,
+                }),
+            )
+            .await?;
+            Ok(true)
+        }
+    }
+
     async fn handle_local_proposal(
         &self,
         from: TConsensusSpec::Addr,
         local_committee: Committee<TConsensusSpec::Addr>,
         block: Block,
     ) -> Result<(), HotStuffError> {
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-
         // First save the block in one db transaction
         self.store.with_write_tx(|tx| {
             self.validate_local_proposed_block(&mut *tx, &from, &block)?;
@@ -133,12 +166,31 @@ where TConsensusSpec: ConsensusSpec
             Ok::<_, HotStuffError>(())
         })?;
 
+        if self.block_has_missing_transaction(&local_committee, &block).await? {
+            Ok(())
+        } else {
+            self.process_block(&local_committee, &block).await
+        }
+    }
+
+    pub async fn reprocess_block(&self, block_id: &BlockId) -> Result<(), HotStuffError> {
+        let block = self.store.with_read_tx(|tx| tx.blocks_get(block_id))?;
+        let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
+        self.process_block(&local_committee, &block).await
+    }
+
+    async fn process_block(
+        &self,
+        local_committee: &Committee<<TConsensusSpec as ConsensusSpec>::Addr>,
+        block: &Block,
+    ) -> Result<(), HotStuffError> {
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
         let maybe_decision = self.store.with_write_tx(|tx| {
-            let should_vote = self.should_vote(&mut *tx, &block)?;
+            let should_vote = self.should_vote(&mut *tx, block)?;
 
             let mut maybe_decision = None;
             if should_vote {
-                maybe_decision = self.decide_what_to_vote(tx, &block, &local_committee_shard)?;
+                maybe_decision = self.decide_what_to_vote(tx, block, &local_committee_shard)?;
             }
 
             self.update_nodes(tx, &block, &local_committee_shard)?;
@@ -146,17 +198,16 @@ where TConsensusSpec: ConsensusSpec
         })?;
 
         if let Some(decision) = maybe_decision {
-            let vote = self.generate_vote_message(&block, decision).await?;
+            let vote = self.generate_vote_message(block, decision).await?;
             debug!(
                 target: LOG_TARGET,
-                "🔥 Send {:?} VOTE for block {}, parent {}, height {} to {}",
+                "🔥 Send {:?} VOTE for block {}, parent {}, height {}",
                 decision,
                 block.id(),
                 block.parent(),
                 block.height(),
-                from,
             );
-            self.send_to_leader(&local_committee, vote).await?;
+            self.send_vote_to_leader(local_committee, vote).await?;
         }
 
         Ok(())
@@ -181,15 +232,25 @@ where TConsensusSpec: ConsensusSpec
     async fn send_to_leader(
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        vote: VoteMessage,
+        block_id: &BlockId,
+        message: HotstuffMessage,
     ) -> Result<(), HotStuffError> {
-        let leader = self.leader_strategy.get_leader(local_committee, &vote.block_id, 0);
+        let leader = self.leader_strategy.get_leader(local_committee, block_id, 0);
         self.tx_leader
-            .send((leader.clone(), HotstuffMessage::Vote(vote)))
+            .send((leader.clone(), message))
             .await
             .map_err(|_| HotStuffError::InternalChannelClosed {
                 context: "tx_leader in OnReceiveProposalHandler::handle_local_proposal",
             })
+    }
+
+    async fn send_vote_to_leader(
+        &self,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+        vote: VoteMessage,
+    ) -> Result<(), HotStuffError> {
+        self.send_to_leader(local_committee, &vote.clone().block_id, HotstuffMessage::Vote(vote))
+            .await
     }
 
     fn decide_what_to_vote(

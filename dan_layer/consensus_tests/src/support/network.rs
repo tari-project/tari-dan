@@ -62,7 +62,7 @@ impl NetworkStatus {
 }
 
 pub struct TestNetwork {
-    tx_new_transaction: mpsc::Sender<ExecutedTransaction>,
+    tx_new_transaction: mpsc::Sender<(Option<TestAddress>, ExecutedTransaction)>,
     network_status: watch::Sender<NetworkStatus>,
     num_sent_messages: Arc<AtomicUsize>,
     _on_message: watch::Receiver<Option<HotstuffMessage>>,
@@ -84,8 +84,8 @@ impl TestNetwork {
         self.network_status.send(NetworkStatus::Paused).unwrap();
     }
 
-    pub async fn send_transaction(&self, tx: ExecutedTransaction) {
-        self.tx_new_transaction.send(tx).await.unwrap();
+    pub async fn send_transaction(&self, addr: Option<TestAddress>, tx: ExecutedTransaction) {
+        self.tx_new_transaction.send((addr, tx)).await.unwrap();
     }
 
     pub fn total_messages_sent(&self) -> usize {
@@ -94,7 +94,7 @@ impl TestNetwork {
 }
 
 pub struct TestNetworkWorker {
-    rx_new_transaction: Option<mpsc::Receiver<ExecutedTransaction>>,
+    rx_new_transaction: Option<mpsc::Receiver<(Option<TestAddress>, ExecutedTransaction)>>,
     tx_new_transactions: HashMap<TestAddress, mpsc::Sender<ExecutedTransaction>>,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
     #[allow(clippy::type_complexity)]
@@ -118,9 +118,13 @@ impl TestNetworkWorker {
         let mut tx_new_transactions = self.tx_new_transactions.clone();
 
         tokio::spawn(async move {
-            while let Some(tx) = rx_new_transaction.recv().await {
-                for tx_new_transaction in tx_new_transactions.values_mut() {
-                    tx_new_transaction.send(tx.clone()).await.unwrap();
+            while let Some((addr, tx)) = rx_new_transaction.recv().await {
+                if let Some(addr) = &addr {
+                    tx_new_transactions[addr].send(tx).await.unwrap();
+                } else {
+                    for tx_new_transaction in tx_new_transactions.values_mut() {
+                        tx_new_transaction.send(tx.clone()).await.unwrap();
+                    }
                 }
             }
         });

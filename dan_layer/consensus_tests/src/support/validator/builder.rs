@@ -93,6 +93,7 @@ impl ValidatorBuilder {
             tx_broadcast,
             tx_leader,
             tx_events.clone(),
+            tx_new_transactions.clone(),
             shutdown_signal,
         );
         let handle = tokio::spawn(async move {

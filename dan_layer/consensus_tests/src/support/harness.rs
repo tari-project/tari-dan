@@ -36,9 +36,14 @@ impl Test {
         TestBuilder::new()
     }
 
+    pub async fn send_transaction_to(&self, addr: &TestAddress, decision: Decision, fee: u64, num_shards: usize) {
+        let tx = build_transaction(decision, fee, num_shards);
+        self.network.send_transaction(Some(*addr), tx).await;
+    }
+
     pub async fn send_transaction_to_all(&self, decision: Decision, fee: u64, num_shards: usize) {
         let tx = build_transaction(decision, fee, num_shards);
-        self.network.send_transaction(tx).await;
+        self.network.send_transaction(None, tx).await;
     }
 
     pub async fn on_hotstuff_event(&mut self) -> HotstuffEvent {
@@ -86,6 +91,17 @@ impl Test {
 
     pub fn with_all_validators(&self, f: impl FnMut(&Validator)) {
         self.validators.values().for_each(f);
+    }
+
+    pub async fn wait_until_new_pool_count_for_vn(&self, count: usize, vn: TestAddress) {
+        self.wait_all_for_predicate(format!("new pool count to be {}", count), |v| {
+            v.address != vn ||
+                v.state_store
+                    .with_read_tx(|tx| tx.transaction_pool_count(None, None))
+                    .unwrap() >=
+                    count
+        })
+        .await;
     }
 
     pub async fn wait_until_new_pool_count(&self, count: usize) {

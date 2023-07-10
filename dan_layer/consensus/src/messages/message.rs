@@ -5,13 +5,16 @@ use serde::Serialize;
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::consensus_models::BlockId;
 
-use super::{NewViewMessage, ProposalMessage, VoteMessage};
+use super::{NewViewMessage, ProposalMessage, RequestedTransactionMessage, VoteMessage};
+use crate::messages::RequestMissingTransactionsMessage;
 
 #[derive(Debug, Clone, Serialize)]
 pub enum HotstuffMessage {
     NewView(NewViewMessage),
     Proposal(ProposalMessage),
     Vote(VoteMessage),
+    RequestMissingTx(RequestMissingTransactionsMessage),
+    RequestedTransaction(RequestedTransactionMessage),
 }
 
 impl HotstuffMessage {
@@ -20,6 +23,8 @@ impl HotstuffMessage {
             Self::NewView(msg) => msg.high_qc.epoch(),
             Self::Proposal(msg) => msg.block.epoch(),
             Self::Vote(msg) => msg.epoch,
+            Self::RequestMissingTx(msg) => msg.epoch,
+            Self::RequestedTransaction(msg) => msg.epoch,
         }
     }
 

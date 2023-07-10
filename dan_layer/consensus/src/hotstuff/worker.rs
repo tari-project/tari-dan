@@ -17,6 +17,7 @@ use tokio::{
     task::JoinHandle,
 };
 
+use super::on_receive_requested_transactions::OnReceiveRequestedTransactions;
 use crate::{
     hotstuff::{
         error::HotStuffError,
@@ -25,6 +26,7 @@ use crate::{
         on_propose::OnPropose,
         on_receive_new_view::OnReceiveNewViewHandler,
         on_receive_proposal::OnReceiveProposalHandler,
+        on_receive_request_missing_transactions::OnReceiveRequestMissingTransactions,
         on_receive_vote::OnReceiveVoteHandler,
     },
     messages::HotstuffMessage,
@@ -42,6 +44,8 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     on_receive_proposal: OnReceiveProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
+    on_receive_request_missing_txs: OnReceiveRequestMissingTransactions<TConsensusSpec>,
+    on_receive_requested_txs: OnReceiveRequestedTransactions<TConsensusSpec>,
     on_propose: OnPropose<TConsensusSpec>,
 
     state_store: TConsensusSpec::StateStore,
@@ -79,6 +83,7 @@ where
         tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
+        tx_new_transaction: mpsc::Sender<ExecutedTransaction>,
         shutdown: ShutdownSignal,
     ) -> Self {
         let on_beat = OnBeat::new();
@@ -94,7 +99,7 @@ where
                 leader_strategy.clone(),
                 state_manager,
                 transaction_pool.clone(),
-                tx_leader,
+                tx_leader.clone(),
                 tx_events,
                 on_beat.clone(),
             ),
@@ -111,6 +116,8 @@ where
                 epoch_manager.clone(),
                 on_beat.clone(),
             ),
+            on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(state_store.clone(), tx_leader),
+            on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_new_transaction),
             on_propose: OnPropose::new(
                 state_store.clone(),
                 epoch_manager.clone(),
@@ -214,6 +221,16 @@ where
 
             Ok::<_, HotStuffError>(())
         })?;
+        dbg!(&self.validator_addr);
+        let block_id;
+        {
+            let mut tx = self.state_store.create_write_tx()?;
+            block_id = tx.remove_missing_transaction(*executed.transaction().hash())?;
+            tx.commit()?;
+        }
+        if let Some(block_id) = block_id {
+            self.on_receive_proposal.reprocess_block(&block_id).await?;
+        }
         self.on_beat.beat();
         Ok(())
     }
@@ -275,6 +292,7 @@ where
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
     ) -> Result<(), HotStuffError> {
+        dbg!(&self.validator_addr);
         if !self.epoch_manager.is_epoch_active(msg.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
                 epoch: msg.epoch(),
@@ -288,6 +306,10 @@ where
             HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
             HotstuffMessage::Proposal(msg) => self.on_receive_proposal.handle(from, msg).await?,
             HotstuffMessage::Vote(msg) => self.on_receive_vote.handle(from, msg).await?,
+            HotstuffMessage::RequestMissingTx(msg) => self.on_receive_request_missing_txs.handle(from, msg).await?,
+            HotstuffMessage::RequestedTransaction(msg) => {
+                self.on_receive_requested_txs.handle(from, msg).await?;
+            },
         }
         Ok(())
     }
