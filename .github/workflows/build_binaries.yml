@@ -176,7 +176,6 @@ jobs:
         if: startsWith(runner.os,'Windows')
         shell: bash
         run: |
-#          echo "SHARUN=pwsh C:\ProgramData\chocolatey\lib\psutils\tools\psutils-master\shasum.ps1 --algorithm 256" >> $GITHUB_ENV
           echo "TBN_EXT=.exe" >> $GITHUB_ENV
           echo "LIB_EXT=.dll" >> $GITHUB_ENV
           echo "LIB_PRE=" >> $GITHUB_ENV
