@@ -205,7 +205,7 @@ jobs:
           export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
           export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
           export BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/aarch64-linux-gnu/include/"
-          cargo build --release --target ${{ matrix.builds.target }} --features ${{ matrix.builds.features }} ${{ matrix.builds.target_bins }}
+          cargo build --release --target ${{ matrix.builds.target }} ${{ matrix.builds.target_bins }}
 
       - name: Build rust binaries - Normal
         if: ${{ matrix.builds.name != 'linux-arm64' }}
@@ -216,7 +216,7 @@ jobs:
         with:
           use-cross: ${{ matrix.builds.cross }}
           command: build
-          args: --release --target ${{ matrix.builds.target }} --features ${{ matrix.builds.features }} ${{ matrix.builds.target_bins }} --locked
+          args: --release --target ${{ matrix.builds.target }} ${{ matrix.builds.target_bins }} --locked
 
       - name: Copy binaries to folder for zipping
         shell: bash
