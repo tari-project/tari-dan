@@ -15,7 +15,7 @@
     "target": "aarch64-unknown-linux-gnu",
     "cross": false,
     "target_cpu": "generic",
-    "target_bins": "--bin tari_base_node --bin tari_console_wallet --bin tari_merge_mining_proxy --bin tari_miner --bin tari_validator_node",
+    "target_bins": "--bin tari_dan_wallet_cli --bin tari_dan_wallet_daemon --bin tari_indexer --bin tari_validator_node --bin tari_signaling_server",
     "features": "safe"
   },
   {
@@ -43,7 +43,7 @@
     "target": "x86_64-pc-windows-msvc",
     "cross": false,
     "target_cpu": "x86-64",
-    "target_bins": "--bin tari_base_node --bin tari_console_wallet --bin tari_merge_mining_proxy --bin tari_miner --bin tari_validator_node",
+    "target_bins": "--bin tari_dan_wallet_cli --bin tari_dan_wallet_daemon --bin tari_indexer --bin tari_validator_node --bin tari_signaling_server",
     "features": "safe"
   },
   {
