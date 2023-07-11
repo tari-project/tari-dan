@@ -28,6 +28,7 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
+use blst::min_sig::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
@@ -92,6 +93,7 @@ use crate::{
     },
     p2p::services::mempool::MempoolHandle,
     registration,
+    validator_node_identity::ValidatorNodeIdentity,
     Services,
     ValidatorNodeConfig,
 };
@@ -99,7 +101,7 @@ use crate::{
 const LOG_TARGET: &str = "tari::validator_node::json_rpc::handlers";
 
 pub struct JsonRpcHandlers {
-    node_identity: Arc<NodeIdentity>,
+    validator_node_identity: Arc<ValidatorNodeIdentity>,
     wallet_grpc_client: GrpcWalletClient,
     mempool: MempoolHandle,
     template_manager: TemplateManagerHandle,
@@ -115,13 +117,17 @@ pub struct JsonRpcHandlers {
 impl JsonRpcHandlers {
     pub fn new(
         wallet_grpc_client: GrpcWalletClient,
+        consensus_secret_key: BlsSecretKey,
         base_node_client: GrpcBaseNodeClient,
         services: &Services,
         config: ValidatorNodeConfig,
     ) -> Self {
+        let consensus_public_key = consensus_secret_key.sk_to_pk();
+        let node_identity = services.comms.node_identity();
+        let validator_node_identity = ValidatorNodeIdentity::new(node_identity.as_ref().clone(), consensus_secret_key);
         Self {
             config,
-            node_identity: services.comms.node_identity(),
+            validator_node_identity: Arc::new(validator_node_identity),
             wallet_grpc_client,
             mempool: services.mempool.clone(),
             epoch_manager: services.epoch_manager.clone(),
@@ -147,9 +153,15 @@ impl JsonRpcHandlers {
     pub fn get_identity(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let response = GetIdentityResponse {
-            node_id: self.node_identity.node_id().to_hex(),
-            public_key: self.node_identity.public_key().to_hex(),
-            public_address: self.node_identity.public_addresses().first().unwrap().to_string(),
+            node_id: self.validator_node_identity.node_identity().node_id().to_hex(),
+            public_key: self.validator_node_identity.node_identity().public_key().to_hex(),
+            public_address: self
+                .validator_node_identity
+                .node_identity()
+                .public_addresses()
+                .first()
+                .unwrap()
+                .to_string(),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
@@ -491,7 +503,7 @@ impl JsonRpcHandlers {
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
 
-        let resp = registration::register(self.wallet_client(), &self.node_identity, &self.epoch_manager)
+        let resp = registration::register(self.wallet_client(), &self.validator_node_identity, &self.epoch_manager)
             .await
             .map_err(internal_error(answer_id))?;
 
@@ -518,7 +530,7 @@ impl JsonRpcHandlers {
 
         let resp = self
             .wallet_client()
-            .register_template(&self.node_identity, data)
+            .register_template(&self.validator_node_identity.node_identity(), data)
             .await
             .map_err(internal_error(answer_id))?;
 

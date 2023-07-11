@@ -68,6 +68,8 @@ pub struct ValidatorNodeConfig {
     pub shard_key_file: PathBuf,
     /// A path to the file that stores your node identity and secret key
     pub identity_file: PathBuf,
+    /// A path to the file that store the BLS signature scheme secret key
+    pub consensus_secret_key_file: PathBuf,
     /// A path to the file that stores the tor hidden service private key, if using the tor transport
     pub tor_identity_file: PathBuf,
     /// The node's publicly-accessible hostname
@@ -114,6 +116,9 @@ impl ValidatorNodeConfig {
         if !self.identity_file.is_absolute() {
             self.identity_file = base_path.as_ref().join(&self.identity_file);
         }
+        if !self.consensus_secret_key_file.is_absolute() {
+            self.consensus_secret_key_file = base_path.as_ref().join(&self.consensus_secret_key_file);
+        }
         if !self.tor_identity_file.is_absolute() {
             self.tor_identity_file = base_path.as_ref().join(&self.tor_identity_file);
         }
@@ -135,6 +140,7 @@ impl Default for ValidatorNodeConfig {
             override_from: None,
             shard_key_file: PathBuf::from("shard_key.json"),
             identity_file: PathBuf::from("validator_node_id.json"),
+            consensus_secret_key_file: PathBuf::from("consensus_secret_key_file.json"),
             tor_identity_file: PathBuf::from("validator_node_tor_id.json"),
             public_address: None,
             base_node_grpc_address: None,

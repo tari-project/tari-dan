@@ -41,7 +41,11 @@ use tari_crypto::tari_utilities::ByteArray;
 use tari_validator_node_client::types::TemplateRegistrationRequest;
 use tari_wallet_grpc_client::Client as GrpcWallet;
 
-use crate::{grpc::base_layer_wallet::WalletGrpcError, template_registration_signing::sign_template_registration};
+use crate::{
+    grpc::base_layer_wallet::WalletGrpcError,
+    template_registration_signing::sign_template_registration,
+    validator_node_identity::ValidatorNodeIdentity,
+};
 
 const _LOG_TARGET: &str = "tari::validator_node::app";
 
@@ -77,12 +81,13 @@ impl GrpcWalletClient {
 
     pub async fn register_validator_node(
         &mut self,
-        node_identity: &NodeIdentity,
+        validator_node_identity: &ValidatorNodeIdentity,
     ) -> Result<RegisterValidatorNodeResponse, WalletGrpcError> {
         let inner = self.connection().await?;
-        let signature = ValidatorNodeSignature::sign(node_identity.secret_key(), b"");
+        let signature = ValidatorNodeSignature::sign(validator_node_identity.node_identity().secret_key(), b"");
+        // TODO: add signature for bls public key
         let request = RegisterValidatorNodeRequest {
-            validator_node_public_key: node_identity.public_key().to_vec(),
+            validator_node_public_key: validator_node_identity.node_identity().public_key().to_vec(),
             validator_node_signature: Some(signature.signature().into()),
             fee_per_gram: 1,
             message: "Registering VN".to_string(),

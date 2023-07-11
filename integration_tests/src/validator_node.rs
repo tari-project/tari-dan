@@ -114,6 +114,7 @@ pub async fn spawn_validator_node(
         config.validator_node.data_dir = temp_dir.to_path_buf();
         config.validator_node.shard_key_file = temp_dir.join("shard_key.json");
         config.validator_node.identity_file = temp_dir.join("validator_node_id.json");
+        config.validator_node.consensus_secret_key_file = temp_dir.join("consensus_secret_key_file.json");
         config.validator_node.tor_identity_file = temp_dir.join("validator_node_tor_id.json");
         config.validator_node.base_node_grpc_address =
             Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());

@@ -89,6 +89,7 @@ use crate::{
     },
     payload_processor::TariDanPayloadProcessor,
     registration,
+    validator_node_identity::ValidatorNodeIdentity,
     ApplicationConfig,
 };
 
@@ -98,7 +99,7 @@ const LOG_TARGET: &str = "tari::validator_node::bootstrap";
 pub async fn spawn_services(
     config: &ApplicationConfig,
     shutdown: ShutdownSignal,
-    node_identity: Arc<NodeIdentity>,
+    validator_node_identity: Arc<ValidatorNodeIdentity>,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     consensus_constants: ConsensusConstants,
 ) -> Result<Services, anyhow::Error> {
@@ -116,12 +117,17 @@ pub async fn spawn_services(
     }));
 
     // Initialize comms
-    let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
+    let (comms, message_channel) = comms::initialize(
+        Arc::new(validator_node_identity.node_identity().clone()),
+        config,
+        shutdown.clone(),
+    )
+    .await?;
 
     // Spawn messaging
     let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
     let (outbound_messaging, join_handle) = messaging::spawn(
-        node_identity.public_key().clone(),
+        validator_node_identity.node_identity().public_key().clone(),
         message_channel,
         message_senders.clone(),
     );
@@ -139,7 +145,7 @@ pub async fn spawn_services(
     let peer_provider = CommsPeerProvider::new(comms.peer_manager());
     let (networking, join_handle) = networking::spawn(
         rx_network_announce,
-        node_identity.clone(),
+        Arc::new(validator_node_identity.node_identity().clone()),
         outbound_messaging.clone(),
         peer_provider.clone(),
         comms.connectivity(),
@@ -160,7 +166,7 @@ pub async fn spawn_services(
         },
         global_db.clone(),
         base_node_client.clone(),
-        node_identity.public_key().clone(),
+        validator_node_identity.node_identity().public_key().clone(),
         shutdown.clone(),
     );
     handles.push(join_handle);
@@ -185,7 +191,7 @@ pub async fn spawn_services(
         payload_processor.clone(),
         shard_store.clone(),
         validator_node_client_factory.clone(),
-        node_identity.clone(),
+        Arc::new(validator_node_identity.node_identity().clone()),
     );
 
     // Mempool
@@ -197,7 +203,7 @@ pub async fn spawn_services(
         rx_new_transaction_message,
         outbound_messaging.clone(),
         epoch_manager.clone(),
-        node_identity.clone(),
+        Arc::new(validator_node_identity.node_identity().clone()),
         validator,
         dry_run_transaction_processor.clone(),
     );
@@ -219,7 +225,7 @@ pub async fn spawn_services(
 
     // Consensus
     let (hotstuff_events, waiter_join_handle, service_join_handle) = hotstuff::try_spawn(
-        node_identity.clone(),
+        Arc::new(validator_node_identity.node_identity().clone()),
         shard_store.clone(),
         outbound_messaging,
         epoch_manager.clone(),
@@ -249,7 +255,7 @@ pub async fn spawn_services(
 
     // Auto-registration
     if config.validator_node.auto_register {
-        let handle = registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
+        let handle = registration::spawn(config.clone(), validator_node_identity, epoch_manager.clone(), shutdown);
         handles.push(handle);
     } else {
         info!(target: LOG_TARGET, "♽️ Node auto registration is disabled");

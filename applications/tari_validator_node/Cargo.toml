@@ -40,6 +40,7 @@ anyhow = "1.0.53"
 async-trait = "0.1.50"
 axum = "0.6.0"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
+blst = "0.3.10"
 bytes = "1"
 chrono = "0.4.22"
 clap = { version = "3.2.5", features = ["env"] }

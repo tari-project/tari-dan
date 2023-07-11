@@ -42,6 +42,7 @@ use tokio::{task, task::JoinHandle, time};
 
 use crate::{
     grpc::base_layer_wallet::{GrpcWalletClient, WalletGrpcError},
+    validator_node_identity::ValidatorNodeIdentity,
     ApplicationConfig,
 };
 
@@ -65,7 +66,7 @@ pub enum AutoRegistrationError {
 
 pub async fn register(
     mut wallet_client: GrpcWalletClient,
-    node_identity: &NodeIdentity,
+    validator_node_identity: &ValidatorNodeIdentity,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<RegisterValidatorNodeResponse, AutoRegistrationError> {
     let balance = wallet_client.get_balance().await?;
@@ -82,7 +83,7 @@ pub async fn register(
     let mut attempts = 1;
 
     loop {
-        match wallet_client.register_validator_node(node_identity).await {
+        match wallet_client.register_validator_node(validator_node_identity).await {
             Ok(resp) => {
                 let tx_id = resp.transaction_id;
                 info!(
@@ -121,7 +122,7 @@ pub async fn register(
 
 pub fn spawn(
     config: ApplicationConfig,
-    node_identity: Arc<NodeIdentity>,
+    node_identity: Arc<ValidatorNodeIdentity>,
     epoch_manager: EpochManagerHandle,
     shutdown: ShutdownSignal,
 ) -> JoinHandle<Result<(), anyhow::Error>> {
@@ -135,7 +136,7 @@ pub fn spawn(
 
 async fn start(
     config: ApplicationConfig,
-    node_identity: Arc<NodeIdentity>,
+    node_identity: Arc<ValidatorNodeIdentity>,
     epoch_manager: EpochManagerHandle,
     mut shutdown: ShutdownSignal,
 ) -> Result<(), AutoRegistrationError> {
@@ -161,7 +162,7 @@ async fn start(
 
 async fn handle_epoch_changed(
     config: &ApplicationConfig,
-    node_identity: &NodeIdentity,
+    validator_node_identity: &ValidatorNodeIdentity,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<(), AutoRegistrationError> {
     if epoch_manager.last_registration_epoch().await?.is_none() {
@@ -179,7 +180,7 @@ async fn handle_epoch_changed(
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
         }));
 
-        register(wallet_client, node_identity, epoch_manager).await?;
+        register(wallet_client, validator_node_identity, epoch_manager).await?;
     } else {
         info!(
             target: LOG_TARGET,
