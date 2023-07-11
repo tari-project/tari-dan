@@ -179,10 +179,6 @@ impl TemplateTest {
         self
     }
 
-    pub fn get_consensus_context(&self) -> ConsensusContext {
-        self.consensus_context.clone()
-    }
-
     pub fn set_consensus_context(&mut self, consensus: ConsensusContext) -> &mut Self {
         self.consensus_context = consensus;
         self
