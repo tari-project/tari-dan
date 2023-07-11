@@ -28,7 +28,7 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
-use blst::min_sig::{PublicKey as BlsPublicKey, SecretKey as BlsSecretKey};
+use blst::min_sig::{SecretKey as BlsSecretKey};
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
@@ -39,7 +39,6 @@ use tari_comms::{
     peer_manager::{NodeId, PeerFeatures},
     types::CommsPublicKey,
     CommsNode,
-    NodeIdentity,
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
@@ -122,7 +121,6 @@ impl JsonRpcHandlers {
         services: &Services,
         config: ValidatorNodeConfig,
     ) -> Self {
-        let consensus_public_key = consensus_secret_key.sk_to_pk();
         let node_identity = services.comms.node_identity();
         let validator_node_identity = ValidatorNodeIdentity::new(node_identity.as_ref().clone(), consensus_secret_key);
         Self {

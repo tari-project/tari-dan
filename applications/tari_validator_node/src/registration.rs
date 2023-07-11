@@ -26,6 +26,7 @@ use std::{
     time::Duration,
 };
 
+use blst::min_sig::{SecretKey as BlsSecretKey};
 use log::{error, info, warn};
 use tari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
 use tari_base_node_client::BaseNodeClientError;
@@ -122,7 +123,7 @@ pub async fn register(
 
 pub fn spawn(
     config: ApplicationConfig,
-    node_identity: Arc<ValidatorNodeIdentity>,
+    node_identity: Arc<NodeIdentity>,
     epoch_manager: EpochManagerHandle,
     shutdown: ShutdownSignal,
 ) -> JoinHandle<Result<(), anyhow::Error>> {
@@ -136,7 +137,7 @@ pub fn spawn(
 
 async fn start(
     config: ApplicationConfig,
-    node_identity: Arc<ValidatorNodeIdentity>,
+    node_identity: Arc<NodeIdentity>,
     epoch_manager: EpochManagerHandle,
     mut shutdown: ShutdownSignal,
 ) -> Result<(), AutoRegistrationError> {
@@ -162,7 +163,7 @@ async fn start(
 
 async fn handle_epoch_changed(
     config: &ApplicationConfig,
-    validator_node_identity: &ValidatorNodeIdentity,
+    node_identity: &NodeIdentity,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<(), AutoRegistrationError> {
     if epoch_manager.last_registration_epoch().await?.is_none() {
@@ -180,7 +181,13 @@ async fn handle_epoch_changed(
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
         }));
 
-        register(wallet_client, validator_node_identity, epoch_manager).await?;
+        let consensus_secret_key = BlsSecretKey::from_bytes(
+            &std::fs::read(config.validator_node.consensus_secret_key_file.clone())
+                .map_err(|e| AutoRegistrationError::RegistrationFailed { details: format!("{:?}", e) })?,
+        ).map_err(|e| AutoRegistrationError::RegistrationFailed { details: format!("{:?}", e) })?;
+        let validator_node_identity =
+            ValidatorNodeIdentity::new(node_identity.clone(), consensus_secret_key.clone());
+        register(wallet_client, &validator_node_identity, epoch_manager).await?;
     } else {
         info!(
             target: LOG_TARGET,

@@ -44,10 +44,6 @@ impl ValidatorNodeIdentity {
     pub fn node_identity(&self) -> &NodeIdentity {
         &self.node_identity
     }
-
-    pub fn consensus_public_key(&self) -> &BlsPublicKey {
-        &self.consensus_public_key
-    }
 }
 
 impl Serialize for ValidatorNodeIdentity {

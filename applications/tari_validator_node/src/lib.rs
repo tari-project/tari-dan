@@ -42,7 +42,6 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     process,
-    sync::Arc,
 };
 
 use blst::min_sig::SecretKey as BlsSecretKey;
@@ -69,7 +68,6 @@ use crate::{
     http_ui::server::run_http_ui_server,
     json_rpc::{spawn_json_rpc, JsonRpcHandlers},
     p2p::services::networking::DAN_PEER_FEATURES,
-    validator_node_identity::ValidatorNodeIdentity,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::app";
@@ -111,8 +109,6 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         &std::fs::read(config.validator_node.consensus_secret_key_file.clone())
             .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?,
     ).map_err(|e| ExitError::new(ExitCode::ConfigError, format!("{:?}", e)))?;
-    let validator_node_identity =
-        ValidatorNodeIdentity::new(node_identity.as_ref().clone(), consensus_secret_key.clone());
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
     db_factory
         .migrate()
@@ -135,7 +131,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     let services = spawn_services(
         config,
         shutdown_signal.clone(),
-        Arc::new(validator_node_identity),
+        node_identity,
         global_db,
         ConsensusConstants::devnet(), // TODO: change this eventually
     )
