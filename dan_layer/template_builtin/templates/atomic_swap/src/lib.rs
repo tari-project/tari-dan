@@ -120,7 +120,7 @@ mod atomic_swap_template {
         }
 
         fn check_timelock(&self) {
-            assert!(Consensus::current_epoch() >= self.timelock, "Timelock not yet passed");
+            assert!(Consensus::current_epoch() > self.timelock, "Timelock not yet passed");
         }
     }
 }

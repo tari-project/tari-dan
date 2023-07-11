@@ -3,6 +3,7 @@
 
 use digest::Digest;
 use tari_crypto::hash::blake2::Blake256;
+use tari_dan_engine::runtime::ConsensusContext;
 use tari_engine_types::{commit_result::ExecuteResult, instruction::Instruction};
 use tari_template_lib::{
     args,
@@ -96,7 +97,7 @@ fn create_lock_contract(test: &mut AtomicSwapTest, sender: User, receiver: User,
     result.finalize.execution_results[2].decode().unwrap()
 }
 
-fn unlock_funds(
+fn withdraw_funds(
     test: &mut AtomicSwapTest,
     contract: ComponentAddress,
     preimage: [u8; 32],
@@ -123,6 +124,28 @@ fn unlock_funds(
     )
 }
 
+fn refund(test: &mut AtomicSwapTest, contract: ComponentAddress, user: User) -> Result<ExecuteResult, anyhow::Error> {
+    test.template_test.execute_and_commit(
+        vec![
+            Instruction::CallMethod {
+                component_address: contract,
+                method: "refund".to_string(),
+                args: args![],
+            },
+            Instruction::PutLastInstructionOutputOnWorkspace {
+                key: b"bucket".to_vec(),
+            },
+            Instruction::CallMethod {
+                component_address: user.account_address,
+                method: "deposit".to_string(),
+                args: args![Variable("bucket")],
+            },
+        ],
+        // Sender proof needed to refund
+        vec![user.owner_token],
+    )
+}
+
 // This test simulates an atomic swap between two accounts inside the Tari network.
 // Obviously atomic swaps inside the same network does not have any real world utility,
 // but for testing purposes it's useful as it allow us to verify the Tari atomic swap template
@@ -143,8 +166,136 @@ fn successful_swap() {
     let contract_2_component = create_lock_contract(&mut test, bob.clone(), alice.clone(), timelock_c2);
 
     // Alice withdraws the funds from Bob's contract, revealing the preimage in the process
-    unlock_funds(&mut test, contract_2_component, preimage, alice).unwrap();
+    withdraw_funds(&mut test, contract_2_component, preimage, alice).unwrap();
 
     // Bob now knows the preimage, so he can withdraw funds from Alice's contract
-    unlock_funds(&mut test, contract_1_component, preimage, bob).unwrap();
+    withdraw_funds(&mut test, contract_1_component, preimage, bob).unwrap();
+}
+
+#[test]
+fn alice_can_refund() {
+    let mut test = setup();
+    let alice = test.alice.clone();
+    let bob = test.bob.clone();
+
+    // Alice will start the atomic swap by locking her funds first
+    let timelock_c1 = 10u64;
+    let contract_1_component = create_lock_contract(&mut test, alice.clone(), bob, timelock_c1);
+
+    // Bob never publishes his locking contract
+    // So Alice needs to wait until after the timelock in her conctract to retrieve her funds
+    test.template_test.set_consensus_context(ConsensusContext {
+        current_epoch: timelock_c1 + 1,
+    });
+    refund(&mut test, contract_1_component, alice).unwrap();
+}
+
+#[test]
+fn bob_can_refund() {
+    let mut test = setup();
+    let alice = test.alice.clone();
+    let bob = test.bob.clone();
+
+    // Alice will start the atomic swap by locking her funds first
+    let timelock_c1 = 10u64;
+    let _contract_1_component = create_lock_contract(&mut test, alice.clone(), bob.clone(), timelock_c1);
+
+    // Then Bob will lock his funds
+    // Note that the timelock MUST be lower than the previous timelock to give time to Bob to withdraw funds later
+    let timelock_c2 = 5u64;
+    let contract_2_component = create_lock_contract(&mut test, bob.clone(), alice, timelock_c2);
+
+    // Alice never withdraws funds from Bob's contract, so Bob will never know the preimage and cannot complete the swap
+    // So Bob needs to wait until after the timelock in his conctract to retrieve his funds
+    test.template_test.set_consensus_context(ConsensusContext {
+        current_epoch: timelock_c2 + 1,
+    });
+    refund(&mut test, contract_2_component, bob).unwrap();
+}
+
+#[test]
+fn refunds_cannot_be_done_before_timelock() {
+    let mut test = setup();
+    let alice = test.alice.clone();
+    let bob = test.bob.clone();
+
+    // Alice will start the atomic swap by locking her funds first
+    let timelock_c1 = 10u64;
+    let contract_1_component = create_lock_contract(&mut test, alice.clone(), bob.clone(), timelock_c1);
+
+    // Then Bob will lock his funds
+    // Note that the timelock MUST be lower than the previous timelock to give time to Bob to withdraw funds later
+    let timelock_c2 = 5u64;
+    let contract_2_component = create_lock_contract(&mut test, bob.clone(), alice.clone(), timelock_c2);
+
+    // Bob should not be able to refund if his timelock has not expired
+    test.template_test.set_consensus_context(ConsensusContext {
+        current_epoch: timelock_c2,
+    });
+    let err = refund(&mut test, contract_2_component, bob).unwrap_err();
+    assert!(err.to_string().contains("Timelock not yet passed"));
+
+    // Alice should not be able to refund if her timelock has not expired
+    test.template_test.set_consensus_context(ConsensusContext {
+        current_epoch: timelock_c1,
+    });
+    let err = refund(&mut test, contract_1_component, alice).unwrap_err();
+    assert!(err.to_string().contains("Timelock not yet passed"));
+}
+
+#[test]
+fn it_does_not_allow_withdrawals_with_invalid_preimage() {
+    let mut test = setup();
+    let alice = test.alice.clone();
+    let bob = test.bob.clone();
+    let preimage = test.preimage;
+
+    // Alice will start the atomic swap by locking her funds first
+    let timelock_c1 = 10u64;
+    let _contract_1_component = create_lock_contract(&mut test, alice.clone(), bob.clone(), timelock_c1);
+
+    // Then Bob will lock his funds
+    // Note that the timelock MUST be lower than the previous timelock to give time to Bob to withdraw funds later
+    let timelock_c2 = 5u64;
+    let contract_2_component = create_lock_contract(&mut test, bob, alice.clone(), timelock_c2);
+
+    // Alice cannot withdraw from Bob's contract with an invalid preimage
+    let invalid_preimage = [1u8; 32];
+    assert_ne!(invalid_preimage, preimage);
+    let err = withdraw_funds(&mut test, contract_2_component, invalid_preimage, alice).unwrap_err();
+    assert!(err.to_string().contains("Invalid preimage"));
+}
+
+#[test]
+fn it_does_not_allow_withdrawals_from_undesignated_users() {
+    let mut test = setup();
+    let alice = test.alice.clone();
+    let bob = test.bob.clone();
+    let preimage = test.preimage;
+
+    // Alice will start the atomic swap by locking her funds first
+    let timelock_c1 = 10u64;
+    let contract_1_component = create_lock_contract(&mut test, alice.clone(), bob, timelock_c1);
+
+    // No one other than Bob can withdraw even if providing a valid preimage
+    let err = withdraw_funds(&mut test, contract_1_component, preimage, alice).unwrap_err();
+    assert!(err.to_string().contains("Access Denied"));
+}
+
+#[test]
+fn it_does_not_allow_refunds_from_undesignated_users() {
+    let mut test = setup();
+    let alice = test.alice.clone();
+    let bob = test.bob.clone();
+
+    // Alice will start the atomic swap by locking her funds first
+    let timelock_c1 = 10u64;
+    let contract_1_component = create_lock_contract(&mut test, alice, bob.clone(), timelock_c1);
+
+    // No one other than Alice can refund after the timelock
+    test.template_test.set_consensus_context(ConsensusContext {
+        current_epoch: timelock_c1 + 1,
+    });
+    let err = refund(&mut test, contract_1_component, bob).unwrap_err();
+    assert!(err.to_string().contains("Access Denied"));
 }
