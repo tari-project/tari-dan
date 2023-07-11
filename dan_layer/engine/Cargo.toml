@@ -35,3 +35,4 @@ wasmer-middlewares = "2.3.0"
 tari_template_test_tooling = { path = "../template_test_tooling" }
 tari_transaction_manifest = { path = "../transaction_manifest" }
 tari_transaction = { path = "../transaction" }
+digest = "0.9"

@@ -87,6 +87,7 @@ mod atomic_swap_template {
         pub fn withdraw(&mut self, preimage: Preimage) -> Bucket {
             self.check_hashlock(&preimage);
 
+            // we explicitly store the preimage to make it easier for the other party to retrieve it
             self.preimage = Some(preimage);
             self.locked_funds.withdraw_all()
         }

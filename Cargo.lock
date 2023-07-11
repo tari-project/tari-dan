@@ -7663,6 +7663,7 @@ dependencies = [
  "anyhow",
  "cargo_toml",
  "d3ne",
+ "digest 0.9.0",
  "log",
  "rand 0.7.3",
  "serde",
