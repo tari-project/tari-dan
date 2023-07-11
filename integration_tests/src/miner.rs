@@ -25,16 +25,8 @@ use std::time::Duration;
 use tari_app_grpc::{
     authentication::ClientAuthenticationInterceptor,
     tari_rpc::{
-        pow_algo::PowAlgos,
-        wallet_client::WalletClient,
-        GetCoinbaseRequest,
-        GetCoinbaseResponse,
-        NewBlockTemplate,
-        NewBlockTemplateRequest,
-        NewBlockTemplateResponse,
-        PowAlgo,
-        TransactionKernel,
-        TransactionOutput,
+        pow_algo::PowAlgos, wallet_client::WalletClient, GetCoinbaseRequest, GetCoinbaseResponse, NewBlockTemplate,
+        NewBlockTemplateRequest, NewBlockTemplateResponse, PowAlgo, TransactionKernel, TransactionOutput,
     },
 };
 use tari_base_node_grpc_client::BaseNodeGrpcClient;
@@ -110,7 +102,7 @@ async fn create_block_template_with_coinbase(
     // get the block template from the base node
     let template_req = NewBlockTemplateRequest {
         algo: Some(PowAlgo {
-            pow_algo: PowAlgos::Sha3.into(),
+            pow_algo: PowAlgos::Sha3x.into(),
         }),
         max_weight: 0,
     };
