@@ -117,7 +117,6 @@ pub struct TransactionResponse {
     pub outputs: Vec<ShardId>,
 }
 
-
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetAllRequest {
     pub status: Option<TransactionStatus>,
