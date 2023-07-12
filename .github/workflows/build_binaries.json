@@ -1,22 +1,12 @@
 [
   {
     "name": "linux-x86_64",
-    "runs-on": "ubuntu-18.04",
-    "rust": "nightly-2022-05-01",
+    "runs-on": "ubuntu-20.04",
+    "rust": "stable",
     "target": "x86_64-unknown-linux-gnu",
     "cross": false,
     "target_cpu": "x86-64",
-    "features": "safe"
-  },
-  {
-    "name": "linux-arm64",
-    "runs-on": "ubuntu-18.04",
-    "rust": "stable",
-    "target": "aarch64-unknown-linux-gnu",
-    "cross": false,
-    "target_cpu": "generic",
-    "target_bins": "--bin tari_base_node --bin tari_console_wallet --bin tari_merge_mining_proxy --bin tari_miner --bin tari_validator_node",
-    "features": "safe"
+    "features": ""
   },
   {
     "name": "macos-x86_64",
@@ -25,7 +15,7 @@
     "target": "x86_64-apple-darwin",
     "cross": false,
     "target_cpu": "x86-64",
-    "features": "safe"
+    "features": ""
   },
   {
     "name": "macos-arm64",
@@ -34,7 +24,7 @@
     "target": "aarch64-apple-darwin",
     "cross": true,
     "target_cpu": "generic",
-    "features": "safe"
+    "features": ""
   },
   {
     "name": "windows-x64",
@@ -43,8 +33,8 @@
     "target": "x86_64-pc-windows-msvc",
     "cross": false,
     "target_cpu": "x86-64",
-    "target_bins": "--bin tari_base_node --bin tari_console_wallet --bin tari_merge_mining_proxy --bin tari_miner --bin tari_validator_node",
-    "features": "safe"
+    "target_bins": "--bin tari_dan_wallet_cli --bin tari_dan_wallet_daemon --bin tari_indexer --bin tari_validator_node --bin tari_signaling_server",
+    "features": ""
   },
   {
     "name": "windows-arm64",
@@ -53,7 +43,7 @@
     "target": "aarch64-pc-windows-msvc",
     "cross": false,
     "target_cpu": "generic",
-    "features": "safe",
+    "features": "",
     "build_enabled": false
   }
 ]
