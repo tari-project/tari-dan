@@ -94,6 +94,12 @@ where
         Ok(transactions)
     }
 
+    pub fn fetch_all(&self) -> Result<Vec<WalletTransaction>, TransactionApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let transactions = tx.transactions_fetch_all()?;
+        Ok(transactions)
+    }
+
     pub async fn check_and_store_finalized_transaction(
         &self,
         hash: FixedHash,
