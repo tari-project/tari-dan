@@ -60,6 +60,7 @@ where
     TConsensusSpec::VoteSignatureService: Clone,
     HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,

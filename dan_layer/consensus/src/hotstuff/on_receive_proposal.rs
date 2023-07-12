@@ -445,7 +445,7 @@ where
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: from.to_string(),
                 hash: *candidate_block.id(),
-                justify_block: *candidate_block.justify().block_id()
+                justify_block: *candidate_block.justify().block_id(),
             });
         };
 

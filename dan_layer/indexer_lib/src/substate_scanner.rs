@@ -88,7 +88,10 @@ where
                 None => break,
             };
             let nft_substate_address = SubstateAddress::NonFungible(nft_address);
-            let SubstateResult::Up{substate, ..} = self.get_latest_substate_from_committee(&nft_substate_address, 0).await? else {
+            let SubstateResult::Up { substate, .. } = self
+                .get_latest_substate_from_committee(&nft_substate_address, 0)
+                .await?
+            else {
                 break;
             };
 
