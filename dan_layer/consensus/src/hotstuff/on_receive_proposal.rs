@@ -216,20 +216,38 @@ where
                         tx_rec.transition(tx, TransactionPoolStage::LocalPrepared, false)?;
                     } else {
                         // If we disagree with any local decision we abstain from voting
-                        warn!(target: LOG_TARGET, "❌ Prepare decision disagreement for block {}. Leader proposed {}, we decided {}", block.id(), t.decision, transaction.as_decision());
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ Prepare decision disagreement for block {}. Leader proposed {}, we decided {}",
+                            block.id(),
+                            t.decision,
+                            transaction.as_decision()
+                        );
                         return Ok(None);
                     }
                 },
                 // TODO: Check these against what we have
                 Command::LocalPrepared(t) => {
                     if transaction.as_decision() != t.decision {
-                        warn!(target: LOG_TARGET, "❌ Prepare decision disagreement for block {}. Leader proposed {}, we decided {}", block.id(), t.decision, transaction.as_decision());
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ Prepare decision disagreement for block {}. Leader proposed {}, we decided {}",
+                            block.id(),
+                            t.decision,
+                            transaction.as_decision()
+                        );
                         return Ok(None);
                     }
                 },
                 Command::Accept(t) => {
                     if transaction.as_decision() != t.decision {
-                        warn!(target: LOG_TARGET, "❌ Prepare decision disagreement for block {}. Leader proposed {}, we decided {}", block.id(), t.decision, transaction.as_decision());
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ Prepare decision disagreement for block {}. Leader proposed {}, we decided {}",
+                            block.id(),
+                            t.decision,
+                            transaction.as_decision()
+                        );
                         return Ok(None);
                     }
                 },
@@ -427,7 +445,7 @@ where
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: from.to_string(),
                 hash: *candidate_block.id(),
-                justify_block: *candidate_block.justify().block_id()
+                justify_block: *candidate_block.justify().block_id(),
             });
         };
 

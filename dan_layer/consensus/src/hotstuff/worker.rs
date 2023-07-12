@@ -7,7 +7,8 @@ use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch};
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
-    StateStore, StateStoreWriteTransaction,
+    StateStore,
+    StateStoreWriteTransaction,
 };
 use tari_shutdown::ShutdownSignal;
 use tokio::{
@@ -17,8 +18,12 @@ use tokio::{
 
 use crate::{
     hotstuff::{
-        error::HotStuffError, event::HotstuffEvent, on_beat::OnBeat, on_propose::OnPropose,
-        on_receive_new_view::OnReceiveNewViewHandler, on_receive_proposal::OnReceiveProposalHandler,
+        error::HotStuffError,
+        event::HotstuffEvent,
+        on_beat::OnBeat,
+        on_propose::OnPropose,
+        on_receive_new_view::OnReceiveNewViewHandler,
+        on_receive_proposal::OnReceiveProposalHandler,
         on_receive_vote::OnReceiveVoteHandler,
     },
     messages::HotstuffMessage,
@@ -168,21 +173,18 @@ where
         self.state_store.with_write_tx(|tx| {
             executed.insert(tx)?;
 
-            self.transaction_pool.insert(
-                tx,
-                TransactionAtom {
-                    id: *executed.transaction().hash(),
-                    involved_shards: executed.transaction().involved_shards_iter().copied().collect(),
-                    decision: executed.as_decision(),
-                    evidence: executed.to_initial_evidence(),
-                    fee: executed
-                        .result()
-                        .fee_receipt
-                        .as_ref()
-                        .and_then(|f| f.total_fee_payment.as_u64_checked())
-                        .unwrap_or(0),
-                },
-            )?;
+            self.transaction_pool.insert(tx, TransactionAtom {
+                id: *executed.transaction().hash(),
+                involved_shards: executed.transaction().involved_shards_iter().copied().collect(),
+                decision: executed.as_decision(),
+                evidence: executed.to_initial_evidence(),
+                fee: executed
+                    .result()
+                    .fee_receipt
+                    .as_ref()
+                    .and_then(|f| f.total_fee_payment.as_u64_checked())
+                    .unwrap_or(0),
+            })?;
 
             Ok::<_, HotStuffError>(())
         })?;

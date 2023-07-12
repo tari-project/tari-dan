@@ -125,7 +125,8 @@ where
                 )
             })?;
 
-            // Not found - TODO: this probably means the transaction was rejected in the mempool, but we cant be sure. Perhaps we should store it in its entirety and allow the user to resubmit it.
+            // Not found - TODO: this probably means the transaction was rejected in the mempool, but we cant be sure.
+            // Perhaps we should store it in its entirety and allow the user to resubmit it.
             return Ok(Some(WalletTransaction {
                 transaction: transaction.transaction,
                 status: TransactionStatus::InvalidTransaction,
