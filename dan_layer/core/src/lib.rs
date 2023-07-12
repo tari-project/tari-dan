@@ -28,4 +28,4 @@ pub mod services;
 pub mod types;
 pub mod workers;
 
-hash_domain!(TariDanCoreHashDomain, "tari.dan.core", 0);
+hash_domain!(TariDanCoreHashDomain, "com.tari.dan.core", 0);

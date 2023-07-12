@@ -31,15 +31,11 @@ use tari_crypto::{
 };
 use tari_template_lib::Hash;
 
-hash_domain!(
-    ConfidentialOutputHashDomain,
-    "com.tari.layer_two.confidential_output",
-    1
-);
+hash_domain!(ConfidentialOutputHashDomain, "com.tari.dan.confidential_output", 1);
 
 hash_domain!(
     WalletOutputEncryptionKeysDomain,
-    "com.tari.tari_project.base_layer.wallet.output_encryption_keys",
+    "com.tari.base_layer.wallet.output_encryption_keys",
     1
 );
 
