@@ -27,6 +27,9 @@ lazy_static! {
     pub static ref ACCOUNT_NFT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
     ]);
+    pub static ref ATOMIC_SWAP_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2
+    ]);
 }
 
 pub fn get_template_builtin(address: TemplateAddress) -> &'static [u8] {
@@ -34,6 +37,8 @@ pub fn get_template_builtin(address: TemplateAddress) -> &'static [u8] {
         include_bytes!("../templates/account/account.wasm")
     } else if address == *ACCOUNT_NFT_TEMPLATE_ADDRESS {
         include_bytes!("../templates/account_nfts/account_nfts.wasm")
+    } else if address == *ATOMIC_SWAP_TEMPLATE_ADDRESS {
+        include_bytes!("../templates/atomic_swap/atomic_swap.wasm")
     } else {
         panic!("Unknown builtin template address")
     }
