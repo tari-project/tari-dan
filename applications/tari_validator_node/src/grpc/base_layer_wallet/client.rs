@@ -84,7 +84,8 @@ impl GrpcWalletClient {
         validator_node_identity: &ValidatorNodeIdentity,
     ) -> Result<RegisterValidatorNodeResponse, WalletGrpcError> {
         let inner = self.connection().await?;
-        let signature = ValidatorNodeSignature::sign(validator_node_identity.node_identity().secret_key(), b"");
+        let message = validator_node_identity.public_key().to_bytes();
+        let signature = ValidatorNodeSignature::sign(validator_node_identity.node_identity().secret_key(), &message);
         // TODO: add signature for bls public key
         let request = RegisterValidatorNodeRequest {
             validator_node_public_key: validator_node_identity.node_identity().public_key().to_vec(),
