@@ -60,6 +60,7 @@ pub struct SubmitTransactionRequest {
 pub struct SubmitTransactionResponse {
     #[serde(with = "serde_tools::hex")]
     pub transaction_hash: FixedHash,
+    pub execution_result: Option<ExecuteResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

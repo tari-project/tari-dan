@@ -35,9 +35,8 @@ use tari_common::{
     SubConfigPath,
 };
 use tari_comms::multiaddr::Multiaddr;
+use tari_dan_app_utilities::template_manager::implementation::TemplateConfig;
 use tari_p2p::{P2pConfig, PeerSeedsConfig};
-
-use crate::p2p::services::template_manager::TemplateConfig;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {

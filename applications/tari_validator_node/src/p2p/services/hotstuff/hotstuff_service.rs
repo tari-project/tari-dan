@@ -24,6 +24,10 @@ use std::{fmt::Display, sync::Arc};
 
 use log::*;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_dan_app_utilities::{
+    payload_processor::TariDanPayloadProcessor,
+    template_manager::implementation::TemplateManager,
+};
 use tari_dan_common_types::ShardId;
 use tari_dan_core::{
     consensus_constants::ConsensusConstants,
@@ -52,10 +56,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::{
-    p2p::services::{mempool::MempoolHandle, messaging::OutboundMessaging, template_manager::TemplateManager},
-    payload_processor::TariDanPayloadProcessor,
-};
+use crate::p2p::services::{mempool::MempoolHandle, messaging::OutboundMessaging};
 
 const LOG_TARGET: &str = "tari::validator_node::hotstuff_service";
 pub(crate) type HotstuffServiceSpawnOutput = (

@@ -20,6 +20,20 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod base_layer_scanner;
-pub mod payload_processor;
-pub mod template_manager;
+use tari_comms::protocol::rpc::RpcStatus;
+use tari_dan_core::services::PayloadProcessorError;
+use tari_epoch_manager::base_layer::EpochManagerError;
+use tari_indexer_lib::transaction_autofiller::TransactionAutofillerError;
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum DryRunTransactionProcessorError {
+    #[error(transparent)]
+    TransactionAutofillerError(#[from] TransactionAutofillerError),
+    #[error("EpochManager error: {0}")]
+    EpochManager(#[from] EpochManagerError),
+    #[error("Rpc error: {0}")]
+    RpcRequestFailed(#[from] RpcStatus),
+    #[error("PayloadProcessor error: {0}")]
+    PayloadProcessor(#[from] PayloadProcessorError),
+}

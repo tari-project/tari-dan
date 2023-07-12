@@ -22,4 +22,3 @@
 
 pub mod comms_peer_provider;
 pub mod networking;
-pub mod template_manager;

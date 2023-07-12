@@ -8,8 +8,8 @@ use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_wallet_sdk::{
     apis::transaction::TransactionApiError,
     models::TransactionStatus,
+    network::WalletNetworkInterface,
     storage::WalletStore,
-    substate_provider::WalletNetworkInterface,
     DanWalletSdk,
 };
 use tari_shutdown::ShutdownSignal;

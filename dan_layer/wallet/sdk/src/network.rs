@@ -22,7 +22,11 @@ pub trait WalletNetworkInterface {
         local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error>;
 
-    async fn submit_transaction(&self, transaction: Transaction, is_dry_run: bool) -> Result<FixedHash, Self::Error>;
+    async fn submit_transaction(
+        &self,
+        transaction: Transaction,
+        is_dry_run: bool,
+    ) -> Result<TransactionQueryResult, Self::Error>;
     async fn query_transaction_result(&self, hash: PayloadId) -> Result<TransactionQueryResult, Self::Error>;
 }
 
@@ -36,5 +40,6 @@ pub struct SubstateQueryResult {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionQueryResult {
+    pub transaction_hash: FixedHash,
     pub execution_result: Option<ExecuteResult>,
 }

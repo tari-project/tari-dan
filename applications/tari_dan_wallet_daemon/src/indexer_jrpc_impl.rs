@@ -3,12 +3,11 @@
 
 use axum::async_trait;
 use reqwest::{IntoUrl, Url};
-use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
     PayloadId,
 };
-use tari_dan_wallet_sdk::substate_provider::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface};
+use tari_dan_wallet_sdk::network::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface};
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer_client::{
     error::IndexerClientError,
@@ -63,7 +62,11 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
         })
     }
 
-    async fn submit_transaction(&self, transaction: Transaction, is_dry_run: bool) -> Result<FixedHash, Self::Error> {
+    async fn submit_transaction(
+        &self,
+        transaction: Transaction,
+        is_dry_run: bool,
+    ) -> Result<TransactionQueryResult, Self::Error> {
         let mut client = self.get_client()?;
         let result = client
             .submit_transaction(SubmitTransactionRequest {
@@ -71,7 +74,10 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
                 is_dry_run,
             })
             .await?;
-        Ok(result.transaction_hash)
+        Ok(TransactionQueryResult {
+            transaction_hash: result.transaction_hash,
+            execution_result: result.execution_result,
+        })
     }
 
     async fn query_transaction_result(
@@ -85,11 +91,15 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
             .optional()?;
 
         let Some(result) = maybe_result else {
-            return Ok(TransactionQueryResult { execution_result: None });
+            return Ok(TransactionQueryResult {
+                execution_result: None,
+                transaction_hash: transaction_hash.into_array().into(),
+            });
         };
 
         Ok(TransactionQueryResult {
             execution_result: result.execution_result,
+            transaction_hash: transaction_hash.into_array().into(),
         })
     }
 }
