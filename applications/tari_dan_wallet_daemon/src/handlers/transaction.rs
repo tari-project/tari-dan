@@ -14,6 +14,8 @@ use tari_wallet_daemon_client::types::{
     AccountGetRequest,
     AccountGetResponse,
     CallInstructionRequest,
+    TransactionGetAllRequest,
+    TransactionGetAllResponse,
     TransactionGetRequest,
     TransactionGetResponse,
     TransactionGetResultRequest,
@@ -181,6 +183,27 @@ pub async fn handle_get(
         result: transaction.finalize,
         status: transaction.status,
         transaction_failure: transaction.transaction_failure,
+    })
+}
+
+pub async fn handle_get_all_by_status(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: TransactionGetAllRequest,
+) -> Result<TransactionGetAllResponse, anyhow::Error> {
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::TransactionGet])?;
+    let transactions = match req.status {
+        Some(status) => context.wallet_sdk().transaction_api().fetch_all_by_status(status)?,
+        None => context.wallet_sdk().transaction_api().fetch_all()?,
+    };
+    Ok(TransactionGetAllResponse {
+        transactions: transactions
+            .into_iter()
+            .map(|tx| (tx.transaction, tx.finalize, tx.status, tx.transaction_failure))
+            .collect(),
     })
 }
 
