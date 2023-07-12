@@ -179,7 +179,12 @@ where
                 .scan_for_substate(&vault_addr, maybe_vault_version)
                 .await
                 .optional()?;
-            let Some(ValidatorScanResult { address: versioned_addr, substate, created_by_tx}) = scan_result else {
+            let Some(ValidatorScanResult {
+                address: versioned_addr,
+                substate,
+                created_by_tx,
+            }) = scan_result
+            else {
                 warn!(target: LOG_TARGET, "Vault {} for account {} does not exist according to validator node", vault_addr, versioned_account_address);
                 continue;
             };

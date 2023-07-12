@@ -62,7 +62,12 @@ impl Validator<Transaction> for FeeTransactionValidator {
             // Allow 0 fee instructions for account create transactions
             if transaction.instructions().len() == 1 {
                 let first = transaction.instructions().first().unwrap();
-                let Instruction::CallFunction { template_address, function, args } = first else {
+                let Instruction::CallFunction {
+                    template_address,
+                    function,
+                    args,
+                } = first
+                else {
                     return Err(MempoolError::NoFeeInstructions);
                 };
                 if *template_address == *ACCOUNT_TEMPLATE_ADDRESS && function == "create" && args.len() == 1 {

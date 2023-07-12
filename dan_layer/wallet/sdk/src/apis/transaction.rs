@@ -101,6 +101,12 @@ where
         Ok(transactions)
     }
 
+    pub fn fetch_all(&self) -> Result<Vec<WalletTransaction>, TransactionApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let transactions = tx.transactions_fetch_all()?;
+        Ok(transactions)
+    }
+
     pub async fn check_and_store_finalized_transaction(
         &self,
         hash: FixedHash,
@@ -132,7 +138,8 @@ where
                 )
             })?;
 
-            // Not found - TODO: this probably means the transaction was rejected in the mempool, but we cant be sure. Perhaps we should store it in its entirety and allow the user to resubmit it.
+            // Not found - TODO: this probably means the transaction was rejected in the mempool, but we cant be sure.
+            // Perhaps we should store it in its entirety and allow the user to resubmit it.
             return Ok(Some(WalletTransaction {
                 transaction: transaction.transaction,
                 status: TransactionStatus::InvalidTransaction,

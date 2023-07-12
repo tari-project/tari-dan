@@ -117,6 +117,12 @@ pub struct TransactionResponse {
     pub outputs: Vec<ShardId>,
 }
 
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransactionGetAllRequest {
+    pub status: Option<TransactionStatus>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionClaimBurnRequest {
     #[serde(with = "serde_with::hex")]
@@ -131,6 +137,16 @@ pub struct TransactionGetResponse {
     pub result: Option<FinalizeResult>,
     pub status: TransactionStatus,
     pub transaction_failure: Option<RejectReason>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TransactionGetAllResponse {
+    pub transactions: Vec<(
+        Transaction,
+        Option<FinalizeResult>,
+        TransactionStatus,
+        Option<RejectReason>,
+    )>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
