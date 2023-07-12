@@ -85,9 +85,7 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
             .optional()?;
 
         let Some(result) = maybe_result else {
-            return Ok(TransactionQueryResult {
-                execution_result: None,
-            });
+            return Ok(TransactionQueryResult { execution_result: None });
         };
 
         Ok(TransactionQueryResult {
