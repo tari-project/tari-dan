@@ -6,16 +6,20 @@ use std::ops::DerefMut;
 use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch};
 use tari_dan_storage::{
-    consensus_models::{AllTransactionPools, Block, ExecutedTransaction, LeafBlock, NewTransactionPool},
+    consensus_models::{Block, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
 use tari_shutdown::ShutdownSignal;
-use tokio::{sync::mpsc, task::JoinHandle};
+use tokio::{
+    sync::{broadcast, mpsc},
+    task::JoinHandle,
+};
 
 use crate::{
     hotstuff::{
         error::HotStuffError,
+        event::HotstuffEvent,
         on_beat::OnBeat,
         on_propose::OnPropose,
         on_receive_new_view::OnReceiveNewViewHandler,
@@ -42,17 +46,18 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     state_store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
-    on_beat: OnBeat,
+    transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
 
+    on_beat: OnBeat,
     shutdown: ShutdownSignal,
 }
 impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
 where
-    TConsensusSpec: ConsensusSpec + Send + Sync + 'static,
-    TConsensusSpec::StateStore: Clone + Send + Sync + 'static,
-    TConsensusSpec::EpochManager: Clone + Send + Sync + 'static,
-    TConsensusSpec::LeaderStrategy: Clone + Send + Sync + 'static,
-    TConsensusSpec::VoteSignatureService: Clone + Send + Sync + 'static,
+    TConsensusSpec: ConsensusSpec,
+    TConsensusSpec::StateStore: Clone,
+    TConsensusSpec::EpochManager: Clone,
+    TConsensusSpec::LeaderStrategy: Clone,
+    TConsensusSpec::VoteSignatureService: Clone,
     HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
 {
     pub fn new(
@@ -63,8 +68,11 @@ where
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         signing_service: TConsensusSpec::VoteSignatureService,
+        state_manager: TConsensusSpec::StateManager,
+        transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        tx_events: broadcast::Sender<HotstuffEvent>,
         shutdown: ShutdownSignal,
     ) -> Self {
         let on_beat = OnBeat::new();
@@ -78,7 +86,10 @@ where
                 epoch_manager.clone(),
                 signing_service.clone(),
                 leader_strategy.clone(),
+                state_manager,
+                transaction_pool.clone(),
                 tx_leader,
+                tx_events,
                 on_beat.clone(),
             ),
             on_receive_vote: OnReceiveVoteHandler::new(
@@ -94,10 +105,16 @@ where
                 epoch_manager.clone(),
                 on_beat.clone(),
             ),
-            on_propose: OnPropose::new(state_store.clone(), epoch_manager.clone(), tx_broadcast),
+            on_propose: OnPropose::new(
+                state_store.clone(),
+                epoch_manager.clone(),
+                transaction_pool.clone(),
+                tx_broadcast,
+            ),
             state_store,
             leader_strategy,
             epoch_manager,
+            transaction_pool,
             on_beat,
             shutdown,
         }
@@ -116,6 +133,8 @@ where
 
         loop {
             tokio::select! {
+                biased;
+
                 Some(msg) = self.rx_new_transactions.recv() => {
                     if let Err(e) = self.on_new_executed_transaction(msg).await {
                        error!(target: LOG_TARGET, "Error while processing new payload (on_new_executed_transaction): {}", e);
@@ -152,7 +171,21 @@ where
         );
         self.state_store.with_write_tx(|tx| {
             executed.insert(tx)?;
-            NewTransactionPool::insert(tx, executed.to_transaction_decision())
+
+            self.transaction_pool.insert(tx, TransactionAtom {
+                id: *executed.transaction().hash(),
+                involved_shards: executed.transaction().involved_shards_iter().copied().collect(),
+                decision: executed.as_decision(),
+                evidence: executed.to_initial_evidence(),
+                fee: executed
+                    .result()
+                    .fee_receipt
+                    .as_ref()
+                    .and_then(|f| f.total_fee_payment.as_u64_checked())
+                    .unwrap_or(0),
+            })?;
+
+            Ok::<_, HotStuffError>(())
         })?;
         self.on_beat.beat();
         Ok(())
@@ -170,12 +203,13 @@ where
             return Ok(());
         }
 
-        // Are there any transactions to propose?
+        // Are there any transactions in the pools? The block may still be empty if non are ready but we still need to
+        // propose a block to get to a 3-chain.
         if !self
             .state_store
-            .with_read_tx(|tx| AllTransactionPools::has_ready_transactions(tx))?
+            .with_read_tx(|tx| self.transaction_pool.has_transactions(tx))?
         {
-            debug!(target: LOG_TARGET, "[on_beat] No ready transactions");
+            debug!(target: LOG_TARGET, "[on_beat] No transactions to propose");
             return Ok(());
         }
 

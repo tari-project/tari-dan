@@ -2,18 +2,25 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 // TODO: use all functions
-#![allow(dead_code)]
+// #![allow(dead_code)]
 
 mod address;
-pub mod epoch_manager;
+mod epoch_manager;
 mod harness;
+mod helpers;
 mod leader_strategy;
-pub mod signing_service;
+mod network;
+mod signing_service;
 mod spec;
+mod state_manager;
 mod transaction;
 mod validator;
 
+pub use address::*;
+pub use epoch_manager::*;
 pub use harness::*;
 pub use leader_strategy::*;
+pub use signing_service::*;
 pub use spec::*;
+pub use state_manager::*;
 pub use validator::*;

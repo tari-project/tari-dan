@@ -28,7 +28,7 @@ use tari_mmr::{BalancedBinaryMerkleProof, BalancedBinaryMerkleTree, MergedBalanc
 
 use crate::hasher::{tari_hasher, TariHasher};
 
-hash_domain!(TariDanConsensusHashDomain, "tari.dan.consensus", 0);
+hash_domain!(TariDanConsensusHashDomain, "com.tari.dan.consensus", 0);
 
 pub fn block_hasher() -> TariHasher {
     dan_hasher("Block")
@@ -57,7 +57,7 @@ fn dan_hasher(label: &'static str) -> TariHasher {
 // From tari_core
 hash_domain!(
     ValidatorNodeBmtHashDomain,
-    "com.tari.tari_project.base_layer.core.validator_node_mmr",
+    "com.tari.base_layer.core.validator_node_mmr",
     1
 );
 pub type ValidatorNodeBmtHasherBlake256 = DomainSeparatedHasher<Blake256, ValidatorNodeBmtHashDomain>;

@@ -42,14 +42,29 @@ impl Metadata {
         self
     }
 
-    pub fn get(&self, key: &str) -> Option<&str> {
-        self.0.get(key).map(|v| v.as_str())
+    pub fn get(&self, key: &str) -> Option<&String> {
+        self.0.get(key)
     }
 }
 
 impl From<BTreeMap<String, String>> for Metadata {
     fn from(value: BTreeMap<String, String>) -> Self {
         Self(BorTag::new(value))
+    }
+}
+
+impl<K: Into<String>, V: Into<String>, const N: usize> From<[(K, V); N]> for Metadata {
+    fn from(value: [(K, V); N]) -> Self {
+        Self(BorTag::new(BTreeMap::from(value.map(|(k, v)| (k.into(), v.into())))))
+    }
+}
+
+impl IntoIterator for Metadata {
+    type IntoIter = std::collections::btree_map::IntoIter<String, String>;
+    type Item = (String, String);
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_inner().into_iter()
     }
 }
 
