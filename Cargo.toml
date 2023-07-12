@@ -26,6 +26,8 @@ members = [
     "dan_layer/tari_bor",
     "dan_layer/template_abi",
     "dan_layer/template_builtin",
+    "dan_layer/template_builtin/templates/account",
+    "dan_layer/template_builtin/templates/account_nfts",
     "dan_layer/template_lib",
     "dan_layer/template_macros",
     "dan_layer/template_test_tooling",
