@@ -133,15 +133,15 @@ mod tests {
         let deserialized: ValidatorNodeIdentity =
             serde_json::from_str(&serialized).expect("Failed to deserialize validator node identity");
         assert_eq!(
-            deserialized.node_identity.public_key,
-            validator_node_identity.node_identity.public_key
+            deserialized.node_identity.public_key(),
+            validator_node_identity.node_identity.public_key()
         );
         assert_eq!(
             deserialized.consensus_secret_key.to_bytes(),
             validator_node_identity.consensus_secret_key.to_bytes()
         );
         assert_eq!(
-            deserialized.consensus_public_key.to_bytes(),
+            deserialized.consensus_public_key().to_bytes(),
             validator_node_identity.consensus_public_key.to_bytes()
         );
     }
