@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2023. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,28 +20,38 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_app_utilities::template_manager::TemplateManagerHandle;
-use tari_shutdown::ShutdownSignal;
-use tokio::{sync::mpsc, task::JoinHandle};
+use std::{collections::HashMap, path::PathBuf};
 
-use crate::p2p::services::template_manager::{
-    downloader::TemplateDownloadWorker,
-    service::TemplateManagerService,
-    TemplateManager,
-};
+use serde::{Deserialize, Serialize};
+use tari_engine_types::TemplateAddress;
 
-pub fn spawn(
-    manager: TemplateManager,
-    shutdown: ShutdownSignal,
-) -> (TemplateManagerHandle, JoinHandle<anyhow::Result<()>>) {
-    let (tx_request, rx_request) = mpsc::channel(1);
-    let handle = TemplateManagerHandle::new(tx_request);
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TemplateConfig {
+    max_cache_size_bytes: u64,
+    debug_replacements: Vec<String>,
+}
 
-    let (tx_download_queue, rx_download_queue) = mpsc::channel(1);
-    let (tx_completed_downloads, rx_completed_downloads) = mpsc::channel(1);
+impl Default for TemplateConfig {
+    fn default() -> Self {
+        Self {
+            max_cache_size_bytes: 200 * 1024 * 1024,
+            debug_replacements: Vec::new(),
+        }
+    }
+}
 
-    let join_handle =
-        TemplateManagerService::spawn(rx_request, manager, tx_download_queue, rx_completed_downloads, shutdown);
-    TemplateDownloadWorker::new(rx_download_queue, tx_completed_downloads).spawn();
-    (handle, join_handle)
+impl TemplateConfig {
+    pub fn debug_replacements(&self) -> HashMap<TemplateAddress, PathBuf> {
+        let mut result = HashMap::new();
+        for row in &self.debug_replacements {
+            let (template_address, path) = row.split_once('=').expect("USAGE: [templateaddress]=[path]");
+            let template_address = TemplateAddress::from_hex(template_address).expect("Not a valid template address");
+            result.insert(template_address, path.into());
+        }
+        result
+    }
+
+    pub fn max_cache_size_bytes(&self) -> u64 {
+        self.max_cache_size_bytes
+    }
 }

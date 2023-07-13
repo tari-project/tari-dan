@@ -198,6 +198,17 @@ impl WalletStoreReader for ReadTransaction<'_> {
         rows.into_iter().map(|row| row.try_into_wallet_transaction()).collect()
     }
 
+    fn transactions_fetch_all(&mut self) -> Result<Vec<WalletTransaction>, WalletStorageError> {
+        use crate::schema::transactions;
+
+        let rows = transactions::table
+            .filter(transactions::dry_run.eq(false))
+            .load::<models::Transaction>(self.connection())
+            .map_err(|e| WalletStorageError::general("transactions_fetch_all", e))?;
+
+        rows.into_iter().map(|row| row.try_into_wallet_transaction()).collect()
+    }
+
     // -------------------------------- Substates -------------------------------- //
     fn substates_get(&mut self, address: &SubstateAddress) -> Result<SubstateModel, WalletStorageError> {
         use crate::schema::substates;

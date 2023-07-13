@@ -42,7 +42,7 @@ use tari_comms::{
 };
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
-use tari_dan_app_utilities::template_manager::TemplateManagerHandle;
+use tari_dan_app_utilities::template_manager::interface::TemplateManagerHandle;
 use tari_dan_common_types::{optional::Optional, PayloadId, QuorumCertificate, QuorumDecision, ShardId};
 use tari_dan_core::workers::events::{EventSubscription, HotStuffEvent};
 use tari_dan_storage::{ShardStore, ShardStoreReadTransaction};

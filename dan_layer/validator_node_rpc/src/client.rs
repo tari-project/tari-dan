@@ -17,7 +17,7 @@ use tari_comms::{
     PeerConnection,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{NodeAddressable, PayloadId};
+use tari_dan_common_types::{NodeAddressable, ObjectPledge, PayloadId, ShardId, SubstateState};
 use tari_dan_core::services::DanPeer;
 use tari_engine_types::{
     commit_result::ExecuteResult,
@@ -33,6 +33,8 @@ use crate::{
         PayloadResultStatus,
         SubmitTransactionRequest,
         SubstateStatus,
+        VnStateSyncRequest,
+        VnStateSyncResponse,
     },
     rpc_service,
     ValidatorNodeRpcClientError,
@@ -59,6 +61,8 @@ pub trait ValidatorNodeRpcClient: Send + Sync {
     async fn get_peers(&mut self) -> Result<Vec<DanPeer<Self::Addr>>, Self::Error>;
 
     async fn get_substate(&mut self, address: &SubstateAddress, version: u32) -> Result<SubstateResult, Self::Error>;
+
+    async fn get_shard_pledge(&mut self, shard_id: &ShardId) -> Result<ObjectPledge, Self::Error>;
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -111,6 +115,34 @@ impl TariCommsValidatorNodeRpcClient {
             .await?;
         let client = conn.connect_rpc().await?;
         Ok(client)
+    }
+
+    fn extract_pledge_from_vn_sync_response(msg: VnStateSyncResponse) -> Result<ObjectPledge, anyhow::Error> {
+        let shard_id = ShardId::try_from(msg.shard_id)?;
+        let pledged_to_payload = PayloadId::try_from(msg.created_payload_id.as_slice())?;
+
+        let current_state = if let Some(deleted_by) = Some(msg.destroyed_payload_id).filter(|p| !p.is_empty()) {
+            SubstateState::Down {
+                deleted_by: deleted_by.try_into()?,
+                fees_accrued: msg.destroyed_fee_accrued,
+            }
+        } else {
+            let substate = Substate::from_bytes(&msg.substate)?;
+            SubstateState::Up {
+                created_by: msg.created_payload_id.try_into()?,
+                address: SubstateAddress::from_bytes(&msg.address)?,
+                data: substate,
+                fees_accrued: msg.created_fee_accrued,
+            }
+        };
+
+        let pledge = ObjectPledge {
+            shard_id,
+            current_state,
+            pledged_to_payload,
+        };
+
+        Ok(pledge)
     }
 }
 
@@ -249,6 +281,33 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                 response.status
             ))),
         }
+    }
+
+    async fn get_shard_pledge(&mut self, shard_id: &ShardId) -> Result<ObjectPledge, Self::Error> {
+        let mut client = self.client_connection().await?;
+
+        // request the shard substate to the VN
+        let shard_id_proto: crate::proto::common::ShardId = (*shard_id).into();
+        let request = VnStateSyncRequest {
+            start_shard_id: Some(shard_id_proto.clone()),
+            end_shard_id: Some(shard_id_proto),
+            inventory: vec![],
+        };
+
+        // get the VN's response
+        let mut vn_state_stream = client.vn_state_sync(request).await?;
+
+        // extract the shard pledge from the response
+        if let Some(resp) = vn_state_stream.next().await {
+            let resp = resp?;
+            let pledge = Self::extract_pledge_from_vn_sync_response(resp)
+                .map_err(ValidatorNodeRpcClientError::InvalidResponse)?;
+            return Ok(pledge);
+        }
+
+        Err(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+            "Node returned an invalid or empty response"
+        )))
     }
 }
 

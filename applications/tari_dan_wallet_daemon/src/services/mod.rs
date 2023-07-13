@@ -14,7 +14,7 @@ mod transaction_service;
 use anyhow::anyhow;
 use futures::{future, future::BoxFuture, FutureExt};
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_dan_wallet_sdk::{storage::WalletStore, substate_provider::WalletNetworkInterface, DanWalletSdk};
+use tari_dan_wallet_sdk::{network::WalletNetworkInterface, storage::WalletStore, DanWalletSdk};
 use tari_shutdown::ShutdownSignal;
 use tokio::{sync::oneshot, task::JoinHandle};
 use transaction_service::TransactionService;

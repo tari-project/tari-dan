@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
-use tari_dan_app_utilities::template_manager::TemplateManagerError;
+use tari_dan_app_utilities::template_manager::interface::TemplateManagerError;
 use tari_epoch_manager::base_layer::EpochManagerError;
 use thiserror::Error;
 use tokio::sync::{mpsc::error::SendError, oneshot};
