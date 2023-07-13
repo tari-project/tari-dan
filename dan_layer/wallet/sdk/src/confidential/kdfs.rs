@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use chacha20poly1305::{aead::generic_array::GenericArray, Key};
+use digest::FixedOutput;
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::dhke::DiffieHellmanSharedSecret;
 use tari_engine_types::base_layer_hashing::encrypted_data_hasher;
@@ -17,7 +18,7 @@ pub fn encrypted_data_dh_kdf_aead(private_key: &PrivateKey, public_nonce: &Publi
     let mut aead_key = EncryptedDataKey::from(SafeArray::default());
     // Must match base layer burn
     encrypted_data_hasher()
-        .chain(&shared_secret.as_bytes())
+        .chain(shared_secret.as_bytes())
         .finalize_into(GenericArray::from_mut_slice(aead_key.reveal_mut()));
 
     PrivateKey::from_bytes(aead_key.reveal()).unwrap()

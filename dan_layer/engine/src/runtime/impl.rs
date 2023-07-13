@@ -75,7 +75,8 @@ use tari_template_lib::{
     },
     auth::AccessRules,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-    models::{Amount, BucketId, ComponentAddress, NonFungibleAddress, VaultRef},
+    crypto::RistrettoPublicKeyBytes,
+    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, VaultRef},
 };
 use tari_utilities::ByteArray;
 
@@ -171,7 +172,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         Ok(())
     }
 
-    fn emit_event(&self, topic: String, payload: HashMap<String, String>) -> Result<(), RuntimeError> {
+    fn emit_event(&self, topic: String, payload: Metadata) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
         let component_address = self.tracker.runtime_state_component_address()?;
@@ -208,8 +209,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError> {
         self.invoke_modules_on_runtime_call("caller_context_invoke")?;
 
+        let sender_public_key = RistrettoPublicKeyBytes::from_bytes(self.sender_public_key.as_bytes()).expect(
+            "RistrettoPublicKeyBytes::from_bytes should be infallible when called with RistrettoPublicKey bytes",
+        );
+
         match action {
-            CallerContextAction::GetCallerPublicKey => Ok(InvokeResult::encode(&self.sender_public_key)?),
+            CallerContextAction::GetCallerPublicKey => Ok(InvokeResult::encode(&sender_public_key)?),
         }
     }
 

@@ -21,7 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-use std::{collections::BTreeMap, convert::TryFrom, str::FromStr};
+use std::{convert::TryFrom, str::FromStr};
 
 use diesel::sql_types::{Integer, Nullable, Text};
 use serde::{Deserialize, Serialize};
@@ -106,7 +106,7 @@ impl TryFrom<EventData> for tari_engine_types::events::Event {
             .transpose()?;
         let template_address = Hash::from_hex(&event_data.template_address)?;
         let tx_hash = Hash::from_hex(&event_data.tx_hash)?;
-        let payload: BTreeMap<String, String> = serde_json::from_str(event_data.payload.as_str())?;
+        let payload = serde_json::from_str(event_data.payload.as_str())?;
 
         Ok(Self::new(
             component_address,

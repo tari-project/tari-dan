@@ -30,7 +30,6 @@ mod grpc;
 mod http_ui;
 mod json_rpc;
 mod p2p;
-mod payload_processor;
 mod registration;
 mod template_registration_signing;
 // TODO: Hook up transaction executor to process transactions from the mempool and pass the executed result to consensus
@@ -133,20 +132,22 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
 
     // Run the JSON-RPC API
     let mut jrpc_address = config.validator_node.json_rpc_address;
-    if let Some(address) = jrpc_address.as_mut() {
-        info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
+    if let Some(jrpc_address) = jrpc_address.as_mut() {
+        info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", jrpc_address);
         let handlers = JsonRpcHandlers::new(
             wallet_client,
             base_node_client,
             &services,
             config.validator_node.clone(),
         );
-        *address = spawn_json_rpc(*address, handlers)?;
-    }
-
-    // Run the http ui
-    if let Some(address) = config.validator_node.http_ui_address {
-        task::spawn(run_http_ui_server(address, jrpc_address));
+        *jrpc_address = spawn_json_rpc(*jrpc_address, handlers)?;
+        // Run the http ui
+        if let Some(address) = config.validator_node.http_ui_address {
+            task::spawn(run_http_ui_server(
+                address,
+                config.validator_node.ui_connect_address.unwrap_or(*jrpc_address),
+            ));
+        }
     }
 
     fs::write(config.common.base_path.join("pid"), process::id().to_string())

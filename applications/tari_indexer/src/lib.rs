@@ -29,6 +29,7 @@ mod bootstrap;
 pub mod cli;
 mod comms;
 pub mod config;
+mod dry_run;
 pub mod graphql;
 mod http_ui;
 mod json_rpc;
@@ -63,6 +64,7 @@ use tokio::{task, time};
 use crate::{
     bootstrap::{spawn_services, Services},
     config::ApplicationConfig,
+    dry_run::processor::DryRunTransactionProcessor,
     graphql::server::run_graphql,
     json_rpc::{run_json_rpc, JsonRpcHandlers},
     transaction_manager::TransactionManager,
@@ -109,7 +111,15 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let transaction_manager = TransactionManager::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
+        dan_layer_scanner.clone(),
+    );
+
+    // dry run
+    let dry_run_transaction_processor = DryRunTransactionProcessor::new(
+        services.epoch_manager.clone(),
+        services.validator_node_client_factory.clone(),
         dan_layer_scanner,
+        services.template_manager.clone(),
     );
 
     // Run the JSON-RPC API
@@ -127,6 +137,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
             base_node_client,
             substate_manager.clone(),
             transaction_manager,
+            dry_run_transaction_processor,
         );
         task::spawn(run_json_rpc(address, handlers));
     }

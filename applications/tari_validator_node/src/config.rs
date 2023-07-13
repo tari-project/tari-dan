@@ -35,9 +35,8 @@ use tari_common::{
     SubConfigPath,
 };
 use tari_comms::multiaddr::Multiaddr;
+use tari_dan_app_utilities::template_manager::implementation::TemplateConfig;
 use tari_p2p::{P2pConfig, PeerSeedsConfig};
-
-use crate::p2p::services::template_manager::TemplateConfig;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -89,6 +88,9 @@ pub struct ValidatorNodeConfig {
     pub grpc_address: Option<Multiaddr>,
     /// JSON-RPC address of the validator node  application
     pub json_rpc_address: Option<SocketAddr>,
+    /// The jrpc address where the UI should connect (it can be the same as the json_rpc_address, but doesn't have to
+    /// be), if this will be None, then the listen_addr will be used.
+    pub ui_connect_address: Option<SocketAddr>,
     /// The address of the HTTP UI
     pub http_ui_address: Option<SocketAddr>,
     /// The node will re-register each epoch
@@ -142,6 +144,7 @@ impl Default for ValidatorNodeConfig {
             p2p,
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
             json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
+            ui_connect_address: None,
             http_ui_address: Some("127.0.0.1:5001".parse().unwrap()),
             auto_register: true,
             templates: TemplateConfig::default(),

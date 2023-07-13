@@ -9,6 +9,6 @@ pub mod confidential;
 pub mod models;
 mod sdk;
 pub use sdk::{DanWalletSdk, WalletSdkConfig};
-pub mod substate_provider;
+pub mod network;
 
 pub use tari_key_manager::cipher_seed::CipherSeed;

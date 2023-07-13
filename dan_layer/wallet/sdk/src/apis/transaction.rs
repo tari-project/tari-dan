@@ -15,8 +15,8 @@ use tari_transaction::Transaction;
 
 use crate::{
     models::{TransactionStatus, VersionedSubstateAddress, WalletTransaction},
+    network::{TransactionQueryResult, WalletNetworkInterface},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
-    substate_provider::WalletNetworkInterface,
 };
 
 const LOG_TARGET: &str = "tari::dan::wallet_sdk::apis::transaction";
@@ -45,11 +45,17 @@ where
         Ok(transaction)
     }
 
-    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<FixedHash, TransactionApiError> {
+    pub async fn submit_transaction(
+        &self,
+        transaction: Transaction,
+    ) -> Result<TransactionQueryResult, TransactionApiError> {
         self.submit_transaction_internal(transaction, false).await
     }
 
-    pub async fn submit_dry_run_transaction(&self, transaction: Transaction) -> Result<FixedHash, TransactionApiError> {
+    pub async fn submit_dry_run_transaction(
+        &self,
+        transaction: Transaction,
+    ) -> Result<TransactionQueryResult, TransactionApiError> {
         self.submit_transaction_internal(transaction, true).await
     }
 
@@ -57,32 +63,33 @@ where
         &self,
         transaction: Transaction,
         is_dry_run: bool,
-    ) -> Result<FixedHash, TransactionApiError> {
-        self.store
-            .with_write_tx(|tx| tx.transactions_insert(&transaction, is_dry_run))?;
+    ) -> Result<TransactionQueryResult, TransactionApiError> {
+        // we don't have any need to store a dry run transaction
+        if !is_dry_run {
+            self.store
+                .with_write_tx(|tx| tx.transactions_insert(&transaction, is_dry_run))?;
+        }
 
-        let hash = self
+        let result = self
             .network_interface
             .submit_transaction(transaction, is_dry_run)
             .await
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
-        self.store.with_write_tx(|tx| {
-            tx.transactions_set_result_and_status(
-                hash,
-                None,
-                None,
-                None,
-                None,
-                if is_dry_run {
-                    TransactionStatus::DryRun
-                } else {
-                    TransactionStatus::Pending
-                },
-            )
-        })?;
+        if !is_dry_run {
+            self.store.with_write_tx(|tx| {
+                tx.transactions_set_result_and_status(
+                    result.transaction_hash,
+                    None,
+                    None,
+                    None,
+                    None,
+                    TransactionStatus::Pending,
+                )
+            })?;
+        }
 
-        Ok(hash)
+        Ok(result)
     }
 
     pub fn fetch_all_by_status(
@@ -91,6 +98,12 @@ where
     ) -> Result<Vec<WalletTransaction>, TransactionApiError> {
         let mut tx = self.store.create_read_tx()?;
         let transactions = tx.transactions_fetch_all_by_status(status)?;
+        Ok(transactions)
+    }
+
+    pub fn fetch_all(&self) -> Result<Vec<WalletTransaction>, TransactionApiError> {
+        let mut tx = self.store.create_read_tx()?;
+        let transactions = tx.transactions_fetch_all()?;
         Ok(transactions)
     }
 
@@ -125,7 +138,8 @@ where
                 )
             })?;
 
-            // Not found - TODO: this probably means the transaction was rejected in the mempool, but we cant be sure. Perhaps we should store it in its entirety and allow the user to resubmit it.
+            // Not found - TODO: this probably means the transaction was rejected in the mempool, but we cant be sure.
+            // Perhaps we should store it in its entirety and allow the user to resubmit it.
             return Ok(Some(WalletTransaction {
                 transaction: transaction.transaction,
                 status: TransactionStatus::InvalidTransaction,

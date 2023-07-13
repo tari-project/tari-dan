@@ -24,18 +24,18 @@ use std::{io, io::Write};
 
 use borsh::BorshSerialize;
 use digest::Digest;
-use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
+use tari_crypto::{
+    hash::blake2::Blake256,
+    hash_domain,
+    hashing::{DomainSeparatedHasher, DomainSeparation},
+};
 use tari_template_lib::Hash;
 
-hash_domain!(
-    ConfidentialOutputHashDomain,
-    "com.tari.layer_two.confidential_output",
-    1
-);
+hash_domain!(ConfidentialOutputHashDomain, "com.tari.dan.confidential_output", 1);
 
 hash_domain!(
     WalletOutputEncryptionKeysDomain,
-    "com.tari.tari_project.base_layer.wallet.output_encryption_keys",
+    "com.tari.base_layer.wallet.output_encryption_keys",
     1
 );
 
@@ -43,8 +43,9 @@ fn confidential_hasher(label: &'static str) -> TariBaseLayerHasher {
     TariBaseLayerHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
 }
 
-pub fn encrypted_data_hasher() -> TariBaseLayerHasher {
-    TariBaseLayerHasher::new_with_label::<WalletOutputEncryptionKeysDomain>("")
+type WalletOutputEncryptionKeysDomainHasher = DomainSeparatedHasher<Blake256, WalletOutputEncryptionKeysDomain>;
+pub fn encrypted_data_hasher() -> WalletOutputEncryptionKeysDomainHasher {
+    WalletOutputEncryptionKeysDomainHasher::new_with_label("")
 }
 
 pub fn ownership_proof_hasher() -> TariBaseLayerHasher {

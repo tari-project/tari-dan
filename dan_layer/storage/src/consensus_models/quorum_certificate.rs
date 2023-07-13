@@ -162,15 +162,16 @@ impl QuorumCertificate {
         Ok(tx.quorum_certificates_get(&self.qc_id).optional()?.is_some())
     }
 
-    pub fn save<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
+    pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
         TTx: StateStoreWriteTransaction + DerefMut,
         TTx::Target: StateStoreReadTransaction,
     {
         if self.exists(tx.deref_mut())? {
-            return Ok(());
+            return Ok(true);
         }
-        self.insert(tx)
+        self.insert(tx)?;
+        Ok(false)
     }
 
     pub fn set_as_high_qc<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {

@@ -34,6 +34,7 @@ use tari_common::{
     DefaultConfigLoader,
     SubConfigPath,
 };
+use tari_dan_app_utilities::template_manager::implementation::TemplateConfig;
 use tari_engine_types::substate::SubstateAddress;
 use tari_p2p::{P2pConfig, PeerSeedsConfig};
 
@@ -87,6 +88,8 @@ pub struct IndexerConfig {
     /// How often do we want to scan the second layer for new versions
     #[serde(with = "serializers::seconds")]
     pub dan_layer_scanning_internal: Duration,
+    /// Template config
+    pub templates: TemplateConfig,
 }
 
 impl IndexerConfig {
@@ -128,6 +131,7 @@ impl Default for IndexerConfig {
             http_ui_address: Some("127.0.0.1:15000".parse().unwrap()),
             address_watchlist: vec![],
             dan_layer_scanning_internal: Duration::from_secs(10),
+            templates: TemplateConfig::default(),
         }
     }
 }

@@ -20,12 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::{BTreeMap, HashMap},
-    convert::TryInto,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::HashMap, convert::TryInto, str::FromStr, sync::Arc};
 
 use anyhow::anyhow;
 use log::info;
@@ -43,7 +38,11 @@ use tari_indexer_lib::{
     substate_scanner::SubstateScanner,
     NonFungibleSubstate,
 };
-use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
+use tari_template_lib::{
+    models::TemplateAddress,
+    prelude::{ComponentAddress, Metadata},
+    Hash,
+};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::substate_storage_sqlite::{
@@ -293,7 +292,7 @@ impl SubstateManager {
         template_address: TemplateAddress,
         tx_hash: PayloadId,
         topic: String,
-        payload: BTreeMap<String, String>,
+        payload: &Metadata,
         version: u64,
     ) -> Result<(), anyhow::Error> {
         let mut tx = self.substate_store.create_write_tx()?;
@@ -394,7 +393,7 @@ impl SubstateManager {
             let template_address = event.template_address();
             let tx_hash = PayloadId::from_array(event.tx_hash().into_array());
             let topic = event.topic();
-            let payload = event.payload().clone();
+            let payload = event.payload();
             self.save_event_to_db(
                 component_address,
                 template_address,

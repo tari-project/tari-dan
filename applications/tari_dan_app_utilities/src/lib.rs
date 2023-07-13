@@ -21,4 +21,5 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod base_layer_scanner;
+pub mod payload_processor;
 pub mod template_manager;

@@ -28,7 +28,7 @@ use tari_bor::encode_into;
 use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
 use tari_template_lib::Hash;
 
-hash_domain!(TariEngineHashDomain, "tari.dan.engine", 0);
+hash_domain!(TariEngineHashDomain, "com.tari.dan.engine", 0);
 
 pub fn hasher(label: EngineHashDomainLabel) -> TariHasher {
     TariHasher::new_with_label::<TariEngineHashDomain>(label.as_label())
@@ -38,11 +38,7 @@ pub fn template_hasher() -> TariHasher {
     hasher(EngineHashDomainLabel::Template)
 }
 
-hash_domain!(
-    ConfidentialOutputHashDomain,
-    "com.tari.layer_two.confidential_output",
-    1
-);
+hash_domain!(ConfidentialOutputHashDomain, "com.tari.dan.confidential_output", 1);
 
 #[derive(Debug, Clone)]
 pub struct TariHasher {

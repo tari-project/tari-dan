@@ -14,8 +14,8 @@ use tari_engine_types::{
 
 use crate::{
     models::{SubstateModel, VersionedSubstateAddress},
+    network::WalletNetworkInterface,
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
-    substate_provider::WalletNetworkInterface,
 };
 
 const LOG_TARGET: &str = "tari::dan::wallet_sdk::apis::substate";

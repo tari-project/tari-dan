@@ -14,6 +14,8 @@ use tari_wallet_daemon_client::types::{
     AccountGetRequest,
     AccountGetResponse,
     CallInstructionRequest,
+    TransactionGetAllRequest,
+    TransactionGetAllResponse,
     TransactionGetRequest,
     TransactionGetResponse,
     TransactionGetResultRequest,
@@ -143,20 +145,28 @@ pub async fn handle_submit(
         "Submitted transaction with hash {}",
         transaction.hash()
     );
-    let hash = if req.is_dry_run {
-        sdk.transaction_api().submit_dry_run_transaction(transaction).await?
-    } else {
-        sdk.transaction_api().submit_transaction(transaction).await?
-    };
 
-    if !req.is_dry_run {
+    if req.is_dry_run {
+        let response = sdk.transaction_api().submit_dry_run_transaction(transaction).await?;
+        Ok(TransactionSubmitResponse {
+            hash: response.transaction_hash,
+            result: response.execution_result,
+            inputs,
+            outputs,
+        })
+    } else {
+        let response = sdk.transaction_api().submit_transaction(transaction).await?;
         context.notifier().notify(TransactionSubmittedEvent {
-            hash,
+            hash: response.transaction_hash,
             new_account: None,
         });
+        Ok(TransactionSubmitResponse {
+            hash: response.transaction_hash,
+            inputs,
+            outputs,
+            result: None,
+        })
     }
-
-    Ok(TransactionSubmitResponse { hash, inputs, outputs })
 }
 
 pub async fn handle_get(
@@ -181,6 +191,27 @@ pub async fn handle_get(
         result: transaction.finalize,
         status: transaction.status,
         transaction_failure: transaction.transaction_failure,
+    })
+}
+
+pub async fn handle_get_all_by_status(
+    context: &HandlerContext,
+    token: Option<String>,
+    req: TransactionGetAllRequest,
+) -> Result<TransactionGetAllResponse, anyhow::Error> {
+    context
+        .wallet_sdk()
+        .jwt_api()
+        .check_auth(token, &[JrpcPermission::TransactionGet])?;
+    let transactions = match req.status {
+        Some(status) => context.wallet_sdk().transaction_api().fetch_all_by_status(status)?,
+        None => context.wallet_sdk().transaction_api().fetch_all()?,
+    };
+    Ok(TransactionGetAllResponse {
+        transactions: transactions
+            .into_iter()
+            .map(|tx| (tx.transaction, tx.finalize, tx.status, tx.transaction_failure))
+            .collect(),
     })
 }
 
@@ -217,7 +248,7 @@ pub async fn handle_wait_result(
     context
         .wallet_sdk()
         .jwt_api()
-        .check_auth(token, &[JrpcPermission::Admin])?;
+        .check_auth(token, &[JrpcPermission::TransactionGet])?;
     let mut events = context.notifier().subscribe();
     let transaction = context
         .wallet_sdk()

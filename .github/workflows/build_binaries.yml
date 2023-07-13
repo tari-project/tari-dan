@@ -1,0 +1,458 @@
+---
+name: Build Matrix of Binaries
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+    branches:
+      - build-*
+  schedule:
+    - cron: "05 00 * * *"
+  workflow_dispatch:
+    inputs:
+      customTag:
+        description: "Development Tag"
+        required: true
+        default: "development-tag"
+
+env:
+  TN_FILENAME: "tari_network_suite"
+  TBN_BUNDLEID_BASE: "com.tari.network.pkg"
+  toolchain: stable
+  matrix-json-file: ".github/workflows/build_binaries.json"
+
+jobs:
+  matrix-prep:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: false
+
+      - name: Set Matrix
+        id: set-matrix
+        run: |
+          #
+          # build all targets images
+          # matrix=$( jq -s -c .[] .github/workflows/base_node_binaries.json )
+          #
+          # build only single target image
+          # matrix_selection=$( jq -c '.[] | select( ."name" == "windows-x64" )' ${{ env.matrix-json-file }} )
+          #
+          # buid select target images - build_enabled
+          matrix_selection=$( jq -c '.[] | select( ."build_enabled" != false )' ${{ env.matrix-json-file }} )
+          #
+          # Setup the json build matrix
+          matrix=$(echo ${matrix_selection} | jq -s -c '{"builds": .}')
+          echo $matrix
+          echo $matrix | jq .
+          echo "::set-output name=matrix::$matrix"
+
+  matrix-check:
+    runs-on: ubuntu-latest
+    needs: matrix-prep
+    steps:
+      - name: Install json2yaml
+        run: |
+          sudo npm install -g json2yaml
+
+      - name: Check matrix definition
+        run: |
+          matrix='${{ needs.matrix-prep.outputs.matrix }}'
+          echo $matrix
+          echo $matrix | jq .
+          echo $matrix | json2yaml
+
+  builds:
+    name: Building ${{ matrix.builds.name }} on ${{ matrix.builds.runs-on }}
+    needs: matrix-prep
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.matrix-prep.outputs.matrix) }}
+
+    runs-on: ${{ matrix.builds.runs-on }}
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+
+      - name: Declare Global Variables 4 GHA ${{ github.event_name }}
+        id: vars
+        shell: bash
+        run: |
+          echo "VBRANCH=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_ENV
+          echo "VSHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "CARGO_HTTP_MULTIPLEXING=false" >> $GITHUB_ENV
+
+      - name: Default Destination Folder
+        run: |
+          echo "S3DESTOVERRIDE=" >> $GITHUB_ENV
+
+      - name: Scheduled Destination Folder Override
+        if: ${{ github.event_name == 'schedule' && github.event.schedule == '05 00 01 * *' }}
+        run: |
+          echo "S3DESTOVERRIDE=daily/" >> $GITHUB_ENV
+
+      - name: Setup Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          components: rustfmt, clippy
+          toolchain: ${{ matrix.builds.rust }}
+          target: ${{ matrix.builds.target }}
+          override: true
+      - uses: rui314/setup-mold@v1
+      - name: wasm target install
+        run: rustup target add wasm32-unknown-unknown
+      - name: Install Linux dependencies - Ubuntu
+        if: startsWith(runner.os,'Linux')
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install \
+            openssl \
+            libssl-dev \
+            pkg-config \
+            libsqlite3-dev \
+            clang-10 \
+            git \
+            cmake \
+            libc++-dev \
+            libc++abi-dev \
+            libprotobuf-dev \
+            protobuf-compiler \
+            libncurses5-dev \
+            libncursesw5-dev \
+            zip \
+            build-essential \
+            libgtk-3-dev \
+            libwebkit2gtk-4.0-dev \
+            libsoup2.4-dev \
+            curl \
+            wget \
+            libappindicator3-dev \
+            patchelf \
+            librsvg2-dev \
+            gcc-aarch64-linux-gnu \
+            g++-aarch64-linux-gnu
+          sudo apt-get -y --purge remove \
+            clang-9 clang-format-9 libclang-common-9-dev libclang-cpp9 libclang1-9
+
+      - name: Install macOS dependencies
+        if: startsWith(runner.os,'macOS')
+        run: brew install cmake zip coreutils automake autoconf
+
+      - name: Install Windows dependencies
+        if: startsWith(runner.os,'Windows')
+        run: |
+          vcpkg.exe install sqlite3:x64-windows zlib:x64-windows
+          choco upgrade llvm zip openssl strawberryperl -y
+
+      - name: Set environment variables - Nix
+        if: "!startsWith(runner.os,'Windows')"
+        run: |
+          echo "SHARUN=shasum --algorithm 256" >> $GITHUB_ENV
+          echo "CC=gcc" >> $GITHUB_ENV
+          echo "TBN_EXT=" >> $GITHUB_ENV
+          echo "LIB_PRE=lib" >> $GITHUB_ENV
+          echo "SHELL_EXT=.sh" >> $GITHUB_ENV
+          echo "PLATFORM_SPECIFIC_DIR=linux" >> $GITHUB_ENV
+          echo "TBN_DIST=/dist" >> $GITHUB_ENV
+
+      - name: Set environment variables - macOS
+        if: startsWith(runner.os,'macOS')
+        run: |
+          echo "PLATFORM_SPECIFIC_DIR=osx" >> $GITHUB_ENV
+          echo "LIB_EXT=.dylib" >> $GITHUB_ENV
+
+      - name: Set environment variables - Ubuntu
+        if: startsWith(runner.os,'Linux')
+        run: |
+          echo "LIB_EXT=.so" >> $GITHUB_ENV
+
+      - name: Set environment variables - Windows
+        if: startsWith(runner.os,'Windows')
+        shell: bash
+        run: |
+          echo "TBN_EXT=.exe" >> $GITHUB_ENV
+          echo "LIB_EXT=.dll" >> $GITHUB_ENV
+          echo "LIB_PRE=" >> $GITHUB_ENV
+          echo "SHELL_EXT=.bat" >> $GITHUB_ENV
+          echo "TBN_DIST=\dist" >> $GITHUB_ENV
+          echo "PLATFORM_SPECIFIC_DIR=windows" >> $GITHUB_ENV
+          echo "SQLITE3_LIB_DIR=C:\vcpkg\installed\x64-windows\lib" >> $GITHUB_ENV
+          echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $GITHUB_ENV
+          echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $GITHUB_ENV
+          echo "C:\Strawberry\perl\bin" >> $GITHUB_PATH
+
+      - name: Cache cargo files and outputs
+        uses: Swatinem/rust-cache@v1
+
+        # Fix me soon!
+      - name: Build rust binaries - hardcoded (linux-arm64)
+        if: ${{ matrix.builds.name == 'linux-arm64' }}
+        shell: bash
+        run: |
+          export RUSTFLAGS="-C target_cpu=generic"
+          export ROARING_ARCH=generic
+          export BUILD_TARGET="aarch64-unknown-linux-gnu/"
+          export RUST_TARGET="--target=aarch64-unknown-linux-gnu"
+          export ARCH=generic
+          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
+          export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
+          export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
+          export BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/aarch64-linux-gnu/include/"
+          cargo build --release --target ${{ matrix.builds.target }} ${{ matrix.builds.target_bins }}
+
+      - name: Build rust binaries - Normal
+        if: ${{ matrix.builds.name != 'linux-arm64' }}
+        uses: actions-rs/cargo@v1
+        env:
+          RUSTFLAGS: "-C target_cpu=${{ matrix.builds.target_cpu }}"
+          ROARING_ARCH: "${{ matrix.builds.target_cpu }}"
+        with:
+          use-cross: ${{ matrix.builds.cross }}
+          command: build
+          args: --release --target ${{ matrix.builds.target }} ${{ matrix.builds.target_bins }} --locked
+
+      - name: Copy binaries to folder for zipping
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE${TBN_DIST}"
+          cd "$GITHUB_WORKSPACE${TBN_DIST}"
+          VERSION=$(awk -F ' = ' '$1 ~ /version/ { gsub(/["]/, "", $2); printf("%s",$2) }' "$GITHUB_WORKSPACE/applications/tari_validator_node/Cargo.toml")
+          echo "Branch: ${VBRANCH}"
+          echo "Sha: ${VSHA_SHORT}"
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "VSHA_SHORT=${VSHA_SHORT}" >> $GITHUB_ENV
+          BINFILE="${TN_FILENAME}-${VERSION}-${VSHA_SHORT}-${{ matrix.builds.name }}${TBN_EXT}"
+          echo "BINFILE=${BINFILE}" >> $GITHUB_ENV
+          echo "Copying files for ${BINFILE} to $(pwd)"
+          ls -la "$GITHUB_WORKSPACE/target/${{ matrix.builds.target }}/release/"
+          FILES=(
+            "tari_dan_wallet_cli"
+            "tari_dan_wallet_daemon"
+            "tari_indexer"
+            "tari_validator_node"
+            "tari_signaling_server"
+          )
+          for FILE in "${FILES[@]}"; do
+            if [ -f "$GITHUB_WORKSPACE/target/${{ matrix.builds.target }}/release/${FILE}${TBN_EXT}" ]; then
+              cp -v "$GITHUB_WORKSPACE/target/${{ matrix.builds.target }}/release/${FILE}${TBN_EXT}" .
+            fi
+          done
+
+#      - name: Build the macOS pkg
+#        if: startsWith(runner.os,'macOS')
+#        continue-on-error: true
+#        env:
+#          MACOS_KEYCHAIN_PASS: ${{ secrets.MACOS_KEYCHAIN_PASS }}
+#          MACOS_APPLICATION_ID: ${{ secrets.MACOS_APPLICATION_ID }}
+#          MACOS_APPLICATION_CERT: ${{ secrets.MACOS_APPLICATION_CERT }}
+#          MACOS_APPLICATION_PASS: ${{ secrets.MACOS_APPLICATION_PASS }}
+#          MACOS_INSTALLER_ID: ${{ secrets.MACOS_INSTALLER_ID }}
+#          MACOS_INSTALLER_CERT: ${{ secrets.MACOS_INSTALLER_CERT }}
+#          MACOS_INSTALLER_PASS: ${{ secrets.MACOS_INSTALLER_PASS }}
+#          MACOS_NOTARIZE_USERNAME: ${{ secrets.MACOS_NOTARIZE_USERNAME }}
+#          MACOS_NOTARIZE_PASSWORD: ${{ secrets.MACOS_NOTARIZE_PASSWORD }}
+#          MACOS_ASC_PROVIDER: ${{ secrets.MACOS_ASC_PROVIDER }}
+#        run: |
+#          echo $MACOS_APPLICATION_CERT | base64 --decode > application.p12
+#          echo $MACOS_INSTALLER_CERT | base64 --decode > installer.p12
+#          security create-keychain -p $MACOS_KEYCHAIN_PASS build.keychain
+#          security default-keychain -s build.keychain
+#          security unlock-keychain -p $MACOS_KEYCHAIN_PASS build.keychain
+#          security import application.p12 -k build.keychain -P $MACOS_APPLICATION_PASS -T /usr/bin/codesign
+#          security import installer.p12 -k build.keychain -P $MACOS_INSTALLER_PASS -T /usr/bin/pkgbuild
+#          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k $MACOS_KEYCHAIN_PASS build.keychain
+#          cd buildtools
+#          export target_release="target/${{ matrix.builds.target }}/release"
+#          ./create_osx_install_zip.sh unused nozip
+#          FILES=(
+#            "tari_dan_wallet_cli"
+#            "tari_dan_wallet_daemon"
+#            "tari_indexer"
+#            "tari_validator_node"
+#            "tari_signaling_server"
+#          )
+#          for FILE in "${FILES[@]}"; do
+#            codesign --options runtime --force --verify --verbose --timestamp --sign "Developer ID Application: $MACOS_APPLICATION_ID" "/tmp/tari_testnet/runtime/$FILE"
+#            codesign --verify --deep --display --verbose=4 "/tmp/tari_testnet/runtime/$FILE"
+#            cp -vf "/tmp/tari_testnet/runtime/$FILE" "$GITHUB_WORKSPACE${{ env.TBN_DIST }}"
+#          done
+#          distDirPKG=$(mktemp -d -t ${{ env.TN_FILENAME }})
+#          echo "${distDirPKG}"
+#          echo "distDirPKG=${distDirPKG}" >> $GITHUB_ENV
+#          TBN_Temp=${{ env.TN_FILENAME }}
+#          TBN_BUNDLEID_VALID_NAME=$(echo "${TBN_Temp//_/-}")
+#          # Strip apple-darwin
+#          TBN_ARCH=$(echo "${${{ matrix.builds.target }}//-apple-darwin/}")
+#          pkgbuild --root /tmp/tari_testnet \
+#            --identifier "${{ env.TBN_BUNDLEID_BASE }}.$TBN_BUNDLEID_VALID_NAME" \
+#            --version "$VERSION" \
+#            --install-location "/tmp/tari" \
+#            --scripts "/tmp/tari_testnet/scripts" \
+#            --sign "Developer ID Installer: $MACOS_INSTALLER_ID" \
+#            "${distDirPKG}/${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg"
+#          echo -e "Submitting to Apple...\n\n"
+#          xcrun altool --notarize-app \
+#            --primary-bundle-id "${{ env.TBN_BUNDLEID_BASE }}.$TBN_BUNDLEID_VALID_NAME" \
+#            --username "$MACOS_NOTARIZE_USERNAME" --password "$MACOS_NOTARIZE_PASSWORD" \
+#            --asc-provider "$MACOS_ASC_PROVIDER" \
+#            --file "${distDirPKG}/${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg" &> notarisation.result
+#          requestUUID=`grep RequestUUID notarisation.result | cut -d" " -f 3`
+#          echo $requestUUID
+#          if [[ $requestUUID == "" ]]; then
+#            echo "could not upload for notarization"
+#            exit 1
+#          else
+#            echo "Notarization RequestUUID: $requestUUID"
+#          fi
+#          echo -e "\n\nChecking result of notarisation..."
+#          request_status="in progress"
+#          while [[ "$request_status" == "in progress" ]]; do
+#            echo -n "waiting... "
+#            sleep 10
+#            request_status=$(xcrun altool --notarization-info $requestUUID --username "$MACOS_NOTARIZE_USERNAME" --password "$MACOS_NOTARIZE_PASSWORD" 2>&1)
+#            echo "$request_status"
+#            request_status=$(echo "$request_status" | awk -F ': ' '/Status:/ { print $2; }' )
+#            echo "$request_status"
+#          done
+#          echo "$request_status"
+#          if [[ $request_status != "success" ]]; then
+#            echo "## could not notarize - $request_status - ${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg"
+#            exit 1
+#          else
+#            echo -e "\nStapling package...${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg\n"
+#            xcrun stapler staple -v "${distDirPKG}/${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg"
+#          fi
+#
+#      - name: Artifact upload for macOS pkg
+#        if: startsWith(runner.os,'macOS')
+#        continue-on-error: true
+#        uses: actions/upload-artifact@v2
+#        with:
+#          name: ${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg
+#          path: "${{ env.distDirPKG }}/${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}*.pkg"
+
+      # unlike inno script studio, iscc.exe doesn't run the [precompile] step generate_config.bat
+#      - name: Build the Windows installer
+#        shell: cmd
+#        if: startsWith(runner.os,'Windows')
+#        run: |
+#          cd buildtools
+#          call generate_config.bat
+#          "%programfiles(x86)%\Inno Setup 6\iscc.exe" "/DMyAppVersion=${{ env.VERSION }}-${{ env.VSHA_SHORT }}-release" "/DTariSuitePath=${{ github.workspace }}${{ env.TBN_DIST }}" "windows_inno_installer.iss"
+
+#      - name: Artifact upload for Windows installer
+#        uses: actions/upload-artifact@v2
+#        if: startsWith(runner.os,'Windows')
+#        with:
+#          name: "tari_windows_installer"
+#          path: "${{ github.workspace }}/buildtools/Output/*"
+
+      - name: Archive and Checksum Binaries
+        shell: bash
+        run: |
+          echo "Archive ${{ env.BINFILE }} too ${{ env.BINFILE }}.zip"
+          cd "$GITHUB_WORKSPACE${{ env.TBN_DIST }}"
+          zip -j "${{ env.BINFILE }}.zip" *
+          echo "Compute shasum"
+# TODO: checksums
+#          ${SHARUN} "${{ env.BINFILE }}.zip" >> "${{ env.BINFILE }}.zip.sha256"
+#          cat "${{ env.BINFILE }}.zip.sha256"
+#          echo "Verifications is "
+#          ${SHARUN} --check "${{ env.BINFILE }}.zip.sha256"
+#          if [ -f "${{ env.distDirPKG }}/${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg" ]; then
+#            echo "Add PKG to $GITHUB_WORKSPACE${{ env.TBN_DIST }} "
+#            cp -v "${{ env.distDirPKG }}/${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg" "$GITHUB_WORKSPACE${{ env.TBN_DIST }}"
+#            ${SHARUN} "${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg" >> "${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg.sha256"
+#            ${SHARUN} --check "${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg.sha256"
+#          fi
+
+      - name: Artifact upload for Archive
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ env.TN_FILENAME }}_archive-${{ matrix.builds.name }}
+          path: "${{ github.workspace }}${{ env.TBN_DIST }}/${{ env.BINFILE }}.zip*"
+
+#      - name: Sync dist to S3 - Bash
+#        continue-on-error: true # Don't break if s3 upload fails
+#        if: ${{ env.AWS_SECRET_ACCESS_KEY != '' && matrix.builds.runs-on != 'self-hosted' }}
+#        shell: bash
+#        run: |
+#          echo "Starting upload ... ${{ env.SOURCE }}"
+#          if [ "$RUNNER_OS" == "Windows" ]; then
+#            echo "No ls for 'D:' on Windows"
+#          else
+#            ls -al ${{ env.SOURCE }}
+#          fi
+#          aws s3 ${{ env.S3CMD }} --region ${{ secrets.AWS_REGION }} \
+#            "${{ env.SOURCE }}" \
+#            s3://${{ secrets.AWS_S3_BUCKET }}/${{ env.DEST_DIR }} \
+#            ${{ env.S3OPTIONS }}
+#          echo "Done - $?"
+#          exit 0
+#        env:
+#          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          SOURCE: "${{ github.workspace }}${{ env.TBN_DIST }}"
+#          DEST_DIR: "${{ env.S3DESTOVERRIDE }}${{ env.PLATFORM_SPECIFIC_DIR }}/"
+#          S3CMD: "cp"
+#          S3OPTIONS: '--recursive --exclude "*" --include "*.zip*" --include "*.pkg*"'
+#          # S3OPTIONS: '--recursive --exclude "*" --include "*.zip*"'
+#          # S3OPTIONS: '--acl public-read'
+#
+#      - name: Copy tags to latest s3 - Bash
+#        continue-on-error: true # Don't break if s3 upload fails
+#        if: ${{ env.AWS_SECRET_ACCESS_KEY != '' && matrix.builds.runs-on != 'self-hosted' && startsWith(github.ref, 'refs/tags/v') }}
+#        shell: bash
+#        run: |
+#          echo "Starting upload ... ${{ env.SOURCE }}"
+#          if [ "$RUNNER_OS" == "Windows" ]; then
+#            echo "No ls for 'D:' on Windows"
+#          else
+#            ls -al ${{ env.SOURCE }}
+#          fi
+#
+#          aws s3 ${{ env.S3CMD }} --region ${{ secrets.AWS_REGION }} \
+#            "${{ env.SOURCE }}" \
+#            s3://${{ secrets.AWS_S3_BUCKET }}/current/${{ env.DEST_DIR }} \
+#            ${{ env.S3OPTIONS }}
+#
+#          aws s3 rm --region ${{ secrets.AWS_REGION }} \
+#            s3://${{ secrets.AWS_S3_BUCKET }}/latest/${{ env.DEST_DIR }}/*
+#
+#          aws s3 ${{ env.S3CMD }} --region ${{ secrets.AWS_REGION }} \
+#            "${{ env.SOURCE }}" \
+#            s3://${{ secrets.AWS_S3_BUCKET }}/latest/${{ env.DEST_DIR }} \
+#            ${{ env.S3OPTIONS }}
+#          echo "Done - $?"
+#          exit 0
+#        env:
+#          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          SOURCE: "${{ github.workspace }}${{ env.TBN_DIST }}"
+#          DEST_DIR: "${{ env.S3DESTOVERRIDE }}${{ env.PLATFORM_SPECIFIC_DIR }}/"
+#          S3CMD: "cp"
+#          S3OPTIONS: '--recursive --exclude "*" --include "*.zip*" --include "*.pkg*"'
+#          # S3OPTIONS: '--acl public-read'
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: builds
+    if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v2
+      - name: Create release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "tari_*/**/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: true
+          draft: true

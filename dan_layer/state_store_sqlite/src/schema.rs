@@ -10,21 +10,7 @@ diesel::table! {
         epoch -> BigInt,
         proposed_by -> Text,
         qc_id -> Text,
-        prepared -> Text,
-        precommitted -> Text,
-        committed -> Text,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
-    committed_transaction_pool (id) {
-        id -> Integer,
-        transaction_id -> Text,
-        overall_decision -> Text,
-        transaction_decision -> Text,
-        fee -> BigInt,
-        is_ready -> Bool,
+        commands -> Text,
         created_at -> Timestamp,
     }
 }
@@ -79,55 +65,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    new_transaction_pool (id) {
-        id -> Integer,
-        transaction_id -> Text,
-        overall_decision -> Text,
-        transaction_decision -> Text,
-        fee -> BigInt,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
-    pledges (id) {
-        id -> Integer,
-        shard_id -> Text,
-        created_by_block -> Text,
-        pledged_to_transaction_id -> Text,
-        is_active -> Bool,
-        completed_by_block -> Nullable<Text>,
-        abandoned_by_block -> Nullable<Text>,
-        created_at -> Timestamp,
-        updated_at -> Nullable<Timestamp>,
-    }
-}
-
-diesel::table! {
-    precommitted_transaction_pool (id) {
-        id -> Integer,
-        transaction_id -> Text,
-        overall_decision -> Text,
-        transaction_decision -> Text,
-        fee -> BigInt,
-        is_ready -> Bool,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
-    prepared_transaction_pool (id) {
-        id -> Integer,
-        transaction_id -> Text,
-        overall_decision -> Text,
-        transaction_decision -> Text,
-        fee -> BigInt,
-        is_ready -> Bool,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
     quorum_certificates (id) {
         id -> Integer,
         qc_id -> Text,
@@ -157,8 +94,25 @@ diesel::table! {
         destroyed_at_epoch -> Nullable<BigInt>,
         created_justify_leader -> Nullable<Text>,
         destroyed_justify_leader -> Nullable<Text>,
+        read_locks -> Integer,
+        is_locked_w -> Bool,
+        locked_by -> Nullable<Text>,
         created_at -> Timestamp,
         destroyed_at -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
+    transaction_pool (id) {
+        id -> Integer,
+        transaction_id -> Text,
+        involved_shards -> Text,
+        overall_decision -> Text,
+        evidence -> Text,
+        fee -> BigInt,
+        stage -> Text,
+        is_ready -> Bool,
+        created_at -> Timestamp,
     }
 }
 
@@ -171,7 +125,7 @@ diesel::table! {
         sender_public_key -> Text,
         signature -> Text,
         inputs -> Text,
-        exists -> Text,
+        input_refs -> Text,
         outputs -> Text,
         result -> Text,
         is_finalized -> Bool,
@@ -195,18 +149,14 @@ diesel::table! {
 
 diesel::allow_tables_to_appear_in_same_query!(
     blocks,
-    committed_transaction_pool,
     high_qcs,
     last_executed,
     last_voted,
     leaf_blocks,
     locked_block,
-    new_transaction_pool,
-    pledges,
-    precommitted_transaction_pool,
-    prepared_transaction_pool,
     quorum_certificates,
     substates,
+    transaction_pool,
     transactions,
     votes,
 );
