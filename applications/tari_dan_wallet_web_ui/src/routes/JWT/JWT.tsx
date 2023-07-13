@@ -20,58 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Routes, Route } from 'react-router-dom';
-import Accounts from './routes/Accounts/Accounts';
-import AccountDetails from './routes/AccountDetails/AccountDetails';
-import Keys from './routes/Keys/Keys';
-import ErrorPage from './routes/ErrorPage';
-import Wallet from './routes/Wallet/Wallet';
-import Layout from './theme/LayoutMain';
-import JWT from './routes/JWT/JWT';
+import PageHeading from '../../Components/PageHeading';
+import Grid from '@mui/material/Grid';
+import { StyledPaper } from '../../Components/StyledComponents';
+import JWTGrid from '../Wallet/Components/JWTGrid';
 
-export const breadcrumbRoutes = [
-  {
-    label: 'Home',
-    path: '/',
-    dynamic: false,
-  },
-  {
-    label: 'Accounts',
-    path: '/accounts',
-    dynamic: false,
-  },
-  {
-    label: 'Keys',
-    path: '/keys',
-    dynamic: false,
-  },
-  {
-    label: 'JWTs',
-    path: '/jwts',
-    dynamic: false,
-  },
-  {
-    label: 'Account Details',
-    path: '/accounts/:name',
-    dynamic: true,
-  },
-];
-
-function App() {
+function JWTLayout() {
   return (
-    <div>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Wallet />} />
-          <Route path="accounts" element={<Accounts />} />
-          <Route path="accounts/:name" element={<AccountDetails />} />
-          <Route path="keys" element={<Keys />} />
-          <Route path="jwts" element={<JWT />} />
-          <Route path="*" element={<ErrorPage />} />
-        </Route>
-      </Routes>
-    </div>
+    <>
+      <Grid item xs={12} md={12} lg={12}>
+        <PageHeading>JWTs</PageHeading>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <JWTGrid />
+        </StyledPaper>
+      </Grid>
+    </>
   );
 }
 
-export default App;
+export default JWTLayout;
