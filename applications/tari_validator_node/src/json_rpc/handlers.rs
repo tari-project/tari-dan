@@ -528,7 +528,7 @@ impl JsonRpcHandlers {
 
         let resp = self
             .wallet_client()
-            .register_template(&self.validator_node_identity.node_identity(), data)
+            .register_template(self.validator_node_identity.node_identity(), data)
             .await
             .map_err(internal_error(answer_id))?;
 

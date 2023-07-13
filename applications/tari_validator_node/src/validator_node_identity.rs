@@ -141,7 +141,7 @@ mod tests {
             validator_node_identity.consensus_secret_key.to_bytes()
         );
         assert_eq!(
-            deserialized.consensus_public_key().to_bytes(),
+            deserialized.consensus_public_key.to_bytes(),
             validator_node_identity.consensus_public_key.to_bytes()
         );
     }
