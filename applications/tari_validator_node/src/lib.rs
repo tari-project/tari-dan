@@ -107,7 +107,8 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     let consensus_secret_key = BlsSecretKey::from_bytes(
         &std::fs::read(config.validator_node.consensus_secret_key_file.clone())
             .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?,
-    ).map_err(|e| ExitError::new(ExitCode::ConfigError, format!("{:?}", e)))?;
+    )
+    .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("{:?}", e)))?;
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
     db_factory
         .migrate()

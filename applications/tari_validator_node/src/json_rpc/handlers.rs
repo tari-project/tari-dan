@@ -28,7 +28,7 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
-use blst::min_sig::{SecretKey as BlsSecretKey};
+use blst::min_sig::SecretKey as BlsSecretKey;
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};

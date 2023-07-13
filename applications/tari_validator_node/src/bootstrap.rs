@@ -117,12 +117,7 @@ pub async fn spawn_services(
     }));
 
     // Initialize comms
-    let (comms, message_channel) = comms::initialize(
-        node_identity.clone(),
-        config,
-        shutdown.clone(),
-    )
-    .await?;
+    let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
 
     // Spawn messaging
     let (message_senders, message_receivers) = messaging::new_messaging_channel(10);

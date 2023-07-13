@@ -119,7 +119,6 @@ mod tests {
         let random_seed: [u8; 32] = rand::random();
         let secret_key =
             BlsSecretKey::key_gen(&random_seed, &[]).expect("Failed to generate secret key from random material");
-        let public_key = secret_key.sk_to_pk();
 
         let node_identity = NodeIdentity::random(&mut rand::rngs::OsRng, Multiaddr::empty(), PeerFeatures::default());
         let validator_node_identity = ValidatorNodeIdentity::new(node_identity, secret_key);
@@ -133,5 +132,17 @@ mod tests {
         // Deserialize the JSON back to a ValidatorNodeIdentity instance
         let deserialized: ValidatorNodeIdentity =
             serde_json::from_str(&serialized).expect("Failed to deserialize validator node identity");
+        assert_eq!(
+            deserialized.node_identity.public_key,
+            validator_node_identity.node_identity.public_key
+        );
+        assert_eq!(
+            deserialized.consensus_secret_key.to_bytes(),
+            validator_node_identity.consensus_secret_key.to_bytes()
+        );
+        assert_eq!(
+            deserialized.consensus_public_key.to_bytes(),
+            validator_node_identity.consensus_public_key.to_bytes()
+        );
     }
 }
