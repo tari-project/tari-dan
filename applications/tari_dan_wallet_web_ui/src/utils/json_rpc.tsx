@@ -40,7 +40,7 @@ async function internalJsonRpc(
   });
   let address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || 'localhost:9000';
   try {
-    let text = await (await fetch('json_rpc_address')).text();
+    let text = await (await fetch('/json_rpc_address')).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       address = text;
     }
@@ -51,7 +51,7 @@ async function internalJsonRpc(
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  let response = await fetch(address, {
+  let response = await fetch(`http://${address}`, {
     method: 'POST',
     body: JSON.stringify({
       method: method,
@@ -198,7 +198,7 @@ export const confidentialCancel = (proofId: number) =>
 export const confidentialCreateOutputProof = (amount: number) =>
   jsonRpc('confidential.create_output_proof', [amount]);
 
-export const getAllTransactionByStatus = (status: string) =>
+export const getAllTransactionByStatus = (status: string | null | undefined) =>
   jsonRpc('transactions.get_all_by_status', [status]);
 
 export const webrtc = (
