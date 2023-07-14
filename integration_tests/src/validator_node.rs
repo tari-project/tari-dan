@@ -143,6 +143,17 @@ pub async fn spawn_validator_node(
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
+
+        // write BLS consensus secret key on the file
+        let random_seed: [u8; 32] = rand::random();
+        let consensus_secret_key = blst::min_sig::SecretKey::key_gen(&random_seed, &[])
+            .expect("Failed to generate secret key from random material");
+        std::fs::write(
+            temp_dir.join("consensus_secret_key_file.json"),
+            consensus_secret_key.to_bytes(),
+        )
+        .expect("Failed to save BLS secret key to file");
+
         run_validator_node(&config, shutdown_signal).await
     });
 
