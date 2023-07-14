@@ -26,6 +26,7 @@ use std::{
     time::Duration,
 };
 
+use blst::min_sig::SecretKey as BlsSecretKey;
 use log::{error, info, warn};
 use tari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
 use tari_base_node_client::BaseNodeClientError;
@@ -42,6 +43,7 @@ use tokio::{task, task::JoinHandle, time};
 
 use crate::{
     grpc::base_layer_wallet::{GrpcWalletClient, WalletGrpcError},
+    validator_node_identity::ValidatorNodeIdentity,
     ApplicationConfig,
 };
 
@@ -65,7 +67,7 @@ pub enum AutoRegistrationError {
 
 pub async fn register(
     mut wallet_client: GrpcWalletClient,
-    node_identity: &NodeIdentity,
+    validator_node_identity: &ValidatorNodeIdentity,
     epoch_manager: &EpochManagerHandle,
 ) -> Result<RegisterValidatorNodeResponse, AutoRegistrationError> {
     let balance = wallet_client.get_balance().await?;
@@ -82,7 +84,7 @@ pub async fn register(
     let mut attempts = 1;
 
     loop {
-        match wallet_client.register_validator_node(node_identity).await {
+        match wallet_client.register_validator_node(validator_node_identity).await {
             Ok(resp) => {
                 let tx_id = resp.transaction_id;
                 info!(
@@ -179,7 +181,18 @@ async fn handle_epoch_changed(
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
         }));
 
-        register(wallet_client, node_identity, epoch_manager).await?;
+        let consensus_secret_key = BlsSecretKey::from_bytes(
+            &std::fs::read(config.validator_node.consensus_secret_key_file.clone()).map_err(|e| {
+                AutoRegistrationError::RegistrationFailed {
+                    details: format!("{:?}", e),
+                }
+            })?,
+        )
+        .map_err(|e| AutoRegistrationError::RegistrationFailed {
+            details: format!("{:?}", e),
+        })?;
+        let validator_node_identity = ValidatorNodeIdentity::new(node_identity.clone(), consensus_secret_key.clone());
+        register(wallet_client, &validator_node_identity, epoch_manager).await?;
     } else {
         info!(
             target: LOG_TARGET,

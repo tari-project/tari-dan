@@ -32,6 +32,7 @@ mod json_rpc;
 mod p2p;
 mod registration;
 mod template_registration_signing;
+mod validator_node_identity;
 // TODO: Hook up transaction executor to process transactions from the mempool and pass the executed result to consensus
 // mod transaction_executor;
 
@@ -42,6 +43,7 @@ use std::{
     process,
 };
 
+use blst::min_sig::SecretKey as BlsSecretKey;
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_app_utilities::identity_management::setup_node_identity;
@@ -102,6 +104,11 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         true,
         DAN_PEER_FEATURES,
     )?;
+    let consensus_secret_key = BlsSecretKey::from_bytes(
+        &std::fs::read(config.validator_node.consensus_secret_key_file.clone())
+            .map_err(|e| ExitError::new(ExitCode::ConfigError, e))?,
+    )
+    .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("{:?}", e)))?;
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
     db_factory
         .migrate()
@@ -124,7 +131,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     let services = spawn_services(
         config,
         shutdown_signal.clone(),
-        node_identity.clone(),
+        node_identity,
         global_db,
         ConsensusConstants::devnet(), // TODO: change this eventually
     )
@@ -136,6 +143,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", jrpc_address);
         let handlers = JsonRpcHandlers::new(
             wallet_client,
+            consensus_secret_key,
             base_node_client,
             &services,
             config.validator_node.clone(),

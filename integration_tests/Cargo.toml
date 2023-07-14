@@ -41,6 +41,7 @@ tari_wallet = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0
 
 anyhow = "1.0.53"
 base64 = "0.21.0"
+blst = "0.3.10"
 config = "0.13.0"
 cucumber = { version = "0.18.0", features = ["default", "libtest", "output-junit"] }
 httpmock = { git = "https://github.com/sdbondi/httpmock.git", branch = "remove-signal-handling" }

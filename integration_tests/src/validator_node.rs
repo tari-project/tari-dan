@@ -114,6 +114,7 @@ pub async fn spawn_validator_node(
         config.validator_node.data_dir = temp_dir.to_path_buf();
         config.validator_node.shard_key_file = temp_dir.join("shard_key.json");
         config.validator_node.identity_file = temp_dir.join("validator_node_id.json");
+        config.validator_node.consensus_secret_key_file = temp_dir.join("consensus_secret_key_file.json");
         config.validator_node.tor_identity_file = temp_dir.join("validator_node_tor_id.json");
         config.validator_node.base_node_grpc_address =
             Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
@@ -142,6 +143,17 @@ pub async fn spawn_validator_node(
 
         // Add all other VNs as peer seeds
         config.peer_seeds.peer_seeds = StringList::from(peer_seeds);
+
+        // write BLS consensus secret key on the file
+        let random_seed: [u8; 32] = rand::random();
+        let consensus_secret_key = blst::min_sig::SecretKey::key_gen(&random_seed, &[])
+            .expect("Failed to generate secret key from random material");
+        std::fs::write(
+            temp_dir.join("consensus_secret_key_file.json"),
+            consensus_secret_key.to_bytes(),
+        )
+        .expect("Failed to save BLS secret key to file");
+
         run_validator_node(&config, shutdown_signal).await
     });
 

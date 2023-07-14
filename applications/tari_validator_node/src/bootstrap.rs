@@ -251,7 +251,7 @@ pub async fn spawn_services(
 
     // Auto-registration
     if config.validator_node.auto_register {
-        let handle = registration::spawn(config.clone(), node_identity.clone(), epoch_manager.clone(), shutdown);
+        let handle = registration::spawn(config.clone(), node_identity, epoch_manager.clone(), shutdown);
         handles.push(handle);
     } else {
         info!(target: LOG_TARGET, "♽️ Node auto registration is disabled");
