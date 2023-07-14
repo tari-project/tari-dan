@@ -33,6 +33,8 @@ import {
   IoKey,
   IoWalletOutline,
   IoWallet,
+  IoTicketOutline,
+  IoTicket,
 } from 'react-icons/io5';
 import Tooltip from '@mui/material/Tooltip';
 import Fade from '@mui/material/Fade';
@@ -73,6 +75,12 @@ const mainItems = [
     icon: <IoWalletOutline style={iconStyle} />,
     activeIcon: <IoWallet style={activeIconStyle} />,
     link: 'transactions',
+  },
+  {
+    title: 'JWTs',
+    icon: <IoTicketOutline style={iconStyle} />,
+    activeIcon: <IoTicket style={activeIconStyle} />,
+    link: 'jwts',
   },
 ];
 

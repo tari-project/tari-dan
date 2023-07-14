@@ -28,6 +28,7 @@ import { StyledPaper } from '../../Components/StyledComponents';
 import Grid from '@mui/material/Grid';
 import SecondaryHeading from '../../Components/SecondaryHeading';
 import Transactions from '../Transactions/Transactions';
+import JWTGrid from './Components/JWTGrid';
 
 function Wallet() {
   const [error, setError] = useState('');
@@ -58,6 +59,14 @@ function Wallet() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Transactions />
+        </StyledPaper>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>JWTs</SecondaryHeading>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <JWTGrid />
         </StyledPaper>
       </Grid>
     </>

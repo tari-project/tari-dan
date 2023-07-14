@@ -26,7 +26,7 @@ env:
 jobs:
   fmt:
     name: fmt
-    runs-on: [ self-hosted, ubuntu18.04-high-cpu ]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -68,7 +68,7 @@ jobs:
           args: --all -- --check
   clippy:
     name: clippy
-    runs-on: [ self-hosted, ubuntu18.04-high-cpu ]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -116,7 +116,7 @@ jobs:
           args: clippy --all-targets --all-features
   build:
     name: check nightly
-    runs-on: [ self-hosted, ubuntu18.04-high-cpu ]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -159,7 +159,7 @@ jobs:
           args: --release --all-features --all-targets
   build-stable:
     name: check stable
-    runs-on: [ self-hosted, ubuntu18.04-high-cpu ]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -219,7 +219,7 @@ jobs:
         run: ./scripts/file_license_check.sh
   test:
     name: test
-    runs-on: [ self-hosted, ubuntu18.04-high-cpu ]
+    runs-on: [ self-hosted, ubuntu-high-cpu ]
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -249,22 +249,33 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: wasm target install
         run: rustup target add wasm32-unknown-unknown
+      - name: Install cargo-nextest
+        run: cargo install cargo-nextest --locked
       - name: cargo test compile
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: --no-run --locked --all-features --release
+
       - name: cargo test
+        run: cargo nextest run --all-features --release -E "not package(integration_tests)" --profile ci
+      - name: upload artifact
+        uses: actions/upload-artifact@v3  # upload test results as artifact
+        if: success() || failure()
+        with:
+          name: test-results
+          path: ${{ github.workspace }}/target/nextest/ci/junit.xml
+      - name: cargo test cucumber
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: -v --all-features --release
+          args: --all-features --release --package integration_tests
       - name: upload artifact
         uses: actions/upload-artifact@v3  # upload test results as artifact
-        if: always()
+        if: success() || failure()
         with:
             name: cucumber-test-results
-            path: ${{ github.workspace }}/applications/tari_validator_node/cucumber-output-junit.xml
+            path: ${{ github.workspace }}/integration_tests/cucumber-output-junit.xml
 
   # needed for test results
   event_file:

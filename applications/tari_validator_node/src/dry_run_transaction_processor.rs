@@ -29,6 +29,10 @@ use std::{
 use futures::StreamExt;
 use log::info;
 use tari_comms::{protocol::rpc::RpcStatus, NodeIdentity};
+use tari_dan_app_utilities::{
+    payload_processor::TariDanPayloadProcessor,
+    template_manager::implementation::TemplateManager,
+};
 use tari_dan_common_types::{Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
 use tari_dan_core::services::{PayloadProcessor, PayloadProcessorError};
 use tari_dan_engine::runtime::ConsensusContext;
@@ -55,8 +59,6 @@ use tari_validator_node_rpc::{
 };
 use thiserror::Error;
 use tokio::task;
-
-use crate::{p2p::services::template_manager::TemplateManager, payload_processor::TariDanPayloadProcessor};
 
 const LOG_TARGET: &str = "tari::dan::validator_node::dry_run_transaction_processor";
 

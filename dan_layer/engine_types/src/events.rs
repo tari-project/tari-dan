@@ -20,10 +20,14 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::BTreeMap, fmt::Display};
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{models::TemplateAddress, prelude::ComponentAddress, Hash};
+use tari_template_lib::{
+    models::{Metadata, TemplateAddress},
+    prelude::ComponentAddress,
+    Hash,
+};
 
 use crate::serde_with;
 
@@ -38,23 +42,23 @@ pub struct Event {
     topic: String,
     // NOTE: We need to use an ordered map here. HashMaps are unordered, so when we pledge this state the hash
     // resulting hash may differ.
-    payload: BTreeMap<String, String>,
+    payload: Metadata,
 }
 
 impl Event {
-    pub fn new<P: IntoIterator<Item = (String, String)>>(
+    pub fn new(
         component_address: Option<ComponentAddress>,
         template_address: TemplateAddress,
         tx_hash: Hash,
         topic: String,
-        payload: P,
+        payload: Metadata,
     ) -> Self {
         Self {
             component_address,
             template_address,
             tx_hash,
             topic,
-            payload: payload.into_iter().collect(),
+            payload,
         }
     }
 
@@ -82,11 +86,11 @@ impl Event {
         self.payload.get(key).cloned()
     }
 
-    pub fn payload(&self) -> &BTreeMap<String, String> {
+    pub fn payload(&self) -> &Metadata {
         &self.payload
     }
 
-    pub fn into_payload(self) -> BTreeMap<String, String> {
+    pub fn into_payload(self) -> Metadata {
         self.payload
     }
 }

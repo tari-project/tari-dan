@@ -30,7 +30,6 @@ mod grpc;
 mod http_ui;
 mod json_rpc;
 mod p2p;
-mod payload_processor;
 mod registration;
 mod template_registration_signing;
 // TODO: Hook up transaction executor to process transactions from the mempool and pass the executed result to consensus

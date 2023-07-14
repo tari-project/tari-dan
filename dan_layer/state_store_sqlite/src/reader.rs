@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
 use diesel::{
     sql_query,
@@ -28,9 +28,9 @@ use tari_dan_storage::{
         LockedBlock,
         QcId,
         QuorumCertificate,
-        TransactionDecision,
         TransactionId,
-        TransactionPool,
+        TransactionPoolRecord,
+        TransactionPoolStage,
         Vote,
     },
     StateStoreReadTransaction,
@@ -202,6 +202,31 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         block.try_convert(qc)
     }
 
+    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let (block, qc) = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .filter(blocks::epoch.eq(epoch.as_u64() as i64))
+            .order_by(blocks::height.desc())
+            .first::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_get_tip",
+                source: e,
+            })?;
+
+        let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+            operation: "blocks_get_tip",
+            details: format!(
+                "block {} references non-existent quorum certificate {}",
+                block.block_id, block.qc_id
+            ),
+        })?;
+
+        block.try_convert(qc)
+    }
+
     fn blocks_get_by_parent(&mut self, parent_id: &BlockId) -> Result<Block, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
@@ -282,117 +307,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         deserialize_json(&qc_json)
     }
 
-    fn transaction_pools_count(&mut self, pool: TransactionPool) -> Result<usize, StorageError> {
-        use crate::schema::{
-            committed_transaction_pool,
-            new_transaction_pool,
-            precommitted_transaction_pool,
-            prepared_transaction_pool,
-        };
-
-        let count = match pool {
-            TransactionPool::New => new_transaction_pool::table
-                .count()
-                .get_result::<i64>(self.connection())
-                .map_err(|e| SqliteStorageError::DieselError {
-                    operation: "transaction_pools_ready_transaction_count",
-                    source: e,
-                })? as usize,
-            TransactionPool::Prepare => prepared_transaction_pool::table
-                .count()
-                .get_result::<i64>(self.connection())
-                .map_err(|e| SqliteStorageError::DieselError {
-                    operation: "transaction_pools_ready_transaction_count",
-                    source: e,
-                })? as usize,
-            TransactionPool::Precommit => precommitted_transaction_pool::table
-                .count()
-                .get_result::<i64>(self.connection())
-                .map_err(|e| SqliteStorageError::DieselError {
-                    operation: "transaction_pools_ready_transaction_count",
-                    source: e,
-                })? as usize,
-            TransactionPool::Commit => committed_transaction_pool::table
-                .count()
-                .get_result::<i64>(self.connection())
-                .map_err(|e| SqliteStorageError::DieselError {
-                    operation: "transaction_pools_ready_transaction_count",
-                    source: e,
-                })? as usize,
-            TransactionPool::All => {
-                let count = sql_query(
-                    r#"
-                        SELECT SUM(count) as "count" FROM (
-                            SELECT COUNT(*) AS count FROM committed_transaction_pool
-                            UNION ALL
-                            SELECT COUNT(*) AS count FROM new_transaction_pool
-                            UNION ALL
-                            SELECT COUNT(*) AS count FROM precommitted_transaction_pool
-                            UNION ALL
-                            SELECT COUNT(*) AS count FROM prepared_transaction_pool
-                        )
-                    "#,
-                )
-                .get_result::<Count>(self.connection())
-                .map_err(|e| SqliteStorageError::DieselError {
-                    operation: "transaction_pools_count",
-                    source: e,
-                })?;
-
-                count.count as usize
-            },
-        };
-
-        Ok(count)
-    }
-
-    fn transaction_pools_ready_transaction_count(&mut self) -> Result<usize, StorageError> {
-        use crate::schema::{
-            committed_transaction_pool,
-            new_transaction_pool,
-            precommitted_transaction_pool,
-            prepared_transaction_pool,
-        };
-
-        let new_count = new_transaction_pool::table
-            .count()
-            .get_result::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pools_ready_transaction_count",
-                source: e,
-            })? as usize;
-
-        let prepared_count = prepared_transaction_pool::table
-            .filter(prepared_transaction_pool::is_ready.eq(true))
-            .count()
-            .get_result::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pools_ready_transaction_count",
-                source: e,
-            })? as usize;
-
-        let precommitted_count = precommitted_transaction_pool::table
-            .filter(precommitted_transaction_pool::is_ready.eq(true))
-            .count()
-            .get_result::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pools_ready_transaction_count",
-                source: e,
-            })? as usize;
-
-        let committed_count = committed_transaction_pool::table
-            .filter(committed_transaction_pool::is_ready.eq(true))
-            .count()
-            .get_result::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "transaction_pools_ready_transaction_count",
-                source: e,
-            })? as usize;
-
-        Ok(new_count + prepared_count + precommitted_count + committed_count)
-    }
-
-    fn transaction_pools_fetch_involved_shards(
+    fn transactions_fetch_involved_shards(
         &mut self,
         transaction_ids: HashSet<TransactionId>,
     ) -> Result<HashSet<ShardId>, StorageError> {
@@ -401,9 +316,9 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         let tx_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
 
         let involved_shards = transactions::table
-            .select((transactions::inputs, transactions::outputs))
+            .select((transactions::inputs, transactions::input_refs, transactions::outputs))
             .filter(transactions::transaction_id.eq_any(tx_ids))
-            .load::<(String, String)>(self.connection())
+            .load::<(String, String, String)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pools_fetch_involved_shards",
                 source: e,
@@ -411,132 +326,24 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
 
         let shards = involved_shards
             .into_iter()
-            .map(|(inputs, outputs)| {
+            .map(|(inputs, input_refs, outputs)| {
                 (
                     // a Result is very inconvenient with flat_map
                     deserialize_json::<HashSet<ShardId>>(&inputs).unwrap(),
+                    deserialize_json::<HashSet<ShardId>>(&input_refs).unwrap(),
                     deserialize_json::<HashSet<ShardId>>(&outputs).unwrap(),
                 )
             })
-            .flat_map(|(inputs, outputs)| inputs.into_iter().chain(outputs.into_iter()).collect::<HashSet<_>>())
+            .flat_map(|(inputs, input_refs, outputs)| {
+                inputs
+                    .into_iter()
+                    .chain(input_refs)
+                    .chain(outputs)
+                    .collect::<HashSet<_>>()
+            })
             .collect();
 
         Ok(shards)
-    }
-
-    fn new_transaction_pool_get_specific_decisions(
-        &mut self,
-        transactions: &BTreeSet<TransactionId>,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
-        use crate::schema::new_transaction_pool;
-
-        let decisions = new_transaction_pool::table
-            .filter(new_transaction_pool::transaction_id.eq_any(transactions.iter().map(serialize_hex)))
-            .get_results::<sql_models::TransactionDecision>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "new_transaction_pool_check_specific_decisions",
-                source: e,
-            })?;
-
-        if decisions.len() != transactions.len() {
-            return Err(SqliteStorageError::NotAllTransactionsFound {
-                operation: "new_transaction_pool_check_specific_decisions",
-                details: format!(
-                    "Expected {} transactions, found {}",
-                    transactions.len(),
-                    decisions.len()
-                ),
-            }
-            .into());
-        }
-
-        decisions.into_iter().map(TransactionDecision::try_from).collect()
-    }
-
-    fn precommitted_transaction_pool_get_many_ready(
-        &mut self,
-        max_txs: usize,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
-        use crate::schema::precommitted_transaction_pool;
-
-        let sql_transactions = precommitted_transaction_pool::table
-            .select((
-                precommitted_transaction_pool::id,
-                precommitted_transaction_pool::transaction_id,
-                precommitted_transaction_pool::overall_decision,
-                precommitted_transaction_pool::transaction_decision,
-                precommitted_transaction_pool::fee,
-                precommitted_transaction_pool::created_at,
-            ))
-            .filter(precommitted_transaction_pool::is_ready.eq(true))
-            .order(precommitted_transaction_pool::created_at.asc())
-            .limit(max_txs as i64)
-            .load::<sql_models::TransactionDecision>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "precommitted_transaction_pool_get_many_ready",
-                source: e,
-            })?;
-
-        let txs = sql_transactions
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
-
-        Ok(txs)
-    }
-
-    fn new_transaction_pool_get_many_ready(
-        &mut self,
-        max_txs: usize,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
-        use crate::schema::new_transaction_pool;
-
-        let rows = new_transaction_pool::table
-            .limit(max_txs as i64)
-            .load::<sql_models::TransactionDecision>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "new_transaction_pool_get_many_ready",
-                source: e,
-            })?;
-
-        let txs = rows
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, StorageError>>()?;
-
-        Ok(txs)
-    }
-
-    fn prepared_transaction_pool_get_many_ready(
-        &mut self,
-        max_txs: usize,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError> {
-        use crate::schema::prepared_transaction_pool;
-
-        let sql_transactions = prepared_transaction_pool::table
-            .select((
-                prepared_transaction_pool::id,
-                prepared_transaction_pool::transaction_id,
-                prepared_transaction_pool::overall_decision,
-                prepared_transaction_pool::transaction_decision,
-                prepared_transaction_pool::fee,
-                prepared_transaction_pool::created_at,
-            ))
-            .filter(prepared_transaction_pool::is_ready.eq(true))
-            .order_by(prepared_transaction_pool::id.asc())
-            .limit(max_txs as i64)
-            .load::<sql_models::TransactionDecision>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "prepared_transaction_pool_get_many_ready",
-                source: e,
-            })?;
-
-        let txs = sql_transactions
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
-
-        Ok(txs)
     }
 
     fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError> {
@@ -585,6 +392,61 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             })?;
 
         Vote::try_from(vote)
+    }
+
+    fn transaction_pool_get(&mut self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError> {
+        use crate::schema::transaction_pool;
+
+        transaction_pool::table
+            .filter(transaction_pool::transaction_id.eq(serialize_hex(transaction_id)))
+            .first::<sql_models::TransactionPoolRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_get",
+                source: e,
+            })?
+            .try_into()
+    }
+
+    fn transaction_pool_get_many_ready(&mut self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError> {
+        use crate::schema::transaction_pool;
+
+        transaction_pool::table
+            .filter(transaction_pool::is_ready.eq(true))
+            .limit(max_txs as i64)
+            .get_results::<sql_models::TransactionPoolRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_get_many_ready",
+                source: e,
+            })?
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect()
+    }
+
+    fn transaction_pool_count(
+        &mut self,
+        stage: Option<TransactionPoolStage>,
+        is_ready: Option<bool>,
+    ) -> Result<usize, StorageError> {
+        use crate::schema::transaction_pool;
+        let mut query = transaction_pool::table.into_boxed();
+        if let Some(stage) = stage {
+            query = query.filter(transaction_pool::stage.eq(stage.to_string()));
+        }
+        if let Some(is_ready) = is_ready {
+            query = query.filter(transaction_pool::is_ready.eq(is_ready));
+        }
+
+        let count =
+            query
+                .count()
+                .get_result::<i64>(self.connection())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "transaction_pool_count",
+                    source: e,
+                })?;
+
+        Ok(count as usize)
     }
 }
 

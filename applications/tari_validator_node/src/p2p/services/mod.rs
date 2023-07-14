@@ -27,4 +27,3 @@ pub mod hotstuff;
 pub mod mempool;
 pub mod messaging;
 pub mod networking;
-pub mod template_manager;

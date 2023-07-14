@@ -19,8 +19,8 @@ use crate::{
         substate::SubstatesApi,
         transaction::TransactionApi,
     },
+    network::WalletNetworkInterface,
     storage::{WalletStorageError, WalletStore},
-    substate_provider::WalletNetworkInterface,
 };
 
 #[derive(Debug, Clone)]

@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { Mutex } from 'async-mutex';
+import { json } from 'react-router-dom';
 
 let token: String | null = null;
 let json_id = 0;
@@ -136,8 +137,6 @@ export const transactionsWaitResult = (
   hash: string,
   timeoutSecs: number | null
 ) => jsonRpc('transactions.wait_result', [hash, timeoutSecs]);
-export const getAllTransactionByStatus = (status: string | null | undefined) =>
-  jsonRpc('transactions.get_all_by_status', [status]);
 
 // accounts
 export const accountsClaimBurn = (
@@ -199,8 +198,15 @@ export const confidentialCancel = (proofId: number) =>
 export const confidentialCreateOutputProof = (amount: number) =>
   jsonRpc('confidential.create_output_proof', [amount]);
 
+export const getAllTransactionByStatus = (status: string) =>
+  jsonRpc('transactions.get_all_by_status', [status]);
+
 export const webrtc = (
   signalingServerToken: string,
   permissions: string,
   name: string
 ) => jsonRpc('webrtc.start', [signalingServerToken, permissions, name]);
+
+// nfts
+export const accountNFTsList = (offset: number, limit: number) =>
+  jsonRpc('nfts.list', [offset, limit]);

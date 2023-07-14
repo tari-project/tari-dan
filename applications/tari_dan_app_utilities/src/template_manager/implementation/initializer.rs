@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2023. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,14 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod downloader;
+use tari_shutdown::ShutdownSignal;
+use tokio::{sync::mpsc, task::JoinHandle};
 
-mod initializer;
-pub use initializer::spawn;
+use super::{downloader::TemplateDownloadWorker, service::TemplateManagerService, TemplateManager};
+use crate::template_manager::interface::TemplateManagerHandle;
 
-mod manager;
-pub use manager::TemplateManager;
-mod service;
+pub fn spawn(
+    manager: TemplateManager,
+    shutdown: ShutdownSignal,
+) -> (TemplateManagerHandle, JoinHandle<anyhow::Result<()>>) {
+    let (tx_request, rx_request) = mpsc::channel(1);
+    let handle = TemplateManagerHandle::new(tx_request);
 
-mod template_config;
-pub use template_config::TemplateConfig;
+    let (tx_download_queue, rx_download_queue) = mpsc::channel(1);
+    let (tx_completed_downloads, rx_completed_downloads) = mpsc::channel(1);
+
+    let join_handle =
+        TemplateManagerService::spawn(rx_request, manager, tx_download_queue, rx_completed_downloads, shutdown);
+    TemplateDownloadWorker::new(rx_download_queue, tx_completed_downloads).spawn();
+    (handle, join_handle)
+}

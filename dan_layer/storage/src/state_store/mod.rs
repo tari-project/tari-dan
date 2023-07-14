@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::HashSet,
     ops::{Deref, DerefMut},
 };
 
@@ -13,18 +13,20 @@ use crate::{
     consensus_models::{
         Block,
         BlockId,
+        Evidence,
         ExecutedTransaction,
         HighQc,
         LastExecuted,
         LastVoted,
         LeafBlock,
         LockedBlock,
-        PledgeCollection,
         QcId,
         QuorumCertificate,
-        TransactionDecision,
+        SubstateLockFlag,
+        TransactionAtom,
         TransactionId,
-        TransactionPool,
+        TransactionPoolRecord,
+        TransactionPoolStage,
         Vote,
     },
     StorageError,
@@ -78,6 +80,7 @@ pub trait StateStoreReadTransaction {
         tx_ids: I,
     ) -> Result<Vec<ExecutedTransaction>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError>;
+    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block, StorageError>;
@@ -85,31 +88,19 @@ pub trait StateStoreReadTransaction {
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
-    fn transaction_pools_count(&mut self, pool: TransactionPool) -> Result<usize, StorageError>;
-    fn transaction_pools_ready_transaction_count(&mut self) -> Result<usize, StorageError>;
-    fn transaction_pools_fetch_involved_shards(
+    fn transaction_pool_get(&mut self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError>;
+    fn transaction_pool_get_many_ready(&mut self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError>;
+    fn transaction_pool_count(
+        &mut self,
+        stage: Option<TransactionPoolStage>,
+        is_ready: Option<bool>,
+    ) -> Result<usize, StorageError>;
+
+    fn transactions_fetch_involved_shards(
         &mut self,
         transaction_ids: HashSet<TransactionId>,
     ) -> Result<HashSet<ShardId>, StorageError>;
 
-    fn new_transaction_pool_get_specific_decisions(
-        &mut self,
-        transactions: &BTreeSet<TransactionId>,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
-
-    fn new_transaction_pool_get_many_ready(
-        &mut self,
-        max_txs: usize,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
-
-    fn precommitted_transaction_pool_get_many_ready(
-        &mut self,
-        max_tx: usize,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
-    fn prepared_transaction_pool_get_many_ready(
-        &mut self,
-        max_txs: usize,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
     // -------------------------------- Votes -------------------------------- //
     fn votes_get_by_block_and_sender(
         &mut self,
@@ -137,74 +128,37 @@ pub trait StateStoreWriteTransaction {
     fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError>;
     fn high_qc_set(&mut self, high_qc: &HighQc) -> Result<(), StorageError>;
 
-    // -------------------------------- Pledges -------------------------------- //
-    fn create_pledges(
-        &mut self,
-        block_id: &BlockId,
-        transactions_and_shards: HashMap<TransactionId, Vec<ShardId>>,
-    ) -> Result<PledgeCollection, StorageError>;
-
-    // -------------------------------- Transaction Pools -------------------------------- //
+    // -------------------------------- Transaction -------------------------------- //
     fn transactions_insert(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError>;
-    fn transactions_mark_many_finalized(
+    // -------------------------------- Transaction Pool -------------------------------- //
+    fn transaction_pool_insert(
         &mut self,
-        transactions: &BTreeSet<TransactionDecision>,
+        transaction: TransactionAtom,
+        stage: TransactionPoolStage,
+        is_ready: bool,
     ) -> Result<(), StorageError>;
-
-    // New transaction pool
-    fn new_transaction_pool_insert(&mut self, transaction: TransactionDecision) -> Result<(), StorageError>;
-
-    fn new_transaction_pool_remove_specific_ready(
+    fn transaction_pool_update(
         &mut self,
-        transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
-
-    // Prepared transaction pool
-    fn prepared_transaction_pool_insert_pending(
-        &mut self,
-        transaction: &BTreeSet<TransactionDecision>,
+        transaction_id: &TransactionId,
+        evidence: Option<&Evidence>,
+        stage: Option<TransactionPoolStage>,
+        is_ready: Option<bool>,
     ) -> Result<(), StorageError>;
-
-    fn prepared_transaction_pool_mark_specific_ready(
-        &mut self,
-        transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<usize, StorageError>;
-
-    fn prepared_transaction_pool_remove_specific_ready(
-        &mut self,
-        transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
-
-    // Precommitted transaction pool
-    fn precommitted_transaction_pool_insert_pending(
-        &mut self,
-        transaction: &BTreeSet<TransactionDecision>,
-    ) -> Result<(), StorageError>;
-
-    fn precommitted_transaction_pool_mark_specific_ready(
-        &mut self,
-        transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<usize, StorageError>;
-
-    fn precommitted_transaction_pool_remove_specific_ready(
-        &mut self,
-        transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
-
-    // Committed transaction pool
-    fn committed_transaction_pool_insert_pending(
-        &mut self,
-        transaction: &BTreeSet<TransactionDecision>,
-    ) -> Result<(), StorageError>;
-    fn committed_transaction_pool_mark_specific_ready(
-        &mut self,
-        transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<usize, StorageError>;
-    fn committed_transaction_pool_remove_specific_ready(
-        &mut self,
-        transactions: &BTreeSet<TransactionDecision>,
-    ) -> Result<BTreeSet<TransactionDecision>, StorageError>;
+    fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;
 
     // -------------------------------- Votes -------------------------------- //
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
+
+    //---------------------------------- Substates --------------------------------------------//
+    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+        &mut self,
+        objects: I,
+        lock_flag: SubstateLockFlag,
+    ) -> Result<(), StorageError>;
+
+    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+        &mut self,
+        objects: I,
+        lock_flag: SubstateLockFlag,
+    ) -> Result<(), StorageError>;
 }

@@ -29,6 +29,7 @@ import Wallet from './routes/Wallet/Wallet';
 import Layout from './theme/LayoutMain';
 import TransactionsLayout from './routes/Transactions/TransactionsLayout';
 import TransactionDetails from './routes/Transactions/TransactionDetails';
+import JWT from './routes/JWT/JWT';
 
 export const breadcrumbRoutes = [
   {
@@ -49,6 +50,11 @@ export const breadcrumbRoutes = [
   {
     label: 'Transactions',
     path: '/transactions',
+    dynamic: false,
+  },
+  {
+    label: 'JWTs',
+    path: '/jwts',
     dynamic: false,
   },
   {
@@ -78,6 +84,7 @@ function App() {
             element={<TransactionDetails />}
             // loader={transactionLoader}
           />
+          <Route path="jwts" element={<JWT />} />
           <Route path="*" element={<ErrorPage />} />
         </Route>
       </Routes>

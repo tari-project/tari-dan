@@ -1,20 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, iter};
+use std::{collections::HashSet, iter, ops::DerefMut};
 
 use log::*;
 use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight, ShardId};
 use tari_dan_storage::{
-    consensus_models::{
-        Block,
-        HighQc,
-        LeafBlock,
-        NewTransactionPool,
-        PrecommitTransactionPool,
-        PrepareTransactionPool,
-        QuorumCertificate,
-    },
+    consensus_models::{Block, ExecutedTransaction, HighQc, LeafBlock, QuorumCertificate, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -31,6 +23,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose";
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
+    transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
 }
 
@@ -42,11 +35,13 @@ where
     pub fn new(
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
+        transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
     ) -> Self {
         Self {
             store,
             epoch_manager,
+            transaction_pool,
             tx_broadcast,
         }
     }
@@ -85,28 +80,33 @@ where
                 return Ok(());
             }
 
-            next_block = self.build_next_block(&mut *tx, epoch, &parent_block, high_qc, validator_id)?;
-            if next_block.exists(&mut *tx)? {
-                debug!(
-                    target: LOG_TARGET,
-                    "🌿 Already proposed block {} ({})",
-                    next_block.id(),
-                    next_block.height(),
-                );
-                tx.rollback()?;
-                return Ok(());
-            }
-            involved_shards = next_block.find_involved_shards(&mut *tx)?;
+            next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator_id)?;
             next_block.insert(&mut tx)?;
+
+            // Get involved shards for all LocalPrepared commands in the block.
+            // This allows us to broadcast the proposal only to the relevant committees that would be interested in the
+            // LocalPrepared.
+            let prepared_iter = next_block
+                .commands()
+                .iter()
+                .filter_map(|cmd| cmd.local_prepared())
+                .map(|t| &t.id);
+            let prepared_txs = ExecutedTransaction::get_many(tx.deref_mut(), prepared_iter)?;
+            involved_shards = prepared_txs
+                .iter()
+                .flat_map(|tx| tx.transaction().involved_shards_iter().copied())
+                .collect::<HashSet<_>>();
 
             tx.commit()?;
         }
 
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING new block {}({}) (justify: {} ({})) -> {}",
+            "🌿 PROPOSING new block {}({}) {} command(s), {} shards, justify: {} ({}), parent: {}",
             next_block.id(),
             next_block.height(),
+            next_block.commands().len(),
+            involved_shards.len(),
             next_block.justify().block_id(),
             next_block.justify().block_height(),
             next_block.parent()
@@ -161,7 +161,7 @@ where
 
     fn build_next_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         epoch: Epoch,
         parent_block: &Block,
         high_qc: QuorumCertificate,
@@ -169,16 +169,7 @@ where
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
-        let mut remaining_txs = TARGET_BLOCK_SIZE;
-
-        // TODO: Decide if we should lock the txs to the next block somehow
-        // Fetch transactions that are ready to go into a block. They will be moved into the correct pool in
-        // OnReceiveProposal
-        let commit_txs = PrecommitTransactionPool::get_batch(tx, remaining_txs)?;
-        remaining_txs -= commit_txs.len();
-        let precommit_txs = PrepareTransactionPool::get_batch(tx, remaining_txs)?;
-        remaining_txs -= precommit_txs.len();
-        let prepare_txs = NewTransactionPool::get_batch(tx, remaining_txs)?;
+        let commands = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
 
         let next_block = Block::new(
             *parent_block.id(),
@@ -187,9 +178,7 @@ where
             epoch,
             0,
             proposed_by,
-            prepare_txs,
-            precommit_txs,
-            commit_txs,
+            commands,
         );
 
         Ok(next_block)

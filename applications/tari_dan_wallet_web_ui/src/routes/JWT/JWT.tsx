@@ -20,16 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_app_utilities::template_manager::TemplateManagerHandle;
-use tari_shutdown::ShutdownSignal;
-use tokio::{sync::mpsc, task::JoinHandle};
+import PageHeading from '../../Components/PageHeading';
+import Grid from '@mui/material/Grid';
+import { StyledPaper } from '../../Components/StyledComponents';
+import JWTGrid from '../Wallet/Components/JWTGrid';
 
-use crate::p2p::services::template_manager::service::TemplateManagerService;
-
-pub fn spawn(shutdown: ShutdownSignal) -> (TemplateManagerHandle, JoinHandle<anyhow::Result<()>>) {
-    let (tx_request, rx_request) = mpsc::channel(1);
-    let handle = TemplateManagerHandle::new(tx_request);
-
-    let join_handle = TemplateManagerService::spawn(rx_request, shutdown);
-    (handle, join_handle)
+function JWTLayout() {
+  return (
+    <>
+      <Grid item xs={12} md={12} lg={12}>
+        <PageHeading>JWTs</PageHeading>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <JWTGrid />
+        </StyledPaper>
+      </Grid>
+    </>
+  );
 }
+
+export default JWTLayout;

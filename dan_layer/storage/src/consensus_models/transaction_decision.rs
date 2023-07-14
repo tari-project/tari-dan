@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    cmp::Ordering,
     fmt,
     fmt::{Display, Formatter},
     str::FromStr,
@@ -13,50 +12,29 @@ use tari_common_types::types::FixedHashSizeError;
 use tari_dan_common_types::serde_with;
 use tari_utilities::hex::Hex;
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
-pub struct TransactionDecision {
-    pub transaction_id: TransactionId,
-    pub overall_decision: Decision,
-    pub transaction_decision: Decision,
-    /// The fee for this transaction owed to this validator shard. `calculated_fee / num_shards`.
-    pub per_shard_validator_fee: u64,
-}
-
-impl Ord for TransactionDecision {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.transaction_id.cmp(&other.transaction_id)
-    }
-}
-
-impl PartialOrd for TransactionDecision {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.transaction_id.partial_cmp(&other.transaction_id)
-    }
-}
-
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
 pub enum Decision {
     /// Decision to COMMIT the transaction
-    Accept,
+    Commit,
     /// Decision to ABORT the transaction
-    Reject,
+    Abort,
 }
 
 impl Decision {
-    pub fn is_accept(&self) -> bool {
-        matches!(self, Decision::Accept)
+    pub fn is_commit(&self) -> bool {
+        matches!(self, Decision::Commit)
     }
 
-    pub fn is_reject(&self) -> bool {
-        matches!(self, Decision::Reject)
+    pub fn is_abort(&self) -> bool {
+        matches!(self, Decision::Abort)
     }
 }
 
 impl Display for Decision {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
-            Decision::Accept => write!(f, "Commit"),
-            Decision::Reject => write!(f, "Abort"),
+            Decision::Commit => write!(f, "Commit"),
+            Decision::Abort => write!(f, "Abort"),
         }
     }
 }
@@ -66,8 +44,8 @@ impl FromStr for Decision {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "Commit" => Ok(Decision::Accept),
-            "Abort" => Ok(Decision::Reject),
+            "Commit" => Ok(Decision::Commit),
+            "Abort" => Ok(Decision::Abort),
             _ => Err(()),
         }
     }
