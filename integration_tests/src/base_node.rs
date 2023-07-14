@@ -25,7 +25,7 @@ use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 use rand::rngs::OsRng;
 use tari_base_node::{run_base_node, BaseNodeConfig, MetricsConfig};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
-use tari_common::configuration::CommonConfig;
+use tari_common::{configuration::CommonConfig, exit_codes::ExitError};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
@@ -44,7 +44,7 @@ pub struct BaseNodeProcess {
     pub port: u16,
     pub grpc_port: u16,
     pub identity: NodeIdentity,
-    pub handle: task::JoinHandle<()>,
+    pub handle: task::JoinHandle<Result<(), ExitError>>,
     pub temp_dir_path: PathBuf,
     pub shutdown: Shutdown,
 }
@@ -113,11 +113,14 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
                 let dest = format!("./temp/base_node_{}", base_node_name);
                 std::fs::create_dir_all(&dest).unwrap();
                 std::fs::copy(temp_dir, dest).unwrap();
-                panic!("{:?}", e);
+                return Err(e);
             }
+            Ok(())
         }
     });
 
+    // Wait for node to start up
+    let handle = wait_listener_on_local_port(handle, grpc_port).await;
     // make the new base node able to be referenced by other processes
     let node_process = BaseNodeProcess {
         name: bn_name.clone(),
@@ -128,10 +131,8 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
         temp_dir_path,
         shutdown,
     };
-    world.base_nodes.insert(bn_name, node_process);
 
-    // Wait for node to start up
-    wait_listener_on_local_port(grpc_port).await;
+    world.base_nodes.insert(bn_name, node_process);
 }
 
 pub fn get_base_node_client(port: u16) -> GrpcBaseNodeClient {

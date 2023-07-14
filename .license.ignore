@@ -3,7 +3,6 @@
 ./applications/tari_indexer/src/substate_storage_sqlite/schema.rs
 ./comms/tari_comms_logging/src/schema.rs
 ./dan_layer/storage_sqlite/src/global/schema.rs
-./dan_layer/storage_sqlite/src/schema.rs
 ./dan_layer/state_store_sqlite/src/schema.rs
 ./dan_layer/wallet/storage_sqlite/src/schema.rs
 ./scripts/env_sample

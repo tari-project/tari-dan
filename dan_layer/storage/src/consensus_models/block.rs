@@ -10,10 +10,11 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_dan_common_types::{hashing, serde_with, Epoch, NodeHeight, ShardId};
+use tari_transaction::TransactionId;
 
 use super::QuorumCertificate;
 use crate::{
-    consensus_models::{Command, LastExecuted, LastVoted, LeafBlock, LockedBlock, TransactionId, Vote},
+    consensus_models::{Command, LastExecuted, LastProposed, LastVoted, LeafBlock, LockedBlock, Vote},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -144,6 +145,14 @@ impl Block {
             block_id: self.id,
         }
     }
+
+    pub fn as_last_proposed(&self) -> LastProposed {
+        LastProposed {
+            epoch: self.epoch,
+            height: self.height,
+            block_id: self.id,
+        }
+    }
 }
 
 // impl getters for Block
@@ -183,10 +192,14 @@ impl Block {
     pub fn commands(&self) -> &BTreeSet<Command> {
         &self.commands
     }
+
+    pub fn into_commands(self) -> BTreeSet<Command> {
+        self.commands
+    }
 }
 
 impl Block {
-    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, id: &BlockId) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, id: &BlockId) -> Result<Self, StorageError> {
         tx.blocks_get(id)
     }
 
@@ -202,15 +215,18 @@ impl Block {
         tx.blocks_insert(self)
     }
 
-    pub fn save<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
+    /// Inserts the block if it doesnt exist. Returns true if the block exists, otherwise false.
+    pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
         TTx: StateStoreWriteTransaction + DerefMut,
         TTx::Target: StateStoreReadTransaction,
     {
-        if self.exists(tx.deref_mut())? {
-            return Ok(());
+        let exists = self.exists(tx.deref_mut())?;
+        if exists {
+            return Ok(true);
         }
-        self.insert(tx)
+        self.insert(tx)?;
+        Ok(false)
     }
 
     pub fn find_involved_shards<TTx: StateStoreReadTransaction>(

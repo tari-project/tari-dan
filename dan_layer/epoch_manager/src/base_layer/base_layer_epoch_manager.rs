@@ -20,28 +20,30 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{cmp, ops::RangeInclusive};
+use std::{
+    cmp,
+    collections::{HashMap, HashSet},
+    ops::RangeInclusive,
+};
 
 use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
 use tari_common_types::types::FixedHash;
 use tari_comms::types::CommsPublicKey;
-use tari_core::{
-    blocks::BlockHeader,
-    transactions::transaction_components::ValidatorNodeRegistration,
-    ValidatorNodeBMT,
-};
+use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, ShardId};
-use tari_dan_storage::global::{DbEpoch, GlobalDb, MetadataKey};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeShard},
+    hashing::{ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
+    optional::Optional,
+    Epoch,
+    ShardId,
+};
+use tari_dan_storage::global::{models::ValidatorNode, DbEpoch, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tokio::sync::broadcast;
 
-use crate::{
-    base_layer::{config::EpochManagerConfig, error::EpochManagerError, types::EpochManagerEvent},
-    validator_node::ValidatorNode,
-    ShardCommitteeAllocation,
-};
+use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
 
 const LOG_TARGET: &str = "tari::dan::epoch_manager::base_layer";
 
@@ -274,7 +276,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             .get(start_epoch, end_epoch, ByteArray::as_bytes(public_key))
             .optional()?;
 
-        Ok(vn.map(Into::into))
+        Ok(vn)
     }
 
     pub fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
@@ -301,15 +303,12 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
     pub fn get_committees(
         &self,
         epoch: Epoch,
-        shards: &[ShardId],
-    ) -> Result<Vec<ShardCommitteeAllocation<CommsPublicKey>>, EpochManagerError> {
-        let mut result = vec![];
-        for &shard in shards {
-            let committee = self.get_committee(epoch, shard)?;
-            result.push(ShardCommitteeAllocation {
-                shard_id: shard,
-                committee,
-            });
+        shards: &HashSet<ShardId>,
+    ) -> Result<HashMap<ShardId, Committee<CommsPublicKey>>, EpochManagerError> {
+        let mut result = HashMap::with_capacity(shards.len());
+        for shard in shards {
+            let committee = self.get_committee(epoch, *shard)?;
+            result.insert(*shard, committee);
         }
         Ok(result)
     }
@@ -344,7 +343,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
 
     pub fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
         let result = self.get_committee_vns_from_shard_key(epoch, shard)?;
-        Ok(Committee::new(result.into_iter().map(|v| v.public_key).collect()))
+        Ok(Committee::new(result.into_iter().map(|v| v.address).collect()))
     }
 
     pub fn is_validator_in_committee(
@@ -441,7 +440,10 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         }
     }
 
-    pub fn get_validator_node_bmt(&self, epoch: Epoch) -> Result<ValidatorNodeBMT, EpochManagerError> {
+    pub fn get_validator_node_balanced_merkle_tree(
+        &self,
+        epoch: Epoch,
+    ) -> Result<ValidatorNodeBalancedMerkleTree, EpochManagerError> {
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
         // TODO: the MMR struct should be serializable to store it only once and avoid recalculating it every time per
@@ -451,8 +453,20 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             vn_bmt_vec.push(vn.node_hash().to_vec())
         }
 
-        let vn_bmt = ValidatorNodeBMT::create(vn_bmt_vec);
+        let vn_bmt = ValidatorNodeBalancedMerkleTree::create(vn_bmt_vec);
         Ok(vn_bmt)
+    }
+
+    pub fn get_validator_node_merkle_proof(&self, epoch: Epoch) -> Result<ValidatorNodeMerkleProof, EpochManagerError> {
+        let bmt = self.get_validator_node_balanced_merkle_tree(epoch)?;
+
+        let vn = self
+            .get_validator_node(epoch, &self.node_public_key)?
+            .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered)?;
+        let leaf_index = bmt.find_leaf_index_for_hash(&vn.node_hash().to_vec())?;
+
+        let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, leaf_index as usize)?;
+        Ok(proof)
     }
 
     pub async fn on_scanning_complete(&mut self) -> Result<(), EpochManagerError> {
@@ -521,7 +535,61 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         let validators = validator_node_db.get_by_shard_range(start_epoch, end_epoch, rounded_shard_range)?;
-        Ok(Committee::new(validators.into_iter().map(|v| v.public_key).collect()))
+        Ok(Committee::new(validators.into_iter().map(|v| v.address).collect()))
+    }
+
+    pub fn get_our_validator_node(&self, epoch: Epoch) -> Result<ValidatorNode<CommsPublicKey>, EpochManagerError> {
+        let vn = self
+            .get_validator_node(epoch, &self.node_public_key)?
+            .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered)?;
+        Ok(vn)
+    }
+
+    pub fn get_total_validator_count(&self, epoch: Epoch) -> Result<u64, EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
+        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        let num_validators = validator_node_db.count(start_epoch, end_epoch)?;
+        Ok(num_validators)
+    }
+
+    pub fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError> {
+        let total_vns = self.get_total_validator_count(epoch)?;
+        let committee_size = self.config.committee_size;
+        let num_committees = calculate_num_committees(total_vns, committee_size);
+        Ok(num_committees)
+    }
+
+    pub fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, EpochManagerError> {
+        let num_committees = self.get_number_of_committees(epoch)?;
+        let bucket = shard.to_committee_bucket(num_committees);
+        let mut tx = self.global_db.create_transaction()?;
+        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
+        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        let num_validators = validator_node_db.count_in_bucket(start_epoch, end_epoch, bucket)?;
+        let num_validators = u32::try_from(num_validators).map_err(|_| EpochManagerError::IntegerOverflow {
+            func: "get_committee_count_and_bucket",
+        })?;
+        Ok(CommitteeShard::new(num_committees, num_validators, bucket))
+    }
+
+    pub fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError> {
+        let shard_key = self
+            .current_shard_key
+            .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered)?;
+        self.get_committee_shard(epoch, shard_key)
+    }
+
+    pub fn get_committees_by_buckets(
+        &self,
+        epoch: Epoch,
+        buckets: HashSet<u32>,
+    ) -> Result<HashMap<u32, Committee<CommsPublicKey>>, EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
+        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        let committees = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
+        Ok(committees)
     }
 
     fn publish_event(&mut self, event: EpochManagerEvent) {

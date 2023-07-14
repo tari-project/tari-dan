@@ -24,7 +24,6 @@ use std::{collections::HashMap, str::FromStr};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde_json::json;
-use tari_common_types::types::FixedHash;
 use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     signatures::CommitmentSignature,
@@ -102,7 +101,7 @@ pub async fn claim_burn(
     };
 
     let wait_req = TransactionWaitResultRequest {
-        hash: claim_burn_resp.hash,
+        transaction_id: claim_burn_resp.transaction_id,
         timeout_secs: Some(300),
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
@@ -139,7 +138,7 @@ pub async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, am
         .expect("Failed to request reveal funds");
 
     let wait_req = TransactionWaitResultRequest {
-        hash: resp.hash,
+        transaction_id: resp.transaction_id,
         timeout_secs: Some(120),
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
@@ -240,7 +239,7 @@ pub async fn transfer_confidential(
     let submit_resp = client.submit_transaction(submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
-        hash: submit_resp.hash,
+        transaction_id: submit_resp.transaction_id,
         timeout_secs: Some(120),
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
@@ -277,7 +276,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
     );
 
     let wait_req = TransactionWaitResultRequest {
-        hash: FixedHash::from(resp.result.transaction_hash.into_array()),
+        transaction_id: resp.result.transaction_hash.into_array().into(),
         timeout_secs: Some(120),
     };
     let _wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
@@ -310,7 +309,7 @@ pub async fn create_account_with_free_coins(
         (RistrettoSecretKey::default(), resp.public_key.clone()),
     );
     let wait_req = TransactionWaitResultRequest {
-        hash: FixedHash::from(resp.result.transaction_hash.into_array()),
+        transaction_id: resp.result.transaction_hash.into_array().into(),
         timeout_secs: Some(120),
     };
     let _wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
@@ -353,7 +352,7 @@ pub async fn mint_new_nft_on_account(
         .expect("Failed to mint new account NFT");
 
     let wait_req = TransactionWaitResultRequest {
-        hash: FixedHash::from(resp.result.transaction_hash.into_array()),
+        transaction_id: resp.result.transaction_hash.into_array().into(),
         timeout_secs: Some(120),
     };
     let _wait_resp = client
@@ -501,7 +500,7 @@ pub async fn submit_manifest_with_signing_keys(
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
-        hash: resp.hash,
+        transaction_id: resp.transaction_id,
         timeout_secs: Some(120),
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
@@ -613,7 +612,7 @@ pub async fn submit_manifest(
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
-        hash: resp.hash,
+        transaction_id: resp.transaction_id,
         timeout_secs: Some(120),
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
@@ -656,15 +655,6 @@ pub async fn create_component(
         args,
     };
 
-    // // Supply the inputs explicitly. If this is empty, the internal component manager
-    // // will attempt to supply the correct inputs
-    // let inputs = world
-    //     .wallet_daemon_outputs
-    //     .get(&account_name)
-    //     .unwrap_or_else(|| panic!("No account_name {}", account_name))
-    //     .iter()
-    //         address: addr.address.clone(),
-
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
         instructions: vec![instruction],
@@ -683,7 +673,7 @@ pub async fn create_component(
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
 
     let wait_req = TransactionWaitResultRequest {
-        hash: resp.hash,
+        transaction_id: resp.transaction_id,
         timeout_secs: Some(120),
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();

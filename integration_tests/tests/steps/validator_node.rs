@@ -10,7 +10,7 @@ use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{confidential::ConfidentialClaim, substate::SubstateAddress};
 use tari_template_lib::args;
 use tari_transaction::Transaction;
-use tari_validator_node_client::types::{GetStateRequest, SubmitTransactionRequest, TransactionFinalizeResult};
+use tari_validator_node_client::types::{DryRunTransactionFinalizeResult, GetStateRequest, SubmitTransactionRequest};
 
 #[then(expr = "validator node {word} has state at {word}")]
 async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String, state_address_name: String) {
@@ -42,7 +42,7 @@ async fn when_i_claim_burn(
     claim_public_key_name: String,
     account_name: String,
     vn_name: String,
-) -> Result<TransactionFinalizeResult, anyhow::Error> {
+) -> Result<DryRunTransactionFinalizeResult, anyhow::Error> {
     let commitment = world
         .commitments
         .get(&commitment_name)
@@ -78,7 +78,6 @@ async fn when_i_claim_burn(
         .unwrap_or_else(|| panic!("Claim public key {} not found", claim_public_key_name));
 
     let account_shard = ShardId::from_address(&account_address, 0);
-    let account_v1_shard = ShardId::from_address(&account_address, 1);
 
     let transaction = Transaction::builder()
         .claim_burn(ConfidentialClaim {
@@ -90,22 +89,22 @@ async fn when_i_claim_burn(
         })
         .put_last_instruction_output_on_workspace("burn")
         .call_method(component_address, "deposit", args![Workspace("burn")])
-        .with_outputs(vec![account_v1_shard])
         .with_inputs(vec![commitment_shard, account_shard])
         .sign(account_secret)
         .build();
 
     let request = SubmitTransactionRequest {
         transaction,
-        wait_for_result: true,
-        wait_for_result_timeout: None,
         is_dry_run: false,
     };
 
     let mut client = vn.create_client();
 
     let resp = client.submit_transaction(request).await?;
-    let result = resp.result.ok_or_else(|| anyhow::anyhow!("Transaction failed"))?;
+
+    let result = resp
+        .dry_run_result
+        .ok_or_else(|| anyhow::anyhow!("Transaction failed"))?;
 
     Ok(result)
 }

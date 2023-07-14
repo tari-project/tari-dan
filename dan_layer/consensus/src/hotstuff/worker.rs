@@ -10,6 +10,7 @@ use tari_dan_storage::{
     StateStore,
     StateStoreWriteTransaction,
 };
+use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
 use tokio::{
     sync::{broadcast, mpsc},
@@ -27,7 +28,7 @@ use crate::{
         on_receive_vote::OnReceiveVoteHandler,
     },
     messages::HotstuffMessage,
-    traits::{ConsensusSpec, EpochManager, LeaderStrategy},
+    traits::{ConsensusSpec, LeaderStrategy},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
@@ -45,8 +46,12 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
 
     state_store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
-    epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
+
+    epoch_manager: TConsensusSpec::EpochManager,
+    epoch_events: broadcast::Receiver<EpochManagerEvent>,
+    latest_epoch: Option<Epoch>,
+    is_epoch_synced: bool,
 
     on_beat: OnBeat,
     shutdown: ShutdownSignal,
@@ -58,7 +63,6 @@ where
     TConsensusSpec::EpochManager: Clone,
     TConsensusSpec::LeaderStrategy: Clone,
     TConsensusSpec::VoteSignatureService: Clone,
-    HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
 {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -66,6 +70,7 @@ where
         rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
         rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
         state_store: TConsensusSpec::StateStore,
+        epoch_events: broadcast::Receiver<EpochManagerEvent>,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         signing_service: TConsensusSpec::VoteSignatureService,
@@ -115,26 +120,32 @@ where
             state_store,
             leader_strategy,
             epoch_manager,
+            epoch_events,
+            latest_epoch: None,
+            is_epoch_synced: false,
             transaction_pool,
             on_beat,
             shutdown,
         }
     }
 
-    pub fn spawn(self) -> JoinHandle<Result<(), HotStuffError>> {
-        tokio::spawn(self.run())
+    pub fn spawn(self) -> JoinHandle<Result<(), anyhow::Error>> {
+        tokio::spawn(async move {
+            self.run().await?;
+            Ok(())
+        })
     }
 
     pub async fn run(mut self) -> Result<(), HotStuffError> {
-        // TODO: this should happen for every epoch change / need to merge chain(s) from previous epoch
-        let current_epoch = self.epoch_manager.current_epoch().await?;
-        self.create_genesis_block_if_required(current_epoch)?;
-
-        self.on_beat.beat();
-
         loop {
             tokio::select! {
                 biased;
+
+                Ok(event) = self.epoch_events.recv() => {
+                    if let Err(e) = self.on_epoch_event(event).await {
+                        error!(target: LOG_TARGET, "Error while processing epoch change (on_epoch_event): {}", e);
+                    }
+                },
 
                 Some(msg) = self.rx_new_transactions.recv() => {
                     if let Err(e) = self.on_new_executed_transaction(msg).await {
@@ -164,17 +175,32 @@ where
         Ok(())
     }
 
+    async fn on_epoch_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
+        match event {
+            EpochManagerEvent::EpochChanged(epoch) => {
+                self.create_genesis_block_if_required(epoch)?;
+
+                self.is_epoch_synced = true;
+                // TODO: merge chain(s) from previous epoch?
+
+                self.on_beat.beat();
+            },
+        }
+
+        Ok(())
+    }
+
     async fn on_new_executed_transaction(&mut self, executed: ExecutedTransaction) -> Result<(), HotStuffError> {
-        debug!(
+        info!(
             target: LOG_TARGET,
-            "Received new transaction with id: {}",
-            executed.transaction().hash()
+            "🚀 Consensus READY for new transaction with id: {}",
+            executed.transaction().id()
         );
         self.state_store.with_write_tx(|tx| {
             executed.insert(tx)?;
 
             self.transaction_pool.insert(tx, TransactionAtom {
-                id: *executed.transaction().hash(),
+                id: *executed.transaction().id(),
                 involved_shards: executed.transaction().involved_shards_iter().copied().collect(),
                 decision: executed.as_decision(),
                 evidence: executed.to_initial_evidence(),
@@ -193,7 +219,14 @@ where
     }
 
     async fn on_beat(&mut self) -> Result<(), HotStuffError> {
+        // TODO: This is a temporary hack to ensure that the VN has synced the blockchain before proposing
+        if !self.is_epoch_synced {
+            warn!(target: LOG_TARGET, "Waiting for epoch change before proposing");
+            return Ok(());
+        }
+
         let epoch = self.epoch_manager.current_epoch().await?;
+        debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", epoch);
 
         // Is the VN registered?
         if !self.epoch_manager.is_epoch_active(epoch).await? {
@@ -203,6 +236,8 @@ where
             );
             return Ok(());
         }
+
+        self.create_genesis_block_if_required(epoch)?;
 
         // Are there any transactions in the pools? The block may still be empty if non are ready but we still need to
         // propose a block to get to a 3-chain.
@@ -220,6 +255,14 @@ where
         let is_leader = self
             .leader_strategy
             .is_leader(&self.validator_addr, &local_committee, &leaf_block.block_id, 0);
+        info!(
+            target: LOG_TARGET,
+            "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}",
+            is_leader,
+            leaf_block.block_id,
+            local_committee
+                .len()
+        );
         if is_leader {
             self.on_propose.handle(epoch, local_committee, leaf_block).await?;
         }
@@ -239,6 +282,8 @@ where
             });
         }
 
+        self.create_genesis_block_if_required(msg.epoch())?;
+
         match msg {
             HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
             HotstuffMessage::Proposal(msg) => self.on_receive_proposal.handle(from, msg).await?,
@@ -247,18 +292,26 @@ where
         Ok(())
     }
 
-    fn create_genesis_block_if_required(&self, epoch: Epoch) -> Result<(), HotStuffError> {
+    fn create_genesis_block_if_required(&mut self, epoch: Epoch) -> Result<(), HotStuffError> {
+        // If we've already created the genesis block for this epoch then we can return early
+        if self.latest_epoch.map(|e| e >= epoch).unwrap_or(false) {
+            return Ok(());
+        }
+
         let mut tx = self.state_store.create_write_tx()?;
 
         // The parent for all genesis blocks refer to this zero block
         let zero_block = Block::zero_block();
         if !zero_block.exists(tx.deref_mut())? {
+            debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;
             zero_block.insert(&mut tx)?;
         }
 
         let genesis = Block::genesis(epoch);
         if !genesis.exists(tx.deref_mut())? {
+            debug!(target: LOG_TARGET, "Creating genesis block");
+            genesis.justify().save(&mut tx)?;
             genesis.insert(&mut tx)?;
             genesis.set_as_locked(&mut tx)?;
             genesis.set_as_leaf(&mut tx)?;
@@ -267,6 +320,14 @@ where
         }
 
         tx.commit()?;
+
+        info!(
+            target: LOG_TARGET,
+            "🚀 Epoch changed to {}",
+            epoch
+        );
+
+        self.latest_epoch = Some(epoch);
 
         Ok(())
     }

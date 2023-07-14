@@ -8,10 +8,14 @@ use std::{
     str::FromStr,
 };
 
-use tari_dan_common_types::{committee::CommitteeShard, optional::IsNotFoundError};
+use tari_dan_common_types::{
+    committee::CommitteeShard,
+    optional::{IsNotFoundError, Optional},
+};
+use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{Command, QcId, TransactionAtom, TransactionId},
+    consensus_models::{Command, QcId, TransactionAtom},
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -63,6 +67,16 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
     ) -> Result<TransactionPoolRecord, TransactionPoolError> {
         let rec = tx.transaction_pool_get(id)?;
         Ok(rec)
+    }
+
+    pub fn exists(
+        &self,
+        tx: &mut TStateStore::ReadTransaction<'_>,
+        id: &TransactionId,
+    ) -> Result<bool, TransactionPoolError> {
+        // TODO: optimise
+        let rec = tx.transaction_pool_get(id).optional()?;
+        Ok(rec.is_some())
     }
 
     pub fn insert(

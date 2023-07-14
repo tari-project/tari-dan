@@ -49,11 +49,11 @@ use integration_tests::{
 };
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_common::initialize_logging;
-use tari_common_types::types::{FixedHash, PublicKey};
+use tari_common_types::types::PublicKey;
 use tari_comms::multiaddr::Multiaddr;
 use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::hex::Hex};
-use tari_dan_common_types::QuorumDecision;
 use tari_dan_engine::abi::Type;
+use tari_dan_storage::consensus_models::QuorumDecision;
 use tari_shutdown::Shutdown;
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{
@@ -513,7 +513,7 @@ async fn call_component_method(
 ) {
     let resp =
         validator_node_cli::call_method(world, vn_name, component_name, output_name, method_call, num_outputs).await;
-    assert_eq!(resp.result.unwrap().decision, QuorumDecision::Accept);
+    assert_eq!(resp.dry_run_result.unwrap().decision, QuorumDecision::Accept);
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
@@ -540,7 +540,7 @@ async fn call_component_method_on_all_vns(
             num_outputs,
         )
         .await;
-        assert_eq!(resp.result.unwrap().decision, QuorumDecision::Accept);
+        assert_eq!(resp.dry_run_result.unwrap().decision, QuorumDecision::Accept);
     }
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
@@ -567,7 +567,7 @@ async fn call_component_method_and_check_result(
         num_outputs,
     )
     .await;
-    let finalize_result = resp.result.unwrap();
+    let finalize_result = resp.dry_run_result.unwrap();
     assert_eq!(finalize_result.decision, QuorumDecision::Accept);
 
     let results = finalize_result.finalize.execution_results;
@@ -607,7 +607,7 @@ async fn call_component_method_on_all_vns_and_check_result(
             num_outputs,
         )
         .await;
-        let finalize_result = resp.result.unwrap();
+        let finalize_result = resp.dry_run_result.unwrap();
         assert_eq!(finalize_result.decision, QuorumDecision::Accept);
 
         let results = finalize_result.finalize.execution_results;
@@ -935,19 +935,24 @@ async fn successful_transaction(world: &mut TariWorld) {
         let recent_transactions = recent_transactions_res.transactions;
         // check that all transactions have succeeded
         for tx in &recent_transactions {
-            let payload_id = &tx.payload_id[..];
-            assert_eq!(payload_id.len(), 32);
-
-            let hash = FixedHash::try_from(payload_id).unwrap();
-            let get_transaction_req = GetTransactionResultRequest { hash };
+            let get_transaction_req = GetTransactionResultRequest {
+                transaction_id: *tx.id(),
+            };
             let get_transaction_res = client
                 .get_transaction_result(get_transaction_req)
                 .await
-                .unwrap_or_else(|_| panic!("Failed to get transaction with hash {} for vn = {}", hash, vn_ps.name));
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "Failed to get transaction with hash {} for vn = {}",
+                        tx.id(),
+                        vn_ps.name
+                    )
+                });
             let finalized_tx = get_transaction_res.result.unwrap_or_else(|| {
                 panic!(
                     "Transaction result was rejected for tx hash {} and vn = {}",
-                    hash, vn_ps.name
+                    tx.id(),
+                    vn_ps.name
                 )
             });
             finalized_tx.expect_success();

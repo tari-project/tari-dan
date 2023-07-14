@@ -54,7 +54,7 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::peer_manager::PeerFeatures;
-use tari_dan_core::consensus_constants::ConsensusConstants;
+use tari_dan_app_utilities::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_indexer_lib::substate_scanner::SubstateScanner;

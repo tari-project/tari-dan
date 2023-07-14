@@ -88,7 +88,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         .await
         .unwrap();
 
-    if let Some(ref failure) = resp.result.as_ref().unwrap().transaction_failure {
+    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
         panic!("Transaction failed: {:?}", failure);
     }
 
@@ -96,7 +96,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     add_substate_addresses(
         world,
         account_name,
-        resp.result.unwrap().finalize.result.accept().unwrap(),
+        resp.dry_run_result.unwrap().finalize.result.accept().unwrap(),
     );
 }
 
@@ -154,14 +154,14 @@ pub async fn create_component(
     let mut client = get_validator_node_client(world, vn_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
-    if let Some(ref failure) = resp.result.as_ref().unwrap().transaction_failure {
+    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
         panic!("Transaction failed: {:?}", failure);
     }
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
         world,
         outputs_name,
-        resp.result.unwrap().finalize.result.accept().unwrap(),
+        resp.dry_run_result.unwrap().finalize.result.accept().unwrap(),
     );
 }
 
@@ -290,14 +290,14 @@ pub async fn call_method(
     let mut client = get_validator_node_client(world, vn_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
-    if let Some(ref failure) = resp.result.as_ref().unwrap().transaction_failure {
+    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
         panic!("Transaction failed: {:?}", failure);
     }
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
         world,
         outputs_name,
-        resp.result.as_ref().unwrap().finalize.result.accept().unwrap(),
+        resp.dry_run_result.as_ref().unwrap().finalize.result.accept().unwrap(),
     );
     resp
 }
@@ -421,14 +421,14 @@ pub async fn submit_manifest(
         .await
         .unwrap();
 
-    if let Some(ref failure) = resp.result.as_ref().unwrap().transaction_failure {
+    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
         panic!("Transaction failed: {:?}", failure);
     }
 
     add_substate_addresses(
         world,
         outputs_name,
-        resp.result.unwrap().finalize.result.accept().unwrap(),
+        resp.dry_run_result.unwrap().finalize.result.accept().unwrap(),
     );
 }
 

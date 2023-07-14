@@ -5,8 +5,7 @@ use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::PublicKey;
-use tari_dan_common_types::QuorumCertificate;
+use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::commit_result::{FinalizeResult, RejectReason};
 use tari_template_lib::models::Amount;
 use tari_transaction::Transaction;
@@ -18,7 +17,7 @@ pub struct WalletTransaction {
     pub finalize: Option<FinalizeResult>,
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Option<Amount>,
-    pub qcs: Vec<QuorumCertificate<PublicKey>>,
+    pub qcs: Vec<QuorumCertificate>,
     pub is_dry_run: bool,
 }
 

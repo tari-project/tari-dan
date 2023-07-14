@@ -22,13 +22,9 @@
 
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{
-    quorum_certificate::{QuorumCertificate, QuorumDecision},
-    Epoch,
-    ShardId,
-};
-use tari_dan_storage::models::RecentTransaction;
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_storage::consensus_models::{ExecutedTransaction, QuorumDecision, SubstateRecord};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     fees::FeeCostBreakdown,
@@ -36,7 +32,7 @@ use tari_engine_types::{
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetIdentityResponse {
@@ -118,41 +114,17 @@ pub struct TemplateMetadata {
 }
 
 /// A request to submit a transaction
-/// ```json
-/// instructions": [{
-///    "type": "CallFunction",
-///    "template_address": "55886cfee6e91503b7f1df2dc6d11951b53db64733521595c3505747b83be277",
-///    "function": "new",
-///    "args": [{
-///       "type":"Literal",
-///       "value": "1232"
-///    }]
-///  }],
-///  "signature": {
-///    "public_nonce": "90392b9cebd7bf7d693f938911ccd3fb735a6cf24fcf1341a2edca38c560b563",
-///    "signature": "90392b9cebd7bf7d693f938911ccd3fb735a6cf24fcf1341a2edca38c560b563"
-///   },
-///   "fee": 1,
-///   "sender_public_key": "90392b9cebd7bf7d693f938911ccd3fb735a6cf24fcf1341a2edca38c560b563",
-///   "num_new_components": 1
-/// }
-/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionRequest {
     pub transaction: Transaction,
-    /// Set to true to wait for the transaction to complete before returning
-    #[serde(default)]
-    pub wait_for_result: bool,
-    #[serde(default)]
-    pub wait_for_result_timeout: Option<u64>,
     pub is_dry_run: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
-    pub result: Option<TransactionFinalizeResult>,
+    pub transaction_id: TransactionId,
+    /// The result is a _dry run_ transaction.
+    pub dry_run_result: Option<DryRunTransactionFinalizeResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,18 +133,22 @@ pub struct GetClaimableFeesResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionFinalizeResult {
+pub struct DryRunTransactionFinalizeResult {
     // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
     pub decision: QuorumDecision,
     pub finalize: FinalizeResult,
     pub transaction_failure: Option<RejectReason>,
     pub fee_breakdown: Option<FeeCostBreakdown>,
-    pub qc: QuorumCertificate<PublicKey>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionRequest {
-    pub payload_id: Vec<u8>,
+pub struct GetTransactionRequest {
+    pub transaction_id: TransactionId,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetTransactionResponse {
+    pub transaction: ExecutedTransaction,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -182,15 +158,18 @@ pub struct GetClaimableFeesRequest {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SubstatesRequest {
-    pub payload_id: Vec<u8>,
-    pub shard_id: Vec<u8>,
+pub struct GetSubstatesByTransactionRequest {
+    pub transaction_id: TransactionId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetSubstatesByTransactionResponse {
+    pub substates: Vec<SubstateRecord>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionResultRequest {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -199,22 +178,11 @@ pub struct GetTransactionResultResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetTransactionQcsRequest {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetTransactionQcsResponse {
-    pub qcs: Vec<QuorumCertificate<PublicKey>>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetRecentTransactionsRequest {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetRecentTransactionsResponse {
-    pub transactions: Vec<RecentTransaction>,
+    pub transactions: Vec<Transaction>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -263,7 +231,7 @@ pub struct GetSubstateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateResponse {
     pub value: Option<SubstateValue>,
-    pub created_by_tx: Option<FixedHash>,
+    pub created_by_tx: Option<TransactionId>,
     pub status: SubstateStatus,
 }
 

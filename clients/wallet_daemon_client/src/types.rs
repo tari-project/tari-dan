@@ -23,8 +23,8 @@
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{QuorumCertificate, ShardId};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::{
     apis::jwt::JrpcPermissions,
     models::{Account, ConfidentialProofId, TransactionStatus},
@@ -43,7 +43,7 @@ use tari_template_lib::{
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
     prelude::{ConfidentialWithdrawProof, ResourceType},
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 use crate::{
     serialize::{opt_string_or_struct, string_or_struct},
@@ -85,57 +85,41 @@ pub struct TransactionSubmitRequest {
     pub instructions: Vec<Instruction>,
     pub inputs: Vec<SubstateRequirement>,
     pub override_inputs: bool,
+
+    // TODO: all of these are ignored
     pub new_outputs: u8,
     pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
     pub new_resources: Vec<(TemplateAddress, String)>,
     pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
     pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
+
     pub is_dry_run: bool,
     pub proof_ids: Vec<ConfidentialProofId>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionSubmitResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub inputs: Vec<SubstateRequirement>,
-    pub outputs: Vec<ShardId>,
     pub result: Option<ExecuteResult>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetRequest {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TransactionResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
-    pub inputs: Vec<SubstateRequirement>,
-    pub outputs: Vec<ShardId>,
+pub struct TransactionGetResponse {
+    pub transaction: Transaction,
+    pub result: Option<FinalizeResult>,
+    pub status: TransactionStatus,
+    pub transaction_failure: Option<RejectReason>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetAllRequest {
     pub status: Option<TransactionStatus>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TransactionClaimBurnRequest {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct TransactionGetResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
-    pub transaction: Transaction,
-    pub result: Option<FinalizeResult>,
-    pub status: TransactionStatus,
-    pub transaction_failure: Option<RejectReason>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -150,33 +134,26 @@ pub struct TransactionGetAllResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetResultRequest {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetResultResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub result: Option<FinalizeResult>,
-    // TODO: Always None
-    pub qc: Option<QuorumCertificate<PublicKey>>,
     pub status: TransactionStatus,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionWaitResultRequest {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub timeout_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionWaitResultResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub result: Option<FinalizeResult>,
-    pub qcs: Vec<QuorumCertificate<PublicKey>>,
     pub status: TransactionStatus,
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Amount,
@@ -185,8 +162,7 @@ pub struct TransactionWaitResultResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionClaimBurnResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub inputs: Vec<ShardId>,
     pub outputs: Vec<ShardId>,
 }
@@ -351,8 +327,7 @@ pub struct TransferRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransferResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub fee: Amount,
     pub result: FinalizeResult,
 }
@@ -410,8 +385,7 @@ pub struct ConfidentialTransferRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ConfidentialTransferResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub fee: Amount,
     pub result: FinalizeResult,
 }
@@ -426,8 +400,7 @@ pub struct ClaimBurnRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimBurnResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub fee: Amount,
     pub result: FinalizeResult,
 }
@@ -450,8 +423,7 @@ pub struct RevealFundsRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RevealFundsResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub fee: Amount,
     pub result: FinalizeResult,
 }
@@ -465,8 +437,7 @@ pub struct AccountsCreateFreeTestCoinsRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateFreeTestCoinsResponse {
-    #[serde(with = "serde_with::hex")]
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub amount: Amount,
     pub fee: Amount,
     pub result: FinalizeResult,

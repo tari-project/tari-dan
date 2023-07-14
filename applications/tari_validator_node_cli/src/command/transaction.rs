@@ -29,11 +29,10 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
-    commit_result::{FinalizeResult, TransactionResult},
+    commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
     instruction::Instruction,
     instruction_result::InstructionResult,
     substate::{SubstateAddress, SubstateValue},
@@ -45,18 +44,19 @@ use tari_template_lib::{
     models::{Amount, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 use tari_transaction_manifest::parse_manifest;
 use tari_utilities::hex::to_hex;
 use tari_validator_node_client::{
     types::{
+        DryRunTransactionFinalizeResult,
         GetTransactionResultRequest,
         SubmitTransactionRequest,
         SubmitTransactionResponse,
-        TransactionFinalizeResult,
     },
     ValidatorNodeClient,
 };
+use tokio::time::MissedTickBehavior;
 
 use crate::{
     command::manifest,
@@ -75,7 +75,7 @@ pub enum TransactionSubcommand {
 
 #[derive(Debug, Args, Clone)]
 pub struct GetArgs {
-    transaction_hash: FromHex<FixedHash>,
+    transaction_hash: FromHex<TransactionId>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -162,7 +162,7 @@ impl TransactionSubcommand {
 
 async fn handle_get(args: GetArgs, client: &mut ValidatorNodeClient) -> Result<(), anyhow::Error> {
     let request = GetTransactionResultRequest {
-        hash: args.transaction_hash.into_inner(),
+        transaction_id: args.transaction_hash.into_inner(),
     };
     let resp = client.get_transaction_result(request).await?;
 
@@ -237,101 +237,92 @@ pub async fn submit_transaction(
         common.inputs
     };
 
-    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
-    //       object is mutated
-    let mut outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
-
-    outputs.extend(
-        common
-            .non_fungible_mint_outputs
-            .into_iter()
-            .map(|m| ShardId::from_address(&m.to_substate_address(), 0)),
-    );
-
     // Convert to shard id
     let inputs = inputs
         .into_iter()
         .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version))
         .collect::<Vec<_>>();
 
-    summarize_request(&instructions, &inputs, &outputs, 1, common.dry_run);
+    summarize_request(&instructions, &inputs, 1, common.dry_run);
     println!();
 
     let transaction = Transaction::builder()
         .with_instructions(instructions)
         .with_inputs(inputs)
-        .with_new_outputs(common.num_outputs.unwrap_or(0))
-        .with_outputs(outputs)
-        .with_new_resources(
-            common
-                .new_resources
-                .into_iter()
-                .map(|r| (r.template_address, r.token_symbol))
-                .collect(),
-        )
-        .with_new_non_fungible_outputs(
-            common
-                .new_non_fungible_outputs
-                .into_iter()
-                .map(|m| (m.resource_address, m.count))
-                .collect(),
-        )
-        .with_new_non_fungible_index_outputs(
-            common
-                .new_non_fungible_index_outputs
-                .into_iter()
-                .map(|i| (i.parent_address, i.index))
-                .collect(),
-        )
         .sign(&key.secret_key)
         .build();
 
-    if transaction.meta().involved_shards().is_empty() && transaction.meta().max_outputs() == 0 {
-        return Err(anyhow::anyhow!(
-            "No inputs or outputs, transaction will not be processed by the network"
-        ));
-    }
-
-    let tx_hash = *transaction.hash();
     let request = SubmitTransactionRequest {
         transaction,
-        wait_for_result: common.wait_for_result,
         is_dry_run: common.dry_run,
-        wait_for_result_timeout: common.wait_for_result_timeout,
     };
 
-    println!("✅ Transaction {} submitted.", tx_hash);
+    let mut resp = client.submit_transaction(request).await?;
+
+    println!("✅ Transaction {} submitted.", resp.transaction_id);
     println!();
 
     let timer = Instant::now();
     if common.wait_for_result {
         println!("⏳️ Waiting for transaction result...");
         println!();
-    }
-
-    // dbg!(&request);
-    let resp = client.submit_transaction(request).await?;
-
-    if let Some(result) = &resp.result {
+        let result = wait_for_transaction_result(
+            resp.transaction_id,
+            client,
+            common.wait_for_result_timeout.map(Duration::from_secs),
+        )
+        .await?;
         if let Some(diff) = result.finalize.result.accept() {
             component_manager.commit_diff(diff)?;
         }
-        summarize(result, timer.elapsed());
+        summarize(&result, timer.elapsed());
+        // Hack: submit response never returns a result unless it's a dry run - however cucumbers expect a result so add
+        // it to the response here to satify that We'll eventaully remove these handlers eventually anyway
+        use tari_dan_storage::consensus_models::QuorumDecision;
+        resp.dry_run_result = Some(DryRunTransactionFinalizeResult {
+            decision: if result.finalize.result.is_accept() {
+                QuorumDecision::Accept
+            } else {
+                QuorumDecision::Reject
+            },
+            finalize: result.finalize,
+            transaction_failure: result.transaction_failure,
+            fee_breakdown: result.fee_receipt.map(|f| f.to_cost_breakdown()),
+        });
     }
 
     Ok(resp)
 }
 
-fn summarize_request(
-    instructions: &[Instruction],
-    inputs: &[ShardId],
-    outputs: &[ShardId],
-    fee: u64,
-    is_dry_run: bool,
-) {
+async fn wait_for_transaction_result(
+    transaction_id: TransactionId,
+    client: &mut ValidatorNodeClient,
+    timeout: Option<Duration>,
+) -> anyhow::Result<ExecuteResult> {
+    let mut interval = tokio::time::interval(Duration::from_secs(1));
+    interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let mut timeout = timeout;
+    loop {
+        let resp = client
+            .get_transaction_result(GetTransactionResultRequest { transaction_id })
+            .await
+            .optional()?;
+        if let Some(resp) = resp {
+            if let Some(result) = resp.result {
+                return Ok(result);
+            }
+        }
+        if let Some(t) = timeout {
+            timeout = t.checked_sub(Duration::from_secs(1));
+            if timeout.is_none() {
+                return Err(anyhow!("Timeout waiting for transaction result"));
+            }
+        }
+        interval.tick().await;
+    }
+}
+
+fn summarize_request(instructions: &[Instruction], inputs: &[ShardId], fee: u64, is_dry_run: bool) {
     if is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();
@@ -346,15 +337,6 @@ fn summarize_request(
         }
     }
     println!();
-    println!("Outputs:");
-    if outputs.is_empty() {
-        println!("  None");
-    } else {
-        for shard_id in outputs {
-            println!("- {}", shard_id);
-        }
-    }
-    println!();
     println!("🌟 Submitting instructions:");
     for instruction in instructions {
         println!("- {}", instruction);
@@ -362,22 +344,15 @@ fn summarize_request(
     println!();
 }
 
-#[allow(clippy::too_many_lines)]
-fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
+fn summarize(result: &ExecuteResult, time_taken: Duration) {
     println!("✅️ Transaction finalized",);
     println!();
-    println!("Epoch: {}", result.qc.epoch());
-    println!("Payload height: {}", result.qc.payload_height());
-    println!("Signed by: {} validator nodes", result.qc.validators_metadata().len());
-    println!();
+    // println!("Epoch: {}", result.qc.epoch());
+    // println!("Payload height: {}", result.qc.payload_height());
+    // println!("Signed by: {} validator nodes", result.qc.validators_metadata().len());
+    // println!();
 
     summarize_finalize_result(&result.finalize);
-
-    println!();
-    println!("========= Pledges =========");
-    for p in result.qc.all_shard_pledges().iter() {
-        println!("Shard:{} Pledge:{}", p.shard_id, p.pledge.current_state.as_str());
-    }
 
     println!();
     println!("Time taken: {:?}", time_taken);
@@ -385,7 +360,7 @@ fn summarize(result: &TransactionFinalizeResult, time_taken: Duration) {
     if let Some(tx_failure) = &result.transaction_failure {
         println!("Transaction failure: {:?}", tx_failure);
     }
-    println!("OVERALL DECISION: {:?}", result.decision);
+    println!("OVERALL DECISION: {}", result.finalize.result);
 }
 
 #[allow(clippy::too_many_lines)]

@@ -91,7 +91,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
     }
 
     pub fn execute(self, transaction: Transaction) -> Result<ExecuteResult, TransactionError> {
-        let id_provider = IdProvider::new(*transaction.hash(), 1000);
+        let id_provider = IdProvider::new(transaction.hash(), 1000);
         // TODO: We can avoid this for each execution with improved design
         let tracker = StateTracker::new(self.state_db.clone(), id_provider, self.template_provider.clone());
         let initial_proofs = self.auth_params.initial_ownership_proofs.clone();
@@ -100,15 +100,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             tracker,
             self.auth_params,
             self.consensus,
-            transaction.sender_public_key().clone(),
+            transaction.signer_public_key().clone(),
             self.modules,
         )?;
 
         let auth_scope = AuthorizationScope::new(Arc::new(initial_proofs));
         let runtime = Runtime::new(Arc::new(runtime_interface));
-        let transaction_hash = *transaction.hash();
+        let transaction_hash = transaction.hash();
 
-        let (instructions, fee_instructions, _sig, _pk) = transaction.destruct();
+        let (fee_instructions, instructions) = transaction.into_instructions();
 
         let fee_exec_results = fee_instructions
             .into_iter()
