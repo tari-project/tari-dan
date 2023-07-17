@@ -27,7 +27,7 @@ use serde_json::json;
 use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     signatures::CommitmentSignature,
-    tari_utilities::{hex::Hex, ByteArray},
+    tari_utilities::ByteArray,
 };
 use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_engine_types::instruction::Instruction;
@@ -41,6 +41,7 @@ use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::command::transaction::CliArg;
 use tari_wallet_daemon_client::{
+    error::WalletDaemonClientError,
     types::{
         AccountGetResponse,
         AccountsCreateFreeTestCoinsRequest,
@@ -50,6 +51,7 @@ use tari_wallet_daemon_client::{
         AuthLoginRequest,
         AuthLoginResponse,
         ClaimBurnRequest,
+        ClaimBurnResponse,
         ConfidentialTransferRequest,
         MintAccountNftRequest,
         ProofsGenerateRequest,
@@ -74,7 +76,7 @@ pub async fn claim_burn(
     ownership_proof: CommitmentSignature<RistrettoPublicKey, RistrettoSecretKey>,
     reciprocal_claim_public_key: RistrettoPublicKey,
     wallet_daemon_name: String,
-) -> TransactionWaitResultResponse {
+) -> Result<ClaimBurnResponse, WalletDaemonClientError> {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
     let claim_burn_request = ClaimBurnRequest {
@@ -92,29 +94,7 @@ pub async fn claim_burn(
         fee: Some(Amount(1)),
     };
 
-    let claim_burn_resp = match client.claim_burn(claim_burn_request).await {
-        Ok(resp) => resp,
-        Err(err) => {
-            println!("Failed to claim burn: {}", err);
-            panic!("Failed to claim burn: {}", err);
-        },
-    };
-
-    let wait_req = TransactionWaitResultRequest {
-        transaction_id: claim_burn_resp.transaction_id,
-        timeout_secs: Some(300),
-    };
-    let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
-
-    if let Some(diff) = wait_resp.result.as_ref().and_then(|r| r.result.accept()) {
-        add_substate_addresses(
-            world,
-            format!("claim_burn/{}/{}", account_name, commitment.to_hex()),
-            diff,
-        );
-    }
-
-    wait_resp
+    client.claim_burn(claim_burn_request).await
 }
 
 pub async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, amount: u64, wallet_daemon_name: String) {
@@ -624,6 +604,45 @@ pub async fn submit_manifest(
             .result
             .expect("Transaction has failed"),
     );
+}
+
+pub async fn submit_transaction(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    fee_instructions: Vec<Instruction>,
+    instructions: Vec<Instruction>,
+    inputs: Vec<SubstateRequirement>,
+    outputs_name: String,
+) -> TransactionWaitResultResponse {
+    let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
+
+    let transaction_submit_req = TransactionSubmitRequest {
+        signing_key_index: None,
+        instructions,
+        fee_instructions,
+        override_inputs: false,
+        is_dry_run: false,
+        inputs,
+        proof_ids: vec![],
+        new_resources: vec![],
+        specific_non_fungible_outputs: vec![],
+        new_outputs: 0,
+        new_non_fungible_outputs: vec![],
+        new_non_fungible_index_outputs: vec![],
+    };
+
+    let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
+
+    let wait_req = TransactionWaitResultRequest {
+        transaction_id: resp.transaction_id,
+        timeout_secs: Some(120),
+    };
+    let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
+
+    if let Some(diff) = wait_resp.result.as_ref().and_then(|r| r.result.accept()) {
+        add_substate_addresses(world, outputs_name, diff);
+    }
+    wait_resp
 }
 
 pub async fn create_component(

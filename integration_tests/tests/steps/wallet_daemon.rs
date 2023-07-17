@@ -48,11 +48,11 @@ async fn when_i_claim_burn_via_wallet_daemon(
         reciprocal_claim_public_key.clone(),
         wallet_daemon_name,
     )
-    .await;
-    if let Some(ref reason) = claim_burn_resp.transaction_failure {
+    .await
+    .unwrap();
+    if let Some(ref reason) = claim_burn_resp.result.result.reject() {
         panic!("Transaction failed: {}", reason);
     }
-    assert!(claim_burn_resp.result.unwrap().is_accept());
 }
 
 #[when(
@@ -85,7 +85,9 @@ async fn when_i_claim_burn_via_wallet_daemon_it_fails(
         .get(&claim_pubkey_name)
         .unwrap_or_else(|| panic!("Claim public key {} not found", claim_pubkey_name));
 
-    let claim_burn_resp = wallet_daemon_cli::claim_burn(
+    // TODO: The walletd picks up the substate that doesnt exist before the transaction is submitted. This doesnt test
+    // the validator node behaviour. We should submit the transaction directly ithout any special claim burn handling
+    let _err = wallet_daemon_cli::claim_burn(
         world,
         account_name,
         commitment.clone(),
@@ -94,11 +96,8 @@ async fn when_i_claim_burn_via_wallet_daemon_it_fails(
         reciprocal_claim_public_key.clone(),
         wallet_daemon_name,
     )
-    .await;
-
-    let _reason = claim_burn_resp
-        .transaction_failure
-        .expect("Expected transaction failure");
+    .await
+    .unwrap_err();
 }
 
 #[then(
