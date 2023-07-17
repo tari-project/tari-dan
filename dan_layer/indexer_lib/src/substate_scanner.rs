@@ -174,7 +174,8 @@ where
         committee.shuffle();
 
         let f = (committee.members.len() - 1) / 3;
-        let mut num_down_substate_results = 0;
+        let mut num_nexist_substate_results = 0;
+        let mut last_error = None;
         for vn_public_key in &committee.members {
             // TODO: we cannot request data from ourselves via p2p rpc - so we should exclude ourselves from requests
 
@@ -182,10 +183,10 @@ where
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up { .. } | SubstateResult::Down { .. } => return Ok(substate_result),
                     SubstateResult::DoesNotExist => {
-                        if num_down_substate_results > f {
+                        if num_nexist_substate_results > f {
                             return Ok(substate_result);
                         }
-                        num_down_substate_results += 1;
+                        num_nexist_substate_results += 1;
                     },
                 },
                 Err(e) => {
@@ -194,6 +195,7 @@ where
                         target: LOG_TARGET,
                         "Could not get substate {} from vn {}: {}", shard, vn_public_key, e
                     );
+                    last_error = Some(e);
                 },
             }
         }
@@ -203,6 +205,9 @@ where
             "Could not get substate {} from any of the validator nodes", shard,
         );
 
+        if let Some(e) = last_error {
+            return Err(e);
+        }
         Ok(SubstateResult::DoesNotExist)
     }
 

@@ -107,7 +107,7 @@ where
                 Some(req) = self.mempool_requests.recv() => self.handle_request(req).await,
                 Some(result) = self.pending_executions.next() => {
                     if  let Err(e) = self.handle_execution_complete(result).await {
-                        error!(target: LOG_TARGET, "handle_execution_complete failed: {}", e);
+                        error!(target: LOG_TARGET, "Possible bug: handle_execution_complete failed: {}", e);
                     }
                 },
                 Some(tx) = self.new_transactions.recv() => {
@@ -226,6 +226,7 @@ where
         &mut self,
         result: Result<ExecutionResult, MempoolError>,
     ) -> Result<(), MempoolError> {
+        // This is due to a bug or possibly db failure only
         let (transaction_id, time_taken, exec_result) = result?;
 
         self.transactions.remove(&transaction_id);
@@ -246,10 +247,9 @@ where
                 executed
             },
             Err(e) => {
-                // This is due to a bug or possibly db failure only
                 error!(
                     target: LOG_TARGET,
-                    "❌ POSSIBLE BUG: Transaction {} failed to execute: {}",
+                    "❌ Transaction {} failed: {}",
                     transaction_id,
                     e.to_string()
                 );

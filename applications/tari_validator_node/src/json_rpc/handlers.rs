@@ -279,6 +279,7 @@ impl JsonRpcHandlers {
             })?;
 
         let response = GetTransactionResultResponse {
+            is_finalized: executed.is_finalized(),
             result: Some(executed.into_result()),
         };
         Ok(JsonRpcResponse::success(answer_id, response))

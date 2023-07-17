@@ -111,7 +111,8 @@ impl TariCommsValidatorNodeRpcClient {
             .connectivity
             .dial_peer(NodeId::from_public_key(&self.address))
             .await?;
-        let client = conn.connect_rpc().await?;
+        let client: rpc_service::ValidatorNodeRpcClient = conn.connect_rpc().await?;
+        self.connection = Some((conn, client.clone()));
         Ok(client)
     }
 }

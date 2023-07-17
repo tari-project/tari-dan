@@ -51,7 +51,7 @@ where
         // Substates are downed/dont exist
         Err(err @ SubstateResolverError::InputSubstateDowned { .. }) |
         Err(err @ SubstateResolverError::InputSubstateDoesNotExist { .. }) => {
-            warn!(target: LOG_TARGET, "Invalid input shards for transaction {}: {}", transaction.id(), err);
+            warn!(target: LOG_TARGET, "One or more invalid input shards for transaction {}: {}", transaction.id(), err);
             Ok((*transaction.id(), Duration::default(), Err(err.into())))
         },
         // Some other issue - network, db, etc

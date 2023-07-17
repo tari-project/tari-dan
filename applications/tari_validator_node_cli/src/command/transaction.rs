@@ -93,8 +93,6 @@ pub struct CommonSubmitArgs {
     /// Timeout in seconds
     #[clap(long, short = 't')]
     pub wait_for_result_timeout: Option<u64>,
-    #[clap(long, short = 'n')]
-    pub num_outputs: Option<u8>,
     #[clap(long, short = 'i')]
     pub inputs: Vec<VersionedSubstateAddress>,
     #[clap(long, short = 'v')]
@@ -307,9 +305,12 @@ async fn wait_for_transaction_result(
             .get_transaction_result(GetTransactionResultRequest { transaction_id })
             .await
             .optional()?;
+
         if let Some(resp) = resp {
-            if let Some(result) = resp.result {
-                return Ok(result);
+            if resp.is_finalized {
+                if let Some(result) = resp.result {
+                    return Ok(result);
+                }
             }
         }
         if let Some(t) = timeout {

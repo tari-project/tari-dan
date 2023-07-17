@@ -53,6 +53,8 @@ where
             .store
             .with_read_tx(|tx| SubstateRecord::get_any(tx, transaction.all_inputs_iter()))?;
 
+        // TODO: If any of the missing shards are local we should/could error early here rather than asking the local
+        // committee
         info!(
             target: LOG_TARGET,
             "Found {} local substates and {} missing shards",

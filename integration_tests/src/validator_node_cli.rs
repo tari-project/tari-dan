@@ -72,7 +72,6 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
     let common = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(120),
-        num_outputs: Some(1),
         inputs: vec![],
         version: None,
         dump_outputs_into: None,
@@ -107,7 +106,6 @@ pub async fn create_component(
     vn_name: String,
     function_call: String,
     args: Vec<String>,
-    num_outputs: u64,
     new_resource_token_symbols: Vec<String>,
 ) {
     let data_dir = get_cli_data_dir(world);
@@ -124,18 +122,11 @@ pub async fn create_component(
         args,
     };
 
-    let num_outputs = if num_outputs == 0 {
-        None
-    } else {
-        Some(num_outputs as u8)
-    };
-
     let args = SubmitArgs {
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
             wait_for_result_timeout: Some(300),
-            num_outputs,
             inputs: vec![],
             version: None,
             dump_outputs_into: None,
@@ -239,7 +230,6 @@ pub async fn call_method(
     fq_component_name: String,
     outputs_name: String,
     method_call: String,
-    num_outputs: u64,
 ) -> SubmitTransactionResponse {
     let data_dir = get_cli_data_dir(world);
     let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
@@ -258,25 +248,19 @@ pub async fn call_method(
         .unwrap_or_else(|| panic!("No component named {}", component_name));
 
     let instruction = CliInstruction::CallMethod {
-        component_address: component.address,
+        component_address: component.address.clone(),
         // TODO: actually parse the method call for arguments
         method_name: method_call,
         args: vec![],
     };
 
-    let num_outputs = if num_outputs == 0 {
-        None
-    } else {
-        Some(num_outputs as u8)
-    };
-
+    println!("Inputs: {}", component);
     let args = SubmitArgs {
         instruction,
         common: CommonSubmitArgs {
             wait_for_result: true,
             wait_for_result_timeout: Some(60),
-            num_outputs,
-            inputs: vec![],
+            inputs: vec![component],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
@@ -308,7 +292,6 @@ pub async fn submit_manifest(
     outputs_name: String,
     manifest_content: String,
     inputs: String,
-    num_outputs: u64,
     signing_key_name: String,
 ) {
     // HACKY: Sets the active key so that submit_transaction will use it.
@@ -384,11 +367,6 @@ pub async fn submit_manifest(
     // submit the instructions to the vn
     let mut client = get_validator_node_client(world, vn_name).await;
     let data_dir = get_cli_data_dir(world);
-    let num_outputs = if num_outputs == 0 {
-        None
-    } else {
-        Some(num_outputs as u8)
-    };
 
     // Supply the inputs explicitly. If this is empty, the internal component manager will attempt to supply the correct
     // inputs
@@ -401,12 +379,11 @@ pub async fn submit_manifest(
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
         .map(|(_, addr)| addr.clone())
-        .collect();
+        .collect::<Vec<_>>();
 
     let args = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(60),
-        num_outputs,
         inputs,
         version: None,
         dump_outputs_into: None,
