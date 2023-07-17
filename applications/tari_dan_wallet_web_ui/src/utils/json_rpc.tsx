@@ -134,6 +134,7 @@ export const accountsCreate = (
   fee: number | undefined,
   is_default: boolean | false
 ) => jsonRpc("accounts.create", [accountName, signingKeyIndex, customAccessRules, fee, is_default]);
+export const accountsCreateFreeTestCoins = (accountName: string | undefined, amount: number | undefined, fee: number | undefined) => jsonRpc("accounts.create_free_test_coins", [{ "Name": accountName}, amount, fee]);
 export const accountsList = (offset: number, limit: number) => jsonRpc("accounts.list", [offset, limit]);
 export const accountsGetBalances = (accountName: string) => jsonRpc("accounts.get_balances", [accountName]);
 export const accountsInvoke = (accountName: string, method: string, args: any[]) =>

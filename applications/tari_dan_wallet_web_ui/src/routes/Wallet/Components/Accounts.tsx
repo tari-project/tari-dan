@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { ReactNode, useEffect, useState } from "react";
-import { accountsClaimBurn, accountsCreate, accountsList } from "../../../utils/json_rpc";
+import {accountsClaimBurn, accountsCreate, accountsCreateFreeTestCoins, accountsList} from "../../../utils/json_rpc";
 import Error from "./Error";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -98,6 +98,10 @@ function Accounts() {
     setAccountFormState({ ...accountFormState, [e.target.name]: e.target.value });
   };
 
+  const onClaimFreeCoins = () => {
+    accountsCreateFreeTestCoins("TestAccount", 1000, 0).then((response) => { loadAccounts(); });
+  }
+
   const onClaimBurn = () => {
     accountsClaimBurn(claimBurnFormState.account, JSON.parse(claimBurnFormState.claimProof), +claimBurnFormState.fee)
       .then((response) => {
@@ -130,6 +134,11 @@ function Accounts() {
         <Alert severity="error">{error}</Alert>
       ) : null}
       <BoxHeading2>
+        <div className="flex-container">
+          <Button variant="outlined" startIcon={<AddIcon />} onClick={() => onClaimFreeCoins()}>
+            Claim free testnet coins
+          </Button>
+        </div>
         {showAccountDialog && (
           <Fade in={showAccountDialog}>
             <Form onSubmit={onSubmitAddAccount} className="flex-container">
