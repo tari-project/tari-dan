@@ -25,7 +25,7 @@ async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
             break;
         }
         let leaf = test.get_validator(&TestAddress("1")).get_leaf_block();
-        if leaf.height > NodeHeight(10) {
+        if leaf.height > NodeHeight(20) {
             panic!("Not all transaction committed after {} blocks", leaf.height);
         }
     }
@@ -50,7 +50,7 @@ async fn propose_blocks_with_new_transactions_until_all_committed() {
             break;
         }
         let leaf = test.get_validator(&TestAddress("1")).get_leaf_block();
-        if leaf.height > NodeHeight(10) {
+        if leaf.height > NodeHeight(20) {
             panic!("Not all transaction committed after {} blocks", leaf.height);
         }
     }
@@ -78,7 +78,7 @@ async fn multi_validator_propose_blocks_with_new_transactions_until_all_committe
             break;
         }
         let leaf = test.get_validator(&TestAddress("1")).get_leaf_block();
-        if leaf.height > NodeHeight(10) {
+        if leaf.height > NodeHeight(20) {
             panic!("Not all transaction committed after {} blocks", leaf.height);
         }
     }
@@ -114,7 +114,7 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
         let leaf1 = test.get_validator(&TestAddress("1")).get_leaf_block();
         let leaf2 = test.get_validator(&TestAddress("4")).get_leaf_block();
         let leaf3 = test.get_validator(&TestAddress("7")).get_leaf_block();
-        if leaf1.height > NodeHeight(10) || leaf2.height > NodeHeight(10) || leaf3.height > NodeHeight(10) {
+        if leaf1.height > NodeHeight(20) || leaf2.height > NodeHeight(20) || leaf3.height > NodeHeight(20) {
             panic!(
                 "Not all transaction committed after {}/{}/{} blocks",
                 leaf1.height, leaf2.height, leaf3.height

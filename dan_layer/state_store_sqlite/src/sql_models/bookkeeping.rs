@@ -12,6 +12,7 @@ use crate::serialization::deserialize_hex_try_from;
 pub struct HighQc {
     pub id: i32,
     pub epoch: i64,
+    pub block_id: String,
     pub qc_id: String,
     pub created_at: PrimitiveDateTime,
 }
@@ -22,6 +23,7 @@ impl TryFrom<HighQc> for consensus_models::HighQc {
     fn try_from(value: HighQc) -> Result<Self, Self::Error> {
         Ok(Self {
             epoch: Epoch(value.epoch as u64),
+            block_id: deserialize_hex_try_from(&value.block_id)?,
             qc_id: deserialize_hex_try_from(&value.qc_id)?,
         })
     }
@@ -82,6 +84,27 @@ impl TryFrom<LastVoted> for consensus_models::LastVoted {
     type Error = StorageError;
 
     fn try_from(value: LastVoted) -> Result<Self, Self::Error> {
+        Ok(Self {
+            epoch: Epoch(value.epoch as u64),
+            block_id: deserialize_hex_try_from(&value.block_id)?,
+            height: NodeHeight(value.height as u64),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Queryable)]
+pub struct LastProposed {
+    pub id: i32,
+    pub epoch: i64,
+    pub block_id: String,
+    pub height: i64,
+    pub created_at: PrimitiveDateTime,
+}
+
+impl TryFrom<LastProposed> for consensus_models::LastProposed {
+    type Error = StorageError;
+
+    fn try_from(value: LastProposed) -> Result<Self, Self::Error> {
         Ok(Self {
             epoch: Epoch(value.epoch as u64),
             block_id: deserialize_hex_try_from(&value.block_id)?,

@@ -7,9 +7,8 @@ use tari_dan_storage::{
     consensus_models::{BlockId, TransactionPoolError},
     StorageError,
 };
+use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
-
-use crate::traits::EpochManagerError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
@@ -43,10 +42,9 @@ pub enum HotStuffError {
     TransactionPoolError(#[from] TransactionPoolError),
 }
 
-// This removes the need for `map_err`s for every epoch manager call
-impl<E: EpochManagerError> From<E> for HotStuffError {
-    fn from(err: E) -> Self {
-        Self::EpochManagerError(err.to_anyhow())
+impl From<EpochManagerError> for HotStuffError {
+    fn from(err: EpochManagerError) -> Self {
+        Self::EpochManagerError(err.into())
     }
 }
 

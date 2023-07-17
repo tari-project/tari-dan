@@ -12,7 +12,6 @@ mod types;
 pub use base_layer_epoch_manager::BaseLayerEpochManager;
 pub use config::EpochManagerConfig;
 pub use epoch_manager_service::EpochManagerService;
-pub use error::EpochManagerError;
 pub use handle::EpochManagerHandle;
 pub use initializer::spawn_service;
 pub use types::*;

@@ -36,13 +36,14 @@ use tari_common::{
 use tari_comms::{CommsNode, NodeIdentity};
 use tari_dan_app_utilities::{
     base_layer_scanner,
+    consensus_constants::ConsensusConstants,
     template_manager::{self, implementation::TemplateManager},
 };
-use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::GlobalDb;
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
+use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_shutdown::ShutdownSignal;
+use tari_state_store_sqlite::SqliteStateStore;
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 
 use crate::{
@@ -110,7 +111,10 @@ pub async fn spawn_services(
         shutdown.clone(),
         consensus_constants,
         // TODO: Remove coupling between scanner and shard store
-        SqliteShardStore::try_create(config.indexer.data_dir.join("unused-shard-store.sqlite"))?,
+        SqliteStateStore::connect(&format!(
+            "sqlite://{}",
+            config.indexer.data_dir.join("unused-shard-store.sqlite").display()
+        ))?,
         true,
         config.indexer.base_layer_scanning_interval,
     );

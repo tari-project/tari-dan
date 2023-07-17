@@ -12,6 +12,8 @@ tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v
 tari_crypto = { version = "0.17", features = ["borsh"] }
 tari_engine_types = { path = "../../engine_types" }
 tari_dan_common_types = { path = "../../common_types" }
+# Just used for QuorumCertificate
+tari_dan_storage = { path = "../../storage" }
 tari_key_manager = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
 tari_transaction = { path = "../../transaction" }
 tari_template_lib = { path = "../../template_lib" }

@@ -31,11 +31,14 @@ use tokio::{
     task::JoinHandle,
 };
 
-use crate::base_layer::{
-    base_layer_epoch_manager::BaseLayerEpochManager,
-    config::EpochManagerConfig,
+use crate::{
+    base_layer::{
+        base_layer_epoch_manager::BaseLayerEpochManager,
+        config::EpochManagerConfig,
+        types::EpochManagerRequest,
+    },
     error::EpochManagerError,
-    types::{EpochManagerEvent, EpochManagerRequest},
+    EpochManagerEvent,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
@@ -56,7 +59,7 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         node_public_key: PublicKey,
     ) -> JoinHandle<anyhow::Result<()>> {
         tokio::spawn(async move {
-            let (tx, _) = broadcast::channel(10);
+            let (tx, _) = broadcast::channel(100);
             EpochManagerService {
                 rx_request,
                 inner: BaseLayerEpochManager::new(config, global_db, base_node_client, tx.clone(), node_public_key),
@@ -134,8 +137,11 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
                 );
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe())),
-            EpochManagerRequest::GetValidatorNodeBMT { epoch, reply } => {
-                handle(reply, self.inner.get_validator_node_bmt(epoch))
+            EpochManagerRequest::GetValidatorNodeBalancedMerkleTree { epoch, reply } => {
+                handle(reply, self.inner.get_validator_node_balanced_merkle_tree(epoch))
+            },
+            EpochManagerRequest::GetValidatorNodeMerkleProof { epoch, reply } => {
+                handle(reply, self.inner.get_validator_node_merkle_proof(epoch));
             },
             EpochManagerRequest::GetValidatorNodeMerkleRoot { epoch, reply } => {
                 handle(reply, self.inner.get_validator_node_merkle_root(epoch))
@@ -165,6 +171,21 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             },
             EpochManagerRequest::GetLocalShardRange { epoch, for_addr, reply } => {
                 handle(reply, self.inner.get_local_shard_range(epoch, &for_addr))
+            },
+            EpochManagerRequest::GetOurValidatorNode { epoch, reply } => {
+                handle(reply, self.inner.get_our_validator_node(epoch))
+            },
+            EpochManagerRequest::GetCommitteeShard { epoch, shard, reply } => {
+                handle(reply, self.inner.get_committee_shard(epoch, shard))
+            },
+            EpochManagerRequest::GetLocalCommitteeShard { epoch, reply } => {
+                handle(reply, self.inner.get_local_committee_shard(epoch))
+            },
+            EpochManagerRequest::GetNumCommittees { epoch, reply } => {
+                handle(reply, self.inner.get_num_committees(epoch))
+            },
+            EpochManagerRequest::GetCommitteesByBuckets { epoch, buckets, reply } => {
+                handle(reply, self.inner.get_committees_by_buckets(epoch, buckets))
             },
         }
     }

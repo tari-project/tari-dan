@@ -4,7 +4,6 @@
 use std::{collections::HashMap, time::Duration};
 
 use log::*;
-use tari_common_types::types::FixedHash;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_dan_wallet_sdk::{
     apis::{
@@ -32,6 +31,7 @@ use tari_template_lib::{
     prelude::{NonFungibleId, ResourceAddress},
     resource::TOKEN_SYMBOL,
 };
+use tari_transaction::TransactionId;
 use tokio::{
     sync::{mpsc, oneshot},
     time,
@@ -49,7 +49,7 @@ pub struct AccountMonitor<TStore, TNetworkInterface> {
     notify: Notify<WalletEvent>,
     wallet_sdk: DanWalletSdk<TStore, TNetworkInterface>,
     request_rx: mpsc::Receiver<AccountMonitorRequest>,
-    pending_accounts: HashMap<FixedHash, NewAccountInfo>,
+    pending_accounts: HashMap<TransactionId, NewAccountInfo>,
     shutdown_signal: ShutdownSignal,
 }
 
@@ -313,15 +313,15 @@ where
         Ok(())
     }
 
-    async fn process_result(&mut self, tx_hash: FixedHash, diff: &SubstateDiff) -> Result<(), AccountMonitorError> {
+    async fn process_result(&mut self, tx_id: TransactionId, diff: &SubstateDiff) -> Result<(), AccountMonitorError> {
         let substate_api = self.wallet_sdk.substate_api();
         let accounts_api = self.wallet_sdk.accounts_api();
 
-        if let Some(new_account) = self.pending_accounts.remove(&tx_hash) {
+        if let Some(new_account) = self.pending_accounts.remove(&tx_id) {
             // Filter for a _new_ account created in this transaction
             let new_account_address =
                 find_new_account_address(diff).ok_or_else(|| AccountMonitorError::ExpectedNewAccount {
-                    tx_hash,
+                    tx_id,
                     account_name: new_account.name.clone().unwrap_or_else(|| "<no-name>".to_string()),
                 })?;
 
@@ -348,7 +348,7 @@ where
                     Err(e) => {
                         error!(
                             target: LOG_TARGET,
-                            "👁️‍🗨️ Failed to parse account substate {} in tx {}: {}", a, tx_hash, e
+                            "👁️‍🗨️ Failed to parse account substate {} in tx {}: {}", a, tx_id, e
                         );
                         None
                     },
@@ -472,16 +472,16 @@ where
         match event {
             WalletEvent::TransactionSubmitted(event) => {
                 if let Some(account) = event.new_account {
-                    self.pending_accounts.insert(event.hash, account);
+                    self.pending_accounts.insert(event.transaction_id, account);
                 }
             },
             WalletEvent::TransactionFinalized(event) => {
                 if let Some(diff) = event.finalize.result.accept() {
-                    self.process_result(event.hash, diff).await?;
+                    self.process_result(event.transaction_id, diff).await?;
                 }
             },
             WalletEvent::TransactionInvalid(event) => {
-                self.pending_accounts.remove(&event.hash);
+                self.pending_accounts.remove(&event.transaction_id);
             },
             WalletEvent::AccountChanged(_) => {},
             WalletEvent::AuthLoginRequest(_) => {},
@@ -536,8 +536,8 @@ pub enum AccountMonitorError {
     #[error("Monitor service is not running")]
     ServiceShutdown,
 
-    #[error("Failed to send request to monitor service")]
-    ExpectedNewAccount { tx_hash: FixedHash, account_name: String },
+    #[error("Expected new account '{account_name}'to be created in transaction {tx_id}")]
+    ExpectedNewAccount { tx_id: TransactionId, account_name: String },
 }
 
 fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateAddress> {

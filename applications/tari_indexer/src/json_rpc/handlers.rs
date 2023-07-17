@@ -32,7 +32,6 @@ use log::{error, warn};
 use serde::Serialize;
 use serde_json::{self as json, json, Value};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
-use tari_common_types::types::FixedHash;
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
@@ -321,11 +320,12 @@ impl JsonRpcHandlers {
                             ),
                         )),
                         SubstateResult::Up {
+                            address,
                             substate,
                             created_by_tx,
                         } => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                            address: request.address,
-                            version: request.version.unwrap_or_default(),
+                            address,
+                            version: substate.version(),
                             substate,
                             created_by_transaction: created_by_tx,
                         })),
@@ -497,27 +497,27 @@ impl JsonRpcHandlers {
         let request: SubmitTransactionRequest = value.parse_params()?;
 
         if request.is_dry_run {
-            let transaction_hash = FixedHash::from(request.transaction.hash().into_array());
+            let transaction_id = *request.transaction.id();
             let exec_result = self
                 .dry_run_transaction_processor
-                .process_transaction(&request.transaction)
+                .process_transaction(request.transaction, request.required_substates)
                 .await
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 execution_result: Some(exec_result),
-                transaction_hash,
+                transaction_id,
             }))
         } else {
-            let payload_id = self
+            let transaction_id = self
                 .transaction_manager
-                .submit_transaction(request.transaction)
+                .submit_transaction(request.transaction, request.required_substates)
                 .await
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                transaction_hash: payload_id.into_array().into(),
                 execution_result: None,
+                transaction_id,
             }))
         }
     }
@@ -528,7 +528,7 @@ impl JsonRpcHandlers {
 
         let maybe_result = self
             .transaction_manager
-            .get_transaction_result(request.transaction_hash)
+            .get_transaction_result(request.transaction_id)
             .await
             .optional()
             .map_err(|e| Self::internal_error(answer_id, e))?;

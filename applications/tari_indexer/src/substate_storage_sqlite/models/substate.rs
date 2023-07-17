@@ -23,7 +23,7 @@
 
 use std::convert::{TryFrom, TryInto};
 
-use tari_common_types::types::FixedHash;
+use tari_transaction::TransactionId;
 
 use crate::{
     substate_manager::SubstateResponse,
@@ -46,7 +46,7 @@ impl TryFrom<Substate> for SubstateResponse {
         let tx_hash = if let Some(hash) = row.transaction_hash {
             hash.try_into()?
         } else {
-            FixedHash::zero()
+            TransactionId::default()
         };
         Ok(SubstateResponse {
             address: row.address.parse()?,

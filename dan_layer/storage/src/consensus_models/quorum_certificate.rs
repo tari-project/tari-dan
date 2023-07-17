@@ -21,7 +21,7 @@ use tari_dan_common_types::{
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 
 use crate::{
-    consensus_models::{Block, BlockId, HighQc, LeafBlock, ValidatorSignature},
+    consensus_models::{Block, BlockId, HighQc, LeafBlock, QuorumDecision, ValidatorSignature},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -33,10 +33,10 @@ pub struct QuorumCertificate {
     block_id: BlockId,
     block_height: NodeHeight,
     epoch: Epoch,
-    view_number: u64,
     signatures: Vec<ValidatorSignature>,
     merged_proof: MergedValidatorNodeMerkleProof,
     leaf_hashes: Vec<FixedHash>,
+    decision: QuorumDecision,
 }
 
 impl QuorumCertificate {
@@ -44,10 +44,10 @@ impl QuorumCertificate {
         block: BlockId,
         block_height: NodeHeight,
         epoch: Epoch,
-        view_number: u64,
         signatures: Vec<ValidatorSignature>,
         merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>,
         mut leaf_hashes: Vec<FixedHash>,
+        decision: QuorumDecision,
     ) -> Self {
         leaf_hashes.sort();
         let mut qc = Self {
@@ -55,10 +55,10 @@ impl QuorumCertificate {
             block_id: block,
             block_height,
             epoch,
-            view_number,
             signatures,
             merged_proof,
             leaf_hashes,
+            decision,
         };
         qc.qc_id = qc.calculate_id();
         qc
@@ -73,10 +73,10 @@ impl QuorumCertificate {
             BlockId::genesis(),
             NodeHeight::zero(),
             epoch,
-            0,
             vec![],
             merged_proof,
             vec![],
+            QuorumDecision::Accept,
         )
     }
 
@@ -104,12 +104,12 @@ impl QuorumCertificate {
         &self.signatures
     }
 
-    pub fn view_number(&self) -> u64 {
-        self.view_number
-    }
-
     pub fn block_height(&self) -> NodeHeight {
         self.block_height
+    }
+
+    pub fn decision(&self) -> QuorumDecision {
+        self.decision
     }
 
     pub fn calculate_id(&self) -> QcId {
@@ -117,10 +117,10 @@ impl QuorumCertificate {
             .chain(&self.epoch)
             .chain(&self.block_id)
             .chain(&self.block_height)
-            .chain(&self.view_number)
             .chain(&self.signatures)
             .chain(&self.merged_proof)
             .chain(&self.leaf_hashes)
+            .chain(&self.decision)
             .result()
             .into()
     }
@@ -132,6 +132,7 @@ impl QuorumCertificate {
     pub fn as_high_qc(&self) -> HighQc {
         HighQc {
             epoch: self.epoch,
+            block_id: self.block_id,
             qc_id: self.qc_id,
         }
     }
@@ -146,11 +147,11 @@ impl QuorumCertificate {
 }
 
 impl QuorumCertificate {
-    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, qc_id: &QcId) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, qc_id: &QcId) -> Result<Self, StorageError> {
         tx.quorum_certificates_get(qc_id)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.block_id)
     }
 
