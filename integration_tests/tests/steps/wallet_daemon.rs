@@ -49,8 +49,56 @@ async fn when_i_claim_burn_via_wallet_daemon(
         wallet_daemon_name,
     )
     .await;
+    if let Some(ref reason) = claim_burn_resp.transaction_failure {
+        panic!("Transaction failed: {}", reason);
+    }
+    assert!(claim_burn_resp.result.unwrap().is_accept());
+}
 
-    assert!(claim_burn_resp.result.is_accept());
+#[when(
+    expr = "I claim burn {word} with {word}, {word} and {word} and spend it into account {word} via the wallet daemon \
+            {word}, it fails"
+)]
+async fn when_i_claim_burn_via_wallet_daemon_it_fails(
+    world: &mut TariWorld,
+    commitment_name: String,
+    proof_name: String,
+    rangeproof_name: String,
+    claim_pubkey_name: String,
+    account_name: String,
+    wallet_daemon_name: String,
+) {
+    let commitment = world
+        .commitments
+        .get(&commitment_name)
+        .unwrap_or_else(|| panic!("Commitment {} not found", commitment_name));
+    let proof = world
+        .commitment_ownership_proofs
+        .get(&proof_name)
+        .unwrap_or_else(|| panic!("Proof {} not found", proof_name));
+    let rangeproof = world
+        .rangeproofs
+        .get(&rangeproof_name)
+        .unwrap_or_else(|| panic!("Rangeproof {} not found", rangeproof_name));
+    let reciprocal_claim_public_key = world
+        .claim_public_keys
+        .get(&claim_pubkey_name)
+        .unwrap_or_else(|| panic!("Claim public key {} not found", claim_pubkey_name));
+
+    let claim_burn_resp = wallet_daemon_cli::claim_burn(
+        world,
+        account_name,
+        commitment.clone(),
+        rangeproof.clone(),
+        proof.clone(),
+        reciprocal_claim_public_key.clone(),
+        wallet_daemon_name,
+    )
+    .await;
+
+    let _reason = claim_burn_resp
+        .transaction_failure
+        .expect("Expected transaction failure");
 }
 
 #[then(

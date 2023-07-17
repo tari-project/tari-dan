@@ -50,13 +50,13 @@ use tari_wallet_daemon_client::{
         AuthLoginRequest,
         AuthLoginResponse,
         ClaimBurnRequest,
-        ClaimBurnResponse,
         ConfidentialTransferRequest,
         MintAccountNftRequest,
         ProofsGenerateRequest,
         RevealFundsRequest,
         TransactionSubmitRequest,
         TransactionWaitResultRequest,
+        TransactionWaitResultResponse,
         TransferRequest,
     },
     ComponentAddressOrName,
@@ -74,7 +74,7 @@ pub async fn claim_burn(
     ownership_proof: CommitmentSignature<RistrettoPublicKey, RistrettoSecretKey>,
     reciprocal_claim_public_key: RistrettoPublicKey,
     wallet_daemon_name: String,
-) -> ClaimBurnResponse {
+) -> TransactionWaitResultResponse {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
     let claim_burn_request = ClaimBurnRequest {
@@ -106,20 +106,15 @@ pub async fn claim_burn(
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
 
-    if let Some(reason) = wait_resp.transaction_failure {
-        panic!("Transaction failed: {}", reason);
+    if let Some(diff) = wait_resp.result.as_ref().and_then(|r| r.result.accept()) {
+        add_substate_addresses(
+            world,
+            format!("claim_burn/{}/{}", account_name, commitment.to_hex()),
+            diff,
+        );
     }
-    add_substate_addresses(
-        world,
-        format!("claim_burn/{}/{}", account_name, commitment.to_hex()),
-        &wait_resp
-            .result
-            .expect("Transaction has timed out")
-            .result
-            .expect("Transaction has failed"),
-    );
 
-    claim_burn_resp
+    wait_resp
 }
 
 pub async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, amount: u64, wallet_daemon_name: String) {

@@ -74,7 +74,7 @@ pub async fn wait_listener_on_local_port<T, E: Debug>(
                                 "Node panicked {:?}",
                                 panic
                                     .downcast_ref::<&str>()
-                                    .map(|s| *s)
+                                    .copied()
                                     .or_else(|| panic.downcast_ref::<String>().map(|s| s.as_str()))
                                     .unwrap()
                             );
