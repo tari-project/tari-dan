@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use tokio::task::JoinHandle;
+use tokio::{io::AsyncWriteExt, task::JoinHandle};
 
 pub fn get_os_assigned_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -53,25 +53,46 @@ pub async fn wait_listener_on_local_port<T, E: Debug>(
     port: u16,
 ) -> JoinHandle<Result<T, E>> {
     let mut i = 0;
-    while let Err(e) = tokio::net::TcpSocket::new_v4()
-        .unwrap()
-        .connect(([127u8, 0, 0, 1], port).into())
-        .await
-    {
-        if handle.is_finished() {
-            handle.await.expect("Node panicked").expect("Node exited unexpectedly");
-            panic!("Node exited cleanly unexpectedly");
+    loop {
+        match tokio::net::TcpSocket::new_v4()
+            .unwrap()
+            .connect(([127u8, 0, 0, 1], port).into())
+            .await
+        {
+            Ok(mut sock) => {
+                sock.shutdown().await.unwrap();
+                break;
+            },
+            Err(e) => {
+                if handle.is_finished() {
+                    match handle.await {
+                        Ok(Ok(_)) => panic!("Node exited cleanly unexpectedly"),
+                        Ok(Err(e)) => panic!("Node exited with error: {:?}", e),
+                        Err(e) => {
+                            let panic = e.into_panic();
+                            panic!(
+                                "Node panicked {:?}",
+                                panic
+                                    .downcast_ref::<&str>()
+                                    .map(|s| *s)
+                                    .or_else(|| panic.downcast_ref::<String>().map(|s| s.as_str()))
+                                    .unwrap()
+                            );
+                        },
+                    }
+                }
+                // println!("Waiting for base node to start listening on port {}. {}", port, e);
+                if i >= 20 {
+                    // println!("Node failed to start listening on port {} within 10s", port);
+                    panic!(
+                        "Node failed to start listening on port {} within 20s (err: {})",
+                        port, e
+                    );
+                }
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                i += 1;
+            },
         }
-        // println!("Waiting for base node to start listening on port {}. {}", port, e);
-        if i >= 20 {
-            // println!("Node failed to start listening on port {} within 10s", port);
-            panic!(
-                "Node failed to start listening on port {} within 20s (err: {})",
-                port, e
-            );
-        }
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        i += 1;
     }
     handle
 }
