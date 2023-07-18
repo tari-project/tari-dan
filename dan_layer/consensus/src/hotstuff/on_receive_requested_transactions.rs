@@ -2,30 +2,24 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_storage::consensus_models::ExecutedTransaction;
+use tari_transaction::Transaction;
 use tokio::sync::mpsc;
 
-use crate::{
-    hotstuff::error::HotStuffError,
-    messages::RequestedTransactionMessage,
-    traits::{ConsensusSpec, EpochManager},
-};
+use crate::{hotstuff::error::HotStuffError, messages::RequestedTransactionMessage, traits::ConsensusSpec};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_requested_transactions";
 
 pub struct OnReceiveRequestedTransactions<TConsensusSpec: ConsensusSpec> {
-    tx_new_transaction: mpsc::Sender<ExecutedTransaction>,
+    tx_mempool: mpsc::Sender<Transaction>,
     _phantom: std::marker::PhantomData<TConsensusSpec>,
 }
 
 impl<TConsensusSpec> OnReceiveRequestedTransactions<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
-    HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
+where TConsensusSpec: ConsensusSpec
 {
-    pub fn new(tx_new_transaction: mpsc::Sender<ExecutedTransaction>) -> Self {
+    pub fn new(tx_mempool: mpsc::Sender<Transaction>) -> Self {
         Self {
-            tx_new_transaction,
+            tx_mempool,
             _phantom: Default::default(),
         }
     }
@@ -37,7 +31,7 @@ where
     ) -> Result<(), HotStuffError> {
         info!(target: LOG_TARGET, "{:?} sent the requested transactions for block {}", from,msg.block_id);
         for tx in msg.transactions {
-            self.tx_new_transaction
+            self.tx_mempool
                 .send(tx)
                 .await
                 .map_err(|_| HotStuffError::InternalChannelClosed {

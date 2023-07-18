@@ -14,6 +14,7 @@ use tari_dan_storage::consensus_models::{ExecutedTransaction, TransactionPool};
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
+use tari_transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -46,6 +47,7 @@ pub async fn spawn(
 ) -> (JoinHandle<Result<(), anyhow::Error>>, EventSubscription<HotstuffEvent>) {
     let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
     let (tx_leader, rx_leader) = mpsc::channel(10);
+    let (tx_mempool, rx_mempool) = mpsc::channel(10);
 
     let validator_addr = node_identity.public_key().clone();
     let signing_service = TariSignatureService::new(node_identity);
@@ -70,6 +72,7 @@ pub async fn spawn(
         tx_broadcast,
         tx_leader,
         tx_events.clone(),
+        tx_mempool,
         shutdown_signal,
     )
     .spawn();
@@ -77,6 +80,7 @@ pub async fn spawn(
     ConsensusWorker {
         rx_broadcast,
         rx_leader,
+        rx_mempool,
         outbound_messaging,
     }
     .spawn();
@@ -87,6 +91,7 @@ pub async fn spawn(
 struct ConsensusWorker {
     rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage)>,
     rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage)>,
+    rx_mempool: mpsc::Receiver<Transaction>,
     outbound_messaging: OutboundMessaging,
 }
 
@@ -106,6 +111,9 @@ impl ConsensusWorker {
                             .send(dest, DanMessage::HotStuffMessage(Box::new(msg)))
                             .await
                             .ok();
+                    },
+                    Some(tx) = self.rx_mempool.recv() => {
+                        self.outbound_messaging.send_self(DanMessage::NewTransaction(Box::new(tx))).await.ok();
                     },
                     else => break,
                 }

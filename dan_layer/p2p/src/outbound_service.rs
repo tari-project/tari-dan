@@ -30,6 +30,8 @@ pub trait OutboundService {
     type Error;
     type Addr: NodeAddressable + Send;
 
+    async fn send_self(&mut self, message: DanMessage<Self::Addr>) -> Result<(), Self::Error>;
+
     async fn send(&mut self, to: Self::Addr, message: DanMessage<Self::Addr>) -> Result<(), Self::Error>;
 
     async fn broadcast(&mut self, committee: &[Self::Addr], message: DanMessage<Self::Addr>)

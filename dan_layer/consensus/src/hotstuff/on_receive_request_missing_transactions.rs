@@ -2,13 +2,13 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_storage::{StateStore, StateStoreReadTransaction};
+use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
 use tokio::sync::mpsc;
 
 use crate::{
     hotstuff::error::HotStuffError,
     messages::{HotstuffMessage, RequestMissingTransactionsMessage, RequestedTransactionMessage},
-    traits::{ConsensusSpec, EpochManager},
+    traits::ConsensusSpec,
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_request_missing_transactions";
@@ -19,9 +19,7 @@ pub struct OnReceiveRequestMissingTransactions<TConsensusSpec: ConsensusSpec> {
 }
 
 impl<TConsensusSpec> OnReceiveRequestMissingTransactions<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
-    HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         store: TConsensusSpec::StateStore,
@@ -35,18 +33,17 @@ where
         from: TConsensusSpec::Addr,
         msg: RequestMissingTransactionsMessage,
     ) -> Result<(), HotStuffError> {
-        info!(target: LOG_TARGET, "{:?} is requesting missing transactions from block {} with ids {:?}", from,msg.block_id, msg.transactions);
+        debug!(target: LOG_TARGET, "{:?} is requesting missing transactions from block {} with ids {:?}", from,msg.block_id, msg.transactions);
         let txs = self
             .store
-            .with_read_tx(|tx| tx.transactions_get_many(&msg.transactions));
-        let txs = txs?;
+            .with_read_tx(|tx| ExecutedTransaction::get_many(tx, &msg.transactions))?;
         self.tx_leader
             .send((
                 from,
                 HotstuffMessage::RequestedTransaction(RequestedTransactionMessage {
                     epoch: msg.epoch,
                     block_id: msg.block_id,
-                    transactions: txs,
+                    transactions: txs.into_iter().map(|tx| tx.into_transaction()).collect(),
                 }),
             ))
             .await

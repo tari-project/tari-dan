@@ -41,7 +41,7 @@ use crate::{
         on_beat::OnBeat,
         ProposalValidationError,
     },
-    messages::{HotstuffMessage, ProposalMessage, VoteMessage},
+    messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage, VoteMessage},
     traits::{ConsensusSpec, LeaderStrategy, StateManager, VoteSignatureService},
 };
 
@@ -126,7 +126,7 @@ where TConsensusSpec: ConsensusSpec
         let mut missing_tx_ids = Vec::new();
         self.store.with_read_tx(|tx| {
             for tx_id in block.all_transaction_ids() {
-                if tx.transactions_get(tx_id).is_err() {
+                if ExecutedTransaction::exists(tx, tx_id)? {
                     missing_tx_ids.push(*tx_id);
                 }
             }
@@ -140,7 +140,7 @@ where TConsensusSpec: ConsensusSpec
             self.send_to_leader(
                 local_committee,
                 block.id(),
-                HotstuffMessage::RequestMissingTx(RequestMissingTransactionsMessage {
+                HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
                     block_id: *block.id(),
                     epoch: block.epoch(),
                     transactions: missing_tx_ids,
@@ -174,7 +174,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     pub async fn reprocess_block(&self, block_id: &BlockId) -> Result<(), HotStuffError> {
-        let block = self.store.with_read_tx(|tx| tx.blocks_get(block_id))?;
+        let block = self.store.with_read_tx(|tx| Block::get(tx, block_id))?;
         let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
         self.process_block(&local_committee, &block).await
     }

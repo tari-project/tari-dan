@@ -3,7 +3,8 @@
 
 use serde::Serialize;
 use tari_dan_common_types::Epoch;
-use tari_dan_storage::consensus_models::{BlockId, TransactionId};
+use tari_dan_storage::consensus_models::BlockId;
+use tari_transaction::TransactionId;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RequestMissingTransactionsMessage {

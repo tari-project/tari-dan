@@ -13,7 +13,7 @@ pub enum HotstuffMessage {
     NewView(NewViewMessage),
     Proposal(ProposalMessage),
     Vote(VoteMessage),
-    RequestMissingTx(RequestMissingTransactionsMessage),
+    RequestMissingTransactions(RequestMissingTransactionsMessage),
     RequestedTransaction(RequestedTransactionMessage),
 }
 
@@ -23,7 +23,7 @@ impl HotstuffMessage {
             Self::NewView(msg) => msg.high_qc.epoch(),
             Self::Proposal(msg) => msg.block.epoch(),
             Self::Vote(msg) => msg.epoch,
-            Self::RequestMissingTx(msg) => msg.epoch,
+            Self::RequestMissingTransactions(msg) => msg.epoch,
             Self::RequestedTransaction(msg) => msg.epoch,
         }
     }
@@ -33,6 +33,8 @@ impl HotstuffMessage {
             Self::NewView(msg) => msg.high_qc.block_id(),
             Self::Proposal(msg) => msg.block.id(),
             Self::Vote(msg) => &msg.block_id,
+            Self::RequestMissingTransactions(msg) => &msg.block_id,
+            Self::RequestedTransaction(msg) => &msg.block_id,
         }
     }
 }

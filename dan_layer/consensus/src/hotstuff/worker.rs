@@ -12,6 +12,7 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
+use tari_transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -83,7 +84,7 @@ where
         tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
-        tx_new_transaction: mpsc::Sender<ExecutedTransaction>,
+        tx_mempool: mpsc::Sender<Transaction>,
         shutdown: ShutdownSignal,
     ) -> Self {
         let on_beat = OnBeat::new();
@@ -117,7 +118,7 @@ where
                 on_beat.clone(),
             ),
             on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(state_store.clone(), tx_leader),
-            on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_new_transaction),
+            on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool),
             on_propose: OnPropose::new(
                 state_store.clone(),
                 epoch_manager.clone(),
@@ -221,11 +222,10 @@ where
 
             Ok::<_, HotStuffError>(())
         })?;
-        dbg!(&self.validator_addr);
         let block_id;
         {
             let mut tx = self.state_store.create_write_tx()?;
-            block_id = tx.remove_missing_transaction(*executed.transaction().hash())?;
+            block_id = tx.remove_missing_transaction(*executed.into_transaction().id())?;
             tx.commit()?;
         }
         if let Some(block_id) = block_id {
@@ -292,7 +292,6 @@ where
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage,
     ) -> Result<(), HotStuffError> {
-        dbg!(&self.validator_addr);
         if !self.epoch_manager.is_epoch_active(msg.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
                 epoch: msg.epoch(),
@@ -306,7 +305,9 @@ where
             HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
             HotstuffMessage::Proposal(msg) => self.on_receive_proposal.handle(from, msg).await?,
             HotstuffMessage::Vote(msg) => self.on_receive_vote.handle(from, msg).await?,
-            HotstuffMessage::RequestMissingTx(msg) => self.on_receive_request_missing_txs.handle(from, msg).await?,
+            HotstuffMessage::RequestMissingTransactions(msg) => {
+                self.on_receive_request_missing_txs.handle(from, msg).await?
+            },
             HotstuffMessage::RequestedTransaction(msg) => {
                 self.on_receive_requested_txs.handle(from, msg).await?;
             },
