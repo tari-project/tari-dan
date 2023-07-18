@@ -67,7 +67,7 @@ pub struct DenyArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct RevokeArgs {
-    permission_token: String,
+    permission_token_id: i32,
 }
 
 impl AuthSubcommand {
@@ -108,15 +108,15 @@ impl AuthSubcommand {
             Revoke(args) => {
                 client
                     .auth_revoke(AuthRevokeTokenRequest {
-                        permission_token: args.permission_token,
+                        permission_token_id: args.permission_token_id,
                     })
                     .await?;
                 println!("Token revoked!");
             },
             List => {
                 let tokens = client.auth_get_all_jwt(AuthGetAllJwtRequest {}).await?;
-                for (id, name) in &tokens.jwt {
-                    println!("Id {id} name {name}");
+                for claims in &tokens.jwt {
+                    println!("Id {} name {}", claims.id, claims.name);
                 }
             },
         }
