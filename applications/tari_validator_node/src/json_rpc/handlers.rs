@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
@@ -32,7 +32,6 @@ use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
-use tari_common_types::types::PublicKey;
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
@@ -41,19 +40,21 @@ use tari_comms::{
     NodeIdentity,
 };
 use tari_comms_logging::SqliteMessageLog;
-use tari_crypto::tari_utilities::{hex::Hex, ByteArray};
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_app_utilities::template_manager::interface::TemplateManagerHandle;
-use tari_dan_common_types::{optional::Optional, PayloadId, QuorumCertificate, QuorumDecision, ShardId};
-use tari_dan_core::workers::events::{EventSubscription, HotStuffEvent};
-use tari_dan_storage::{ShardStore, ShardStoreReadTransaction};
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
-use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManager};
-use tari_template_lib::Hash;
+use tari_dan_common_types::{optional::Optional, ShardId};
+use tari_dan_storage::{
+    consensus_models::{ExecutedTransaction, QuorumDecision, SubstateRecord},
+    Ordering,
+    StateStore,
+};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
+use tari_state_store_sqlite::SqliteStateStore;
 use tari_validator_node_client::types::{
     AddPeerRequest,
     AddPeerResponse,
+    DryRunTransactionFinalizeResult,
     GetClaimableFeesRequest,
-    GetClaimableFeesResponse,
     GetCommitteeRequest,
     GetEpochManagerStatsResponse,
     GetIdentityResponse,
@@ -63,33 +64,28 @@ use tari_validator_node_client::types::{
     GetStateResponse,
     GetSubstateRequest,
     GetSubstateResponse,
+    GetSubstatesByTransactionRequest,
+    GetSubstatesByTransactionResponse,
     GetTemplateRequest,
     GetTemplateResponse,
     GetTemplatesRequest,
     GetTemplatesResponse,
-    GetTransactionQcsRequest,
-    GetTransactionQcsResponse,
+    GetTransactionRequest,
+    GetTransactionResponse,
     GetTransactionResultRequest,
     GetTransactionResultResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     SubstateStatus,
-    SubstatesRequest,
     TemplateMetadata,
     TemplateRegistrationRequest,
     TemplateRegistrationResponse,
-    TransactionFinalizeResult,
-    TransactionRequest,
 };
-use tokio::sync::{broadcast, broadcast::error::RecvError};
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
     grpc::base_layer_wallet::GrpcWalletClient,
-    json_rpc::{
-        jrpc_errors::{internal_error, invalid_argument},
-        JsonTransactionResult,
-    },
+    json_rpc::jrpc_errors::internal_error,
     p2p::services::mempool::MempoolHandle,
     registration,
     Services,
@@ -105,9 +101,8 @@ pub struct JsonRpcHandlers {
     template_manager: TemplateManagerHandle,
     epoch_manager: EpochManagerHandle,
     comms: CommsNode,
-    hotstuff_events: EventSubscription<HotStuffEvent<CommsPublicKey>>,
     base_node_client: GrpcBaseNodeClient,
-    shard_store: SqliteShardStore,
+    state_store: SqliteStateStore,
     dry_run_transaction_processor: DryRunTransactionProcessor,
     config: ValidatorNodeConfig,
 }
@@ -127,9 +122,8 @@ impl JsonRpcHandlers {
             epoch_manager: services.epoch_manager.clone(),
             template_manager: services.template_manager.clone(),
             comms: services.comms.clone(),
-            hotstuff_events: services.hotstuff_events.clone(),
             base_node_client,
-            shard_store: services.shard_store.clone(),
+            state_store: services.state_store.clone(),
             dry_run_transaction_processor: services.dry_run_transaction_processor.clone(),
         }
     }
@@ -160,55 +154,31 @@ impl JsonRpcHandlers {
         let SubmitTransactionRequest {
             transaction,
             is_dry_run,
-            wait_for_result,
-            wait_for_result_timeout,
         } = value.parse_params()?;
         debug!(
             target: LOG_TARGET,
-            "Transaction {} has involved shards {:?}",
+            "Transaction {} has {} involved shards",
             transaction.hash(),
             transaction
-                .meta()
-                .involved_objects_iter()
-                .map(|(s, ch)| format!("{}:{}", s, ch))
-                .collect::<Vec<_>>()
+                .num_involved_shards()
         );
 
-        // Pass to translation engine to translate into Shards and Substates.
-        // TODO: submit the transaction to the wasm engine and return the result data
-        let hash = *transaction.hash();
+        let tx_id = *transaction.id();
 
         if is_dry_run {
             let result = self
                 .dry_run_transaction_processor
-                .process_transaction(&transaction)
+                .process_transaction(transaction)
                 .await;
             match result {
                 Ok(exec_result) => {
-                    let epoch = match self.epoch_manager.current_epoch().await {
-                        Ok(epoch) => epoch,
-                        Err(e) => {
-                            return Err(JsonRpcResponse::error(
-                                answer_id,
-                                JsonRpcError::new(JsonRpcErrorReason::ApplicationError(1), e.to_string(), json!(null)),
-                            ))
-                        },
-                    };
-
                     let response = SubmitTransactionResponse {
-                        hash: hash.into_array().into(),
-                        result: Some(TransactionFinalizeResult {
+                        transaction_id: tx_id,
+                        dry_run_result: Some(DryRunTransactionFinalizeResult {
                             decision: QuorumDecision::Accept,
                             finalize: exec_result.finalize,
                             transaction_failure: exec_result.transaction_failure,
                             fee_breakdown: exec_result.fee_receipt.map(|f| f.to_cost_breakdown()),
-                            // TODO: Get correct QC
-                            qc: QuorumCertificate::genesis(
-                                epoch,
-                                PayloadId::new(hash),
-                                ShardId::zero(),
-                                PublicKey::from_vec(&vec![0; 32]).unwrap(),
-                            ),
                         }),
                     };
 
@@ -220,7 +190,6 @@ impl JsonRpcHandlers {
                 )),
             }
         } else {
-            let subscription = self.hotstuff_events.subscribe();
             // Submit to mempool.
             self.mempool.submit_transaction(transaction).await.map_err(|e| {
                 log::error!(target: LOG_TARGET, "🚨 Mempool error: {}", e);
@@ -234,19 +203,9 @@ impl JsonRpcHandlers {
                 )
             })?;
 
-            if wait_for_result {
-                return wait_for_transaction_result(
-                    answer_id,
-                    hash,
-                    subscription,
-                    Duration::from_secs(wait_for_result_timeout.unwrap_or(30)),
-                )
-                .await;
-            }
-
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                hash: hash.into_array().into(),
-                result: None,
+                transaction_id: tx_id,
+                dry_run_result: None,
             }))
         }
     }
@@ -255,64 +214,57 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetStateRequest = value.parse_params()?;
 
-        let mut tx = self.shard_store.create_read_tx().unwrap();
-        let state = match tx.get_substate_states(&[request.shard_id]) {
-            Ok(state) => state,
-            Err(e) => {
-                return Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        format!("Something went wrong: {}", e),
-                        json::Value::Null,
-                    ),
-                ))
-            },
-        };
-        if state.is_empty() {
-            return Err(JsonRpcResponse::error(
+        let mut tx = self.state_store.create_read_tx().unwrap();
+        match SubstateRecord::get(&mut tx, &request.shard_id).optional() {
+            Ok(Some(state)) => Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
+                data: state.into_substate().to_bytes(),
+            })),
+            Ok(None) => Err(JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
                     JsonRpcErrorReason::ApplicationError(404),
                     "state not found".to_string(),
                     json::Value::Null,
                 ),
-            ));
+            )),
+            Err(e) => Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    format!("Something went wrong: {}", e),
+                    json::Value::Null,
+                ),
+            )),
         }
-
-        Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
-            data: state[0].substate().to_bytes(),
-        }))
     }
 
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let mut tx = self.shard_store.create_read_tx().unwrap();
-        if let Ok(recent_transactions) = tx.get_recent_transactions() {
-            let res = GetRecentTransactionsResponse {
-                transactions: recent_transactions,
-            };
-            Ok(JsonRpcResponse::success(answer_id, res))
-        } else {
-            Err(JsonRpcResponse::error(
+        let mut tx = self.state_store.create_read_tx().unwrap();
+        match ExecutedTransaction::get_paginated(&mut tx, 1000, 0, Some(Ordering::Descending)) {
+            Ok(recent_transactions) => {
+                let res = GetRecentTransactionsResponse {
+                    transactions: recent_transactions.into_iter().map(|t| t.into_transaction()).collect(),
+                };
+                Ok(JsonRpcResponse::success(answer_id, res))
+            },
+            Err(e) => Err(JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
                     JsonRpcErrorReason::InvalidParams,
-                    "Something went wrong".to_string(),
+                    format!("Something went wrong: {}", e),
                     json::Value::Null,
                 ),
-            ))
+            )),
         }
     }
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request: GetTransactionResultRequest = value.parse_params()?;
-        let payload_id = PayloadId::new(request.hash);
 
-        let mut tx = self.shard_store.create_read_tx().unwrap();
-        let payload = tx
-            .get_payload(&payload_id)
+        let mut tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
+        let executed = ExecutedTransaction::get(&mut tx, &request.transaction_id)
             .optional()
             .map_err(internal_error(answer_id))?
             .ok_or_else(|| {
@@ -320,172 +272,88 @@ impl JsonRpcHandlers {
                     answer_id,
                     JsonRpcError::new(
                         JsonRpcErrorReason::ApplicationError(404),
-                        format!("Transaction with hash {} not found", payload_id),
+                        format!("Transaction {} not found", request.transaction_id),
                         json::Value::Null,
                     ),
                 )
             })?;
 
         let response = GetTransactionResultResponse {
-            result: payload.result().cloned(),
+            is_finalized: executed.is_finalized(),
+            result: Some(executed.into_result()),
         };
-        Ok(JsonRpcResponse::success(answer_id, response))
-    }
-
-    pub async fn get_transaction_qcs(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-        let request: GetTransactionQcsRequest = value.parse_params()?;
-        let payload_id = PayloadId::new(request.hash);
-
-        let qcs = self
-            .shard_store
-            .with_read_tx(|tx| tx.get_high_qcs(payload_id))
-            .map_err(internal_error(answer_id))?;
-
-        let response = GetTransactionQcsResponse { qcs };
         Ok(JsonRpcResponse::success(answer_id, response))
     }
 
     pub async fn get_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let data: TransactionRequest = value.parse_params()?;
-        let mut tx = self.shard_store.create_read_tx().unwrap();
-        let id = data
-            .payload_id
-            .clone()
-            .try_into()
-            .map_err(invalid_argument(answer_id))?;
-        let dan_payload = tx.get_payload(&id).map_err(internal_error(answer_id))?;
+        let data: GetTransactionRequest = value.parse_params()?;
 
-        match tx.get_transaction(data.payload_id) {
-            // TODO: return the transaction with the Response struct, and probably rename this jrpc method to
-            // get_transaction_status
-            Ok(transaction) => Ok(JsonRpcResponse::success(answer_id, JsonTransactionResult {
-                nodes: transaction,
-                payload: dan_payload,
-            })),
-            Err(err) => {
-                println!("error {:?}", err);
-                Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        "Something went wrong".to_string(),
-                        json::Value::Null,
-                    ),
-                ))
-            },
-        }
+        let transaction = self
+            .state_store
+            .with_read_tx(|tx| ExecutedTransaction::get(tx, &data.transaction_id))
+            .map_err(internal_error(answer_id))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetTransactionResponse {
+            transaction,
+        }))
     }
 
     pub async fn get_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: GetSubstateRequest = value.parse_params()?;
-        let mut tx = self.shard_store.create_read_tx().unwrap();
-        let shard_id = ShardId::from_address(&data.address, data.version);
-        match tx.get_substate_states(&[shard_id]) {
-            Ok(substates) => {
-                let (value, tx_hash, status) = if substates.is_empty() {
-                    (None, None, SubstateStatus::DoesNotExist)
-                } else if substates[0].destroyed_height().is_some() {
-                    (None, None, SubstateStatus::Down)
-                } else {
-                    (
-                        Some(substates[0].substate().substate_value().clone()),
-                        Some(substates[0].created_payload_id().into_array().into()),
-                        SubstateStatus::Up,
-                    )
-                };
-                Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                    status,
-                    created_by_tx: tx_hash,
-                    value,
-                }))
-            },
-            Err(err) => {
-                error!(target: LOG_TARGET, "[get_substate] error {}", err);
-                Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        "Something went wrong".to_string(),
-                        json::Value::Null,
-                    ),
-                ))
-            },
+
+        let maybe_substate = self
+            .state_store
+            .with_read_tx(|tx| {
+                let shard_id = ShardId::from_address(&data.address, data.version);
+                SubstateRecord::get(tx, &shard_id).optional()
+            })
+            .map_err(internal_error(answer_id))?;
+
+        match maybe_substate {
+            Some(substate) if substate.is_destroyed() => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+                status: SubstateStatus::Down,
+                created_by_tx: Some(substate.created_by_transaction),
+                value: None,
+            })),
+            Some(substate) => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+                status: SubstateStatus::Up,
+                created_by_tx: Some(substate.created_by_transaction),
+                value: Some(substate.into_substate_value()),
+            })),
+            None => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+                status: SubstateStatus::DoesNotExist,
+                created_by_tx: None,
+                value: None,
+            })),
         }
     }
 
-    pub async fn get_substates(&self, value: JsonRpcExtractor) -> JrpcResult {
+    pub async fn get_substates_created_by_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let data: SubstatesRequest = value.parse_params()?;
-        let mut tx = self.shard_store.create_read_tx().unwrap();
-        match tx.get_substates_for_payload(data.payload_id, data.shard_id) {
-            Ok(substates) => Ok(JsonRpcResponse::success(answer_id, json!(substates))),
-            Err(err) => {
-                println!("error {:?}", err);
-                Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        "Something went wrong".to_string(),
-                        json::Value::Null,
-                    ),
-                ))
-            },
-        }
+        let data: GetSubstatesByTransactionRequest = value.parse_params()?;
+        let substates = self
+            .state_store
+            .with_read_tx(|tx| SubstateRecord::get_many_by_created_transaction(tx, &data.transaction_id))
+            .map_err(internal_error(answer_id))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetSubstatesByTransactionResponse {
+            substates,
+        }))
     }
 
     pub async fn get_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let data: GetClaimableFeesRequest = value.parse_params()?;
-        let mut tx = self.shard_store.create_read_tx().unwrap();
-        match tx.get_fees_by_epoch(data.epoch, data.claim_leader_public_key.to_vec()) {
-            Ok(claim_fees) => Ok(JsonRpcResponse::success(answer_id, GetClaimableFeesResponse {
-                total_accrued_fees: claim_fees
-                    .iter()
-                    .map(|fees| {
-                        if fees.destroyed_at_epoch.is_none() {
-                            fees.fee_paid_for_created_justify
-                        } else {
-                            fees.fee_paid_for_destroyed_justify
-                        }
-                    })
-                    .sum::<i64>() as u64,
-            })),
-            Err(err) => {
-                println!("error {:?}", err);
-                Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        "Something went wrong".to_string(),
-                        json::Value::Null,
-                    ),
-                ))
-            },
-        }
-    }
-
-    pub async fn get_current_leader_state(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-        let data: TransactionRequest = value.parse_params()?;
-        let mut tx = self.shard_store.create_read_tx().unwrap();
-        let payload_id = PayloadId::new(data.payload_id);
-        match tx.get_current_leaders_states(&payload_id) {
-            Ok(states) => Ok(JsonRpcResponse::success(answer_id, json!(states))),
-            Err(err) => {
-                println!("error {:?}", err);
-                Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::InvalidParams,
-                        "Something went wrong".to_string(),
-                        json::Value::Null,
-                    ),
-                ))
-            },
-        }
+        let _data: GetClaimableFeesRequest = value.parse_params()?;
+        Err(JsonRpcResponse::error(
+            answer_id,
+            JsonRpcError::new(
+                JsonRpcErrorReason::MethodNotFound,
+                "Not implemented".to_string(),
+                json::Value::Null,
+            ),
+        ))
     }
 
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -653,7 +521,7 @@ impl JsonRpcHandlers {
             )
         })?;
 
-        let is_valid = self.epoch_manager.is_epoch_valid(current_epoch).await.map_err(|err| {
+        let is_valid = self.epoch_manager.is_epoch_active(current_epoch).await.map_err(|err| {
             JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
@@ -820,76 +688,4 @@ struct Connection {
 #[derive(Serialize, Debug)]
 struct GetConnectionsResponse {
     connections: Vec<Connection>,
-}
-
-async fn wait_for_transaction_result(
-    answer_id: i64,
-    hash: Hash,
-    mut subscription: broadcast::Receiver<HotStuffEvent<CommsPublicKey>>,
-    timeout: Duration,
-) -> JrpcResult {
-    loop {
-        match tokio::time::timeout(timeout, subscription.recv()).await {
-            Ok(res) => match res {
-                Ok(HotStuffEvent::OnFinalized(qc, result)) => {
-                    if qc.payload_id().as_bytes() != hash.as_ref() {
-                        continue;
-                    }
-
-                    let response = SubmitTransactionResponse {
-                        hash: hash.into_array().into(),
-                        result: Some(TransactionFinalizeResult {
-                            decision: *qc.decision(),
-                            finalize: result.finalize,
-                            transaction_failure: result.transaction_failure,
-                            fee_breakdown: result.fee_receipt.map(|f| f.to_cost_breakdown()),
-                            qc: *qc,
-                        }),
-                    };
-
-                    return Ok(JsonRpcResponse::success(answer_id, response));
-                },
-                Ok(HotStuffEvent::Failed(payload_id, err)) => {
-                    if payload_id.as_bytes() != hash.as_ref() {
-                        continue;
-                    }
-                    // May not be our tx that failed
-                    warn!(target: LOG_TARGET, "Transaction failed: {}", err);
-                    return Err(JsonRpcResponse::error(
-                        answer_id,
-                        JsonRpcError::new(
-                            // TODO: define error code
-                            JsonRpcErrorReason::ApplicationError(1),
-                            err,
-                            json!(null),
-                        ),
-                    ));
-                },
-                Err(RecvError::Lagged(n)) => {
-                    error!(target: LOG_TARGET, "HotStuffEvent subscription lagged ({})", n);
-                },
-                Err(RecvError::Closed) => {
-                    return Err(JsonRpcResponse::error(
-                        answer_id,
-                        JsonRpcError::new(
-                            // TODO: define error code
-                            JsonRpcErrorReason::ApplicationError(1),
-                            "Failed to receive event".to_string(),
-                            json!(null),
-                        ),
-                    ));
-                },
-            },
-            Err(_) => {
-                return Err(JsonRpcResponse::error(
-                    answer_id,
-                    JsonRpcError::new(
-                        JsonRpcErrorReason::ApplicationError(2),
-                        "Timeout waiting for result".to_string(),
-                        json!(null),
-                    ),
-                ));
-            },
-        }
-    }
 }

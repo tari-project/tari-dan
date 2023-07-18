@@ -33,10 +33,7 @@ use tari_common::configuration::bootstrap::{grpc_default_port, ApplicationType};
 use tari_comms::NodeIdentity;
 use tari_dan_common_types::Epoch;
 use tari_dan_storage_sqlite::error::SqliteStorageError;
-use tari_epoch_manager::{
-    base_layer::{EpochManagerError, EpochManagerEvent, EpochManagerHandle},
-    EpochManager,
-};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
 use tokio::{task, task::JoinHandle, time};
 

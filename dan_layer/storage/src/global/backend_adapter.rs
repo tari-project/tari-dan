@@ -20,11 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::ops::RangeInclusive;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::RangeInclusive,
+};
 
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 
 use super::DbEpoch;
 use crate::{
@@ -79,20 +82,28 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-    ) -> Result<Vec<ValidatorNode>, Self::Error>;
+    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error>;
     fn get_validator_node(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
         public_key: &[u8],
-    ) -> Result<ValidatorNode, Self::Error>;
+    ) -> Result<ValidatorNode<PublicKey>, Self::Error>;
     fn validator_nodes_count(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
     ) -> Result<u64, Self::Error>;
+    fn validator_nodes_count_for_bucket(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+        bucket: u32,
+    ) -> Result<u64, Self::Error>;
+
     fn validator_nodes_set_committee_bucket(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -106,7 +117,15 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         start_epoch: Epoch,
         end_epoch: Epoch,
         shard_range: RangeInclusive<ShardId>,
-    ) -> Result<Vec<ValidatorNode>, Self::Error>;
+    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error>;
+
+    fn validator_nodes_get_by_buckets(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+        buckets: HashSet<u32>,
+    ) -> Result<HashMap<u32, Committee<PublicKey>>, Self::Error>;
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;

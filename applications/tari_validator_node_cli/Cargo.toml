@@ -19,6 +19,7 @@ tari_transaction = { path = "../../dan_layer/transaction" }
 tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
 tari_utilities = "0.4.10"
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
+tari_dan_storage = { path = "../../dan_layer/storage" }
 
 anyhow = "1.0.65"
 clap = { version = "3.2.22", features = ["derive", "env"] }
@@ -32,4 +33,4 @@ serde = "1.0.144"
 serde_json = "1.0.85"
 thiserror = "1.0.36"
 time = "0.3.15"
-tokio = { version = "1", features = ["macros"] }
+tokio = { version = "1", features = ["macros", "time"] }

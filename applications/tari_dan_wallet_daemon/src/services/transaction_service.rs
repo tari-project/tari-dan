@@ -131,7 +131,7 @@ where
                 transaction.transaction.hash()
             );
             let maybe_finalized_transaction = transaction_api
-                .check_and_store_finalized_transaction(transaction.transaction.hash().into_array().into())
+                .check_and_store_finalized_transaction(*transaction.transaction.id())
                 .await?;
 
             match maybe_finalized_transaction {
@@ -146,16 +146,15 @@ where
                     match transaction.finalize {
                         Some(finalize) => {
                             notify.notify(TransactionFinalizedEvent {
-                                hash: transaction.transaction.hash().into_array().into(),
+                                transaction_id: *transaction.transaction.id(),
                                 finalize,
                                 transaction_failure: transaction.transaction_failure,
                                 final_fee: transaction.final_fee.unwrap_or_default(),
-                                qcs: transaction.qcs,
                                 status: transaction.status,
                             });
                         },
                         None => notify.notify(TransactionInvalidEvent {
-                            hash: transaction.transaction.hash().into_array().into(),
+                            transaction_id: *transaction.transaction.id(),
                             status: transaction.status,
                             final_fee: transaction.final_fee.unwrap_or_default(),
                         }),

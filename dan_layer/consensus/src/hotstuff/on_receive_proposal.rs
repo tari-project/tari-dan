@@ -13,6 +13,7 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
+        Decision,
         ExecutedTransaction,
         LastExecuted,
         LastVoted,
@@ -20,13 +21,14 @@ use tari_dan_storage::{
         QuorumDecision,
         SubstateLockFlag,
         SubstateRecord,
-        Transaction,
         TransactionPool,
         TransactionPoolStage,
     },
     StateStore,
     StateStoreReadTransaction,
 };
+use tari_epoch_manager::EpochManagerReader;
+use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::{
@@ -38,7 +40,7 @@ use crate::{
         ProposalValidationError,
     },
     messages::{HotstuffMessage, ProposalMessage, VoteMessage},
-    traits::{ConsensusSpec, EpochManager, LeaderStrategy, StateManager, VoteSignatureService},
+    traits::{ConsensusSpec, LeaderStrategy, StateManager, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_proposal";
@@ -57,9 +59,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
 }
 
 impl<TConsensusSpec> OnReceiveProposalHandler<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
-    HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
@@ -141,7 +141,7 @@ where
                 maybe_decision = self.decide_what_to_vote(tx, &block, &local_committee_shard)?;
             }
 
-            self.update_nodes(tx, &block)?;
+            self.update_nodes(tx, &block, &local_committee_shard)?;
             Ok::<_, HotStuffError>(maybe_decision)
         })?;
 
@@ -163,8 +163,11 @@ where
     }
 
     async fn handle_foreign_proposal(&self, from: TConsensusSpec::Addr, block: Block) -> Result<(), HotStuffError> {
-        let vn_shard = self.epoch_manager.get_validator_shard(block.epoch(), &from).await?;
-        let committee_shard = self.epoch_manager.get_committee_shard(block.epoch(), vn_shard).await?;
+        let vn = self.epoch_manager.get_validator_node(block.epoch(), &from).await?;
+        let committee_shard = self
+            .epoch_manager
+            .get_committee_shard(block.epoch(), vn.shard_key)
+            .await?;
         self.validate_proposed_block(&from, &block)?;
         self.store
             .with_write_tx(|tx| self.on_receive_foreign_block(tx, &block, &committee_shard))?;
@@ -210,7 +213,17 @@ where
                     if transaction.as_decision() == t.decision {
                         if transaction.as_decision().is_commit() {
                             // Lock all inputs for the transaction as part of LocalPrepare
-                            self.lock_objects(tx, transaction.transaction(), local_committee_shard)?;
+                            if !self.lock_inputs(tx, transaction.transaction(), local_committee_shard)? {
+                                // Unable to lock all inputs - abstain? or vote reject?
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "❌ Unable to lock inputs for block {}. Leader proposed {}, we decided {}",
+                                    block.id(),
+                                    t.decision,
+                                    transaction.as_decision()
+                                );
+                                return Ok(None);
+                            }
                         }
 
                         tx_rec.transition(tx, TransactionPoolStage::LocalPrepared, false)?;
@@ -258,19 +271,50 @@ where
         Ok(Some(QuorumDecision::Accept))
     }
 
-    fn lock_objects(
+    fn lock_inputs(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        transaction: &Transaction,
+        local_committee_shard: &CommitteeShard,
+    ) -> Result<bool, HotStuffError> {
+        let state = SubstateRecord::try_lock_many(
+            tx,
+            transaction.id(),
+            local_committee_shard.filter(transaction.inputs().iter().chain(transaction.filled_inputs())),
+            SubstateLockFlag::Write,
+        )?;
+        if !state.is_acquired() {
+            return Ok(false);
+        }
+        let state = SubstateRecord::try_lock_many(
+            tx,
+            transaction.id(),
+            local_committee_shard.filter(transaction.input_refs()),
+            SubstateLockFlag::Read,
+        )?;
+
+        if !state.is_acquired() {
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
+    fn unlock_inputs(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
-        SubstateRecord::try_lock_many(
+        SubstateRecord::try_unlock_many(
             tx,
-            local_committee_shard.filter(transaction.inputs()),
+            transaction.id(),
+            local_committee_shard.filter(transaction.inputs().iter().chain(transaction.filled_inputs())),
             SubstateLockFlag::Write,
         )?;
-        SubstateRecord::try_lock_many(
+        SubstateRecord::try_unlock_many(
             tx,
+            transaction.id(),
             local_committee_shard.filter(transaction.input_refs()),
             SubstateLockFlag::Read,
         )?;
@@ -286,10 +330,11 @@ where
             .epoch_manager
             .get_validator_node_merkle_proof(block.epoch())
             .await?;
-        let leaf_hash = self
+        let vn = self
             .epoch_manager
-            .get_validator_leaf_hash(block.epoch(), &self.validator_addr)
+            .get_validator_node(block.epoch(), &self.validator_addr)
             .await?;
+        let leaf_hash = vn.node_hash();
 
         let signature = self.vote_signing_service.sign_vote(&leaf_hash, block.id(), &decision);
 
@@ -326,8 +371,9 @@ where
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
+        local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
-        update_high_qc::<TConsensusSpec::StateStore>(tx, block.justify())?;
+        update_high_qc(tx, block.justify())?;
 
         // b'' <- b*.justify.node
         let Some(commit_node) = block.justify().get_block(tx.deref_mut()).optional()? else {
@@ -359,7 +405,7 @@ where
             );
 
             let last_executed = LastExecuted::get(tx.deref_mut(), block.epoch())?;
-            self.on_commit(tx, &last_executed, block)?;
+            self.on_commit(tx, &last_executed, block, local_committee_shard)?;
             block.set_as_last_executed(tx)?;
         } else {
             debug!(
@@ -380,25 +426,27 @@ where
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         last_executed: &LastExecuted,
         block: &Block,
+        local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
         if last_executed.height < block.height() {
             let parent = block.get_parent(tx.deref_mut())?;
             // Recurse to "catch up" any parent parent blocks we may not have executed
-            self.on_commit(tx, last_executed, &parent)?;
-            self.execute(tx, block)?;
+            self.on_commit(tx, last_executed, &parent, local_committee_shard)?;
+            self.execute(tx, block, local_committee_shard)?;
             self.publish_event(HotstuffEvent::BlockCommitted { block_id: *block.id() });
         }
         Ok(())
     }
 
     fn publish_event(&self, event: HotstuffEvent) {
-        let _ = self.tx_events.send(event);
+        let _ignore = self.tx_events.send(event);
     }
 
     fn execute(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block,
+        local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
         for cmd in block.commands() {
             let tx_rec = self.transaction_pool.get(tx, cmd.transaction_id())?;
@@ -418,12 +466,25 @@ where
                 },
                 Command::Accept(t) => {
                     tx_rec.remove(tx)?;
-                    if t.decision.is_commit() {
-                        let executed_tx = ExecutedTransaction::get(tx.deref_mut(), &t.id)?;
-                        self.state_manager
-                            .commit_transaction(tx, &executed_tx)
-                            .map_err(|e| HotStuffError::StateManagerError(e.into()))?;
+                    let mut executed = t.get_transaction(tx.deref_mut())?;
+                    match t.decision {
+                        // Commit the transaction substate changes.
+                        Decision::Commit => {
+                            self.state_manager
+                                .commit_transaction(tx, block, &executed)
+                                .map_err(|e| HotStuffError::StateManagerError(e.into()))?;
+
+                            // We unlock just so that inputs that were not mutated are unlocked, even though those
+                            // should be in input_refs
+                            self.unlock_inputs(tx, executed.transaction(), local_committee_shard)?;
+                        },
+                        // Unlock the aborted inputs.
+                        Decision::Abort => {
+                            self.unlock_inputs(tx, executed.transaction(), local_committee_shard)?;
+                        },
                     }
+
+                    executed.set_as_finalized().update(tx)?;
                 },
             }
         }
@@ -550,13 +611,14 @@ fn is_safe_block<TTx: StateStoreReadTransaction>(
     if block.justify().block_height() <= locked_block.height() {
         debug!(
             target: LOG_TARGET,
-            "❌ justify block height {} less than locked block height {}. Block does not satisfy safeNode predicate",
+            "❌ justify block height {} less than or equal to locked block height {}. Block does not satisfy safeNode predicate",
             block.justify().block_height(),
             locked_block.height(),
         );
         return Ok(false);
     }
 
+    // Safety
     let extends = block.extends(tx, locked_block.id())?;
     if !extends {
         debug!(

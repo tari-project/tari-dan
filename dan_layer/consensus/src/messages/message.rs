@@ -3,6 +3,7 @@
 
 use serde::Serialize;
 use tari_dan_common_types::Epoch;
+use tari_dan_storage::consensus_models::BlockId;
 
 use super::{NewViewMessage, ProposalMessage, VoteMessage};
 
@@ -19,6 +20,14 @@ impl HotstuffMessage {
             Self::NewView(msg) => msg.high_qc.epoch(),
             Self::Proposal(msg) => msg.block.epoch(),
             Self::Vote(msg) => msg.epoch,
+        }
+    }
+
+    pub fn block_id(&self) -> &BlockId {
+        match self {
+            Self::NewView(msg) => msg.high_qc.block_id(),
+            Self::Proposal(msg) => msg.block.id(),
+            Self::Vote(msg) => &msg.block_id,
         }
     }
 }

@@ -6,7 +6,8 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{confidential::ConfidentialOutput, substate::SubstateAddress};
 use tari_key_manager::key_manager::DerivedKey;
-use tari_template_lib::{models::Amount, Hash};
+use tari_template_lib::models::Amount;
+use tari_transaction::TransactionId;
 
 use crate::{
     apis::{
@@ -243,10 +244,10 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
     pub fn proofs_set_transaction_hash(
         &self,
         proof_id: ConfidentialProofId,
-        transaction_hash: Hash,
+        transaction_id: TransactionId,
     ) -> Result<(), ConfidentialOutputsApiError> {
         let mut tx = self.store.create_write_tx()?;
-        tx.proofs_set_transaction_hash(proof_id, transaction_hash)?;
+        tx.proofs_set_transaction_id(proof_id, transaction_id)?;
         tx.commit()?;
         Ok(())
     }

@@ -25,18 +25,24 @@ use std::{collections::HashMap, sync::Arc};
 use log::info;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_app_utilities::{
-    payload_processor::TariDanPayloadProcessor,
     template_manager::implementation::TemplateManager,
+    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor},
 };
-use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ObjectPledge, PayloadId, ShardId, SubstateState};
-use tari_dan_core::services::PayloadProcessor;
-use tari_dan_engine::{fees::FeeTable, runtime::ConsensusContext};
-use tari_dan_storage::models::{Payload, TariDanPayload};
-use tari_engine_types::commit_result::ExecuteResult;
-use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
+use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ShardId};
+use tari_dan_engine::{
+    bootstrap_state,
+    fees::FeeTable,
+    runtime::ConsensusContext,
+    state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
+};
+use tari_engine_types::{
+    commit_result::ExecuteResult,
+    substate::{Substate, SubstateAddress},
+};
+use tari_epoch_manager::EpochManagerReader;
 use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller};
-use tari_transaction::Transaction;
-use tari_validator_node_rpc::client::{ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+use tari_transaction::{SubstateRequirement, Transaction};
+use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 use tokio::task;
 
 use crate::dry_run::error::DryRunTransactionProcessorError;
@@ -52,7 +58,7 @@ pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory> {
 
 impl<TEpochManager, TClientFactory> DryRunTransactionProcessor<TEpochManager, TClientFactory>
 where
-    TEpochManager: EpochManager<CommsPublicKey, Error = EpochManagerError>,
+    TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
     TClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
 {
@@ -74,27 +80,35 @@ where
 
     pub async fn process_transaction(
         &self,
-        transaction: &Transaction,
+        transaction: Transaction,
+        substate_requirements: Vec<SubstateRequirement>,
     ) -> Result<ExecuteResult, DryRunTransactionProcessorError> {
         info!(target: LOG_TARGET, "process_transaction: {}", transaction.hash());
 
         // automatically scan the inputs and add all related involved objects
         // note that this operation does not alter the transaction hash
-        let transaction = self.transaction_autofiller.autofill_transaction(transaction).await?;
+        let (transaction, mut found_substates) = self
+            .transaction_autofiller
+            .autofill_transaction(transaction, substate_requirements)
+            .await?;
 
-        let payload = TariDanPayload::new(transaction.clone());
         let epoch = self.epoch_manager.current_epoch().await?;
-        let pledges = self.get_shard_pledges(&payload, &epoch).await?;
+        found_substates.extend(self.fetch_input_substates(&transaction, epoch).await?);
+
         let payload_processor = self.build_payload_processor(&transaction);
 
         // execute the payload in the WASM engine and return the result
         let consensus_context = Self::get_consensus_context(&epoch).await?;
-        let result = task::block_in_place(|| payload_processor.process_payload(payload, pledges, consensus_context))?;
 
-        Ok(result)
+        let mut state_store = new_state_store();
+        state_store.extend(found_substates);
+
+        let result = task::block_in_place(|| payload_processor.execute(transaction, state_store, consensus_context))?;
+
+        Ok(result.into_result())
     }
 
-    fn build_payload_processor(&self, transaction: &Transaction) -> TariDanPayloadProcessor<TemplateManager> {
+    fn build_payload_processor(&self, transaction: &Transaction) -> TariDanTransactionProcessor<TemplateManager> {
         // simulate fees if the transaction requires it
         let fee_table = if Self::transaction_includes_fees(transaction) {
             // TODO: should match the VN fee table, should the fee table values be a consensus constant?
@@ -103,58 +117,77 @@ where
             FeeTable::zero_rated()
         };
 
-        TariDanPayloadProcessor::new(self.template_manager.clone(), fee_table)
+        TariDanTransactionProcessor::new(self.template_manager.clone(), fee_table)
     }
 
     fn transaction_includes_fees(transaction: &Transaction) -> bool {
         !transaction.fee_instructions().is_empty()
     }
 
-    async fn get_shard_pledges(
+    async fn fetch_input_substates(
         &self,
-        payload: &TariDanPayload,
-        epoch: &Epoch,
-    ) -> Result<HashMap<ShardId, ObjectPledge>, DryRunTransactionProcessorError> {
-        let mut shard_pledges = HashMap::new();
+        transaction: &Transaction,
+        epoch: Epoch,
+    ) -> Result<HashMap<SubstateAddress, Substate>, DryRunTransactionProcessorError> {
+        let mut substates = HashMap::new();
 
-        // TODO: spawn a tokio task per pledge for better performance?
-        for shard_id in payload.involved_shards() {
-            let pledge = self.get_shard_pledge(shard_id, payload.to_id(), *epoch).await?;
-            shard_pledges.insert(shard_id, pledge);
+        for shard_id in transaction.inputs().iter().chain(transaction.input_refs()) {
+            // If the input has been filled, we've already fetched the substate
+            if transaction.filled_inputs().contains(shard_id) {
+                continue;
+            }
+
+            let (address, substate) = self.fetch_substate(*shard_id, epoch).await?;
+            substates.insert(address, substate);
         }
 
-        Ok(shard_pledges)
+        Ok(substates)
     }
 
-    pub async fn get_shard_pledge(
+    pub async fn fetch_substate(
         &self,
         shard_id: ShardId,
-        payload_id: PayloadId,
         epoch: Epoch,
-    ) -> Result<ObjectPledge, DryRunTransactionProcessorError> {
-        let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+    ) -> Result<(SubstateAddress, Substate), DryRunTransactionProcessorError> {
+        let mut committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+        committee.shuffle();
 
-        for vn_public_key in committee.members {
+        let mut nexist_count = 0;
+        let mut err_count = 0;
+
+        for vn_public_key in &committee {
             // build a client with the VN
-            let mut sync_vn_client = self.client_provider.create_client(&vn_public_key);
+            let mut client = self.client_provider.create_client(vn_public_key);
 
-            match sync_vn_client.get_shard_pledge(&shard_id).await {
-                Ok(pledge) => {
-                    return Ok(pledge);
+            match client.get_substate(shard_id).await {
+                Ok(SubstateResult::Up { substate, address, .. }) => {
+                    return Ok((address, substate));
+                },
+                Ok(SubstateResult::Down { address, version, .. }) => {
+                    // TODO: we should seek proof of this.
+                    return Err(DryRunTransactionProcessorError::SubstateDowned { address, version });
+                },
+                Ok(SubstateResult::DoesNotExist) => {
+                    // we do not stop when an individual claims DoesNotExist, we try all Vns
+                    nexist_count += 1;
+                    continue;
                 },
                 Err(e) => {
                     info!(target: LOG_TARGET, "Unable to get pledge from peer: {} ", e.to_string());
-                    // we do not stop when an individual VN does not respond correctly, we try all Vns
+                    // we do not stop when an individual request errors, we try all Vns
+                    err_count += 1;
                     continue;
                 },
             };
         }
 
-        // The shard does not exist on any VN, so we pledge it to be created in this payload
-        Ok(ObjectPledge {
+        // The substate does not exist on any VN or all validator nodes are offline, we return an error
+        Err(DryRunTransactionProcessorError::AllValidatorsFailedToReturnSubstate {
             shard_id,
-            pledged_to_payload: payload_id,
-            current_state: SubstateState::DoesNotExist,
+            epoch,
+            nexist_count,
+            err_count,
+            committee_size: committee.members.len(),
         })
     }
 
@@ -163,4 +196,12 @@ where
         let consensus_context = ConsensusContext { current_epoch };
         Ok(consensus_context)
     }
+}
+
+fn new_state_store() -> MemoryStateStore {
+    let state_store = MemoryStateStore::new();
+    let mut tx = state_store.write_access().unwrap();
+    bootstrap_state(&mut tx).unwrap();
+    tx.commit().unwrap();
+    state_store
 }

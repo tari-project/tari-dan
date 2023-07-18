@@ -3,14 +3,12 @@
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::PayloadId;
 use tari_engine_types::{
     commit_result::ExecuteResult,
     serde_with as serde_tools,
     substate::{Substate, SubstateAddress},
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateRequest {
@@ -27,8 +25,7 @@ pub struct GetSubstateResponse {
     pub address: SubstateAddress,
     pub version: u32,
     pub substate: Substate,
-    #[serde(with = "serde_tools::hex")]
-    pub created_by_transaction: FixedHash,
+    pub created_by_transaction: TransactionId,
 }
 
 #[serde_as]
@@ -46,26 +43,25 @@ pub struct InspectSubstateResponse {
     pub address: SubstateAddress,
     pub version: u32,
     pub substate_contents: serde_json::Value,
-    #[serde(with = "serde_tools::hex")]
-    pub created_by_transaction: FixedHash,
+    pub created_by_transaction: TransactionId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionRequest {
     pub transaction: Transaction,
+    pub required_substates: Vec<SubstateRequirement>,
     pub is_dry_run: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionResponse {
-    #[serde(with = "serde_tools::hex")]
-    pub transaction_hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub execution_result: Option<ExecuteResult>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionResultRequest {
-    pub transaction_hash: PayloadId,
+    pub transaction_id: TransactionId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

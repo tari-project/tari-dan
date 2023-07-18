@@ -5,7 +5,7 @@ use std::{collections::BTreeMap, str::FromStr};
 
 use anyhow::anyhow;
 use log::info;
-use tari_common_types::types::{FixedHash, PublicKey};
+use tari_common_types::types::PublicKey;
 use tari_crypto::{keys::PublicKey as PK, ristretto::RistrettoSecretKey};
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::{
@@ -23,7 +23,7 @@ use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     prelude::{Amount, ComponentAddress, Metadata, NonFungibleAddress, NonFungibleId, ResourceAddress},
 };
-use tari_transaction::{SubstateRequirement, Transaction};
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
     AccountNftInfo,
@@ -209,16 +209,14 @@ async fn mint_account_nft(
 
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
-        .with_required_inputs(inputs)
         .with_instructions(instructions)
         .sign(owner_sk)
         .build();
 
-    let result = sdk.transaction_api().submit_transaction(transaction).await?;
-    let tx_hash = result.transaction_hash;
+    let tx_hash = sdk.transaction_api().submit_transaction(transaction, inputs).await?;
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
-        hash: tx_hash,
+        transaction_id: tx_hash,
         new_account: None,
     });
 
@@ -295,15 +293,14 @@ async fn create_account_nft(
         .sign(owner_sk)
         .build();
 
-    let result = sdk.transaction_api().submit_transaction(transaction).await?;
-    let tx_hash = result.transaction_hash;
+    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
-        hash: tx_hash,
+        transaction_id: tx_id,
         new_account: None,
     });
 
-    let event = wait_for_result(&mut events, tx_hash).await?;
+    let event = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!(
             "Create NFT resource address from account {} was rejected: {}",
@@ -324,12 +321,12 @@ async fn create_account_nft(
 
 async fn wait_for_result(
     events: &mut broadcast::Receiver<WalletEvent>,
-    tx_hash: FixedHash,
+    transaction_id: TransactionId,
 ) -> Result<TransactionFinalizedEvent, anyhow::Error> {
     loop {
         let wallet_event = events.recv().await?;
         match wallet_event {
-            WalletEvent::TransactionFinalized(event) if event.hash == tx_hash => return Ok(event),
+            WalletEvent::TransactionFinalized(event) if event.transaction_id == transaction_id => return Ok(event),
             _ => {},
         }
     }

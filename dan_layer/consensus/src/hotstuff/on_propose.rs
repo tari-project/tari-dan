@@ -6,16 +6,25 @@ use std::{collections::HashSet, iter, ops::DerefMut};
 use log::*;
 use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight, ShardId};
 use tari_dan_storage::{
-    consensus_models::{Block, ExecutedTransaction, HighQc, LeafBlock, QuorumCertificate, TransactionPool},
+    consensus_models::{
+        Block,
+        ExecutedTransaction,
+        HighQc,
+        LastProposed,
+        LeafBlock,
+        QuorumCertificate,
+        TransactionPool,
+    },
     StateStore,
     StateStoreWriteTransaction,
 };
+use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
 use crate::{
     hotstuff::error::HotStuffError,
     messages::{HotstuffMessage, ProposalMessage},
-    traits::{ConsensusSpec, EpochManager},
+    traits::ConsensusSpec,
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose";
@@ -28,9 +37,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
-    HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         store: TConsensusSpec::StateStore,
@@ -52,11 +59,22 @@ where
         local_committee: Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
     ) -> Result<(), HotStuffError> {
-        let validator_id = self.epoch_manager.get_our_validator_shard(epoch).await?;
+        let last_proposed = self.store.with_read_tx(|tx| LastProposed::get(tx, epoch).optional())?;
+        let last_proposed_height = last_proposed.map(|lp| lp.height).unwrap_or(NodeHeight(0));
+        if last_proposed_height >= leaf_block.height + NodeHeight(1) {
+            info!(
+                target: LOG_TARGET,
+                "Skipping on_propose for next block because we have already proposed a block at height {}",
+                last_proposed_height
+            );
+            return Ok(());
+        }
+
+        let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
 
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
         // the non-Send tx could be used after the await point, which is not possible.
-        let involved_shards;
+        let involved_foreign_shards;
         let next_block;
         {
             let mut tx = self.store.create_write_tx()?;
@@ -65,23 +83,9 @@ where
 
             let parent_block = leaf_block.get_block(&mut *tx)?;
 
-            // Edge case: on_beat is called again before the leaf has changed - so check that we haven't already
-            // proposed for this leaf
-            if let Some(child) = parent_block.get_child(&mut *tx).optional()? {
-                debug!(
-                    target: LOG_TARGET,
-                    "🌿 Already proposed block for current leaf {} ({}) - child {} ({})",
-                    parent_block.id(),
-                    parent_block.height(),
-                    child.id(),
-                    child.height(),
-                );
-                tx.rollback()?;
-                return Ok(());
-            }
-
-            next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator_id)?;
+            next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator.shard_key)?;
             next_block.insert(&mut tx)?;
+            next_block.as_last_proposed().set(&mut tx)?;
 
             // Get involved shards for all LocalPrepared commands in the block.
             // This allows us to broadcast the proposal only to the relevant committees that would be interested in the
@@ -92,7 +96,7 @@ where
                 .filter_map(|cmd| cmd.local_prepared())
                 .map(|t| &t.id);
             let prepared_txs = ExecutedTransaction::get_many(tx.deref_mut(), prepared_iter)?;
-            involved_shards = prepared_txs
+            involved_foreign_shards = prepared_txs
                 .iter()
                 .flat_map(|tx| tx.transaction().involved_shards_iter().copied())
                 .collect::<HashSet<_>>();
@@ -102,18 +106,25 @@ where
 
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING new block {}({}) {} command(s), {} shards, justify: {} ({}), parent: {}",
+            "🌿 PROPOSING new block {}({}) to {} validators. {} command(s), {} foreign shards, justify: {} ({}), parent: {}",
             next_block.id(),
             next_block.height(),
+            local_committee.len(),
             next_block.commands().len(),
-            involved_shards.len(),
+            involved_foreign_shards.len(),
             next_block.justify().block_id(),
             next_block.justify().block_height(),
             next_block.parent()
         );
 
-        self.broadcast_proposal(epoch, next_block, involved_shards, local_committee, validator_id)
-            .await?;
+        self.broadcast_proposal(
+            epoch,
+            next_block,
+            involved_foreign_shards,
+            local_committee,
+            validator.shard_key,
+        )
+        .await?;
 
         Ok(())
     }
