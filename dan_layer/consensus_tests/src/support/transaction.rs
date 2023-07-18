@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::iter;
+
 use tari_common_types::types::PrivateKey;
 use tari_dan_storage::consensus_models::{Decision, ExecutedTransaction};
 use tari_engine_types::{
@@ -15,16 +17,15 @@ use crate::support::helpers::random_shard;
 pub fn build_transaction(decision: Decision, fee: u64, num_shards: usize) -> ExecutedTransaction {
     let k = PrivateKey::default();
 
-    let mut builder = tari_transaction::Transaction::builder();
-    for _ in 0..num_shards {
-        builder = builder.add_output(random_shard());
-    }
-    let tx = builder.sign(&k).build();
+    let mut tx = tari_transaction::Transaction::builder().sign(&k).build();
+    // We fill these outputs so that the test VNs dont have to have any actual substates
+    tx.filled_outputs_mut()
+        .extend(iter::repeat_with(random_shard).take(num_shards));
 
-    let tx_hash = *tx.hash();
-    ExecutedTransaction::new(tx.into(), ExecuteResult {
+    let tx_id = *tx.id();
+    ExecutedTransaction::new(tx, ExecuteResult {
         finalize: FinalizeResult::new(
-            tx_hash,
+            tx_id.into_array().into(),
             vec![],
             vec![],
             if decision.is_commit() {

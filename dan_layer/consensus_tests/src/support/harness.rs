@@ -4,13 +4,14 @@
 use std::collections::HashMap;
 
 use futures::{stream::FuturesUnordered, StreamExt};
-use tari_consensus::{hotstuff::HotstuffEvent, traits::EpochManager};
+use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_common_types::committee::Committee;
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, Decision, TransactionPoolStage},
     StateStore,
     StateStoreReadTransaction,
 };
+use tari_epoch_manager::EpochManagerReader;
 use tokio::task;
 
 use crate::support::{
@@ -52,13 +53,12 @@ impl Test {
     }
 
     pub async fn on_block_committed(&mut self) -> BlockId {
-        // Remove when events are added
-        #[allow(clippy::never_loop)]
         loop {
             let event = self.on_hotstuff_event().await;
+            #[allow(clippy::single_match)]
             match event {
                 HotstuffEvent::BlockCommitted { block_id } => return block_id,
-                // _ => {}
+                _ => {},
             }
         }
     }

@@ -146,7 +146,7 @@ pub async fn spawn_validator_node(
     });
 
     // Wait for node to start up
-    wait_listener_on_local_port(json_rpc_port).await;
+    let handle = wait_listener_on_local_port(handle, json_rpc_port).await;
 
     // Check if the inner thread panicked
     let handle = check_join_handle(&name, handle).await;

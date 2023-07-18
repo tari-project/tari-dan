@@ -27,18 +27,19 @@ use tari_engine_types::{
     events::Event,
     substate::{SubstateAddress, SubstateValue},
 };
-use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
+use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::{
     models::NonFungibleIndexAddress,
     prelude::{ComponentAddress, ResourceAddress},
-    Hash,
 };
+use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
 use crate::{error::IndexerError, NonFungibleSubstate};
 
 const LOG_TARGET: &str = "tari::indexer::dan_layer_scanner";
 
+#[derive(Debug, Clone)]
 pub struct SubstateScanner<TEpochManager, TVnClient> {
     committee_provider: TEpochManager,
     validator_node_client_factory: TVnClient,
@@ -47,7 +48,7 @@ pub struct SubstateScanner<TEpochManager, TVnClient> {
 impl<TEpochManager, TVnClient, TAddr> SubstateScanner<TEpochManager, TVnClient>
 where
     TAddr: NodeAddressable,
-    TEpochManager: EpochManager<TAddr, Error = EpochManagerError>,
+    TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
 {
     pub fn new(committee_provider: TEpochManager, validator_node_client_factory: TVnClient) -> Self {
@@ -159,41 +160,54 @@ where
         version: u32,
     ) -> Result<SubstateResult, IndexerError> {
         let shard = ShardId::from_address(substate_address, version);
+        self.get_specific_substate_from_committee_by_shard(shard).await
+    }
+
+    /// Returns a specific version. If this is not found an error is returned.
+    pub async fn get_specific_substate_from_committee_by_shard(
+        &self,
+        shard: ShardId,
+    ) -> Result<SubstateResult, IndexerError> {
         let epoch = self.committee_provider.current_epoch().await?;
         let mut committee = self.committee_provider.get_committee(epoch, shard).await?;
 
-        committee.members.shuffle(&mut OsRng);
+        committee.shuffle();
+
         let f = (committee.members.len() - 1) / 3;
-        let mut num_down_substate_results = 0;
+        let mut num_nexist_substate_results = 0;
+        let mut last_error = None;
         for vn_public_key in &committee.members {
-            match self
-                .get_substate_from_vn(vn_public_key, substate_address, version)
-                .await
-            {
+            // TODO: we cannot request data from ourselves via p2p rpc - so we should exclude ourselves from requests
+
+            match self.get_substate_from_vn(vn_public_key, shard).await {
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up { .. } | SubstateResult::Down { .. } => return Ok(substate_result),
                     SubstateResult::DoesNotExist => {
-                        if num_down_substate_results > f {
+                        if num_nexist_substate_results > f {
                             return Ok(substate_result);
                         }
-                        num_down_substate_results += 1;
+                        num_nexist_substate_results += 1;
                     },
                 },
                 Err(e) => {
                     // We ignore a single VN error and keep querying the rest of the committee
                     error!(
                         target: LOG_TARGET,
-                        "Could not get substate {}:{} from vn {}: {}", substate_address, version, vn_public_key, e
+                        "Could not get substate {} from vn {}: {}", shard, vn_public_key, e
                     );
+                    last_error = Some(e);
                 },
             }
         }
 
         error!(
             target: LOG_TARGET,
-            "Could not get substate {}:{} from any of the validator nodes", substate_address, version,
+            "Could not get substate {} from any of the validator nodes", shard,
         );
 
+        if let Some(e) = last_error {
+            return Err(e);
+        }
         Ok(SubstateResult::DoesNotExist)
     }
 
@@ -201,21 +215,20 @@ where
     async fn get_substate_from_vn(
         &self,
         vn_public_key: &TAddr,
-        address: &SubstateAddress,
-        version: u32,
+        shard: ShardId,
     ) -> Result<SubstateResult, IndexerError> {
         // build a client with the VN
         let mut client = self.validator_node_client_factory.create_client(vn_public_key);
         let result = client
-            .get_substate(address, version)
+            .get_substate(shard)
             .await
             .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
         Ok(result)
     }
 
     /// Queries the network to obtain events emitted in a single transaction
-    pub async fn get_events_for_transaction(&self, transaction_hash: Hash) -> Result<Vec<Event>, IndexerError> {
-        let substate_address = SubstateAddress::TransactionReceipt(transaction_hash.into());
+    pub async fn get_events_for_transaction(&self, transaction_id: TransactionId) -> Result<Vec<Event>, IndexerError> {
+        let substate_address = SubstateAddress::TransactionReceipt(transaction_id.into_array().into());
         let substate = self.get_specific_substate_from_committee(&substate_address, 0).await?;
         let substate_value = if let SubstateResult::Up { substate, .. } = substate {
             substate.substate_value().clone()
@@ -236,7 +249,7 @@ where
         &self,
         substate_address: &SubstateAddress,
         version: u32,
-    ) -> Result<Hash, IndexerError> {
+    ) -> Result<TransactionId, IndexerError> {
         let shard_id = ShardId::from_address(substate_address, version);
 
         let epoch = self.committee_provider.current_epoch().await?;
@@ -246,7 +259,7 @@ where
 
         let mut transaction_hash = None;
         for member in &committee.members {
-            match self.get_substate_from_vn(member, substate_address, version).await {
+            match self.get_substate_from_vn(member, shard_id).await {
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up {
                         created_by_tx: tx_hash, ..
@@ -281,12 +294,7 @@ where
             }
         }
 
-        if let Some(tx_hash) = transaction_hash {
-            Hash::try_from(tx_hash.as_slice()).map_err(|e| IndexerError::FailedToParseTransactionHash(e.to_string()))
-        } else {
-            // no transaction was found in the network for this component address and version
-            Err(IndexerError::NotFoundTransaction(substate_address.clone(), version))
-        }
+        transaction_hash.ok_or_else(|| IndexerError::NotFoundTransaction(substate_address.clone(), version))
     }
 
     /// Queries the network to obtain all the events associated with a component and
@@ -298,11 +306,11 @@ where
     ) -> Result<Vec<Event>, IndexerError> {
         let substate_address = SubstateAddress::Component(component_address);
 
-        let tx_hash = self
+        let transaction_id = self
             .get_transaction_hash_from_substate_address(&substate_address, version)
             .await?;
 
-        match self.get_events_for_transaction(tx_hash).await {
+        match self.get_events_for_transaction(transaction_id).await {
             Ok(tx_events) => {
                 // we need to filter all transaction events, by those corresponding
                 // to the current component address

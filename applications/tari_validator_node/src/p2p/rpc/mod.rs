@@ -23,15 +23,15 @@
 mod service_impl;
 
 pub use service_impl::ValidatorNodeRpcServiceImpl;
-use tari_dan_core::services::PeerProvider;
-use tari_dan_storage_sqlite::sqlite_shard_store_factory::SqliteShardStore;
+use tari_dan_p2p::PeerProvider;
+use tari_state_store_sqlite::SqliteStateStore;
 use tari_validator_node_rpc::rpc_service::ValidatorNodeRpcServer;
 
 use crate::p2p::services::mempool::MempoolHandle;
 
 pub fn create_tari_validator_node_rpc_service<TPeerProvider>(
     peer_provider: TPeerProvider,
-    shard_store_store: SqliteShardStore,
+    shard_store_store: SqliteStateStore,
     mempool: MempoolHandle,
 ) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TPeerProvider>>
 where

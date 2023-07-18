@@ -34,8 +34,8 @@ pub use outbound::OutboundMessaging;
 // Messaging impl
 // -----------------------
 use tari_comms::types::CommsPublicKey;
-use tari_dan_core::{message::NetworkAnnounce, workers::hotstuff_waiter::RecoveryMessage};
-use tari_dan_storage::models::{HotStuffMessage, TariDanPayload, VoteMessage};
+use tari_consensus::messages::HotstuffMessage;
+use tari_dan_p2p::NetworkAnnounce;
 use tari_transaction::Transaction;
 use tokio::{sync::mpsc, task::JoinHandle};
 
@@ -56,41 +56,31 @@ pub fn spawn(
 
 #[derive(Debug, Clone)]
 pub struct DanMessageSenders {
-    pub tx_consensus_message: mpsc::Sender<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
-    pub tx_vote_message: mpsc::Sender<(CommsPublicKey, VoteMessage)>,
+    pub tx_consensus_message: mpsc::Sender<(CommsPublicKey, HotstuffMessage)>,
     pub tx_new_transaction_message: mpsc::Sender<Transaction>,
     pub tx_network_announce: mpsc::Sender<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
-    pub tx_recovery_message: mpsc::Sender<(CommsPublicKey, RecoveryMessage)>,
 }
 
 #[derive(Debug)]
 pub struct DanMessageReceivers {
-    pub rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotStuffMessage<TariDanPayload, CommsPublicKey>)>,
-    pub rx_vote_message: mpsc::Receiver<(CommsPublicKey, VoteMessage)>,
+    pub rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage)>,
     pub rx_new_transaction_message: mpsc::Receiver<Transaction>,
     pub rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
-    pub rx_recovery_message: mpsc::Receiver<(CommsPublicKey, RecoveryMessage)>,
 }
 
 pub fn new_messaging_channel(size: usize) -> (DanMessageSenders, DanMessageReceivers) {
     let (tx_consensus_message, rx_consensus_message) = mpsc::channel(size);
-    let (tx_vote_message, rx_vote_message) = mpsc::channel(size);
     let (tx_new_transaction_message, rx_new_transaction_message) = mpsc::channel(size);
     let (tx_network_announce, rx_network_announce) = mpsc::channel(size);
-    let (tx_recovery_message, rx_recovery_message) = mpsc::channel(size);
     let senders = DanMessageSenders {
         tx_consensus_message,
-        tx_vote_message,
         tx_new_transaction_message,
         tx_network_announce,
-        tx_recovery_message,
     };
     let receivers = DanMessageReceivers {
         rx_consensus_message,
-        rx_vote_message,
         rx_new_transaction_message,
         rx_network_announce,
-        rx_recovery_message,
     };
 
     (senders, receivers)

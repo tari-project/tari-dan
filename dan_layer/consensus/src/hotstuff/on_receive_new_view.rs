@@ -8,11 +8,12 @@ use tari_dan_storage::{
     consensus_models::{BlockId, QuorumCertificate},
     StateStore,
 };
+use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
     hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat},
     messages::NewViewMessage,
-    traits::{ConsensusSpec, EpochManager},
+    traits::ConsensusSpec,
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_new_view";
@@ -26,9 +27,7 @@ pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
 }
 
 impl<TConsensusSpec> OnReceiveNewViewHandler<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
-    HotStuffError: From<<TConsensusSpec::EpochManager as EpochManager>::Error>,
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         store: TConsensusSpec::StateStore,
@@ -67,8 +66,7 @@ where
 
         self.validate_qc(&high_qc)?;
 
-        self.store
-            .with_write_tx(|tx| update_high_qc::<TConsensusSpec::StateStore>(tx, &high_qc))?;
+        self.store.with_write_tx(|tx| update_high_qc(tx, &high_qc))?;
 
         // Take note of unique NEWVIEWs so that we can count them
         let entry = self.newview_message_counts.entry(*high_qc.block_id()).or_default();

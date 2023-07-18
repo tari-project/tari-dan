@@ -20,15 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    borrow::Borrow,
-    convert::{TryFrom, TryInto},
-};
+use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
+use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
-use tari_dan_common_types::ShardId;
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{
     args::Arg,
@@ -36,7 +32,7 @@ use tari_template_lib::{
     models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData},
     Hash,
 };
-use tari_transaction::{SubstateChange, SubstateRequirement, Transaction, TransactionMeta};
+use tari_transaction::{SubstateRequirement, Transaction};
 
 use crate::{
     proto::{self, transaction::OptionalVersion},
@@ -44,6 +40,7 @@ use crate::{
 };
 
 //---------------------------------- Transaction --------------------------------------------//
+
 impl TryFrom<proto::transaction::Transaction> for Transaction {
     type Error = anyhow::Error;
 
@@ -58,20 +55,44 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<Vec<tari_engine_types::instruction::Instruction>, _>>()?;
-        let signature: Signature = request
+        let signature = request
             .signature
             .ok_or_else(|| anyhow!("invalid signature"))?
             .try_into()?;
-        let instruction_signature = signature.try_into().map_err(|s| anyhow!("{}", s))?;
-        let sender_public_key =
-            PublicKey::from_bytes(&request.sender_public_key).map_err(|_| anyhow!("invalid sender_public_key"))?;
-        let meta = request.meta.map(TryInto::try_into).transpose()?;
+        let inputs = request
+            .inputs
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let input_refs = request
+            .input_refs
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let outputs = request
+            .outputs
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let filled_inputs = request
+            .filled_inputs
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
+        let filled_outputs = request
+            .filled_outputs
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<_, _>>()?;
         let transaction = Transaction::new(
             fee_instructions,
             instructions,
-            instruction_signature,
-            sender_public_key,
-            meta.ok_or_else(|| anyhow!("meta not provided"))?,
+            signature,
+            inputs,
+            input_refs,
+            outputs,
+            filled_inputs,
+            filled_outputs,
         );
 
         Ok(transaction)
@@ -80,19 +101,36 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
 
 impl From<Transaction> for proto::transaction::Transaction {
     fn from(transaction: Transaction) -> Self {
-        let meta = transaction.meta().clone();
-        let (instructions, fee_instructions, signature, sender_public_key) = transaction.destruct();
+        let signature = transaction.signature().clone().into();
+        let inputs = transaction.inputs().iter().map(|s| s.as_bytes().to_vec()).collect();
+        let input_refs = transaction.input_refs().iter().map(|s| s.as_bytes().to_vec()).collect();
+        let outputs = transaction.outputs().iter().map(|s| s.as_bytes().to_vec()).collect();
+        let filled_inputs = transaction
+            .filled_inputs()
+            .iter()
+            .map(|s| s.as_bytes().to_vec())
+            .collect();
+        let filled_outputs = transaction
+            .filled_outputs()
+            .iter()
+            .map(|s| s.as_bytes().to_vec())
+            .collect();
+        let (fee_instructions, instructions) = transaction.into_instructions();
+        let fee_instructions = fee_instructions.into_iter().map(Into::into).collect();
+        let instructions = instructions.into_iter().map(Into::into).collect();
 
         proto::transaction::Transaction {
-            fee_instructions: fee_instructions.into_iter().map(Into::into).collect(),
-            instructions: instructions.into_iter().map(Into::into).collect(),
-            signature: Some(signature.signature().into()),
-            sender_public_key: sender_public_key.to_vec(),
-            meta: Some(meta.into()),
+            fee_instructions,
+            instructions,
+            signature: Some(signature),
+            inputs,
+            input_refs,
+            outputs,
+            filled_inputs,
+            filled_outputs,
         }
     }
 }
-
 // -------------------------------- Instruction -------------------------------- //
 
 impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction::Instruction {
@@ -253,63 +291,6 @@ impl From<Arg> for proto::transaction::Arg {
     }
 }
 
-// -------------------------------- TransactionMeta -------------------------------- //
-
-impl TryFrom<proto::transaction::TransactionMeta> for TransactionMeta {
-    type Error = anyhow::Error;
-
-    fn try_from(val: proto::transaction::TransactionMeta) -> Result<Self, Self::Error> {
-        if val.involved_shard_ids.len() != val.involved_substates.len() {
-            return Err(anyhow!(
-                "involved_shard_ids and involved_shard_ids must have the same length"
-            ));
-        }
-
-        let required_inputs = val
-            .required_inputs
-            .into_iter()
-            .map(|spec| {
-                let address = SubstateAddress::from_bytes(&spec.address)?;
-                let version = spec.version.map(|v| v.version);
-                Result::<_, anyhow::Error>::Ok(SubstateRequirement::new(address, version))
-            })
-            .collect::<Result<_, _>>()?;
-
-        let involved_objects = val
-            .involved_shard_ids
-            .into_iter()
-            .map(|s| ShardId::try_from(s).map_err(|e| anyhow!("{}", e)))
-            .zip(val.involved_substates.into_iter().map(|c| {
-                proto::transaction::SubstateChange::from_i32(c.change)
-                    .ok_or_else(|| anyhow!("invalid change"))
-                    .and_then(SubstateChange::try_from)
-            }))
-            .map(|(a, b)| {
-                let a = a?;
-                let b = b?;
-                Result::<_, anyhow::Error>::Ok((a, b))
-            })
-            .collect::<Result<_, _>>()?;
-
-        Ok(TransactionMeta::new(required_inputs, involved_objects, val.max_outputs))
-    }
-}
-
-impl<T: Borrow<TransactionMeta>> From<T> for proto::transaction::TransactionMeta {
-    fn from(val: T) -> Self {
-        let mut meta = proto::transaction::TransactionMeta::default();
-        for (k, ch) in val.borrow().involved_objects_iter() {
-            meta.involved_shard_ids.push(k.as_bytes().to_vec());
-            meta.involved_substates.push(proto::transaction::SubstateRef {
-                change: proto::transaction::SubstateChange::from(*ch) as i32,
-            });
-        }
-        meta.required_inputs = val.borrow().required_inputs_iter().map(Into::into).collect();
-        meta.max_outputs = val.borrow().max_outputs();
-        meta
-    }
-}
-
 // -------------------------------- SubstateRequirement -------------------------------- //
 impl TryFrom<proto::transaction::SubstateRequirement> for SubstateRequirement {
     type Error = anyhow::Error;
@@ -336,30 +317,6 @@ impl From<&SubstateRequirement> for proto::transaction::SubstateRequirement {
         Self {
             address: val.address().to_bytes(),
             version: val.version().map(|v| OptionalVersion { version: v }),
-        }
-    }
-}
-
-// -------------------------------- SubstateChange -------------------------------- //
-
-impl TryFrom<proto::transaction::SubstateChange> for SubstateChange {
-    type Error = anyhow::Error;
-
-    fn try_from(val: proto::transaction::SubstateChange) -> Result<Self, Self::Error> {
-        match val {
-            proto::transaction::SubstateChange::Create => Ok(SubstateChange::Create),
-            proto::transaction::SubstateChange::Exists => Ok(SubstateChange::Exists),
-            proto::transaction::SubstateChange::Destroy => Ok(SubstateChange::Destroy),
-        }
-    }
-}
-
-impl From<SubstateChange> for proto::transaction::SubstateChange {
-    fn from(val: SubstateChange) -> Self {
-        match val {
-            SubstateChange::Create => proto::transaction::SubstateChange::Create,
-            SubstateChange::Exists => proto::transaction::SubstateChange::Exists,
-            SubstateChange::Destroy => proto::transaction::SubstateChange::Destroy,
         }
     }
 }

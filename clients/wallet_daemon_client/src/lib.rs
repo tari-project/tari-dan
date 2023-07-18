@@ -188,18 +188,6 @@ impl WalletDaemonClient {
     // pub async fn get_identity(&mut self) -> Result<GetIdentityResponse, WalletDaemonClientError> {
     //     self.send_request("identities.get", json!({})).await
     // }
-    //
-    // pub async fn get_active_templates(
-    //     &mut self,
-    //     request: GetTemplatesRequest,
-    // ) -> Result<GetTemplatesResponse, WalletDaemonClientError> { self.send_request("templates.list", request).await
-    // }
-    //
-    // pub async fn get_template(
-    //     &mut self,
-    //     request: GetTemplateRequest,
-    // ) -> Result<GetTemplateResponse, WalletDaemonClientError> { self.send_request("templates.get", request).await
-    // }
 
     pub async fn create_key(&mut self) -> Result<KeysCreateResponse, WalletDaemonClientError> {
         self.send_request("keys.create", &KeysCreateRequest {}).await

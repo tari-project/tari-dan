@@ -20,22 +20,22 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_core::message::DanMessage;
+use tari_dan_p2p::DanMessage;
 use tokio::sync::mpsc;
 
 const _LOG_TARGET: &str = "tari::validator_node::p2p::services::messaging::inbound";
 
-pub struct InboundMessaging<TAddr, TPayload> {
+pub struct InboundMessaging<TAddr> {
     our_node_addr: TAddr,
-    inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TPayload, TAddr>)>,
-    loopback_receiver: mpsc::Receiver<DanMessage<TPayload, TAddr>>,
+    inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TAddr>)>,
+    loopback_receiver: mpsc::Receiver<DanMessage<TAddr>>,
 }
 
-impl<TAddr: Clone, TPayload> InboundMessaging<TAddr, TPayload> {
+impl<TAddr: Clone> InboundMessaging<TAddr> {
     pub fn new(
         our_node_addr: TAddr,
-        inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TPayload, TAddr>)>,
-        loopback_receiver: mpsc::Receiver<DanMessage<TPayload, TAddr>>,
+        inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TAddr>)>,
+        loopback_receiver: mpsc::Receiver<DanMessage<TAddr>>,
     ) -> Self {
         Self {
             our_node_addr,
@@ -44,7 +44,7 @@ impl<TAddr: Clone, TPayload> InboundMessaging<TAddr, TPayload> {
         }
     }
 
-    pub async fn next_message(&mut self) -> Option<(TAddr, DanMessage<TPayload, TAddr>)> {
+    pub async fn next_message(&mut self) -> Option<(TAddr, DanMessage<TAddr>)> {
         tokio::select! {
            Some(msg) = self.loopback_receiver.recv() => Some((self.our_node_addr.clone(), msg)),
            Some(msg) = self.inbound_messages.recv() => Some(msg),

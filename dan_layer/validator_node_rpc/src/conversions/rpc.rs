@@ -3,87 +3,71 @@
 
 use std::convert::{TryFrom, TryInto};
 
-use tari_dan_storage::models::SubstateShardData;
-use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_storage::consensus_models::SubstateRecord;
+use tari_engine_types::substate::{SubstateAddress, SubstateValue};
 
 use crate::proto;
 
-impl TryFrom<proto::rpc::VnStateSyncResponse> for SubstateShardData {
+impl TryFrom<proto::rpc::VnStateSyncResponse> for SubstateRecord {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::rpc::VnStateSyncResponse) -> Result<Self, Self::Error> {
-        Ok(Self::new(
-            value.shard_id.try_into()?,
-            SubstateAddress::from_bytes(&value.address)?,
-            value.version,
-            Substate::from_bytes(&value.substate)?,
-            value.created_height.try_into()?,
-            if value.destroyed_height == 0 {
-                None
-            } else {
-                Some(value.destroyed_height.try_into()?)
-            },
-            value.created_node_hash.try_into()?,
-            if value.destroyed_node_hash.is_empty() {
-                None
-            } else {
-                Some(value.destroyed_node_hash.try_into()?)
-            },
-            value.created_payload_id.try_into()?,
-            if value.destroyed_payload_id.is_empty() {
-                None
-            } else {
-                Some(value.destroyed_payload_id.try_into()?)
-            },
-            Some(
-                value
-                    .created_justify
-                    .map(|v| v.try_into())
-                    .transpose()?
-                    .ok_or_else(|| anyhow::anyhow!("VnStateSyncResponse created_justify is required"))?,
-            ),
-            value.destroyed_justify.map(|v| v.try_into()).transpose()?,
-            value.created_fee_accrued,
-            value.destroyed_fee_accrued,
-        ))
+        Ok(Self {
+            address: SubstateAddress::from_bytes(&value.address)?,
+            version: value.version,
+            substate_value: SubstateValue::from_bytes(&value.substate)?,
+            state_hash: Default::default(),
+
+            created_at_epoch: Epoch(value.created_epoch),
+            created_by_transaction: value.created_transaction.try_into()?,
+            created_justify: value.created_justify.try_into()?,
+            created_block: value.created_block.try_into()?,
+            created_height: NodeHeight(value.created_height),
+
+            destroyed_by_transaction: Some(value.destroyed_transaction)
+                .filter(|v| !v.is_empty())
+                .map(TryInto::try_into)
+                .transpose()?,
+            destroyed_justify: Some(value.destroyed_justify)
+                .filter(|v| !v.is_empty())
+                .map(TryInto::try_into)
+                .transpose()?,
+            destroyed_by_block: Some(value.destroyed_block)
+                .filter(|v| !v.is_empty())
+                .map(TryInto::try_into)
+                .transpose()?,
+            destroyed_at_epoch: value.destroyed_epoch.map(Into::into),
+        })
     }
 }
 
-impl TryFrom<SubstateShardData> for proto::rpc::VnStateSyncResponse {
-    type Error = anyhow::Error;
+impl From<SubstateRecord> for proto::rpc::VnStateSyncResponse {
+    fn from(value: SubstateRecord) -> Self {
+        Self {
+            address: value.address.to_bytes(),
+            version: value.version,
+            substate: value.substate_value.to_bytes(),
 
-    fn try_from(value: SubstateShardData) -> Result<Self, Self::Error> {
-        Ok(Self {
-            shard_id: value.shard_id().as_bytes().to_vec(),
-            version: value.version(),
-            address: value.substate_address().to_bytes(),
-            substate: value.substate().to_bytes(),
-            created_height: value.created_height().as_u64(),
-            destroyed_height: value.destroyed_height().map(|v| v.as_u64()).unwrap_or(0),
-            created_node_hash: value.created_node_hash().as_bytes().to_vec(),
-            destroyed_node_hash: value
-                .destroyed_node_hash()
-                .map(|v| v.as_bytes().to_vec())
+            created_transaction: value.created_by_transaction.as_bytes().to_vec(),
+            created_justify: value.created_justify.as_bytes().to_vec(),
+            created_block: value.created_block.as_bytes().to_vec(),
+            created_height: value.created_height.as_u64(),
+            created_epoch: value.created_at_epoch.as_u64(),
+
+            destroyed_transaction: value
+                .destroyed_by_transaction
+                .map(|s| s.as_bytes().to_vec())
                 .unwrap_or_default(),
-            created_payload_id: value.created_payload_id().as_bytes().to_vec(),
-            destroyed_payload_id: value
-                .destroyed_payload_id()
-                .map(|v| v.as_bytes().to_vec())
-                .unwrap_or_default(),
-            created_justify: Some(
-                value
-                    .created_justify()
-                    .ok_or_else(|| anyhow::anyhow!("VnStateSyncResponse created_justify is required"))?
-                    .clone()
-                    .try_into()?,
-            ),
             destroyed_justify: value
-                .destroyed_justify()
-                .as_ref()
-                .map(|v| v.clone().try_into())
-                .transpose()?,
-            created_fee_accrued: value.created_fee_accrued(),
-            destroyed_fee_accrued: value.destroyed_fee_accrued(),
-        })
+                .destroyed_justify
+                .map(|id| id.as_bytes().to_vec())
+                .unwrap_or_default(),
+            destroyed_block: value
+                .destroyed_by_block
+                .map(|s| s.as_bytes().to_vec())
+                .unwrap_or_default(),
+            destroyed_epoch: value.destroyed_at_epoch.map(Into::into),
+        }
     }
 }

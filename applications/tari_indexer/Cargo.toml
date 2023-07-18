@@ -13,7 +13,6 @@ tari_common = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
 tari_comms = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4", default-features = false, features = ["transactions"] }
 tari_crypto = { version = "0.17" }
 tari_p2p = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
@@ -23,19 +22,19 @@ tari_bor = { path = "../../dan_layer/tari_bor" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_base_node_client = { path = "../../clients/base_node_client" }
-tari_dan_core = { path = "../../dan_layer/core" }
 tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
+tari_state_store_sqlite = { path = "../../dan_layer/state_store_sqlite" }
 tari_epoch_manager = { path = "../../dan_layer/epoch_manager" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
-tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
+tari_dan_p2p = { path = "../../dan_layer/p2p" }
 
 anyhow = "1.0.53"
 async-trait = "0.1"
@@ -43,7 +42,6 @@ axum = "0.6.0"
 async-graphql = "5.0.7"
 async-graphql-axum = "5.0.7"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
-chrono = "0.4.22"
 ciborium = { version = "0.2.1", default-features = false }
 clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"
@@ -51,11 +49,9 @@ diesel = { version = "2", default-features = false, features = ["sqlite", "chron
 diesel_migrations = "2"
 futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
-lazy_static = "1.4.0"
 lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
-mini-moka = "0.10.0"
 prost = "0.9"
 rand = "0.8"
 reqwest = "0.11.11"
@@ -63,7 +59,6 @@ serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0.64"
 thiserror = "^1.0.20"
 tokio = { version = "1.10", features = ["macros", "time", "sync", "rt-multi-thread"] }
-tokio-stream = { version = "0.1.7", features = ["sync"] }
 tonic = "0.6.2"
 tower = "0.4"
 tower-layer = "0.3"

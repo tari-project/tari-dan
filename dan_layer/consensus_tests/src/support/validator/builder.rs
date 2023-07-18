@@ -2,8 +2,9 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::hotstuff::HotstuffWorker;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_storage::consensus_models::TransactionPool;
+use tari_epoch_manager::EpochManagerEvent;
 use tari_shutdown::Shutdown;
 use tari_state_store_sqlite::SqliteStateStore;
 use tokio::sync::{broadcast, mpsc};
@@ -76,12 +77,14 @@ impl ValidatorBuilder {
         let transaction_pool = TransactionPool::new();
         let noop_state_manager = NoopStateManager::new();
         let (tx_events, _) = broadcast::channel(100);
+        let (tx_epoch_events, rx_epoch_events) = broadcast::channel(1);
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address,
             rx_new_transactions,
             rx_hs_message,
             store.clone(),
+            rx_epoch_events,
             self.epoch_manager.clone_for(self.address, self.shard),
             self.leader_strategy.clone(),
             signing_service,
@@ -104,12 +107,16 @@ impl ValidatorBuilder {
             rx_leader,
         };
 
+        // Fire off initial epoch change event
+        tx_epoch_events.send(EpochManagerEvent::EpochChanged(Epoch(0))).unwrap();
+
         let validator = Validator {
             address: self.address,
             shard: self.shard,
             state_store: store,
             epoch_manager: self.epoch_manager.clone_for(self.address, self.shard),
             shutdown,
+            tx_epoch_events,
             leader_strategy: self.leader_strategy.clone(),
             events: tx_events.subscribe(),
             handle,
