@@ -19,12 +19,14 @@ use tokio::{
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
+    NoopStateManager,
     SelectedIndexLeaderStrategy,
     ValidatorBuilder,
 };
 
 pub struct ValidatorChannels {
     pub address: TestAddress,
+    pub bucket: u32,
 
     pub tx_new_transactions: mpsc::Sender<ExecutedTransaction>,
     pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage)>,
@@ -42,6 +44,7 @@ pub struct Validator {
     pub shutdown: Shutdown,
     pub events: broadcast::Receiver<HotstuffEvent>,
     pub tx_epoch_events: broadcast::Sender<EpochManagerEvent>,
+    pub state_manager: NoopStateManager,
 
     pub handle: JoinHandle<()>,
 }
@@ -54,6 +57,10 @@ impl Validator {
     #[allow(dead_code)]
     pub fn leader_strategy(&self) -> &SelectedIndexLeaderStrategy {
         &self.leader_strategy
+    }
+
+    pub fn state_manager(&self) -> &NoopStateManager {
+        &self.state_manager
     }
 
     pub fn uncommitted_transaction_count(&self) -> usize {

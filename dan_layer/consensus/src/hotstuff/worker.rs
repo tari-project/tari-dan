@@ -6,7 +6,7 @@ use std::ops::DerefMut;
 use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch};
 use tari_dan_storage::{
-    consensus_models::{Block, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
+    consensus_models::{Block, Decision, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -199,10 +199,14 @@ where
         self.state_store.with_write_tx(|tx| {
             executed.insert(tx)?;
 
+            let decision = if executed.result().finalize.is_accept() {
+                Decision::Commit
+            } else {
+                Decision::Abort
+            };
             self.transaction_pool.insert(tx, TransactionAtom {
                 id: *executed.transaction().id(),
-                involved_shards: executed.transaction().involved_shards_iter().copied().collect(),
-                decision: executed.as_decision(),
+                decision,
                 evidence: executed.to_initial_evidence(),
                 fee: executed
                     .result()
@@ -243,7 +247,7 @@ where
         // propose a block to get to a 3-chain.
         if !self
             .state_store
-            .with_read_tx(|tx| self.transaction_pool.has_transactions(tx))?
+            .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
         {
             debug!(target: LOG_TARGET, "[on_beat] No transactions to propose");
             return Ok(());
@@ -313,10 +317,10 @@ where
             debug!(target: LOG_TARGET, "Creating genesis block");
             genesis.justify().save(&mut tx)?;
             genesis.insert(&mut tx)?;
-            genesis.set_as_locked(&mut tx)?;
-            genesis.set_as_leaf(&mut tx)?;
-            genesis.set_as_last_executed(&mut tx)?;
-            genesis.justify().set_as_high_qc(&mut tx)?;
+            genesis.as_locked().set(&mut tx)?;
+            genesis.as_leaf_block().set(&mut tx)?;
+            genesis.as_last_executed().set(&mut tx)?;
+            genesis.justify().as_high_qc().set(&mut tx)?;
         }
 
         tx.commit()?;

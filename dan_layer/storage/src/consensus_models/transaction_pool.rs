@@ -15,19 +15,54 @@ use tari_dan_common_types::{
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{Command, QcId, TransactionAtom},
+    consensus_models::{Command, Decision, QcId, TransactionAtom},
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransactionPoolStage {
+    /// Transaction has just come in and has never been proposed
     New,
+    /// Transaction is prepared in response to a Prepare command, but we do not yet have confirmation that the rest of
+    /// the local committee has prepared.
+    Prepared,
+    /// We have proof that all local committees have prepared the transaction
     LocalPrepared,
-    SomePrepared,
+    /// All foreign shards have prepared and have an identical decision
     AllPrepared,
+    /// All foreign shards have prepared but one or more has decided to ABORT
+    SomePrepared,
+    /// The transaction been finalized but not yet executed, this allows proceeding blocks to form a 3-chain.
+    Complete,
+}
+
+impl TransactionPoolStage {
+    pub fn is_new(&self) -> bool {
+        matches!(self, Self::New)
+    }
+
+    pub fn is_prepared(&self) -> bool {
+        matches!(self, Self::Prepared)
+    }
+
+    pub fn is_local_prepared(&self) -> bool {
+        matches!(self, Self::LocalPrepared)
+    }
+
+    pub fn is_some_prepared(&self) -> bool {
+        matches!(self, Self::SomePrepared)
+    }
+
+    pub fn is_all_prepared(&self) -> bool {
+        matches!(self, Self::AllPrepared)
+    }
+
+    pub fn is_complete(&self) -> bool {
+        matches!(self, Self::Complete)
+    }
 }
 
 impl Display for TransactionPoolStage {
@@ -42,9 +77,11 @@ impl FromStr for TransactionPoolStage {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "New" => Ok(TransactionPoolStage::New),
+            "Prepared" => Ok(TransactionPoolStage::Prepared),
             "LocalPrepared" => Ok(TransactionPoolStage::LocalPrepared),
             "SomePrepared" => Ok(TransactionPoolStage::SomePrepared),
             "AllPrepared" => Ok(TransactionPoolStage::AllPrepared),
+            "Complete" => Ok(TransactionPoolStage::Complete),
             _ => Err(()),
         }
     }
@@ -96,20 +133,29 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         let ready = tx.transaction_pool_get_many_ready(max)?;
         let commands = ready
             .into_iter()
-            .map(|t| match t.stage {
-                TransactionPoolStage::New => Command::Prepare(t.transaction),
-                TransactionPoolStage::LocalPrepared => Command::LocalPrepared(t.transaction),
-                TransactionPoolStage::AllPrepared => Command::Accept(t.transaction),
-                // TODO: We move to abort - add some test cases and figure out the best way to handle this
-                TransactionPoolStage::SomePrepared => Command::Accept(t.transaction),
+            .filter_map(|t| match t.stage {
+                TransactionPoolStage::New => Some(Command::Prepare(t.transaction)),
+                TransactionPoolStage::Prepared => Some(Command::LocalPrepared(t.get_transaction_atom())),
+                TransactionPoolStage::LocalPrepared => Some(Command::LocalPrepared(t.get_transaction_atom())),
+                TransactionPoolStage::AllPrepared => Some(Command::Accept(t.get_transaction_atom())),
+                TransactionPoolStage::SomePrepared => Some(Command::Accept(t.get_transaction_atom())),
+                // Technically unreachable because is_ready should be false
+                TransactionPoolStage::Complete => None,
             })
             .collect();
 
         Ok(commands)
     }
 
-    pub fn has_transactions(&self, tx: &mut TStateStore::ReadTransaction<'_>) -> Result<bool, TransactionPoolError> {
-        let count = self.count(tx)?;
+    pub fn has_uncommitted_transactions(
+        &self,
+        tx: &mut TStateStore::ReadTransaction<'_>,
+    ) -> Result<bool, TransactionPoolError> {
+        let count = tx.transaction_pool_count(None, Some(true))?;
+        if count > 0 {
+            return Ok(true);
+        }
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::Complete), None)?;
         Ok(count > 0)
     }
 
@@ -123,29 +169,57 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 pub struct TransactionPoolRecord {
     pub transaction: TransactionAtom,
     pub stage: TransactionPoolStage,
+    pub changed_decision: Option<Decision>,
     pub is_ready: bool,
 }
 
 impl TransactionPoolRecord {
+    pub fn final_decision(&self) -> Decision {
+        self.changed_decision().unwrap_or(self.original_decision())
+    }
+
+    pub fn original_decision(&self) -> Decision {
+        self.transaction.decision
+    }
+
+    pub fn changed_decision(&self) -> Option<Decision> {
+        self.changed_decision
+    }
+
+    pub fn transaction_id(&self) -> &TransactionId {
+        &self.transaction.id
+    }
+
+    pub fn stage(&self) -> TransactionPoolStage {
+        self.stage
+    }
+
+    pub fn get_transaction_atom(&self) -> TransactionAtom {
+        TransactionAtom {
+            decision: self.final_decision(),
+            ..self.transaction.clone()
+        }
+    }
+}
+
+impl TransactionPoolRecord {
     pub fn transition<TTx: StateStoreWriteTransaction>(
-        &self,
+        &mut self,
         tx: &mut TTx,
         next_stage: TransactionPoolStage,
         is_ready: bool,
     ) -> Result<(), TransactionPoolError> {
+        // Check that only permitted stage transactions are performed
         match ((self.stage, next_stage), is_ready) {
-            ((TransactionPoolStage::New, TransactionPoolStage::LocalPrepared), false) => {
-                tx.transaction_pool_update(&self.transaction.id, None, Some(next_stage), Some(false))?;
-            },
-            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) => {
-                tx.transaction_pool_update(&self.transaction.id, None, Some(next_stage), Some(true))?;
-            },
-            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), true) => {
-                tx.transaction_pool_update(&self.transaction.id, None, Some(next_stage), Some(true))?;
-            },
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), true) => {
-                tx.transaction_pool_update(&self.transaction.id, None, Some(next_stage), Some(true))?;
-            },
+            ((TransactionPoolStage::New, TransactionPoolStage::Prepared), true) |
+            ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), false) |
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), _) |
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), _) |
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), _) |
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), _) |
+            ((TransactionPoolStage::SomePrepared, TransactionPoolStage::SomePrepared), _) |
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::Complete), false) |
+            ((TransactionPoolStage::SomePrepared, TransactionPoolStage::Complete), false) => {},
             _ => {
                 return Err(TransactionPoolError::InvalidTransactionTransition {
                     from: self.stage,
@@ -155,6 +229,23 @@ impl TransactionPoolRecord {
             },
         }
 
+        tx.transaction_pool_update(&self.transaction.id, None, Some(next_stage), None, Some(is_ready))?;
+        self.stage = next_stage;
+
+        Ok(())
+    }
+
+    pub fn update_decision<TTx: StateStoreWriteTransaction>(
+        &mut self,
+        tx: &mut TTx,
+        decision: Decision,
+    ) -> Result<(), TransactionPoolError> {
+        if self.original_decision() == decision {
+            return Ok(());
+        }
+
+        self.changed_decision = Some(decision);
+        tx.transaction_pool_update(&self.transaction.id, None, None, Some(decision), None)?;
         Ok(())
     }
 
@@ -170,7 +261,7 @@ impl TransactionPoolRecord {
                 qcs_mut.push(qc_id);
             }
         }
-        tx.transaction_pool_update(&self.transaction.id, Some(evidence), None, None)?;
+        tx.transaction_pool_update(&self.transaction.id, Some(evidence), None, None, None)?;
 
         Ok(())
     }

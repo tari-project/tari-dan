@@ -71,10 +71,11 @@ where TConsensusSpec: ConsensusSpec
         }
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
-
+        let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
+        let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
         // the non-Send tx could be used after the await point, which is not possible.
-        let involved_foreign_shards;
+        let non_local_buckets;
         let next_block;
         {
             let mut tx = self.store.create_write_tx()?;
@@ -96,9 +97,11 @@ where TConsensusSpec: ConsensusSpec
                 .filter_map(|cmd| cmd.local_prepared())
                 .map(|t| &t.id);
             let prepared_txs = ExecutedTransaction::get_many(tx.deref_mut(), prepared_iter)?;
-            involved_foreign_shards = prepared_txs
+            non_local_buckets = prepared_txs
                 .iter()
                 .flat_map(|tx| tx.transaction().involved_shards_iter().copied())
+                .map(|shard| shard.to_committee_bucket(num_committees))
+                .filter(|bucket| *bucket != local_bucket)
                 .collect::<HashSet<_>>();
 
             tx.commit()?;
@@ -111,20 +114,14 @@ where TConsensusSpec: ConsensusSpec
             next_block.height(),
             local_committee.len(),
             next_block.commands().len(),
-            involved_foreign_shards.len(),
+            non_local_buckets.len(),
             next_block.justify().block_id(),
             next_block.justify().block_height(),
             next_block.parent()
         );
 
-        self.broadcast_proposal(
-            epoch,
-            next_block,
-            involved_foreign_shards,
-            local_committee,
-            validator.shard_key,
-        )
-        .await?;
+        self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
+            .await?;
 
         Ok(())
     }
@@ -133,23 +130,26 @@ where TConsensusSpec: ConsensusSpec
         &self,
         epoch: Epoch,
         next_block: Block,
-        involved_shards: HashSet<ShardId>,
+        non_local_buckets: HashSet<u32>,
         local_committee: Committee<TConsensusSpec::Addr>,
-        our_shard_id: ShardId,
     ) -> Result<(), HotStuffError> {
         // Find non-local shard committees to include in the broadcast
-        let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
-        let local_bucket = our_shard_id.to_committee_bucket(num_committees);
-        let non_local_buckets = involved_shards
-            .into_iter()
-            .map(|shard| shard.to_committee_bucket(num_committees))
-            .filter(|bucket| *bucket != local_bucket)
-            .collect::<HashSet<_>>();
+        debug!(
+            target: LOG_TARGET,
+            "non_local_buckets : [{}]",
+            non_local_buckets.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","));
 
         let non_local_committees = self
             .epoch_manager
             .get_committees_by_buckets(epoch, non_local_buckets)
             .await?;
+
+        info!(
+            target: LOG_TARGET,
+            "🔥 Broadcasting proposal {} to committees ({} local, {} foreign)",
+            next_block.id(),
+            local_committee.len(),
+            non_local_committees.len());
 
         // Broadcast to local and foreign committees
         // TODO: only broadcast to f + 1 foreign committee members. They can gossip the proposal around from there.
@@ -181,6 +181,12 @@ where TConsensusSpec: ConsensusSpec
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
         let commands = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
+
+        debug!(
+            target: LOG_TARGET,
+            "command(s) for next block: [{}]",
+            commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
+        );
 
         let next_block = Block::new(
             *parent_block.id(),

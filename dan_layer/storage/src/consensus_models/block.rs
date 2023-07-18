@@ -247,22 +247,6 @@ impl Block {
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 
-    pub fn set_as_locked<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        self.as_locked().set(tx)
-    }
-
-    pub fn set_as_last_executed<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        self.as_last_executed().set(tx)
-    }
-
-    pub fn set_as_last_voted<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        self.as_last_voted().set(tx)
-    }
-
-    pub fn set_as_leaf<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        self.as_leaf_block().set(tx)
-    }
-
     pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.parent)
     }

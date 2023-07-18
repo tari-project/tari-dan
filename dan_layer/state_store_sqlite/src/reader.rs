@@ -181,6 +181,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         use crate::schema::transactions;
 
         let tx_ids: Vec<String> = tx_ids.into_iter().map(serialize_hex).collect();
+        let num_requested = tx_ids.len();
 
         let transactions = transactions::table
             .filter(transactions::transaction_id.eq_any(tx_ids))
@@ -189,6 +190,14 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
                 operation: "transactions_get_many",
                 source: e,
             })?;
+
+        if transactions.len() != num_requested {
+            return Err(SqliteStorageError::NotAllTransactionsFound {
+                operation: "transaction_get_many",
+                details: format!("{} found, {} requested", transactions.len(), num_requested),
+            }
+            .into());
+        }
 
         transactions
             .into_iter()

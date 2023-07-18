@@ -1,7 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::{
+    cmp::Ordering,
+    collections::BTreeMap,
+    fmt::{Display, Formatter},
+};
 
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::ShardId;
@@ -36,7 +40,28 @@ impl Evidence {
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&ShardId, &mut Vec<QcId>)> {
         self.evidence.iter_mut()
     }
+
+    pub fn shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+        self.evidence.keys()
+    }
 }
+
+// impl Evidence {
+//     pub fn get_all_qcs<TTx: StateStoreReadTransaction>(
+//         &self,
+//         tx: &mut TTx,
+//     ) -> Result<Vec<QuorumCertificate>, StorageError> {
+//         let mut qcs = Vec::with_capacity(self.evidence.len());
+//         // TODO(perf): O(n*m) queries
+//         for qc_ids in self.evidence.values() {
+//             for qc_id in qc_ids {
+//                 let qc = QuorumCertificate::get(tx, qc_id)?;
+//                 qcs.push(qc);
+//             }
+//         }
+//         Ok(qcs)
+//     }
+// }
 
 impl FromIterator<(ShardId, Vec<QcId>)> for Evidence {
     fn from_iter<T: IntoIterator<Item = (ShardId, Vec<QcId>)>>(iter: T) -> Self {
@@ -49,7 +74,6 @@ impl FromIterator<(ShardId, Vec<QcId>)> for Evidence {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TransactionAtom {
     pub id: TransactionId,
-    pub involved_shards: Vec<ShardId>,
     pub decision: Decision,
     pub evidence: Evidence,
     pub fee: u64,
@@ -81,6 +105,14 @@ impl Command {
         }
     }
 
+    pub fn decision(&self) -> Decision {
+        match self {
+            Command::Prepare(tx) => tx.decision,
+            Command::LocalPrepared(tx) => tx.decision,
+            Command::Accept(tx) => tx.decision,
+        }
+    }
+
     pub fn local_prepared(&self) -> Option<&TransactionAtom> {
         match self {
             Command::LocalPrepared(tx) => Some(tx),
@@ -94,6 +126,14 @@ impl Command {
             _ => None,
         }
     }
+
+    pub fn involved_shards(&self) -> impl Iterator<Item = &ShardId> + '_ {
+        match self {
+            Command::Prepare(tx) => tx.evidence.shards_iter(),
+            Command::LocalPrepared(tx) => tx.evidence.shards_iter(),
+            Command::Accept(tx) => tx.evidence.shards_iter(),
+        }
+    }
 }
 
 impl PartialOrd for Command {
@@ -105,5 +145,15 @@ impl PartialOrd for Command {
 impl Ord for Command {
     fn cmp(&self, other: &Self) -> Ordering {
         self.transaction_id().cmp(other.transaction_id())
+    }
+}
+
+impl Display for Command {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Command::Prepare(tx) => write!(f, "Prepare({}, {})", tx.id, tx.decision),
+            Command::LocalPrepared(tx) => write!(f, "LocalPrepared({}, {})", tx.id, tx.decision),
+            Command::Accept(tx) => write!(f, "Accept({}, {})", tx.id, tx.decision),
+        }
     }
 }

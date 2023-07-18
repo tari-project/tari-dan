@@ -35,6 +35,7 @@ pub struct QuorumCertificate {
     epoch: Epoch,
     signatures: Vec<ValidatorSignature>,
     merged_proof: MergedValidatorNodeMerkleProof,
+    #[serde(with = "serde_with::hex::vec")]
     leaf_hashes: Vec<FixedHash>,
     decision: QuorumDecision,
 }
@@ -173,14 +174,6 @@ impl QuorumCertificate {
         }
         self.insert(tx)?;
         Ok(false)
-    }
-
-    pub fn set_as_high_qc<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        self.as_high_qc().set(tx)
-    }
-
-    pub fn set_block_as_leaf<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        self.as_leaf_block().set(tx)
     }
 }
 
