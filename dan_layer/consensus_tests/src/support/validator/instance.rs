@@ -8,6 +8,7 @@ use tari_dan_storage::{
     StateStore,
     StateStoreReadTransaction,
 };
+use tari_epoch_manager::EpochManagerEvent;
 use tari_shutdown::Shutdown;
 use tari_state_store_sqlite::SqliteStateStore;
 use tokio::{
@@ -40,6 +41,7 @@ pub struct Validator {
     pub leader_strategy: SelectedIndexLeaderStrategy,
     pub shutdown: Shutdown,
     pub events: broadcast::Receiver<HotstuffEvent>,
+    pub tx_epoch_events: broadcast::Sender<EpochManagerEvent>,
 
     pub handle: JoinHandle<()>,
 }
@@ -62,12 +64,12 @@ impl Validator {
 
     #[allow(dead_code)]
     pub async fn on_block_committed(&mut self) -> BlockId {
-        #[allow(clippy::never_loop)]
         loop {
             let event = self.events.recv().await.unwrap();
+            #[allow(clippy::single_match)]
             match event {
                 HotstuffEvent::BlockCommitted { block_id } => break block_id,
-                // _ => {}
+                _ => {},
             }
         }
     }

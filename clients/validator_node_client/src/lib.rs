@@ -45,8 +45,8 @@ use crate::types::{
     GetTemplateResponse,
     GetTemplatesRequest,
     GetTemplatesResponse,
-    GetTransactionQcsRequest,
-    GetTransactionQcsResponse,
+    GetTransactionRequest,
+    GetTransactionResponse,
     GetTransactionResultRequest,
     GetTransactionResultResponse,
     SubmitTransactionRequest,
@@ -136,25 +136,18 @@ impl ValidatorNodeClient {
         self.send_request("get_template", request).await
     }
 
-    // TODO: This call is broken because it returns a Vec<SQLTransaction>. Bring this in-line with other requests
-    // pub async fn get_transaction(
-    //     &mut self,
-    //     request: GetTransactionResponseRequest,
-    // ) -> Result<GetTransactionResponse, anyhow::Error> { self.send_request("get_transaction", request).await
-    // }
+    pub async fn get_transaction(
+        &mut self,
+        request: GetTransactionRequest,
+    ) -> Result<GetTransactionResponse, ValidatorNodeClientError> {
+        self.send_request("get_transaction", request).await
+    }
 
     pub async fn get_transaction_result(
         &mut self,
         request: GetTransactionResultRequest,
     ) -> Result<GetTransactionResultResponse, ValidatorNodeClientError> {
         self.send_request("get_transaction_result", request).await
-    }
-
-    pub async fn get_transaction_quorum_certificates(
-        &mut self,
-        request: GetTransactionQcsRequest,
-    ) -> Result<GetTransactionQcsResponse, ValidatorNodeClientError> {
-        self.send_request("get_transaction_qcs", request).await
     }
 
     pub async fn get_recent_transactions(

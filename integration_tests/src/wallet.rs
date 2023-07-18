@@ -35,7 +35,7 @@ use tari_app_grpc::{
     tari_rpc::{wallet_client::WalletClient, ConnectivityStatus, Empty, GetIdentityRequest, SetBaseNodeRequest},
 };
 use tari_app_utilities::common_cli_args::CommonCliArgs;
-use tari_common::configuration::CommonConfig;
+use tari_common::{configuration::CommonConfig, exit_codes::ExitError};
 use tari_common_types::grpc_authentication::GrpcAuthentication;
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
@@ -51,7 +51,7 @@ use tonic::{
 
 type WalletGrpcClient = WalletClient<InterceptedService<Channel, ClientAuthenticationInterceptor>>;
 use crate::{
-    helpers::{get_os_assigned_ports, wait_listener_on_local_port},
+    helpers::{get_os_assigned_ports, wait_listener_on_local_port_os_thread},
     logging::get_base_dir_for_scenario,
     TariWorld,
 };
@@ -61,7 +61,7 @@ pub struct WalletProcess {
     pub name: String,
     pub port: u16,
     pub grpc_port: u16,
-    pub handle: JoinHandle<()>,
+    pub handle: JoinHandle<Result<(), ExitError>>,
     pub temp_dir_path: PathBuf,
     pub shutdown: Shutdown,
 }
@@ -164,9 +164,12 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
             let mut builder = runtime::Builder::new_multi_thread();
             let rt = builder.enable_all().build().unwrap();
 
-            run_wallet(rt, &mut wallet_config, &mut shutdown);
+            run_wallet(rt, &mut wallet_config, &mut shutdown)
         }
     });
+
+    // Wait for node to start up
+    let handle = wait_listener_on_local_port_os_thread(handle, grpc_port).await;
 
     // make the new wallet able to be referenced by other processes
     let wallet_process = WalletProcess {
@@ -182,8 +185,6 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
     //     "Wallet {} GRPC listening on port {}",
     //     wallet_name, wallet_process.grpc_port
     // );
-    // Wait for node to start up
-    wait_listener_on_local_port(grpc_port).await;
 
     let mut wallet_client = wallet_process.create_client().await;
 
@@ -214,7 +215,7 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
     world.wallets.insert(wallet_name.clone(), wallet_process);
 }
 
-pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig, shutdown: &mut Shutdown) {
+pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig, shutdown: &mut Shutdown) -> Result<(), ExitError> {
     let data_dir = config.wallet.data_dir.clone();
     let data_dir_str = data_dir.clone().into_os_string().into_string().unwrap();
 
@@ -248,7 +249,5 @@ pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig, shutdown: &m
         profile_with_tokio_console: false,
     };
 
-    if let Err(err) = run_wallet_with_cli(shutdown, runtime, config, cli) {
-        eprintln!("Wallet error: {}", err);
-    }
+    run_wallet_with_cli(shutdown, runtime, config, cli)
 }

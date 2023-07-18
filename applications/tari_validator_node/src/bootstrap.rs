@@ -37,50 +37,48 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_app_utilities::{
     base_layer_scanner,
-    payload_processor::TariDanPayloadProcessor,
-    template_manager::{self, implementation::TemplateManager, interface::TemplateManagerHandle},
-};
-use tari_dan_common_types::{NodeAddressable, NodeHeight, PayloadId, ShardId, TreeNodeHash};
-use tari_dan_core::{
     consensus_constants::ConsensusConstants,
-    workers::events::{EventSubscription, HotStuffEvent},
+    template_manager,
+    template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
+    transaction_executor::TariDanTransactionProcessor,
 };
+use tari_dan_common_types::{Epoch, NodeHeight, ShardId};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::{
+    consensus_models::{Block, SubstateRecord},
     global::GlobalDb,
-    models::{Payload, SubstateShardData},
-    ShardStore,
-    ShardStoreReadTransaction,
-    ShardStoreWriteTransaction,
+    StateStore,
+    StateStoreReadTransaction,
+    StateStoreWriteTransaction,
     StorageError,
 };
-use tari_dan_storage_sqlite::{global::SqliteGlobalDbAdapter, sqlite_shard_store_factory::SqliteShardStore};
-use tari_engine_types::{
-    resource::Resource,
-    substate::{Substate, SubstateAddress},
-};
+use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
+use tari_engine_types::{resource::Resource, substate::SubstateAddress};
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
+use tari_indexer_lib::substate_scanner::SubstateScanner;
 use tari_shutdown::ShutdownSignal;
+use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::{
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     models::Metadata,
     prelude::ResourceType,
 };
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
-use tokio::task::JoinHandle;
+use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
     comms,
+    consensus,
     dry_run_transaction_processor::DryRunTransactionProcessor,
+    event_subscription::EventSubscription,
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
             comms_peer_provider::CommsPeerProvider,
-            hotstuff,
             mempool,
             mempool::{FeeTransactionValidator, MempoolHandle, TemplateExistsValidator, Validator},
             messaging,
@@ -90,6 +88,7 @@ use crate::{
         },
     },
     registration,
+    substate_resolver::TariSubstateResolver,
     ApplicationConfig,
 };
 
@@ -130,10 +129,8 @@ pub async fn spawn_services(
 
     let DanMessageReceivers {
         rx_consensus_message,
-        rx_vote_message,
         rx_new_transaction_message,
         rx_network_announce,
-        rx_recovery_message,
     } = message_receivers;
 
     // Networking
@@ -148,8 +145,9 @@ pub async fn spawn_services(
     handles.push(join_handle);
 
     // Connect to shard db
-    let shard_store = SqliteShardStore::try_create(config.validator_node.state_db_path())?;
-    shard_store.with_write_tx(|tx| bootstrap_state(tx))?;
+    let state_store =
+        SqliteStateStore::connect(&format!("sqlite://{}", config.validator_node.state_db_path().display()))?;
+    state_store.with_write_tx(|tx| bootstrap_state(tx))?;
 
     // Epoch manager
     let (epoch_manager, join_handle) = tari_epoch_manager::base_layer::spawn_service(
@@ -178,30 +176,28 @@ pub async fn spawn_services(
     } else {
         FeeTable::new(1, 1)
     };
-    let payload_processor = TariDanPayloadProcessor::new(template_manager.clone(), fee_table);
+    let payload_processor = TariDanTransactionProcessor::new(template_manager.clone(), fee_table);
 
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
-    // Dry run transaction processor
-    let dry_run_transaction_processor = DryRunTransactionProcessor::new(
-        epoch_manager.clone(),
-        payload_processor.clone(),
-        shard_store.clone(),
-        validator_node_client_factory.clone(),
-        node_identity.clone(),
-    );
 
     // Mempool
     let mut validator = TemplateExistsValidator::new(template_manager.clone()).boxed();
     if !config.validator_node.no_fees {
         validator = validator.and_then(FeeTransactionValidator).boxed();
     }
+    let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
+    let scanner = SubstateScanner::new(epoch_manager.clone(), validator_node_client_factory.clone());
+    let substate_resolver = TariSubstateResolver::new(state_store.clone(), scanner);
     let (mempool, join_handle) = mempool::spawn(
         rx_new_transaction_message,
         outbound_messaging.clone(),
+        tx_executed_transaction,
         epoch_manager.clone(),
         node_identity.clone(),
+        payload_processor.clone(),
+        substate_resolver.clone(),
         validator,
-        dry_run_transaction_processor.clone(),
+        state_store.clone(),
     );
     handles.push(join_handle);
 
@@ -213,29 +209,26 @@ pub async fn spawn_services(
         template_manager_service.clone(),
         shutdown.clone(),
         consensus_constants,
-        shard_store.clone(),
+        state_store.clone(),
         config.validator_node.scan_base_layer,
         config.validator_node.base_layer_scanning_interval,
     );
     handles.push(join_handle);
 
     // Consensus
-    let (hotstuff_events, waiter_join_handle, service_join_handle) = hotstuff::try_spawn(
+    let (consensus_handle, consensus_events) = consensus::spawn(
+        state_store.clone(),
         node_identity.clone(),
-        shard_store.clone(),
-        outbound_messaging,
         epoch_manager.clone(),
-        mempool.clone(),
-        payload_processor.clone(),
+        rx_executed_transaction,
         rx_consensus_message,
-        rx_recovery_message,
-        rx_vote_message,
+        outbound_messaging,
         shutdown.clone(),
-    );
-    handles.push(waiter_join_handle);
-    handles.push(service_join_handle);
+    )
+    .await;
+    handles.push(consensus_handle);
 
-    let comms = setup_p2p_rpc(config, comms, peer_provider, shard_store.clone(), mempool.clone());
+    let comms = setup_p2p_rpc(config, comms, peer_provider, state_store.clone(), mempool.clone());
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| {
@@ -257,15 +250,18 @@ pub async fn spawn_services(
         info!(target: LOG_TARGET, "♽️ Node auto registration is disabled");
     }
 
+    let dry_run_transaction_processor =
+        DryRunTransactionProcessor::new(epoch_manager.clone(), payload_processor, substate_resolver);
+
     Ok(Services {
         comms,
         networking,
         mempool,
         epoch_manager,
         template_manager: template_manager_service,
-        hotstuff_events,
+        hotstuff_events: consensus_events,
         global_db,
-        shard_store,
+        state_store,
         dry_run_transaction_processor,
         handles,
         validator_node_client_factory,
@@ -295,11 +291,11 @@ pub struct Services {
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
     pub template_manager: TemplateManagerHandle,
-    pub hotstuff_events: EventSubscription<HotStuffEvent<PublicKey>>,
+    pub hotstuff_events: EventSubscription<HotstuffEvent>,
     pub global_db: GlobalDb<SqliteGlobalDbAdapter>,
-    pub shard_store: SqliteShardStore,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
     pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    pub state_store: SqliteStateStore,
 
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
 }
@@ -320,7 +316,7 @@ fn setup_p2p_rpc(
     config: &ApplicationConfig,
     comms: UnspawnedCommsNode,
     peer_provider: CommsPeerProvider,
-    shard_store_store: SqliteShardStore,
+    shard_store_store: SqliteStateStore,
     mempool: MempoolHandle,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
@@ -336,67 +332,53 @@ fn setup_p2p_rpc(
 }
 
 // TODO: Figure out the best way to have the engine shard store mirror these bootstrapped states.
-fn bootstrap_state<T, TAddr, TPayload>(tx: &mut T) -> Result<(), StorageError>
+fn bootstrap_state<TTx>(tx: &mut TTx) -> Result<(), StorageError>
 where
-    T: ShardStoreWriteTransaction<TAddr, TPayload> + DerefMut,
-    T::Target: ShardStoreReadTransaction<TAddr, TPayload>,
-    TAddr: NodeAddressable,
-    TPayload: Payload,
+    TTx: StateStoreWriteTransaction + DerefMut,
+    TTx::Target: StateStoreReadTransaction,
 {
-    let genesis_payload = PayloadId::new([0u8; 32]);
-
+    let genesis_block = Block::genesis(Epoch(0));
     let address = SubstateAddress::Resource(*PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
-    if tx.get_substate_states(&[shard_id])?.is_empty() {
+    if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         // Create the resource for public identity
-        tx.insert_substates(SubstateShardData::new(
-            shard_id,
+        SubstateRecord {
             address,
-            0,
-            Substate::new(
-                0,
-                Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()),
-            ),
-            NodeHeight(0),
-            None,
-            TreeNodeHash::zero(),
-            None,
-            genesis_payload,
-            None,
-            None,
-            None,
-            0,
-            0,
-        ))?;
+            version: 0,
+            substate_value: Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()).into(),
+            state_hash: Default::default(),
+            created_by_transaction: Default::default(),
+            created_justify: *genesis_block.justify().id(),
+            created_block: *genesis_block.id(),
+            created_height: NodeHeight(0),
+            destroyed_by_transaction: None,
+            destroyed_justify: None,
+            destroyed_by_block: None,
+            created_at_epoch: Epoch(0),
+            destroyed_at_epoch: None,
+        }
+        .create(tx)?;
     }
 
     let address = SubstateAddress::Resource(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
-    if tx.get_substate_states(&[shard_id])?.is_empty() {
-        // Create the second layer tari resource
-        let metadata = Metadata::new();
-        // TODO: decide on symbol for L2 tari
-        // metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
-
-        tx.insert_substates(SubstateShardData::new(
-            shard_id,
+    if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
+        SubstateRecord {
             address,
-            0,
-            Substate::new(
-                0,
-                Resource::new(ResourceType::Confidential, "tXTR2".to_string(), metadata),
-            ),
-            NodeHeight(0),
-            None,
-            TreeNodeHash::zero(),
-            None,
-            genesis_payload,
-            None,
-            None,
-            None,
-            0,
-            0,
-        ))?;
+            version: 0,
+            substate_value: Resource::new(ResourceType::Confidential, "tXTR2".to_string(), Metadata::new()).into(),
+            state_hash: Default::default(),
+            created_by_transaction: Default::default(),
+            created_justify: *genesis_block.justify().id(),
+            created_block: *genesis_block.id(),
+            created_height: NodeHeight(0),
+            destroyed_by_transaction: None,
+            destroyed_justify: None,
+            destroyed_by_block: None,
+            created_at_epoch: Epoch(0),
+            destroyed_at_epoch: None,
+        }
+        .create(tx)?;
     }
 
     Ok(())

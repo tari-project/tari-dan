@@ -22,8 +22,6 @@
 
 pub mod committee_state_sync;
 pub mod comms_peer_provider;
-pub mod hotstuff;
-// mod hotstuff2;
 pub mod mempool;
 pub mod messaging;
 pub mod networking;

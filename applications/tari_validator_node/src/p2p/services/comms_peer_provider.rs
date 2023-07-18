@@ -30,7 +30,7 @@ use tari_comms::{
     PeerManager,
 };
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_dan_core::services::{DanPeer, PeerProvider};
+use tari_dan_p2p::{DanPeer, PeerProvider};
 
 #[derive(Debug, Clone)]
 pub struct CommsPeerProvider {

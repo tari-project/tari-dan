@@ -29,7 +29,6 @@ use tari_comms::{
     types::CommsPublicKey,
     NodeIdentity,
 };
-use tari_dan_core::message::NetworkAnnounce;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::p2p::services::{comms_peer_provider::CommsPeerProvider, messaging::OutboundMessaging};
@@ -43,6 +42,7 @@ pub use error::NetworkingError;
 mod handle;
 
 pub use handle::NetworkingHandle;
+use tari_dan_p2p::NetworkAnnounce;
 
 pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 

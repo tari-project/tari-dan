@@ -3,14 +3,13 @@
 
 use std::time::SystemTime;
 
-use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::QuorumCertificate;
 use tari_dan_wallet_sdk::models::TransactionStatus;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     substate::SubstateAddress,
 };
 use tari_template_lib::models::Amount;
+use tari_transaction::TransactionId;
 
 #[derive(Debug, Clone)]
 pub enum WalletEvent {
@@ -53,7 +52,7 @@ impl From<AuthLoginRequestEvent> for WalletEvent {
 
 #[derive(Debug, Clone)]
 pub struct TransactionSubmittedEvent {
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     /// Set to Some if this transaction results in a new account
     pub new_account: Option<NewAccountInfo>,
 }
@@ -67,11 +66,10 @@ pub struct NewAccountInfo {
 
 #[derive(Debug, Clone)]
 pub struct TransactionFinalizedEvent {
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub finalize: FinalizeResult,
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Amount,
-    pub qcs: Vec<QuorumCertificate<PublicKey>>,
     pub status: TransactionStatus,
 }
 
@@ -82,7 +80,7 @@ pub struct AccountChangedEvent {
 
 #[derive(Debug, Clone)]
 pub struct TransactionInvalidEvent {
-    pub hash: FixedHash,
+    pub transaction_id: TransactionId,
     pub status: TransactionStatus,
     pub final_fee: Amount,
 }

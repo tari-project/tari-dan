@@ -27,7 +27,6 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
-use tari_dan_common_types::PayloadId;
 use tari_engine_types::{
     events::Event,
     substate::{Substate, SubstateAddress},
@@ -41,8 +40,8 @@ use tari_indexer_lib::{
 use tari_template_lib::{
     models::TemplateAddress,
     prelude::{ComponentAddress, Metadata},
-    Hash,
 };
+use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::substate_storage_sqlite::{
@@ -63,7 +62,7 @@ pub struct SubstateResponse {
     pub address: SubstateAddress,
     pub version: u32,
     pub substate: Substate,
-    pub created_by_transaction: FixedHash,
+    pub created_by_transaction: TransactionId,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -222,10 +221,11 @@ impl SubstateManager {
         let substate_result = self.substate_scanner.get_substate(substate_address, version).await?;
         match substate_result {
             SubstateResult::Up {
+                address,
                 substate,
                 created_by_tx,
             } => Ok(Some(SubstateResponse {
-                address: substate_address.clone(),
+                address,
                 version: substate.version(),
                 substate,
                 created_by_transaction: created_by_tx,
@@ -290,7 +290,7 @@ impl SubstateManager {
         &self,
         component_address: ComponentAddress,
         template_address: TemplateAddress,
-        tx_hash: PayloadId,
+        tx_hash: TransactionId,
         topic: String,
         payload: &Metadata,
         version: u64,
@@ -309,10 +309,10 @@ impl SubstateManager {
         Ok(())
     }
 
-    pub async fn scan_events_for_transaction(&self, tx_hash: Hash) -> Result<Vec<Event>, anyhow::Error> {
+    pub async fn scan_events_for_transaction(&self, tx_id: TransactionId) -> Result<Vec<Event>, anyhow::Error> {
         let events = {
             let mut tx = self.substate_store.create_read_tx()?;
-            tx.get_events_for_transaction(PayloadId::from_array(tx_hash.into_array()))?
+            tx.get_events_for_transaction(tx_id)?
         };
 
         let mut events = events
@@ -322,7 +322,7 @@ impl SubstateManager {
 
         // If we have no events locally, fetch from the network if possible.
         if events.is_empty() {
-            let network_events = self.substate_scanner.get_events_for_transaction(tx_hash).await?;
+            let network_events = self.substate_scanner.get_events_for_transaction(tx_id).await?;
             events.extend(network_events);
         }
 
@@ -391,7 +391,7 @@ impl SubstateManager {
         // duplicates
         for (version, event) in network_events {
             let template_address = event.template_address();
-            let tx_hash = PayloadId::from_array(event.tx_hash().into_array());
+            let tx_hash = TransactionId::new(event.tx_hash().into_array());
             let topic = event.topic();
             let payload = event.payload();
             self.save_event_to_db(

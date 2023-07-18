@@ -20,10 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::ops::RangeInclusive;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::RangeInclusive,
+};
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 
 use crate::global::{models::ValidatorNode, GlobalDbAdapter};
 
@@ -54,12 +57,23 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
+    pub fn count_in_bucket(
+        &mut self,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+        bucket: u32,
+    ) -> Result<u64, TGlobalDbAdapter::Error> {
+        self.backend
+            .validator_nodes_count_for_bucket(self.tx, start_epoch, end_epoch, bucket)
+            .map_err(TGlobalDbAdapter::Error::into)
+    }
+
     pub fn get(
         &mut self,
         start_epoch: Epoch,
         end_epoch: Epoch,
         public_key: &[u8],
-    ) -> Result<ValidatorNode, TGlobalDbAdapter::Error> {
+    ) -> Result<ValidatorNode<PublicKey>, TGlobalDbAdapter::Error> {
         self.backend
             .get_validator_node(self.tx, start_epoch, end_epoch, public_key)
             .map_err(TGlobalDbAdapter::Error::into)
@@ -69,7 +83,7 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         &mut self,
         start_epoch: Epoch,
         end_epoch: Epoch,
-    ) -> Result<Vec<ValidatorNode>, TGlobalDbAdapter::Error> {
+    ) -> Result<Vec<ValidatorNode<PublicKey>>, TGlobalDbAdapter::Error> {
         self.backend
             .get_validator_nodes_within_epochs(self.tx, start_epoch, end_epoch)
             .map_err(TGlobalDbAdapter::Error::into)
@@ -80,9 +94,20 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> ValidatorNodeDb<'a, 'tx, TGloba
         start_epoch: Epoch,
         end_epoch: Epoch,
         shard_range: RangeInclusive<ShardId>,
-    ) -> Result<Vec<ValidatorNode>, TGlobalDbAdapter::Error> {
+    ) -> Result<Vec<ValidatorNode<PublicKey>>, TGlobalDbAdapter::Error> {
         self.backend
             .validator_nodes_get_by_shard_range(self.tx, start_epoch, end_epoch, shard_range)
+            .map_err(TGlobalDbAdapter::Error::into)
+    }
+
+    pub fn get_committees_by_buckets(
+        &mut self,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+        buckets: HashSet<u32>,
+    ) -> Result<HashMap<u32, Committee<PublicKey>>, TGlobalDbAdapter::Error> {
+        self.backend
+            .validator_nodes_get_by_buckets(self.tx, start_epoch, end_epoch, buckets)
             .map_err(TGlobalDbAdapter::Error::into)
     }
 

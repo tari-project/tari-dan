@@ -1,13 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::convert::TryFrom;
-
-use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::{PublicKey, Signature};
 use tari_crypto::{
     keys::PublicKey as PublicKeyT,
-    ristretto::{RistrettoPublicKey, RistrettoSchnorr, RistrettoSecretKey},
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
@@ -15,31 +13,33 @@ use tari_engine_types::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
-pub struct InstructionSignature(RistrettoSchnorr);
-
-impl InstructionSignature {
-    pub fn sign(secret_key: &RistrettoSecretKey, instructions: &[Instruction]) -> Self {
-        let (secret_nonce, _nonce_pk) = RistrettoPublicKey::random_keypair(&mut OsRng);
-        let public_key = RistrettoPublicKey::from_secret_key(secret_key);
-        let nonce_pk = RistrettoPublicKey::from_secret_key(&secret_nonce);
-        // TODO: implement dan encoding for (a wrapper of) PublicKey
-        let challenge = hasher(EngineHashDomainLabel::InstructionSignature)
-            .chain(&nonce_pk)
-            .chain(&public_key)
-            .chain(instructions)
-            .result();
-        Self(RistrettoSchnorr::sign_raw(secret_key, secret_nonce, &challenge).unwrap())
-    }
-
-    pub fn signature(&self) -> &RistrettoSchnorr {
-        &self.0
-    }
+pub struct TransactionSignature {
+    public_key: PublicKey,
+    signature: Signature,
 }
 
-impl TryFrom<RistrettoSchnorr> for InstructionSignature {
-    type Error = String;
+impl TransactionSignature {
+    pub fn new(public_key: PublicKey, signature: Signature) -> Self {
+        Self { public_key, signature }
+    }
 
-    fn try_from(sig: RistrettoSchnorr) -> Result<Self, Self::Error> {
-        Ok(InstructionSignature(sig))
+    pub fn sign(secret_key: &RistrettoSecretKey, instructions: &[Instruction]) -> Self {
+        let public_key = RistrettoPublicKey::from_secret_key(secret_key);
+        let challenge = hasher(EngineHashDomainLabel::InstructionSignature)
+            .chain(instructions)
+            .result();
+
+        Self {
+            signature: Signature::sign_message(secret_key, challenge).unwrap(),
+            public_key,
+        }
+    }
+
+    pub fn signature(&self) -> &Signature {
+        &self.signature
+    }
+
+    pub fn public_key(&self) -> &RistrettoPublicKey {
+        &self.public_key
     }
 }

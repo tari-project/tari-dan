@@ -6,7 +6,7 @@ use anyhow::anyhow;
 use base64;
 use log::*;
 use rand::rngs::OsRng;
-use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
+use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_crypto::{
     commitment::{HomomorphicCommitment as Commitment, HomomorphicCommitmentFactory},
     keys::PublicKey as _,
@@ -34,7 +34,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
@@ -122,18 +122,16 @@ pub async fn handle_create(
         .with_inputs(
             inputs
                 .iter()
-                .map(|addr| ShardId::from_address(&addr.address, addr.version))
-                .collect(),
+                .map(|addr| ShardId::from_address(&addr.address, addr.version)),
         )
         .sign(&signing_key.key)
         .build();
 
-    let result = sdk.transaction_api().submit_transaction(transaction).await?;
-    let tx_hash = result.transaction_hash;
+    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
-        hash: tx_hash,
+        transaction_id: tx_id,
         new_account: Some(NewAccountInfo {
             name: req.account_name,
             key_index: owner_key.key_index,
@@ -141,7 +139,7 @@ pub async fn handle_create(
         }),
     });
 
-    let event = wait_for_result(&mut events, tx_hash).await?;
+    let event = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!("Create account transaction rejected: {}", reject));
     }
@@ -219,10 +217,7 @@ pub async fn handle_invoke(
 
     let inputs = sdk.substate_api().load_dependent_substates(&[&account.address])?;
 
-    let inputs = inputs
-        .into_iter()
-        .map(|s| ShardId::from_address(&s.address, s.version))
-        .collect();
+    let inputs = inputs.into_iter().map(|s| ShardId::from_address(&s.address, s.version));
 
     let account_address = account.address.as_component_address().unwrap();
     let transaction = Transaction::builder()
@@ -232,15 +227,15 @@ pub async fn handle_invoke(
         .sign(&signing_key.key)
         .build();
 
-    let result = sdk.transaction_api().submit_transaction(transaction).await?;
-    let tx_hash = result.transaction_hash;
+    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
+
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
-        hash: tx_hash,
+        transaction_id: tx_id,
         new_account: None,
     });
 
-    let mut finalized = wait_for_result(&mut events, tx_hash).await?;
+    let mut finalized = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow!("Fee transaction rejected: {}", reject));
     }
@@ -336,17 +331,7 @@ pub async fn handle_reveal_funds(
     // If the caller aborts the request early, this async block would be aborted at any await point. To avoid this, we
     // spawn a task that will continue running.
     task::spawn(async move {
-        let mut inputs = vec![];
-
         let account = get_account_or_default(req.account, &sdk.accounts_api())?;
-        // Add the account component
-        let account_substate = sdk.substate_api().get_substate(&account.address)?;
-
-        inputs.push(account_substate.address);
-
-        // Add all versioned account child addresses as inputs
-        let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
-        inputs.extend(child_addresses);
 
         let vault = sdk
             .accounts_api()
@@ -444,43 +429,30 @@ pub async fn handle_reveal_funds(
         let mut inputs = vec![account_substate.address];
         inputs.extend(child_addresses);
 
-        // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when
-        // the       object is mutated
-        let outputs = inputs
-            .iter()
-            .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-            .collect::<Vec<_>>();
-
         let inputs = inputs
             .into_iter()
-            .map(|addr| ShardId::from_address(&addr.address, addr.version))
-            .collect();
+            .map(|addr| ShardId::from_address(&addr.address, addr.version));
 
-        let transaction = builder
-            .with_inputs(inputs)
-            .with_outputs(outputs)
-            .sign(&account_key.key)
-            .build();
+        let transaction = builder.with_inputs(inputs).sign(&account_key.key).build();
 
         sdk.confidential_outputs_api()
-            .proofs_set_transaction_hash(proof_id, *transaction.hash())?;
+            .proofs_set_transaction_hash(proof_id, *transaction.id())?;
 
-        let result = sdk.transaction_api().submit_transaction(transaction).await?;
-        let tx_hash = result.transaction_hash;
+        let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
 
         let mut events = notifier.subscribe();
         notifier.notify(TransactionSubmittedEvent {
-            hash: tx_hash,
+            transaction_id: tx_id,
             new_account: None,
         });
 
-        let finalized = wait_for_result(&mut events, tx_hash).await?;
+        let finalized = wait_for_result(&mut events, tx_id).await?;
         if let Some(reason) = finalized.transaction_failure {
             return Err(anyhow::anyhow!("Transaction failed: {}", reason));
         }
 
         Ok(RevealFundsResponse {
-            hash: tx_hash,
+            transaction_id: tx_id,
             fee: finalized.final_fee,
             result: finalized.finalize,
         })
@@ -658,10 +630,7 @@ pub async fn handle_claim_burn(
         sdk.confidential_crypto_api()
             .generate_withdraw_proof(&[unmasked_output], &output_statement, None)?;
 
-    let inputs = inputs
-        .into_iter()
-        .map(|s| ShardId::from_address(&s.address, s.version))
-        .collect();
+    let inputs = inputs.into_iter().map(|s| ShardId::from_address(&s.address, s.version));
 
     let transaction = Transaction::builder()
         .with_fee_instructions(vec![
@@ -693,16 +662,15 @@ pub async fn handle_claim_burn(
         .sign(&account_secret_key.key)
         .build();
 
-    let result = sdk.transaction_api().submit_transaction(transaction).await?;
-    let tx_hash = result.transaction_hash;
+    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
-        hash: tx_hash,
+        transaction_id: tx_id,
         new_account: None,
     });
 
-    let finalized = wait_for_result(&mut events, tx_hash).await?;
+    let finalized = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
@@ -714,7 +682,7 @@ pub async fn handle_claim_burn(
     }
 
     Ok(ClaimBurnResponse {
-        hash: tx_hash,
+        transaction_id: tx_id,
         fee: finalized.final_fee,
         result: finalized.finalize,
     })
@@ -732,6 +700,7 @@ pub async fn handle_create_free_test_coins(
 
     let accounts_api = sdk.accounts_api();
     let mut inputs = vec![];
+    let mut outputs = vec![];
 
     // Get the account if one is specified and exists.
     let maybe_account = match req.account {
@@ -752,7 +721,7 @@ pub async fn handle_create_free_test_coins(
                 .key_manager_api()
                 .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
             let account_substate = sdk.substate_api().get_substate(&account.address)?;
-            inputs.push(account_substate.address);
+            inputs.push((account_substate.address.address, account_substate.address.version));
             (account.address, account_secret_key, None)
         },
         None => {
@@ -768,10 +737,8 @@ pub async fn handle_create_free_test_coins(
             let component_id = Hash::try_from(account_pk.as_bytes())?;
             let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
 
-            inputs.push(VersionedSubstateAddress {
-                address: account_address.into(),
-                version: 0,
-            });
+            // We have no involved shards, so we need to add an output
+            outputs.push((SubstateAddress::from(account_address), 0));
             (account_address.into(), account_secret_key, Some(name.to_string()))
         },
     };
@@ -822,42 +789,25 @@ pub async fn handle_create_free_test_coins(
         args: args![fee],
     });
 
-    // Add the account component
-    // let account_substate = sdk.substate_api().get_substate(&account_address)?;
-    // inputs.push(account_substate.address);
-
     // Add all versioned account child addresses as inputs unless the account is new
     if new_account_name.is_none() {
         let child_addresses = sdk.substate_api().load_dependent_substates(&[&account_address])?;
-        inputs.extend(child_addresses);
+        inputs.extend(child_addresses.into_iter().map(|a| (a.address, a.version)));
     }
-
-    // TODO: we assume that all inputs will be consumed and produce a new output however this is only the case when the
-    //       object is mutated
-    let outputs = inputs
-        .iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version + 1))
-        .collect::<Vec<_>>();
-
-    let inputs = inputs
-        .into_iter()
-        .map(|s| ShardId::from_address(&s.address, s.version))
-        .collect();
 
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
-        .with_inputs(inputs)
-        .with_outputs(outputs)
+        .with_substate_inputs(inputs)
+        .with_substate_outputs(outputs)
         .sign(&account_secret_key.key)
         .build();
 
-    let result = sdk.transaction_api().submit_transaction(transaction).await?;
-    let tx_hash = result.transaction_hash;
+    let tx_id = sdk.transaction_api().submit_transaction(transaction, vec![]).await?;
 
     let is_first_account = accounts_api.count()? == 0;
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
-        hash: tx_hash,
+        transaction_id: tx_id,
         new_account: new_account_name.map(|name| NewAccountInfo {
             name: Some(name),
             key_index: account_secret_key.key_index,
@@ -865,7 +815,7 @@ pub async fn handle_create_free_test_coins(
         }),
     });
 
-    let finalized = wait_for_result(&mut events, tx_hash).await?;
+    let finalized = wait_for_result(&mut events, tx_id).await?;
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
@@ -877,7 +827,7 @@ pub async fn handle_create_free_test_coins(
     }
 
     Ok(AccountsCreateFreeTestCoinsResponse {
-        hash: tx_hash,
+        transaction_id: tx_id,
         amount: req.amount,
         fee,
         result: finalized.finalize,
@@ -958,22 +908,24 @@ pub async fn handle_transfer(
         .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
 
     let transaction = Transaction::builder()
-        .with_required_inputs(inputs.into_iter().map(Into::into))
         .with_fee_instructions(instructions)
         .sign(&account_secret_key.key)
         .build();
 
     // send the transaction
-    let result = sdk.transaction_api().submit_transaction(transaction).await?;
-    let tx_hash = result.transaction_hash;
+    let required_inputs = inputs.into_iter().map(Into::into).collect();
+    let tx_id = sdk
+        .transaction_api()
+        .submit_transaction(transaction, required_inputs)
+        .await?;
 
     let mut events = context.notifier().subscribe();
     context.notifier().notify(TransactionSubmittedEvent {
-        hash: tx_hash,
+        transaction_id: tx_id,
         new_account: None,
     });
 
-    let finalized = wait_for_result(&mut events, tx_hash).await?;
+    let finalized = wait_for_result(&mut events, tx_id).await?;
 
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
@@ -986,14 +938,13 @@ pub async fn handle_transfer(
     }
     info!(
         target: LOG_TARGET,
-        "✅ Transfer transaction {} finalized by {} QCs. Fee: {}",
-        finalized.hash,
-        finalized.qcs.len(),
+        "✅ Transfer transaction {} finalized. Fee: {}",
+        finalized.transaction_id,
         finalized.final_fee
     );
 
     Ok(TransferResponse {
-        hash: tx_hash,
+        transaction_id: tx_id,
         fee: finalized.final_fee,
         result: finalized.finalize,
     })
@@ -1181,23 +1132,24 @@ pub async fn handle_confidential_transfer(
 
         let transaction = Transaction::builder()
             .fee_transaction_pay_from_component(source_component_address, req.fee.unwrap_or(DEFAULT_FEE))
-            .with_required_inputs(inputs.into_iter().map(Into::into))
             .with_instructions(instructions)
             .sign(&account_secret.key)
             .build();
 
-        outputs_api.proofs_set_transaction_hash(proof_id, *transaction.hash())?;
+        outputs_api.proofs_set_transaction_hash(proof_id, *transaction.id())?;
 
-        let result = sdk.transaction_api().submit_transaction(transaction).await?;
-        let tx_hash = result.transaction_hash;
+        let tx_id = sdk
+            .transaction_api()
+            .submit_transaction(transaction, inputs.into_iter().map(Into::into).collect())
+            .await?;
 
         let mut events = notifier.subscribe();
         notifier.notify(TransactionSubmittedEvent {
-            hash: tx_hash,
+            transaction_id: tx_id,
             new_account: None,
         });
 
-        let finalized = wait_for_result(&mut events, tx_hash).await?;
+        let finalized = wait_for_result(&mut events, tx_id).await?;
         if let Some(reject) = finalized.finalize.result.reject() {
             return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
         }
@@ -1209,7 +1161,7 @@ pub async fn handle_confidential_transfer(
         }
 
         Ok(ConfidentialTransferResponse {
-            hash: tx_hash,
+            transaction_id: tx_id,
             fee: finalized.final_fee,
             result: finalized.finalize,
         })
@@ -1219,12 +1171,12 @@ pub async fn handle_confidential_transfer(
 
 async fn wait_for_result(
     events: &mut broadcast::Receiver<WalletEvent>,
-    tx_hash: FixedHash,
+    transaction_id: TransactionId,
 ) -> Result<TransactionFinalizedEvent, anyhow::Error> {
     loop {
         let wallet_event = events.recv().await?;
         match wallet_event {
-            WalletEvent::TransactionFinalized(event) if event.hash == tx_hash => return Ok(event),
+            WalletEvent::TransactionFinalized(event) if event.transaction_id == transaction_id => return Ok(event),
             _ => {},
         }
     }

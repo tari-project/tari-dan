@@ -25,7 +25,6 @@ import { useLoaderData } from 'react-router-dom';
 import {
   getSubstates,
   getTransaction,
-  getCurrentLeaderState,
 } from '../../utils/json_rpc';
 import { toHexString } from '../VN/Components/helpers';
 import Output from './Components/Output';
@@ -102,13 +101,14 @@ export async function transactionLoader({ params }: { params: any }) {
   const { payload, outputs } = splitToOutputs(
     await getTransaction(params.payloadId)
   );
-  const current_leader_states = splitToShards(
-    await getCurrentLeaderState(params.payloadId)
-  );
+  // TODO: Fix these
+  const current_leader_states =
+      new Map<string, [string, number, string]>();
   let substates = new Map<string, any[]>();
+  let substates_resp  = await getSubstates(params.payloadId);
   await Promise.all(
     Array.from(outputs.entries()).map(async ([shard, _]) => {
-      substates.set(shard, await getSubstates(params.payloadId, shard));
+      substates.set(shard, substates_resp.find((s: any) => s.shard_id === shard));
     })
   );
   return [params.payloadId, substates, outputs, current_leader_states, payload];

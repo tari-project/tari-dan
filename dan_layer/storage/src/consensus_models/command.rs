@@ -5,8 +5,13 @@ use std::{cmp::Ordering, collections::BTreeMap};
 
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::ShardId;
+use tari_transaction::TransactionId;
 
-use crate::consensus_models::{Decision, QcId, TransactionId};
+use crate::{
+    consensus_models::{Decision, ExecutedTransaction, QcId},
+    StateStoreReadTransaction,
+    StorageError,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub struct Evidence {
@@ -22,6 +27,10 @@ impl Evidence {
 
     pub fn all_shards_complete(&self) -> bool {
         self.evidence.values().all(|qc_ids| !qc_ids.is_empty())
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&ShardId, &Vec<QcId>)> {
+        self.evidence.iter()
     }
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (&ShardId, &mut Vec<QcId>)> {
@@ -46,6 +55,15 @@ pub struct TransactionAtom {
     pub fee: u64,
 }
 
+impl TransactionAtom {
+    pub fn get_transaction<TTx: StateStoreReadTransaction>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<ExecutedTransaction, StorageError> {
+        ExecutedTransaction::get(tx, &self.id)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Command {
     /// Command to prepare a transaction.
@@ -66,6 +84,13 @@ impl Command {
     pub fn local_prepared(&self) -> Option<&TransactionAtom> {
         match self {
             Command::LocalPrepared(tx) => Some(tx),
+            _ => None,
+        }
+    }
+
+    pub fn accept(&self) -> Option<&TransactionAtom> {
+        match self {
+            Command::Accept(tx) => Some(tx),
             _ => None,
         }
     }

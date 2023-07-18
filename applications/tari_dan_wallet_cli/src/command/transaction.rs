@@ -32,7 +32,7 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_common_types::types::{FixedHash, PublicKey};
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
@@ -50,7 +50,7 @@ use tari_template_lib::{
     models::{Amount, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
-use tari_transaction::SubstateRequirement;
+use tari_transaction::{SubstateRequirement, TransactionId};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_utilities::{hex::to_hex, ByteArray};
 use tari_wallet_daemon_client::{
@@ -81,7 +81,7 @@ pub enum TransactionSubcommand {
 
 #[derive(Debug, Args, Clone)]
 pub struct GetArgs {
-    transaction_hash: FromHex<FixedHash>,
+    transaction_id: FromHex<TransactionId>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -196,12 +196,12 @@ impl TransactionSubcommand {
 
 async fn handle_get(args: GetArgs, client: &mut WalletDaemonClient) -> Result<(), anyhow::Error> {
     let request = TransactionGetResultRequest {
-        hash: args.transaction_hash.into_inner(),
+        transaction_id: args.transaction_id.into_inner(),
     };
     let resp = client.get_transaction_result(request).await?;
 
     if let Some(result) = resp.result {
-        println!("Transaction {}", args.transaction_hash);
+        println!("Transaction {}", args.transaction_id);
         println!();
 
         summarize_finalize_result(&result);
@@ -376,7 +376,7 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
         })
         .await?;
 
-    println!("Transaction: {}", resp.hash);
+    println!("Transaction: {}", resp.transaction_id);
     println!("Fee: {} ({} refunded)", resp.fee, fee - resp.fee);
     println!();
     summarize_finalize_result(&resp.result);
@@ -408,7 +408,7 @@ pub async fn handle_confidential_transfer(
         })
         .await?;
 
-    println!("Transaction: {}", resp.hash);
+    println!("Transaction: {}", resp.transaction_id);
     println!("Fee: {}", resp.fee);
     println!();
     summarize_finalize_result(&resp.result);
@@ -425,36 +425,32 @@ pub async fn submit_transaction(
     let resp = client.submit_transaction(&request).await?;
 
     println!();
-    println!("✅ Transaction {} submitted.", resp.hash);
+    println!("✅ Transaction {} submitted.", resp.transaction_id);
     println!();
     // TODO: Would be great if we could display the Substate addresses as well as shard ids
-    summarize_request(&request, &resp.inputs, &resp.outputs);
+    summarize_request(&request, &resp.inputs);
 
-    if let Some(result) = &resp.result {
-        summarize_finalize_result(&result.finalize);
+    println!();
+    println!("⏳️ Waiting for transaction result...");
+    println!();
+    let wait_resp = client
+        .wait_transaction_result(TransactionWaitResultRequest {
+            transaction_id: resp.transaction_id,
+            // Never timeout, you can ctrl+c to exit
+            timeout_secs: None,
+        })
+        .await?;
+    if wait_resp.timed_out {
+        println!("⏳️ Transaction result timed out.",);
+        println!();
     } else {
-        println!();
-        println!("⏳️ Waiting for transaction result...");
-        println!();
-        let wait_resp = client
-            .wait_transaction_result(TransactionWaitResultRequest {
-                hash: resp.hash,
-                // Never timeout, you can ctrl+c to exit
-                timeout_secs: None,
-            })
-            .await?;
-        if wait_resp.timed_out {
-            println!("⏳️ Transaction result timed out.",);
-            println!();
-        } else {
-            summarize(&wait_resp, timer.elapsed());
-        }
+        summarize(&wait_resp, timer.elapsed());
     }
 
     Ok(resp)
 }
 
-fn summarize_request(request: &TransactionSubmitRequest, inputs: &[SubstateRequirement], outputs: &[ShardId]) {
+fn summarize_request(request: &TransactionSubmitRequest, inputs: &[SubstateRequirement]) {
     if request.is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();
@@ -466,16 +462,6 @@ fn summarize_request(request: &TransactionSubmitRequest, inputs: &[SubstateRequi
         for shard_id in inputs {
             println!("- {}", shard_id);
         }
-    }
-    println!();
-    println!("Outputs:");
-    if outputs.is_empty() && request.new_outputs == 0 {
-        println!("  None");
-    } else {
-        for shard_id in outputs {
-            println!("- {}", shard_id);
-        }
-        println!("- {} new output(s)", request.new_outputs);
     }
     println!();
     println!("🌟 Submitting fee instructions:");
@@ -494,25 +480,17 @@ fn summarize_request(request: &TransactionSubmitRequest, inputs: &[SubstateRequi
 fn summarize(resp: &TransactionWaitResultResponse, time_taken: Duration) {
     println!("✅️ Transaction complete");
     println!();
-    if let Some(qc) = resp.qcs.first() {
-        println!("Epoch: {}", qc.epoch());
-        println!("Payload height: {}", qc.payload_height());
-        println!("Signed by: {} validator nodes", qc.validators_metadata().len());
-    } else {
-        println!("No QC");
-    }
-    println!();
+    // if let Some(qc) = resp.qcs.first() {
+    //     println!("Epoch: {}", qc.epoch());
+    //     println!("Payload height: {}", qc.payload_height());
+    //     println!("Signed by: {} validator nodes", qc.validators_metadata().len());
+    // } else {
+    //     println!("No QC");
+    // }
+    // println!();
 
     if let Some(ref result) = resp.result {
         summarize_finalize_result(result);
-    }
-
-    if let Some(qc) = resp.qcs.first() {
-        println!();
-        println!("========= Pledges =========");
-        for p in qc.all_shard_pledges().iter() {
-            println!("Shard:{} Pledge:{}", p.shard_id, p.pledge.current_state.as_str());
-        }
     }
 
     println!();
@@ -523,8 +501,8 @@ fn summarize(resp: &TransactionWaitResultResponse, time_taken: Duration) {
     if let Some(result) = &resp.transaction_failure {
         println!("Transaction failure: {}", result);
     }
-    if let Some(qc) = resp.qcs.first() {
-        println!("OVERALL DECISION: {:?}", qc.decision());
+    if let Some(ref result) = resp.result {
+        println!("OVERALL DECISION: {}", result.result);
     } else {
         println!("STATUS: {:?}", resp.status);
     }
