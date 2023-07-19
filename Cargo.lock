@@ -1600,6 +1600,7 @@ dependencies = [
  "async-trait",
  "env_logger",
  "futures 0.3.28",
+ "itertools 0.11.0",
  "log",
  "rand 0.7.3",
  "serde",
@@ -2061,7 +2062,7 @@ dependencies = [
  "globwalk",
  "humantime",
  "inventory",
- "itertools",
+ "itertools 0.10.5",
  "junit-report",
  "linked-hash-map",
  "once_cell",
@@ -2079,7 +2080,7 @@ checksum = "755eae3e762505d670bbf02db048d512e79118f93f8383ae1bf6235506ed3c94"
 dependencies = [
  "cucumber-expressions",
  "inflections",
- "itertools",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "regex",
@@ -3868,6 +3869,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3981,7 +3991,7 @@ dependencies = [
  "diff",
  "ena",
  "is-terminal",
- "itertools",
+ "itertools 0.10.5",
  "lalrpop-util",
  "petgraph",
  "regex",
@@ -5437,7 +5447,7 @@ checksum = "62941722fb675d463659e49c4f3fe1fe792ff24fe5bbaa9c08cd3b98a1c354f5"
 dependencies = [
  "bytes 1.4.0",
  "heck 0.3.3",
- "itertools",
+ "itertools 0.10.5",
  "lazy_static",
  "log",
  "multimap",
@@ -5456,7 +5466,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9cc1a3263e07e0bf68e96268f37665207b49560d98739662cdfaae215c720fe"
 dependencies = [
  "anyhow",
- "itertools",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -5469,7 +5479,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5d2d8d10f3c6ded6da8b05b5fb3b8a5082514344d56c9f871412d29b4e075b4"
 dependencies = [
  "anyhow",
- "itertools",
+ "itertools 0.10.5",
  "proc-macro2",
  "quote",
  "syn 1.0.109",
@@ -8382,7 +8392,7 @@ dependencies = [
  "digest 0.9.0",
  "fs2",
  "futures 0.3.28",
- "itertools",
+ "itertools 0.10.5",
  "libsqlite3-sys",
  "log",
  "prost 0.9.0",
@@ -10429,7 +10439,7 @@ checksum = "103fa851fff70ea29af380e87c25c48ff7faac5c530c70bd0e65366d4e0c94e4"
 dependencies = [
  "derive_builder 0.12.0",
  "fancy-regex",
- "itertools",
+ "itertools 0.10.5",
  "js-sys",
  "lazy_static",
  "quick-error",

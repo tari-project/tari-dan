@@ -27,7 +27,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
         block: &Block,
         transaction: &ExecutedTransaction,
     ) -> Result<(), Self::Error> {
-        let Some(diff) =transaction.result().finalize.result.accept() else {
+        let Some(diff) = transaction.result().finalize.result.accept() else {
             // We should only commit accepted transactions, might want to change this API to reflect that
             return Ok(());
         };
