@@ -16,7 +16,7 @@ tari_transaction = { path = "../transaction" }
 tari_core = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
 tari_crypto = "0.17"
-tari_utilities = "*"
+tari_utilities = "0.4.10"
 
 anyhow = "1.0"
 chrono = "0.4.23"
