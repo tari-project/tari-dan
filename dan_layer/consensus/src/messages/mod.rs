@@ -11,3 +11,9 @@ pub use proposal::*;
 
 mod vote;
 pub use vote::*;
+
+mod request_missing_transaction;
+pub use request_missing_transaction::*;
+
+mod requested_transaction;
+pub use requested_transaction::*;

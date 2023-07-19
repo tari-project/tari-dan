@@ -28,7 +28,14 @@ use std::{
 use anyhow::anyhow;
 use tari_bor::{decode_exact, encode};
 use tari_common_types::types::PublicKey;
-use tari_consensus::messages::{HotstuffMessage, NewViewMessage, ProposalMessage, VoteMessage};
+use tari_consensus::messages::{
+    HotstuffMessage,
+    NewViewMessage,
+    ProposalMessage,
+    RequestMissingTransactionsMessage,
+    RequestedTransactionMessage,
+    VoteMessage,
+};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{Epoch, NodeHeight, ShardId, ValidatorMetadata};
 use tari_dan_storage::consensus_models::{
@@ -51,6 +58,12 @@ impl From<HotstuffMessage> for proto::consensus::HotStuffMessage {
             HotstuffMessage::NewView(msg) => proto::consensus::hot_stuff_message::Message::NewView(msg.into()),
             HotstuffMessage::Proposal(msg) => proto::consensus::hot_stuff_message::Message::Proposal(msg.into()),
             HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.into()),
+            HotstuffMessage::RequestMissingTransactions(msg) => {
+                proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.into())
+            },
+            HotstuffMessage::RequestedTransaction(msg) => {
+                proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.into())
+            },
         };
         Self { message: Some(message) }
     }
@@ -65,6 +78,12 @@ impl TryFrom<proto::consensus::HotStuffMessage> for HotstuffMessage {
             proto::consensus::hot_stuff_message::Message::NewView(msg) => HotstuffMessage::NewView(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::Proposal(msg) => HotstuffMessage::Proposal(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::Vote(msg) => HotstuffMessage::Vote(msg.try_into()?),
+            proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg) => {
+                HotstuffMessage::RequestMissingTransactions(msg.try_into()?)
+            },
+            proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg) => {
+                HotstuffMessage::RequestedTransaction(msg.try_into()?)
+            },
         })
     }
 }
@@ -141,6 +160,63 @@ impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
     }
 }
 
+//---------------------------------- RequestMissingTransactionsMessage --------------------------------------------//
+impl From<RequestMissingTransactionsMessage> for proto::consensus::RequestMissingTransactionsMessage {
+    fn from(msg: RequestMissingTransactionsMessage) -> Self {
+        Self {
+            epoch: msg.epoch.as_u64(),
+            block_id: msg.block_id.as_bytes().to_vec(),
+            transaction_ids: msg
+                .transactions
+                .into_iter()
+                .map(|tx_id| tx_id.as_bytes().to_vec())
+                .collect(),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::RequestMissingTransactionsMessage> for RequestMissingTransactionsMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::RequestMissingTransactionsMessage) -> Result<Self, Self::Error> {
+        Ok(RequestMissingTransactionsMessage {
+            epoch: Epoch(value.epoch),
+            block_id: BlockId::try_from(value.block_id)?,
+            transactions: value
+                .transaction_ids
+                .into_iter()
+                .map(|tx_id| tx_id.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
+//---------------------------------- RequestedTransactionMessage --------------------------------------------//
+
+impl From<RequestedTransactionMessage> for proto::consensus::RequestedTransactionMessage {
+    fn from(msg: RequestedTransactionMessage) -> Self {
+        Self {
+            epoch: msg.epoch.as_u64(),
+            block_id: msg.block_id.as_bytes().to_vec(),
+            transactions: msg.transactions.into_iter().map(|tx| tx.into()).collect(),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::RequestedTransactionMessage> for RequestedTransactionMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::RequestedTransactionMessage) -> Result<Self, Self::Error> {
+        Ok(RequestedTransactionMessage {
+            epoch: Epoch(value.epoch),
+            block_id: BlockId::try_from(value.block_id)?,
+            transactions: value
+                .transactions
+                .into_iter()
+                .map(|tx| tx.try_into())
+                .collect::<Result<Vec<_>, _>>()?,
+        })
+    }
+}
 //---------------------------------- Block --------------------------------------------//
 
 impl From<tari_dan_storage::consensus_models::Block> for proto::consensus::Block {

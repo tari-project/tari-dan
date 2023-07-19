@@ -56,14 +56,18 @@ impl OutboundService for OutboundMessaging {
     type Addr = CommsPublicKey;
     type Error = MessagingError;
 
+    async fn send_self(&mut self, message: DanMessage<Self::Addr>) -> Result<(), MessagingError> {
+        trace!(target: LOG_TARGET, "Sending {:?} to self", message);
+        self.loopback_sender
+            .send(message)
+            .await
+            .map_err(|_| MessagingError::LoopbackSendFailed)?;
+        return Ok(());
+    }
+
     async fn send(&mut self, to: Self::Addr, message: DanMessage<Self::Addr>) -> Result<(), MessagingError> {
         if to == self.our_node_addr {
-            trace!(target: LOG_TARGET, "Sending {:?} to self", message);
-            self.loopback_sender
-                .send(message)
-                .await
-                .map_err(|_| MessagingError::LoopbackSendFailed)?;
-            return Ok(());
+            return self.send_self(message).await;
         }
 
         self.sender
