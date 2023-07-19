@@ -7,7 +7,7 @@ use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
 
 use crate::consensus::{
-    leader_selection::RandomDeterministicLeaderStrategy,
+    leader_selection::{RandomDeterministicLeaderStrategy, RoundRobinLeaderStrategy},
     signature_service::TariSignatureService,
     state_manager::TariStateManager,
 };
@@ -17,7 +17,7 @@ pub struct TariConsensusSpec;
 impl ConsensusSpec for TariConsensusSpec {
     type Addr = CommsPublicKey;
     type EpochManager = EpochManagerHandle;
-    type LeaderStrategy = RandomDeterministicLeaderStrategy;
+    type LeaderStrategy = RoundRobinLeaderStrategy;
     type StateManager = TariStateManager;
     type StateStore = SqliteStateStore;
     type VoteSignatureService = TariSignatureService;

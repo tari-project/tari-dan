@@ -22,7 +22,7 @@ use tokio::{
 
 use crate::{
     consensus::{
-        leader_selection::RandomDeterministicLeaderStrategy,
+        leader_selection::{RandomDeterministicLeaderStrategy, RoundRobinLeaderStrategy},
         signature_service::TariSignatureService,
         spec::TariConsensusSpec,
         state_manager::TariStateManager,
@@ -51,7 +51,7 @@ pub async fn spawn(
 
     let validator_addr = node_identity.public_key().clone();
     let signing_service = TariSignatureService::new(node_identity);
-    let leader_strategy = RandomDeterministicLeaderStrategy::new();
+    let leader_strategy = RoundRobinLeaderStrategy::new();
     let transaction_pool = TransactionPool::new();
     let noop_state_manager = TariStateManager::new();
     let (tx_events, _) = broadcast::channel(100);
