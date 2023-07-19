@@ -21,9 +21,8 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useState, useEffect } from 'react';
-import { getAllTokens } from '../../../utils/json_rpc';
+import { getAllTokens, authRevokeToken } from '../../../utils/json_rpc';
 import Button from '@mui/material/Button';
-import { IoTrashOutline } from 'react-icons/io5';
 import IconButton from '@mui/material/IconButton';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -45,19 +44,17 @@ import { DataTableCell } from '../../../Components/StyledComponents';
 import theme from '../../../theme';
 import { shortenString } from '../../../utils/helpers';
 import CopyToClipboard from '../../../Components/CopyToClipboard';
+import { IoCloseCircleOutline } from 'react-icons/io5';
 
 interface IToken {
   id: number;
   name: string;
   deleted: boolean;
+  expiryDate: Date;
 }
 
 function AlertDialog({ fn, row }: any) {
   const [open, setOpen] = useState(false);
-
-  useEffect(() => {
-    getAllTokens().then((res) => console.log('Tokens', res));
-  }, []);
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -75,7 +72,7 @@ function AlertDialog({ fn, row }: any) {
   return (
     <div>
       <IconButton onClick={handleClickOpen} color="primary">
-        <IoTrashOutline />
+        <IoCloseCircleOutline />
       </IconButton>
       <Dialog
         open={open}
@@ -109,18 +106,19 @@ export default function AccessTokens() {
   const [error, setError] = useState<String>();
   const [loading, setLoading] = useState(true);
 
+  console.log('tokens', tokens);
+
   const loadTokens = () => {
     getAllTokens()
       .then((response) => {
         console.log('response', response);
         setTokens(
-          response.jwt.map((t: any) => {
-            return {
-              id: t[0],
-              name: t[1],
-              deleted: false,
-            };
-          })
+          response.jwt.map((item: any) => ({
+            id: item.id,
+            name: item.name,
+            expiryDate: new Date(item.exp * 1000),
+            deleted: false,
+          }))
         );
         setError(undefined);
       })
@@ -141,17 +139,22 @@ export default function AccessTokens() {
   }, []);
 
   const handleRevoke = (id: any) => {
-    setTokens((prevRows) =>
-      prevRows.map((row) => {
-        if (row.id === id) {
-          return { ...row, deleted: true };
-        }
-        return row;
-      })
+    setTokens((prevTokens) =>
+      prevTokens.map((item) =>
+        item.id === id ? { ...item, deleted: true } : item
+      )
     );
-    setTimeout(() => {
-      setTokens((prevRows) => prevRows.filter((row) => row.id !== id));
-    }, 500);
+
+    const tokenToRevoke = tokens.find((item) => item.id === id);
+
+    if (tokenToRevoke && !tokenToRevoke.deleted) {
+      authRevokeToken(id);
+      setTimeout(() => {
+        setTokens((prevTokens) => prevTokens.filter((item) => item.id !== id));
+      }, 500);
+    } else {
+      console.log('Token has already been revoked:', tokenToRevoke);
+    }
   };
 
   const emptyRows =
@@ -173,7 +176,9 @@ export default function AccessTokens() {
       <Table>
         <TableHead>
           <TableRow>
+            <TableCell>ID</TableCell>
             <TableCell>Token Name</TableCell>
+            <TableCell>Expiry Date</TableCell>
             <TableCell width="100" align="center">
               Revoke
             </TableCell>
@@ -183,7 +188,10 @@ export default function AccessTokens() {
           {tokens &&
             tokens
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map(({ id, name, deleted }: IToken) => {
+              .map(({ id, name, deleted, expiryDate }: IToken) => {
+                const formattedDate = `${expiryDate
+                  .toISOString()
+                  .slice(0, 10)} ${expiryDate.toISOString().slice(11, 16)}`;
                 if (!deleted) {
                   return (
                     <Fade in={!deleted} key={id}>
@@ -191,12 +199,14 @@ export default function AccessTokens() {
                         key={id}
                         className={deleted ? 'purple-flash' : ''}
                       >
+                        <DataTableCell>{id}</DataTableCell>
                         <DataTableCell>
                           {shortenString(name)}
                           <CopyToClipboard copy={name} />
                         </DataTableCell>
+                        <DataTableCell>{formattedDate}</DataTableCell>
                         <DataTableCell align="center">
-                          <AlertDialog fn={() => handleRevoke(id)} row={id} />
+                          <AlertDialog fn={() => handleRevoke(id)} row={name} />
                         </DataTableCell>
                       </TableRow>
                     </Fade>
@@ -205,7 +215,7 @@ export default function AccessTokens() {
                   return (
                     <TableRow key={id}>
                       <DataTableCell
-                        colSpan={2}
+                        colSpan={4}
                         height={73}
                         className="purple-flash"
                       >
@@ -234,7 +244,7 @@ export default function AccessTokens() {
 
           {emptyRows > 0 && (
             <TableRow style={{ height: 57 * emptyRows }}>
-              <TableCell colSpan={3} />
+              <TableCell colSpan={4} />
             </TableRow>
           )}
         </TableBody>

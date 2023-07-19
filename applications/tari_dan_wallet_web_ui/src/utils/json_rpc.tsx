@@ -95,6 +95,8 @@ export const authLogin = () => jsonRpc('auth.login');
 
 // jwts
 export const getAllTokens = () => jsonRpc('auth.get_all_jwt', []);
+export const authRevokeToken = (token: string) =>
+  jsonRpc('auth.revoke', [token]);
 
 // rpc
 export const rpcDiscover = () => jsonRpc('rpc.discover');
