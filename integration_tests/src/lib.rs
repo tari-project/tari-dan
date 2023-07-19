@@ -131,6 +131,8 @@ impl TariWorld {
             p.shutdown.trigger();
         }
         self.outputs.clear();
+        self.commitments.clear();
+        self.commitment_ownership_proofs.clear();
         self.miners.clear();
     }
 

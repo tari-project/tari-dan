@@ -32,10 +32,7 @@ use tari_comms::{
     PeerConnection,
 };
 use tari_dan_common_types::optional::Optional;
-use tari_dan_core::{
-    message::{DanMessage, NetworkAnnounce},
-    services::{infrastructure_services::OutboundService, DanPeer, PeerProvider},
-};
+use tari_dan_p2p::{DanMessage, DanPeer, NetworkAnnounce, OutboundService, PeerProvider};
 use tari_validator_node_rpc::peer_sync::PeerSyncProtocol;
 use tokio::{
     sync::{mpsc, Semaphore},
@@ -145,14 +142,11 @@ impl Networking {
 
                 let res = self
                     .outbound
-                    .flood(
-                        Default::default(),
-                        DanMessage::NetworkAnnounce(Box::new(NetworkAnnounce {
-                            identity: self.node_identity.public_key().clone(),
-                            addresses: self.node_identity.public_addresses(),
-                            identity_signature,
-                        })),
-                    )
+                    .flood(DanMessage::NetworkAnnounce(Box::new(NetworkAnnounce {
+                        identity: self.node_identity.public_key().clone(),
+                        addresses: self.node_identity.public_addresses(),
+                        identity_signature,
+                    })))
                     .await;
                 let _ignore = reply.send(res.map_err(Into::into));
             },
@@ -204,7 +198,7 @@ impl Networking {
         {
             self.peer_provider.add_peer(peer).await?;
             self.outbound
-                .flood(Default::default(), DanMessage::NetworkAnnounce(Box::new(announce)))
+                .flood(DanMessage::NetworkAnnounce(Box::new(announce)))
                 .await?;
         }
 

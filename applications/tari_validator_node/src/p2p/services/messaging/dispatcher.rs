@@ -22,8 +22,7 @@
 
 use log::*;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_core::message::DanMessage;
-use tari_dan_storage::models::TariDanPayload;
+use tari_dan_p2p::DanMessage;
 use tokio::task;
 
 use crate::p2p::services::messaging::{DanMessageSenders, InboundMessaging};
@@ -31,12 +30,12 @@ use crate::p2p::services::messaging::{DanMessageSenders, InboundMessaging};
 const LOG_TARGET: &str = "tari::validator_node::p2p::services::message_dispatcher";
 
 pub struct MessageDispatcher {
-    inbound: InboundMessaging<CommsPublicKey, TariDanPayload>,
+    inbound: InboundMessaging<CommsPublicKey>,
     message_senders: DanMessageSenders,
 }
 
 impl MessageDispatcher {
-    pub fn new(inbound: InboundMessaging<CommsPublicKey, TariDanPayload>, message_senders: DanMessageSenders) -> Self {
+    pub fn new(inbound: InboundMessaging<CommsPublicKey>, message_senders: DanMessageSenders) -> Self {
         Self {
             inbound,
             message_senders,
@@ -53,12 +52,10 @@ impl MessageDispatcher {
                 DanMessage::HotStuffMessage(msg) => {
                     self.message_senders.tx_consensus_message.send((from, *msg)).await?
                 },
-                DanMessage::VoteMessage(msg) => self.message_senders.tx_vote_message.send((from, msg)).await?,
                 DanMessage::NewTransaction(msg) => self.message_senders.tx_new_transaction_message.send(*msg).await?,
                 DanMessage::NetworkAnnounce(announce) => {
                     self.message_senders.tx_network_announce.send((from, *announce)).await?
                 },
-                DanMessage::RecoveryMessage(msg) => self.message_senders.tx_recovery_message.send((from, *msg)).await?,
             }
         }
 

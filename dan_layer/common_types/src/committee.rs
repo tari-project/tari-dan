@@ -3,13 +3,14 @@
 
 use std::borrow::Borrow;
 
+use rand::{rngs::OsRng, seq::SliceRandom};
 use serde::Serialize;
 
 use crate::{NodeAddressable, ShardId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 pub struct Committee<TAddr> {
-    // TODO: encapsulate
+    // TODO: not pub
     pub members: Vec<TAddr>,
 }
 
@@ -24,6 +25,10 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
 
     pub fn new(members: Vec<TAddr>) -> Self {
         Self { members }
+    }
+
+    pub fn members(&self) -> &[TAddr] {
+        &self.members
     }
 
     /// Returns n - f where n is the number of committee members and f is the tolerated failure nodes.
@@ -46,6 +51,10 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
 
     pub fn contains(&self, member: &TAddr) -> bool {
         self.members.contains(member)
+    }
+
+    pub fn shuffle(&mut self) {
+        self.members.shuffle(&mut OsRng);
     }
 }
 
@@ -125,7 +134,14 @@ impl CommitteeShard {
     }
 
     pub fn includes_shard(&self, shard_id: &ShardId) -> bool {
-        self.bucket == shard_id.to_committee_bucket(self.num_committees)
+        let b = shard_id.to_committee_bucket(self.num_committees);
+        self.bucket == b
+    }
+
+    pub fn includes_any_shard<I: IntoIterator<Item = B>, B: Borrow<ShardId>>(&self, shard_ids: I) -> bool {
+        shard_ids
+            .into_iter()
+            .any(|shard_id| self.includes_shard(shard_id.borrow()))
     }
 
     pub fn filter<'a, I, B: Borrow<ShardId>>(&'a self, items: I) -> impl Iterator<Item = B> + '_

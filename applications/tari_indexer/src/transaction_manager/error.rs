@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_epoch_manager::base_layer::EpochManagerError;
+use tari_epoch_manager::EpochManagerError;
 use tari_indexer_lib::{error::IndexerError, transaction_autofiller::TransactionAutofillerError};
 
 #[derive(Debug, thiserror::Error)]

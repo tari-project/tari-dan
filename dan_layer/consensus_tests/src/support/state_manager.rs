@@ -2,7 +2,10 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::traits::StateManager;
-use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
+use tari_dan_storage::{
+    consensus_models::{Block, ExecutedTransaction},
+    StateStore,
+};
 
 pub struct NoopStateManager;
 
@@ -18,6 +21,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for NoopStateManager {
     fn commit_transaction(
         &self,
         _tx: &mut TStateStore::WriteTransaction<'_>,
+        _block: &Block,
         _transaction: &ExecutedTransaction,
     ) -> Result<(), Self::Error> {
         Ok(())

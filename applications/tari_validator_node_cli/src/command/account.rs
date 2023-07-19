@@ -80,7 +80,6 @@ pub async fn handle_create(
     let common = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(60),
-        num_outputs: Some(1),
         inputs: vec![],
         version: None,
         dump_outputs_into: None,

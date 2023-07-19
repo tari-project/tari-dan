@@ -25,7 +25,7 @@ impl ValidatorMetadata {
     }
 }
 
-pub fn vn_bmt_node_hash<TAddr: NodeAddressable>(public_key: &TAddr, shard_id: &ShardId) -> FixedHash {
+pub fn vn_node_hash<TAddr: NodeAddressable>(public_key: &TAddr, shard_id: &ShardId) -> FixedHash {
     Blake256::new()
         .chain(public_key.as_bytes())
         .chain(shard_id.as_bytes())

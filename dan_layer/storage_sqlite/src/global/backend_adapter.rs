@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt::{Debug, Formatter},
     ops::RangeInclusive,
@@ -37,7 +37,7 @@ use diesel::{
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
+use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
     global::{
         models::ValidatorNode,
@@ -352,7 +352,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         start_epoch: Epoch,
         end_epoch: Epoch,
         public_key: &[u8],
-    ) -> Result<ValidatorNode, Self::Error> {
+    ) -> Result<ValidatorNode<PublicKey>, Self::Error> {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let vn = dsl::validator_nodes
@@ -377,21 +377,38 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         start_epoch: Epoch,
         end_epoch: Epoch,
     ) -> Result<u64, Self::Error> {
-        #[derive(QueryableByName)]
-        pub struct Count {
-            #[diesel(sql_type = BigInt)]
-            cnt: i64,
-        }
-
         let count =
             sql_query("SELECT COUNT(distinct public_key) as cnt FROM validator_nodes WHERE epoch >= ? AND epoch <= ?")
-                .bind::<Integer, _>(start_epoch.as_u64() as i32)
-                .bind::<Integer, _>(end_epoch.as_u64() as i32)
+                .bind::<BigInt, _>(start_epoch.as_u64() as i64)
+                .bind::<BigInt, _>(end_epoch.as_u64() as i64)
                 .get_result::<Count>(tx.connection())
                 .map_err(|source| SqliteStorageError::DieselError {
                     source,
                     operation: "count_validator_nodes".to_string(),
                 })?;
+
+        Ok(count.cnt as u64)
+    }
+
+    fn validator_nodes_count_for_bucket(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+        bucket: u32,
+    ) -> Result<u64, Self::Error> {
+        let count = sql_query(
+            "SELECT COUNT(distinct public_key) as cnt FROM validator_nodes WHERE epoch >= ? AND epoch <= ? AND \
+             committee_bucket = ?",
+        )
+        .bind::<BigInt, _>(start_epoch.as_u64() as i64)
+        .bind::<BigInt, _>(end_epoch.as_u64() as i64)
+        .bind::<Integer, _>(bucket as i32)
+        .get_result::<Count>(tx.connection())
+        .map_err(|source| SqliteStorageError::DieselError {
+            source,
+            operation: "count_validator_nodes".to_string(),
+        })?;
 
         Ok(count.cnt as u64)
     }
@@ -422,7 +439,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         start_epoch: Epoch,
         end_epoch: Epoch,
         shard_range: RangeInclusive<ShardId>,
-    ) -> Result<Vec<ValidatorNode>, Self::Error> {
+    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error> {
         use crate::global::schema::validator_nodes;
 
         let validators: Vec<DbValidatorNode> = validator_nodes::table
@@ -442,12 +459,47 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         distinct_validators_sorted(validators)
     }
 
+    fn validator_nodes_get_by_buckets(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+        buckets: HashSet<u32>,
+    ) -> Result<HashMap<u32, Committee<PublicKey>>, Self::Error> {
+        use crate::global::schema::validator_nodes;
+
+        let validators: Vec<DbValidatorNode> = validator_nodes::table
+            .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
+            .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
+            .filter(validator_nodes::committee_bucket.eq_any(buckets.iter().map(|b| i64::from(*b))))
+            .order_by(validator_nodes::id.asc())
+            .get_results(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "validator_nodes_get_by_buckets".to_string(),
+            })?;
+
+        let mut committees = HashMap::with_capacity(buckets.len());
+        for bucket in buckets {
+            committees.insert(bucket, Committee::empty());
+        }
+
+        for validator in distinct_validators_sorted(validators)? {
+            let Some(bucket) = validator.committee_bucket else {
+                continue;
+            };
+            committees.get_mut(&bucket).unwrap().members.push(validator.address);
+        }
+
+        Ok(committees)
+    }
+
     fn get_validator_nodes_within_epochs(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-    ) -> Result<Vec<ValidatorNode>, Self::Error> {
+    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error> {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let sqlite_vns = dsl::validator_nodes
@@ -509,7 +561,7 @@ impl Debug for SqliteGlobalDbAdapter {
     }
 }
 
-fn distinct_validators_sorted(sqlite_vns: Vec<DbValidatorNode>) -> Result<Vec<ValidatorNode>, SqliteStorageError> {
+fn distinct_validators(sqlite_vns: Vec<DbValidatorNode>) -> Result<Vec<ValidatorNode<PublicKey>>, SqliteStorageError> {
     let mut db_vns = Vec::with_capacity(sqlite_vns.len());
     let mut dedup_map = HashMap::with_capacity(sqlite_vns.len());
     for (i, vn) in sqlite_vns.into_iter().enumerate() {
@@ -519,7 +571,20 @@ fn distinct_validators_sorted(sqlite_vns: Vec<DbValidatorNode>) -> Result<Vec<Va
         db_vns.push(Some(ValidatorNode::try_from(vn)?));
     }
 
-    let mut db_vns = db_vns.into_iter().flatten().collect::<Vec<_>>();
+    let db_vns = db_vns.into_iter().flatten().collect::<Vec<_>>();
+    Ok(db_vns)
+}
+
+fn distinct_validators_sorted(
+    sqlite_vns: Vec<DbValidatorNode>,
+) -> Result<Vec<ValidatorNode<PublicKey>>, SqliteStorageError> {
+    let mut db_vns = distinct_validators(sqlite_vns)?;
     db_vns.sort_by(|a, b| a.shard_key.cmp(&b.shard_key));
     Ok(db_vns)
+}
+
+#[derive(QueryableByName)]
+struct Count {
+    #[diesel(sql_type = BigInt)]
+    cnt: i64,
 }

@@ -5,25 +5,20 @@ use std::{convert::TryInto, ops::RangeInclusive};
 
 use futures::StreamExt;
 use log::info;
-use tari_comms::types::CommsPublicKey;
+use tari_comms::{
+    protocol::rpc::{RpcError, RpcStatus},
+    types::CommsPublicKey,
+};
 use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 use tari_dan_storage::{
+    consensus_models::SubstateRecord,
     global::{GlobalDb, MetadataKey},
-    models::SubstateShardData,
-    ShardStore,
-    ShardStoreReadTransaction,
-    ShardStoreWriteTransaction,
+    StateStore,
     StorageError,
 };
-use tari_dan_storage_sqlite::{
-    error::SqliteStorageError,
-    global::SqliteGlobalDbAdapter,
-    sqlite_shard_store_factory::SqliteShardStore,
-};
-use tari_epoch_manager::{
-    base_layer::{EpochManagerError, EpochManagerHandle},
-    EpochManager,
-};
+use tari_dan_storage_sqlite::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerReader};
+use tari_state_store_sqlite::SqliteStateStore;
 use tari_validator_node_rpc::{
     client::{TariCommsValidatorNodeClientFactory, ValidatorNodeClientFactory},
     ValidatorNodeRpcClientError,
@@ -34,7 +29,7 @@ const LOG_TARGET: &str = "tari::dan::committee_state_sync";
 pub struct CommitteeStateSync {
     epoch_manager: EpochManagerHandle,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-    shard_store: SqliteShardStore,
+    shard_store: SqliteStateStore,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     node_public_key: CommsPublicKey,
 }
@@ -43,7 +38,7 @@ impl CommitteeStateSync {
     pub fn new(
         epoch_manager: EpochManagerHandle,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-        shard_store: SqliteShardStore,
+        shard_store: SqliteStateStore,
         global_db: GlobalDb<SqliteGlobalDbAdapter>,
         node_public_key: CommsPublicKey,
     ) -> Self {
@@ -70,23 +65,18 @@ impl CommitteeStateSync {
         //     info!(target: LOG_TARGET, "📋 Nothing to sync for epoch zero");
         //     return Ok(());
         // };
+        if !self.epoch_manager.is_epoch_active(epoch).await? {
+            info!(
+                target: LOG_TARGET,
+                "🌍️ Validator is not registered for epoch {}, Skipping state sync", epoch
+            );
+            return Ok(());
+        }
 
         // Get the shard range for our local committee
-        let new_local_shard_range = match self
-            .epoch_manager
-            .get_local_shard_range(epoch, self.node_public_key.clone())
-            .await
-        {
-            Ok(range) => range,
-            Err(EpochManagerError::ValidatorNodeNotRegistered) => {
-                info!(
-                    target: LOG_TARGET,
-                    "🌍️ Validator is not registered for epoch {}, Skipping state sync", epoch
-                );
-                return Ok(());
-            },
-            Err(err) => return Err(err.into()),
-        };
+        let our_vn = self.epoch_manager.get_our_validator_node(epoch).await?;
+        let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
+        let new_local_shard_range = our_vn.shard_key.to_committee_range(num_committees);
 
         // Find previous epoch committee to contact for state sync.
         // Since the actual shard space (slice of pie) that this node is responsible
@@ -94,7 +84,7 @@ impl CommitteeStateSync {
         // we have to find nodes within a shard range.
         let prev_committee = self
             .epoch_manager
-            .get_committee_for_shard_range(previous_epoch, new_local_shard_range.clone())
+            .get_committee_within_shard_range(previous_epoch, new_local_shard_range.clone())
             .await?;
 
         info!(
@@ -123,13 +113,13 @@ impl CommitteeStateSync {
         committee_vns: Committee<CommsPublicKey>,
         shard_range: RangeInclusive<ShardId>,
     ) -> Result<(), CommitteeStateSyncError> {
-        let inventory = {
-            let mut shard_db = self.shard_store.create_read_tx()?;
-            shard_db.get_state_inventory()?
-        };
+        let inventory = self
+            .shard_store
+            .with_read_tx(|tx| SubstateRecord::get_many_within_range(tx, &shard_range, &[]))?;
 
         let inventory = inventory
             .into_iter()
+            .map(|s| s.to_shard_id())
             .map(tari_validator_node_rpc::proto::common::ShardId::from)
             .collect::<Vec<_>>();
 
@@ -152,20 +142,16 @@ impl CommitteeStateSync {
                 end_shard_id: Some((*shard_range.end()).into()),
                 inventory: inventory.clone(),
             };
-            let mut vn_state_stream = sync_vn_rpc_client
-                .vn_state_sync(request)
-                .await
-                .map_err(EpochManagerError::RpcError)?;
+            let mut vn_state_stream = sync_vn_rpc_client.vn_state_sync(request).await?;
             info!(target: LOG_TARGET, "🌍 Syncing...");
             let mut substate_count = 0;
             while let Some(resp) = vn_state_stream.next().await {
-                let msg = resp.map_err(EpochManagerError::RpcStatus)?;
-                let substate_shard_data: SubstateShardData =
+                let msg = resp?;
+                let substate_shard_data: SubstateRecord =
                     msg.try_into().map_err(CommitteeStateSyncError::InvalidStateSyncData)?;
 
                 // insert response state values in the shard db
-                self.shard_store
-                    .with_write_tx(|tx| tx.insert_substates(substate_shard_data))?;
+                self.shard_store.with_write_tx(|tx| substate_shard_data.create(tx))?;
 
                 // increase node inventory
                 // inventory.push(sync_vn_shard.into());
@@ -203,4 +189,8 @@ pub enum CommitteeStateSyncError {
     ValidatorNodeClientError(#[from] ValidatorNodeRpcClientError),
     #[error("Invalid state sync data: {0}")]
     InvalidStateSyncData(anyhow::Error),
+    #[error("RPC status error: {0}")]
+    RpcStatus(#[from] RpcStatus),
+    #[error("RPC error: {0}")]
+    RpcError(#[from] RpcError),
 }

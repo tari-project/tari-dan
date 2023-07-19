@@ -209,6 +209,15 @@ impl TransactionResult {
     }
 }
 
+impl Display for TransactionResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Accept(diff) => write!(f, "Accept({} up, {} down)", diff.up_len(), diff.down_len()),
+            Self::Reject(reason) => write!(f, "Reject: {}", reason),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum RejectReason {
     ShardsNotPledged(String),

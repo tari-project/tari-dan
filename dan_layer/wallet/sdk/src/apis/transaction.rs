@@ -2,16 +2,12 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{
-    optional::{IsNotFoundError, Optional},
-    PayloadId,
-};
+use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
     indexed_value::{IndexedValue, IndexedValueVisitorError},
     substate::SubstateDiff,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 use crate::{
     models::{TransactionStatus, VersionedSubstateAddress, WalletTransaction},
@@ -39,55 +35,61 @@ where
         }
     }
 
-    pub fn get(&self, hash: FixedHash) -> Result<WalletTransaction, TransactionApiError> {
+    pub fn get(&self, tx_id: TransactionId) -> Result<WalletTransaction, TransactionApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let transaction = tx.transaction_get(hash)?;
+        let transaction = tx.transaction_get(tx_id)?;
         Ok(transaction)
     }
 
     pub async fn submit_transaction(
         &self,
         transaction: Transaction,
-    ) -> Result<TransactionQueryResult, TransactionApiError> {
-        self.submit_transaction_internal(transaction, false).await
+        required_substates: Vec<SubstateRequirement>,
+    ) -> Result<TransactionId, TransactionApiError> {
+        self.store
+            .with_write_tx(|tx| tx.transactions_insert(&transaction, false))?;
+
+        let transaction_id = self
+            .network_interface
+            .submit_transaction(transaction, required_substates)
+            .await
+            .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
+
+        self.store.with_write_tx(|tx| {
+            tx.transactions_set_result_and_status(transaction_id, None, None, None, None, TransactionStatus::Pending)
+        })?;
+
+        Ok(transaction_id)
     }
 
     pub async fn submit_dry_run_transaction(
         &self,
         transaction: Transaction,
+        required_substates: Vec<SubstateRequirement>,
     ) -> Result<TransactionQueryResult, TransactionApiError> {
-        self.submit_transaction_internal(transaction, true).await
-    }
-
-    async fn submit_transaction_internal(
-        &self,
-        transaction: Transaction,
-        is_dry_run: bool,
-    ) -> Result<TransactionQueryResult, TransactionApiError> {
-        // we don't have any need to store a dry run transaction
-        if !is_dry_run {
-            self.store
-                .with_write_tx(|tx| tx.transactions_insert(&transaction, is_dry_run))?;
-        }
+        self.store
+            .with_write_tx(|tx| tx.transactions_insert(&transaction, true))?;
 
         let result = self
             .network_interface
-            .submit_transaction(transaction, is_dry_run)
+            .submit_dry_run_transaction(transaction, required_substates)
             .await
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
-        if !is_dry_run {
-            self.store.with_write_tx(|tx| {
-                tx.transactions_set_result_and_status(
-                    result.transaction_hash,
-                    None,
-                    None,
-                    None,
-                    None,
-                    TransactionStatus::Pending,
-                )
-            })?;
-        }
+        let execution_result = result.execution_result.as_ref().ok_or_else(|| {
+            TransactionApiError::NetworkInterfaceError("No execution result returned from dry run".to_string())
+        })?;
+
+        self.store.with_write_tx(|tx| {
+            tx.transactions_set_result_and_status(
+                result.transaction_id,
+                Some(&execution_result.finalize),
+                execution_result.transaction_failure.as_ref(),
+                execution_result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
+                None,
+                TransactionStatus::DryRun,
+            )
+        })?;
 
         Ok(result)
     }
@@ -109,27 +111,27 @@ where
 
     pub async fn check_and_store_finalized_transaction(
         &self,
-        hash: FixedHash,
+        transaction_id: TransactionId,
     ) -> Result<Option<WalletTransaction>, TransactionApiError> {
         // Multithreaded considerations: The transaction result could be requested more than once because db
         // transactions cannot be used around await points.
-        let transaction = self.store.with_read_tx(|tx| tx.transaction_get(hash))?;
+        let transaction = self.store.with_read_tx(|tx| tx.transaction_get(transaction_id))?;
         if transaction.finalize.is_some() {
             return Ok(Some(transaction));
         }
 
         let maybe_resp = self
             .network_interface
-            .query_transaction_result(PayloadId::new(hash))
+            .query_transaction_result(transaction_id)
             .await
             .optional()
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
         let Some(resp) = maybe_resp else {
-            warn!( target: LOG_TARGET, "Transaction result not found for transaction with hash {}. Marking transaction as invalid", hash);
+            warn!( target: LOG_TARGET, "Transaction result not found for transaction with hash {}. Marking transaction as invalid", transaction_id);
             self.store.with_write_tx(|tx| {
                 tx.transactions_set_result_and_status(
-                    hash,
+                    transaction_id,
                     None,
                     None,
                     None,
@@ -167,12 +169,12 @@ where
                 self.store.with_write_tx(|tx| {
                     if !transaction.is_dry_run {
                         if let Some(diff) = result.finalize.result.accept() {
-                            self.commit_result(tx, hash, diff)?;
+                            self.commit_result(tx, transaction_id, diff)?;
                         }
                     }
 
                     tx.transactions_set_result_and_status(
-                        hash,
+                        transaction_id,
                         Some(&result.finalize),
                         result.transaction_failure.as_ref(),
                         result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
@@ -186,7 +188,7 @@ where
                         // we should make sure that the account's locked outputs
                         // are either set to spent or released, depending if the
                         // transaction was finalized or rejected
-                        if let Some(proof_id) = tx.proofs_get_by_transaction_hash(hash).optional()? {
+                        if let Some(proof_id) = tx.proofs_get_by_transaction_id(transaction_id).optional()? {
                             if new_status == TransactionStatus::Accepted {
                                 tx.outputs_finalize_by_proof_id(proof_id)?;
                             } else {
@@ -216,7 +218,7 @@ where
     fn commit_result(
         &self,
         tx: &mut TStore::WriteTransaction<'_>,
-        tx_hash: FixedHash,
+        transaction_id: TransactionId,
         diff: &SubstateDiff,
     ) -> Result<(), TransactionApiError> {
         for (addr, _) in diff.down_iter() {
@@ -236,7 +238,7 @@ where
             let header = substate.substate_value().component().unwrap();
 
             tx.substates_insert_root(
-                tx_hash,
+                transaction_id,
                 VersionedSubstateAddress {
                     address: component_addr.clone(),
                     version: substate.version(),
@@ -250,7 +252,7 @@ where
             for owned_addr in value.referenced_substates() {
                 if let Some(pos) = rest.iter().position(|(addr, _)| addr == &owned_addr) {
                     let (_, s) = rest.swap_remove(pos);
-                    tx.substates_insert_child(tx_hash, component_addr.clone(), VersionedSubstateAddress {
+                    tx.substates_insert_child(transaction_id, component_addr.clone(), VersionedSubstateAddress {
                         address: owned_addr,
                         version: s.version(),
                     })?;
@@ -260,7 +262,7 @@ where
 
         for (addr, substate) in rest {
             tx.substates_insert_root(
-                tx_hash,
+                transaction_id,
                 VersionedSubstateAddress {
                     address: addr.clone(),
                     version: substate.version(),

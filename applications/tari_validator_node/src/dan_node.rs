@@ -24,13 +24,10 @@ use std::time::Duration;
 
 use log::*;
 use tari_comms::{connection_manager::LivenessStatus, connectivity::ConnectivityEvent, peer_manager::NodeId};
-use tari_dan_core::workers::events::HotStuffEvent;
-use tari_epoch_manager::{
-    base_layer::{EpochManagerError, EpochManagerEvent},
-    EpochManager,
-};
+use tari_consensus::hotstuff::HotstuffEvent;
+use tari_dan_storage::{consensus_models::Block, StateStore};
+use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
-use tari_template_lib::Hash;
 use tokio::{task, time, time::MissedTickBehavior};
 
 use crate::{
@@ -85,15 +82,9 @@ impl DanNode {
                     }
                 },
 
-                Ok(event) = hotstuff_events.recv() => {
-                    if let HotStuffEvent::OnFinalized(qc, _) = event {
-                        let transaction_hash = Hash::from(qc.payload_id().into_array());
-                        info!(target: LOG_TARGET, "🏁 Removing finalized transaction {} from mempool", transaction_hash);
-                        if let Err(err) = self.services.mempool.remove_transaction(transaction_hash).await {
-                            error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
-                        }
-                    }
-                }
+                Ok(event) = hotstuff_events.recv() => if let Err(err) = self.handle_hotstuff_event(event).await{
+                    error!(target: LOG_TARGET, "Error handling hotstuff event: {}", err);
+                },
 
                 Ok(event) = epoch_manager_events.recv() => {
                     self.handle_epoch_manager_event(event).await?;
@@ -123,6 +114,34 @@ impl DanNode {
         Ok(())
     }
 
+    async fn handle_hotstuff_event(&self, event: HotstuffEvent) -> Result<(), anyhow::Error> {
+        let HotstuffEvent::BlockCommitted { block_id } = event else {
+            return Ok(());
+        };
+
+        let committed_transactions = self.services.state_store.with_read_tx(|tx| {
+            let block = Block::get(tx, &block_id)?;
+            info!(target: LOG_TARGET, "🏁 Block {} committed", block_id);
+            Ok::<_, anyhow::Error>(
+                block
+                    .commands()
+                    .iter()
+                    .filter_map(|cmd| cmd.accept())
+                    .map(|t| t.id)
+                    .collect::<Vec<_>>(),
+            )
+        })?;
+
+        for tx_id in committed_transactions {
+            info!(target: LOG_TARGET, "🏁 Removing finalized transaction {} from mempool", tx_id);
+            if let Err(err) = self.services.mempool.remove_transaction(tx_id).await {
+                error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
+            }
+        }
+
+        Ok(())
+    }
+
     async fn handle_epoch_manager_event(&self, event: EpochManagerEvent) -> Result<(), anyhow::Error> {
         match event {
             EpochManagerEvent::EpochChanged(epoch) => {
@@ -130,7 +149,7 @@ impl DanNode {
                 let sync_service = CommitteeStateSync::new(
                     self.services.epoch_manager.clone(),
                     self.services.validator_node_client_factory.clone(),
-                    self.services.shard_store.clone(),
+                    self.services.state_store.clone(),
                     self.services.global_db.clone(),
                     self.services.comms.node_identity().public_key().clone(),
                 );
@@ -155,11 +174,15 @@ impl DanNode {
         let res = self
             .services
             .epoch_manager
-            .get_validator_node(epoch, self.services.comms.node_identity().public_key().clone())
+            .get_validator_node(epoch, self.services.comms.node_identity().public_key())
             .await;
 
         let shard_id = match res {
             Ok(vn) => vn.shard_key,
+            Err(EpochManagerError::ValidatorNodeNotRegistered) => {
+                info!(target: LOG_TARGET, "Validator node registered for this epoch");
+                return Ok(());
+            },
             Err(EpochManagerError::BaseLayerConsensusConstantsNotSet) => {
                 info!(target: LOG_TARGET, "Epoch manager has not synced with base layer yet");
                 return Ok(());

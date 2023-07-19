@@ -36,7 +36,7 @@ pub struct DbValidatorNode {
     pub epoch: i64,
     pub committee_bucket: Option<i64>,
 }
-impl TryFrom<DbValidatorNode> for ValidatorNode {
+impl TryFrom<DbValidatorNode> for ValidatorNode<PublicKey> {
     type Error = SqliteStorageError;
 
     fn try_from(vn: DbValidatorNode) -> Result<Self, Self::Error> {
@@ -44,7 +44,7 @@ impl TryFrom<DbValidatorNode> for ValidatorNode {
             shard_key: ShardId::try_from(vn.shard_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!("Invalid shard id in validator node record id={}", vn.id))
             })?,
-            public_key: PublicKey::from_bytes(&vn.public_key).map_err(|_| {
+            address: PublicKey::from_bytes(&vn.public_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!("Invalid public key in validator node record id={}", vn.id))
             })?,
             epoch: Epoch(vn.epoch as u64),

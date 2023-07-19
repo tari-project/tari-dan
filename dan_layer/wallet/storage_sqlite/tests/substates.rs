@@ -3,7 +3,6 @@
 
 use std::str::FromStr;
 
-use tari_common_types::types::FixedHash;
 use tari_dan_common_types::optional::Optional;
 use tari_dan_wallet_sdk::{
     models::VersionedSubstateAddress,
@@ -11,6 +10,7 @@ use tari_dan_wallet_sdk::{
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_engine_types::substate::SubstateAddress;
+use tari_transaction::TransactionId;
 
 #[test]
 fn get_and_insert_substates() {
@@ -23,7 +23,7 @@ fn get_and_insert_substates() {
     let mut tx = db.create_write_tx().unwrap();
     let substate = tx.substates_get(&example_addr).optional().unwrap();
     assert!(substate.is_none());
-    let hash = FixedHash::zero();
+    let hash = TransactionId::default();
     let address =
         SubstateAddress::from_str("component_1f019e4d434cbf2b99c0af89ee212f422af86de7280a169d2e392dfb66ab34d4")
             .unwrap();

@@ -20,18 +20,34 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::Serialize;
+// use serde::Serialize;
+// use tari_common_types::types::FixedHash;
+// use tari_dan_common_types::{vn_node_hash, NodeAddressable, ShardId};
+//
+// #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+// pub struct ValidatorNode<TAddr> {
+//     pub shard_key: ShardId,
+//     pub public_key: TAddr,
+// }
+//
+// impl<TAddr: NodeAddressable> ValidatorNode<TAddr> {
+//     pub fn node_hash(&self) -> FixedHash {
+//         vn_node_hash(&self.public_key, &self.shard_key)
+//     }
+// }
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{vn_bmt_node_hash, NodeAddressable, ShardId};
+use tari_dan_common_types::{vn_node_hash, Epoch, NodeAddressable, ShardId};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone)]
 pub struct ValidatorNode<TAddr> {
+    pub address: TAddr,
     pub shard_key: ShardId,
-    pub public_key: TAddr,
+    pub epoch: Epoch,
+    pub committee_bucket: Option<u32>,
 }
 
 impl<TAddr: NodeAddressable> ValidatorNode<TAddr> {
     pub fn node_hash(&self) -> FixedHash {
-        vn_bmt_node_hash(&self.public_key, &self.shard_key)
+        vn_node_hash(&self.address, &self.shard_key)
     }
 }

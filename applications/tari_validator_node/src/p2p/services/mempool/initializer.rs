@@ -23,47 +23,52 @@
 use std::sync::Arc;
 
 use tari_comms::NodeIdentity;
+use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
+use tari_dan_storage::consensus_models::ExecutedTransaction;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::Transaction;
-use tokio::{
-    sync::{broadcast, mpsc},
-    task,
-    task::JoinHandle,
-};
+use tokio::{sync::mpsc, task, task::JoinHandle};
 
 use crate::{
-    dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::services::{
-        mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, Validator},
+        mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, SubstateResolver, Validator},
         messaging::OutboundMessaging,
     },
+    substate_resolver::SubstateResolverError,
 };
 
-pub fn spawn<TValidator>(
+pub fn spawn<TExecutor, TValidator, TSubstateResolver>(
     new_transactions: mpsc::Receiver<Transaction>,
     outbound: OutboundMessaging,
+    tx_executed_transactions: mpsc::Sender<ExecutedTransaction>,
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
+    transaction_executor: TExecutor,
+    substate_resolver: TSubstateResolver,
     validator: TValidator,
-    dry_run_processor: DryRunTransactionProcessor,
+    state_store: SqliteStateStore,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
     TValidator: Validator<Transaction, Error = MempoolError> + Send + Sync + 'static,
+    TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
+    TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
-    let (tx_valid_transactions, rx_valid_transactions) = broadcast::channel(100);
     let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
 
     let mempool = MempoolService::new(
         new_transactions,
         rx_mempool_request,
         outbound,
-        tx_valid_transactions,
+        tx_executed_transactions,
         epoch_manager,
         node_identity,
+        transaction_executor,
+        substate_resolver,
         validator,
-        dry_run_processor,
+        state_store,
     );
-    let handle = MempoolHandle::new(rx_valid_transactions, tx_mempool_request);
+    let handle = MempoolHandle::new(tx_mempool_request);
 
     let join_handle = task::spawn(mempool.run());
 

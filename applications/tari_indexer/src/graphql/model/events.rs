@@ -25,8 +25,8 @@ use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::PayloadId;
 use tari_template_lib::{prelude::ComponentAddress, Hash};
+use tari_transaction::TransactionId;
 
 use crate::substate_manager::SubstateManager;
 
@@ -67,8 +67,8 @@ impl EventQuery {
     ) -> Result<Vec<Event>, anyhow::Error> {
         info!(target: LOG_TARGET, "Querying events for transaction hash = {}", tx_hash);
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        let tx_hash = Hash::from_hex(&tx_hash)?;
-        let events = match substate_manager.scan_events_for_transaction(tx_hash).await {
+        let tx_id = TransactionId::from_hex(&tx_hash)?;
+        let events = match substate_manager.scan_events_for_transaction(tx_id).await {
             Ok(events) => events,
             Err(e) => {
                 info!(
@@ -126,7 +126,7 @@ impl EventQuery {
 
         let component_address = ComponentAddress::from_hex(&component_address)?;
         let template_address = Hash::from_str(&template_address)?;
-        let tx_hash = PayloadId::new(Hash::from_hex(&tx_hash)?);
+        let tx_hash = TransactionId::from_hex(&tx_hash)?;
 
         let payload = serde_json::from_str(&payload)?;
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();

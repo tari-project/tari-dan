@@ -1598,7 +1598,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "env_logger 0.10.0",
+ "env_logger",
  "futures 0.3.28",
  "log",
  "rand 0.7.3",
@@ -1609,6 +1609,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_storage",
  "tari_engine_types",
+ "tari_epoch_manager",
  "tari_mmr",
  "tari_shutdown",
  "tari_state_store_sqlite",
@@ -2790,19 +2791,6 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a12e6657c4c97ebab115a42dcee77225f7f482cdd841cf7088c657a42e9e00e7"
-dependencies = [
- "atty",
- "humantime",
- "log",
- "regex",
- "termcolor",
-]
-
-[[package]]
-name = "env_logger"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85cdab6a89accf66733ad5a1693a4dcced6aeff64602b634530dd73c1f3ee9f0"
@@ -2988,12 +2976,6 @@ dependencies = [
  "libc",
  "winapi",
 ]
-
-[[package]]
-name = "fuchsia-cprng"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a06f77d526c1a601b7c4cdd98f54b5eaabffc14d5f2f0296febdc7f357c6d3ba"
 
 [[package]]
 name = "funty"
@@ -3770,6 +3752,7 @@ dependencies = [
  "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
+ "tari_dan_storage",
  "tari_dan_wallet_daemon",
  "tari_dan_wallet_sdk",
  "tari_engine_types",
@@ -5611,19 +5594,6 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "552840b97013b1a26992c11eac34bdd778e464601a4c2054b5f0bff7c6761293"
-dependencies = [
- "fuchsia-cprng",
- "libc",
- "rand_core 0.3.1",
- "rdrand",
- "winapi",
-]
-
-[[package]]
-name = "rand"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a6b1679d49b24bbfe0c803429aa1874472f50d9b363131f0e89fc356b544d03"
@@ -5665,21 +5635,6 @@ dependencies = [
  "ppv-lite86",
  "rand_core 0.6.4",
 ]
-
-[[package]]
-name = "rand_core"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a6fdeb83b075e8266dcc8762c22776f6877a63111121f5f8c7411e5be7eed4b"
-dependencies = [
- "rand_core 0.4.2",
-]
-
-[[package]]
-name = "rand_core"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c33a3c44ca05fa6f1807d8e6743f3824e8509beca625669633be0acbdf509dc"
 
 [[package]]
 name = "rand_core"
@@ -5766,15 +5721,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rdrand"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "678054eb77286b51581ba43620cc911abf02758c91f93f479767aed0f90458b2"
-dependencies = [
- "rand_core 0.3.1",
-]
-
-[[package]]
 name = "redox_syscall"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5855,15 +5801,6 @@ dependencies = [
  "bitflags 1.3.2",
  "libc",
  "mach",
- "winapi",
-]
-
-[[package]]
-name = "remove_dir_all"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
-dependencies = [
  "winapi",
 ]
 
@@ -7395,8 +7332,10 @@ dependencies = [
  "tari_common_types",
  "tari_dan_common_types",
  "tari_dan_storage",
+ "tari_epoch_manager",
  "tari_mmr",
  "tari_shutdown",
+ "tari_transaction",
  "thiserror",
  "tokio",
 ]
@@ -7597,13 +7536,13 @@ dependencies = [
  "tari_core",
  "tari_crypto",
  "tari_dan_common_types",
- "tari_dan_core",
  "tari_dan_engine",
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
  "tari_epoch_manager",
  "tari_shutdown",
+ "tari_state_store_sqlite",
  "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
@@ -7617,7 +7556,6 @@ dependencies = [
 name = "tari_dan_common_types"
 version = "0.50.0-pre.0"
 dependencies = [
- "anyhow",
  "digest 0.9.0",
  "newtype-ops",
  "prost 0.9.0",
@@ -7628,43 +7566,10 @@ dependencies = [
  "tari_bor",
  "tari_common",
  "tari_common_types",
- "tari_core",
  "tari_crypto",
  "tari_engine_types",
  "tari_mmr",
  "tari_utilities",
-]
-
-[[package]]
-name = "tari_dan_core"
-version = "0.50.0-pre.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "blake2 0.9.2",
- "digest 0.9.0",
- "futures 0.3.28",
- "log",
- "rand 0.8.5",
- "serde",
- "tari_base_node_client",
- "tari_common",
- "tari_common_types",
- "tari_comms",
- "tari_core",
- "tari_crypto",
- "tari_dan_common_types",
- "tari_dan_engine",
- "tari_dan_storage",
- "tari_engine_types",
- "tari_epoch_manager",
- "tari_mmr",
- "tari_shutdown",
- "tari_test_utils",
- "tari_transaction",
- "tari_utilities",
- "thiserror",
- "tokio",
 ]
 
 [[package]]
@@ -7694,6 +7599,18 @@ dependencies = [
  "thiserror",
  "wasmer",
  "wasmer-middlewares",
+]
+
+[[package]]
+name = "tari_dan_p2p"
+version = "0.50.0-pre.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "tari_comms",
+ "tari_consensus",
+ "tari_dan_common_types",
+ "tari_transaction",
 ]
 
 [[package]]
@@ -7744,37 +7661,8 @@ dependencies = [
  "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_storage",
- "tari_engine_types",
- "tari_transaction",
  "tari_utilities",
  "thiserror",
-]
-
-[[package]]
-name = "tari_dan_tests"
-version = "0.50.0-pre.0"
-dependencies = [
- "anyhow",
- "env_logger 0.9.3",
- "log",
- "rand 0.7.3",
- "tari_common_types",
- "tari_comms",
- "tari_core",
- "tari_crypto",
- "tari_dan_common_types",
- "tari_dan_core",
- "tari_dan_engine",
- "tari_dan_storage",
- "tari_dan_storage_sqlite",
- "tari_engine_types",
- "tari_epoch_manager",
- "tari_shutdown",
- "tari_template_lib",
- "tari_transaction",
- "tari_utilities",
- "tempdir",
- "tokio",
 ]
 
 [[package]]
@@ -7862,6 +7750,7 @@ dependencies = [
  "tari_common_types",
  "tari_crypto",
  "tari_dan_common_types",
+ "tari_dan_storage",
  "tari_dan_wallet_storage_sqlite",
  "tari_engine_types",
  "tari_key_manager",
@@ -7887,6 +7776,7 @@ dependencies = [
  "serde_json",
  "tari_common_types",
  "tari_dan_common_types",
+ "tari_dan_storage",
  "tari_dan_wallet_sdk",
  "tari_engine_types",
  "tari_template_lib",
@@ -7923,7 +7813,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "log",
- "serde",
  "tari_base_node_client",
  "tari_common_types",
  "tari_comms",
@@ -7932,6 +7821,7 @@ dependencies = [
  "tari_dan_common_types",
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
+ "tari_mmr",
  "tari_shutdown",
  "thiserror",
  "tokio",
@@ -7952,7 +7842,6 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-jrpc",
- "chrono",
  "ciborium",
  "clap 3.2.25",
  "config",
@@ -7960,11 +7849,9 @@ dependencies = [
  "diesel_migrations",
  "futures 0.3.28",
  "include_dir",
- "lazy_static",
  "lmdb-zero",
  "log",
  "log4rs 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "mini-moka",
  "prost 0.9.0",
  "rand 0.8.5",
  "reqwest",
@@ -7977,12 +7864,11 @@ dependencies = [
  "tari_common_types",
  "tari_comms",
  "tari_comms_logging",
- "tari_core",
  "tari_crypto",
  "tari_dan_app_utilities",
  "tari_dan_common_types",
- "tari_dan_core",
  "tari_dan_engine",
+ "tari_dan_p2p",
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
@@ -7991,15 +7877,14 @@ dependencies = [
  "tari_indexer_lib",
  "tari_p2p",
  "tari_shutdown",
+ "tari_state_store_sqlite",
  "tari_storage",
- "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
  "tari_validator_node_client",
  "tari_validator_node_rpc",
  "thiserror",
  "tokio",
- "tokio-stream",
  "tonic 0.6.2",
  "tower",
  "tower-http",
@@ -8015,7 +7900,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "tari_common_types",
  "tari_dan_common_types",
  "tari_engine_types",
  "tari_transaction",
@@ -8212,7 +8096,7 @@ dependencies = [
  "tari_common_types",
  "tari_dan_common_types",
  "tari_dan_storage",
- "tari_utilities",
+ "tari_transaction",
  "thiserror",
  "time 0.3.22",
 ]
@@ -8305,7 +8189,6 @@ dependencies = [
 name = "tari_transaction"
 version = "0.50.0-pre.0"
 dependencies = [
- "rand 0.7.3",
  "serde",
  "tari_common_types",
  "tari_crypto",
@@ -8354,20 +8237,16 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-jrpc",
- "bytes 1.4.0",
- "chrono",
  "clap 3.2.25",
  "config",
  "futures 0.3.28",
  "include_dir",
  "json5 0.2.8",
- "lazy_static",
  "libsqlite3-sys",
  "lmdb-zero",
  "log",
  "log4rs 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "mime_guess",
- "mini-moka",
  "prost 0.9.0",
  "rand 0.7.3",
  "reqwest",
@@ -8380,20 +8259,22 @@ dependencies = [
  "tari_common_types",
  "tari_comms",
  "tari_comms_logging",
+ "tari_consensus",
  "tari_core",
  "tari_crypto",
  "tari_dan_app_utilities",
  "tari_dan_common_types",
- "tari_dan_core",
  "tari_dan_engine",
+ "tari_dan_p2p",
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
  "tari_epoch_manager",
+ "tari_indexer_lib",
  "tari_p2p",
  "tari_shutdown",
+ "tari_state_store_sqlite",
  "tari_storage",
- "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
  "tari_validator_node_client",
@@ -8402,7 +8283,6 @@ dependencies = [
  "thiserror",
  "time 0.3.22",
  "tokio",
- "tokio-stream",
  "tonic 0.6.2",
  "tower",
  "tower-http",
@@ -8427,6 +8307,7 @@ dependencies = [
  "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_engine",
+ "tari_dan_storage",
  "tari_engine_types",
  "tari_template_builtin",
  "tari_template_lib",
@@ -8471,9 +8352,10 @@ dependencies = [
  "tari_common_types",
  "tari_comms",
  "tari_comms_rpc_macros",
+ "tari_consensus",
  "tari_crypto",
  "tari_dan_common_types",
- "tari_dan_core",
+ "tari_dan_p2p",
  "tari_dan_storage",
  "tari_engine_types",
  "tari_template_lib",
@@ -8574,16 +8456,6 @@ dependencies = [
  "wasm-bindgen-test",
  "web-sys",
  "wee_alloc",
-]
-
-[[package]]
-name = "tempdir"
-version = "0.3.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15f2b5fb00ccdf689e0149d1b1b3c03fead81c2b37735d812fa8bddbbf41b6d8"
-dependencies = [
- "rand 0.4.6",
- "remove_dir_all",
 ]
 
 [[package]]
