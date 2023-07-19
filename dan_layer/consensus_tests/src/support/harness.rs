@@ -203,6 +203,8 @@ impl Test {
 pub struct TestBuilder {
     committees: HashMap<u32, Committee<TestAddress>>,
     sql_address: String,
+    default_decision: Decision,
+    default_fee: u64,
 }
 
 impl TestBuilder {
@@ -210,6 +212,8 @@ impl TestBuilder {
         Self {
             committees: HashMap::new(),
             sql_address: ":memory:".to_string(),
+            default_decision: Decision::Commit,
+            default_fee: 1,
         }
     }
 
@@ -257,7 +261,7 @@ impl TestBuilder {
             epoch_manager.add_committee(*bucket, committee.clone()).await;
         }
         let (channels, validators) = self.build_validators(&leader_strategy, &epoch_manager).await;
-        let network = spawn_network(channels);
+        let network = spawn_network(channels, self.default_decision, self.default_fee);
 
         Test {
             validators,

@@ -126,7 +126,7 @@ where TConsensusSpec: ConsensusSpec
         let mut missing_tx_ids = Vec::new();
         self.store.with_read_tx(|tx| {
             for tx_id in block.all_transaction_ids() {
-                if ExecutedTransaction::exists(tx, tx_id)? {
+                if !ExecutedTransaction::exists(tx, tx_id)? {
                     missing_tx_ids.push(*tx_id);
                 }
             }
@@ -193,7 +193,7 @@ where TConsensusSpec: ConsensusSpec
                 maybe_decision = self.decide_what_to_vote(tx, block, &local_committee_shard)?;
             }
 
-            self.update_nodes(tx, &block, &local_committee_shard)?;
+            self.update_nodes(tx, block, &local_committee_shard)?;
             Ok::<_, HotStuffError>(maybe_decision)
         })?;
 
