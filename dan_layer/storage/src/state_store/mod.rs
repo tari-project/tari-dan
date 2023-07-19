@@ -8,7 +8,7 @@ use std::{
 
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, ShardId};
-use tari_transaction::TransactionId;
+use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
     consensus_models::{
@@ -30,6 +30,7 @@ use crate::{
         TransactionAtom,
         TransactionPoolRecord,
         TransactionPoolStage,
+        TransactionRecord,
         Vote,
     },
     StorageError,
@@ -78,17 +79,18 @@ pub trait StateStoreReadTransaction {
     fn locked_block_get(&mut self, epoch: Epoch) -> Result<LockedBlock, StorageError>;
     fn leaf_block_get(&mut self, epoch: Epoch) -> Result<LeafBlock, StorageError>;
     fn high_qc_get(&mut self, epoch: Epoch) -> Result<HighQc, StorageError>;
-    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<ExecutedTransaction, StorageError>;
-    fn transactions_get_many<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError>;
+    fn transactions_exists(&mut self, tx_id: &TransactionId) -> Result<bool, StorageError>;
+    fn transactions_get_any<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         tx_ids: I,
-    ) -> Result<Vec<ExecutedTransaction>, StorageError>;
+    ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn transactions_get_paginated(
         &mut self,
         limit: u64,
         offset: u64,
         asc_desc_created_at: Option<Ordering>,
-    ) -> Result<Vec<ExecutedTransaction>, StorageError>;
+    ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError>;
     fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
@@ -154,8 +156,8 @@ pub trait StateStoreWriteTransaction {
     fn high_qc_set(&mut self, high_qc: &HighQc) -> Result<(), StorageError>;
 
     // -------------------------------- Transaction -------------------------------- //
-    fn transactions_insert(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError>;
-    fn transactions_update(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError>;
+    fn transactions_insert(&mut self, transaction: &Transaction) -> Result<(), StorageError>;
+    fn executed_transactions_update(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError>;
     // -------------------------------- Transaction Pool -------------------------------- //
     fn transaction_pool_insert(
         &mut self,

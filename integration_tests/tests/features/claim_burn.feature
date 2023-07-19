@@ -40,7 +40,6 @@ Feature: Claim Burn
 # Then account ACC has one confidential bucket in it
 
   @serial
-    @doit
   Scenario: Double Claim base layer burn funds with wallet daemon. should fail
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE

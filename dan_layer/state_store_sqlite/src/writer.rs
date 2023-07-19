@@ -32,7 +32,7 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
     StorageError,
 };
-use tari_transaction::TransactionId;
+use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
     error::SqliteStorageError,
@@ -329,17 +329,13 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn transactions_insert(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError> {
+    fn transactions_insert(&mut self, transaction: &Transaction) -> Result<(), StorageError> {
         use crate::schema::transactions;
-
-        let transaction = executed_transaction.transaction();
-        let result = executed_transaction.result();
 
         let insert = (
             transactions::transaction_id.eq(serialize_hex(transaction.id())),
             transactions::fee_instructions.eq(serialize_json(transaction.fee_instructions())?),
             transactions::instructions.eq(serialize_json(transaction.instructions())?),
-            transactions::result.eq(serialize_json(result)?),
             transactions::signature.eq(serialize_json(transaction.signature())?),
             transactions::inputs.eq(serialize_json(transaction.inputs())?),
             transactions::input_refs.eq(serialize_json(transaction.input_refs())?),
@@ -360,7 +356,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn transactions_update(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError> {
+    fn executed_transactions_update(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError> {
         use crate::schema::transactions;
 
         let transaction = executed_transaction.transaction();
@@ -370,6 +366,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             transactions::result.eq(serialize_json(result)?),
             transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
             transactions::filled_outputs.eq(serialize_json(transaction.filled_outputs())?),
+            transactions::execution_time_ms
+                .eq(i64::try_from(executed_transaction.execution_time().as_millis()).unwrap_or(i64::MAX)),
             transactions::is_finalized.eq(true),
         );
 

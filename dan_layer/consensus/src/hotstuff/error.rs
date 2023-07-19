@@ -9,6 +9,7 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
+use tari_transaction::TransactionId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
@@ -40,6 +41,8 @@ pub enum HotStuffError {
     InvalidVoteSignature { signer_public_key: PublicKey },
     #[error("Transaction pool error: {0}")]
     TransactionPoolError(#[from] TransactionPoolError),
+    #[error("Transaction {transaction_id} does not exist")]
+    TransactionDoesNotExist { transaction_id: TransactionId },
 }
 
 impl From<EpochManagerError> for HotStuffError {

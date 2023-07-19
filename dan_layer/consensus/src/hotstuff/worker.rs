@@ -205,7 +205,7 @@ where
             executed.transaction().id()
         );
         self.state_store.with_write_tx(|tx| {
-            executed.insert(tx)?;
+            executed.upsert(tx)?;
 
             self.transaction_pool.insert(tx, TransactionAtom {
                 id: *executed.transaction().id(),

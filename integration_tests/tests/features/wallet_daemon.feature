@@ -70,6 +70,7 @@ Feature: Wallet Daemon
         acc2.balance(faucet_resource);
         acc1.balance(faucet_resource);
         ```
+        When I wait 1 seconds
         # Check balances
         # Notice that `take_free_coins` extracts precisely 1000 faucet tokens
         When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 1000

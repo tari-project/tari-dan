@@ -113,19 +113,20 @@ create table locked_block
 
 create table transactions
 (
-    id               integer   not null primary key AUTOINCREMENT,
-    transaction_id   text      not null,
-    fee_instructions text      not NULL,
-    instructions     text      not NULL,
-    signature        text      not NULL,
-    inputs           text      not NULL,
-    input_refs       text      not NULL,
-    outputs          text      not NULL,
-    filled_inputs    text      not NULL,
-    filled_outputs   text      not NULL,
-    result           text      not NULL,
-    is_finalized     boolean   NOT NULL DEFAULT '0',
-    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id                integer   not null primary key AUTOINCREMENT,
+    transaction_id    text      not null,
+    fee_instructions  text      not NULL,
+    instructions      text      not NULL,
+    signature         text      not NULL,
+    inputs            text      not NULL,
+    input_refs        text      not NULL,
+    outputs           text      not NULL,
+    filled_inputs     text      not NULL,
+    filled_outputs    text      not NULL,
+    result            text      NULL,
+    execution_time_ms bigint    NULL,
+    is_finalized      boolean   NOT NULL DEFAULT '0',
+    created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 create unique index transactions_uniq_idx_id on transactions (transaction_id);
@@ -157,4 +158,20 @@ create table votes
     signature        text      not NULL,
     merkle_proof     text      not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE block_missing_txs
+(
+    id              integer   not NULL PRIMARY KEY AUTOINCREMENT,
+    transaction_ids text      not NULL,
+    block_id        text      not NULL,
+    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE missing_tx
+(
+    id              integer   not NULL primary key AUTOINCREMENT,
+    transaction_id  text      not NULL,
+    block_id        text      not NULL,
+    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );

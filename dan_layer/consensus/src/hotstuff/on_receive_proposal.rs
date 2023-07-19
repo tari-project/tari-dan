@@ -24,6 +24,7 @@ use tari_dan_storage::{
         SubstateRecord,
         TransactionPool,
         TransactionPoolStage,
+        TransactionRecord,
     },
     StateStore,
     StateStoreReadTransaction,
@@ -126,7 +127,7 @@ where TConsensusSpec: ConsensusSpec
         let mut missing_tx_ids = Vec::new();
         self.store.with_read_tx(|tx| {
             for tx_id in block.all_transaction_ids() {
-                if !ExecutedTransaction::exists(tx, tx_id)? {
+                if !TransactionRecord::exists(tx, tx_id)? {
                     missing_tx_ids.push(*tx_id);
                 }
             }

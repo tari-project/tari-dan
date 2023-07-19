@@ -1,7 +1,7 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
@@ -55,6 +55,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         state_store: MemoryStateStore,
         consensus_context: ConsensusContext,
     ) -> Result<ExecutedTransaction, Self::Error> {
+        let timer = Instant::now();
         // Include ownership token for the signers of this in the auth scope
         let owner_token = get_auth_token(transaction.signer_public_key());
         let auth_params = AuthParams {
@@ -82,7 +83,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             },
         };
 
-        Ok(ExecutedTransaction::new(transaction, result))
+        Ok(ExecutedTransaction::new(transaction, result, timer.elapsed()))
     }
 }
 

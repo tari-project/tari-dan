@@ -95,7 +95,7 @@ where TConsensusSpec: ConsensusSpec
                 .iter()
                 .filter_map(|cmd| cmd.local_prepared())
                 .map(|t| &t.id);
-            let prepared_txs = ExecutedTransaction::get_many(tx.deref_mut(), prepared_iter)?;
+            let prepared_txs = ExecutedTransaction::get_any(tx.deref_mut(), prepared_iter)?;
             involved_foreign_shards = prepared_txs
                 .iter()
                 .flat_map(|tx| tx.transaction().involved_shards_iter().copied())

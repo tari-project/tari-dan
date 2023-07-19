@@ -44,7 +44,7 @@ use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_app_utilities::template_manager::interface::TemplateManagerHandle;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, QuorumDecision, SubstateRecord},
+    consensus_models::{ExecutedTransaction, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
     StateStore,
 };
@@ -241,10 +241,10 @@ impl JsonRpcHandlers {
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let mut tx = self.state_store.create_read_tx().unwrap();
-        match ExecutedTransaction::get_paginated(&mut tx, 1000, 0, Some(Ordering::Descending)) {
+        match TransactionRecord::get_paginated(&mut tx, 1000, 0, Some(Ordering::Descending)) {
             Ok(recent_transactions) => {
                 let res = GetRecentTransactionsResponse {
-                    transactions: recent_transactions.into_iter().map(|t| t.into_transaction()).collect(),
+                    transactions: recent_transactions.into_iter().map(|t| t.transaction).collect(),
                 };
                 Ok(JsonRpcResponse::success(answer_id, res))
             },
