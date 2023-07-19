@@ -95,6 +95,7 @@ pub trait StateStoreReadTransaction {
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block, StorageError>;
+    fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError>;
 
@@ -172,6 +173,14 @@ pub trait StateStoreWriteTransaction {
         is_ready: Option<bool>,
     ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;
+
+    fn insert_missing_transactions(
+        &mut self,
+        block_id: &BlockId,
+        transaction_ids: Vec<TransactionId>,
+    ) -> Result<(), StorageError>;
+
+    fn remove_missing_transaction(&mut self, transaction_id: TransactionId) -> Result<Option<BlockId>, StorageError>;
 
     // -------------------------------- Votes -------------------------------- //
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;

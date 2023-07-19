@@ -16,6 +16,24 @@ diesel::table! {
 }
 
 diesel::table! {
+    block_missing_txs(id) {
+        id -> Integer,
+        block_id -> Text,
+        transaction_ids -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    missing_tx(id) {
+        id -> Integer,
+        transaction_id -> Text,
+        block_id -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     high_qcs (id) {
         id -> Integer,
         epoch -> BigInt,

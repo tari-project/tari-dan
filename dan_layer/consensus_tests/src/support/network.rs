@@ -7,23 +7,34 @@ use std::{
 };
 
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
+use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::committee::Committee;
-use tari_dan_storage::consensus_models::ExecutedTransaction;
-use tokio::sync::{mpsc, watch};
+use tari_dan_storage::consensus_models::{Decision, ExecutedTransaction};
+use tari_transaction::Transaction;
+use tokio::sync::{
+    mpsc::{self},
+    watch,
+};
 
-use crate::support::{address::TestAddress, ValidatorChannels};
+use crate::support::{address::TestAddress, transaction::build_transaction_from, ValidatorChannels};
 
-pub fn spawn_network(channels: Vec<ValidatorChannels>) -> TestNetwork {
+pub fn spawn_network(channels: Vec<ValidatorChannels>, default_decision: Decision, default_fee: u64) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
         .map(|c| (c.address, (c.bucket, c.tx_new_transactions.clone())))
         .collect();
     let tx_hs_message = channels.iter().map(|c| (c.address, c.tx_hs_message.clone())).collect();
-    let (rx_broadcast, rx_leader) = channels
+    let (rx_broadcast, rx_leader, rx_mempool) = channels
         .into_iter()
-        .map(|c| ((c.address, c.rx_broadcast), (c.address, c.rx_leader)))
-        .unzip();
+        .map(|c| {
+            (
+                (c.address, c.rx_broadcast),
+                (c.address, c.rx_leader),
+                (c.address, c.rx_mempool),
+            )
+        })
+        .multiunzip();
     let (tx_new_transaction, rx_new_transaction) = mpsc::channel(100);
     let (tx_network_status, network_status) = watch::channel(NetworkStatus::Paused);
     let (tx_on_message, rx_on_message) = watch::channel(None);
@@ -36,8 +47,11 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>) -> TestNetwork {
         tx_hs_message,
         rx_broadcast: Some(rx_broadcast),
         rx_leader: Some(rx_leader),
+        rx_mempool: Some(rx_mempool),
         on_message: tx_on_message,
         num_sent_messages: num_sent_messages.clone(),
+        default_decision,
+        default_fee,
     }
     .spawn();
 
@@ -96,15 +110,15 @@ impl TestNetwork {
 #[derive(Debug, Clone, Copy)]
 pub enum TestNetworkDestination {
     All,
-    // Address(TestAddress),
+    Address(TestAddress),
     Bucket(u32),
 }
 
 impl TestNetworkDestination {
-    pub fn is_for(self, _addr: &TestAddress, bucket: u32) -> bool {
+    pub fn is_for(self, addr: &TestAddress, bucket: u32) -> bool {
         match self {
             TestNetworkDestination::All => true,
-            // TestNetworkDestination::Address(a) => a == addr,
+            TestNetworkDestination::Address(a) => a == *addr,
             TestNetworkDestination::Bucket(b) => b == bucket,
         }
     }
@@ -117,9 +131,12 @@ pub struct TestNetworkWorker {
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>>>,
     rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage)>>>,
+    rx_mempool: Option<HashMap<TestAddress, mpsc::Receiver<Transaction>>>,
     network_status: watch::Receiver<NetworkStatus>,
     on_message: watch::Sender<Option<HotstuffMessage>>,
     num_sent_messages: Arc<AtomicUsize>,
+    default_decision: Decision,
+    default_fee: u64,
 }
 
 impl TestNetworkWorker {
@@ -130,6 +147,7 @@ impl TestNetworkWorker {
     async fn run(mut self) {
         let mut rx_broadcast = self.rx_broadcast.take().unwrap();
         let mut rx_leader = self.rx_leader.take().unwrap();
+        let mut rx_mempool = self.rx_mempool.take().unwrap();
 
         let mut rx_new_transaction = self.rx_new_transaction.take().unwrap();
         let tx_new_transactions = self.tx_new_transactions.clone();
@@ -163,9 +181,15 @@ impl TestNetworkWorker {
                 .map(|(from, rx)| rx.recv().map(|r| (*from, r.unwrap())))
                 .collect::<FuturesUnordered<_>>();
 
+            let mut rx_mempool = rx_mempool
+                .iter_mut()
+                .map(|(from, rx)| rx.recv().map(|r| (*from, r.unwrap())))
+                .collect::<FuturesUnordered<_>>();
+
             tokio::select! {
                 Some((from, (to, msg))) = rx_broadcast.next() => self.handle_broadcast(from, to, msg).await,
-                Some((from, (to, msg))) = rx_leader.next() => self.handle_leader(from,to, msg).await,
+                Some((from, (to, msg))) = rx_leader.next() => self.handle_leader(from, to, msg).await,
+                Some((from, msg)) = rx_mempool.next() => self.handle_mempool(from, msg).await,
 
                 Ok(_) = self.network_status.changed() => {
                     if let NetworkStatus::Started = *self.network_status.borrow() {
@@ -202,5 +226,14 @@ impl TestNetworkWorker {
         self.num_sent_messages
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
+    }
+
+    pub async fn handle_mempool(&mut self, from: TestAddress, msg: Transaction) {
+        let (_, sender) = self.tx_new_transactions.get(&from).unwrap();
+
+        sender
+            .send(build_transaction_from(msg, self.default_decision, self.default_fee))
+            .await
+            .unwrap();
     }
 }

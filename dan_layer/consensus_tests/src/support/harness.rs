@@ -36,6 +36,14 @@ impl Test {
         TestBuilder::new()
     }
 
+    pub async fn send_transaction_to(&self, addr: &TestAddress, decision: Decision, fee: u64, num_shards: usize) {
+        let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
+        let tx = build_transaction(decision, fee, num_shards, num_committees);
+        self.network
+            .send_transaction(TestNetworkDestination::Address(*addr), tx)
+            .await;
+    }
+
     pub async fn send_transaction_to_all(&self, decision: Decision, fee: u64, num_shards: usize) {
         let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
         let tx = build_transaction(decision, fee, num_shards, num_committees);
@@ -91,10 +99,21 @@ impl Test {
         self.validators.values().for_each(f);
     }
 
+    pub async fn wait_until_new_pool_count_for_vn(&self, count: usize, vn: TestAddress) {
+        self.wait_all_for_predicate(format!("new pool count to be {}", count), |v| {
+            v.address != vn ||
+                v.state_store
+                    .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None))
+                    .unwrap() >=
+                    count
+        })
+        .await;
+    }
+
     pub async fn wait_until_new_pool_count(&self, count: usize) {
         self.wait_all_for_predicate(format!("new pool count to be {}", count), |v| {
             v.state_store
-                .with_read_tx(|tx| tx.transaction_pool_count(None, None))
+                .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None))
                 .unwrap() >=
                 count
         })
@@ -232,6 +251,8 @@ impl Test {
 pub struct TestBuilder {
     committees: HashMap<u32, Committee<TestAddress>>,
     sql_address: String,
+    default_decision: Decision,
+    default_fee: u64,
 }
 
 impl TestBuilder {
@@ -239,6 +260,8 @@ impl TestBuilder {
         Self {
             committees: HashMap::new(),
             sql_address: ":memory:".to_string(),
+            default_decision: Decision::Commit,
+            default_fee: 1,
         }
     }
 
@@ -284,7 +307,7 @@ impl TestBuilder {
         let epoch_manager = TestEpochManager::new();
         epoch_manager.add_committees(self.committees.clone()).await;
         let (channels, validators) = self.build_validators(&leader_strategy, &epoch_manager).await;
-        let network = spawn_network(channels);
+        let network = spawn_network(channels, self.default_decision, self.default_fee);
 
         Test {
             validators,

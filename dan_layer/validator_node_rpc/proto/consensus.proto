@@ -13,6 +13,8 @@ message HotStuffMessage {
     NewViewMessage new_view = 1;
     ProposalMessage proposal = 2;
     VoteMessage vote = 3;
+    RequestMissingTransactionsMessage request_missing_transactions = 4;
+    RequestedTransactionMessage requested_transaction = 5;
   }
 }
 
@@ -139,4 +141,16 @@ message UpState {
 message DownState {
   bytes deleted_by = 1;
   uint64 fees_accrued = 2;
+}
+
+message RequestMissingTransactionsMessage {
+    uint64 epoch = 1;
+    bytes block_id = 2;
+    repeated bytes transaction_ids = 3;
+}
+
+message RequestedTransactionMessage {
+    uint64 epoch = 1;
+    bytes block_id = 2;
+    repeated tari.dan.transaction.Transaction transactions = 3;
 }

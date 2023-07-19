@@ -11,6 +11,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerEvent;
 use tari_shutdown::Shutdown;
 use tari_state_store_sqlite::SqliteStateStore;
+use tari_transaction::Transaction;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -32,6 +33,7 @@ pub struct ValidatorChannels {
     pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage)>,
     pub rx_broadcast: mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>,
     pub rx_leader: mpsc::Receiver<(TestAddress, HotstuffMessage)>,
+    pub rx_mempool: mpsc::Receiver<Transaction>,
 }
 
 pub struct Validator {

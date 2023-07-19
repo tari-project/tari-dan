@@ -351,6 +351,20 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         Ok(is_ancestor.count > 0)
     }
 
+    fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError> {
+        use crate::schema::block_missing_txs;
+
+        let txs = block_missing_txs::table
+            .select(block_missing_txs::transaction_ids)
+            .filter(block_missing_txs::block_id.eq(serialize_hex(block_id)))
+            .first::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_get_missing_transactions",
+                source: e,
+            })?;
+        deserialize_json(&txs)
+    }
+
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError> {
         use crate::schema::quorum_certificates;
 
