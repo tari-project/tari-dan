@@ -141,6 +141,7 @@ where TConsensusSpec: ConsensusSpec
             self.send_to_leader(
                 local_committee,
                 block.id(),
+                block.height(),
                 HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
                     block_id: *block.id(),
                     epoch: block.epoch(),
@@ -208,7 +209,7 @@ where TConsensusSpec: ConsensusSpec
                 block.parent(),
                 block.height(),
             );
-            self.send_vote_to_leader(local_committee, vote).await?;
+            self.send_vote_to_leader(local_committee, vote, block.height()).await?;
         }
 
         Ok(())
@@ -234,14 +235,15 @@ where TConsensusSpec: ConsensusSpec
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
         block_id: &BlockId,
+        height: NodeHeight,
         message: HotstuffMessage,
     ) -> Result<(), HotStuffError> {
-        let leader = self.leader_strategy.get_leader(local_committee, block_id, 0);
+        let leader = self.leader_strategy.get_leader(local_committee, block_id, height);
         self.tx_leader
             .send((leader.clone(), message))
             .await
             .map_err(|_| HotStuffError::InternalChannelClosed {
-                context: "tx_leader in OnReceiveProposalHandler::handle_local_proposal",
+                context: "tx_leader in OnReceiveProposalHandler::send_to_leader",
             })
     }
 
@@ -249,9 +251,17 @@ where TConsensusSpec: ConsensusSpec
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
         vote: VoteMessage,
+        height: NodeHeight,
     ) -> Result<(), HotStuffError> {
-        self.send_to_leader(local_committee, &vote.clone().block_id, HotstuffMessage::Vote(vote))
+        let leader = self
+            .leader_strategy
+            .get_leader_for_next_block(local_committee, &vote.block_id, height);
+        self.tx_leader
+            .send((leader.clone(), HotstuffMessage::Vote(vote)))
             .await
+            .map_err(|_| HotStuffError::InternalChannelClosed {
+                context: "tx_leader in OnReceiveProposalHandler::send_vote_to_leader",
+            })
     }
 
     fn decide_what_to_vote(

@@ -130,16 +130,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         }
     }
 
-    fn jwt_revoke(&mut self, token: &str) -> Result<(), WalletStorageError> {
+    fn jwt_revoke(&mut self, token_id: i32) -> Result<(), WalletStorageError> {
         if diesel::update(auth_status::table)
             .set(auth_status::revoked.eq(true))
-            .filter(auth_status::token.eq(token))
+            .filter(auth_status::id.eq(token_id))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("jwt_revoke", e))? ==
             0
         {
             diesel::insert_into(auth_status::table)
-                .values((auth_status::revoked.eq(true), auth_status::token.eq(token)))
+                .values((auth_status::revoked.eq(true), auth_status::id.eq(token_id)))
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general("jwt_revoke", e))?;
         }

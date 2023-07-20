@@ -102,12 +102,12 @@ impl JrpcPermissions {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct Claims {
-    id: u64,
-    name: String,
-    permissions: JrpcPermissions,
-    exp: usize,
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Claims {
+    pub id: u64,
+    pub name: String,
+    pub permissions: JrpcPermissions,
+    pub exp: usize,
 }
 
 // This is used when you request permission.
@@ -179,10 +179,6 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         self.get_token_claims(token).map(|claims| claims.permissions)
     }
 
-    fn get_name(&self, token: &str) -> Result<String, JwtApiError> {
-        self.get_token_claims(token).map(|claims| claims.name)
-    }
-
     pub fn grant(&self, name: String, auth_token: String) -> Result<String, JwtApiError> {
         let auth_claims = self.check_auth_token(auth_token.as_ref())?;
         let my_claims = Claims {
@@ -230,20 +226,20 @@ impl<'a, TStore: WalletStore> JwtApi<'a, TStore> {
         Ok(())
     }
 
-    pub fn revoke(&self, token: &str) -> Result<(), JwtApiError> {
+    pub fn revoke(&self, token_id: i32) -> Result<(), JwtApiError> {
         let mut tx = self.store.create_write_tx()?;
-        tx.jwt_revoke(token)?;
+        tx.jwt_revoke(token_id)?;
         tx.commit()?;
         Ok(())
     }
 
-    pub fn get_tokens(&self) -> Result<Vec<(i32, String)>, JwtApiError> {
+    pub fn get_tokens(&self) -> Result<Vec<Claims>, JwtApiError> {
         let mut tx = self.store.create_read_tx()?;
         let tokens = tx.jwt_get_all()?;
         let mut res = Vec::new();
-        for (id, token) in tokens.iter().filter(|(_, token)| token.is_some()) {
-            if let Ok(name) = self.get_name(token.as_ref().unwrap().as_str()) {
-                res.push((*id, name));
+        for (_, token) in tokens.iter().filter(|(_, token)| token.is_some()) {
+            if let Ok(claims) = self.get_token_claims(token.as_ref().unwrap().as_str()) {
+                res.push(claims);
             }
         }
         Ok(res)

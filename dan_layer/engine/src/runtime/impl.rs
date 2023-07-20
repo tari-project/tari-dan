@@ -180,7 +180,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let template_address = self.tracker.get_template_address()?;
 
         let event = Event::new(component_address, template_address, tx_hash, topic, payload);
-
+        log::log!(target: "tari::dan::engine::runtime", log::Level::Debug, "{}", event.to_string());
         self.tracker.add_event(event);
         Ok(())
     }
