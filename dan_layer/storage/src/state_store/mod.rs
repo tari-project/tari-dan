@@ -80,7 +80,7 @@ pub trait StateStoreReadTransaction {
     fn leaf_block_get(&mut self, epoch: Epoch) -> Result<LeafBlock, StorageError>;
     fn high_qc_get(&mut self, epoch: Epoch) -> Result<HighQc, StorageError>;
     fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<ExecutedTransaction, StorageError>;
-    fn transactions_get_many<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    fn transactions_get_any<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         tx_ids: I,
     ) -> Result<Vec<ExecutedTransaction>, StorageError>;

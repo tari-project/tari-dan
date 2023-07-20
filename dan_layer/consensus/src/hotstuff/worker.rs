@@ -161,9 +161,9 @@ where
                     }
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
-                    if let Err(e) = self.on_new_hs_message(from, msg).await {
+                    if let Err(e) = self.on_new_hs_message(from, msg.clone()).await {
                         // self.publish_event(HotStuffEvent::Failed(e.to_string()));
-                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
+                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {:?} {}", msg,e);
                     }
                 },
 

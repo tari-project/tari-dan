@@ -139,11 +139,11 @@ impl ExecutedTransaction {
         Ok(t.is_some())
     }
 
-    pub fn get_many<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         tx_ids: I,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.transactions_get_many(tx_ids)
+        tx.transactions_get_any(tx_ids)
     }
 
     pub fn get_paginated<TTx: StateStoreReadTransaction>(
@@ -159,7 +159,7 @@ impl ExecutedTransaction {
         tx: &mut TTx,
         transactions: I,
     ) -> Result<HashMap<TransactionId, HashSet<ShardId>>, StorageError> {
-        let transactions = Self::get_many(tx, transactions)?;
+        let transactions = Self::get_any(tx, transactions)?;
         Ok(transactions
             .into_iter()
             .map(|t| {
