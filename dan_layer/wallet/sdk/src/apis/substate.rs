@@ -4,13 +4,13 @@
 use std::collections::HashMap;
 
 use log::*;
-use tari_common_types::types::FixedHash;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
     commit_result::TransactionReceiptAddress,
     indexed_value::{IndexedValue, IndexedValueVisitorError},
     substate::{SubstateAddress, SubstateValue},
 };
+use tari_transaction::TransactionId;
 
 use crate::{
     models::{SubstateModel, VersionedSubstateAddress},
@@ -177,7 +177,7 @@ where
 
     pub fn save_root(
         &self,
-        created_by_tx: FixedHash,
+        created_by_tx: TransactionId,
         address: VersionedSubstateAddress,
     ) -> Result<(), SubstateApiError> {
         self.store.with_write_tx(|tx| {
@@ -194,7 +194,7 @@ where
 
     pub fn save_child(
         &self,
-        created_by_tx: FixedHash,
+        created_by_tx: TransactionId,
         parent: SubstateAddress,
         child: VersionedSubstateAddress,
     ) -> Result<(), SubstateApiError> {
@@ -229,6 +229,6 @@ impl IsNotFoundError for SubstateApiError {
 
 pub struct ValidatorScanResult {
     pub address: VersionedSubstateAddress,
-    pub created_by_tx: FixedHash,
+    pub created_by_tx: TransactionId,
     pub substate: SubstateValue,
 }

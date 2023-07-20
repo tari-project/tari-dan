@@ -369,7 +369,7 @@ pub async fn handle_reveal_funds(args: RevealFundsArgs, client: &mut WalletDaemo
         })
         .await?;
 
-    println!("Transaction: {}", resp.hash);
+    println!("Transaction: {}", resp.transaction_id);
     println!("Fee: {}", resp.fee);
     println!();
     summarize_finalize_result(&resp.result);

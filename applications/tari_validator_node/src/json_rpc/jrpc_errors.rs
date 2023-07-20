@@ -29,19 +29,19 @@ use axum_jrpc::{
     JsonRpcResponse,
 };
 
-pub fn invalid_argument<T: Display>(answer_id: i64) -> impl Fn(T) -> JsonRpcResponse {
-    move |err| {
-        log::error!(target: LOG_TARGET, "🚨 Invalid argument: {}", err);
-        JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::InvalidParams,
-                "Invalid argument".to_string(),
-                serde_json::Value::Null,
-            ),
-        )
-    }
-}
+// pub fn invalid_argument<T: Display>(answer_id: i64) -> impl Fn(T) -> JsonRpcResponse {
+//     move |err| {
+//         log::error!(target: LOG_TARGET, "🚨 Invalid argument: {}", err);
+//         JsonRpcResponse::error(
+//             answer_id,
+//             JsonRpcError::new(
+//                 JsonRpcErrorReason::InvalidParams,
+//                 "Invalid argument".to_string(),
+//                 serde_json::Value::Null,
+//             ),
+//         )
+//     }
+// }
 
 pub fn internal_error<T: Display>(answer_id: i64) -> impl Fn(T) -> JsonRpcResponse {
     move |err| {

@@ -71,7 +71,7 @@ message SubmitTransactionRequest{
 }
 
 message SubmitTransactionResponse {
-  bytes transaction_hash = 1;
+  bytes transaction_id = 1;
 }
 
 message GetPeersRequest {
@@ -84,42 +84,42 @@ message GetPeersResponse {
   repeated tari.dan.network.PeerIdentityClaim claims = 3;
 }
 
-message VNStateSyncRequest {
+message VnStateSyncRequest {
   tari.dan.common.ShardId start_shard_id = 1;
   tari.dan.common.ShardId end_shard_id = 2;
   repeated tari.dan.common.ShardId inventory = 3;
 }
 
-message VNStateSyncResponse {
-  bytes shard_id = 1;
+message VnStateSyncResponse {
+  bytes address = 1;
   uint32 version = 2;
-  bytes address = 3;
-  bytes substate = 4;
+  bytes substate = 3;
+
+  uint64 created_epoch = 4;
   uint64 created_height = 5;
-  uint64 destroyed_height = 6;
-  bytes created_node_hash = 7;
-  bytes destroyed_node_hash = 8;
-  bytes created_payload_id = 9;
-  bytes destroyed_payload_id = 10;
-  tari.dan.consensus.QuorumCertificate created_justify = 11;
-  tari.dan.consensus.QuorumCertificate destroyed_justify = 12;
-  uint64 created_fee_accrued = 13;
-  uint64 destroyed_fee_accrued = 14;
+  bytes created_block = 6;
+  bytes created_transaction = 7;
+  bytes created_justify = 8;
+
+  tari.dan.common.Epoch destroyed_epoch = 9;
+  bytes destroyed_block = 10;
+  bytes destroyed_transaction = 11;
+  bytes destroyed_justify = 12;
 }
 
 message GetSubstateRequest {
-  bytes address = 1;
-  uint32 version = 2;
+  bytes shard = 1;
 }
 
 message GetSubstateResponse {
-  // Encoded Substate
-  bytes substate = 1;
+  bytes address = 1;
   uint32 version = 2;
-  bytes created_transaction_hash = 3;
-  SubstateStatus status = 4;
-  repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 5;
-  bytes destroyed_transaction_hash = 6;
+  // Encoded Substate
+  bytes substate = 3;
+  bytes created_transaction_hash = 4;
+  SubstateStatus status = 5;
+  repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 6;
+  bytes destroyed_transaction_hash = 7;
 }
 
 enum SubstateStatus {
@@ -129,7 +129,7 @@ enum SubstateStatus {
 }
 
 message GetTransactionResultRequest {
-  bytes payload_id = 1;
+  bytes transaction_id = 1;
 }
 
 message GetTransactionResultResponse {

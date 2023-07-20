@@ -24,16 +24,17 @@ mod bootstrap;
 pub mod cli;
 mod comms;
 mod config;
+mod consensus;
 mod dan_node;
 mod dry_run_transaction_processor;
+mod event_subscription;
 mod grpc;
 mod http_ui;
 mod json_rpc;
 mod p2p;
 mod registration;
+mod substate_resolver;
 mod template_registration_signing;
-// TODO: Hook up transaction executor to process transactions from the mempool and pass the executed result to consensus
-// mod transaction_executor;
 
 use std::{
     fs,
@@ -50,8 +51,8 @@ use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
+use tari_dan_app_utilities::consensus_constants::ConsensusConstants;
 use tari_dan_common_types::ShardId;
-use tari_dan_core::consensus_constants::ConsensusConstants;
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;

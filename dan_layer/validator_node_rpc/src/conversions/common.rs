@@ -26,13 +26,15 @@ use std::{
 };
 
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
-use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::ShardId;
+use tari_crypto::{hashing::DomainSeparation, signatures::SchnorrSignature, tari_utilities::ByteArray};
+use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_storage::consensus_models::{ValidatorSchnorrSignature, ValidatorSignature};
+use tari_transaction::TransactionSignature;
 
 use crate::proto;
 
 //---------------------------------- Signature --------------------------------------------//
-impl TryFrom<proto::common::Signature> for Signature {
+impl<H: DomainSeparation> TryFrom<proto::common::Signature> for SchnorrSignature<PublicKey, PrivateKey, H> {
     type Error = anyhow::Error;
 
     fn try_from(sig: proto::common::Signature) -> Result<Self, Self::Error> {
@@ -43,11 +45,62 @@ impl TryFrom<proto::common::Signature> for Signature {
     }
 }
 
-impl<T: Borrow<Signature>> From<T> for proto::common::Signature {
-    fn from(sig: T) -> Self {
+impl<H: DomainSeparation> From<SchnorrSignature<PublicKey, PrivateKey, H>> for proto::common::Signature {
+    fn from(sig: SchnorrSignature<PublicKey, PrivateKey, H>) -> Self {
         Self {
-            public_nonce: sig.borrow().get_public_nonce().to_vec(),
-            signature: sig.borrow().get_signature().to_vec(),
+            public_nonce: sig.get_public_nonce().to_vec(),
+            signature: sig.get_signature().to_vec(),
+        }
+    }
+}
+
+impl TryFrom<proto::common::SignatureAndPublicKey> for ValidatorSignature {
+    type Error = anyhow::Error;
+
+    fn try_from(sig: proto::common::SignatureAndPublicKey) -> Result<Self, Self::Error> {
+        let public_key = PublicKey::from_bytes(&sig.public_key)?;
+        let public_nonce = PublicKey::from_bytes(&sig.public_nonce)?;
+        let signature = PrivateKey::from_bytes(&sig.signature)?;
+
+        Ok(Self::new(
+            public_key,
+            ValidatorSchnorrSignature::new(public_nonce, signature),
+        ))
+    }
+}
+
+impl From<ValidatorSignature> for proto::common::SignatureAndPublicKey {
+    fn from(value: ValidatorSignature) -> Self {
+        let sig = value.borrow();
+        Self {
+            public_nonce: sig.signature.get_public_nonce().to_vec(),
+            signature: sig.signature.get_signature().to_vec(),
+            public_key: sig.public_key.to_vec(),
+        }
+    }
+}
+
+//---------------------------------- InstructionSignature --------------------------------------------//
+
+impl TryFrom<proto::common::SignatureAndPublicKey> for TransactionSignature {
+    type Error = anyhow::Error;
+
+    fn try_from(sig: proto::common::SignatureAndPublicKey) -> Result<Self, Self::Error> {
+        let public_key = PublicKey::from_bytes(&sig.public_key)?;
+        let public_nonce = PublicKey::from_bytes(&sig.public_nonce)?;
+        let signature = PrivateKey::from_bytes(&sig.signature)?;
+
+        Ok(Self::new(public_key, Signature::new(public_nonce, signature)))
+    }
+}
+
+impl From<TransactionSignature> for proto::common::SignatureAndPublicKey {
+    fn from(value: TransactionSignature) -> Self {
+        let sig = value.borrow();
+        Self {
+            public_nonce: sig.signature().get_public_nonce().to_vec(),
+            signature: sig.signature().get_signature().to_vec(),
+            public_key: sig.public_key().to_vec(),
         }
     }
 }
@@ -66,5 +119,26 @@ impl From<ShardId> for proto::common::ShardId {
         Self {
             bytes: shard_id.as_bytes().to_vec(),
         }
+    }
+}
+
+impl From<&ShardId> for proto::common::ShardId {
+    fn from(shard_id: &ShardId) -> Self {
+        Self {
+            bytes: shard_id.as_bytes().to_vec(),
+        }
+    }
+}
+
+//---------------------------------- Epoch --------------------------------------------//
+impl From<proto::common::Epoch> for Epoch {
+    fn from(epoch: proto::common::Epoch) -> Self {
+        Epoch(epoch.epoch)
+    }
+}
+
+impl From<Epoch> for proto::common::Epoch {
+    fn from(epoch: Epoch) -> Self {
+        Self { epoch: epoch.as_u64() }
     }
 }

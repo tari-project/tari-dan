@@ -30,7 +30,7 @@ use tari_comms::{
     NodeIdentity,
     PeerConnection,
 };
-use tari_dan_core::services::PeerProvider;
+use tari_dan_p2p::PeerProvider;
 use tari_validator_node_rpc::peer_sync::PeerSyncProtocol;
 use tokio::{sync::Semaphore, task};
 

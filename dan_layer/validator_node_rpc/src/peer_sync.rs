@@ -25,7 +25,7 @@ use std::convert::TryInto;
 use log::*;
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerIdentityClaim, types::CommsPublicKey, PeerConnection};
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_core::services::{DanPeer, PeerProvider};
+use tari_dan_p2p::{DanPeer, PeerProvider};
 use tokio_stream::StreamExt;
 
 use crate::{proto, rpc_service};

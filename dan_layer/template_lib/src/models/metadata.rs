@@ -31,7 +31,7 @@ const TAG: u64 = BinaryTag::Metadata as u64;
 pub struct Metadata(BorTag<BTreeMap<String, String>, TAG>);
 
 impl Metadata {
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self(BorTag::new(BTreeMap::new()))
     }
 

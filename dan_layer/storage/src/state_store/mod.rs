@@ -8,6 +8,7 @@ use std::{
 
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, ShardId};
+use tari_transaction::TransactionId;
 
 use crate::{
     consensus_models::{
@@ -17,14 +18,16 @@ use crate::{
         ExecutedTransaction,
         HighQc,
         LastExecuted,
+        LastProposed,
         LastVoted,
         LeafBlock,
         LockedBlock,
         QcId,
         QuorumCertificate,
         SubstateLockFlag,
+        SubstateLockState,
+        SubstateRecord,
         TransactionAtom,
-        TransactionId,
         TransactionPoolRecord,
         TransactionPoolStage,
         Vote,
@@ -71,6 +74,7 @@ pub trait StateStore {
 pub trait StateStoreReadTransaction {
     fn last_voted_get(&mut self, epoch: Epoch) -> Result<LastVoted, StorageError>;
     fn last_executed_get(&mut self, epoch: Epoch) -> Result<LastExecuted, StorageError>;
+    fn last_proposed_get(&mut self, epoch: Epoch) -> Result<LastProposed, StorageError>;
     fn locked_block_get(&mut self, epoch: Epoch) -> Result<LockedBlock, StorageError>;
     fn leaf_block_get(&mut self, epoch: Epoch) -> Result<LeafBlock, StorageError>;
     fn high_qc_get(&mut self, epoch: Epoch) -> Result<HighQc, StorageError>;
@@ -79,11 +83,18 @@ pub trait StateStoreReadTransaction {
         &mut self,
         tx_ids: I,
     ) -> Result<Vec<ExecutedTransaction>, StorageError>;
+    fn transactions_get_paginated(
+        &mut self,
+        limit: u64,
+        offset: u64,
+        asc_desc_created_at: Option<Ordering>,
+    ) -> Result<Vec<ExecutedTransaction>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError>;
     fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block, StorageError>;
+    fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError>;
 
@@ -109,6 +120,19 @@ pub trait StateStoreReadTransaction {
     ) -> Result<Vote, StorageError>;
     fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError>;
     fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError>;
+    //---------------------------------- Substates --------------------------------------------//
+    fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError>;
+    fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_get_many_within_range(
+        &mut self,
+        start: &ShardId,
+        end: &ShardId,
+        exclude_shards: &[ShardId],
+    ) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_get_many_by_created_transaction(
+        &mut self,
+        tx_id: &TransactionId,
+    ) -> Result<Vec<SubstateRecord>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -124,12 +148,14 @@ pub trait StateStoreWriteTransaction {
     // -------------------------------- Bookkeeping -------------------------------- //
     fn last_voted_set(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
     fn last_executed_set(&mut self, last_exec: &LastExecuted) -> Result<(), StorageError>;
+    fn last_proposed_set(&mut self, last_proposed: &LastProposed) -> Result<(), StorageError>;
     fn leaf_block_set(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError>;
     fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError>;
     fn high_qc_set(&mut self, high_qc: &HighQc) -> Result<(), StorageError>;
 
     // -------------------------------- Transaction -------------------------------- //
     fn transactions_insert(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError>;
+    fn transactions_update(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError>;
     // -------------------------------- Transaction Pool -------------------------------- //
     fn transaction_pool_insert(
         &mut self,
@@ -146,19 +172,43 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;
 
+    fn insert_missing_transactions(
+        &mut self,
+        block_id: &BlockId,
+        transaction_ids: Vec<TransactionId>,
+    ) -> Result<(), StorageError>;
+
+    fn remove_missing_transaction(&mut self, transaction_id: TransactionId) -> Result<Option<BlockId>, StorageError>;
+
     // -------------------------------- Votes -------------------------------- //
     fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
 
     //---------------------------------- Substates --------------------------------------------//
     fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
         &mut self,
+        locked_by_tx: &TransactionId,
+        objects: I,
+        lock_flag: SubstateLockFlag,
+    ) -> Result<SubstateLockState, StorageError>;
+
+    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+        &mut self,
+        locked_by_tx: &TransactionId,
         objects: I,
         lock_flag: SubstateLockFlag,
     ) -> Result<(), StorageError>;
 
-    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+    fn substate_down_many<I: IntoIterator<Item = ShardId>>(
         &mut self,
-        objects: I,
-        lock_flag: SubstateLockFlag,
+        shard_ids: I,
+        epoch: Epoch,
+        destroyed_block_id: &BlockId,
+        destroyed_transaction_id: &TransactionId,
     ) -> Result<(), StorageError>;
+    fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
+}
+
+pub enum Ordering {
+    Ascending,
+    Descending,
 }

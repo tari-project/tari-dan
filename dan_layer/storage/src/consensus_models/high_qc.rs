@@ -23,7 +23,7 @@
 use tari_dan_common_types::Epoch;
 
 use crate::{
-    consensus_models::{QcId, QuorumCertificate},
+    consensus_models::{BlockId, QcId, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -32,15 +32,16 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighQc {
     pub epoch: Epoch,
+    pub block_id: BlockId,
     pub qc_id: QcId,
 }
 
 impl HighQc {
-    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
         tx.high_qc_get(epoch)
     }
 
-    pub fn get_quorum_certificate<TTx: StateStoreReadTransaction>(
+    pub fn get_quorum_certificate<TTx: StateStoreReadTransaction + ?Sized>(
         &self,
         tx: &mut TTx,
     ) -> Result<QuorumCertificate, StorageError> {

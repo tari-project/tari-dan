@@ -21,8 +21,10 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_comms::protocol::rpc::RpcStatus;
-use tari_dan_core::services::PayloadProcessorError;
-use tari_epoch_manager::base_layer::EpochManagerError;
+use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
+use tari_dan_common_types::{Epoch, ShardId};
+use tari_engine_types::substate::SubstateAddress;
+use tari_epoch_manager::EpochManagerError;
 use tari_indexer_lib::transaction_autofiller::TransactionAutofillerError;
 use thiserror::Error;
 
@@ -30,10 +32,23 @@ use thiserror::Error;
 pub enum DryRunTransactionProcessorError {
     #[error(transparent)]
     TransactionAutofillerError(#[from] TransactionAutofillerError),
+    #[error("Substate {address} v{version} is DOWN")]
+    SubstateDowned { address: SubstateAddress, version: u32 },
     #[error("EpochManager error: {0}")]
     EpochManager(#[from] EpochManagerError),
     #[error("Rpc error: {0}")]
     RpcRequestFailed(#[from] RpcStatus),
-    #[error("PayloadProcessor error: {0}")]
-    PayloadProcessor(#[from] PayloadProcessorError),
+    #[error("TransactionProcessor error: {0}")]
+    PayloadProcessor(#[from] TransactionProcessorError),
+    #[error(
+        "All validators for epoch {epoch} shard {shard_id} failed to return substate. does_not_exist: \
+         {nexist_count}/{committee_size}, substate_down: {err_count}/{committee_size}"
+    )]
+    AllValidatorsFailedToReturnSubstate {
+        shard_id: ShardId,
+        epoch: Epoch,
+        nexist_count: usize,
+        err_count: usize,
+        committee_size: usize,
+    },
 }

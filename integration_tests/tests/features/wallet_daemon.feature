@@ -146,4 +146,3 @@ Feature: Wallet Daemon
 
         # Mint a new account NFT
         When I mint a new non fungible token NFT on ACC using wallet daemon WALLET_D
-        When I wait 20 seconds

@@ -4,10 +4,42 @@
 use async_trait::async_trait;
 use tari_dan_app_utilities::template_manager::{implementation::TemplateManager, interface::TemplateManagerError};
 use tari_engine_types::instruction::Instruction;
-use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
 use tari_transaction::Transaction;
 
-use crate::p2p::services::mempool::{MempoolError, Validator};
+use crate::p2p::services::mempool::{AndThen, MempoolError};
+
+#[async_trait]
+pub trait Validator<T> {
+    type Error;
+
+    async fn validate(&self, input: &T) -> Result<(), Self::Error>;
+
+    fn boxed(self) -> BoxedValidator<T, Self::Error>
+    where Self: Sized + Send + Sync + 'static {
+        BoxedValidator { inner: Box::new(self) }
+    }
+
+    fn and_then<V>(self, other: V) -> AndThen<Self, V>
+    where
+        V: Validator<T>,
+        Self: Sized,
+    {
+        AndThen::new(self, other)
+    }
+}
+
+pub struct BoxedValidator<T, E> {
+    inner: Box<dyn Validator<T, Error = E> + Send + Sync + 'static>,
+}
+
+#[async_trait]
+impl<T: Send + Sync, E> Validator<T> for BoxedValidator<T, E> {
+    type Error = E;
+
+    async fn validate(&self, input: &T) -> Result<(), Self::Error> {
+        self.inner.validate(input).await
+    }
+}
 
 #[derive(Debug)]
 pub struct TemplateExistsValidator {
@@ -59,21 +91,6 @@ impl Validator<Transaction> for FeeTransactionValidator {
 
     async fn validate(&self, transaction: &Transaction) -> Result<(), MempoolError> {
         if transaction.fee_instructions().is_empty() {
-            // Allow 0 fee instructions for account create transactions
-            if transaction.instructions().len() == 1 {
-                let first = transaction.instructions().first().unwrap();
-                let Instruction::CallFunction {
-                    template_address,
-                    function,
-                    args,
-                } = first
-                else {
-                    return Err(MempoolError::NoFeeInstructions);
-                };
-                if *template_address == *ACCOUNT_TEMPLATE_ADDRESS && function == "create" && args.len() == 1 {
-                    return Ok(());
-                }
-            }
             return Err(MempoolError::NoFeeInstructions);
         }
         Ok(())

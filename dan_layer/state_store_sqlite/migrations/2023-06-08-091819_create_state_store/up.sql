@@ -38,30 +38,26 @@ create table leaf_blocks
 
 create table substates
 (
-    id                           integer   not NULL primary key AUTOINCREMENT,
-    shard_id                     text      not NULL,
-    address                      text      not NULL,
-    version                      bigint    not NULL,
-    data                         text      not NULL,
-    state_hash                   text      not NULL,
-    created_by_transaction       text      not NULL,
-    created_justify              text      NULL,
-    created_block                text      not NULL,
-    created_height               bigint    not NULL,
-    destroyed_by_transaction     text      NULL,
-    destroyed_justify            text      NULL,
-    destroyed_by_block           blob      NULL,
-    fee_paid_for_created_justify bigint    not NULL,
-    fee_paid_for_deleted_justify bigint    not NULL,
-    created_at_epoch             bigint    NULL,
-    destroyed_at_epoch           bigint    NULL,
-    created_justify_leader       text      NULL,
-    destroyed_justify_leader     text      NULL,
-    read_locks                   int       NOT NULL DEFAULT '0',
-    is_locked_w                  boolean   NOT NULL DEFAULT '0',
-    locked_by                    text      NULL,
-    created_at                   timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
-    destroyed_at                 timestamp NULL
+    id                       integer   not NULL primary key AUTOINCREMENT,
+    shard_id                 text      not NULL,
+    address                  text      not NULL,
+    version                  integer   not NULL,
+    data                     text      not NULL,
+    state_hash               text      not NULL,
+    created_by_transaction   text      not NULL,
+    created_justify          text      not NULL,
+    created_block            text      not NULL,
+    created_height           bigint    not NULL,
+    destroyed_by_transaction text      NULL,
+    destroyed_justify        text      NULL,
+    destroyed_by_block       text      NULL,
+    created_at_epoch         bigint    not NULL,
+    destroyed_at_epoch       bigint    NULL,
+    read_locks               int       NOT NULL DEFAULT '0',
+    is_locked_w              boolean   NOT NULL DEFAULT '0',
+    locked_by                text      NULL,
+    created_at               timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    destroyed_at             timestamp NULL
 );
 
 -- All shard ids are unique
@@ -71,6 +67,7 @@ create table high_qcs
 (
     id         integer   not null primary key autoincrement,
     epoch      bigint    not NULL,
+    block_id   text      not null,
     qc_id      text      not null,
     created_at timestamp NOT NULL default current_timestamp,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
@@ -96,6 +93,15 @@ create table last_executed
     created_at timestamp NOT NULL default current_timestamp
 );
 
+create table last_proposed
+(
+    id         integer   not null primary key autoincrement,
+    epoch      bigint    not null,
+    block_id   text      not null,
+    height     bigint    not null,
+    created_at timestamp NOT NULL default current_timestamp
+);
+
 create table locked_block
 (
     id         integer   not null primary key autoincrement,
@@ -107,18 +113,19 @@ create table locked_block
 
 create table transactions
 (
-    id                integer   not null primary key AUTOINCREMENT,
-    transaction_id    text      not null,
-    fee_instructions  text      not NULL,
-    instructions      text      not NULL,
-    sender_public_key text      not NULL,
-    signature         text      not NULL,
-    inputs            text      not NULL,
-    input_refs        text      not NULL,
-    outputs           text      not NULL,
-    result            text      not NULL,
-    is_finalized      boolean   NOT NULL DEFAULT '0',
-    created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id               integer   not null primary key AUTOINCREMENT,
+    transaction_id   text      not null,
+    fee_instructions text      not NULL,
+    instructions     text      not NULL,
+    signature        text      not NULL,
+    inputs           text      not NULL,
+    input_refs       text      not NULL,
+    outputs          text      not NULL,
+    filled_inputs    text      not NULL,
+    filled_outputs   text      not NULL,
+    result           text      not NULL,
+    is_finalized     boolean   NOT NULL DEFAULT '0',
+    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 create unique index transactions_uniq_idx_id on transactions (transaction_id);

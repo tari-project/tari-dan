@@ -36,11 +36,11 @@ use diesel::{
 };
 use diesel_migrations::EmbeddedMigrations;
 use log::*;
-use tari_dan_common_types::PayloadId;
 use tari_dan_storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::prelude::ComponentAddress;
+use tari_transaction::TransactionId;
 use thiserror::Error;
 
 use super::models::{
@@ -187,7 +187,7 @@ pub trait SubstateStoreReadTransaction {
         start_idx: i32,
         end_idx: i32,
     ) -> Result<Vec<IndexedNftSubstate>, StorageError>;
-    fn get_events_for_transaction(&mut self, tx_hash: PayloadId) -> Result<Vec<EventData>, StorageError>;
+    fn get_events_for_transaction(&mut self, tx_id: TransactionId) -> Result<Vec<EventData>, StorageError>;
     fn get_stored_versions_of_events(
         &mut self,
         component_address: &ComponentAddress,
@@ -331,16 +331,16 @@ impl SubstateStoreReadTransaction for SqliteSubstateStoreReadTransaction<'_> {
         Ok(res)
     }
 
-    fn get_events_for_transaction(&mut self, tx_hash: PayloadId) -> Result<Vec<EventData>, StorageError> {
+    fn get_events_for_transaction(&mut self, tx_id: TransactionId) -> Result<Vec<EventData>, StorageError> {
         info!(
             target: LOG_TARGET,
-            "Querying substate scanner database: get_events_for_transaction with tx_hash = {}", tx_hash
+            "Querying substate scanner database: get_events_for_transaction with tx_hash = {}", tx_id
         );
         let res = sql_query(
             "SELECT component_address, template_address, tx_hash, topic, payload, version FROM events WHERE tx_hash = \
              ?",
         )
-        .bind::<Text, _>(tx_hash.to_string())
+        .bind::<Text, _>(tx_id.to_string())
         .get_results::<EventData>(self.connection())
         .map_err(|e| StorageError::QueryError {
             reason: format!("get_events_for_transaction: {}", e),

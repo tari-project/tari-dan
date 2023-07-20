@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_engine_types::substate::SubstateAddress;
-use tari_epoch_manager::base_layer::EpochManagerError;
+use tari_epoch_manager::EpochManagerError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexerError {

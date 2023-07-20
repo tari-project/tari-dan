@@ -3,10 +3,7 @@
 
 use axum::async_trait;
 use reqwest::{IntoUrl, Url};
-use tari_dan_common_types::{
-    optional::{IsNotFoundError, Optional},
-    PayloadId,
-};
+use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_dan_wallet_sdk::network::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface};
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer_client::{
@@ -14,7 +11,7 @@ use tari_indexer_client::{
     json_rpc_client::IndexerJsonRpcClient,
     types::{GetSubstateRequest, GetTransactionResultRequest, SubmitTransactionRequest},
 };
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 #[derive(Debug, Clone)]
 pub struct IndexerJsonRpcNetworkInterface {
@@ -65,41 +62,58 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
     async fn submit_transaction(
         &self,
         transaction: Transaction,
-        is_dry_run: bool,
+        required_substates: Vec<SubstateRequirement>,
+    ) -> Result<TransactionId, Self::Error> {
+        let mut client = self.get_client()?;
+        let result = client
+            .submit_transaction(SubmitTransactionRequest {
+                transaction,
+                required_substates,
+                is_dry_run: false,
+            })
+            .await?;
+        Ok(result.transaction_id)
+    }
+
+    async fn submit_dry_run_transaction(
+        &self,
+        transaction: Transaction,
+        required_substates: Vec<SubstateRequirement>,
     ) -> Result<TransactionQueryResult, Self::Error> {
         let mut client = self.get_client()?;
         let result = client
             .submit_transaction(SubmitTransactionRequest {
                 transaction,
-                is_dry_run,
+                required_substates,
+                is_dry_run: true,
             })
             .await?;
         Ok(TransactionQueryResult {
-            transaction_hash: result.transaction_hash,
+            transaction_id: result.transaction_id,
             execution_result: result.execution_result,
         })
     }
 
     async fn query_transaction_result(
         &self,
-        transaction_hash: PayloadId,
+        transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error> {
         let mut client = self.get_client()?;
         let maybe_result = client
-            .get_transaction_result(GetTransactionResultRequest { transaction_hash })
+            .get_transaction_result(GetTransactionResultRequest { transaction_id })
             .await
             .optional()?;
 
         let Some(result) = maybe_result else {
             return Ok(TransactionQueryResult {
                 execution_result: None,
-                transaction_hash: transaction_hash.into_array().into(),
+                transaction_id,
             });
         };
 
         Ok(TransactionQueryResult {
             execution_result: result.execution_result,
-            transaction_hash: transaction_hash.into_array().into(),
+            transaction_id,
         })
     }
 }

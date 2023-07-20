@@ -445,6 +445,14 @@ impl SubstateValue {
             _ => None,
         }
     }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        encode(self).unwrap()
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
+        decode_exact(bytes)
+    }
 }
 
 impl From<ComponentHeader> for SubstateValue {
@@ -511,8 +519,16 @@ impl SubstateDiff {
         self.down_substates.iter()
     }
 
+    pub fn up_len(&self) -> usize {
+        self.up_substates.len()
+    }
+
+    pub fn down_len(&self) -> usize {
+        self.down_substates.len()
+    }
+
     pub fn len(&self) -> usize {
-        self.up_substates.len() + self.down_substates.len()
+        self.up_len() + self.down_len()
     }
 
     pub fn is_empty(&self) -> bool {

@@ -21,7 +21,6 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
-    convert::TryFrom,
     sync::Arc,
     task::{Context, Poll},
 };
@@ -31,8 +30,7 @@ use prost::Message;
 use tari_comms::{message::InboundMessage, types::CommsPublicKey, PeerManager};
 use tari_comms_logging::SqliteMessageLog;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_core::message::DanMessage;
-use tari_dan_storage::models::TariDanPayload;
+use tari_dan_p2p::DanMessage;
 use tari_validator_node_rpc::proto;
 use tower::{Service, ServiceExt};
 
@@ -52,7 +50,7 @@ impl DanDeserialize {
 
 impl<S> tower_layer::Layer<S> for DanDeserialize
 where
-    S: Service<(CommsPublicKey, DanMessage<TariDanPayload, CommsPublicKey>), Response = (), Error = anyhow::Error>
+    S: Service<(CommsPublicKey, DanMessage<CommsPublicKey>), Response = (), Error = anyhow::Error>
         + Send
         + Clone
         + 'static,
@@ -78,7 +76,7 @@ pub struct DanDeserializeService<S> {
 
 impl<S> Service<InboundMessage> for DanDeserializeService<S>
 where
-    S: Service<(CommsPublicKey, DanMessage<TariDanPayload, CommsPublicKey>), Response = (), Error = anyhow::Error>
+    S: Service<(CommsPublicKey, DanMessage<CommsPublicKey>), Response = (), Error = anyhow::Error>
         + Send
         + Clone
         + 'static,
