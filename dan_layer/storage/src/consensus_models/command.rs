@@ -33,6 +33,18 @@ impl Evidence {
         self.evidence.values().all(|qc_ids| !qc_ids.is_empty())
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.evidence.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.evidence.len()
+    }
+
+    pub fn num_complete_shards(&self) -> usize {
+        self.evidence.values().filter(|qc_ids| !qc_ids.is_empty()).count()
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = (&ShardId, &Vec<QcId>)> {
         self.evidence.iter()
     }

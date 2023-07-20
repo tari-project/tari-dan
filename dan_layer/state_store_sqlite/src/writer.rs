@@ -430,7 +430,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
         stage: Option<TransactionPoolStage>,
-        changed_decision: Option<Decision>,
+        pending_decision: Option<Decision>,
         is_ready: Option<bool>,
     ) -> Result<(), StorageError> {
         use crate::schema::transaction_pool;
@@ -440,7 +440,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         struct Changes {
             evidence: Option<String>,
             stage: Option<String>,
-            changed_decision: Option<String>,
+            pending_decision: Option<String>,
             is_ready: Option<bool>,
             updated_at: PrimitiveDateTime,
         }
@@ -450,7 +450,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         let change_set = Changes {
             evidence: evidence.map(serialize_json).transpose()?,
             stage: stage.map(|s| s.to_string()),
-            changed_decision: changed_decision.map(|d| d.to_string()),
+            pending_decision: pending_decision.map(|d| d.to_string()),
             is_ready,
             updated_at: PrimitiveDateTime::new(now.date(), now.time()),
         };

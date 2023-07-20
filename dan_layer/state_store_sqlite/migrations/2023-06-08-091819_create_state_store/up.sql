@@ -136,7 +136,7 @@ create table transaction_pool
     transaction_id    text      not null,
     involved_shards   text      not null,
     original_decision text      not null,
-    changed_decision  text      null,
+    pending_decision  text      null,
     evidence          text      not null,
     fee               bigint    not null,
     stage             text      not null,

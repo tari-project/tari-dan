@@ -36,7 +36,7 @@ async fn single_transaction() {
     loop {
         test.on_block_committed().await;
 
-        if test.are_all_transactions_committed() {
+        if test.is_transaction_pool_empty() {
             break;
         }
         let leaf = test.get_validator(&TestAddress("1")).get_leaf_block();
@@ -63,7 +63,7 @@ async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
     loop {
         test.on_block_committed().await;
 
-        if test.are_all_transactions_committed() {
+        if test.is_transaction_pool_empty() {
             break;
         }
         let leaf = test.get_validator(&TestAddress("1")).get_leaf_block();
@@ -89,7 +89,7 @@ async fn node_requests_missing_transaction_from_local_leader() {
     loop {
         test.on_block_committed().await;
 
-        if test.are_all_transactions_committed() {
+        if test.is_transaction_pool_empty() {
             break;
         }
         let leaf = test.get_validator(&TestAddress("1")).get_leaf_block();
@@ -128,7 +128,7 @@ async fn propose_blocks_with_new_transactions_until_all_committed() {
         remaining_txs -= 1;
         test.on_block_committed().await;
 
-        if test.are_all_transactions_committed() {
+        if test.is_transaction_pool_empty() {
             break;
         }
         let leaf = test.get_validator(&TestAddress("1")).get_leaf_block();
@@ -156,7 +156,7 @@ async fn multi_validator_propose_blocks_with_new_transactions_until_all_committe
         test.on_block_committed().await;
         remaining_txs = remaining_txs.saturating_sub(1);
 
-        if remaining_txs == 0 && test.are_all_transactions_committed() {
+        if remaining_txs == 0 && test.is_transaction_pool_empty() {
             break;
         }
         let leaf = test.get_validator(&TestAddress("1")).get_leaf_block();
@@ -190,7 +190,7 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
     loop {
         test.on_block_committed().await;
 
-        if test.are_all_transactions_committed() {
+        if test.is_transaction_pool_empty() {
             break;
         }
 
@@ -235,13 +235,13 @@ async fn foreign_shard_decides_to_abort() {
     loop {
         test.on_block_committed().await;
 
-        if test.are_all_transactions_committed() {
+        if test.is_transaction_pool_empty() {
             break;
         }
 
         let leaf1 = test.get_validator(&TestAddress("1")).get_leaf_block();
         let leaf2 = test.get_validator(&TestAddress("2")).get_leaf_block();
-        if leaf1.height > NodeHeight(5) || leaf2.height > NodeHeight(5) {
+        if leaf1.height > NodeHeight(6) || leaf2.height > NodeHeight(6) {
             panic!(
                 "Not all transaction committed after {}/{} blocks",
                 leaf1.height, leaf2.height,

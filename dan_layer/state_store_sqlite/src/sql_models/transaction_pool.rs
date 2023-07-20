@@ -13,7 +13,7 @@ pub struct TransactionPoolRecord {
     pub transaction_id: String,
     pub involved_shards: String,
     pub original_decision: String,
-    pub changed_decision: Option<String>,
+    pub pending_decision: Option<String>,
     pub evidence: String,
     pub fee: i64,
     pub stage: String,
@@ -33,7 +33,7 @@ impl TryFrom<TransactionPoolRecord> for consensus_models::TransactionPoolRecord 
                 evidence: deserialize_json(&value.evidence)?,
                 fee: value.fee as u64,
             },
-            changed_decision: value.changed_decision.as_deref().map(parse_from_string).transpose()?,
+            pending_decision: value.pending_decision.as_deref().map(parse_from_string).transpose()?,
             stage: parse_from_string(&value.stage)?,
             is_ready: value.is_ready,
         })

@@ -1,6 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+// (New, true) ----(cmd:Prepare) ---> (Prepared, true) -----cmd:LocalPrepared ---> (LocalPrepared, false)
+// ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
+// Complete
+
 use std::ops::DerefMut;
 
 use log::*;
@@ -248,11 +252,12 @@ where TConsensusSpec: ConsensusSpec
                 continue;
             };
 
-            if tx_rec.stage().is_complete() {
+            if tx_rec.stage().is_all_prepared() || tx_rec.stage().is_some_prepared() {
                 warn!(
                     target: LOG_TARGET,
-                    "⚠️ Foreign proposal received after transaction {} is COMPLETE. Ignoring.",
-                    tx_rec.transaction.id);
+                    "⚠️ Foreign proposal received after transaction {} is {}. Ignoring.",
+                    tx_rec.transaction.id, tx_rec.stage
+                );
                 continue;
             }
 
@@ -264,17 +269,14 @@ where TConsensusSpec: ConsensusSpec
                     "⚠️ Foreign shard ABORT {}. Update decision to ABORT",
                     tx_rec.transaction.id
                 );
-                tx_rec.update_decision(tx, Decision::Abort)?;
+                tx_rec.set_pending_decision(tx, Decision::Abort)?;
             }
 
-            // If we've received we know that all locals have prepared and have all the evidence from all shards, we can
-            // transition to All/SomePrepared
+            // If all shards are complete and we've already received our LocalPrepared, we can set out LocalPrepared
+            // transaction as ready to propose ACCEPT. If we have not received the local LocalPrepared, the transition
+            // will happen when we receive the local block.
             if tx_rec.stage().is_local_prepared() && tx_rec.transaction.evidence.all_shards_complete() {
-                if change_to_abort {
-                    tx_rec.transition(tx, TransactionPoolStage::SomePrepared, true)?;
-                } else {
-                    tx_rec.transition(tx, TransactionPoolStage::AllPrepared, true)?;
-                }
+                tx_rec.transition(tx, TransactionPoolStage::LocalPrepared, true)?;
             }
         }
 
@@ -379,7 +381,11 @@ where TConsensusSpec: ConsensusSpec
                     }
                 },
                 Command::LocalPrepared(t) => {
-                    if tx_rec.stage().is_new() {
+                    // Happy path: We've validated all the QCs and therefore are convinced that everyone also Prepared.
+                    // We only mark the next step (Accept) as ready to propose once all shards have reported
+                    // LocalPrepared.
+
+                    if !tx_rec.stage().is_prepared() {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Stage disagreement in block {} for transaction {}. Leader proposed LocalPrepared, but we have not prepared",
@@ -389,10 +395,7 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(None);
                     }
                     // We check that the committee decision is different from the local decision.
-                    // If the decision was changed (due to a foreign ABORT), we may have a disagreement so check both
-                    if tx_rec.original_decision() != t.decision &&
-                        tx_rec.changed_decision().map(|d| d != t.decision).unwrap_or(true)
-                    {
+                    if tx_rec.original_decision() != t.decision {
                         warn!(
                             target: LOG_TARGET,
                             "❌ LocalPrepared decision disagreement for block {}. Leader proposed {}, we decided {}",
@@ -403,24 +406,16 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(None);
                     }
 
-                    if tx_rec.stage().is_prepared() {
-                        tx_rec.transition(tx, TransactionPoolStage::LocalPrepared, false)?;
-                    }
-
-                    if tx_rec.transaction.evidence.all_shards_complete() {
-                        if tx_rec.changed_decision().map(|d| d.is_abort()).unwrap_or(false) {
-                            warn!(
-                                target: LOG_TARGET,
-                                "⚠️ LocalPrepared({}): Decision changed to ABORT", tx_rec.transaction_id()
-                            );
-                            tx_rec.transition(tx, TransactionPoolStage::SomePrepared, true)?;
-                        } else {
-                            tx_rec.transition(tx, TransactionPoolStage::AllPrepared, true)?;
-                        }
-                    }
+                    tx_rec.transition(
+                        tx,
+                        TransactionPoolStage::LocalPrepared,
+                        tx_rec.transaction.evidence.all_shards_complete(),
+                    )?;
                 },
                 Command::Accept(t) => {
-                    if !tx_rec.stage().is_all_prepared() && !tx_rec.stage().is_some_prepared() {
+                    // Happy path: We've validated all the QCs and therefore are convinced that everyone also received
+                    // LocalPrepare. We then propose new blocks until we have a 3-chain
+                    if !tx_rec.stage().is_local_prepared() {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Stage disagreement for block {}. Leader proposed Accept, local stage {}",
@@ -439,7 +434,25 @@ where TConsensusSpec: ConsensusSpec
                         );
                         return Ok(None);
                     }
-                    tx_rec.transition(tx, TransactionPoolStage::Complete, false)?;
+
+                    if !tx_rec.transaction.evidence.all_shards_complete() {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ Accept evidence disagreement for block {}. Evidence for {} out of {} shards",
+                            block.id(),
+                            tx_rec.transaction.evidence.num_complete_shards(),
+                            tx_rec.transaction.evidence.len(),
+                        );
+                        return Ok(None);
+                    }
+                    // If the decision was changed to Abort, which can only happen when a foreign shard decides ABORT
+                    // and we decide COMMIT, we set SomePrepared, otherwise AllPrepared. These are
+                    // the last stages.
+                    if tx_rec.pending_decision().map(|d| d.is_abort()).unwrap_or(false) {
+                        tx_rec.transition(tx, TransactionPoolStage::SomePrepared, false)?;
+                    } else {
+                        tx_rec.transition(tx, TransactionPoolStage::AllPrepared, false)?;
+                    }
                 },
             }
         }
@@ -544,7 +557,7 @@ where TConsensusSpec: ConsensusSpec
 
         let locked_block = LockedBlock::get(tx.deref_mut(), block.epoch())?;
         if precommit_node.height() > locked_block.height {
-            debug!(target: LOG_TARGET, "LOCKED NODE SET: {}", precommit_node.id());
+            debug!(target: LOG_TARGET, "LOCKED NODE SET: {} {}", precommit_node.height(), precommit_node.id());
             // precommit_node is at COMMIT phase
             precommit_node.as_locked().set(tx)?;
         }
@@ -554,7 +567,8 @@ where TConsensusSpec: ConsensusSpec
         if commit_node.parent() == precommit_node.id() && precommit_node.parent() == prepare_node {
             debug!(
                 target: LOG_TARGET,
-                "✅ Node {} forms a 3-chain b'' = {}, b' = {}, b = {}",
+                "✅ Node {} {} forms a 3-chain b'' = {}, b' = {}, b = {}",
+                block.height(),
                 block.id(),
                 commit_node.id(),
                 precommit_node.id(),
@@ -567,7 +581,9 @@ where TConsensusSpec: ConsensusSpec
         } else {
             debug!(
                 target: LOG_TARGET,
-                "Node DOES NOT form a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
+                "Node {} {} DOES NOT form a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
+                block.height(),
+                block.id(),
                 commit_node.id(),
                 precommit_node.id(),
                 prepare_node,
@@ -589,6 +605,13 @@ where TConsensusSpec: ConsensusSpec
             let parent = block.get_parent(tx.deref_mut())?;
             // Recurse to "catch up" any parent parent blocks we may not have executed
             self.on_commit(tx, last_executed, &parent, local_committee_shard)?;
+            debug!(
+                target: LOG_TARGET,
+                "✅ COMMIT Node {} {}, last executed height = {}",
+                block.height(),
+                block.id(),
+                last_executed.height
+            );
             self.execute(tx, block, local_committee_shard)?;
             self.publish_event(HotstuffEvent::BlockCommitted { block_id: *block.id() });
         }
@@ -635,6 +658,7 @@ where TConsensusSpec: ConsensusSpec
                         },
                     }
 
+                    // We are now committing the containing an Accept so can remove the transaction from the pool
                     tx_rec.remove(tx)?;
                     executed.set_final_decision(t.decision).update(tx)?;
                 },

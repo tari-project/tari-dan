@@ -87,10 +87,10 @@ impl Test {
             .unwrap_or_else(|| panic!("No validator with address {}", addr))
     }
 
-    pub fn are_all_transactions_committed(&self) -> bool {
+    pub fn is_transaction_pool_empty(&self) -> bool {
         self.validators.values().all(|v| {
-            let c = v.uncommitted_transaction_count();
-            log::info!("{} has {} unfinalized transactions", v.address, c);
+            let c = v.get_transaction_pool_count();
+            log::info!("{} has {} transactions in pool", v.address, c);
             c == 0
         })
     }

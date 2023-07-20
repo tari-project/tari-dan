@@ -1,19 +1,25 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, iter, ops::DerefMut};
+use std::{
+    collections::{BTreeSet, HashSet},
+    iter,
+    ops::DerefMut,
+};
 
 use log::*;
 use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        Command,
         ExecutedTransaction,
         HighQc,
         LastProposed,
         LeafBlock,
         QuorumCertificate,
         TransactionPool,
+        TransactionPoolStage,
     },
     StateStore,
     StateStoreWriteTransaction,
@@ -180,7 +186,31 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
-        let commands = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
+        let ready = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
+
+        let commands = ready
+            .into_iter()
+            .map(|t| match t.stage {
+                // If the transaction is New, propose to Prepare it
+                TransactionPoolStage::New => Command::Prepare(t.transaction),
+                // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
+                // accepted Prepared so we propose LocalPrepared
+                TransactionPoolStage::Prepared => Command::LocalPrepared(t.transaction),
+                // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
+                // prepared. We can now propose to Accept it. We also propose the decision change which everyone should
+                // agree with if they received the same foreign LocalPrepare.
+                TransactionPoolStage::LocalPrepared => Command::Accept(t.get_transaction_atom_with_decision_change()),
+                // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes agreed
+                // with the Accept, more (possibly empty) blocks with QCs will be proposed and accepted,
+                // otherwise the Accept block will not be committed.
+                TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => {
+                    unreachable!(
+                        "It is invalid for TransactionPoolStage::{} to be ready to propose",
+                        t.stage
+                    )
+                },
+            })
+            .collect::<BTreeSet<_>>();
 
         debug!(
             target: LOG_TARGET,

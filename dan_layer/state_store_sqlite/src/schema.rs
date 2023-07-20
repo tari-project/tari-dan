@@ -133,7 +133,7 @@ diesel::table! {
         transaction_id -> Text,
         involved_shards -> Text,
         original_decision -> Text,
-        changed_decision -> Nullable<Text>,
+        pending_decision -> Nullable<Text>,
         evidence -> Text,
         fee -> BigInt,
         stage -> Text,

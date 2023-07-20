@@ -65,7 +65,7 @@ impl Validator {
         &self.state_manager
     }
 
-    pub fn uncommitted_transaction_count(&self) -> usize {
+    pub fn get_transaction_pool_count(&self) -> usize {
         self.state_store
             .with_read_tx(|tx| tx.transaction_pool_count(None, None))
             .unwrap()

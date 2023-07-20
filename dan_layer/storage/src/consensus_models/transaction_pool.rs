@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::BTreeSet,
     fmt::{Display, Formatter},
     marker::PhantomData,
     str::FromStr,
@@ -15,7 +14,7 @@ use tari_dan_common_types::{
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{Command, Decision, QcId, TransactionAtom},
+    consensus_models::{Decision, QcId, TransactionAtom},
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -35,8 +34,6 @@ pub enum TransactionPoolStage {
     AllPrepared,
     /// All foreign shards have prepared but one or more has decided to ABORT
     SomePrepared,
-    /// The transaction been finalized but not yet executed, this allows proceeding blocks to form a 3-chain.
-    Complete,
 }
 
 impl TransactionPoolStage {
@@ -59,10 +56,6 @@ impl TransactionPoolStage {
     pub fn is_all_prepared(&self) -> bool {
         matches!(self, Self::AllPrepared)
     }
-
-    pub fn is_complete(&self) -> bool {
-        matches!(self, Self::Complete)
-    }
 }
 
 impl Display for TransactionPoolStage {
@@ -81,7 +74,6 @@ impl FromStr for TransactionPoolStage {
             "LocalPrepared" => Ok(TransactionPoolStage::LocalPrepared),
             "SomePrepared" => Ok(TransactionPoolStage::SomePrepared),
             "AllPrepared" => Ok(TransactionPoolStage::AllPrepared),
-            "Complete" => Ok(TransactionPoolStage::Complete),
             _ => Err(()),
         }
     }
@@ -129,22 +121,9 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         &self,
         tx: &mut TStateStore::ReadTransaction<'_>,
         max: usize,
-    ) -> Result<BTreeSet<Command>, TransactionPoolError> {
-        let ready = tx.transaction_pool_get_many_ready(max)?;
-        let commands = ready
-            .into_iter()
-            .filter_map(|t| match t.stage {
-                TransactionPoolStage::New => Some(Command::Prepare(t.transaction)),
-                TransactionPoolStage::Prepared => Some(Command::LocalPrepared(t.get_transaction_atom())),
-                TransactionPoolStage::LocalPrepared => Some(Command::LocalPrepared(t.get_transaction_atom())),
-                TransactionPoolStage::AllPrepared => Some(Command::Accept(t.get_transaction_atom())),
-                TransactionPoolStage::SomePrepared => Some(Command::Accept(t.get_transaction_atom())),
-                // Technically unreachable because is_ready should be false
-                TransactionPoolStage::Complete => None,
-            })
-            .collect();
-
-        Ok(commands)
+    ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
+        let recs = tx.transaction_pool_get_many_ready(max)?;
+        Ok(recs)
     }
 
     pub fn has_uncommitted_transactions(
@@ -155,7 +134,14 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         if count > 0 {
             return Ok(true);
         }
-        let count = tx.transaction_pool_count(Some(TransactionPoolStage::Complete), None)?;
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::AllPrepared), None)?;
+        if count > 0 {
+            return Ok(true);
+        }
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::SomePrepared), None)?;
+        if count > 0 {
+            return Ok(true);
+        }
         Ok(count > 0)
     }
 
@@ -169,21 +155,21 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 pub struct TransactionPoolRecord {
     pub transaction: TransactionAtom,
     pub stage: TransactionPoolStage,
-    pub changed_decision: Option<Decision>,
+    pub pending_decision: Option<Decision>,
     pub is_ready: bool,
 }
 
 impl TransactionPoolRecord {
     pub fn final_decision(&self) -> Decision {
-        self.changed_decision().unwrap_or(self.original_decision())
+        self.pending_decision().unwrap_or(self.original_decision())
     }
 
     pub fn original_decision(&self) -> Decision {
         self.transaction.decision
     }
 
-    pub fn changed_decision(&self) -> Option<Decision> {
-        self.changed_decision
+    pub fn pending_decision(&self) -> Option<Decision> {
+        self.pending_decision
     }
 
     pub fn transaction_id(&self) -> &TransactionId {
@@ -194,7 +180,7 @@ impl TransactionPoolRecord {
         self.stage
     }
 
-    pub fn get_transaction_atom(&self) -> TransactionAtom {
+    pub fn get_transaction_atom_with_decision_change(&self) -> TransactionAtom {
         TransactionAtom {
             decision: self.final_decision(),
             ..self.transaction.clone()
@@ -212,12 +198,11 @@ impl TransactionPoolRecord {
         // Check that only permitted stage transactions are performed
         match ((self.stage, next_stage), is_ready) {
             ((TransactionPoolStage::New, TransactionPoolStage::Prepared), true) |
-            ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), false) |
-            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), _) |
-            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), _) |
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), _) |
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::Complete), false) |
-            ((TransactionPoolStage::SomePrepared, TransactionPoolStage::Complete), false) => {},
+            ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), _) |
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), false) |
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), false) |
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), false) => {},
             _ => {
                 return Err(TransactionPoolError::InvalidTransactionTransition {
                     from: self.stage,
@@ -233,7 +218,7 @@ impl TransactionPoolRecord {
         Ok(())
     }
 
-    pub fn update_decision<TTx: StateStoreWriteTransaction>(
+    pub fn set_pending_decision<TTx: StateStoreWriteTransaction>(
         &mut self,
         tx: &mut TTx,
         decision: Decision,
@@ -242,7 +227,7 @@ impl TransactionPoolRecord {
             return Ok(());
         }
 
-        self.changed_decision = Some(decision);
+        self.pending_decision = Some(decision);
         tx.transaction_pool_update(&self.transaction.id, None, None, Some(decision), None)?;
         Ok(())
     }
