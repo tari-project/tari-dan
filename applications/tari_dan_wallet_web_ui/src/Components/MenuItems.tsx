@@ -69,10 +69,10 @@ const mainItems = [
     link: 'keys',
   },
   {
-    title: 'JWTs',
+    title: 'Access Tokens',
     icon: <IoTicketOutline style={iconStyle} />,
     activeIcon: <IoTicket style={activeIconStyle} />,
-    link: 'jwts',
+    link: 'access-tokens',
   },
 ];
 
