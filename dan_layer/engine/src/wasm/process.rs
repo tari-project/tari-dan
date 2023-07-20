@@ -55,7 +55,7 @@ use crate::{
     },
 };
 
-const LOG_TARGET: &str = "tari::dan::wasm::process";
+const LOG_TARGET: &str = "tari::dan::engine::wasm::process";
 
 #[derive(Debug)]
 pub struct WasmProcess {
