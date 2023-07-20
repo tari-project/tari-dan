@@ -67,7 +67,7 @@ pub async fn handle_revoke(
 ) -> Result<AuthRevokeTokenResponse, anyhow::Error> {
     let jwt = context.wallet_sdk().jwt_api();
     jwt.check_auth(token, &[JrpcPermission::Admin])?;
-    jwt.revoke(revoke_request.permission_token.as_str())?;
+    jwt.revoke(revoke_request.permission_token_id)?;
     Ok(AuthRevokeTokenResponse {})
 }
 

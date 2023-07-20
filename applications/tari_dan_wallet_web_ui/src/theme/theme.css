@@ -67,3 +67,22 @@ code {
 .MuiDataGrid-columnHeaderTitle {
   font-family: 'AvenirHeavy', sans-serif;
 }
+
+@keyframes purple-flash {
+  0% {
+    background-color: #ffffff;
+  }
+  25% {
+    background-color: #f9f4ff;
+  }
+  75% {
+    background-color: #f9f4ff;
+  }
+  100% {
+    background-color: #ffffff;
+  }
+}
+
+.purple-flash {
+  animation: purple-flash 0.5s ease-in-out;
+}

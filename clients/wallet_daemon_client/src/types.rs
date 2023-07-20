@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::{
-    apis::jwt::JrpcPermissions,
+    apis::jwt::{Claims, JrpcPermissions},
     models::{Account, ConfidentialProofId, TransactionStatus},
 };
 use tari_engine_types::{
@@ -491,7 +491,7 @@ pub struct AuthLoginDenyResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthRevokeTokenRequest {
-    pub permission_token: String,
+    pub permission_token_id: i32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -544,5 +544,5 @@ pub struct AuthGetAllJwtRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthGetAllJwtResponse {
-    pub jwt: Vec<(i32, String)>,
+    pub jwt: Vec<Claims>,
 }
