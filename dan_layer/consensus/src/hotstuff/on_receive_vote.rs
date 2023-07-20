@@ -67,17 +67,6 @@ where TConsensusSpec: ConsensusSpec
 
         // Are we the leader for the block being voted for?
         let vn = self.epoch_manager.get_our_validator_node(message.epoch).await?;
-        if !self
-            .leader_strategy
-            .is_leader(&vn.address, &committee, &message.block_id, 0)
-        {
-            return Err(HotStuffError::NotTheLeader {
-                details: format!(
-                    "Not this leader for block {}, vote sent by {}",
-                    message.block_id, vn.address
-                ),
-            });
-        }
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
 
@@ -102,6 +91,19 @@ where TConsensusSpec: ConsensusSpec
                     sent_by: from.to_string(),
                 });
             };
+            if !self.leader_strategy.is_leader_for_next_block(
+                &vn.address,
+                &committee,
+                &message.block_id,
+                block.height(),
+            ) {
+                return Err(HotStuffError::NotTheLeader {
+                    details: format!(
+                        "Not this leader for block {}, vote sent by {}",
+                        message.block_id, vn.address
+                    ),
+                });
+            }
             Vote {
                 epoch: message.epoch,
                 block_id: message.block_id,
@@ -148,15 +150,15 @@ where TConsensusSpec: ConsensusSpec
 
         let votes = block.get_votes(tx.deref_mut())?;
         let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, &local_committee_shard) else {
-                warn!(
-                    target: LOG_TARGET,
-                    "🔥 Received conflicting votes from replicas for block {} ({} of {}). Waiting for more votes.",
-                    message.block_id,
-                    count,
-                    local_committee_shard.quorum_threshold()
-                );
-                tx.rollback()?;
-                return Ok(())
+            warn!(
+                target: LOG_TARGET,
+                "🔥 Received conflicting votes from replicas for block {} ({} of {}). Waiting for more votes.",
+                message.block_id,
+                count,
+                local_committee_shard.quorum_threshold()
+            );
+            tx.rollback()?;
+            return Ok(());
         };
 
         let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();

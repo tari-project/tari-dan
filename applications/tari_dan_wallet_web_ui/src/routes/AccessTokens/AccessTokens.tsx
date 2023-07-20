@@ -23,21 +23,21 @@
 import PageHeading from '../../Components/PageHeading';
 import Grid from '@mui/material/Grid';
 import { StyledPaper } from '../../Components/StyledComponents';
-import JWTGrid from '../Wallet/Components/JWTGrid';
+import AccessTokens from '../Wallet/Components/AccessTokens';
 
-function JWTLayout() {
+function AccessTokensLayout() {
   return (
     <>
       <Grid item xs={12} md={12} lg={12}>
-        <PageHeading>JWTs</PageHeading>
+        <PageHeading>Access Tokens</PageHeading>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
-          <JWTGrid />
+          <AccessTokens />
         </StyledPaper>
       </Grid>
     </>
   );
 }
 
-export default JWTLayout;
+export default AccessTokensLayout;

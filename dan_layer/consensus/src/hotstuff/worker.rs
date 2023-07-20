@@ -273,9 +273,13 @@ where
         // Are we the leader?
         let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
-        let is_leader = self
-            .leader_strategy
-            .is_leader(&self.validator_addr, &local_committee, &leaf_block.block_id, 0);
+        // TODO: If there were leader failures, the leaf block would be empty and we need to create empty blocks.
+        let is_leader = self.leader_strategy.is_leader_for_next_block(
+            &self.validator_addr,
+            &local_committee,
+            &leaf_block.block_id,
+            leaf_block.height,
+        );
         info!(
             target: LOG_TARGET,
             "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}",

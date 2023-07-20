@@ -27,7 +27,7 @@ import Keys from './routes/Keys/Keys';
 import ErrorPage from './routes/ErrorPage';
 import Wallet from './routes/Wallet/Wallet';
 import Layout from './theme/LayoutMain';
-import JWT from './routes/JWT/JWT';
+import AccessTokensLayout from './routes/AccessTokens/AccessTokens';
 
 export const breadcrumbRoutes = [
   {
@@ -46,8 +46,8 @@ export const breadcrumbRoutes = [
     dynamic: false,
   },
   {
-    label: 'JWTs',
-    path: '/jwts',
+    label: 'Access Tokens',
+    path: '/access-tokens',
     dynamic: false,
   },
   {
@@ -66,7 +66,7 @@ function App() {
           <Route path="accounts" element={<Accounts />} />
           <Route path="accounts/:name" element={<AccountDetails />} />
           <Route path="keys" element={<Keys />} />
-          <Route path="jwts" element={<JWT />} />
+          <Route path="access-tokens" element={<AccessTokensLayout />} />
           <Route path="*" element={<ErrorPage />} />
         </Route>
       </Routes>

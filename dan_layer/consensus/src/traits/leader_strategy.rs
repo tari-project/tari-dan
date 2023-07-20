@@ -20,14 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::{committee::Committee, NodeAddressable};
+use tari_dan_common_types::{committee::Committee, NodeAddressable, NodeHeight};
 use tari_dan_storage::consensus_models::BlockId;
 
 pub trait LeaderStrategy<TAddr: NodeAddressable> {
-    fn calculate_leader(&self, committee: &Committee<TAddr>, block: &BlockId, round: u32) -> u32;
+    fn calculate_leader(&self, committee: &Committee<TAddr>, block: &BlockId, height: NodeHeight) -> u32;
 
-    fn is_leader(&self, validator_addr: &TAddr, committee: &Committee<TAddr>, block: &BlockId, round: u32) -> bool {
-        let position = self.calculate_leader(committee, block, round);
+    fn is_leader(
+        &self,
+        validator_addr: &TAddr,
+        committee: &Committee<TAddr>,
+        block: &BlockId,
+        height: NodeHeight,
+    ) -> bool {
+        let position = self.calculate_leader(committee, block, height);
         if let Some(vn) = committee.members.get(position as usize) {
             vn == validator_addr
         } else {
@@ -35,8 +41,27 @@ pub trait LeaderStrategy<TAddr: NodeAddressable> {
         }
     }
 
-    fn get_leader<'b>(&self, committee: &'b Committee<TAddr>, block: &BlockId, round: u32) -> &'b TAddr {
-        let index = self.calculate_leader(committee, block, round);
+    fn is_leader_for_next_block(
+        &self,
+        validator_addr: &TAddr,
+        committee: &Committee<TAddr>,
+        block: &BlockId,
+        height: NodeHeight,
+    ) -> bool {
+        self.is_leader(validator_addr, committee, block, height + NodeHeight(1))
+    }
+
+    fn get_leader<'b>(&self, committee: &'b Committee<TAddr>, block: &BlockId, height: NodeHeight) -> &'b TAddr {
+        let index = self.calculate_leader(committee, block, height);
         committee.members.get(index as usize).unwrap()
+    }
+
+    fn get_leader_for_next_block<'b>(
+        &self,
+        committee: &'b Committee<TAddr>,
+        block: &BlockId,
+        height: NodeHeight,
+    ) -> &'b TAddr {
+        self.get_leader(committee, block, height + NodeHeight(1))
     }
 }
