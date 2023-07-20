@@ -266,19 +266,13 @@ where TConsensusSpec: ConsensusSpec
                 tx_rec.update_decision(tx, Decision::Abort)?;
             }
 
-            if !tx_rec.stage().is_new() && !tx_rec.stage().is_prepared() {
+            // If we've received we know that all locals have prepared and have all the evidence from all shards, we can
+            // transition to All/SomePrepared
+            if tx_rec.stage().is_local_prepared() && tx_rec.transaction.evidence.all_shards_complete() {
                 if change_to_abort {
-                    tx_rec.transition(
-                        tx,
-                        TransactionPoolStage::SomePrepared,
-                        tx_rec.transaction.evidence.all_shards_complete(),
-                    )?;
+                    tx_rec.transition(tx, TransactionPoolStage::SomePrepared, true)?;
                 } else {
-                    tx_rec.transition(
-                        tx,
-                        TransactionPoolStage::AllPrepared,
-                        tx_rec.transaction.evidence.all_shards_complete(),
-                    )?;
+                    tx_rec.transition(tx, TransactionPoolStage::AllPrepared, true)?;
                 }
             }
         }
@@ -403,22 +397,16 @@ where TConsensusSpec: ConsensusSpec
                         tx_rec.transition(tx, TransactionPoolStage::LocalPrepared, false)?;
                     }
 
-                    if tx_rec.changed_decision().map(|d| d.is_abort()).unwrap_or(false) {
-                        warn!(
-                            target: LOG_TARGET,
-                            "⚠️ LocalPrepared({}): Decision changed to ABORT", tx_rec.transaction_id()
-                        );
-                        tx_rec.transition(
-                            tx,
-                            TransactionPoolStage::SomePrepared,
-                            tx_rec.transaction.evidence.all_shards_complete(),
-                        )?;
-                    } else {
-                        tx_rec.transition(
-                            tx,
-                            TransactionPoolStage::AllPrepared,
-                            tx_rec.transaction.evidence.all_shards_complete(),
-                        )?;
+                    if tx_rec.transaction.evidence.all_shards_complete() {
+                        if tx_rec.changed_decision().map(|d| d.is_abort()).unwrap_or(false) {
+                            warn!(
+                                target: LOG_TARGET,
+                                "⚠️ LocalPrepared({}): Decision changed to ABORT", tx_rec.transaction_id()
+                            );
+                            tx_rec.transition(tx, TransactionPoolStage::SomePrepared, true)?;
+                        } else {
+                            tx_rec.transition(tx, TransactionPoolStage::AllPrepared, true)?;
+                        }
                     }
                 },
                 Command::Accept(t) => {

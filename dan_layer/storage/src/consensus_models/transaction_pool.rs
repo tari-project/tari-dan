@@ -215,9 +215,7 @@ impl TransactionPoolRecord {
             ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), false) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), _) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), _) |
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), _) |
             ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), _) |
-            ((TransactionPoolStage::SomePrepared, TransactionPoolStage::SomePrepared), _) |
             ((TransactionPoolStage::AllPrepared, TransactionPoolStage::Complete), false) |
             ((TransactionPoolStage::SomePrepared, TransactionPoolStage::Complete), false) => {},
             _ => {
