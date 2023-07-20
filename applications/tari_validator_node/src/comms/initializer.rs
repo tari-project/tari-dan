@@ -168,8 +168,9 @@ fn configure_comms(
                 .layer(DanBroadcast::new(connectivity, logger1))
                 .service(sink)
         })
-        .max_concurrent_inbound_tasks(3)
-        .max_concurrent_outbound_tasks(3)
+        // In order to guarantee message ordering, we limit the number of concurrent pipeline tasks to 1
+        .max_concurrent_inbound_tasks(1)
+        .max_concurrent_outbound_tasks(1)
         .with_inbound_pipeline(
             ServiceBuilder::new()
                 .layer(DanDeserialize::new(comms.peer_manager(), logger2))
