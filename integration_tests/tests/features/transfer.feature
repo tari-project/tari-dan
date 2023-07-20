@@ -61,6 +61,8 @@ Feature: Account transfers
 
     # Wait for the wallet daemon account monitor to update the sender account information
 
+    # TODO: remove the wait
+    When I wait 5 seconds
     When I check the balance of ACCOUNT on wallet daemon WALLET_D the amount is at least 1000
     # Do the transfer from ACCOUNT to the second account (which does not exist yet in the network)
     When I create a new key pair KEY_ACC_2
@@ -166,6 +168,8 @@ Feature: Account transfers
     # Initialize the wallet daemon
     Given a wallet daemon WALLET_D connected to indexer IDX
 
+    # TODO: remove the wait
+    When I wait 5 seconds
     # Create the sender account
     When I create an account ACC_1 via the wallet daemon WALLET_D with 1000 free coins
 

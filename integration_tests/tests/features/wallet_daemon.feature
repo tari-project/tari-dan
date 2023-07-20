@@ -4,6 +4,7 @@
 Feature: Wallet Daemon
 
     @serial
+        @doit
     Scenario: Create account and transfer faucets via wallet daemon
         # Initialize a base node, wallet, miner and VN
         Given a base node BASE
@@ -38,6 +39,8 @@ Feature: Wallet Daemon
         # Create two accounts to test sending the tokens
         When I create an account ACC_1 via the wallet daemon WALLET_D with 1000 free coins
         When I create an account ACC_2 via the wallet daemon WALLET_D
+        # TODO: remove the wait
+        When I wait 3 seconds
         When I check the balance of ACC_2 on wallet daemon WALLET_D the amount is exactly 0
 
         # Create a new Faucet component
@@ -45,6 +48,7 @@ Feature: Wallet Daemon
 
         # Submit a transaction manifest
         When I print the cucumber world
+        # TODO: remove the wait
         When I wait 5 seconds
         When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACC_1" and 3 outputs named "TX1"
         ```
@@ -70,7 +74,8 @@ Feature: Wallet Daemon
         acc2.balance(faucet_resource);
         acc1.balance(faucet_resource);
         ```
-        When I wait 1 seconds
+        # TODO: remove the wait
+        When I wait 5 seconds
         # Check balances
         # Notice that `take_free_coins` extracts precisely 1000 faucet tokens
         When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 1000
@@ -113,6 +118,8 @@ Feature: Wallet Daemon
 
         When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACCOUNT_1 via the wallet daemon WALLET_D
         When I print the cucumber world
+        # TODO: remove the wait
+        When I wait 5 seconds
         When I check the confidential balance of ACCOUNT_1 on wallet daemon WALLET_D the amount is at least 1000
         # When account ACCOUNT_1 reveals 100 burned tokens via wallet daemon WALLET_D
         Then I make a confidential transfer with amount 5 from ACCOUNT_1 to ACCOUNT_2 creating output OUTPUT_TX1 via the wallet_daemon WALLET_D
