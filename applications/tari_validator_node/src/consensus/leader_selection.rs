@@ -8,12 +8,6 @@ use tari_dan_storage::consensus_models::BlockId;
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RandomDeterministicLeaderStrategy;
 
-impl RandomDeterministicLeaderStrategy {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for RandomDeterministicLeaderStrategy {
     fn calculate_leader(&self, committee: &Committee<TAddr>, block: &BlockId, height: NodeHeight) -> u32 {
         // TODO: Maybe Committee should not be able to be constructed with an empty committee
@@ -34,7 +28,7 @@ impl RoundRobinLeaderStrategy {
 }
 
 impl<TAddr: NodeAddressable> LeaderStrategy<TAddr> for RoundRobinLeaderStrategy {
-    fn calculate_leader(&self, committee: &Committee<TAddr>, block: &BlockId, height: NodeHeight) -> u32 {
+    fn calculate_leader(&self, committee: &Committee<TAddr>, _block: &BlockId, height: NodeHeight) -> u32 {
         (height.0 % committee.members.len() as u64) as u32
     }
 }

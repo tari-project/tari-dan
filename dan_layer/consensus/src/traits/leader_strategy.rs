@@ -22,7 +22,6 @@
 
 use tari_dan_common_types::{committee::Committee, NodeAddressable, NodeHeight};
 use tari_dan_storage::consensus_models::BlockId;
-use tari_mmr::sparse_merkle_tree::Node;
 
 pub trait LeaderStrategy<TAddr: NodeAddressable> {
     fn calculate_leader(&self, committee: &Committee<TAddr>, block: &BlockId, height: NodeHeight) -> u32;

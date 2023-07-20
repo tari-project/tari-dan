@@ -22,7 +22,7 @@ use tokio::{
 
 use crate::{
     consensus::{
-        leader_selection::{RandomDeterministicLeaderStrategy, RoundRobinLeaderStrategy},
+        leader_selection::RoundRobinLeaderStrategy,
         signature_service::TariSignatureService,
         spec::TariConsensusSpec,
         state_manager::TariStateManager,
