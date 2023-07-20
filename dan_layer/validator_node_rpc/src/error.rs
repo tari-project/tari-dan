@@ -26,6 +26,7 @@ impl IsNotFoundError for ValidatorNodeRpcClientError {
     fn is_not_found_error(&self) -> bool {
         match self {
             ValidatorNodeRpcClientError::RpcStatusError(status) => status.is_not_found(),
+            ValidatorNodeRpcClientError::RpcError(RpcError::RequestFailed(status)) => status.is_not_found(),
             _ => false,
         }
     }

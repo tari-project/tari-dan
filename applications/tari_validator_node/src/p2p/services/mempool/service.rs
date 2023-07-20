@@ -20,68 +20,84 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Display,
-    sync::Arc,
-};
+use std::{collections::HashSet, fmt::Display, iter, sync::Arc};
 
+use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
 use tari_comms::NodeIdentity;
-use tari_dan_common_types::{ShardId, TreeNodeHash};
-use tari_dan_core::{message::DanMessage, services::infrastructure_services::OutboundService};
-use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManager};
-use tari_template_lib::Hash;
-use tari_transaction::Transaction;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
+use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_engine::runtime::ConsensusContext;
+use tari_dan_p2p::{DanMessage, OutboundService};
+use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
+use tari_state_store_sqlite::SqliteStateStore;
+use tari_transaction::{Transaction, TransactionId};
+use tokio::sync::{mpsc, oneshot};
 
 use super::MempoolError;
 use crate::{
-    dry_run_transaction_processor::DryRunTransactionProcessor,
     p2p::services::{
-        mempool::{handle::MempoolRequest, Validator},
+        mempool::{
+            executor::{execute_transaction, ExecutionResult},
+            handle::MempoolRequest,
+            traits::SubstateResolver,
+            Validator,
+        },
         messaging::OutboundMessaging,
     },
+    substate_resolver::SubstateResolverError,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::mempool::service";
 
 #[derive(Debug)]
-pub struct MempoolService<V> {
-    transactions: HashMap<Hash, (Transaction, Option<TreeNodeHash>)>,
+pub struct MempoolService<TValidator, TExecutor, TSubstateResolver> {
+    transactions: HashSet<TransactionId>,
+    pending_executions: FuturesUnordered<BoxFuture<'static, Result<ExecutionResult, MempoolError>>>,
     new_transactions: mpsc::Receiver<Transaction>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     outbound: OutboundMessaging,
-    tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
+    tx_executed_transactions: mpsc::Sender<ExecutedTransaction>,
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
-    validator: V,
-    dry_run_processor: DryRunTransactionProcessor,
+    validator: TValidator,
+    transaction_executor: TExecutor,
+    substate_resolver: TSubstateResolver,
+    state_store: SqliteStateStore,
 }
 
-impl<V> MempoolService<V>
-where V: Validator<Transaction, Error = MempoolError>
+impl<TValidator, TExecutor, TSubstateResolver> MempoolService<TValidator, TExecutor, TSubstateResolver>
+where
+    TValidator: Validator<Transaction, Error = MempoolError>,
+    TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
+    TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
     pub(super) fn new(
         new_transactions: mpsc::Receiver<Transaction>,
         mempool_requests: mpsc::Receiver<MempoolRequest>,
         outbound: OutboundMessaging,
-        tx_valid_transactions: broadcast::Sender<(Transaction, ShardId)>,
+        tx_executed_transactions: mpsc::Sender<ExecutedTransaction>,
         epoch_manager: EpochManagerHandle,
         node_identity: Arc<NodeIdentity>,
-        validator: V,
-        dry_run_processor: DryRunTransactionProcessor,
+        transaction_executor: TExecutor,
+        substate_resolver: TSubstateResolver,
+        validator: TValidator,
+        state_store: SqliteStateStore,
     ) -> Self {
         Self {
             transactions: Default::default(),
+            pending_executions: FuturesUnordered::new(),
             new_transactions,
             mempool_requests,
             outbound,
-            tx_valid_transactions,
+            tx_executed_transactions,
             epoch_manager,
             node_identity,
+            transaction_executor,
+            substate_resolver,
             validator,
-            dry_run_processor,
+            state_store,
         }
     }
 
@@ -89,8 +105,13 @@ where V: Validator<Transaction, Error = MempoolError>
         loop {
             tokio::select! {
                 Some(req) = self.mempool_requests.recv() => self.handle_request(req).await,
+                Some(result) = self.pending_executions.next() => {
+                    if  let Err(e) = self.handle_execution_complete(result).await {
+                        error!(target: LOG_TARGET, "Possible bug: handle_execution_complete failed: {}", e);
+                    }
+                },
                 Some(tx) = self.new_transactions.recv() => {
-                    if let Err(e) = self .handle_new_transaction(tx).await {
+                    if let Err(e) = self.handle_new_transaction(tx).await {
                         warn!(target: LOG_TARGET, "Mempool rejected transaction: {}", e);
                     }
                 }
@@ -109,76 +130,139 @@ where V: Validator<Transaction, Error = MempoolError>
             MempoolRequest::SubmitTransaction(transaction, reply) => {
                 handle(reply, self.handle_new_transaction(*transaction).await);
             },
-            MempoolRequest::RemoveTransaction { transaction_hash } => self.remove_transaction(&transaction_hash),
+            MempoolRequest::RemoveTransaction {
+                transaction_id: transaction_hash,
+            } => self.remove_transaction(&transaction_hash),
             MempoolRequest::GetMempoolSize { reply } => {
                 let _ignore = reply.send(self.transactions.len());
             },
         }
     }
 
-    fn remove_transaction(&mut self, hash: &Hash) {
-        self.transactions.remove(hash);
+    fn remove_transaction(&mut self, id: &TransactionId) {
+        self.transactions.remove(id);
     }
 
-    async fn handle_new_transaction(&mut self, mut transaction: Transaction) -> Result<(), MempoolError> {
+    async fn handle_new_transaction(&mut self, transaction: Transaction) -> Result<(), MempoolError> {
         debug!(
             target: LOG_TARGET,
-            "Received transaction: {} {:?}",
-            transaction.hash(),
+            "Received NEW transaction: {} {:?}",
+            transaction.id(),
             transaction
         );
 
-        if self.transactions.contains_key(transaction.hash()) {
+        if self.transactions.contains(transaction.id()) {
             info!(
                 target: LOG_TARGET,
                 "🎱 Transaction {} already in mempool",
-                transaction.hash()
+                transaction.id()
+            );
+            return Ok(());
+        }
+
+        let transaction_processed = self.state_store.with_read_tx(|tx| {
+            let exists = ExecutedTransaction::exists(tx, transaction.id())?;
+            Ok::<_, MempoolError>(exists)
+        })?;
+
+        if transaction_processed {
+            info!(
+                target: LOG_TARGET,
+                "🎱 Transaction {} already processed. Ignoring",
+                transaction.id()
             );
             return Ok(());
         }
 
         self.validator.validate(&transaction).await?;
 
-        // we do a dry run processor to precalculate shards for new outputs,
-        // so the client does not need to specify them
-        if let Err(e) = self.dry_run_processor.add_missing_shards(&mut transaction).await {
-            error!(target: LOG_TARGET, "Could not add missing shards: {}", e);
-        }
-
-        let shards = transaction.meta().involved_shards();
-        if shards.is_empty() {
+        if transaction.num_involved_shards() == 0 {
             warn!(target: LOG_TARGET, "⚠ No involved shards for payload");
         }
 
-        let current_node_pubkey = self.node_identity.public_key();
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+        let shards = transaction.involved_shards_iter().copied()
+            // Involved shard also includes the transaction hash shard. TODO: hacky, this helps with edge cases where there are no inputs/outputs other than the transaction hash
+            .chain(iter::once(transaction.id().into_array().into()))
+            .collect();
 
-        let mut committee_shards = Vec::with_capacity(shards.len());
-        // TODO(perf): n queries
-        for sid in &shards {
-            if self
-                .epoch_manager
-                .is_validator_in_committee_for_current_epoch(*sid, current_node_pubkey.clone())
-                .await?
-            {
-                committee_shards.push(*sid);
-            }
-        }
-
-        if committee_shards.is_empty() {
+        if local_committee_shard.includes_any_shard(&shards) {
+            info!(target: LOG_TARGET, "🎱 New transaction in mempool");
+            self.transactions.insert(*transaction.id());
+            let current_epoch = self.epoch_manager.current_epoch().await?;
+            self.queue_transaction_for_execution(transaction, current_epoch);
+        } else {
             info!(
                 target: LOG_TARGET,
                 "🙇 Not in committee for transaction {}",
-                transaction.hash()
+                transaction.id()
             );
-        } else {
-            debug!(target: LOG_TARGET, "🎱 New transaction in mempool");
-            self.transactions
-                .insert(*transaction.hash(), (transaction.clone(), None));
+
+            if let Err(e) = self.propagate_transaction(transaction, &shards).await {
+                error!(
+                    target: LOG_TARGET,
+                    "Unable to propagate transaction among peers: {}",
+                    e.to_string()
+                );
+            }
         }
 
-        // TODO: if we're in the committee for this transaction, check if the transaction is in-progress/finalized
-        //       locally. If so, do not propagate.
-        if let Err(e) = self.propagate_transaction(&transaction, &shards).await {
+        Ok(())
+    }
+
+    fn queue_transaction_for_execution(&mut self, transaction: Transaction, current_epoch: Epoch) {
+        let substate_resolver = self.substate_resolver.clone();
+        let executor = self.transaction_executor.clone();
+        let consensus_context = ConsensusContext {
+            current_epoch: current_epoch.as_u64(),
+        };
+
+        self.pending_executions
+            .push(execute_transaction(transaction, substate_resolver, executor, consensus_context).boxed());
+    }
+
+    async fn handle_execution_complete(
+        &mut self,
+        result: Result<ExecutionResult, MempoolError>,
+    ) -> Result<(), MempoolError> {
+        // This is due to a bug or possibly db failure only
+        let (transaction_id, time_taken, exec_result) = result?;
+
+        self.transactions.remove(&transaction_id);
+        let executed = match exec_result {
+            Ok(mut executed) => {
+                info!(
+                    target: LOG_TARGET,
+                    "✅ Transaction {} executed successfully ({}) in {:?}",
+                    executed.transaction().id(),
+                    executed.result().finalize.result,
+                    time_taken
+                );
+                // We refuse to process the transaction if any input_refs are downed
+                self.check_input_refs(&executed)?;
+                // Fill the outputs that were missing so that we can propagate to output shards
+                self.fill_outputs(&mut executed);
+
+                executed
+            },
+            Err(e) => {
+                error!(
+                    target: LOG_TARGET,
+                    "❌ Transaction {} failed: {}",
+                    transaction_id,
+                    e.to_string()
+                );
+                return Ok(());
+            },
+        };
+
+        let shards = executed.transaction().involved_shards_iter().copied().collect();
+
+        if let Err(e) = self
+            .propagate_transaction(executed.transaction().clone(), &shards)
+            .await
+        {
             error!(
                 target: LOG_TARGET,
                 "Unable to propagate transaction among peers: {}",
@@ -186,45 +270,67 @@ where V: Validator<Transaction, Error = MempoolError>
             )
         }
 
-        for shard_id in committee_shards {
+        if self.tx_executed_transactions.send(executed).await.is_err() {
             debug!(
                 target: LOG_TARGET,
-                " 🚀 Sending transaction {} for shard {} to consensus",
-                transaction.hash(),
-                shard_id
+                "Executed transaction channel closed before executed transaction could be sent"
             );
-            if let Err(err) = self.tx_valid_transactions.send((transaction.clone(), shard_id)) {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to send valid transaction to shard: {}: {}", shard_id, err
-                );
-            }
+        }
+
+        Ok(())
+    }
+
+    fn check_input_refs(&self, executed: &ExecutedTransaction) -> Result<(), MempoolError> {
+        let Some(diff) = executed.result().finalize.result.accept().cloned() else {
+            return Ok(());
+        };
+
+        let is_input_refs_downed = diff
+            .down_iter()
+            .map(|(s, v)| ShardId::from_address(s, *v))
+            .any(|s| executed.transaction().input_refs().contains(&s));
+
+        if is_input_refs_downed {
+            return Err(MempoolError::InputRefsDowned);
         }
         Ok(())
     }
 
-    pub async fn propagate_transaction(
+    fn fill_outputs(&mut self, executed: &mut ExecutedTransaction) {
+        let Some(diff) = executed.result().finalize.result.accept().cloned() else {
+            return;
+        };
+
+        let outputs = executed.transaction().outputs();
+        let filled_outputs = diff
+            .up_iter()
+            .map(|(addr, substate)| ShardId::from_address(addr, substate.version()))
+            .filter(|shard_id| outputs.contains(shard_id))
+            // NOTE: we must collect here so that we can mutate
+            .collect::<Vec<_>>();
+        executed.transaction_mut().filled_outputs_mut().extend(filled_outputs);
+    }
+
+    async fn propagate_transaction(
         &mut self,
-        transaction: &Transaction,
-        shards: &[ShardId],
+        transaction: Transaction,
+        shards: &HashSet<ShardId>,
     ) -> Result<(), MempoolError> {
         let epoch = self.epoch_manager.current_epoch().await?;
-        let committees = self.epoch_manager.get_committees(epoch, shards).await?;
+        let committees = self.epoch_manager.get_committees_by_shards(epoch, shards).await?;
 
-        let msg = DanMessage::NewTransaction(Box::new(transaction.clone()));
+        let msg = DanMessage::NewTransaction(Box::new(transaction));
 
         // propagate over the involved shard ids
         #[allow(clippy::mutable_key_type)]
         let unique_members = committees
             .into_iter()
-            .flat_map(|s| s.committee.members)
+            .flat_map(|(_, s)| s.members)
             .filter(|pk| pk != self.node_identity.public_key())
             .collect::<HashSet<_>>();
         let committees = unique_members.into_iter().collect::<Vec<_>>();
 
-        self.outbound
-            .broadcast(self.node_identity.public_key().clone(), &committees, msg)
-            .await?;
+        self.outbound.broadcast(&committees, msg).await?;
 
         Ok(())
     }

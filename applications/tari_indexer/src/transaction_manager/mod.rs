@@ -29,13 +29,12 @@ use rand::{rngs::OsRng, seq::SliceRandom};
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
     NodeAddressable,
-    PayloadId,
     ShardId,
 };
 use tari_engine_types::substate::SubstateAddress;
-use tari_epoch_manager::{base_layer::EpochManagerError, EpochManager};
+use tari_epoch_manager::EpochManagerReader;
 use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller};
-use tari_transaction::Transaction;
+use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tari_validator_node_rpc::client::{
     SubstateResult,
     TransactionResultStatus,
@@ -56,7 +55,7 @@ pub struct TransactionManager<TEpochManager, TClientFactory> {
 impl<TEpochManager, TClientFactory, TAddr> TransactionManager<TEpochManager, TClientFactory>
 where
     TAddr: NodeAddressable,
-    TEpochManager: EpochManager<TAddr, Error = EpochManagerError>,
+    TEpochManager: EpochManagerReader<Addr = TAddr>,
     TClientFactory: ValidatorNodeClientFactory<Addr = TAddr>,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
 {
@@ -72,8 +71,12 @@ where
         }
     }
 
-    pub async fn submit_transaction(&self, transaction: Transaction) -> Result<PayloadId, TransactionManagerError> {
-        let tx_hash = *transaction.hash();
+    pub async fn submit_transaction(
+        &self,
+        transaction: Transaction,
+        required_substates: Vec<SubstateRequirement>,
+    ) -> Result<TransactionId, TransactionManagerError> {
+        let tx_hash = *transaction.id();
 
         info!(
             target: LOG_TARGET,
@@ -81,7 +84,10 @@ where
         );
         // automatically scan the inputs and add all related involved objects
         // note that this operation does not alter the transaction hash
-        let autofilled_transaction = self.transaction_autofiller.autofill_transaction(&transaction).await?;
+        let (autofilled_transaction, _) = self
+            .transaction_autofiller
+            .autofill_transaction(transaction, required_substates)
+            .await?;
 
         self.try_with_committee(tx_hash.into_array().into(), move |mut client| {
             let transaction = autofilled_transaction.clone();
@@ -92,15 +98,15 @@ where
 
     pub async fn get_transaction_result(
         &self,
-        payload_id: PayloadId,
+        transaction_id: TransactionId,
     ) -> Result<TransactionResultStatus, TransactionManagerError> {
-        self.try_with_committee(payload_id.into_array().into(), |mut client| async move {
-            client.get_finalized_transaction_result(payload_id).await.optional()
+        self.try_with_committee(transaction_id.into_array().into(), |mut client| async move {
+            client.get_finalized_transaction_result(transaction_id).await.optional()
         })
         .await?
         .ok_or_else(|| TransactionManagerError::NotFound {
             entity: "Transaction result",
-            key: payload_id.to_string(),
+            key: transaction_id.to_string(),
         })
     }
 
@@ -117,7 +123,9 @@ where
             let substate_address = substate_address.clone();
             async move {
                 let substate_address = substate_address.clone();
-                client.get_substate(&substate_address, version).await
+                client
+                    .get_substate(ShardId::from_address(&substate_address, version))
+                    .await
             }
         })
         .await
@@ -126,14 +134,16 @@ where
     /// Fetches the committee members for the given shard and calls the given callback with each member until
     /// the callback returns a `Ok` result. If the callback returns an `Err` result, the next committee member is
     /// called.
-    async fn try_with_committee<F, T, E, TFut>(
+    async fn try_with_committee<'a, F, T, E, TFut>(
         &self,
         shard_id: ShardId,
         mut callback: F,
     ) -> Result<T, TransactionManagerError>
     where
         F: FnMut(TClientFactory::Client) -> TFut,
-        TFut: Future<Output = Result<T, E>>,
+        TClientFactory::Client: 'a,
+        TFut: Future<Output = Result<T, E>> + 'a,
+        T: 'static,
         E: Display,
     {
         let epoch = self.epoch_manager.current_epoch().await?;

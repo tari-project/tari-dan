@@ -34,9 +34,12 @@ message MerkleProof {
 message Transaction {
   repeated Instruction fee_instructions = 1;
   repeated Instruction instructions = 2;
-  tari.dan.common.Signature signature = 3;
-  bytes sender_public_key = 4;
-  TransactionMeta meta = 5;
+  tari.dan.common.SignatureAndPublicKey signature = 3;
+  repeated bytes inputs = 4;
+  repeated bytes input_refs = 5;
+  repeated bytes outputs = 6;
+  repeated bytes filled_inputs = 7;
+  repeated bytes filled_outputs = 8;
 }
 
 message Instruction {

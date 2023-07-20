@@ -7,6 +7,8 @@ mod on_beat;
 mod on_propose;
 mod on_receive_new_view;
 mod on_receive_proposal;
+mod on_receive_request_missing_transactions;
+mod on_receive_requested_transactions;
 mod on_receive_vote;
 mod worker;
 

@@ -43,8 +43,7 @@ use tari_comms::{
     UnspawnedCommsNode,
 };
 use tari_comms_logging::SqliteMessageLog;
-use tari_dan_core::message::DanMessage;
-use tari_dan_storage::models::TariDanPayload;
+use tari_dan_p2p::DanMessage;
 use tari_p2p::{
     initialization::CommsInitializationError,
     peer_seeds::SeedPeer,
@@ -119,8 +118,8 @@ pub async fn initialize(
 }
 
 pub type MessageChannel = (
-    mpsc::Sender<(Destination<CommsPublicKey>, DanMessage<TariDanPayload, CommsPublicKey>)>,
-    mpsc::Receiver<(CommsPublicKey, DanMessage<TariDanPayload, CommsPublicKey>)>,
+    mpsc::Sender<(Destination<CommsPublicKey>, DanMessage<CommsPublicKey>)>,
+    mpsc::Receiver<(CommsPublicKey, DanMessage<CommsPublicKey>)>,
 );
 
 fn configure_comms(

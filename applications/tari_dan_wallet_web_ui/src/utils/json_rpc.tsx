@@ -198,7 +198,7 @@ export const confidentialCancel = (proofId: number) =>
 export const confidentialCreateOutputProof = (amount: number) =>
   jsonRpc('confidential.create_output_proof', [amount]);
 
-export const getAllTransactionByStatus = (status: string | null | undefined) =>
+export const getAllTransactionByStatus = (status: string) =>
   jsonRpc('transactions.get_all_by_status', [status]);
 
 export const webrtc = (

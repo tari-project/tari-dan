@@ -1,16 +1,25 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::RangeInclusive;
+use std::{
+    collections::{HashMap, HashSet},
+    ops::RangeInclusive,
+};
 
 use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
-use tari_core::{transactions::transaction_components::ValidatorNodeRegistration, ValidatorNodeBMT};
-use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
+use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeShard},
+    hashing::{ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
+    Epoch,
+    ShardId,
+};
+use tari_dan_storage::global::models::ValidatorNode;
 use tokio::sync::{broadcast, oneshot};
 
-use crate::{base_layer::error::EpochManagerError, traits::ShardCommitteeAllocation, validator_node::ValidatorNode};
+use crate::{error::EpochManagerError, EpochManagerEvent};
 
 type Reply<T> = oneshot::Sender<Result<T, EpochManagerError>>;
 
@@ -50,8 +59,8 @@ pub enum EpochManagerRequest {
     },
     GetCommittees {
         epoch: Epoch,
-        shards: Vec<ShardId>,
-        reply: Reply<Vec<ShardCommitteeAllocation<CommsPublicKey>>>,
+        shards: HashSet<ShardId>,
+        reply: Reply<HashMap<ShardId, Committee<CommsPublicKey>>>,
     },
     GetCommittee {
         epoch: Epoch,
@@ -67,9 +76,13 @@ pub enum EpochManagerRequest {
         epoch: Epoch,
         reply: Reply<Vec<ValidatorNode<PublicKey>>>,
     },
-    GetValidatorNodeBMT {
+    GetValidatorNodeBalancedMerkleTree {
         epoch: Epoch,
-        reply: Reply<ValidatorNodeBMT>,
+        reply: Reply<ValidatorNodeBalancedMerkleTree>,
+    },
+    GetValidatorNodeMerkleProof {
+        epoch: Epoch,
+        reply: Reply<ValidatorNodeMerkleProof>,
     },
     GetValidatorNodeMerkleRoot {
         epoch: Epoch,
@@ -103,21 +116,26 @@ pub enum EpochManagerRequest {
         for_addr: PublicKey,
         reply: Reply<RangeInclusive<ShardId>>,
     },
-}
-
-#[derive(Debug, Clone)]
-pub enum EpochManagerEvent {
-    EpochChanged(Epoch),
-}
-
-// -------------------------------- Conversions -------------------------------- //
-
-use tari_dan_storage::global::models;
-impl From<models::ValidatorNode> for ValidatorNode<PublicKey> {
-    fn from(db_vn: models::ValidatorNode) -> Self {
-        Self {
-            shard_key: db_vn.shard_key,
-            public_key: db_vn.public_key,
-        }
-    }
+    GetOurValidatorNode {
+        epoch: Epoch,
+        reply: Reply<ValidatorNode<PublicKey>>,
+    },
+    GetCommitteeShard {
+        epoch: Epoch,
+        shard: ShardId,
+        reply: Reply<CommitteeShard>,
+    },
+    GetLocalCommitteeShard {
+        epoch: Epoch,
+        reply: Reply<CommitteeShard>,
+    },
+    GetNumCommittees {
+        epoch: Epoch,
+        reply: Reply<u32>,
+    },
+    GetCommitteesByBuckets {
+        epoch: Epoch,
+        buckets: HashSet<u32>,
+        reply: Reply<HashMap<u32, Committee<PublicKey>>>,
+    },
 }

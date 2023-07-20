@@ -96,13 +96,9 @@ async function getFees(epoch: number, claim_leader_public_key: string) {
     epoch,
   ]);
 }
-async function getCurrentLeaderState(payload_id: string) {
-  return await jsonRpc('get_current_leader_state', [fromHexString(payload_id)]);
-}
-async function getSubstates(payload_id: string, shard_id: string) {
-  return await jsonRpc('get_substates', [
+async function getSubstates(payload_id: string) {
+  return await jsonRpc('get_substates_created_by_transaction', [
     fromHexString(payload_id),
-    fromHexString(shard_id),
   ]);
 }
 async function getTemplates(limit: number) {
@@ -119,7 +115,6 @@ export {
   getCommsStats,
   getConnections,
   addPeer,
-  getCurrentLeaderState,
   getEpochManagerStats,
   getIdentity,
   getMempoolStats,

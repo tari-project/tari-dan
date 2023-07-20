@@ -23,19 +23,22 @@ use tari_dan_storage::{
         ExecutedTransaction,
         HighQc,
         LastExecuted,
+        LastProposed,
         LastVoted,
         LeafBlock,
         LockedBlock,
         QcId,
         QuorumCertificate,
-        TransactionId,
+        SubstateRecord,
         TransactionPoolRecord,
         TransactionPoolStage,
         Vote,
     },
+    Ordering,
     StateStoreReadTransaction,
     StorageError,
 };
+use tari_transaction::TransactionId;
 
 use crate::{
     error::SqliteStorageError,
@@ -95,6 +98,21 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             })?;
 
         last_executed.try_into()
+    }
+
+    fn last_proposed_get(&mut self, epoch: Epoch) -> Result<LastProposed, StorageError> {
+        use crate::schema::last_proposed;
+
+        let last_proposed = last_proposed::table
+            .filter(last_proposed::epoch.eq(epoch.as_u64() as i64))
+            .order_by(last_proposed::id.desc())
+            .first::<sql_models::LastProposed>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "last_proposed_get",
+                source: e,
+            })?;
+
+        last_proposed.try_into()
     }
 
     fn locked_block_get(&mut self, epoch: Epoch) -> Result<LockedBlock, StorageError> {
@@ -169,6 +187,38 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             .load::<sql_models::Transaction>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transactions_get_many",
+                source: e,
+            })?;
+
+        transactions
+            .into_iter()
+            .map(|transaction| transaction.try_into())
+            .collect()
+    }
+
+    fn transactions_get_paginated(
+        &mut self,
+        limit: u64,
+        offset: u64,
+        asc_desc_created_at: Option<Ordering>,
+    ) -> Result<Vec<ExecutedTransaction>, StorageError> {
+        use crate::schema::transactions;
+
+        let mut query = transactions::table.into_boxed();
+
+        if let Some(ordering) = asc_desc_created_at {
+            match ordering {
+                Ordering::Ascending => query = query.order_by(transactions::created_at.asc()),
+                Ordering::Descending => query = query.order_by(transactions::created_at.desc()),
+            }
+        }
+
+        let transactions = query
+            .limit(limit as i64)
+            .offset(offset as i64)
+            .get_results::<sql_models::Transaction>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transactions_get_paginated",
                 source: e,
             })?;
 
@@ -254,17 +304,17 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError> {
         use crate::schema::blocks;
 
-        let exists = blocks::table
+        let count = blocks::table
             .filter(blocks::block_id.eq(serialize_hex(block_id)))
             .count()
-            .first::<i64>(self.connection())
+            .limit(1)
+            .get_result::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_exists",
                 source: e,
-            })? >
-            0;
+            })?;
 
-        Ok(exists)
+        Ok(count > 0)
     }
 
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError> {
@@ -292,6 +342,20 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         Ok(is_ancestor.count > 0)
     }
 
+    fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError> {
+        use crate::schema::block_missing_txs;
+
+        let txs = block_missing_txs::table
+            .select(block_missing_txs::transaction_ids)
+            .filter(block_missing_txs::block_id.eq(serialize_hex(block_id)))
+            .first::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_get_missing_transactions",
+                source: e,
+            })?;
+        deserialize_json(&txs)
+    }
+
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError> {
         use crate::schema::quorum_certificates;
 
@@ -300,7 +364,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             .filter(quorum_certificates::qc_id.eq(serialize_hex(qc_id)))
             .first::<String>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "blocks_get",
+                operation: "quorum_certificates_get",
                 source: e,
             })?;
 
@@ -447,6 +511,71 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
                 })?;
 
         Ok(count as usize)
+    }
+
+    fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError> {
+        use crate::schema::substates;
+
+        let substate = substates::table
+            .filter(substates::shard_id.eq(serialize_hex(substate_id)))
+            .first::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get",
+                source: e,
+            })?;
+
+        substate.try_into()
+    }
+
+    fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+
+        let substates = substates::table
+            .filter(substates::shard_id.eq_any(substate_ids.iter().map(serialize_hex)))
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_any",
+                source: e,
+            })?;
+
+        substates.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn substates_get_many_within_range(
+        &mut self,
+        start: &ShardId,
+        end: &ShardId,
+        exclude_shards: &[ShardId],
+    ) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+
+        let substates = substates::table
+            .filter(substates::shard_id.between(serialize_hex(start), serialize_hex(end)))
+            .filter(substates::shard_id.ne_all(exclude_shards.iter().map(serialize_hex)))
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_many_within_range",
+                source: e,
+            })?;
+
+        substates.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn substates_get_many_by_created_transaction(
+        &mut self,
+        tx_id: &TransactionId,
+    ) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+
+        let substates = substates::table
+            .filter(substates::created_by_transaction.eq(serialize_hex(tx_id)))
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_many_by_created_transaction",
+                source: e,
+            })?;
+
+        substates.into_iter().map(TryInto::try_into).collect()
     }
 }
 

@@ -8,17 +8,67 @@ package tari.dan.consensus;
 import "common.proto";
 import "transaction.proto";
 
-enum HotStuffMessageType {
-  NEW_VIEW = 0;
-  PROPOSAL = 1;
+message HotStuffMessage {
+  oneof message {
+    NewViewMessage new_view = 1;
+    ProposalMessage proposal = 2;
+    VoteMessage vote = 3;
+    RequestMissingTransactionsMessage request_missing_transactions = 4;
+    RequestedTransactionMessage requested_transaction = 5;
+  }
 }
 
-message HotStuffMessage {
-  HotStuffMessageType message_type = 1;
-  HotStuffTreeNode node = 2;
-  QuorumCertificate high_qc = 3;
-  bytes shard = 4;
-  TariDanPayload new_view_payload = 5;
+message NewViewMessage {
+  QuorumCertificate high_qc = 1;
+}
+
+message ProposalMessage {
+  Block block = 1;
+}
+
+message VoteMessage {
+  uint64 epoch = 1;
+  bytes block_id = 2;
+  QuorumDecision decision = 3;
+  tari.dan.common.SignatureAndPublicKey signature = 4;
+  bytes merkle_proof = 5;
+}
+
+message Block {
+  bytes parent_id = 1;
+  QuorumCertificate justify = 2;
+  uint64 height = 3;
+  uint64 epoch = 4;
+  uint64 round = 5;
+  bytes proposed_by = 6;
+  bytes merkle_root = 7;
+  repeated Command commands = 8;
+}
+
+message Command {
+  oneof command {
+    TransactionAtom prepare = 1;
+    TransactionAtom local_prepared = 2;
+    TransactionAtom accept = 3;
+  }
+}
+
+message TransactionAtom {
+  bytes id = 1;
+  repeated bytes involved_shards = 2;
+  Decision decision = 3;
+  Evidence evidence = 4;
+  uint64 fee = 5;
+}
+
+enum Decision {
+  UNKNOWN = 0;
+  ACCEPT = 1;
+  REJECT = 2;
+}
+
+message Evidence {
+  bytes encoded_evidence = 1;
 }
 
 message ShardPledge {
@@ -28,23 +78,13 @@ message ShardPledge {
 }
 
 message QuorumCertificate {
-  enum QuorumDecision {
-    QUORUM_DECISION_ACCEPT = 0;
-    QUORUM_DECISION_REJECT_SHARD_NOT_PLEDGED = 1;
-    QUORUM_DECISION_REJECT_EXECUTION_FAILURE = 2;
-  }
-  bytes payload_id = 1;
-  uint64 payload_height = 2;
-  bytes local_node_hash = 3;
-  uint64 local_node_height = 4;
-  bytes shard = 5;
-  uint64 epoch = 6;
+  bytes block_id = 1;
+  uint64 block_height = 2;
+  uint64 epoch = 3;
+  repeated tari.dan.common.SignatureAndPublicKey signatures = 4;
+  bytes merged_proof = 5;
+  repeated bytes leaf_hashes = 6;
   QuorumDecision decision = 7;
-  repeated ShardPledge all_shard_pledges = 8;
-  repeated ValidatorMetadata validators_metadata = 9;
-  bytes proposed_by = 10;
-  bytes merged_merkle_proof = 11;
-  repeated bytes leaves_hashes = 12;
 }
 
 message HotStuffTreeNode {
@@ -71,14 +111,6 @@ message TariDanPayload {
   tari.dan.transaction.Transaction transaction = 1;
 }
 
-message VoteMessage {
-  bytes local_node_hash = 1;
-  QuorumDecision decision = 2;
-  repeated ShardPledge all_shard_pledges = 3;
-  ValidatorMetadata validator_metadata = 4;
-  bytes merkle_proof = 5;
-  bytes node_hash = 6;
-}
 
 enum QuorumDecision {
   QUORUM_DECISION_UNKNOWN = 0;
@@ -110,4 +142,16 @@ message UpState {
 message DownState {
   bytes deleted_by = 1;
   uint64 fees_accrued = 2;
+}
+
+message RequestMissingTransactionsMessage {
+    uint64 epoch = 1;
+    bytes block_id = 2;
+    repeated bytes transaction_ids = 3;
+}
+
+message RequestedTransactionMessage {
+    uint64 epoch = 1;
+    bytes block_id = 2;
+    repeated tari.dan.transaction.Transaction transactions = 3;
 }

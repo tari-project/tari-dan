@@ -36,10 +36,8 @@ import "transaction.proto";
 message DanMessage {
   oneof message {
     tari.dan.consensus.HotStuffMessage hot_stuff = 1;
-    tari.dan.consensus.VoteMessage vote = 2;
-    tari.dan.transaction.Transaction new_transaction = 3;
-    NetworkAnnounce network_announce = 4;
-    RecoveryMessage recovery_message = 6;
+    tari.dan.transaction.Transaction new_transaction = 2;
+    NetworkAnnounce network_announce = 3;
   }
 
   // Message tag for debugging purposes. This is typically set to some

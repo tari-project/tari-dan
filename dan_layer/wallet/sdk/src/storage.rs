@@ -3,8 +3,9 @@
 
 use std::ops::{Deref, DerefMut};
 
-use tari_common_types::types::{Commitment, FixedHash, PublicKey};
-use tari_dan_common_types::{optional::IsNotFoundError, QuorumCertificate};
+use tari_common_types::types::Commitment;
+use tari_dan_common_types::optional::IsNotFoundError;
+use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     substate::SubstateAddress,
@@ -13,9 +14,8 @@ use tari_engine_types::{
 use tari_template_lib::{
     models::Amount,
     prelude::{NonFungibleId, ResourceAddress},
-    Hash,
 };
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 
 use crate::models::{
     Account,
@@ -118,7 +118,7 @@ pub trait WalletStoreReader {
     // JWT
     fn jwt_get_all(&mut self) -> Result<Vec<(i32, Option<String>)>, WalletStorageError>;
     // Transactions
-    fn transaction_get(&mut self, hash: FixedHash) -> Result<WalletTransaction, WalletStorageError>;
+    fn transaction_get(&mut self, transaction_id: TransactionId) -> Result<WalletTransaction, WalletStorageError>;
     fn transactions_fetch_all_by_status(
         &mut self,
         status: TransactionStatus,
@@ -163,9 +163,9 @@ pub trait WalletStoreReader {
     ) -> Result<Vec<ConfidentialOutputModel>, WalletStorageError>;
 
     // Proofs
-    fn proofs_get_by_transaction_hash(
+    fn proofs_get_by_transaction_id(
         &mut self,
-        transaction_hash: FixedHash,
+        transaction_id: TransactionId,
     ) -> Result<ConfidentialProofId, WalletStorageError>;
 
     // Non fungible tokens
@@ -194,7 +194,7 @@ pub trait WalletStoreWriter {
     fn jwt_add_empty_token(&mut self) -> Result<u64, WalletStorageError>;
     fn jwt_store_decision(&mut self, id: u64, permissions_token: Option<String>) -> Result<(), WalletStorageError>;
     fn jwt_is_revoked(&mut self, token: &str) -> Result<bool, WalletStorageError>;
-    fn jwt_revoke(&mut self, token: &str) -> Result<(), WalletStorageError>;
+    fn jwt_revoke(&mut self, token_id: i32) -> Result<(), WalletStorageError>;
 
     // Key manager
     fn key_manager_insert(&mut self, branch: &str, index: u64) -> Result<(), WalletStorageError>;
@@ -212,25 +212,25 @@ pub trait WalletStoreWriter {
     fn transactions_insert(&mut self, transaction: &Transaction, is_dry_run: bool) -> Result<(), WalletStorageError>;
     fn transactions_set_result_and_status(
         &mut self,
-        hash: FixedHash,
+        transaction_id: TransactionId,
         result: Option<&FinalizeResult>,
         transaction_failure: Option<&RejectReason>,
         final_fee: Option<Amount>,
-        qcs: Option<&[QuorumCertificate<PublicKey>]>,
+        qcs: Option<&[QuorumCertificate]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError>;
 
     // Substates
     fn substates_insert_root(
         &mut self,
-        tx_hash: FixedHash,
+        transaction_id: TransactionId,
         address: VersionedSubstateAddress,
         module_name: Option<String>,
         template_addr: Option<TemplateAddress>,
     ) -> Result<(), WalletStorageError>;
     fn substates_insert_child(
         &mut self,
-        tx_hash: FixedHash,
+        transaction_id: TransactionId,
         parent: SubstateAddress,
         address: VersionedSubstateAddress,
     ) -> Result<(), WalletStorageError>;
@@ -271,10 +271,10 @@ pub trait WalletStoreWriter {
     // Proofs
     fn proofs_insert(&mut self, vault_address: &SubstateAddress) -> Result<ConfidentialProofId, WalletStorageError>;
     fn proofs_delete(&mut self, proof_id: ConfidentialProofId) -> Result<(), WalletStorageError>;
-    fn proofs_set_transaction_hash(
+    fn proofs_set_transaction_id(
         &mut self,
         proof_id: ConfidentialProofId,
-        transaction_hash: Hash,
+        transaction_id: TransactionId,
     ) -> Result<(), WalletStorageError>;
 
     // Non fungible tokens

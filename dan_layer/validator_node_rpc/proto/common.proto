@@ -10,6 +10,16 @@ message Signature {
   bytes signature = 2;
 }
 
+message SignatureAndPublicKey {
+  bytes public_nonce = 1;
+  bytes signature = 2;
+  bytes public_key = 3;
+}
+
 message ShardId {
   bytes bytes = 1;
+}
+
+message Epoch {
+  uint64 epoch = 1;
 }

@@ -1,14 +1,12 @@
 // Copyright 2022 The Tari Project
 // SPDX-License-Identifier: BSD-3-Clause
 
-// pub mod crypto;
+mod bootstrap;
+pub mod fees;
 pub mod flow;
 pub mod function_definitions;
 pub mod packager;
 pub mod runtime;
-// pub mod state;
-mod bootstrap;
-pub mod fees;
 pub mod state_store;
 pub mod traits;
 pub mod transaction;

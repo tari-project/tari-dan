@@ -334,7 +334,7 @@ jobs:
 #      - name: Artifact upload for macOS pkg
 #        if: startsWith(runner.os,'macOS')
 #        continue-on-error: true
-#        uses: actions/upload-artifact@v2
+#        uses: actions/upload-artifact@v3
 #        with:
 #          name: ${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}.pkg
 #          path: "${{ env.distDirPKG }}/${{ env.TN_FILENAME }}-${{ matrix.builds.name }}-${{ env.VERSION }}*.pkg"
@@ -349,7 +349,7 @@ jobs:
 #          "%programfiles(x86)%\Inno Setup 6\iscc.exe" "/DMyAppVersion=${{ env.VERSION }}-${{ env.VSHA_SHORT }}-release" "/DTariSuitePath=${{ github.workspace }}${{ env.TBN_DIST }}" "windows_inno_installer.iss"
 
 #      - name: Artifact upload for Windows installer
-#        uses: actions/upload-artifact@v2
+#        uses: actions/upload-artifact@v3
 #        if: startsWith(runner.os,'Windows')
 #        with:
 #          name: "tari_windows_installer"
@@ -375,7 +375,7 @@ jobs:
 #          fi
 
       - name: Artifact upload for Archive
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ env.TN_FILENAME }}_archive-${{ matrix.builds.name }}
           path: "${{ github.workspace }}${{ env.TBN_DIST }}/${{ env.BINFILE }}.zip*"
@@ -448,7 +448,7 @@ jobs:
     if: ${{ startsWith(github.ref, 'refs/tags/v') }}
     steps:
       - name: Download binaries
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
       - name: Create release
         uses: ncipollo/release-action@v1
         with:

@@ -95,11 +95,11 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
         .get_by_shard_range(Epoch(0), Epoch(10), start..=end)
         .unwrap();
     if shard_id > shard_id2 {
-        assert_eq!(vns[0].public_key, pk2);
-        assert_eq!(vns[1].public_key, pk);
+        assert_eq!(vns[0].address, pk2);
+        assert_eq!(vns[1].address, pk);
     } else {
-        assert_eq!(vns[0].public_key, pk);
-        assert_eq!(vns[1].public_key, pk2);
+        assert_eq!(vns[0].address, pk);
+        assert_eq!(vns[1].address, pk2);
     }
     assert_eq!(vns.len(), 2);
 }

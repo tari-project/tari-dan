@@ -18,8 +18,8 @@ use diesel::{
 };
 use log::*;
 use serde::Serialize;
-use tari_common_types::types::{Commitment, FixedHash, PublicKey};
-use tari_dan_common_types::QuorumCertificate;
+use tari_common_types::types::{Commitment, PublicKey};
+use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_dan_wallet_sdk::{
     models::{
         ConfidentialOutputModel,
@@ -37,16 +37,13 @@ use tari_engine_types::{
     substate::SubstateAddress,
     TemplateAddress,
 };
-use tari_template_lib::{
-    models::{Amount, EncryptedData},
-    Hash,
-};
-use tari_transaction::Transaction;
+use tari_template_lib::models::{Amount, EncryptedData};
+use tari_transaction::{Transaction, TransactionId};
 use tari_utilities::hex::Hex;
 
 use crate::{
     diesel::ExpressionMethods,
-    models::{self},
+    models::{self, InputsAndOutputs},
     reader::ReadTransaction,
     schema::auth_status,
     serialization::serialize_json,
@@ -133,16 +130,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         }
     }
 
-    fn jwt_revoke(&mut self, token: &str) -> Result<(), WalletStorageError> {
+    fn jwt_revoke(&mut self, token_id: i32) -> Result<(), WalletStorageError> {
         if diesel::update(auth_status::table)
             .set(auth_status::revoked.eq(true))
-            .filter(auth_status::token.eq(token))
+            .filter(auth_status::id.eq(token_id))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("jwt_revoke", e))? ==
             0
         {
             diesel::insert_into(auth_status::table)
-                .values((auth_status::revoked.eq(true), auth_status::token.eq(token)))
+                .values((auth_status::revoked.eq(true), auth_status::id.eq(token_id)))
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general("jwt_revoke", e))?;
         }
@@ -258,12 +255,16 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
         diesel::insert_into(transactions::table)
             .values((
-                transactions::hash.eq(transaction.hash().to_string()),
+                transactions::hash.eq(transaction.id().to_string()),
                 transactions::fee_instructions.eq(serialize_json(transaction.fee_instructions())?),
                 transactions::instructions.eq(serialize_json(transaction.instructions())?),
-                transactions::sender_public_key.eq(transaction.sender_public_key().to_hex()),
-                transactions::signature.eq(serialize_json(transaction.signature())?),
-                transactions::meta.eq(serialize_json(transaction.meta())?),
+                transactions::sender_public_key.eq(transaction.signer_public_key().to_hex()),
+                transactions::signature.eq(serialize_json(transaction.signature().signature())?),
+                transactions::meta.eq(serialize_json(&InputsAndOutputs {
+                    inputs: transaction.inputs().to_vec(),
+                    input_refs: transaction.input_refs().to_vec(),
+                    outputs: transaction.outputs().to_vec(),
+                })?),
                 transactions::status.eq(TransactionStatus::default().as_key_str()),
                 transactions::dry_run.eq(is_dry_run),
             ))
@@ -275,11 +276,11 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     fn transactions_set_result_and_status(
         &mut self,
-        hash: FixedHash,
+        transaction_id: TransactionId,
         result: Option<&FinalizeResult>,
         transaction_failure: Option<&RejectReason>,
         final_fee: Option<Amount>,
-        qcs: Option<&[QuorumCertificate<PublicKey>]>,
+        qcs: Option<&[QuorumCertificate]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError> {
         use crate::schema::transactions;
@@ -293,7 +294,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 transactions::qcs.eq(qcs.map(serialize_json).transpose()?),
                 transactions::updated_at.eq(diesel::dsl::now),
             ))
-            .filter(transactions::hash.eq(hash.to_string()))
+            .filter(transactions::hash.eq(transaction_id.to_string()))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("transactions_set_result_and_status", e))?;
 
@@ -301,7 +302,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             return Err(WalletStorageError::NotFound {
                 operation: "transactions_set_result_and_status",
                 entity: "transaction".to_string(),
-                key: hash.to_string(),
+                key: transaction_id.to_string(),
             });
         }
 
@@ -311,7 +312,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
     // -------------------------------- Substates -------------------------------- //
     fn substates_insert_root(
         &mut self,
-        tx_hash: FixedHash,
+        transaction_id: TransactionId,
         address: VersionedSubstateAddress,
         module_name: Option<String>,
         template_addr: Option<TemplateAddress>,
@@ -321,7 +322,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         diesel::insert_into(substates::table)
             .values((
                 substates::address.eq(address.address.to_string()),
-                substates::transaction_hash.eq(tx_hash.to_string()),
+                substates::transaction_hash.eq(transaction_id.to_string()),
                 substates::module_name.eq(module_name),
                 substates::template_address.eq(template_addr.map(|a| a.to_string())),
                 substates::version.eq(address.version as i32),
@@ -334,7 +335,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     fn substates_insert_child(
         &mut self,
-        tx_hash: FixedHash,
+        transaction_id: TransactionId,
         parent: SubstateAddress,
         child: VersionedSubstateAddress,
     ) -> Result<(), WalletStorageError> {
@@ -343,7 +344,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         diesel::insert_into(substates::table)
             .values((
                 substates::address.eq(child.address.to_string()),
-                substates::transaction_hash.eq(tx_hash.to_string()),
+                substates::transaction_hash.eq(transaction_id.to_string()),
                 substates::parent_address.eq(Some(parent.to_string())),
                 substates::version.eq(child.version as i32),
             ))
@@ -706,15 +707,15 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         Ok(())
     }
 
-    fn proofs_set_transaction_hash(
+    fn proofs_set_transaction_id(
         &mut self,
         proof_id: ConfidentialProofId,
-        transaction_hash: Hash,
+        transaction_id: TransactionId,
     ) -> Result<(), WalletStorageError> {
         use crate::schema::proofs;
 
         diesel::update(proofs::table.filter(proofs::id.eq(proof_id as i32)))
-            .set(proofs::transaction_hash.eq(transaction_hash.to_string()))
+            .set(proofs::transaction_hash.eq(transaction_id.to_string()))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("proofs_set_transaction_hash", e))?;
 

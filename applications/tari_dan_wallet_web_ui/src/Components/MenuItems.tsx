@@ -77,10 +77,16 @@ const mainItems = [
     link: 'transactions',
   },
   {
-    title: 'JWTs',
+    title: 'Transactions',
+    icon: <IoWalletOutline style={iconStyle} />,
+    activeIcon: <IoWallet style={activeIconStyle} />,
+    link: 'transactions',
+  },
+  {
+    title: 'Access Tokens',
     icon: <IoTicketOutline style={iconStyle} />,
     activeIcon: <IoTicket style={activeIconStyle} />,
-    link: 'jwts',
+    link: 'access-tokens',
   },
 ];
 

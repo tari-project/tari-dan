@@ -7,7 +7,7 @@ use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::{dsl::sum, sql_query, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::error;
 use serde::de::DeserializeOwned;
-use tari_common_types::types::{Commitment, FixedHash};
+use tari_common_types::types::Commitment;
 use tari_dan_wallet_sdk::{
     models::{
         Account,
@@ -28,6 +28,7 @@ use tari_template_lib::{
     models::{ResourceAddress, VaultId},
     prelude::NonFungibleId,
 };
+use tari_transaction::TransactionId;
 use tari_utilities::hex::Hex;
 
 use crate::{diesel::ExpressionMethods, models, serialization::deserialize_json};
@@ -160,23 +161,24 @@ impl WalletStoreReader for ReadTransaction<'_> {
         let res = auth_status::table
             .select((auth_status::id, auth_status::token))
             .filter(auth_status::granted.eq(true))
+            .filter(auth_status::revoked.eq(false))
             .get_results::<(i32, Option<String>)>(self.connection())
             .map_err(|e| WalletStorageError::general("jwt_get_all", e))?;
         Ok(res)
     }
 
     // -------------------------------- Transactions -------------------------------- //
-    fn transaction_get(&mut self, hash: FixedHash) -> Result<WalletTransaction, WalletStorageError> {
+    fn transaction_get(&mut self, transaction_id: TransactionId) -> Result<WalletTransaction, WalletStorageError> {
         use crate::schema::transactions;
         let row = transactions::table
-            .filter(transactions::hash.eq(hash.to_string()))
+            .filter(transactions::hash.eq(transaction_id.to_string()))
             .first::<models::Transaction>(self.connection())
             .optional()
             .map_err(|e| WalletStorageError::general("transaction_get", e))?
             .ok_or_else(|| WalletStorageError::NotFound {
                 operation: "transaction_get",
                 entity: "transaction".to_string(),
-                key: hash.to_string(),
+                key: transaction_id.to_string(),
             })?;
 
         let transaction = row.try_into_wallet_transaction()?;
@@ -633,14 +635,14 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(outputs)
     }
 
-    fn proofs_get_by_transaction_hash(
+    fn proofs_get_by_transaction_id(
         &mut self,
-        transaction_hash: FixedHash,
+        transaction_id: TransactionId,
     ) -> Result<ConfidentialProofId, WalletStorageError> {
         use crate::schema::proofs;
 
         let proof_id = proofs::table
-            .filter(proofs::transaction_hash.eq(transaction_hash.to_string()))
+            .filter(proofs::transaction_hash.eq(transaction_id.to_string()))
             .select(proofs::id)
             .first::<i32>(self.connection())
             .optional()
@@ -648,7 +650,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         let proof_id = proof_id.ok_or_else(|| WalletStorageError::NotFound {
             operation: "proofs_get_by_transaction_hash",
             entity: "proofs".to_string(),
-            key: transaction_hash.to_string(),
+            key: transaction_id.to_string(),
         })?;
 
         Ok(proof_id as u64)

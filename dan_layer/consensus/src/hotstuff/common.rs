@@ -6,17 +6,19 @@ use std::ops::DerefMut;
 use log::*;
 use tari_dan_storage::{
     consensus_models::{HighQc, QuorumCertificate},
-    StateStore,
+    StateStoreReadTransaction,
+    StateStoreWriteTransaction,
 };
 
 use crate::hotstuff::error::HotStuffError;
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff";
 
-pub fn update_high_qc<TStore: StateStore>(
-    tx: &mut TStore::WriteTransaction<'_>,
-    qc: &QuorumCertificate,
-) -> Result<(), HotStuffError> {
+pub fn update_high_qc<TTx>(tx: &mut TTx, qc: &QuorumCertificate) -> Result<(), HotStuffError>
+where
+    TTx: StateStoreWriteTransaction + DerefMut,
+    TTx::Target: StateStoreReadTransaction,
+{
     let high_qc = HighQc::get(tx.deref_mut(), qc.epoch())?;
     let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
     // high_qc.node
