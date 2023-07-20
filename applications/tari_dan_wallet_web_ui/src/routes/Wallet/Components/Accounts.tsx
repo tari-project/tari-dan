@@ -99,7 +99,7 @@ function Accounts() {
   };
 
   const onClaimFreeCoins = () => {
-    accountsCreateFreeTestCoins("TestAccount", 1000, 0).then((response) => { loadAccounts(); });
+    accountsCreateFreeTestCoins("TestAccount", 100000, 1000).then((response) => { loadAccounts(); });
   }
 
   const onClaimBurn = () => {
