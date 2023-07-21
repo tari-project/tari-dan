@@ -16,12 +16,12 @@ diesel::table! {
 }
 
 diesel::table! {
-    block_missing_txs(id) {
-        id -> Integer,
-        block_id -> Text,
-        transaction_ids -> Text,
-        created_at -> Timestamp,
-    }
+   block_missing_txs(id) {
+       id -> Integer,
+       block_id -> Text,
+       transaction_ids -> Text,
+       created_at -> Timestamp,
+   }
 }
 
 diesel::table! {
