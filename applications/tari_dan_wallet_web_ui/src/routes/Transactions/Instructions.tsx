@@ -24,15 +24,12 @@ import { useState } from 'react';
 import {
   TableContainer,
   Table,
-  TableHead,
   TableRow,
-  TableCell,
   TableBody,
   Collapse,
 } from '@mui/material';
 import {
   DataTableCell,
-  CodeBlock,
   AccordionIconButton,
 } from '../../Components/StyledComponents';
 import { renderJson } from '../../utils/helpers';
@@ -40,11 +37,11 @@ import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import CodeBlockExpand from '../../Components/CodeBlock';
 
-function RowData({ title, data }: any) {
+function RowData({ title, data }: any, index: number) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <TableRow>
+      <TableRow key={`${index}-1`}>
         <DataTableCell
           width={90}
           sx={{ borderBottom: 'none', textAlign: 'center' }}
@@ -62,7 +59,7 @@ function RowData({ title, data }: any) {
         </DataTableCell>
         <DataTableCell>{title}</DataTableCell>
       </TableRow>
-      <TableRow>
+      <TableRow key={`${index}-2`}>
         <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={2}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <CodeBlockExpand title={title}>{renderJson(data)}</CodeBlockExpand>
@@ -73,7 +70,7 @@ function RowData({ title, data }: any) {
   );
 }
 
-export default function Instructions({ data }: any) {
+export default function Instructions({ data }: any, index: number) {
   return (
     <TableContainer>
       <Table>

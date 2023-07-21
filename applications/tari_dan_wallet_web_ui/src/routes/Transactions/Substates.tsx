@@ -24,30 +24,25 @@ import { useState } from 'react';
 import {
   TableContainer,
   Table,
-  TableHead,
   TableRow,
-  TableCell,
   TableBody,
   Collapse,
 } from '@mui/material';
 import { renderJson } from '../../utils/helpers';
 import { DataTableCell } from '../../Components/StyledComponents';
-import {
-  AccordionIconButton,
-  CodeBlock,
-} from '../../Components/StyledComponents';
+import { AccordionIconButton } from '../../Components/StyledComponents';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { IoArrowDownCircle, IoArrowUpCircle } from 'react-icons/io5';
 import CodeBlockDialog from '../../Components/CodeBlock';
 
-function RowData({ info, index, state }: any) {
+function RowData({ info, state }: any, index: number) {
   const [open, setOpen] = useState(false);
   const itemKey = Object.keys(info[0])[0];
   const itemValue = Object.values(info[0])[0];
   return (
     <>
-      <TableRow>
+      <TableRow key={`${index}-1`}>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
           <AccordionIconButton
             open={open}
@@ -88,7 +83,7 @@ function RowData({ info, index, state }: any) {
             : String(itemValue)}
         </DataTableCell>
       </TableRow>
-      <TableRow>
+      <TableRow key={`${index}-2`}>
         <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={4}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <CodeBlockDialog title="Substate">
@@ -110,10 +105,10 @@ export default function Substates({ data }: { data: any }) {
       <Table>
         <TableBody>
           {up.map((item: any, index: number) => {
-            return <RowData info={item} state="Up" />;
+            return <RowData info={item} state="Up" key={index} />;
           })}
           {down.map((item: any, index: number) => {
-            return <RowData info={item} state="Down" />;
+            return <RowData info={item} state="Down" key={index} />;
           })}
         </TableBody>
       </Table>

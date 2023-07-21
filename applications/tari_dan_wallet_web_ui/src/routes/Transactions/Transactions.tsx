@@ -27,7 +27,6 @@ import {
   emptyRows,
   handleChangePage,
   handleChangeRowsPerPage,
-  toHexString,
 } from '../../utils/helpers';
 import {
   TableContainer,
@@ -44,14 +43,6 @@ import { DataTableCell } from '../../Components/StyledComponents';
 import Loading from '../../Components/Loading';
 import StatusChip from '../../Components/StatusChip';
 
-// Possible states:
-// New,
-// DryRun,
-// Pending,
-// Accepted,
-// Rejected,
-// InvalidTransaction,
-
 export default function Transactions() {
   const [transactions, setTransactions] = useState<any>([]);
   const [error, setError] = useState<String>();
@@ -63,18 +54,16 @@ export default function Transactions() {
     setLoading(true);
     getAllTransactionByStatus(null)
       .then((response) => {
-        console.log('response', response.transactions);
         setTransactions(
           response.transactions.map((t: any) => {
             return {
-              id: t[0].sender_public_key,
               sender_public_key: t[0].sender_public_key,
               total_fees_charged:
                 t[1]?.cost_breakdown === null
                   ? 0
                   : t[1]?.cost_breakdown.total_fees_charged,
               status: t[2],
-              transaction_hash: toHexString(t[0].hash),
+              transaction_hash: t[0].id,
             };
           })
         );
@@ -95,8 +84,6 @@ export default function Transactions() {
   useEffect(() => {
     loadTransactions();
   }, []);
-
-  console.log('state', transactions);
 
   return (
     <>

@@ -50,17 +50,14 @@ interface Event {
   payload: any;
 }
 
-function RowData({
-  component_address,
-  template_address,
-  topic,
-  tx_hash,
-  payload,
-}: any) {
+function RowData(
+  { component_address, template_address, topic, tx_hash, payload }: Event,
+  index: number
+) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <TableRow>
+      <TableRow key={index}>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
           <AccordionIconButton
             open={open}

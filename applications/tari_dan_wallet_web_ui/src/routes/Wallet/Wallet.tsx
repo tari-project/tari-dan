@@ -62,7 +62,6 @@ function Wallet() {
         </StyledPaper>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>JWTs</SecondaryHeading>
         <SecondaryHeading>Access Tokens</SecondaryHeading>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>

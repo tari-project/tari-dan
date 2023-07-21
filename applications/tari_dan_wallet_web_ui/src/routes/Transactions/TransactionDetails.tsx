@@ -57,7 +57,7 @@ export default function TransactionDetails() {
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<String>();
-  const { hash, status, result, transaction, transaction_failure } = state;
+  const { status, result, transaction, transaction_failure } = state;
   const location = useLocation();
 
   const getTransactionByHash = () => {
@@ -65,7 +65,6 @@ export default function TransactionDetails() {
     const path = location.pathname.split('/')[2];
     transactionsGet(path)
       .then((response) => {
-        console.log('transaction details: ', response);
         setState(response);
         setError(undefined);
       })
@@ -84,8 +83,6 @@ export default function TransactionDetails() {
   useEffect(() => {
     getTransactionByHash();
   }, []);
-
-  console.log('state: ', state);
 
   const handleChange =
     (panel: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
@@ -127,7 +124,7 @@ export default function TransactionDetails() {
                         <TableBody>
                           <TableRow>
                             <TableCell>Transaction Hash</TableCell>
-                            <DataTableCell>{hash}</DataTableCell>
+                            <DataTableCell>{transaction.id}</DataTableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Timestamp</TableCell>
@@ -136,8 +133,8 @@ export default function TransactionDetails() {
                           <TableRow>
                             <TableCell>Total Fees</TableCell>
                             <DataTableCell>
-                              {/* {result &&
-                                result.cost_breakdown.total_fees_charged} */}
+                              {result &&
+                                result.cost_breakdown.total_fees_charged}
                             </DataTableCell>
                           </TableRow>
                           <TableRow>

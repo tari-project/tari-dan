@@ -93,6 +93,11 @@ export async function jsonRpc(method: string, params: any = null) {
 // auth
 export const authLogin = () => jsonRpc('auth.login');
 
+// jwts
+export const getAllTokens = () => jsonRpc('auth.get_all_jwt', []);
+export const authRevokeToken = (token: string) =>
+  jsonRpc('auth.revoke', [token]);
+
 // rpc
 export const rpcDiscover = () => jsonRpc('rpc.discover');
 
@@ -164,6 +169,16 @@ export const accountsCreate = (
     fee,
     is_default,
   ]);
+export const accountsCreateFreeTestCoins = (
+  accountName: string | undefined,
+  amount: number | undefined,
+  fee: number | undefined
+) =>
+  jsonRpc('accounts.create_free_test_coins', [
+    { Name: accountName },
+    amount,
+    fee,
+  ]);
 export const accountsList = (offset: number, limit: number) =>
   jsonRpc('accounts.list', [offset, limit]);
 export const accountsGetBalances = (accountName: string) =>
@@ -198,7 +213,7 @@ export const confidentialCancel = (proofId: number) =>
 export const confidentialCreateOutputProof = (amount: number) =>
   jsonRpc('confidential.create_output_proof', [amount]);
 
-export const getAllTransactionByStatus = (status: string) =>
+export const getAllTransactionByStatus = (status: string | null | undefined) =>
   jsonRpc('transactions.get_all_by_status', [status]);
 
 export const webrtc = (

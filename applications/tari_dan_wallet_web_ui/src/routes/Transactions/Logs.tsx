@@ -48,9 +48,9 @@ export default function Logs({ data }: { data: Log[] }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.map(({ level, message, timestamp }: any) => {
+          {data.map(({ level, message, timestamp }: any, index: number) => {
             return (
-              <TableRow>
+              <TableRow key={index}>
                 <DataTableCell>{level}</DataTableCell>
                 <DataTableCell>{message}</DataTableCell>
                 <DataTableCell>{timestamp}</DataTableCell>
