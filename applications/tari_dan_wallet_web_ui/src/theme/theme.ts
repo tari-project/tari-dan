@@ -30,6 +30,7 @@ const theme = createTheme({
     secondary: {
       main: '#40388A',
     },
+    divider: '#f5f5f5',
   },
   shape: {
     borderRadius: 10,
@@ -111,6 +112,15 @@ const theme = createTheme({
             lineHeight: '1.8rem',
             color: 'rgba(0, 0, 0, 0.6)',
           },
+        },
+      },
+    },
+    MuiCircularProgress: {
+      defaultProps: {
+        // size: 20,
+        thickness: 4,
+        sx: {
+          color: '#EAEAEA',
         },
       },
     },
