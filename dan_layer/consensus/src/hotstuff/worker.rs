@@ -102,6 +102,7 @@ where
                 transaction_pool.clone(),
                 tx_leader.clone(),
                 tx_events,
+                tx_broadcast.clone(),
                 on_beat.clone(),
             ),
             on_receive_vote: OnReceiveVoteHandler::new(

@@ -256,3 +256,52 @@ async fn foreign_shard_decides_to_abort() {
     log::info!("total messages sent: {}", test.network().total_messages_sent());
     test.assert_clean_shutdown().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn foreign_block_distribution() {
+    let mut test = Test::builder()
+        .with_hotstuff_filter(Box::new(|from: &TestAddress, to: &TestAddress, _| match *from {
+            // We filter our message from each leader to the foreign committees. So we will rely on other members of
+            // the local committees to send the message to the foreign committee members (non-leader). And then on
+            // the distribution within the foreign committee.
+            TestAddress("1") => *to == TestAddress("1") || *to == TestAddress("2") || *to == TestAddress("3"),
+            TestAddress("4") => *to == TestAddress("4") || *to == TestAddress("5") || *to == TestAddress("6"),
+            TestAddress("7") => *to == TestAddress("7") || *to == TestAddress("8") || *to == TestAddress("9"),
+            _ => true,
+        }))
+        .add_committee(0, vec!["1", "2", "3"])
+        .add_committee(1, vec!["4", "5", "6"])
+        .add_committee(2, vec!["7", "8", "9"])
+        .start()
+        .await;
+    for _ in 0..20 {
+        test.send_transaction_to_all(Decision::Commit, 1, 5).await;
+    }
+
+    test.wait_all_have_at_least_n_new_transactions_in_pool(20).await;
+    test.network().start();
+
+    loop {
+        test.on_block_committed().await;
+
+        if test.is_transaction_pool_empty() {
+            break;
+        }
+
+        let leaf1 = test.get_validator(&TestAddress("1")).get_leaf_block();
+        let leaf2 = test.get_validator(&TestAddress("4")).get_leaf_block();
+        let leaf3 = test.get_validator(&TestAddress("7")).get_leaf_block();
+        if leaf1.height > NodeHeight(20) || leaf2.height > NodeHeight(20) || leaf3.height > NodeHeight(20) {
+            panic!(
+                "Not all transaction committed after {}/{}/{} blocks",
+                leaf1.height, leaf2.height, leaf3.height
+            );
+        }
+    }
+
+    test.assert_all_validators_at_same_height().await;
+
+    log::info!("total messages sent: {}", test.network().total_messages_sent());
+    log::info!("total messages filtered: {}", test.network().total_messages_filtered());
+    test.assert_clean_shutdown().await;
+}

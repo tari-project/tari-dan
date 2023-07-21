@@ -19,7 +19,14 @@ use tokio::sync::{
 
 use crate::support::{address::TestAddress, transaction::build_transaction_from, ValidatorChannels};
 
-pub fn spawn_network(channels: Vec<ValidatorChannels>, default_decision: Decision, default_fee: u64) -> TestNetwork {
+pub type HotstuffFilter = Box<dyn Fn(&TestAddress, &TestAddress, &HotstuffMessage) -> bool + Send + 'static>;
+
+pub fn spawn_network(
+    channels: Vec<ValidatorChannels>,
+    default_decision: Decision,
+    default_fee: u64,
+    hotstuff_filter: Option<HotstuffFilter>,
+) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
         .map(|c| (c.address, (c.bucket, c.tx_new_transactions.clone())))
@@ -39,6 +46,7 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, default_decision: Decisio
     let (tx_network_status, network_status) = watch::channel(NetworkStatus::Paused);
     let (tx_on_message, rx_on_message) = watch::channel(None);
     let num_sent_messages = Arc::new(AtomicUsize::new(0));
+    let num_filtered_messages = Arc::new(AtomicUsize::new(0));
 
     TestNetworkWorker {
         network_status,
@@ -50,8 +58,10 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, default_decision: Decisio
         rx_mempool: Some(rx_mempool),
         on_message: tx_on_message,
         num_sent_messages: num_sent_messages.clone(),
+        num_filtered_messages: num_filtered_messages.clone(),
         default_decision,
         default_fee,
+        hotstuff_filter,
     }
     .spawn();
 
@@ -59,6 +69,7 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, default_decision: Decisio
         tx_new_transaction,
         network_status: tx_network_status,
         num_sent_messages,
+        num_filtered_messages,
         _on_message: rx_on_message,
     }
 }
@@ -79,6 +90,7 @@ pub struct TestNetwork {
     tx_new_transaction: mpsc::Sender<(TestNetworkDestination, ExecutedTransaction)>,
     network_status: watch::Sender<NetworkStatus>,
     num_sent_messages: Arc<AtomicUsize>,
+    num_filtered_messages: Arc<AtomicUsize>,
     _on_message: watch::Receiver<Option<HotstuffMessage>>,
 }
 
@@ -104,6 +116,10 @@ impl TestNetwork {
 
     pub fn total_messages_sent(&self) -> usize {
         self.num_sent_messages.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn total_messages_filtered(&self) -> usize {
+        self.num_filtered_messages.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -135,8 +151,10 @@ pub struct TestNetworkWorker {
     network_status: watch::Receiver<NetworkStatus>,
     on_message: watch::Sender<Option<HotstuffMessage>>,
     num_sent_messages: Arc<AtomicUsize>,
+    num_filtered_messages: Arc<AtomicUsize>,
     default_decision: Decision,
     default_fee: u64,
+    hotstuff_filter: Option<HotstuffFilter>,
 }
 
 impl TestNetworkWorker {
@@ -208,20 +226,34 @@ impl TestNetworkWorker {
     }
 
     pub async fn handle_broadcast(&mut self, from: TestAddress, to: Committee<TestAddress>, msg: HotstuffMessage) {
-        self.num_sent_messages
-            .fetch_add(to.len(), std::sync::atomic::Ordering::Relaxed);
         for vn in to {
+            if let Some(hotstuff_filter) = &self.hotstuff_filter {
+                if !hotstuff_filter(&from, &vn, &msg) {
+                    self.num_filtered_messages
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    continue;
+                }
+            }
             self.tx_hs_message
                 .get(&vn)
                 .unwrap()
                 .send((from, msg.clone()))
                 .await
                 .unwrap();
+            self.num_sent_messages
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         self.on_message.send(Some(msg.clone())).unwrap();
     }
 
     pub async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage) {
+        if let Some(hotstuff_filter) = &self.hotstuff_filter {
+            if !hotstuff_filter(&from, &to, &msg) {
+                self.num_filtered_messages
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return;
+            }
+        }
         self.on_message.send(Some(msg.clone())).unwrap();
         self.num_sent_messages
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);

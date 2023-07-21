@@ -5,7 +5,7 @@
 // ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
 // Complete
 
-use std::ops::DerefMut;
+use std::{collections::HashSet, ops::DerefMut};
 
 use log::*;
 use tari_dan_common_types::{
@@ -22,6 +22,7 @@ use tari_dan_storage::{
         ExecutedTransaction,
         LastExecuted,
         LastVoted,
+        LeafBlock,
         LockedBlock,
         QuorumDecision,
         SubstateLockFlag,
@@ -62,6 +63,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     tx_events: broadcast::Sender<HotstuffEvent>,
+    tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
     on_beat: OnBeat,
 }
 
@@ -78,6 +80,7 @@ where TConsensusSpec: ConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
+        tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
         on_beat: OnBeat,
     ) -> Self {
         Self {
@@ -90,6 +93,7 @@ where TConsensusSpec: ConsensusSpec
             transaction_pool,
             tx_leader,
             tx_events,
+            tx_broadcast,
             on_beat,
         }
     }
@@ -98,7 +102,15 @@ where TConsensusSpec: ConsensusSpec
         let ProposalMessage { block } = message;
 
         let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
-        if local_committee.contains(&from) {
+        let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
+        let our_bucket = self
+            .epoch_manager
+            .get_our_validator_node(block.epoch())
+            .await?
+            .shard_key
+            .to_committee_bucket(num_committees);
+
+        if block.proposed_by().to_committee_bucket(num_committees) == our_bucket {
             debug!(
                 target: LOG_TARGET,
                 "🔥 Receive LOCAL PROPOSAL for block {}, parent {}, height {} from {}",
@@ -119,7 +131,124 @@ where TConsensusSpec: ConsensusSpec
                 from,
             );
 
-            self.handle_foreign_proposal(from, block).await
+            self.handle_foreign_proposal(from, &local_committee, block).await
+        }
+    }
+
+    // Returns the indices in foreign committee to whom I should send the block, so we guarantee that at least one
+    // honest node receives it in the foreign committee. So we need to send it to at least f+1 node in the foreign
+    // committee. But also take into consideration that our committee can have f dishonest nodes.
+    fn to_whom_should_i_resend_the_block(
+        &self,
+        my_index: usize,
+        my_committee_size: usize,
+        foreign_committee_size: usize,
+    ) -> Vec<usize> {
+        if my_index == 0 {
+            // I'm leader, I already sent it to everyone
+            vec![]
+        } else if foreign_committee_size / 3 + my_committee_size / 3 < my_committee_size {
+            // We can do 1 to 1 mapping, but am I one that should be sending it?
+            if foreign_committee_size / 3 + my_committee_size / 3 + 1 > my_index {
+                vec![my_index]
+            } else {
+                vec![]
+            }
+        } else {
+            // We can't do 1 to 1 mapping, the foreign committee is too big (more than 2 times), so now we have need
+            // 1 to N mapping.
+            // Lets the size of the committee be the 3f+1 and the foreign committee 3g+1.
+            // We know that f+g+1 > 3f+1 (that's above)
+            // So now we need to send more than 1 message per node. If we send n messages per node from x nodes, then we
+            // need (x-f)*n > g, because f nodes can be faulty, and we need to hit at least one honest node. So the
+            // smallest n is n=g/(x-f)+1. If we send it from the whole committee then n=g/(2f+1)+1. Ok but now, due to
+            // rounding, we don't have to send it from all the nodes. We just need to satify the (x-f)*n>g. So now we
+            // compute the x, x=g/n+f+1.
+            let my_f = (my_committee_size - 1) / 3;
+            let foreign_f = (foreign_committee_size - 1) / 3;
+            let n = foreign_f / (my_committee_size - my_f) + 1;
+            let nodes = foreign_f / n + 1 + my_f;
+            // So now we have 1 to N mapping, nodes will each send n messages
+            if my_index < nodes {
+                ((my_index * n)..((my_index + 1) * n))
+                    .map(|i| i % foreign_committee_size)
+                    .collect()
+            } else {
+                vec![]
+            }
+        }
+    }
+
+    async fn send_block_to_foreign_committees(&self, block: Block) -> Result<(), HotStuffError> {
+        // We now have a valid block and we may be responsible to send it to the foreign committees
+        let txs = self.store.with_read_tx(|tx| {
+            let prepared_iter = block
+                .commands()
+                .iter()
+                .filter_map(|cmd| cmd.local_prepared())
+                .map(|t| &t.id);
+            ExecutedTransaction::get_any(tx, prepared_iter)
+        })?;
+        let involved_shards = txs
+            .iter()
+            .flat_map(|tx| tx.transaction().involved_shards_iter().copied())
+            .collect::<HashSet<_>>();
+
+        let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
+        let validator = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
+        let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
+
+        let non_local_buckets = involved_shards
+            .into_iter()
+            .map(|shard| shard.to_committee_bucket(num_committees))
+            .filter(|bucket| *bucket != local_bucket)
+            .collect::<HashSet<_>>();
+
+        let non_local_committees = self
+            .epoch_manager
+            .get_committees_by_buckets(block.epoch(), non_local_buckets)
+            .await?;
+        let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
+
+        let mut committee = Vec::new();
+        let local_leader_index = self
+            .leader_strategy
+            .calculate_leader(&local_committee, block.id(), block.height()) as usize;
+        let my_index = local_committee
+            .members
+            .iter()
+            .position(|member| *member == validator.address)
+            .expect("I should be part of my local committee");
+        // Recompute my_index to be zero-based from leader position.
+        let my_index = (my_index + local_committee.len() - local_leader_index) % local_committee.len();
+
+        for non_local_commitee in non_local_committees.values() {
+            let send_to =
+                self.to_whom_should_i_resend_the_block(my_index, local_committee.len(), non_local_commitee.len());
+            let foreign_leader_index =
+                self.leader_strategy
+                    .calculate_leader(non_local_commitee, block.id(), block.height()) as usize;
+            committee.append(
+                &mut send_to
+                    .into_iter()
+                    .map(|index| {
+                        non_local_commitee.members[(index + foreign_leader_index) % non_local_commitee.len()].clone()
+                    })
+                    .collect(),
+            )
+        }
+        if committee.is_empty() {
+            Ok(())
+        } else {
+            self.tx_broadcast
+                .send((
+                    Committee::new(committee),
+                    HotstuffMessage::Proposal(ProposalMessage { block }),
+                ))
+                .await
+                .map_err(|_| HotStuffError::InternalChannelClosed {
+                    context: "syncing local block to foreign committees",
+                })
         }
     }
 
@@ -137,6 +266,8 @@ where TConsensusSpec: ConsensusSpec
             block.save(tx)?;
             Ok::<_, HotStuffError>(())
         })?;
+
+        self.send_block_to_foreign_committees(block.clone()).await?;
 
         if self.block_has_missing_transaction(&local_committee, &block).await? {
             Ok(())
@@ -182,10 +313,11 @@ where TConsensusSpec: ConsensusSpec
         })?;
 
         if !missing_tx_ids.is_empty() {
+            let leader = self
+                .leader_strategy
+                .get_leader(local_committee, block.id(), block.height());
             self.send_to_leader(
-                local_committee,
-                block.id(),
-                block.height(),
+                leader,
                 HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
                     block_id: *block.id(),
                     epoch: block.epoch(),
@@ -238,15 +370,62 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn handle_foreign_proposal(&self, from: TConsensusSpec::Addr, block: Block) -> Result<(), HotStuffError> {
-        let vn = self.epoch_manager.get_validator_node(block.epoch(), &from).await?;
+    async fn handle_foreign_proposal(
+        &self,
+        from: TConsensusSpec::Addr,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+        block: Block,
+    ) -> Result<(), HotStuffError> {
+        if self.store.with_read_tx(|tx| block.justify().exists(tx))? {
+            // We already seen this block. And the block we saw was valid.
+            return Ok(());
+        }
+
         let committee_shard = self
             .epoch_manager
-            .get_committee_shard(block.epoch(), vn.shard_key)
+            .get_committee_shard(block.epoch(), *block.proposed_by())
             .await?;
         self.validate_proposed_block(&from, &block)?;
         self.store
             .with_write_tx(|tx| self.on_receive_foreign_block(tx, &block, &committee_shard))?;
+
+        // If we received the foreign proposal, we send it to the leader (if we are not the leader), the leader then
+        // redistributes the block to all other nodes. This way if the leader is not faulty O(n) messages will be send
+        // around. If the leader doesn't have the message it will take 2 delta (if the delta time is the maximum latency
+        // between any two nodes) to have it everywhere. If the leader has the message already it will be just 1 delta.
+        // Worst case scenario is when we have f faulty nodes, and 2f honest nodes have the message and 1 node doesnt,
+        // but he is the (f+1)th leader. In this case we send exactly 2f*f+2f+3f messages around. 2f*f to the
+        // faulty leaders, 2f to the honest leader, and 3f from the leader.
+        let leader = self.store.with_read_tx(|tx| {
+            let leaf_block = LeafBlock::get(tx, block.epoch())?;
+            Ok::<_, HotStuffError>(
+                self.leader_strategy
+                    .get_leader_for_next_block(local_committee, &leaf_block.block_id, leaf_block.height)
+                    .clone(),
+            )
+        })?;
+        if leader == self.validator_addr {
+            // We are the leader, so we distribute the block within the local committee (we didn't do it yet)
+            // If there leader is malicious and doesn't redistribute the block we should handle the redistribution again
+            // on leader rotation, from all the nodes that have this block. Because the next leader may not have this
+            // block.
+            self.tx_broadcast
+                .send((
+                    local_committee.clone(),
+                    HotstuffMessage::Proposal(ProposalMessage { block }),
+                ))
+                .await
+                .map_err(|_| HotStuffError::InternalChannelClosed {
+                    context: "Redistributing foreign block",
+                })?;
+        } else {
+            // We are not the leader, so we send the block to the leader
+            self.send_to_leader(
+                &leader,
+                HotstuffMessage::Proposal(ProposalMessage { block: block.clone() }),
+            )
+            .await?;
+        }
 
         // We could have ready transactions at this point, so if we're the leader for the next block we can propose
         self.on_beat.beat();
@@ -305,12 +484,9 @@ where TConsensusSpec: ConsensusSpec
 
     async fn send_to_leader(
         &self,
-        local_committee: &Committee<TConsensusSpec::Addr>,
-        block_id: &BlockId,
-        height: NodeHeight,
+        leader: &TConsensusSpec::Addr,
         message: HotstuffMessage,
     ) -> Result<(), HotStuffError> {
-        let leader = self.leader_strategy.get_leader(local_committee, block_id, height);
         self.tx_leader
             .send((leader.clone(), message))
             .await

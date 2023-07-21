@@ -14,6 +14,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerReader;
 use tokio::task;
 
+use super::network::HotstuffFilter;
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
@@ -253,6 +254,7 @@ pub struct TestBuilder {
     sql_address: String,
     default_decision: Decision,
     default_fee: u64,
+    hotstuff_filter: Option<HotstuffFilter>,
 }
 
 impl TestBuilder {
@@ -262,18 +264,24 @@ impl TestBuilder {
             sql_address: ":memory:".to_string(),
             default_decision: Decision::Commit,
             default_fee: 1,
+            hotstuff_filter: None,
         }
     }
 
     #[allow(dead_code)]
-    pub fn with_sql_url<T: Into<String>>(&mut self, sql_address: T) -> &mut Self {
+    pub fn with_sql_url<T: Into<String>>(mut self, sql_address: T) -> Self {
         self.sql_address = sql_address.into();
         self
     }
 
-    pub fn add_committee(&mut self, bucket: u32, addresses: Vec<&'static str>) -> &mut Self {
+    pub fn add_committee(mut self, bucket: u32, addresses: Vec<&'static str>) -> Self {
         self.committees
             .insert(bucket, addresses.into_iter().map(TestAddress).collect());
+        self
+    }
+
+    pub fn with_hotstuff_filter(mut self, hotstuff_filter: HotstuffFilter) -> Self {
+        self.hotstuff_filter = Some(hotstuff_filter);
         self
     }
 
@@ -302,12 +310,12 @@ impl TestBuilder {
             .unzip()
     }
 
-    pub async fn start(&self) -> Test {
+    pub async fn start(self) -> Test {
         let leader_strategy = SelectedIndexLeaderStrategy::new(0);
         let epoch_manager = TestEpochManager::new();
         epoch_manager.add_committees(self.committees.clone()).await;
         let (channels, validators) = self.build_validators(&leader_strategy, &epoch_manager).await;
-        let network = spawn_network(channels, self.default_decision, self.default_fee);
+        let network = spawn_network(channels, self.default_decision, self.default_fee, self.hotstuff_filter);
 
         Test {
             validators,
