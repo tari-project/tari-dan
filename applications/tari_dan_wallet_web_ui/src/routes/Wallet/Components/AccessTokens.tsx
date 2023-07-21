@@ -38,19 +38,31 @@ import {
   TableRow,
   TablePagination,
   CircularProgress,
+  List,
+  ListItem,
   Fade,
+  Alert,
 } from '@mui/material';
-import { DataTableCell } from '../../../Components/StyledComponents';
 import theme from '../../../theme';
 import { shortenString } from '../../../utils/helpers';
 import CopyToClipboard from '../../../Components/CopyToClipboard';
 import { IoCloseCircleOutline } from 'react-icons/io5';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import Collapse from '@mui/material/Collapse';
+import {
+  DataTableCell,
+  CodeBlock,
+  AccordionIconButton,
+} from '../../../Components/StyledComponents';
+import Loading from '../../../Components/Loading';
 
 interface IToken {
   id: number;
   name: string;
   deleted: boolean;
   expiryDate: Date;
+  permissions: string[];
 }
 
 function AlertDialog({ fn, row }: any) {
@@ -117,6 +129,7 @@ export default function AccessTokens() {
             id: item.id,
             name: item.name,
             expiryDate: new Date(item.exp * 1000),
+            permissions: item.permissions,
             deleted: false,
           }))
         );
@@ -171,93 +184,176 @@ export default function AccessTokens() {
     setPage(0);
   };
 
-  return (
-    <TableContainer>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>ID</TableCell>
-            <TableCell>Token Name</TableCell>
-            <TableCell>Expiry Date</TableCell>
-            <TableCell width="100" align="center">
-              Revoke
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {tokens &&
-            tokens
-              .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map(({ id, name, deleted, expiryDate }: IToken) => {
-                const formattedDate = `${expiryDate
-                  .toISOString()
-                  .slice(0, 10)} ${expiryDate.toISOString().slice(11, 16)}`;
-                if (!deleted) {
-                  return (
-                    <Fade in={!deleted} key={id}>
-                      <TableRow
-                        key={id}
-                        className={deleted ? 'purple-flash' : ''}
-                      >
-                        <DataTableCell>{id}</DataTableCell>
-                        <DataTableCell>
-                          {shortenString(name)}
-                          <CopyToClipboard copy={name} />
-                        </DataTableCell>
-                        <DataTableCell>{formattedDate}</DataTableCell>
-                        <DataTableCell align="center">
-                          <AlertDialog fn={() => handleRevoke(id)} row={name} />
-                        </DataTableCell>
-                      </TableRow>
-                    </Fade>
-                  );
-                } else {
-                  return (
-                    <TableRow key={id}>
-                      <DataTableCell
-                        colSpan={4}
-                        height={73}
-                        className="purple-flash"
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            width: '100%',
-                            gap: '1rem',
-                          }}
-                        >
-                          <CircularProgress
-                            style={{
-                              color: theme.palette.primary.main,
-                              height: '1.5rem',
-                              width: '1.5rem',
-                            }}
-                          />
-                        </div>
-                      </DataTableCell>
-                    </TableRow>
-                  );
-                }
-              })}
+  function RowData({ id, name, expiryDate, permissions, formattedDate }: any) {
+    const [open, setOpen] = useState(false);
 
-          {emptyRows > 0 && (
-            <TableRow style={{ height: 57 * emptyRows }}>
-              <TableCell colSpan={4} />
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-      <TablePagination
-        rowsPerPageOptions={[10, 25, 50]}
-        component="div"
-        count={tokens.length}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={handleChangePage}
-        onRowsPerPageChange={handleChangeRowsPerPage}
-      />
-    </TableContainer>
+    return (
+      <>
+        <TableRow key={id}>
+          <DataTableCell
+            style={{
+              borderBottom: 'none',
+            }}
+          >
+            {id}
+          </DataTableCell>
+          <DataTableCell
+            style={{
+              borderBottom: 'none',
+            }}
+          >
+            {shortenString(name)}
+            <CopyToClipboard copy={name} />
+          </DataTableCell>
+          <DataTableCell
+            style={{
+              borderBottom: 'none',
+            }}
+          >
+            {formattedDate}
+          </DataTableCell>
+          <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+            <AccordionIconButton
+              open={open}
+              aria-label="expand row"
+              size="small"
+              onClick={() => {
+                setOpen(!open);
+              }}
+            >
+              {open ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+            </AccordionIconButton>
+          </DataTableCell>
+          <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+            <AlertDialog fn={() => handleRevoke(id)} row={name} />
+          </DataTableCell>
+        </TableRow>
+        <TableRow>
+          <DataTableCell
+            style={{
+              paddingBottom: 0,
+              paddingTop: 0,
+            }}
+            colSpan={5}
+          >
+            <Collapse in={open} timeout="auto" unmountOnExit>
+              <CodeBlock style={{ marginBottom: '10px' }}>
+                Permissions:
+                <List>
+                  {permissions.map((item: string) => (
+                    <ListItem key={item}>{item}</ListItem>
+                  ))}
+                </List>
+              </CodeBlock>
+            </Collapse>
+          </DataTableCell>
+        </TableRow>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {loading && <Loading />}
+      <Fade in={!loading}>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>ID</TableCell>
+                <TableCell>Token Name</TableCell>
+                <TableCell>Expiry Date</TableCell>
+                <TableCell align="center">Permissions</TableCell>
+                <TableCell width="100" align="center">
+                  Revoke
+                </TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {tokens &&
+                tokens
+                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                  .map(
+                    ({
+                      id,
+                      name,
+                      deleted,
+                      expiryDate,
+                      permissions,
+                    }: IToken) => {
+                      const formattedDate = `${expiryDate
+                        .toISOString()
+                        .slice(0, 10)} ${expiryDate
+                        .toISOString()
+                        .slice(11, 16)}`;
+                      if (!deleted) {
+                        return (
+                          <RowData
+                            key={id}
+                            id={id}
+                            name={name}
+                            expiryDate={formattedDate}
+                            permissions={permissions}
+                            formattedDate={formattedDate}
+                          />
+                        );
+                      } else {
+                        return (
+                          <TableRow key={id}>
+                            <DataTableCell
+                              colSpan={5}
+                              height={73}
+                              className="purple-flash"
+                            >
+                              <div
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'center',
+                                  alignItems: 'center',
+                                  width: '100%',
+                                  gap: '1rem',
+                                }}
+                              >
+                                <CircularProgress
+                                  style={{
+                                    color: theme.palette.primary.main,
+                                    height: '1.5rem',
+                                    width: '1.5rem',
+                                  }}
+                                />
+                              </div>
+                            </DataTableCell>
+                          </TableRow>
+                        );
+                      }
+                    }
+                  )}
+
+              {emptyRows > 0 && (
+                <TableRow style={{ height: 57 * emptyRows }}>
+                  <TableCell colSpan={4} />
+                </TableRow>
+              )}
+              {error ? (
+                <TableRow>
+                  <TableCell colSpan={5}>
+                    <Alert severity="error">{error}</Alert>
+                  </TableCell>
+                </TableRow>
+              ) : null}
+            </TableBody>
+          </Table>
+          <TablePagination
+            rowsPerPageOptions={[10, 25, 50]}
+            component="div"
+            count={tokens.length}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+          />
+        </TableContainer>
+      </Fade>
+    </>
   );
 }
