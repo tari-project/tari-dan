@@ -14,7 +14,7 @@ CREATE TABLE transaction_pool_history
     stage            text      not null,
     is_ready         boolean   not null,
     created_at       timestamp NOT NULL,
-    change_time      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    change_time      DATETIME DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
 );
 
 CREATE TRIGGER copy_transaction_pool_history
