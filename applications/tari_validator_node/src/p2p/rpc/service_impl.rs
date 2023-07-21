@@ -271,19 +271,17 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .ok_or_else(|| RpcStatus::not_found("Transaction not found"))?;
 
-        let result = transaction.result();
-        if !transaction.is_finalized() {
+        let Some(result) = transaction.into_final_result() else{
             return Ok(Response::new(GetTransactionResultResponse {
                 status: PayloadResultStatus::Pending.into(),
-                // For simplicity, we simply encode the whole result as a CBOR blob.
-                execution_result: encode(result).map_err(RpcStatus::log_internal_error(LOG_TARGET))?,
+                ..Default::default()
             }));
-        }
+        };
 
         Ok(Response::new(GetTransactionResultResponse {
             status: PayloadResultStatus::Finalized.into(),
             // For simplicity, we simply encode the whole result as a CBOR blob.
-            execution_result: encode(result).map_err(RpcStatus::log_internal_error(LOG_TARGET))?,
+            execution_result: encode(&result).map_err(RpcStatus::log_internal_error(LOG_TARGET))?,
         }))
     }
 }

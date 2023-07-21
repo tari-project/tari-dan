@@ -34,9 +34,9 @@ where
             high_qc_block.height(),
         );
 
-        qc.set_block_as_leaf(tx)?;
+        qc.as_leaf_block().set(tx)?;
         qc.save(tx)?;
-        qc.set_as_high_qc(tx)?;
+        qc.as_high_qc().set(tx)?;
     }
 
     Ok(())

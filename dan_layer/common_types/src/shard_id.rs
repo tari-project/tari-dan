@@ -182,6 +182,18 @@ mod tests {
     }
 
     #[test]
+    fn buckets() {
+        let bucket = ShardId::max().to_committee_bucket(0);
+        assert_eq!(bucket, 0);
+        let bucket = divide_floor(ShardId::max(), 5).to_committee_bucket(20);
+        assert_eq!(bucket, 4);
+        let bucket = divide_floor(ShardId::max(), 2).to_committee_bucket(10);
+        assert_eq!(bucket, 5);
+        let bucket = divide_floor(ShardId::max(), 2).to_committee_bucket(256);
+        assert_eq!(bucket, 128);
+    }
+
+    #[test]
     fn max_committees() {
         let bucket = ShardId::max().to_committee_bucket(u32::MAX);
         assert_eq!(bucket, u32::MAX);

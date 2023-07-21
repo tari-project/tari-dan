@@ -280,7 +280,7 @@ impl JsonRpcHandlers {
 
         let response = GetTransactionResultResponse {
             is_finalized: executed.is_finalized(),
-            result: Some(executed.into_result()),
+            result: executed.into_final_result(),
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }

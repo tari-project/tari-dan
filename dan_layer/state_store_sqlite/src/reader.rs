@@ -174,7 +174,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         transaction.try_into()
     }
 
-    fn transactions_get_many<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    fn transactions_get_any<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         tx_ids: I,
     ) -> Result<Vec<ExecutedTransaction>, StorageError> {

@@ -37,7 +37,7 @@ use tari_consensus::messages::{
     VoteMessage,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{Epoch, NodeHeight, ShardId, ValidatorMetadata};
+use tari_dan_common_types::{Epoch, NodeHeight, ValidatorMetadata};
 use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
@@ -290,11 +290,6 @@ impl From<TransactionAtom> for proto::consensus::TransactionAtom {
     fn from(value: TransactionAtom) -> Self {
         Self {
             id: value.id.as_bytes().to_vec(),
-            involved_shards: value
-                .involved_shards
-                .into_iter()
-                .map(|s| s.as_bytes().to_vec())
-                .collect(),
             decision: i32::from(value.decision.as_u8()),
             evidence: Some(value.evidence.into()),
             fee: value.fee,
@@ -308,11 +303,6 @@ impl TryFrom<proto::consensus::TransactionAtom> for TransactionAtom {
     fn try_from(value: proto::consensus::TransactionAtom) -> Result<Self, Self::Error> {
         Ok(TransactionAtom {
             id: TransactionId::try_from(value.id)?,
-            involved_shards: value
-                .involved_shards
-                .into_iter()
-                .map(|s| ShardId::try_from(s.as_slice()))
-                .collect::<Result<_, _>>()?,
             decision: Decision::from_u8(u8::try_from(value.decision)?)
                 .ok_or_else(|| anyhow!("Invalid Decision byte {}", value.decision))?,
             evidence: value

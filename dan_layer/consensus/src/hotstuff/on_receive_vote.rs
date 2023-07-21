@@ -5,7 +5,7 @@ use std::ops::DerefMut;
 
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{committee::CommitteeShard, hashing::MergedValidatorNodeMerkleProof};
+use tari_dan_common_types::{committee::CommitteeShard, hashing::MergedValidatorNodeMerkleProof, optional::Optional};
 use tari_dan_storage::{
     consensus_models::{Block, HighQc, QuorumCertificate, QuorumDecision, Vote},
     StateStore,
@@ -85,7 +85,12 @@ where TConsensusSpec: ConsensusSpec
         self.validate_vote_message(&message, &sender_leaf_hash)?;
 
         let (block, count) = self.store.with_write_tx(|tx| {
-            let block = Block::get(tx.deref_mut(), &message.block_id)?;
+            let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
+                return Err(HotStuffError::ReceivedVoteForUnknownBlock {
+                    block_id: message.block_id,
+                    sent_by: from.to_string(),
+                });
+            };
             if !self.leader_strategy.is_leader_for_next_block(
                 &vn.address,
                 &committee,
