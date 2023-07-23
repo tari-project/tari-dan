@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+
+//! The prelude contains all the commonly used types and functions that are used. To use it, add the import `use tari_template_lib::prelude::*;`
 pub use tari_bor;
 #[cfg(feature = "macro")]
 pub use tari_template_macros::template;
