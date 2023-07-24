@@ -20,7 +20,6 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
-        ExecutedTransaction,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -32,6 +31,7 @@ use tari_dan_storage::{
         SubstateRecord,
         TransactionPoolRecord,
         TransactionPoolStage,
+        TransactionRecord,
         Vote,
     },
     Ordering,
@@ -160,7 +160,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         high_qc.try_into()
     }
 
-    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<ExecutedTransaction, StorageError> {
+    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError> {
         use crate::schema::transactions;
 
         let transaction = transactions::table
@@ -174,10 +174,26 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         transaction.try_into()
     }
 
+    fn transactions_exists(&mut self, tx_id: &TransactionId) -> Result<bool, StorageError> {
+        use crate::schema::transactions;
+
+        let exists = transactions::table
+            .count()
+            .filter(transactions::transaction_id.eq(serialize_hex(tx_id)))
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transactions_exists",
+                source: e,
+            })?;
+
+        Ok(exists > 0)
+    }
+
     fn transactions_get_any<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         tx_ids: I,
-    ) -> Result<Vec<ExecutedTransaction>, StorageError> {
+    ) -> Result<Vec<TransactionRecord>, StorageError> {
         use crate::schema::transactions;
 
         let tx_ids: Vec<String> = tx_ids.into_iter().map(serialize_hex).collect();
@@ -201,7 +217,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         limit: u64,
         offset: u64,
         asc_desc_created_at: Option<Ordering>,
-    ) -> Result<Vec<ExecutedTransaction>, StorageError> {
+    ) -> Result<Vec<TransactionRecord>, StorageError> {
         use crate::schema::transactions;
 
         let mut query = transactions::table.into_boxed();

@@ -205,7 +205,7 @@ where
             executed.transaction().id()
         );
         self.state_store.with_write_tx(|tx| {
-            executed.insert(tx)?;
+            executed.upsert(tx)?;
 
             let decision = if executed.result().finalize.is_accept() {
                 Decision::Commit

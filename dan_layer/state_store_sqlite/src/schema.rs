@@ -1,6 +1,15 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    block_missing_txs (id) {
+        id -> Integer,
+        transaction_ids -> Text,
+        block_id -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     blocks (id) {
         id -> Integer,
         block_id -> Text,
@@ -11,24 +20,6 @@ diesel::table! {
         proposed_by -> Text,
         qc_id -> Text,
         commands -> Text,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
-    block_missing_txs(id) {
-        id -> Integer,
-        block_id -> Text,
-        transaction_ids -> Text,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
-    missing_tx(id) {
-        id -> Integer,
-        transaction_id -> Text,
-        block_id -> Text,
         created_at -> Timestamp,
     }
 }
@@ -89,6 +80,15 @@ diesel::table! {
         epoch -> BigInt,
         block_id -> Text,
         height -> BigInt,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    missing_tx (id) {
+        id -> Integer,
+        transaction_id -> Text,
+        block_id -> Text,
         created_at -> Timestamp,
     }
 }
@@ -155,7 +155,8 @@ diesel::table! {
         outputs -> Text,
         filled_inputs -> Text,
         filled_outputs -> Text,
-        result -> Text,
+        result -> Nullable<Text>,
+        execution_time_ms -> Nullable<BigInt>,
         final_decision -> Nullable<Text>,
         created_at -> Timestamp,
     }
@@ -176,6 +177,7 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
+    block_missing_txs,
     blocks,
     high_qcs,
     last_executed,
@@ -183,6 +185,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     last_voted,
     leaf_blocks,
     locked_block,
+    missing_tx,
     quorum_certificates,
     substates,
     transaction_pool,

@@ -202,7 +202,7 @@ where
 
         error!(
             target: LOG_TARGET,
-            "Could not get substate {} from any of the validator nodes", shard,
+            "Could not get substate for shard {} from any of the validator nodes", shard,
         );
 
         if let Some(e) = last_error {
