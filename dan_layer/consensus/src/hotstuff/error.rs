@@ -45,6 +45,8 @@ pub enum HotStuffError {
     TransactionDoesNotExist { transaction_id: TransactionId },
     #[error("Received vote for unknown block {block_id} from {sent_by}")]
     ReceivedVoteForUnknownBlock { block_id: BlockId, sent_by: String },
+    #[error("Pacemaker channel dropped: {details}")]
+    PacemakerChannelDropped { details: String },
 }
 
 impl From<EpochManagerError> for HotStuffError {

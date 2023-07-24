@@ -11,7 +11,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat},
+    hotstuff::{common::update_high_qc, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
     traits::ConsensusSpec,
 };
@@ -23,7 +23,7 @@ pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
     _leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
     newview_message_counts: HashMap<BlockId, HashSet<TConsensusSpec::Addr>>,
-    on_beat: OnBeat,
+    on_beat: PaceMakerHandle,
 }
 
 impl<TConsensusSpec> OnReceiveNewViewHandler<TConsensusSpec>
@@ -33,7 +33,7 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
-        on_beat: OnBeat,
+        on_beat: PaceMakerHandle,
     ) -> Self {
         Self {
             store,

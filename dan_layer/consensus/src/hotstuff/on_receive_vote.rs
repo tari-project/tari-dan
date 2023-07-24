@@ -14,7 +14,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat},
+    hotstuff::{common::update_high_qc, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::VoteMessage,
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
@@ -26,7 +26,7 @@ pub struct OnReceiveVoteHandler<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
     vote_signature_service: TConsensusSpec::VoteSignatureService,
-    on_beat: OnBeat,
+    on_beat: PaceMakerHandle,
 }
 
 impl<TConsensusSpec> OnReceiveVoteHandler<TConsensusSpec>
@@ -37,7 +37,7 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
         vote_signature_service: TConsensusSpec::VoteSignatureService,
-        on_beat: OnBeat,
+        on_beat: PaceMakerHandle,
     ) -> Self {
         Self {
             store,

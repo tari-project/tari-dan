@@ -43,7 +43,7 @@ use crate::{
         common::update_high_qc,
         error::HotStuffError,
         event::HotstuffEvent,
-        on_beat::OnBeat,
+        pacemaker_handle::PaceMakerHandle,
         ProposalValidationError,
     },
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage, VoteMessage},
@@ -62,7 +62,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     tx_events: broadcast::Sender<HotstuffEvent>,
-    on_beat: OnBeat,
+    pacemaker: PaceMakerHandle,
 }
 
 impl<TConsensusSpec> OnReceiveProposalHandler<TConsensusSpec>
@@ -78,7 +78,7 @@ where TConsensusSpec: ConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
-        on_beat: OnBeat,
+        pacemaker: PaceMakerHandle,
     ) -> Self {
         Self {
             validator_addr,
@@ -90,7 +90,7 @@ where TConsensusSpec: ConsensusSpec
             transaction_pool,
             tx_leader,
             tx_events,
-            on_beat,
+            pacemaker,
         }
     }
 
@@ -204,6 +204,7 @@ where TConsensusSpec: ConsensusSpec
         })?;
 
         if let Some(decision) = maybe_decision {
+            self.pacemaker.reset_leader_timeout();
             let vote = self.generate_vote_message(block, decision).await?;
             debug!(
                 target: LOG_TARGET,
@@ -230,7 +231,7 @@ where TConsensusSpec: ConsensusSpec
             .with_write_tx(|tx| self.on_receive_foreign_block(tx, &block, &committee_shard))?;
 
         // We could have ready transactions at this point, so if we're the leader for the next block we can propose
-        self.on_beat.beat();
+        self.pacemaker.beat();
 
         Ok(())
     }

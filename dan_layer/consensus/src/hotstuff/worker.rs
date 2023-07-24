@@ -23,12 +23,14 @@ use crate::{
     hotstuff::{
         error::HotStuffError,
         event::HotstuffEvent,
-        on_beat::OnBeat,
+        on_leader_timeout::OnLeaderTimeout,
         on_propose::OnPropose,
         on_receive_new_view::OnReceiveNewViewHandler,
         on_receive_proposal::OnReceiveProposalHandler,
         on_receive_request_missing_transactions::OnReceiveRequestMissingTransactions,
         on_receive_vote::OnReceiveVoteHandler,
+        pacemaker::PaceMaker,
+        pacemaker_handle::PaceMakerHandle,
     },
     messages::HotstuffMessage,
     traits::{ConsensusSpec, LeaderStrategy},
@@ -42,6 +44,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
     rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
 
+    // on_leader_timeout: OnLeaderTimeout,
     on_receive_proposal: OnReceiveProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
@@ -58,7 +61,8 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     latest_epoch: Option<Epoch>,
     is_epoch_synced: bool,
 
-    on_beat: OnBeat,
+    pacemaker: Option<PaceMaker>,
+    pacemaker_handle: PaceMakerHandle,
     shutdown: ShutdownSignal,
 }
 impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
@@ -87,7 +91,7 @@ where
         tx_mempool: mpsc::Sender<Transaction>,
         shutdown: ShutdownSignal,
     ) -> Self {
-        let on_beat = OnBeat::new();
+        let pacemaker = PaceMaker::new(shutdown.clone());
         Self {
             validator_addr: validator_addr.clone(),
             rx_new_transactions,
@@ -102,20 +106,20 @@ where
                 transaction_pool.clone(),
                 tx_leader.clone(),
                 tx_events,
-                on_beat.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_vote: OnReceiveVoteHandler::new(
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
                 signing_service,
-                on_beat.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_new_view: OnReceiveNewViewHandler::new(
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
-                on_beat.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(state_store.clone(), tx_leader),
             on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool),
@@ -125,6 +129,7 @@ where
                 transaction_pool.clone(),
                 tx_broadcast,
             ),
+            // on_leader_timeout: OnLeaderTimeout::qnew(shutdown.clone()),
             state_store,
             leader_strategy,
             epoch_manager,
@@ -132,7 +137,8 @@ where
             latest_epoch: None,
             is_epoch_synced: false,
             transaction_pool,
-            on_beat,
+            pacemaker_handle: pacemaker.clone_handle(),
+            pacemaker: Some(pacemaker),
             shutdown,
         }
     }
@@ -145,16 +151,17 @@ where
     }
 
     pub async fn run(mut self) -> Result<(), HotStuffError> {
+        let (mut on_beat, mut on_leader_timeout) = self.pacemaker.take().and_then(|p| Some(p.spawn())).unwrap();
+
         loop {
             tokio::select! {
-                biased;
+                // biased;
 
                 Ok(event) = self.epoch_events.recv() => {
                     if let Err(e) = self.on_epoch_event(event).await {
                         error!(target: LOG_TARGET, "Error while processing epoch change (on_epoch_event): {}", e);
                     }
                 },
-
                 Some(msg) = self.rx_new_transactions.recv() => {
                     if let Err(e) = self.on_new_executed_transaction(msg).await {
                        error!(target: LOG_TARGET, "Error while processing new payload (on_new_executed_transaction): {}", e);
@@ -166,13 +173,19 @@ where
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {:?} {}", msg,e);
                     }
                 },
-
-                _ = self.on_beat.wait() => {
+                _ = on_beat.wait() => {
                     if let Err(e) = self.on_beat().await {
                         error!(target: LOG_TARGET, "Error (on_beat): {}", e);
                     }
-                }
-
+                },
+                _ = on_leader_timeout.wait() => {
+                     error!(target: LOG_TARGET, "Leader timeout from sleep");
+                },
+                // _ = self.on_leader_timeout.o() => {
+                //     if let Err(e) = self.on_leader_timeout().await {
+                //         error!(target: LOG_TARGET, "Error (on_leader_timeout): {}", e);
+                //     }
+                // }
                 _ = self.shutdown.wait() => {
                     info!(target: LOG_TARGET, "💤 Shutting down");
                     break;
@@ -191,7 +204,7 @@ where
                 self.is_epoch_synced = true;
                 // TODO: merge chain(s) from previous epoch?
 
-                self.on_beat.beat();
+                self.pacemaker_handle.beat();
             },
         }
 
@@ -235,8 +248,12 @@ where
         if let Some(block_id) = block_id {
             self.on_receive_proposal.reprocess_block(&block_id).await?;
         }
-        self.on_beat.beat();
+        self.pacemaker_handle.beat();
         Ok(())
+    }
+
+    async fn on_leader_timeout(&mut self) -> Result<(), HotStuffError> {
+        todo!("Leader has timed out")
     }
 
     async fn on_beat(&mut self) -> Result<(), HotStuffError> {
