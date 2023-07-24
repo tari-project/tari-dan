@@ -167,10 +167,10 @@ impl Display for NonFungibleId {
 
 const TAG: u64 = BinaryTag::NonFungibleAddress.as_u64();
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NonFungibleAddress(BorTag<NonFungibleAddressContents, TAG>);
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NonFungibleAddressContents {
     resource_address: ResourceAddress,
     id: NonFungibleId,
