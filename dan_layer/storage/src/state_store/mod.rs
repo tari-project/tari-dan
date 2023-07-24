@@ -176,10 +176,10 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;
 
-    fn insert_missing_transactions(
+    fn insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         block_id: &BlockId,
-        transaction_ids: Vec<TransactionId>,
+        transaction_ids: I,
     ) -> Result<(), StorageError>;
 
     fn remove_missing_transaction(&mut self, transaction_id: TransactionId) -> Result<Option<BlockId>, StorageError>;
