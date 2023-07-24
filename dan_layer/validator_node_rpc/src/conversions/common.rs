@@ -20,10 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    borrow::Borrow,
-    convert::{TryFrom, TryInto},
-};
+use std::convert::{TryFrom, TryInto};
 
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_crypto::{hashing::DomainSeparation, signatures::SchnorrSignature, tari_utilities::ByteArray};
@@ -71,11 +68,10 @@ impl TryFrom<proto::common::SignatureAndPublicKey> for ValidatorSignature {
 
 impl From<ValidatorSignature> for proto::common::SignatureAndPublicKey {
     fn from(value: ValidatorSignature) -> Self {
-        let sig = value.borrow();
         Self {
-            public_nonce: sig.signature.get_public_nonce().to_vec(),
-            signature: sig.signature.get_signature().to_vec(),
-            public_key: sig.public_key.to_vec(),
+            public_nonce: value.signature.get_public_nonce().to_vec(),
+            signature: value.signature.get_signature().to_vec(),
+            public_key: value.public_key.to_vec(),
         }
     }
 }
@@ -96,11 +92,10 @@ impl TryFrom<proto::common::SignatureAndPublicKey> for TransactionSignature {
 
 impl From<TransactionSignature> for proto::common::SignatureAndPublicKey {
     fn from(value: TransactionSignature) -> Self {
-        let sig = value.borrow();
         Self {
-            public_nonce: sig.signature().get_public_nonce().to_vec(),
-            signature: sig.signature().get_signature().to_vec(),
-            public_key: sig.public_key().to_vec(),
+            public_nonce: value.signature().get_public_nonce().to_vec(),
+            signature: value.signature().get_signature().to_vec(),
+            public_key: value.public_key().to_vec(),
         }
     }
 }

@@ -43,6 +43,8 @@ pub enum HotStuffError {
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]
     TransactionDoesNotExist { transaction_id: TransactionId },
+    #[error("Received vote for unknown block {block_id} from {sent_by}")]
+    ReceivedVoteForUnknownBlock { block_id: BlockId, sent_by: String },
 }
 
 impl From<EpochManagerError> for HotStuffError {

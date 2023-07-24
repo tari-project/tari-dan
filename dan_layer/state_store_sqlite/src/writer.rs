@@ -13,6 +13,7 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
+        Decision,
         Evidence,
         ExecutedTransaction,
         HighQc,
@@ -33,6 +34,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_transaction::{Transaction, TransactionId};
+use time::PrimitiveDateTime;
 
 use crate::{
     error::SqliteStorageError,
@@ -342,7 +344,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             transactions::outputs.eq(serialize_json(transaction.outputs())?),
             transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
             transactions::filled_outputs.eq(serialize_json(transaction.filled_outputs())?),
-            transactions::is_finalized.eq(false),
+            transactions::final_decision.eq(executed_transaction.final_decision().map(|d| d.to_string())),
         );
 
         diesel::insert_into(transactions::table)
@@ -368,7 +370,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             transactions::filled_outputs.eq(serialize_json(transaction.filled_outputs())?),
             transactions::execution_time_ms
                 .eq(i64::try_from(executed_transaction.execution_time().as_millis()).unwrap_or(i64::MAX)),
-            transactions::is_finalized.eq(true),
+            transactions::final_decision.eq(executed_transaction.final_decision().map(|d| d.to_string())),
         );
 
         let num_affected = diesel::update(transactions::table)
@@ -400,8 +402,10 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
 
         let insert = (
             transaction_pool::transaction_id.eq(serialize_hex(transaction.id)),
-            transaction_pool::involved_shards.eq(serialize_json(&transaction.involved_shards)?),
-            transaction_pool::overall_decision.eq(transaction.decision.to_string()),
+            transaction_pool::involved_shards.eq(serialize_json(
+                &transaction.evidence.shards_iter().copied().collect::<Vec<_>>(),
+            )?),
+            transaction_pool::original_decision.eq(transaction.decision.to_string()),
             transaction_pool::fee.eq(transaction.fee as i64),
             transaction_pool::evidence.eq(serialize_json(&transaction.evidence)?),
             transaction_pool::stage.eq(stage.to_string()),
@@ -424,6 +428,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
         stage: Option<TransactionPoolStage>,
+        pending_decision: Option<Decision>,
         is_ready: Option<bool>,
     ) -> Result<(), StorageError> {
         use crate::schema::transaction_pool;
@@ -433,13 +438,19 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         struct Changes {
             evidence: Option<String>,
             stage: Option<String>,
+            pending_decision: Option<String>,
             is_ready: Option<bool>,
+            updated_at: PrimitiveDateTime,
         }
+
+        let now = time::OffsetDateTime::now_utc();
 
         let change_set = Changes {
             evidence: evidence.map(serialize_json).transpose()?,
             stage: stage.map(|s| s.to_string()),
+            pending_decision: pending_decision.map(|d| d.to_string()),
             is_ready,
+            updated_at: PrimitiveDateTime::new(now.date(), now.time()),
         };
 
         diesel::update(transaction_pool::table)

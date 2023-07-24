@@ -132,11 +132,13 @@ diesel::table! {
         id -> Integer,
         transaction_id -> Text,
         involved_shards -> Text,
-        overall_decision -> Text,
+        original_decision -> Text,
+        pending_decision -> Nullable<Text>,
         evidence -> Text,
         fee -> BigInt,
         stage -> Text,
         is_ready -> Bool,
+        updated_at -> Timestamp,
         created_at -> Timestamp,
     }
 }
@@ -155,7 +157,7 @@ diesel::table! {
         filled_outputs -> Text,
         result -> Nullable<Text>,
         execution_time_ms -> Nullable<BigInt>,
-        is_finalized -> Bool,
+        final_decision -> Nullable<Text>,
         created_at -> Timestamp,
     }
 }

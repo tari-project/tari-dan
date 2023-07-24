@@ -6,7 +6,7 @@ use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{consensus_models, StorageError};
 use time::PrimitiveDateTime;
 
-use crate::serialization::{deserialize_hex_try_from, deserialize_json};
+use crate::serialization::{deserialize_hex_try_from, deserialize_json, parse_from_string};
 
 #[derive(Debug, Clone, Queryable)]
 pub struct SubstateRecord {
@@ -37,11 +37,7 @@ impl TryFrom<SubstateRecord> for consensus_models::SubstateRecord {
 
     fn try_from(value: SubstateRecord) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: value.address.parse().map_err(|_| StorageError::DecodingError {
-                operation: "SubstateRecord TryFrom: parse substate address",
-                item: "SubstateRecord",
-                details: "Could not parse substate address".to_string(),
-            })?,
+            address: parse_from_string(&value.address)?,
             version: value.version as u32,
             substate_value: deserialize_json(&value.data)?,
             state_hash: deserialize_hex_try_from(&value.state_hash)?,

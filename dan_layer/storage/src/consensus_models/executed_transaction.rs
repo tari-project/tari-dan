@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{optional::Optional, ShardId};
-use tari_engine_types::commit_result::ExecuteResult;
+use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
@@ -24,7 +24,7 @@ pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
     execution_time: Duration,
-    is_finalized: bool,
+    final_decision: Option<Decision>,
 }
 
 impl ExecutedTransaction {
@@ -33,34 +33,26 @@ impl ExecutedTransaction {
             transaction,
             result,
             execution_time,
-            is_finalized: false,
+            final_decision: None,
         }
     }
 
-    pub fn new_with_finalized(
+    pub fn new_with_final_decision(
         transaction: Transaction,
         result: ExecuteResult,
         execution_time: Duration,
-        is_finalized: bool,
+        final_decision: Option<Decision>,
     ) -> Self {
         Self {
             transaction,
             result,
             execution_time,
-            is_finalized,
+            final_decision,
         }
     }
 
     pub fn as_decision(&self) -> Decision {
         if self.result.finalize.is_accept() {
-            Decision::Commit
-        } else {
-            Decision::Abort
-        }
-    }
-
-    pub fn transaction_decision(&self) -> Decision {
-        if self.result.transaction_failure.is_none() {
             Decision::Commit
         } else {
             Decision::Abort
@@ -83,6 +75,24 @@ impl ExecutedTransaction {
         &self.result
     }
 
+    pub fn into_final_result(self) -> Option<ExecuteResult> {
+        self.final_decision().map(|d| {
+            if d.is_commit() {
+                self.result
+            } else {
+                // TODO: We preserve the original result mainly for debugging purposes, but this is a little hacky
+                ExecuteResult {
+                    finalize: FinalizeResult::reject(
+                        self.result.finalize.transaction_hash,
+                        RejectReason::ShardRejected("Validators decided to abort".to_string()),
+                    ),
+                    transaction_failure: None,
+                    fee_receipt: None,
+                }
+            }
+        })
+    }
+
     pub fn into_result(self) -> ExecuteResult {
         self.result
     }
@@ -103,11 +113,15 @@ impl ExecutedTransaction {
     }
 
     pub fn is_finalized(&self) -> bool {
-        self.is_finalized
+        self.final_decision.is_some()
     }
 
-    pub fn set_as_finalized(&mut self) -> &mut Self {
-        self.is_finalized = true;
+    pub fn final_decision(&self) -> Option<Decision> {
+        self.final_decision
+    }
+
+    pub fn set_final_decision(&mut self, decision: Decision) -> &mut Self {
+        self.final_decision = Some(decision);
         self
     }
 }

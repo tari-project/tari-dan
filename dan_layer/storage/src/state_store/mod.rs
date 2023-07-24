@@ -14,6 +14,7 @@ use crate::{
     consensus_models::{
         Block,
         BlockId,
+        Decision,
         Evidence,
         ExecutedTransaction,
         HighQc,
@@ -170,6 +171,7 @@ pub trait StateStoreWriteTransaction {
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
         stage: Option<TransactionPoolStage>,
+        decision: Option<Decision>,
         is_ready: Option<bool>,
     ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;

@@ -1,17 +1,29 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
+use std::sync::{atomic::AtomicBool, Arc};
+
 use tari_consensus::traits::StateManager;
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction},
     StateStore,
 };
 
-pub struct NoopStateManager;
+#[derive(Debug, Clone)]
+pub struct NoopStateManager(Arc<AtomicBool>);
 
 impl NoopStateManager {
     pub fn new() -> Self {
-        Self
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+
+    pub fn is_committed(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    #[allow(dead_code)]
+    pub fn reset(&self) {
+        self.0.store(false, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -24,6 +36,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for NoopStateManager {
         _block: &Block,
         _transaction: &ExecutedTransaction,
     ) -> Result<(), Self::Error> {
+        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
         Ok(())
     }
 }

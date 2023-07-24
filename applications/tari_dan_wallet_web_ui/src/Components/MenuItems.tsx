@@ -31,6 +31,8 @@ import {
   IoBarChart,
   IoKeyOutline,
   IoKey,
+  IoWalletOutline,
+  IoWallet,
   IoTicketOutline,
   IoTicket,
 } from 'react-icons/io5';
@@ -67,6 +69,12 @@ const mainItems = [
     icon: <IoKeyOutline style={iconStyle} />,
     activeIcon: <IoKey style={activeIconStyle} />,
     link: 'keys',
+  },
+  {
+    title: 'Transactions',
+    icon: <IoWalletOutline style={iconStyle} />,
+    activeIcon: <IoWallet style={activeIconStyle} />,
+    link: 'transactions',
   },
   {
     title: 'Access Tokens',

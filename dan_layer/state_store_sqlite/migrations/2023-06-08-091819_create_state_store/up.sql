@@ -125,7 +125,7 @@ create table transactions
     filled_outputs    text      not NULL,
     result            text      NULL,
     execution_time_ms bigint    NULL,
-    is_finalized      boolean   NOT NULL DEFAULT '0',
+    final_decision   text      NULL,
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -133,15 +133,17 @@ create unique index transactions_uniq_idx_id on transactions (transaction_id);
 
 create table transaction_pool
 (
-    id               integer   not null primary key AUTOINCREMENT,
-    transaction_id   text      not null,
-    involved_shards  text      not null,
-    overall_decision text      not null,
-    evidence         text      not null,
-    fee              bigint    not null,
-    stage            text      not null,
-    is_ready         boolean   not null,
-    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                integer   not null primary key AUTOINCREMENT,
+    transaction_id    text      not null,
+    involved_shards   text      not null,
+    original_decision text      not null,
+    pending_decision  text      null,
+    evidence          text      not null,
+    fee               bigint    not null,
+    stage             text      not null,
+    is_ready          boolean   not null,
+    updated_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
