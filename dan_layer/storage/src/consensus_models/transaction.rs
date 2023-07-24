@@ -13,7 +13,7 @@ use tari_engine_types::commit_result::ExecuteResult;
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
-    consensus_models::ExecutedTransaction,
+    consensus_models::{Decision, ExecutedTransaction},
     Ordering,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
@@ -25,7 +25,7 @@ pub struct TransactionRecord {
     pub transaction: Transaction,
     pub result: Option<ExecuteResult>,
     pub execution_time: Option<Duration>,
-    pub is_finalized: bool,
+    pub final_decision: Option<Decision>,
 }
 
 impl TransactionRecord {
@@ -34,7 +34,7 @@ impl TransactionRecord {
             transaction,
             result: None,
             execution_time: None,
-            is_finalized: false,
+            final_decision: None,
         }
     }
 
@@ -42,13 +42,13 @@ impl TransactionRecord {
         transaction: Transaction,
         result: Option<ExecuteResult>,
         execution_time: Option<Duration>,
-        is_finalized: bool,
+        final_decision: Option<Decision>,
     ) -> Self {
         Self {
             transaction,
             result,
             execution_time,
-            is_finalized,
+            final_decision,
         }
     }
 }
@@ -116,13 +116,13 @@ impl TransactionRecord {
 impl From<ExecutedTransaction> for TransactionRecord {
     fn from(tx: ExecutedTransaction) -> Self {
         let execution_time = tx.execution_time();
-        let is_finalized = tx.is_finalized();
+        let final_decision = tx.final_decision();
         let (transaction, result) = tx.dissolve();
         Self {
             transaction,
             result: Some(result),
             execution_time: Some(execution_time),
-            is_finalized,
+            final_decision,
         }
     }
 }

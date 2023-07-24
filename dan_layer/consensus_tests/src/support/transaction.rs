@@ -67,6 +67,13 @@ pub fn build_transaction(decision: Decision, fee: u64, num_shards: usize, num_co
 }
 
 pub fn change_decision(tx: ExecutedTransaction, new_decision: Decision) -> ExecutedTransaction {
-    let total_fees_charged = tx.result().fee_receipt.as_ref().unwrap().total_fee_payment;
+    let total_fees_charged = tx
+        .result()
+        .fee_receipt
+        .as_ref()
+        .unwrap()
+        .total_fee_payment
+        .as_u64_checked()
+        .unwrap();
     build_transaction_from(tx.into_transaction(), new_decision, total_fees_charged)
 }

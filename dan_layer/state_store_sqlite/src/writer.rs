@@ -344,7 +344,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             transactions::outputs.eq(serialize_json(transaction.outputs())?),
             transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
             transactions::filled_outputs.eq(serialize_json(transaction.filled_outputs())?),
-            transactions::final_decision.eq(executed_transaction.final_decision().map(|d| d.to_string())),
         );
 
         diesel::insert_into(transactions::table)

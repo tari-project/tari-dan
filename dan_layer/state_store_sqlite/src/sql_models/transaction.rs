@@ -72,8 +72,8 @@ impl TryFrom<Transaction> for consensus_models::TransactionRecord {
                 ),
             })?;
         let execution_time = value.execution_time_ms.map(|ms| Duration::from_millis(ms as u64));
-        let result = deserialize_json(&value.result)?;
-        Ok(Self::new_with_final_decision(
+        let result = value.result.as_deref().map(deserialize_json).transpose()?;
+        Ok(Self::new_with_details(
             value.try_into()?,
             result,
             execution_time,

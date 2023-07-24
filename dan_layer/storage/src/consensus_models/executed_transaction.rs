@@ -207,7 +207,7 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
             transaction: value.transaction,
             result: value.result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
-            is_finalized: value.is_finalized,
+            final_decision: value.final_decision,
         })
     }
 }
