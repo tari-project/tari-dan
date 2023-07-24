@@ -1,8 +1,6 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::time::{Duration, Instant};
-
 use log::*;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_engine::{
@@ -21,7 +19,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::mempool::executor";
 
-pub(super) type ExecutionResult = (TransactionId, Duration, Result<ExecutedTransaction, MempoolError>);
+pub(super) type ExecutionResult = (TransactionId, Result<ExecutedTransaction, MempoolError>);
 
 pub async fn execute_transaction<TSubstateResolver, TExecutor>(
     transaction: Transaction,
@@ -35,13 +33,12 @@ where
 {
     let mut state_db = new_state_db();
 
-    let timer = Instant::now();
     match substate_resolver.resolve(&transaction, &mut state_db).await {
         Ok(()) => {
             let res = task::spawn_blocking(move || {
                 let id = *transaction.id();
                 let result = executor.execute(transaction, state_db, consensus_context);
-                (id, timer.elapsed(), result.map_err(MempoolError::from))
+                (id, result.map_err(MempoolError::from))
             })
             .await;
 
@@ -52,7 +49,7 @@ where
         Err(err @ SubstateResolverError::InputSubstateDowned { .. }) |
         Err(err @ SubstateResolverError::InputSubstateDoesNotExist { .. }) => {
             warn!(target: LOG_TARGET, "One or more invalid input shards for transaction {}: {}", transaction.id(), err);
-            Ok((*transaction.id(), Duration::default(), Err(err.into())))
+            Ok((*transaction.id(), Err(err.into())))
         },
         // Some other issue - network, db, etc
         Err(err) => Err(err.into()),

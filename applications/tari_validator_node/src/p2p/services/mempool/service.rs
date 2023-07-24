@@ -29,7 +29,11 @@ use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, Transact
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_engine::runtime::ConsensusContext;
 use tari_dan_p2p::{DanMessage, OutboundService};
-use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
+use tari_dan_storage::{
+    consensus_models::{ExecutedTransaction, TransactionRecord},
+    StateStore,
+    StateStoreWriteTransaction,
+};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
@@ -160,21 +164,23 @@ where
             return Ok(());
         }
 
-        let transaction_processed = self.state_store.with_read_tx(|tx| {
-            let exists = ExecutedTransaction::exists(tx, transaction.id())?;
-            Ok::<_, MempoolError>(exists)
-        })?;
+        let transaction_exists = self
+            .state_store
+            .with_read_tx(|tx| TransactionRecord::exists(tx, transaction.id()))?;
 
-        if transaction_processed {
+        if transaction_exists {
             info!(
                 target: LOG_TARGET,
-                "🎱 Transaction {} already processed. Ignoring",
+                "🎱 Transaction {} already exists. Ignoring",
                 transaction.id()
             );
             return Ok(());
         }
 
         self.validator.validate(&transaction).await?;
+
+        self.state_store
+            .with_write_tx(|tx| tx.transactions_insert(&transaction))?;
 
         if transaction.num_involved_shards() == 0 {
             warn!(target: LOG_TARGET, "⚠ No involved shards for payload");
@@ -227,7 +233,7 @@ where
         result: Result<ExecutionResult, MempoolError>,
     ) -> Result<(), MempoolError> {
         // This is due to a bug or possibly db failure only
-        let (transaction_id, time_taken, exec_result) = result?;
+        let (transaction_id, exec_result) = result?;
 
         self.transactions.remove(&transaction_id);
         let executed = match exec_result {
@@ -237,7 +243,7 @@ where
                     "✅ Transaction {} executed successfully ({}) in {:?}",
                     executed.transaction().id(),
                     executed.result().finalize.result,
-                    time_taken
+                    executed.execution_time()
                 );
                 // We refuse to process the transaction if any input_refs are downed
                 self.check_input_refs(&executed)?;
@@ -253,6 +259,7 @@ where
                     transaction_id,
                     e.to_string()
                 );
+
                 return Ok(());
             },
         };
