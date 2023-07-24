@@ -40,6 +40,8 @@ pub enum HotStuffError {
     InvalidVoteSignature { signer_public_key: PublicKey },
     #[error("Transaction pool error: {0}")]
     TransactionPoolError(#[from] TransactionPoolError),
+    #[error("Received vote for unknown block {block_id} from {sent_by}")]
+    ReceivedVoteForUnknownBlock { block_id: BlockId, sent_by: String },
 }
 
 impl From<EpochManagerError> for HotStuffError {

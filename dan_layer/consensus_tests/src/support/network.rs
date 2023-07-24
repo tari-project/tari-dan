@@ -22,7 +22,7 @@ use crate::support::{address::TestAddress, transaction::build_transaction_from, 
 pub fn spawn_network(channels: Vec<ValidatorChannels>, default_decision: Decision, default_fee: u64) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
-        .map(|c| (c.address, c.tx_new_transactions.clone()))
+        .map(|c| (c.address, (c.bucket, c.tx_new_transactions.clone())))
         .collect();
     let tx_hs_message = channels.iter().map(|c| (c.address, c.tx_hs_message.clone())).collect();
     let (rx_broadcast, rx_leader, rx_mempool) = channels
@@ -76,7 +76,7 @@ impl NetworkStatus {
 }
 
 pub struct TestNetwork {
-    tx_new_transaction: mpsc::Sender<(Option<TestAddress>, ExecutedTransaction)>,
+    tx_new_transaction: mpsc::Sender<(TestNetworkDestination, ExecutedTransaction)>,
     network_status: watch::Sender<NetworkStatus>,
     num_sent_messages: Arc<AtomicUsize>,
     _on_message: watch::Receiver<Option<HotstuffMessage>>,
@@ -98,8 +98,8 @@ impl TestNetwork {
         self.network_status.send(NetworkStatus::Paused).unwrap();
     }
 
-    pub async fn send_transaction(&self, addr: Option<TestAddress>, tx: ExecutedTransaction) {
-        self.tx_new_transaction.send((addr, tx)).await.unwrap();
+    pub async fn send_transaction(&self, destination: TestNetworkDestination, tx: ExecutedTransaction) {
+        self.tx_new_transaction.send((destination, tx)).await.unwrap();
     }
 
     pub fn total_messages_sent(&self) -> usize {
@@ -107,9 +107,26 @@ impl TestNetwork {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum TestNetworkDestination {
+    All,
+    Address(TestAddress),
+    Bucket(u32),
+}
+
+impl TestNetworkDestination {
+    pub fn is_for(self, addr: &TestAddress, bucket: u32) -> bool {
+        match self {
+            TestNetworkDestination::All => true,
+            TestNetworkDestination::Address(a) => a == *addr,
+            TestNetworkDestination::Bucket(b) => b == bucket,
+        }
+    }
+}
+
 pub struct TestNetworkWorker {
-    rx_new_transaction: Option<mpsc::Receiver<(Option<TestAddress>, ExecutedTransaction)>>,
-    tx_new_transactions: HashMap<TestAddress, mpsc::Sender<ExecutedTransaction>>,
+    rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
+    tx_new_transactions: HashMap<TestAddress, (u32, mpsc::Sender<ExecutedTransaction>)>,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>>>,
@@ -133,14 +150,12 @@ impl TestNetworkWorker {
         let mut rx_mempool = self.rx_mempool.take().unwrap();
 
         let mut rx_new_transaction = self.rx_new_transaction.take().unwrap();
-        let mut tx_new_transactions = self.tx_new_transactions.clone();
+        let tx_new_transactions = self.tx_new_transactions.clone();
 
         tokio::spawn(async move {
-            while let Some((addr, tx)) = rx_new_transaction.recv().await {
-                if let Some(addr) = &addr {
-                    tx_new_transactions[addr].send(tx).await.unwrap();
-                } else {
-                    for tx_new_transaction in tx_new_transactions.values_mut() {
+            while let Some((dest, tx)) = rx_new_transaction.recv().await {
+                for (addr, (bucket, tx_new_transaction)) in &tx_new_transactions {
+                    if dest.is_for(addr, *bucket) {
                         tx_new_transaction.send(tx.clone()).await.unwrap();
                     }
                 }
@@ -214,9 +229,9 @@ impl TestNetworkWorker {
     }
 
     pub async fn handle_mempool(&mut self, from: TestAddress, msg: Transaction) {
-        self.tx_new_transactions
-            .get(&from)
-            .unwrap()
+        let (_, sender) = self.tx_new_transactions.get(&from).unwrap();
+
+        sender
             .send(build_transaction_from(msg, self.default_decision, self.default_fee))
             .await
             .unwrap();

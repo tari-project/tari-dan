@@ -15,6 +15,7 @@ pub fn random_shard_in_bucket(bucket: u32, num_committees: u32) -> ShardId {
     ShardId::from_u256(shard)
 }
 
+#[allow(dead_code)]
 pub fn random_shard() -> ShardId {
     let lsb: u128 = OsRng.gen();
     let msb: u128 = OsRng.gen();

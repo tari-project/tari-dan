@@ -138,6 +138,12 @@ impl CommitteeShard {
         self.bucket == b
     }
 
+    pub fn includes_all_shards<I: IntoIterator<Item = B>, B: Borrow<ShardId>>(&self, shard_ids: I) -> bool {
+        shard_ids
+            .into_iter()
+            .all(|shard_id| self.includes_shard(shard_id.borrow()))
+    }
+
     pub fn includes_any_shard<I: IntoIterator<Item = B>, B: Borrow<ShardId>>(&self, shard_ids: I) -> bool {
         shard_ids
             .into_iter()

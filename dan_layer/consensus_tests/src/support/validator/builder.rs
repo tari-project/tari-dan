@@ -23,6 +23,7 @@ use crate::support::{
 pub struct ValidatorBuilder {
     pub address: TestAddress,
     pub shard: ShardId,
+    pub bucket: u32,
     pub sql_url: String,
     pub leader_strategy: SelectedIndexLeaderStrategy,
     pub epoch_manager: TestEpochManager,
@@ -33,6 +34,7 @@ impl ValidatorBuilder {
         Self {
             address: TestAddress("default"),
             shard: ShardId::zero(),
+            bucket: 0,
             sql_url: ":memory".to_string(),
             leader_strategy: SelectedIndexLeaderStrategy::new(0),
             epoch_manager: TestEpochManager::new(),
@@ -41,6 +43,11 @@ impl ValidatorBuilder {
 
     pub fn with_address(&mut self, address: TestAddress) -> &mut Self {
         self.address = address;
+        self
+    }
+
+    pub fn with_bucket(&mut self, bucket: u32) -> &mut Self {
+        self.bucket = bucket;
         self
     }
 
@@ -89,7 +96,7 @@ impl ValidatorBuilder {
             self.epoch_manager.clone_for(self.address, self.shard),
             self.leader_strategy.clone(),
             signing_service,
-            noop_state_manager,
+            noop_state_manager.clone(),
             transaction_pool,
             tx_broadcast,
             tx_leader,
@@ -103,6 +110,7 @@ impl ValidatorBuilder {
 
         let channels = ValidatorChannels {
             address: self.address,
+            bucket: self.bucket,
             tx_new_transactions,
             tx_hs_message,
             rx_broadcast,
@@ -120,6 +128,7 @@ impl ValidatorBuilder {
             epoch_manager: self.epoch_manager.clone_for(self.address, self.shard),
             shutdown,
             tx_epoch_events,
+            state_manager: noop_state_manager,
             leader_strategy: self.leader_strategy.clone(),
             events: tx_events.subscribe(),
             handle,

@@ -49,29 +49,27 @@ impl TestEpochManager {
         copy
     }
 
-    pub async fn add_committee(&self, bucket: u32, committee: Committee<TestAddress>) {
+    pub async fn add_committees(&self, committees: HashMap<u32, Committee<TestAddress>>) {
         let mut state = self.state_lock().await;
-        let num_committees = state.num_committees;
-        for address in &committee.members {
-            state
-                .validator_shards
-                .insert(*address, random_shard_in_bucket(bucket, num_committees));
-            state.address_bucket.insert(*address, bucket);
+        let num_committees = committees.len() as u32;
+        for (bucket, committee) in committees {
+            for address in &committee.members {
+                state
+                    .validator_shards
+                    .insert(*address, (bucket, random_shard_in_bucket(bucket, num_committees)));
+                state.address_bucket.insert(*address, bucket);
+            }
+
+            state.committees.insert(bucket, committee);
         }
-        state.committees.insert(bucket, committee);
     }
 
-    pub async fn set_num_committees(&self, num_committees: u32) {
-        let mut state = self.state_lock().await;
-        state.num_committees = num_committees;
-    }
-
-    pub async fn all_validators(&self) -> Vec<(TestAddress, ShardId)> {
+    pub async fn all_validators(&self) -> Vec<(TestAddress, u32, ShardId)> {
         self.state_lock()
             .await
             .validator_shards
             .iter()
-            .map(|(a, b)| (*a, *b))
+            .map(|(a, (bucket, shard))| (*a, *bucket, *shard))
             .collect()
     }
 
@@ -86,7 +84,7 @@ impl EpochManagerReader for TestEpochManager {
 
     async fn get_committee(&self, _epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let state = self.state_lock().await;
-        let bucket = shard.to_committee_bucket(state.num_committees);
+        let bucket = shard.to_committee_bucket(state.committees.len() as u32);
         Ok(state.committees[&bucket].clone())
     }
 
@@ -99,13 +97,13 @@ impl EpochManagerReader for TestEpochManager {
         epoch: Epoch,
         addr: &Self::Addr,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
-        let shard_key = self.state_lock().await.validator_shards[addr];
+        let (bucket, shard_key) = self.state_lock().await.validator_shards[addr];
 
         Ok(ValidatorNode {
             address: *addr,
             shard_key,
             epoch,
-            committee_bucket: None,
+            committee_bucket: Some(bucket),
         })
     }
 
@@ -127,7 +125,7 @@ impl EpochManagerReader for TestEpochManager {
     }
 
     async fn get_num_committees(&self, _epoch: Epoch) -> Result<u32, EpochManagerError> {
-        Ok(self.inner.lock().await.num_committees)
+        Ok(self.inner.lock().await.committees.len() as u32)
     }
 
     async fn get_validator_node_merkle_proof(
@@ -182,7 +180,7 @@ impl EpochManagerReader for TestEpochManager {
         Ok(Committee::new(
             lock.validator_shards
                 .iter()
-                .filter(|(_, s)| range.contains(s))
+                .filter(|(_, (_, s))| range.contains(s))
                 .map(|(a, _)| a)
                 .copied()
                 .collect(),
@@ -194,8 +192,7 @@ impl EpochManagerReader for TestEpochManager {
 pub struct TestEpochManagerState {
     pub current_epoch: Epoch,
     pub is_epoch_active: bool,
-    pub num_committees: u32,
-    pub validator_shards: HashMap<TestAddress, ShardId>,
+    pub validator_shards: HashMap<TestAddress, (u32, ShardId)>,
     pub committees: HashMap<u32, Committee<TestAddress>>,
     pub address_bucket: HashMap<TestAddress, u32>,
 }
@@ -206,7 +203,6 @@ impl Default for TestEpochManagerState {
             current_epoch: Epoch(0),
             validator_shards: HashMap::new(),
             is_epoch_active: true,
-            num_committees: 1,
             committees: HashMap::new(),
             address_bucket: HashMap::new(),
         }
