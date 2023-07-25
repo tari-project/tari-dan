@@ -41,7 +41,6 @@ use tari_template_lib::{
 };
 
 use crate::{
-    commit_result::{TransactionReceipt, TransactionReceiptAddress},
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     hashing::{hasher, EngineHashDomainLabel},
@@ -49,6 +48,7 @@ use crate::{
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
     serde_with,
+    transaction_receipt::{TransactionReceipt, TransactionReceiptAddress},
     vault::Vault,
 };
 

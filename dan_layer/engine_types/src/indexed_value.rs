@@ -11,7 +11,7 @@ use tari_template_lib::{
     Hash,
 };
 
-use crate::{commit_result::TransactionReceiptAddress, serde_with, substate::SubstateAddress};
+use crate::{serde_with, substate::SubstateAddress, transaction_receipt::TransactionReceiptAddress};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct IndexedValue {

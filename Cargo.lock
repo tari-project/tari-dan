@@ -7800,7 +7800,6 @@ version = "0.50.0-pre.0"
 dependencies = [
  "base64 0.21.2",
  "borsh",
- "ciborium",
  "digest 0.9.0",
  "hex",
  "lazy_static",

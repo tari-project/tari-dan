@@ -53,7 +53,7 @@ pub async fn spawn(
     let signing_service = TariSignatureService::new(node_identity);
     let leader_strategy = RoundRobinLeaderStrategy::new();
     let transaction_pool = TransactionPool::new();
-    let noop_state_manager = TariStateManager::new();
+    let state_manager = TariStateManager::new();
     let (tx_events, _) = broadcast::channel(100);
 
     let epoch_events = epoch_manager.subscribe().await.unwrap();
@@ -67,7 +67,7 @@ pub async fn spawn(
         epoch_manager,
         leader_strategy,
         signing_service,
-        noop_state_manager,
+        state_manager,
         transaction_pool,
         tx_broadcast,
         tx_leader,
