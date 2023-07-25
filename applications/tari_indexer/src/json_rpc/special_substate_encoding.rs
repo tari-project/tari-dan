@@ -14,7 +14,7 @@ type CborValue = tari_bor::Value;
 #[derive(Debug, thiserror::Error)]
 pub enum SubstateDecoderError {
     #[error("Could not decode the substate: {0}")]
-    BinaryEncoding(#[from] ciborium::value::Error),
+    BinaryEncoding(#[from] tari_bor::BorError),
     #[error("Serde error: {0}")]
     Serde(#[from] serde_json::Error),
     #[error("Unexpected error: {0}")]
@@ -22,7 +22,7 @@ pub enum SubstateDecoderError {
 }
 
 pub fn encode_substate_into_json(substate: &Substate) -> Result<json::Value, SubstateDecoderError> {
-    let substate_cbor = decode_into_cbor(&substate.to_bytes())?;
+    let substate_cbor = tari_bor::decode(&substate.to_bytes())?;
     let substate_cbor = fix_invalid_object_keys(&substate_cbor);
     let mut result = json::to_value(substate_cbor)?;
 
@@ -49,12 +49,6 @@ fn get_mut_json_field<'a>(
         .ok_or(SubstateDecoderError::Unexpected("field does not exist".to_owned()))?;
 
     Ok(json_field)
-}
-
-fn decode_into_cbor(bytes: &[u8]) -> Result<CborValue, SubstateDecoderError> {
-    let value = ciborium::de::from_reader::<CborValue, _>(bytes)
-        .map_err(|e| SubstateDecoderError::Unexpected(e.to_string()))?;
-    Ok(value)
 }
 
 fn json_value_as_object(value: &mut json::Value) -> Result<&mut JsonObject, SubstateDecoderError> {
@@ -85,7 +79,7 @@ fn decode_cbor_field_into_json(
     parent_object: &mut JsonObject,
     field_name: &str,
 ) -> Result<(), SubstateDecoderError> {
-    let cbor_value = decode_into_cbor(bytes)?;
+    let cbor_value = tari_bor::decode(bytes)?;
     let cbor_value = fix_invalid_object_keys(&cbor_value);
     let json_value = serde_json::to_value(cbor_value)?;
     parent_object.insert(field_name.to_owned(), json_value);

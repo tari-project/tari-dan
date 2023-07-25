@@ -7851,7 +7851,6 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-jrpc",
- "ciborium",
  "clap 3.2.25",
  "config",
  "diesel",
