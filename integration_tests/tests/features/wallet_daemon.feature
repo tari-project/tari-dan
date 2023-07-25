@@ -4,7 +4,6 @@
 Feature: Wallet Daemon
 
     @serial
-        @doit
     Scenario: Create account and transfer faucets via wallet daemon
         # Initialize a base node, wallet, miner and VN
         Given a base node BASE

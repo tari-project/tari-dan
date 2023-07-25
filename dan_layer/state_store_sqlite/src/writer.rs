@@ -100,15 +100,17 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn insert_missing_transactions(
+    fn insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         block_id: &BlockId,
-        transaction_ids: Vec<TransactionId>,
+        transaction_ids: I,
     ) -> Result<(), StorageError> {
         use crate::schema::{block_missing_txs, missing_tx};
 
+        let transaction_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
+        let block_id_hex = serialize_hex(block_id);
         let insert = (
-            block_missing_txs::block_id.eq(serialize_hex(block_id)),
+            block_missing_txs::block_id.eq(&block_id_hex),
             block_missing_txs::transaction_ids.eq(serialize_json(&transaction_ids)?),
         );
 
@@ -120,18 +122,24 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 source: e,
             })?;
 
-        for transaction_id in transaction_ids {
-            diesel::insert_into(missing_tx::table)
-                .values((
-                    missing_tx::block_id.eq(serialize_hex(block_id)),
-                    missing_tx::transaction_id.eq(serialize_hex(transaction_id)),
-                ))
-                .execute(self.connection())
-                .map_err(|e| SqliteStorageError::DieselError {
-                    operation: "insert_missing_txs",
-                    source: e,
-                })?;
-        }
+        let values = transaction_ids
+            .iter()
+            .map(|tx_id| {
+                (
+                    missing_tx::block_id.eq(&block_id_hex),
+                    missing_tx::transaction_id.eq(tx_id),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        diesel::insert_into(missing_tx::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "insert_missing_txs",
+                source: e,
+            })?;
+
         Ok(())
     }
 

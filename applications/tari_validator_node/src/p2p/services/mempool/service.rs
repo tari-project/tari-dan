@@ -312,7 +312,7 @@ where
         let filled_outputs = diff
             .up_iter()
             .map(|(addr, substate)| ShardId::from_address(addr, substate.version()))
-            .filter(|shard_id| outputs.contains(shard_id))
+            .filter(|shard_id| !outputs.contains(shard_id))
             // NOTE: we must collect here so that we can mutate
             .collect::<Vec<_>>();
         executed.transaction_mut().filled_outputs_mut().extend(filled_outputs);
@@ -325,6 +325,14 @@ where
     ) -> Result<(), MempoolError> {
         let epoch = self.epoch_manager.current_epoch().await?;
         let committees = self.epoch_manager.get_committees_by_shards(epoch, shards).await?;
+
+        debug!(
+            target: LOG_TARGET,
+            "Propagating transaction {} to {} members {} shards",
+            transaction.id(),
+            committees.values().flat_map(|c|&c.members).count(),
+            shards.len()
+        );
 
         let msg = DanMessage::NewTransaction(Box::new(transaction));
 

@@ -161,8 +161,11 @@ impl ExecutedTransaction {
         rec.try_into()
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
-        match tx.transactions_get(self.transaction.id()).optional()? {
+    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &mut TTx,
+        tx_id: &TransactionId,
+    ) -> Result<bool, StorageError> {
+        match tx.transactions_get(tx_id).optional()? {
             Some(rec) => Ok(rec.result.is_some()),
             None => Ok(false),
         }

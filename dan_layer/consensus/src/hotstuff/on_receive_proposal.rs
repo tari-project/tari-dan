@@ -123,40 +123,6 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    async fn block_has_missing_transaction(
-        &self,
-        local_committee: &Committee<TConsensusSpec::Addr>,
-        block: &Block,
-    ) -> Result<bool, HotStuffError> {
-        let mut missing_tx_ids = Vec::new();
-        self.store.with_read_tx(|tx| {
-            for tx_id in block.all_transaction_ids() {
-                if !TransactionRecord::exists(tx, tx_id)? {
-                    missing_tx_ids.push(*tx_id);
-                }
-            }
-            Ok::<_, HotStuffError>(())
-        })?;
-        if missing_tx_ids.is_empty() {
-            Ok(false)
-        } else {
-            self.store
-                .with_write_tx(|tx| tx.insert_missing_transactions(block.id(), missing_tx_ids.clone()))?;
-            self.send_to_leader(
-                local_committee,
-                block.id(),
-                block.height(),
-                HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
-                    block_id: *block.id(),
-                    epoch: block.epoch(),
-                    transactions: missing_tx_ids,
-                }),
-            )
-            .await?;
-            Ok(true)
-        }
-    }
-
     async fn handle_local_proposal(
         &self,
         from: TConsensusSpec::Addr,
@@ -177,6 +143,59 @@ where TConsensusSpec: ConsensusSpec
         } else {
             self.process_block(&local_committee, &block).await
         }
+    }
+
+    async fn block_has_missing_transaction(
+        &self,
+        local_committee: &Committee<TConsensusSpec::Addr>,
+        block: &Block,
+    ) -> Result<bool, HotStuffError> {
+        let mut missing_tx_ids = Vec::new();
+        let mut awaiting_execution = Vec::new();
+        // TODO(perf): n queries
+        self.store.with_read_tx(|tx| {
+            for tx_id in block.all_transaction_ids() {
+                match TransactionRecord::get(tx, tx_id).optional()? {
+                    Some(tx) => {
+                        // If execution is in progress, we need to note down the transactions without requesting them
+                        if tx.result.is_none() {
+                            awaiting_execution.push(*tx_id);
+                        }
+                    },
+                    None => missing_tx_ids.push(*tx_id),
+                }
+            }
+            Ok::<_, HotStuffError>(())
+        })?;
+
+        if missing_tx_ids.is_empty() && awaiting_execution.is_empty() {
+            return Ok(false);
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "🔥 Block {} has {} missing transactions and {} awaiting execution", block.id(), missing_tx_ids.len(), awaiting_execution.len(),
+        );
+
+        self.store.with_write_tx(|tx| {
+            tx.insert_missing_transactions(block.id(), missing_tx_ids.iter().chain(&awaiting_execution))
+        })?;
+
+        if !missing_tx_ids.is_empty() {
+            self.send_to_leader(
+                local_committee,
+                block.id(),
+                block.height(),
+                HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
+                    block_id: *block.id(),
+                    epoch: block.epoch(),
+                    transactions: missing_tx_ids,
+                }),
+            )
+            .await?;
+        }
+
+        Ok(true)
     }
 
     pub async fn reprocess_block(&self, block_id: &BlockId) -> Result<(), HotStuffError> {
@@ -330,7 +349,7 @@ where TConsensusSpec: ConsensusSpec
             let mut tx_rec = self.transaction_pool.get(tx, cmd.transaction_id())?;
             // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
             //       part of the proposal DanMessage so that there is no race condition between receiving the
-            //       AllProposed and receiving the foreign proposals
+            //       proposed block and receiving the foreign proposals
             tx_rec.update_evidence(tx, local_committee_shard, *block.justify().id())?;
 
             debug!(
