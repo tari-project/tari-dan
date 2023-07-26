@@ -16,7 +16,6 @@ tari_template_lib = { path = "../template_lib" }
 tari_utilities = "0.4.10"
 
 borsh = "0.9.3"
-ciborium = { version = "0.2.1", default-features = false }
 base64 = "0.21.0"
 rand = "0.7"
 digest = "0.9.0"

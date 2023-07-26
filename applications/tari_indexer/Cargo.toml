@@ -42,7 +42,6 @@ axum = "0.6.0"
 async-graphql = "5.0.7"
 async-graphql-axum = "5.0.7"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
-ciborium = { version = "0.2.1", default-features = false }
 clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"
 diesel = { version = "2", default-features = false, features = ["sqlite", "chrono"] }

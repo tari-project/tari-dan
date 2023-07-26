@@ -26,9 +26,9 @@ use anyhow::anyhow;
 use tari_bor::BorError;
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{
-    commit_result::TransactionReceiptAddress,
     resource_container::ResourceError,
     substate::SubstateAddress,
+    transaction_receipt::TransactionReceiptAddress,
 };
 use tari_template_lib::models::{
     Amount,
