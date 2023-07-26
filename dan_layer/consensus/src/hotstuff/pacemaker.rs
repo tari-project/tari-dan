@@ -1,20 +1,22 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use log::*;
 use tari_shutdown::ShutdownSignal;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::mpsc;
 
 use crate::hotstuff::{
     on_beat::OnBeat,
+    on_force_beat::OnForceBeat,
     on_leader_timeout::OnLeaderTimeout,
     pacemaker_handle::{PaceMakerHandle, PacemakerEvent},
     HotStuffError,
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::pacemaker";
-const MAX_DELTA: Duration = Duration::from_secs(180); // 3 minutes
+const MAX_DELTA: Duration = Duration::from_secs(90);
+const MIN_DELTA: Duration = Duration::from_millis(60000);
 
 pub struct PaceMaker {
     pace_maker_handle: PaceMakerHandle,
@@ -38,33 +40,58 @@ impl PaceMaker {
         self.pace_maker_handle.clone()
     }
 
-    pub fn spawn(self) -> (OnBeat, OnLeaderTimeout) {
+    pub fn spawn(self) -> (OnBeat, OnForceBeat, OnLeaderTimeout) {
         // let (tx_on_beat, rx_on_beat) = watch::channel(());
         // let (tx_on_leader_timeout, rx_on_leader_timeout) = watch::channel(());
         let on_beat = OnBeat::new();
         let on_beat2 = on_beat.clone();
+        let on_force_beat = OnForceBeat::new();
+        let on_force_beat2 = on_force_beat.clone();
         let on_leader_timeout = OnLeaderTimeout::new();
         let on_leader_timeout2 = on_leader_timeout.clone();
         tokio::spawn(async move {
-            if let Err(e) = self.run(on_beat2, on_leader_timeout2).await {
+            if let Err(e) = self.run(on_beat2, on_force_beat2, on_leader_timeout2).await {
                 error!(target: LOG_TARGET, "Error (run): {}", e);
             }
         });
-        (on_beat, on_leader_timeout)
+        (on_beat, on_force_beat, on_leader_timeout)
     }
 
-    pub async fn run(mut self, on_beat: OnBeat, on_leader_timeout: OnLeaderTimeout) -> Result<(), HotStuffError> {
-        let sleep = tokio::time::sleep(self.current_delta);
+    pub async fn run(
+        mut self,
+        on_beat: OnBeat,
+        on_force_beat: OnForceBeat,
+        on_leader_timeout: OnLeaderTimeout,
+    ) -> Result<(), HotStuffError> {
+        // Don't start the timer until we receive a reset event
+        let sleep = tokio::time::sleep(Duration::from_secs(31_000_000));
+        let empty_block_deadline = tokio::time::sleep(Duration::from_secs(31_000_000));
         tokio::pin!(sleep);
+        tokio::pin!(empty_block_deadline);
+        let mut last_reset = Instant::now();
         loop {
             tokio::select! {
                 // biased;
                 Some(event) = self.handle_receiver.recv() => {
                     match event {
                        PacemakerEvent::ResetLeaderTimeout => {
+                            error!(target: LOG_TARGET, "XX Resetting leader timeout");
                            sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
+                            // set a timer for when we must send an empty block...
+                            empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
+
+                            // if the last time we reset was less than half delta, then we reduce delta
+                            if last_reset.elapsed() < self.current_delta / 2 {
+                                self.current_delta = self.current_delta * 9 / 10;
+                                if self.current_delta < MIN_DELTA {
+                                    self.current_delta = MIN_DELTA;
+                                }
+                            }
+
+                            last_reset = Instant::now();
                        },
                         PacemakerEvent::Beat => {
+                            error!(target: LOG_TARGET, "XX Beat");
                            on_beat.beat();
                         }
                     }
@@ -73,13 +100,20 @@ impl PaceMaker {
                     // }
 
                 },
+                () = &mut empty_block_deadline => {
+                    error!(target: LOG_TARGET, "XX Empty block deadline: {}", self.current_delta.as_millis());
+                    on_force_beat.beat();
+                }
                 () = &mut sleep => {
+                    error!(target: LOG_TARGET, "XX Leader timed out delta: {}", self.current_delta.as_millis());
                     // tx_on_leader_timeout.send(()).map_err(|e| HotStuffError::PacemakerChannelDropped{ details: e.to_string()})?;
                     on_leader_timeout.leader_timed_out();
                     self.current_delta *= 2;
                     if self.current_delta > MAX_DELTA {
                         self.current_delta = MAX_DELTA;
                     }
+                    // TODO: perhaps we should track the height
+                    sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
                 },
                 // _ = self.on_leader_timeout.wait() => {
                 //     if let Err(e) = self.on_leader_timeout().await {

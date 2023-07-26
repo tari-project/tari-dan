@@ -23,7 +23,7 @@ use crate::{
     hotstuff::{
         error::HotStuffError,
         event::HotstuffEvent,
-        on_leader_timeout::OnLeaderTimeout,
+        on_next_sync_view::OnNextSyncViewHandler,
         on_propose::OnPropose,
         on_receive_new_view::OnReceiveNewViewHandler,
         on_receive_proposal::OnReceiveProposalHandler,
@@ -45,6 +45,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
 
     // on_leader_timeout: OnLeaderTimeout,
+    on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
     on_receive_proposal: OnReceiveProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
@@ -96,6 +97,12 @@ where
             validator_addr: validator_addr.clone(),
             rx_new_transactions,
             rx_hs_message,
+            on_next_sync_view: OnNextSyncViewHandler::new(
+                state_store.clone(),
+                tx_leader.clone(),
+                leader_strategy.clone(),
+                epoch_manager.clone(),
+            ),
             on_receive_proposal: OnReceiveProposalHandler::new(
                 validator_addr,
                 state_store.clone(),
@@ -151,7 +158,7 @@ where
     }
 
     pub async fn run(mut self) -> Result<(), HotStuffError> {
-        let (mut on_beat, mut on_leader_timeout) = self.pacemaker.take().and_then(|p| Some(p.spawn())).unwrap();
+        let (mut on_beat, mut on_force_beat, mut on_leader_timeout) = self.pacemaker.take().map(|p| p.spawn()).unwrap();
 
         loop {
             tokio::select! {
@@ -173,13 +180,21 @@ where
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {:?} {}", msg,e);
                     }
                 },
+
                 _ = on_beat.wait() => {
-                    if let Err(e) = self.on_beat().await {
+                    if let Err(e) = self.on_beat(false ).await {
                         error!(target: LOG_TARGET, "Error (on_beat): {}", e);
                     }
                 },
+                _ = on_force_beat.wait() => {
+                    if let Err(e) = self.on_beat(true).await {
+                        error!(target: LOG_TARGET, "Error (on_beat forced): {}", e);
+                    }
+                }
                 _ = on_leader_timeout.wait() => {
-                     error!(target: LOG_TARGET, "Leader timeout from sleep");
+                    if let Err(e) = self.on_leader_timeout().await {
+                        error!(target: LOG_TARGET, "Error (on_leader_timeout): {}", e);
+                    }
                 },
                 // _ = self.on_leader_timeout.o() => {
                 //     if let Err(e) = self.on_leader_timeout().await {
@@ -204,7 +219,7 @@ where
                 self.is_epoch_synced = true;
                 // TODO: merge chain(s) from previous epoch?
 
-                self.pacemaker_handle.beat();
+                self.pacemaker_handle.beat().await?;
             },
         }
 
@@ -248,15 +263,32 @@ where
         if let Some(block_id) = block_id {
             self.on_receive_proposal.reprocess_block(&block_id).await?;
         }
-        self.pacemaker_handle.beat();
+        self.pacemaker_handle.beat().await?;
         Ok(())
     }
 
     async fn on_leader_timeout(&mut self) -> Result<(), HotStuffError> {
-        todo!("Leader has timed out")
+        // TODO: perhaps the leader should not be increasing the timeout
+        if !self.is_epoch_synced {
+            warn!(target: LOG_TARGET, "Waiting for epoch change before worrying about leader timeout");
+            return Ok(());
+        }
+        let epoch = self.epoch_manager.current_epoch().await?;
+        // Is the VN registered?
+        if !self.epoch_manager.is_epoch_active(epoch).await? {
+            info!(
+                target: LOG_TARGET,
+                "[on_leader_timeout] Validator is not active within this epoch"
+            );
+            return Ok(());
+        }
+
+        self.on_next_sync_view.handle(epoch).await?;
+
+        Ok(())
     }
 
-    async fn on_beat(&mut self) -> Result<(), HotStuffError> {
+    async fn on_beat(&mut self, must_propose: bool) -> Result<(), HotStuffError> {
         // TODO: This is a temporary hack to ensure that the VN has synced the blockchain before proposing
         if !self.is_epoch_synced {
             warn!(target: LOG_TARGET, "Waiting for epoch change before proposing");
@@ -266,24 +298,16 @@ where
         let epoch = self.epoch_manager.current_epoch().await?;
         debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", epoch);
 
-        // Is the VN registered?
-        if !self.epoch_manager.is_epoch_active(epoch).await? {
-            info!(
-                target: LOG_TARGET,
-                "[on_beat] Validator is not active within this epoch"
-            );
-            return Ok(());
-        }
-
         self.create_genesis_block_if_required(epoch)?;
 
-        // Are there any transactions in the pools? The block may still be empty if non are ready but we still need to
-        // propose a block to get to a 3-chain.
-        if !self
-            .state_store
-            .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
+        // Are there any transactions in the pools?
+        // If not, only propose an empty block if we are close to exceeding the timeout
+        if !must_propose &&
+            !self
+                .state_store
+                .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
         {
-            debug!(target: LOG_TARGET, "[on_beat] No transactions to propose");
+            debug!(target: LOG_TARGET, "[on_beat] No transactions to propose. Waiting for a timeout.");
             return Ok(());
         }
 

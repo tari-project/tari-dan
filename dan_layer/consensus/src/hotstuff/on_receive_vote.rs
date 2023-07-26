@@ -131,57 +131,57 @@ where TConsensusSpec: ConsensusSpec
             );
             return Ok(());
         }
+        {
+            let mut tx = self.store.create_write_tx()?;
+            let high_qc = HighQc::get(tx.deref_mut(), block.epoch())?;
+            if high_qc.block_id == *block.id() {
+                debug!(
+                    target: LOG_TARGET,
+                    "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block",
+                    message.block_id,
+                    from,
+                    count,
+                    local_committee_shard.quorum_threshold()
+                );
+                // We have already created a QC for this block
+                tx.rollback()?;
+                return Ok(());
+            }
 
-        let mut tx = self.store.create_write_tx()?;
-        let high_qc = HighQc::get(tx.deref_mut(), block.epoch())?;
-        if high_qc.block_id == *block.id() {
-            debug!(
-                target: LOG_TARGET,
-                "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block",
-                message.block_id,
-                from,
-                count,
-                local_committee_shard.quorum_threshold()
+            let votes = block.get_votes(tx.deref_mut())?;
+            let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, &local_committee_shard) else {
+                warn!(
+                    target: LOG_TARGET,
+                    "🔥 Received conflicting votes from replicas for block {} ({} of {}). Waiting for more votes.",
+                    message.block_id,
+                    count,
+                    local_committee_shard.quorum_threshold()
+                );
+                tx.rollback()?;
+                return Ok(());
+            };
+
+            let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
+            let (leaf_hashes, proofs) = votes
+                .iter()
+                .map(|v| (v.sender_leaf_hash, v.merkle_proof.clone()))
+                .unzip::<_, _, _, Vec<_>>();
+            let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(&proofs)?;
+
+            let qc = QuorumCertificate::new(
+                *block.id(),
+                block.height(),
+                block.epoch(),
+                signatures,
+                merged_proof,
+                leaf_hashes,
+                quorum_decision,
             );
-            // We have already created a QC for this block
-            tx.rollback()?;
-            return Ok(());
+
+            update_high_qc(&mut tx, &qc)?;
+            tx.commit()?;
         }
-
-        let votes = block.get_votes(tx.deref_mut())?;
-        let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, &local_committee_shard) else {
-            warn!(
-                target: LOG_TARGET,
-                "🔥 Received conflicting votes from replicas for block {} ({} of {}). Waiting for more votes.",
-                message.block_id,
-                count,
-                local_committee_shard.quorum_threshold()
-            );
-            tx.rollback()?;
-            return Ok(());
-        };
-
-        let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
-        let (leaf_hashes, proofs) = votes
-            .iter()
-            .map(|v| (v.sender_leaf_hash, v.merkle_proof.clone()))
-            .unzip::<_, _, _, Vec<_>>();
-        let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(&proofs)?;
-
-        let qc = QuorumCertificate::new(
-            *block.id(),
-            block.height(),
-            block.epoch(),
-            signatures,
-            merged_proof,
-            leaf_hashes,
-            quorum_decision,
-        );
-
-        update_high_qc(&mut tx, &qc)?;
-        tx.commit()?;
-
-        self.on_beat.beat();
+        self.on_beat.beat().await?;
 
         Ok(())
     }

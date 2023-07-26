@@ -72,7 +72,7 @@ where TConsensusSpec: ConsensusSpec
         let entry = self.newview_message_counts.entry(*high_qc.block_id()).or_default();
         entry.insert(from);
 
-        self.on_beat.beat();
+        self.on_beat.beat().await?;
 
         Ok(())
     }

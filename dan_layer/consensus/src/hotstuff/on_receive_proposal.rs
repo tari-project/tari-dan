@@ -223,7 +223,7 @@ where TConsensusSpec: ConsensusSpec
         })?;
 
         if let Some(decision) = maybe_decision {
-            self.pacemaker.reset_leader_timeout();
+            self.pacemaker.reset_leader_timeout().await?;
             let vote = self.generate_vote_message(block, decision).await?;
             debug!(
                 target: LOG_TARGET,
@@ -250,7 +250,7 @@ where TConsensusSpec: ConsensusSpec
             .with_write_tx(|tx| self.on_receive_foreign_block(tx, &block, &committee_shard))?;
 
         // We could have ready transactions at this point, so if we're the leader for the next block we can propose
-        self.pacemaker.beat();
+        self.pacemaker.beat().await?;
 
         Ok(())
     }
@@ -478,7 +478,7 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
-        info!(target: LOG_TARGET, "✅ Accepting block {}", block.id());
+        info!(target: LOG_TARGET, "✅ Voting to accept block {}", block.id());
         Ok(Some(QuorumDecision::Accept))
     }
 
