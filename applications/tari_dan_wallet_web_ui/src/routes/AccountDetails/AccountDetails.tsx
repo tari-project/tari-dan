@@ -32,17 +32,26 @@ import TableCell from '@mui/material/TableCell';
 import TableBody from '@mui/material/TableBody';
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { accountsGetBalances, accountsGet, accountNFTsList } from '../../utils/json_rpc';
+import {
+  accountsGetBalances,
+  accountsGet,
+  accountNFTsList,
+} from '../../utils/json_rpc';
 import Alert from '@mui/material/Alert';
-import { removeTagged, toHexString } from '../../utils/helpers';
+import { removeTagged, shortenString } from '../../utils/helpers';
+import { DataTableCell } from '../../Components/StyledComponents';
+import CopyToClipboard from '../../Components/CopyToClipboard';
 
 function BalanceRow(props: any) {
   return (
     <TableRow>
-      <TableCell>{props.token_symbol || props.resource_address}</TableCell>
-      <TableCell>{props.resource_type}</TableCell>
-      <TableCell>{removeTagged(props.balance)}</TableCell>
-      <TableCell>{removeTagged(props.confidential_balance)}</TableCell>
+      <DataTableCell>
+        {shortenString(props.token_symbol || props.resource_address)}
+        <CopyToClipboard copy={props.token_symbol || props.resource_address} />
+      </DataTableCell>
+      <DataTableCell>{props.resource_type}</DataTableCell>
+      <DataTableCell>{removeTagged(props.balance)}</DataTableCell>
+      <DataTableCell>{removeTagged(props.confidential_balance)}</DataTableCell>
     </TableRow>
   );
 }
@@ -50,11 +59,11 @@ function BalanceRow(props: any) {
 function NftsList(props: any) {
   return (
     <TableRow>
-      <TableCell>{props.token_symbol}</TableCell>
-      <TableCell>{props.metadata}</TableCell>
-      <TableCell>{props.is_burned}</TableCell>
+      <DataTableCell>{props.token_symbol}</DataTableCell>
+      <DataTableCell>{props.metadata}</DataTableCell>
+      <DataTableCell>{props.is_burned}</DataTableCell>
     </TableRow>
-  )
+  );
 }
 
 function AccountDetailsLayout() {
@@ -99,7 +108,7 @@ function AccountDetailsLayout() {
         })
         .catch((error: any) => {
           console.error(error);
-          setError(error.message)
+          setError(error.message);
         });
     }
   };
@@ -126,13 +135,22 @@ function AccountDetailsLayout() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                <TableRow>
-                  <TableCell>{state?.account.name}</TableCell>
-                  <TableCell>
-                    {state?.account.address.Component}
-                  </TableCell>
-                  <TableCell>{state?.public_key}</TableCell>
-                </TableRow>
+                {state && (
+                  <TableRow>
+                    <DataTableCell>
+                      {shortenString(state.account.name)}
+                      <CopyToClipboard copy={state.account.name} />
+                    </DataTableCell>
+                    <DataTableCell>
+                      {shortenString(state.account.address.Component)}
+                      <CopyToClipboard copy={state.account.address.Component} />
+                    </DataTableCell>
+                    <DataTableCell>
+                      {shortenString(state.public_key)}
+                      <CopyToClipboard copy={state.public_key} />
+                    </DataTableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </TableContainer>

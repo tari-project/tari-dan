@@ -7800,7 +7800,6 @@ version = "0.50.0-pre.0"
 dependencies = [
  "base64 0.21.2",
  "borsh",
- "ciborium",
  "digest 0.9.0",
  "hex",
  "lazy_static",
@@ -7852,7 +7851,6 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-jrpc",
- "ciborium",
  "clap 3.2.25",
  "config",
  "diesel",

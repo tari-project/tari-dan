@@ -103,6 +103,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         true,
         DAN_PEER_FEATURES,
     )?;
+
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
     db_factory
         .migrate()

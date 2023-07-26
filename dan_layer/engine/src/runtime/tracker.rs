@@ -32,7 +32,7 @@ use log::debug;
 use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
 use tari_engine_types::{
     bucket::Bucket,
-    commit_result::{RejectReason, TransactionReceipt, TransactionResult},
+    commit_result::{RejectReason, TransactionResult},
     component::{ComponentBody, ComponentHeader},
     confidential::UnclaimedConfidentialOutput,
     events::Event,
@@ -43,6 +43,7 @@ use tari_engine_types::{
     resource::Resource,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
+    transaction_receipt::TransactionReceipt,
     vault::Vault,
     TemplateAddress,
 };
