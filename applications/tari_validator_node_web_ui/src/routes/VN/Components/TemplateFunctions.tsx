@@ -44,7 +44,6 @@ function TemplateFunctions() {
   const { address } = useParams();
   const [info, setInfo] = useState<ITemplate>();
 
-  const data = address ? fromHexString(address.replace('0x', '')) : '';
 
   const load = (address: any) => {
     getTemplate(address).then((response) => {
@@ -53,8 +52,9 @@ function TemplateFunctions() {
   };
 
   useEffect(() => {
+    const data = address ? fromHexString(address.replace('0x', '')) : '';
     load(data);
-  }, [data]);
+  }, []);
 
   const renderFunctions = (template: ITemplate) => {
     return (
