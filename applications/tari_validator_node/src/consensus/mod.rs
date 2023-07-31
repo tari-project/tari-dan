@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use tari_common_types::types::PublicKey;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_consensus::{
     hotstuff::{HotstuffEvent, HotstuffWorker},
@@ -37,11 +38,11 @@ mod spec;
 mod state_manager;
 
 pub async fn spawn(
-    store: SqliteStateStore,
+    store: SqliteStateStore<PublicKey>,
     node_identity: Arc<NodeIdentity>,
     epoch_manager: EpochManagerHandle,
     rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-    rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage)>,
+    rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
     outbound_messaging: OutboundMessaging,
     shutdown_signal: ShutdownSignal,
 ) -> (JoinHandle<Result<(), anyhow::Error>>, EventSubscription<HotstuffEvent>) {
@@ -89,8 +90,8 @@ pub async fn spawn(
 }
 
 struct ConsensusWorker {
-    rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage)>,
-    rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage)>,
+    rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
+    rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
     rx_mempool: mpsc::Receiver<Transaction>,
     outbound_messaging: OutboundMessaging,
 }

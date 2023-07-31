@@ -22,6 +22,7 @@
 
 use std::sync::Arc;
 
+use tari_common_types::types::PublicKey;
 use tari_comms::NodeIdentity;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_storage::consensus_models::ExecutedTransaction;
@@ -47,7 +48,7 @@ pub fn spawn<TExecutor, TValidator, TSubstateResolver>(
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,
     validator: TValidator,
-    state_store: SqliteStateStore,
+    state_store: SqliteStateStore<PublicKey>,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
     TValidator: Validator<Transaction, Error = MempoolError> + Send + Sync + 'static,

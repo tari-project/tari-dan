@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::{collections::HashSet, marker::PhantomData};
 
 use diesel::{
     sql_query,
@@ -14,8 +14,9 @@ use diesel::{
     RunQueryDsl,
     SqliteConnection,
 };
+use serde::Serialize;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -47,13 +48,17 @@ use crate::{
     sqlite_transaction::SqliteTransaction,
 };
 
-pub struct SqliteStateStoreReadTransaction<'a> {
+pub struct SqliteStateStoreReadTransaction<'a, TAddr> {
     transaction: SqliteTransaction<'a>,
+    _addr: PhantomData<TAddr>,
 }
 
-impl<'a> SqliteStateStoreReadTransaction<'a> {
+impl<'a, TAddr> SqliteStateStoreReadTransaction<'a, TAddr> {
     pub(crate) fn new(transaction: SqliteTransaction<'a>) -> Self {
-        Self { transaction }
+        Self {
+            transaction,
+            _addr: PhantomData,
+        }
     }
 
     pub(crate) fn connection(&mut self) -> &mut SqliteConnection {
@@ -69,7 +74,9 @@ impl<'a> SqliteStateStoreReadTransaction<'a> {
     }
 }
 
-impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
+impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_, TAddr> {
+    type Addr = TAddr;
+
     fn last_voted_get(&mut self, epoch: Epoch) -> Result<LastVoted, StorageError> {
         use crate::schema::last_voted;
 
@@ -244,7 +251,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             .collect()
     }
 
-    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError> {
+    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<TAddr>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
@@ -268,7 +275,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         block.try_convert(qc)
     }
 
-    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block, StorageError> {
+    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block<TAddr>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
@@ -293,7 +300,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         block.try_convert(qc)
     }
 
-    fn blocks_get_by_parent(&mut self, parent_id: &BlockId) -> Result<Block, StorageError> {
+    fn blocks_get_by_parent(&mut self, parent_id: &BlockId) -> Result<Block<TAddr>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table

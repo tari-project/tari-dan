@@ -23,6 +23,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use log::*;
+use tari_common_types::types::PublicKey;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
 use tari_dan_p2p::PeerProvider;
@@ -55,12 +56,16 @@ use crate::p2p::services::mempool::MempoolHandle;
 
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
     peer_provider: TPeerProvider,
-    shard_state_store: SqliteStateStore,
+    shard_state_store: SqliteStateStore<PublicKey>,
     mempool: MempoolHandle,
 }
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
-    pub fn new(peer_provider: TPeerProvider, shard_state_store: SqliteStateStore, mempool: MempoolHandle) -> Self {
+    pub fn new(
+        peer_provider: TPeerProvider,
+        shard_state_store: SqliteStateStore<PublicKey>,
+        mempool: MempoolHandle,
+    ) -> Self {
         Self {
             peer_provider,
             shard_state_store,

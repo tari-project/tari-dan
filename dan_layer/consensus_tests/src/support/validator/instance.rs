@@ -30,9 +30,9 @@ pub struct ValidatorChannels {
     pub bucket: u32,
 
     pub tx_new_transactions: mpsc::Sender<ExecutedTransaction>,
-    pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage)>,
-    pub rx_broadcast: mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>,
-    pub rx_leader: mpsc::Receiver<(TestAddress, HotstuffMessage)>,
+    pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage<TestAddress>)>,
+    pub rx_broadcast: mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>,
+    pub rx_leader: mpsc::Receiver<(TestAddress, HotstuffMessage<TestAddress>)>,
     pub rx_mempool: mpsc::Receiver<Transaction>,
 }
 
@@ -40,7 +40,7 @@ pub struct Validator {
     pub address: TestAddress,
     pub shard: ShardId,
 
-    pub state_store: SqliteStateStore,
+    pub state_store: SqliteStateStore<TestAddress>,
     pub epoch_manager: TestEpochManager,
     pub leader_strategy: SelectedIndexLeaderStrategy,
     pub shutdown: Shutdown,

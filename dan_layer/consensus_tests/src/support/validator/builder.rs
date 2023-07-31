@@ -32,7 +32,7 @@ pub struct ValidatorBuilder {
 impl ValidatorBuilder {
     pub fn new() -> Self {
         Self {
-            address: TestAddress("default"),
+            address: TestAddress::new("default"),
             shard: ShardId::zero(),
             bucket: 0,
             sql_url: ":memory".to_string(),
@@ -88,12 +88,12 @@ impl ValidatorBuilder {
         let (tx_epoch_events, rx_epoch_events) = broadcast::channel(1);
 
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
-            self.address,
+            self.address.clone(),
             rx_new_transactions,
             rx_hs_message,
             store.clone(),
             rx_epoch_events,
-            self.epoch_manager.clone_for(self.address, self.shard),
+            self.epoch_manager.clone_for(self.address.clone(), self.shard),
             self.leader_strategy.clone(),
             signing_service,
             noop_state_manager.clone(),
@@ -109,7 +109,7 @@ impl ValidatorBuilder {
         });
 
         let channels = ValidatorChannels {
-            address: self.address,
+            address: self.address.clone(),
             bucket: self.bucket,
             tx_new_transactions,
             tx_hs_message,
@@ -122,10 +122,10 @@ impl ValidatorBuilder {
         tx_epoch_events.send(EpochManagerEvent::EpochChanged(Epoch(0))).unwrap();
 
         let validator = Validator {
-            address: self.address,
+            address: self.address.clone(),
             shard: self.shard,
             state_store: store,
-            epoch_manager: self.epoch_manager.clone_for(self.address, self.shard),
+            epoch_manager: self.epoch_manager.clone_for(self.address.clone(), self.shard),
             shutdown,
             tx_epoch_events,
             state_manager: noop_state_manager,

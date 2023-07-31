@@ -32,6 +32,7 @@ use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
+use tari_common_types::types::PublicKey;
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
@@ -102,7 +103,7 @@ pub struct JsonRpcHandlers {
     epoch_manager: EpochManagerHandle,
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
-    state_store: SqliteStateStore,
+    state_store: SqliteStateStore<PublicKey>,
     dry_run_transaction_processor: DryRunTransactionProcessor,
     config: ValidatorNodeConfig,
 }

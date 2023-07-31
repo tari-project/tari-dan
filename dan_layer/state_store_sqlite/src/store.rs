@@ -3,11 +3,14 @@
 
 use std::{
     fmt,
+    marker::PhantomData,
     sync::{Arc, Mutex},
 };
 
 use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use serde::Serialize;
+use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::{StateStore, StorageError};
 
 use crate::{
@@ -19,12 +22,12 @@ use crate::{
 
 const _LOG_TARGET: &str = "tari::dan::storage::sqlite::state_store";
 
-#[derive(Clone)]
-pub struct SqliteStateStore {
+pub struct SqliteStateStore<TAddr> {
     connection: Arc<Mutex<SqliteConnection>>,
+    _addr: PhantomData<TAddr>,
 }
 
-impl SqliteStateStore {
+impl<TAddr> SqliteStateStore<TAddr> {
     pub fn connect(url: &str) -> Result<Self, StorageError> {
         let mut connection = SqliteConnection::establish(url).map_err(SqliteStorageError::from)?;
 
@@ -42,20 +45,22 @@ impl SqliteStateStore {
 
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
+            _addr: PhantomData,
         })
     }
 }
 
-// we mock the Debug implementation because "SqliteConnection" does not implement the Debug trait
-impl fmt::Debug for SqliteStateStore {
+// Manually implement the Debug implementation because `SqliteConnection` does not implement the Debug trait
+impl<TAddr> fmt::Debug for SqliteStateStore<TAddr> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "SqliteShardStore")
     }
 }
 
-impl StateStore for SqliteStateStore {
-    type ReadTransaction<'a> = SqliteStateStoreReadTransaction<'a>;
-    type WriteTransaction<'a> = SqliteStateStoreWriteTransaction<'a>;
+impl<TAddr: NodeAddressable + Serialize> StateStore for SqliteStateStore<TAddr> {
+    type Addr = TAddr;
+    type ReadTransaction<'a> = SqliteStateStoreReadTransaction<'a, Self::Addr> where TAddr: 'a;
+    type WriteTransaction<'a> = SqliteStateStoreWriteTransaction<'a, Self::Addr> where TAddr: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError> {
         let tx = SqliteTransaction::begin(self.connection.lock().unwrap())?;
@@ -65,5 +70,14 @@ impl StateStore for SqliteStateStore {
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError> {
         let tx = SqliteTransaction::begin(self.connection.lock().unwrap())?;
         Ok(SqliteStateStoreWriteTransaction::new(tx))
+    }
+}
+
+impl<TAddr> Clone for SqliteStateStore<TAddr> {
+    fn clone(&self) -> Self {
+        Self {
+            connection: self.connection.clone(),
+            _addr: PhantomData,
+        }
     }
 }

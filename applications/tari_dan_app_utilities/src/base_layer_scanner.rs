@@ -29,7 +29,7 @@ use tari_base_node_client::{
     BaseNodeClient,
     BaseNodeClientError,
 };
-use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
+use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError, PublicKey};
 use tari_core::transactions::transaction_components::{
     CodeTemplateRegistration,
     SideChainFeature,
@@ -69,7 +69,7 @@ pub fn spawn(
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
     consensus_constants: ConsensusConstants,
-    shard_store: SqliteStateStore,
+    shard_store: SqliteStateStore<PublicKey>,
     scan_base_layer: bool,
     base_layer_scanning_interval: Duration,
 ) -> JoinHandle<anyhow::Result<()>> {
@@ -102,7 +102,7 @@ pub struct BaseLayerScanner {
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
     consensus_constants: ConsensusConstants,
-    state_store: SqliteStateStore,
+    state_store: SqliteStateStore<PublicKey>,
     scan_base_layer: bool,
     base_layer_scanning_interval: Duration,
     has_attempted_scan: bool,
@@ -116,7 +116,7 @@ impl BaseLayerScanner {
         template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
         consensus_constants: ConsensusConstants,
-        state_store: SqliteStateStore,
+        state_store: SqliteStateStore<PublicKey>,
         scan_base_layer: bool,
         base_layer_scanning_interval: Duration,
     ) -> Self {
@@ -375,7 +375,7 @@ impl BaseLayerScanner {
         let epoch = self.epoch_manager.current_epoch().await?;
         self.state_store
             .with_write_tx(|tx| {
-                let genesis = Block::genesis(epoch);
+                let genesis = Block::<PublicKey>::genesis(epoch);
 
                 SubstateRecord {
                     address,

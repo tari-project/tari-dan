@@ -2,12 +2,13 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use serde::Serialize;
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{consensus_models, StorageError};
 use time::PrimitiveDateTime;
 
 use crate::{
-    serialization::{deserialize_hex_try_from, deserialize_json},
+    serialization::{deserialize_hex, deserialize_hex_try_from, deserialize_json},
     sql_models,
 };
 
@@ -26,14 +27,21 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn try_convert(self, qc: sql_models::QuorumCertificate) -> Result<consensus_models::Block, StorageError> {
+    pub fn try_convert<TAddr: NodeAddressable + Serialize>(
+        self,
+        qc: sql_models::QuorumCertificate,
+    ) -> Result<consensus_models::Block<TAddr>, StorageError> {
         Ok(consensus_models::Block::new(
             deserialize_hex_try_from(&self.parent_block_id)?,
             qc.try_into()?,
             NodeHeight(self.height as u64),
             Epoch(self.epoch as u64),
             self.leader_round as u64,
-            deserialize_hex_try_from(&self.proposed_by)?,
+            TAddr::from_bytes(&deserialize_hex(&self.proposed_by)?).ok_or_else(|| StorageError::DecodingError {
+                operation: "try_convert",
+                item: "block",
+                details: format!("Block #{} proposed_by is malformed", self.id),
+            })?,
             deserialize_json(&self.commands)?,
         ))
     }
