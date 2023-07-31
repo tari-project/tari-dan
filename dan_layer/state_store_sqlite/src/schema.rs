@@ -15,7 +15,6 @@ diesel::table! {
         block_id -> Text,
         parent_block_id -> Text,
         height -> BigInt,
-        leader_round -> BigInt,
         epoch -> BigInt,
         proposed_by -> Text,
         qc_id -> Text,

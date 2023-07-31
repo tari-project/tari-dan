@@ -15,7 +15,6 @@ create table blocks
     block_id        text      not NULL,
     parent_block_id text      not NULL,
     height          bigint    not NULL,
-    leader_round    bigint    not NULL DEFAULT 0,
     epoch           bigint    not NULL,
     proposed_by     text      not NULL,
     qc_id           text      not NULL,

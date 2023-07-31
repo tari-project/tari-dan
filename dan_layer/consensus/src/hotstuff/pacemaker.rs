@@ -3,6 +3,7 @@
 use std::time::{Duration, Instant};
 
 use log::*;
+use tari_dan_common_types::NodeHeight;
 use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
@@ -23,6 +24,7 @@ pub struct PaceMaker {
     handle_receiver: mpsc::Receiver<PacemakerEvent>,
     shutdown: ShutdownSignal,
     current_delta: Duration,
+    current_height: NodeHeight,
 }
 
 impl PaceMaker {
@@ -33,6 +35,7 @@ impl PaceMaker {
             pace_maker_handle: PaceMakerHandle::new(sender),
             current_delta: Duration::from_millis(3000),
             shutdown,
+            current_height: NodeHeight(0),
         }
     }
 
@@ -74,8 +77,9 @@ impl PaceMaker {
                 // biased;
                 Some(event) = self.handle_receiver.recv() => {
                     match event {
-                       PacemakerEvent::ResetLeaderTimeout => {
-                            error!(target: LOG_TARGET, "XX Resetting leader timeout");
+                       PacemakerEvent::ResetLeaderTimeout { last_seen_height } => {
+                            error!(target: LOG_TARGET, "XX Resetting leader timeout. Last seen height: {}", last_seen_height);
+                            self.current_height = last_seen_height + NodeHeight(1);
                            sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
                             // set a timer for when we must send an empty block...
                             empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
@@ -102,12 +106,14 @@ impl PaceMaker {
                 },
                 () = &mut empty_block_deadline => {
                     error!(target: LOG_TARGET, "XX Empty block deadline: {}", self.current_delta.as_millis());
+                    empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
                     on_force_beat.beat();
                 }
                 () = &mut sleep => {
-                    error!(target: LOG_TARGET, "XX Leader timed out delta: {}", self.current_delta.as_millis());
+                    error!(target: LOG_TARGET, "XX Leader timed out delta: {}, setting new height: {}", self.current_delta.as_millis(), self.current_height + NodeHeight(1) );
                     // tx_on_leader_timeout.send(()).map_err(|e| HotStuffError::PacemakerChannelDropped{ details: e.to_string()})?;
-                    on_leader_timeout.leader_timed_out();
+                    on_leader_timeout.leader_timed_out(self.current_height);
+                    self.current_height =  self.current_height + NodeHeight(1);
                     self.current_delta *= 2;
                     if self.current_delta > MAX_DELTA {
                         self.current_delta = MAX_DELTA;

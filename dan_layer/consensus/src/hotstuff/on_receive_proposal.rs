@@ -223,7 +223,7 @@ where TConsensusSpec: ConsensusSpec
         })?;
 
         if let Some(decision) = maybe_decision {
-            self.pacemaker.reset_leader_timeout().await?;
+            self.pacemaker.reset_leader_timeout(block.height()).await?;
             let vote = self.generate_vote_message(block, decision).await?;
             debug!(
                 target: LOG_TARGET,
@@ -311,7 +311,7 @@ where TConsensusSpec: ConsensusSpec
         height: NodeHeight,
         message: HotstuffMessage,
     ) -> Result<(), HotStuffError> {
-        let leader = self.leader_strategy.get_leader(local_committee, block_id, height);
+        let leader = self.leader_strategy.get_leader(local_committee, height);
         self.tx_leader
             .send((leader.clone(), message))
             .await
@@ -326,9 +326,7 @@ where TConsensusSpec: ConsensusSpec
         vote: VoteMessage,
         height: NodeHeight,
     ) -> Result<(), HotStuffError> {
-        let leader = self
-            .leader_strategy
-            .get_leader_for_next_block(local_committee, &vote.block_id, height);
+        let leader = self.leader_strategy.get_leader_for_next_block(local_committee, height);
         self.tx_leader
             .send((leader.clone(), HotstuffMessage::Vote(vote)))
             .await

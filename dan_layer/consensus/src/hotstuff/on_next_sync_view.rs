@@ -2,7 +2,7 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 use log::info;
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{HighQc, LeafBlock},
     StateStore,
@@ -40,19 +40,17 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         }
     }
 
-    pub async fn handle(&mut self, epoch: Epoch) -> Result<(), HotStuffError> {
-        info!(target: LOG_TARGET, "🔥 Handle NEXTSYNCVIEW for epoch {}", epoch);
-        let leaf_block = self.store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
+    pub async fn handle(&mut self, epoch: Epoch, new_height: NodeHeight) -> Result<(), HotStuffError> {
+        info!(target: LOG_TARGET, "🔥 Handle NEXTSYNCVIEW for epoch {} and node height {}", epoch, new_height);
+        // let leaf_block = self.store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
-        let next_leader =
-            self.leader_strategy
-                .get_leader_for_next_block(&local_committee, &leaf_block.block_id, leaf_block.height);
+        let next_leader = self.leader_strategy.get_leader(&local_committee, new_height);
 
         let high_qc = self
             .store
             .with_read_tx(|tx| HighQc::get(tx, epoch).and_then(|qc| qc.get_quorum_certificate(tx)))?;
 
-        let message = NewViewMessage { high_qc };
+        let message = NewViewMessage { high_qc, new_height };
 
         info!(target: LOG_TARGET, "🔥 Send NEWVIEW to {}", next_leader);
         self.tx_leader

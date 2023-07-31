@@ -223,7 +223,6 @@ where TConsensusSpec: ConsensusSpec
             high_qc,
             parent_block.height() + NodeHeight(1),
             epoch,
-            0,
             proposed_by,
             commands,
         );

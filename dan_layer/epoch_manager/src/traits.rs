@@ -146,4 +146,9 @@ pub trait EpochManagerReader: Send + Sync {
         let current_epoch = self.current_epoch().await?;
         self.get_committee(current_epoch, shard).await
     }
+
+    async fn get_local_threshold_for_epoch(&self, epoch: Epoch) -> Result<usize, EpochManagerError> {
+        let committee = self.get_local_committee(epoch).await?;
+        Ok(committee.consensus_threshold())
+    }
 }

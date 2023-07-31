@@ -91,12 +91,10 @@ where TConsensusSpec: ConsensusSpec
                     sent_by: from.to_string(),
                 });
             };
-            if !self.leader_strategy.is_leader_for_next_block(
-                &vn.address,
-                &committee,
-                &message.block_id,
-                block.height(),
-            ) {
+            if !self
+                .leader_strategy
+                .is_leader_for_next_block(&vn.address, &committee, block.height())
+            {
                 return Err(HotStuffError::NotTheLeader {
                     details: format!(
                         "Not this leader for block {}, vote sent by {}",

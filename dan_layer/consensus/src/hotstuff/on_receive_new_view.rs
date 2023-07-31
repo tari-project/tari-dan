@@ -4,8 +4,9 @@
 use std::collections::{HashMap, HashSet};
 
 use log::*;
+use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{BlockId, QuorumCertificate},
+    consensus_models::{Block, BlockId, LeafBlock, QuorumCertificate},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -13,14 +14,14 @@ use tari_epoch_manager::EpochManagerReader;
 use crate::{
     hotstuff::{common::update_high_qc, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, LeaderStrategy},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_new_view";
 
 pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
-    _leader_strategy: TConsensusSpec::LeaderStrategy,
+    leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
     newview_message_counts: HashMap<BlockId, HashSet<TConsensusSpec::Addr>>,
     on_beat: PaceMakerHandle,
@@ -37,7 +38,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Self {
         Self {
             store,
-            _leader_strategy: leader_strategy,
+            leader_strategy,
             epoch_manager,
             newview_message_counts: HashMap::default(),
             on_beat,
@@ -45,11 +46,13 @@ where TConsensusSpec: ConsensusSpec
     }
 
     pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: NewViewMessage) -> Result<(), HotStuffError> {
-        let NewViewMessage { high_qc } = message;
+        let NewViewMessage { high_qc, new_height } = message;
         debug!(
             target: LOG_TARGET,
-            "🔥 Receive NEWVIEW for block {}",
-            high_qc.block_id(),
+            "🔥 Receive NEWVIEW for qc {} new height {} from {}",
+            high_qc.id(),
+            new_height,
+            from
         );
 
         if !self
@@ -71,8 +74,57 @@ where TConsensusSpec: ConsensusSpec
         // Take note of unique NEWVIEWs so that we can count them
         let entry = self.newview_message_counts.entry(*high_qc.block_id()).or_default();
         entry.insert(from);
+        let threshold = self
+            .epoch_manager
+            .get_local_threshold_for_epoch(high_qc.epoch())
+            .await?;
+        debug!(
+        target: LOG_TARGET,
+        "🔥 NEWVIEW for block {} has {} votes out of {}",
+        high_qc.block_id(),
+        entry.len(),
+            threshold
+        );
+        // look at equal to, so that we only propose once
+        if entry.len() == threshold {
+            debug!(target: LOG_TARGET, "🔥 NEWVIEW for block {} has reached quorum", high_qc.block_id());
 
-        self.on_beat.beat().await?;
+            // Determine how many missing blocks we must fill.
+            let local_committee = self.epoch_manager.get_local_committee(high_qc.epoch()).await?;
+            let our_node = self.epoch_manager.get_our_validator_node(high_qc.epoch()).await?;
+
+            let (our_add, our_shard_key) = (our_node.address, our_node.shard_key);
+
+            let mut leaf_block = self
+                .store
+                .with_read_tx(|tx| LeafBlock::get(tx, high_qc.epoch())?.get_block(tx))?;
+            self.store.with_write_tx(|tx| {
+
+
+
+                // let missing_blocks = local_committee
+                //     .calculate_steps_between(leaf_block.proposed_by(), &our_node)
+                //     .ok_or_else(|| HotStuffError::MismatchBetweenCommittees {
+                //         epoch: high_qc.epoch(),
+                //         context: "Could not calculate steps between committees".to_string(),
+                //     })?;
+
+                todo!("This logic is wrong");
+                let mut leader = self.leader_strategy.get_leader_for_next_block(&local_committee,  leaf_block.height());
+                debug!(target: LOG_TARGET, "🔥 New View failed leader is {} at height:{}", leader, leaf_block.height() + NodeHeight(1)   );
+                while leader != &our_add {
+                    info!(target: LOG_TARGET, "Creating dummy block for leader {}, height: {}", leader, leaf_block.height() + NodeHeight(1));
+                    // TODO: replace with actual leader's propose
+                    leaf_block = Block::dummy_block(leaf_block.id().clone(), our_shard_key.clone(), leaf_block.height() + NodeHeight(1), high_qc.epoch());
+                    leaf_block.save(tx)?;
+                    leaf_block.as_leaf_block().set(tx)?;
+                    leader = self.leader_strategy.get_leader_for_next_block(&local_committee, leaf_block.height());
+                }
+                Ok::<(), HotStuffError>(())
+            })?;
+
+            self.on_beat.beat().await?;
+        }
 
         Ok(())
     }

@@ -4,7 +4,7 @@
 use std::ops::DerefMut;
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, Epoch};
+use tari_dan_common_types::{committee::Committee, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, Decision, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
     StateStore,
@@ -191,8 +191,8 @@ where
                         error!(target: LOG_TARGET, "Error (on_beat forced): {}", e);
                     }
                 }
-                _ = on_leader_timeout.wait() => {
-                    if let Err(e) = self.on_leader_timeout().await {
+                new_height = on_leader_timeout.wait() => {
+                    if let Err(e) = self.on_leader_timeout(new_height).await {
                         error!(target: LOG_TARGET, "Error (on_leader_timeout): {}", e);
                     }
                 },
@@ -267,12 +267,13 @@ where
         Ok(())
     }
 
-    async fn on_leader_timeout(&mut self) -> Result<(), HotStuffError> {
+    async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
         // TODO: perhaps the leader should not be increasing the timeout
         if !self.is_epoch_synced {
             warn!(target: LOG_TARGET, "Waiting for epoch change before worrying about leader timeout");
             return Ok(());
         }
+
         let epoch = self.epoch_manager.current_epoch().await?;
         // Is the VN registered?
         if !self.epoch_manager.is_epoch_active(epoch).await? {
@@ -283,7 +284,7 @@ where
             return Ok(());
         }
 
-        self.on_next_sync_view.handle(epoch).await?;
+        self.on_next_sync_view.handle(epoch, new_height).await?;
 
         Ok(())
     }
@@ -315,12 +316,9 @@ where
         let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         // TODO: If there were leader failures, the leaf block would be empty and we need to create empty blocks.
-        let is_leader = self.leader_strategy.is_leader_for_next_block(
-            &self.validator_addr,
-            &local_committee,
-            &leaf_block.block_id,
-            leaf_block.height,
-        );
+        let is_leader =
+            self.leader_strategy
+                .is_leader_for_next_block(&self.validator_addr, &local_committee, leaf_block.height);
         info!(
             target: LOG_TARGET,
             "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}",

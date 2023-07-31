@@ -94,6 +94,7 @@ impl From<NewViewMessage> for proto::consensus::NewViewMessage {
     fn from(value: NewViewMessage) -> Self {
         Self {
             high_qc: Some(value.high_qc.into()),
+            new_height: value.new_height.0,
         }
     }
 }
@@ -104,6 +105,7 @@ impl TryFrom<proto::consensus::NewViewMessage> for NewViewMessage {
     fn try_from(value: proto::consensus::NewViewMessage) -> Result<Self, Self::Error> {
         Ok(NewViewMessage {
             high_qc: value.high_qc.ok_or_else(|| anyhow!("High QC is missing"))?.try_into()?,
+            new_height: value.new_height.into(),
         })
     }
 }
@@ -228,7 +230,6 @@ impl From<tari_dan_storage::consensus_models::Block> for proto::consensus::Block
             proposed_by: value.proposed_by().as_bytes().to_vec(),
             merkle_root: value.merkle_root().as_slice().to_vec(),
             justify: Some(value.justify().into()),
-            round: value.round(),
             commands: value.into_commands().into_iter().map(Into::into).collect(),
         }
     }
@@ -246,7 +247,6 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
                 .try_into()?,
             NodeHeight(value.height),
             Epoch(value.epoch),
-            value.round,
             value.proposed_by.try_into()?,
             value
                 .commands

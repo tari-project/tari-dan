@@ -28,7 +28,6 @@ pub struct Block {
     justify: QuorumCertificate,
     height: NodeHeight,
     epoch: Epoch,
-    round: u64,
     proposed_by: ShardId,
 
     // Body
@@ -43,7 +42,6 @@ impl Block {
         justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
-        round: u64,
         proposed_by: ShardId,
         commands: BTreeSet<Command>,
     ) -> Self {
@@ -53,7 +51,6 @@ impl Block {
             justify,
             height,
             epoch,
-            round,
             proposed_by,
             // TODO
             merkle_root: FixedHash::zero(),
@@ -69,7 +66,6 @@ impl Block {
             QuorumCertificate::genesis(epoch),
             NodeHeight(0),
             epoch,
-            0,
             ShardId::zero(),
             Default::default(),
         )
@@ -87,11 +83,21 @@ impl Block {
             justify: QuorumCertificate::genesis(Epoch(0)),
             height: NodeHeight(0),
             epoch: Epoch(0),
-            round: 0,
             proposed_by: ShardId::zero(),
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
         }
+    }
+
+    pub fn dummy_block(parent: BlockId, proposed_by: ShardId, node_height: NodeHeight, epoch: Epoch) -> Self {
+        Self::new(
+            parent,
+            QuorumCertificate::genesis(epoch),
+            node_height,
+            epoch,
+            proposed_by,
+            Default::default(),
+        )
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
@@ -175,10 +181,6 @@ impl Block {
 
     pub fn epoch(&self) -> Epoch {
         self.epoch
-    }
-
-    pub fn round(&self) -> u64 {
-        self.round
     }
 
     pub fn proposed_by(&self) -> &ShardId {

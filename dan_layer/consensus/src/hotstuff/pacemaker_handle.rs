@@ -1,12 +1,13 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
+use tari_dan_common_types::NodeHeight;
 use tokio::sync::mpsc;
 
 use crate::hotstuff::HotStuffError;
 
 pub enum PacemakerEvent {
-    ResetLeaderTimeout,
+    ResetLeaderTimeout { last_seen_height: NodeHeight },
     Beat,
 }
 
@@ -36,9 +37,9 @@ impl PaceMakerHandle {
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
-    pub async fn reset_leader_timeout(&self) -> Result<(), HotStuffError> {
+    pub async fn reset_leader_timeout(&self, last_seen_height: NodeHeight) -> Result<(), HotStuffError> {
         self.sender
-            .send(PacemakerEvent::ResetLeaderTimeout)
+            .send(PacemakerEvent::ResetLeaderTimeout { last_seen_height })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }

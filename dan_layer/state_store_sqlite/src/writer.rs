@@ -83,7 +83,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             blocks::parent_block_id.eq(serialize_hex(block.parent())),
             blocks::height.eq(block.height().as_u64() as i64),
             blocks::epoch.eq(block.epoch().as_u64() as i64),
-            blocks::leader_round.eq(block.round() as i64),
             blocks::proposed_by.eq(serialize_hex(block.proposed_by())),
             blocks::commands.eq(serialize_json(block.commands())?),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
