@@ -164,7 +164,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                     })
                     .collect::<Result<_, _>>()?;
                 Result::<_, ValidatorNodeRpcClientError>::Ok(DanPeer {
-                    identity: CommsPublicKey::from_bytes(&p.identity)
+                    identity: ByteArray::from_bytes(&p.identity)
                         .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Invalid identity")))?,
                     addresses: addresses.into_iter().zip(claims).collect(),
                 })

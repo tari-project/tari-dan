@@ -19,6 +19,6 @@ impl ConsensusSpec for TariConsensusSpec {
     type EpochManager = EpochManagerHandle;
     type LeaderStrategy = RoundRobinLeaderStrategy;
     type StateManager = TariStateManager;
-    type StateStore = SqliteStateStore;
+    type StateStore = SqliteStateStore<Self::Addr>;
     type VoteSignatureService = TariSignatureService;
 }

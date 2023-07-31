@@ -10,7 +10,7 @@ use tari_transaction::Transaction;
 #[derive(Debug, Clone, Serialize)]
 pub enum DanMessage<TAddr> {
     // Consensus
-    HotStuffMessage(Box<HotstuffMessage>),
+    HotStuffMessage(Box<HotstuffMessage<TAddr>>),
     // Mempool
     NewTransaction(Box<Transaction>),
     // Network

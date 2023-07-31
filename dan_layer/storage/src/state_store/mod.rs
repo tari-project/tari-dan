@@ -7,7 +7,7 @@ use std::{
 };
 
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
@@ -40,9 +40,12 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage";
 
 pub trait StateStore {
-    type ReadTransaction<'a>: StateStoreReadTransaction
+    type Addr: NodeAddressable;
+    type ReadTransaction<'a>: StateStoreReadTransaction<Addr = Self::Addr>
     where Self: 'a;
-    type WriteTransaction<'a>: StateStoreWriteTransaction + Deref<Target = Self::ReadTransaction<'a>> + DerefMut
+    type WriteTransaction<'a>: StateStoreWriteTransaction<Addr = Self::Addr>
+        + Deref<Target = Self::ReadTransaction<'a>>
+        + DerefMut
     where Self: 'a;
 
     fn create_read_tx(&self) -> Result<Self::ReadTransaction<'_>, StorageError>;
@@ -74,6 +77,8 @@ pub trait StateStore {
 }
 
 pub trait StateStoreReadTransaction {
+    type Addr: NodeAddressable;
+
     fn last_voted_get(&mut self, epoch: Epoch) -> Result<LastVoted, StorageError>;
     fn last_executed_get(&mut self, epoch: Epoch) -> Result<LastExecuted, StorageError>;
     fn last_proposed_get(&mut self, epoch: Epoch) -> Result<LastProposed, StorageError>;
@@ -92,11 +97,11 @@ pub trait StateStoreReadTransaction {
         offset: u64,
         asc_desc_created_at: Option<Ordering>,
     ) -> Result<Vec<TransactionRecord>, StorageError>;
-    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError>;
-    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block, StorageError>;
+    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
+    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
-    fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block, StorageError>;
+    fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError>;
@@ -139,11 +144,13 @@ pub trait StateStoreReadTransaction {
 }
 
 pub trait StateStoreWriteTransaction {
+    type Addr: NodeAddressable;
+
     fn commit(self) -> Result<(), StorageError>;
     fn rollback(self) -> Result<(), StorageError>;
 
     // -------------------------------- Block -------------------------------- //
-    fn blocks_insert(&mut self, block: &Block) -> Result<(), StorageError>;
+    fn blocks_insert(&mut self, block: &Block<Self::Addr>) -> Result<(), StorageError>;
 
     // -------------------------------- QuorumCertificate -------------------------------- //
     fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError>;
@@ -212,6 +219,7 @@ pub trait StateStoreWriteTransaction {
     fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum Ordering {
     Ascending,
     Descending,

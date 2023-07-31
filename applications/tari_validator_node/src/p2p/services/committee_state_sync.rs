@@ -5,6 +5,7 @@ use std::{convert::TryInto, ops::RangeInclusive};
 
 use futures::StreamExt;
 use log::info;
+use tari_common_types::types::PublicKey;
 use tari_comms::{
     protocol::rpc::{RpcError, RpcStatus},
     types::CommsPublicKey,
@@ -29,7 +30,7 @@ const LOG_TARGET: &str = "tari::dan::committee_state_sync";
 pub struct CommitteeStateSync {
     epoch_manager: EpochManagerHandle,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-    shard_store: SqliteStateStore,
+    shard_store: SqliteStateStore<PublicKey>,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     node_public_key: CommsPublicKey,
 }
@@ -38,7 +39,7 @@ impl CommitteeStateSync {
     pub fn new(
         epoch_manager: EpochManagerHandle,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-        shard_store: SqliteStateStore,
+        shard_store: SqliteStateStore<PublicKey>,
         global_db: GlobalDb<SqliteGlobalDbAdapter>,
         node_public_key: CommsPublicKey,
     ) -> Self {

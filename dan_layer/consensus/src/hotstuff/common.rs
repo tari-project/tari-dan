@@ -4,15 +4,19 @@
 use std::ops::DerefMut;
 
 use log::*;
+use tari_dan_common_types::committee::Committee;
 use tari_dan_storage::{
     consensus_models::{HighQc, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
 };
 
-use crate::hotstuff::error::HotStuffError;
+use crate::{hotstuff::error::HotStuffError, messages::HotstuffMessage};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff";
+
+// To avoid clippy::type_complexity
+pub(super) type CommitteeAndMessage<TAddr> = (Committee<TAddr>, HotstuffMessage<TAddr>);
 
 pub fn update_high_qc<TTx>(tx: &mut TTx, qc: &QuorumCertificate) -> Result<(), HotStuffError>
 where

@@ -4,7 +4,7 @@
 use std::ops::DerefMut;
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, Epoch};
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::{
     consensus_models::{Block, Decision, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
     StateStore,
@@ -21,6 +21,7 @@ use tokio::{
 use super::on_receive_requested_transactions::OnReceiveRequestedTransactions;
 use crate::{
     hotstuff::{
+        common::CommitteeAndMessage,
         error::HotStuffError,
         event::HotstuffEvent,
         on_beat::OnBeat,
@@ -40,7 +41,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
 
     rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-    rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+    rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
 
     on_receive_proposal: OnReceiveProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
@@ -73,7 +74,7 @@ where
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         state_store: TConsensusSpec::StateStore,
         epoch_events: broadcast::Receiver<EpochManagerEvent>,
         epoch_manager: TConsensusSpec::EpochManager,
@@ -81,8 +82,8 @@ where
         signing_service: TConsensusSpec::VoteSignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::Sender<Transaction>,
         shutdown: ShutdownSignal,
@@ -298,7 +299,7 @@ where
     async fn on_new_hs_message(
         &mut self,
         from: TConsensusSpec::Addr,
-        msg: HotstuffMessage,
+        msg: HotstuffMessage<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(msg.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {

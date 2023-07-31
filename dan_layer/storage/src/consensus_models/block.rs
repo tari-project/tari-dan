@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_dan_common_types::{hashing, serde_with, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{hashing, serde_with, Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_transaction::TransactionId;
 
 use super::QuorumCertificate;
@@ -21,7 +21,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Block {
+pub struct Block<TAddr> {
     // Header
     id: BlockId,
     parent: BlockId,
@@ -29,7 +29,7 @@ pub struct Block {
     height: NodeHeight,
     epoch: Epoch,
     round: u64,
-    proposed_by: ShardId,
+    proposed_by: TAddr,
 
     // Body
     merkle_root: FixedHash,
@@ -37,14 +37,14 @@ pub struct Block {
     commands: BTreeSet<Command>,
 }
 
-impl Block {
+impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
     pub fn new(
         parent: BlockId,
         justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
         round: u64,
-        proposed_by: ShardId,
+        proposed_by: TAddr,
         commands: BTreeSet<Command>,
     ) -> Self {
         let mut block = Self {
@@ -70,13 +70,9 @@ impl Block {
             NodeHeight(0),
             epoch,
             0,
-            ShardId::zero(),
+            TAddr::zero(),
             Default::default(),
         )
-    }
-
-    pub fn is_genesis(&self) -> bool {
-        self.parent == BlockId::genesis()
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
@@ -88,7 +84,7 @@ impl Block {
             height: NodeHeight(0),
             epoch: Epoch(0),
             round: 0,
-            proposed_by: ShardId::zero(),
+            proposed_by: TAddr::zero(),
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
         }
@@ -104,6 +100,12 @@ impl Block {
             .chain(&self.merkle_root)
             .chain(&self.commands)
             .result()
+    }
+}
+
+impl<TAddr> Block<TAddr> {
+    pub fn is_genesis(&self) -> bool {
+        self.parent == BlockId::genesis()
     }
 
     pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
@@ -153,10 +155,7 @@ impl Block {
             block_id: self.id,
         }
     }
-}
 
-// impl getters for Block
-impl Block {
     pub fn id(&self) -> &BlockId {
         &self.id
     }
@@ -181,7 +180,7 @@ impl Block {
         self.round
     }
 
-    pub fn proposed_by(&self) -> &ShardId {
+    pub fn proposed_by(&self) -> &TAddr {
         &self.proposed_by
     }
 
@@ -198,28 +197,40 @@ impl Block {
     }
 }
 
-impl Block {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, id: &BlockId) -> Result<Self, StorageError> {
+impl<TAddr: NodeAddressable> Block<TAddr> {
+    pub fn get<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        id: &BlockId,
+    ) -> Result<Self, StorageError> {
         tx.blocks_get(id)
     }
 
-    pub fn get_tip<TTx: StateStoreReadTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
+    pub fn get_tip<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        tx: &mut TTx,
+        epoch: Epoch,
+    ) -> Result<Self, StorageError> {
         tx.blocks_get_tip(epoch)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<bool, StorageError> {
         tx.blocks_exists(self.id())
     }
 
-    pub fn insert<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr> + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
         tx.blocks_insert(self)
     }
 
     /// Inserts the block if it doesnt exist. Returns true if the block exists, otherwise false.
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
-        TTx::Target: StateStoreReadTransaction,
+        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
+        TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
     {
         let exists = self.exists(tx.deref_mut())?;
         if exists {
@@ -229,14 +240,14 @@ impl Block {
         Ok(false)
     }
 
-    pub fn find_involved_shards<TTx: StateStoreReadTransaction>(
+    pub fn find_involved_shards<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         &self,
         tx: &mut TTx,
     ) -> Result<HashSet<ShardId>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
     }
 
-    pub fn extends<TTx: StateStoreReadTransaction>(
+    pub fn extends<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         &self,
         tx: &mut TTx,
         ancestor: &BlockId,
@@ -247,15 +258,21 @@ impl Block {
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 
-    pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_parent<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Block<TAddr>, StorageError> {
         Block::get(tx, &self.parent)
     }
 
-    pub fn get_votes<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Vec<Vote>, StorageError> {
+    pub fn get_votes<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Vec<Vote>, StorageError> {
         Vote::get_for_block(tx, &self.id)
     }
 
-    pub fn get_child<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Self, StorageError> {
+    pub fn get_child<TTx: StateStoreReadTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<Self, StorageError> {
         tx.blocks_get_by_parent(self.id())
     }
 }

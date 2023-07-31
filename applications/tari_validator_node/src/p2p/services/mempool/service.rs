@@ -24,6 +24,7 @@ use std::{collections::HashSet, fmt::Display, iter, sync::Arc};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
+use tari_common_types::types::PublicKey;
 use tari_comms::NodeIdentity;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_common_types::{Epoch, ShardId};
@@ -68,7 +69,7 @@ pub struct MempoolService<TValidator, TExecutor, TSubstateResolver> {
     validator: TValidator,
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,
-    state_store: SqliteStateStore,
+    state_store: SqliteStateStore<PublicKey>,
 }
 
 impl<TValidator, TExecutor, TSubstateResolver> MempoolService<TValidator, TExecutor, TSubstateResolver>
@@ -87,7 +88,7 @@ where
         transaction_executor: TExecutor,
         substate_resolver: TSubstateResolver,
         validator: TValidator,
-        state_store: SqliteStateStore,
+        state_store: SqliteStateStore<PublicKey>,
     ) -> Self {
         Self {
             transactions: Default::default(),

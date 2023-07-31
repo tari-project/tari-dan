@@ -33,7 +33,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for NoopStateManager {
     fn commit_transaction(
         &self,
         _tx: &mut TStateStore::WriteTransaction<'_>,
-        _block: &Block,
+        _block: &Block<TStateStore::Addr>,
         _transaction: &ExecutedTransaction,
     ) -> Result<(), Self::Error> {
         self.0.store(true, std::sync::atomic::Ordering::Relaxed);

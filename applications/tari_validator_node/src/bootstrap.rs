@@ -31,13 +31,15 @@ use std::{
 use anyhow::anyhow;
 use futures::{future, FutureExt};
 use log::info;
+use serde::Serialize;
 use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_common_types::types::PublicKey;
+use tari_comms::{protocol::rpc::RpcServer, types::CommsPublicKey, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_app_utilities::{
     base_layer_scanner,
@@ -46,7 +48,7 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::{
     consensus_models::{Block, SubstateRecord},
@@ -295,7 +297,7 @@ pub struct Services {
     pub global_db: GlobalDb<SqliteGlobalDbAdapter>,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
     pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-    pub state_store: SqliteStateStore,
+    pub state_store: SqliteStateStore<PublicKey>,
 
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
 }
@@ -316,7 +318,7 @@ fn setup_p2p_rpc(
     config: &ApplicationConfig,
     comms: UnspawnedCommsNode,
     peer_provider: CommsPeerProvider,
-    shard_store_store: SqliteStateStore,
+    shard_store_store: SqliteStateStore<CommsPublicKey>,
     mempool: MempoolHandle,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
@@ -336,8 +338,9 @@ fn bootstrap_state<TTx>(tx: &mut TTx) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + DerefMut,
     TTx::Target: StateStoreReadTransaction,
+    TTx::Addr: NodeAddressable + Serialize,
 {
-    let genesis_block = Block::genesis(Epoch(0));
+    let genesis_block = Block::<TTx::Addr>::genesis(Epoch(0));
     let address = SubstateAddress::Resource(*PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {

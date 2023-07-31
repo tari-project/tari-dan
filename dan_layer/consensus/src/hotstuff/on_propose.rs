@@ -8,7 +8,7 @@ use std::{
 };
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -28,7 +28,7 @@ use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
 use crate::{
-    hotstuff::error::HotStuffError,
+    hotstuff::{common::CommitteeAndMessage, error::HotStuffError},
     messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
@@ -39,7 +39,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-    tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
+    tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
@@ -49,7 +49,7 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
+        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
     ) -> Self {
         Self {
             store,
@@ -90,7 +90,7 @@ where TConsensusSpec: ConsensusSpec
 
             let parent_block = leaf_block.get_block(&mut *tx)?;
 
-            next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator.shard_key)?;
+            next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator.address)?;
             next_block.insert(&mut tx)?;
             next_block.as_last_proposed().set(&mut tx)?;
 
@@ -135,7 +135,7 @@ where TConsensusSpec: ConsensusSpec
     async fn broadcast_proposal(
         &self,
         epoch: Epoch,
-        next_block: Block,
+        next_block: Block<TConsensusSpec::Addr>,
         non_local_buckets: HashSet<u32>,
         local_committee: Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
@@ -180,10 +180,10 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         epoch: Epoch,
-        parent_block: &Block,
+        parent_block: &Block<TConsensusSpec::Addr>,
         high_qc: QuorumCertificate,
-        proposed_by: ShardId,
-    ) -> Result<Block, HotStuffError> {
+        proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
+    ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
         let ready = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
