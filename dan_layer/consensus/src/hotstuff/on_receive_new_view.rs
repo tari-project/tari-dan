@@ -91,9 +91,11 @@ where TConsensusSpec: ConsensusSpec
 
             // Determine how many missing blocks we must fill.
             let local_committee = self.epoch_manager.get_local_committee(high_qc.epoch()).await?;
-            let our_node = self.epoch_manager.get_our_validator_node(high_qc.epoch()).await?;
-
-            let (our_add, our_shard_key) = (our_node.address, our_node.shard_key);
+            let our_node = self
+                .epoch_manager
+                .get_our_validator_node(high_qc.epoch())
+                .await?
+                .address;
 
             let mut leaf_block = self
                 .store
@@ -112,10 +114,10 @@ where TConsensusSpec: ConsensusSpec
                 todo!("This logic is wrong");
                 let mut leader = self.leader_strategy.get_leader_for_next_block(&local_committee,  leaf_block.height());
                 debug!(target: LOG_TARGET, "🔥 New View failed leader is {} at height:{}", leader, leaf_block.height() + NodeHeight(1)   );
-                while leader != &our_add {
+                while leader != &our_node {
                     info!(target: LOG_TARGET, "Creating dummy block for leader {}, height: {}", leader, leaf_block.height() + NodeHeight(1));
                     // TODO: replace with actual leader's propose
-                    leaf_block = Block::dummy_block(leaf_block.id().clone(), our_shard_key.clone(), leaf_block.height() + NodeHeight(1), high_qc.epoch());
+                    leaf_block = Block::dummy_block(leaf_block.id().clone(), our_node.clone(), leaf_block.height() + NodeHeight(1), high_qc.epoch());
                     leaf_block.save(tx)?;
                     leaf_block.as_leaf_block().set(tx)?;
                     leader = self.leader_strategy.get_leader_for_next_block(&local_committee, leaf_block.height());

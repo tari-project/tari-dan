@@ -85,7 +85,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         }
     }
 
-    pub fn dummy_block(parent: BlockId, proposed_by: ShardId, node_height: NodeHeight, epoch: Epoch) -> Self {
+    pub fn dummy_block(parent: BlockId, proposed_by: TAddr, node_height: NodeHeight, epoch: Epoch) -> Self {
         Self::new(
             parent,
             QuorumCertificate::genesis(epoch),

@@ -5,7 +5,12 @@ use std::ops::DerefMut;
 
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{committee::CommitteeShard, hashing::MergedValidatorNodeMerkleProof, optional::Optional};
+use tari_dan_common_types::{
+    committee::CommitteeShard,
+    hashing::MergedValidatorNodeMerkleProof,
+    optional::Optional,
+    NodeAddressable,
+};
 use tari_dan_storage::{
     consensus_models::{Block, HighQc, QuorumCertificate, QuorumDecision, Vote},
     StateStore,
@@ -158,6 +163,17 @@ where TConsensusSpec: ConsensusSpec
                 tx.rollback()?;
                 return Ok(());
             };
+
+            // Wait for our own vote to make sure we've processed all transactions and we also have an up to date
+            // database
+            if !votes
+                .iter()
+                .any(|x| x.signature.public_key.as_bytes() == vn.address.as_bytes())
+            {
+                warn!(target: LOG_TARGET, "🔥 Received enough votes but waiting for our own vote for block {}", message.block_id);
+                tx.rollback();
+                return Ok(());
+            }
 
             let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
             let (leaf_hashes, proofs) = votes
