@@ -24,7 +24,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
     fn commit_transaction(
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
-        block: &Block,
+        block: &Block<TStateStore::Addr>,
         transaction: &ExecutedTransaction,
     ) -> Result<(), Self::Error> {
         let Some(diff) = transaction.result().finalize.result.accept() else {

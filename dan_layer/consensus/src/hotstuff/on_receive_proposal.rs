@@ -60,7 +60,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     state_manager: TConsensusSpec::StateManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
     tx_events: broadcast::Sender<HotstuffEvent>,
     pacemaker: PaceMakerHandle,
 }
@@ -76,7 +76,7 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         pacemaker: PaceMakerHandle,
     ) -> Self {
@@ -94,7 +94,11 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub async fn handle(&self, from: TConsensusSpec::Addr, message: ProposalMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(
+        &self,
+        from: TConsensusSpec::Addr,
+        message: ProposalMessage<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
         let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
@@ -127,7 +131,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         from: TConsensusSpec::Addr,
         local_committee: Committee<TConsensusSpec::Addr>,
-        block: Block,
+        block: Block<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         // First save the block in one db transaction
         self.store.with_write_tx(|tx| {
@@ -148,7 +152,7 @@ where TConsensusSpec: ConsensusSpec
     async fn block_has_missing_transaction(
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        block: &Block,
+        block: &Block<TConsensusSpec::Addr>,
     ) -> Result<bool, HotStuffError> {
         let mut missing_tx_ids = Vec::new();
         let mut awaiting_execution = Vec::new();
@@ -207,7 +211,7 @@ where TConsensusSpec: ConsensusSpec
     async fn process_block(
         &self,
         local_committee: &Committee<<TConsensusSpec as ConsensusSpec>::Addr>,
-        block: &Block,
+        block: &Block<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
         let maybe_decision = self.store.with_write_tx(|tx| {
@@ -239,7 +243,11 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn handle_foreign_proposal(&self, from: TConsensusSpec::Addr, block: Block) -> Result<(), HotStuffError> {
+    async fn handle_foreign_proposal(
+        &self,
+        from: TConsensusSpec::Addr,
+        block: Block<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
         let vn = self.epoch_manager.get_validator_node(block.epoch(), &from).await?;
         let committee_shard = self
             .epoch_manager
@@ -258,7 +266,7 @@ where TConsensusSpec: ConsensusSpec
     fn on_receive_foreign_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block,
+        block: &Block<TConsensusSpec::Addr>,
         foreign_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
         // Save the QCs if it doesnt exist already, we'll reference the QC in subsequent blocks
@@ -309,7 +317,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee: &Committee<TConsensusSpec::Addr>,
         block_id: &BlockId,
         height: NodeHeight,
-        message: HotstuffMessage,
+        message: HotstuffMessage<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         let leader = self.leader_strategy.get_leader(local_committee, height);
         self.tx_leader
@@ -339,7 +347,7 @@ where TConsensusSpec: ConsensusSpec
     fn decide_what_to_vote(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block,
+        block: &Block<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<Option<QuorumDecision>, HotStuffError> {
         block.as_last_voted().set(tx)?;
@@ -532,7 +540,7 @@ where TConsensusSpec: ConsensusSpec
 
     async fn generate_vote_message(
         &self,
-        block: &Block,
+        block: &Block<TConsensusSpec::Addr>,
         decision: QuorumDecision,
     ) -> Result<VoteMessage, HotStuffError> {
         let merkle_proof = self
@@ -559,7 +567,7 @@ where TConsensusSpec: ConsensusSpec
     fn update_nodes(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block,
+        block: &Block<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
         update_high_qc(tx, block.justify())?;
@@ -617,7 +625,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         last_executed: &LastExecuted,
-        block: &Block,
+        block: &Block<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
         if last_executed.height < block.height() {
@@ -644,7 +652,7 @@ where TConsensusSpec: ConsensusSpec
     fn execute(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block,
+        block: &Block<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
         for cmd in block.commands() {
@@ -691,7 +699,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         from: &TConsensusSpec::Addr,
-        candidate_block: &Block,
+        candidate_block: &Block<TConsensusSpec::Addr>,
     ) -> Result<(), ProposalValidationError> {
         self.validate_proposed_block(from, candidate_block)?;
 
@@ -723,7 +731,7 @@ where TConsensusSpec: ConsensusSpec
     fn validate_proposed_block(
         &self,
         from: &TConsensusSpec::Addr,
-        candidate_block: &Block,
+        candidate_block: &Block<TConsensusSpec::Addr>,
     ) -> Result<(), ProposalValidationError> {
         if candidate_block.height() == NodeHeight::zero() || candidate_block.id().is_genesis() {
             return Err(ProposalValidationError::ProposingGenesisBlock {
@@ -753,7 +761,7 @@ where TConsensusSpec: ConsensusSpec
     fn should_vote(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
-        block: &Block,
+        block: &Block<TConsensusSpec::Addr>,
     ) -> Result<bool, HotStuffError> {
         let Some(last_voted) = LastVoted::get(tx, block.epoch()).optional()? else {
             // Never voted, then validated.block.height() > last_voted.height (0)
@@ -799,8 +807,8 @@ where TConsensusSpec: ConsensusSpec
 /// is true as long as either one of two rules holds.
 fn is_safe_block<TTx: StateStoreReadTransaction>(
     tx: &mut TTx,
-    block: &Block,
-    locked_block: &Block,
+    block: &Block<TTx::Addr>,
+    locked_block: &Block<TTx::Addr>,
 ) -> Result<bool, HotStuffError> {
     // Liveness
     if block.justify().block_height() <= locked_block.height() {

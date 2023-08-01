@@ -152,7 +152,10 @@ impl QuorumCertificate {
         tx.quorum_certificates_get(qc_id)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Block<TTx::Addr>, StorageError> {
         Block::get(tx, &self.block_id)
     }
 

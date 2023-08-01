@@ -40,7 +40,7 @@ impl Test {
         let num_committees = self.epoch_manager.get_num_committees(Epoch(0)).await.unwrap();
         let tx = build_transaction(decision, fee, num_shards, num_committees);
         self.network
-            .send_transaction(TestNetworkDestination::Address(*addr), tx)
+            .send_transaction(TestNetworkDestination::Address(addr.clone()), tx)
             .await;
     }
 
@@ -141,7 +141,7 @@ impl Test {
                     return;
                 }
                 if predicate(v) {
-                    complete.push(v.address);
+                    complete.push(v.address.clone());
                 } else if remaining_loops == 0 {
                     panic!("Timed out waiting for {}", description);
                 } else {
@@ -174,7 +174,7 @@ impl Test {
                             .with_read_tx(|tx| Block::get_tip(tx, epoch))
                             .unwrap()
                             .height();
-                        (v.address, height)
+                        (v.address.clone(), height)
                     });
                 let (first_addr, first) = heights.next().unwrap();
                 for (addr, height) in heights {
@@ -209,7 +209,7 @@ impl Test {
                     .iter()
                     .map(|cmd| cmd.decision())
                     .collect::<Vec<_>>();
-                (v.address, decisions)
+                (v.address.clone(), decisions)
             });
             for (addr, decisions) in decisions {
                 let all_match = decisions.iter().all(|d| *d == expected_decision);
@@ -273,7 +273,7 @@ impl TestBuilder {
 
     pub fn add_committee(&mut self, bucket: u32, addresses: Vec<&'static str>) -> &mut Self {
         self.committees
-            .insert(bucket, addresses.into_iter().map(TestAddress).collect());
+            .insert(bucket, addresses.into_iter().map(TestAddress::new).collect());
         self
     }
 
@@ -288,13 +288,13 @@ impl TestBuilder {
             .into_iter()
             .map(|(address, bucket, shard)| {
                 let leader_strategy = leader_strategy.clone();
-                let sql_address = self.sql_address.replace("{}", address.0);
+                let sql_address = self.sql_address.replace("{}", &address.0);
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
-                    .with_address(address)
+                    .with_address(address.clone())
                     .with_shard(shard)
                     .with_bucket(bucket)
-                    .with_epoch_manager(epoch_manager.clone_for(address, shard))
+                    .with_epoch_manager(epoch_manager.clone_for(address.clone(), shard))
                     .with_leader_strategy(leader_strategy)
                     .spawn();
                 (channels, (address, validator))

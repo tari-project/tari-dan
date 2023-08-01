@@ -22,7 +22,7 @@ impl LockedBlock {
         tx.locked_block_get(epoch)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block<TTx::Addr>, StorageError> {
         tx.blocks_get(&self.block_id)
     }
 

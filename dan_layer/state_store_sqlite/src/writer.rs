@@ -8,7 +8,7 @@ use std::{
 
 use diesel::{AsChangeset, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::*;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -45,12 +45,12 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::storage";
 
-pub struct SqliteStateStoreWriteTransaction<'a> {
+pub struct SqliteStateStoreWriteTransaction<'a, TAddr> {
     /// None indicates if the transaction has been explicitly committed/rolled back
-    transaction: Option<SqliteStateStoreReadTransaction<'a>>,
+    transaction: Option<SqliteStateStoreReadTransaction<'a, TAddr>>,
 }
 
-impl<'a> SqliteStateStoreWriteTransaction<'a> {
+impl<'a, TAddr> SqliteStateStoreWriteTransaction<'a, TAddr> {
     pub fn new(transaction: SqliteTransaction<'a>) -> Self {
         Self {
             transaction: Some(SqliteStateStoreReadTransaction::new(transaction)),
@@ -62,7 +62,9 @@ impl<'a> SqliteStateStoreWriteTransaction<'a> {
     }
 }
 
-impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
+impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_, TAddr> {
+    type Addr = TAddr;
+
     fn commit(mut self) -> Result<(), StorageError> {
         // Take so that we mark this transaction as complete in the drop impl
         self.transaction.take().unwrap().commit()?;
@@ -75,7 +77,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn blocks_insert(&mut self, block: &Block) -> Result<(), StorageError> {
+    fn blocks_insert(&mut self, block: &Block<TAddr>) -> Result<(), StorageError> {
         use crate::schema::blocks;
 
         let insert = (
@@ -83,7 +85,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             blocks::parent_block_id.eq(serialize_hex(block.parent())),
             blocks::height.eq(block.height().as_u64() as i64),
             blocks::epoch.eq(block.epoch().as_u64() as i64),
-            blocks::proposed_by.eq(serialize_hex(block.proposed_by())),
+            blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
             blocks::commands.eq(serialize_json(block.commands())?),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
         );
@@ -758,21 +760,21 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
     }
 }
 
-impl<'a> Deref for SqliteStateStoreWriteTransaction<'a> {
-    type Target = SqliteStateStoreReadTransaction<'a>;
+impl<'a, TAddr> Deref for SqliteStateStoreWriteTransaction<'a, TAddr> {
+    type Target = SqliteStateStoreReadTransaction<'a, TAddr>;
 
     fn deref(&self) -> &Self::Target {
         self.transaction.as_ref().unwrap()
     }
 }
 
-impl<'a> DerefMut for SqliteStateStoreWriteTransaction<'a> {
+impl<'a, TAddr> DerefMut for SqliteStateStoreWriteTransaction<'a, TAddr> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.transaction.as_mut().unwrap()
     }
 }
 
-impl Drop for SqliteStateStoreWriteTransaction<'_> {
+impl<TAddr> Drop for SqliteStateStoreWriteTransaction<'_, TAddr> {
     fn drop(&mut self) {
         if self.transaction.is_some() {
             warn!(

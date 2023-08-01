@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::info;
+use tari_common_types::types::PublicKey;
 use tari_comms::protocol::rpc::RpcStatus;
 use tari_dan_app_utilities::{
     template_manager::implementation::TemplateManager,
@@ -68,7 +69,8 @@ pub enum DryRunTransactionProcessorError {
 
 #[derive(Clone, Debug)]
 pub struct DryRunTransactionProcessor {
-    substate_resolver: TariSubstateResolver<SqliteStateStore, EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+    substate_resolver:
+        TariSubstateResolver<SqliteStateStore<PublicKey>, EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
     epoch_manager: EpochManagerHandle,
     payload_processor: TariDanTransactionProcessor<TemplateManager>,
 }
@@ -78,7 +80,7 @@ impl DryRunTransactionProcessor {
         epoch_manager: EpochManagerHandle,
         payload_processor: TariDanTransactionProcessor<TemplateManager>,
         substate_resolver: TariSubstateResolver<
-            SqliteStateStore,
+            SqliteStateStore<PublicKey>,
             EpochManagerHandle,
             TariCommsValidatorNodeClientFactory,
         >,

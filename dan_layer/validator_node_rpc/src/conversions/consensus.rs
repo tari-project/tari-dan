@@ -26,8 +26,8 @@ use std::{
 };
 
 use anyhow::anyhow;
+use serde::Serialize;
 use tari_bor::{decode_exact, encode};
-use tari_common_types::types::PublicKey;
 use tari_consensus::messages::{
     HotstuffMessage,
     NewViewMessage,
@@ -37,7 +37,7 @@ use tari_consensus::messages::{
     VoteMessage,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{Epoch, NodeHeight, ValidatorMetadata};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ValidatorMetadata};
 use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
@@ -52,8 +52,8 @@ use tari_transaction::TransactionId;
 use crate::proto;
 // -------------------------------- HotstuffMessage -------------------------------- //
 
-impl From<HotstuffMessage> for proto::consensus::HotStuffMessage {
-    fn from(source: HotstuffMessage) -> Self {
+impl<TAddr: NodeAddressable> From<HotstuffMessage<TAddr>> for proto::consensus::HotStuffMessage {
+    fn from(source: HotstuffMessage<TAddr>) -> Self {
         let message = match source {
             HotstuffMessage::NewView(msg) => proto::consensus::hot_stuff_message::Message::NewView(msg.into()),
             HotstuffMessage::Proposal(msg) => proto::consensus::hot_stuff_message::Message::Proposal(msg.into()),
@@ -69,7 +69,7 @@ impl From<HotstuffMessage> for proto::consensus::HotStuffMessage {
     }
 }
 
-impl TryFrom<proto::consensus::HotStuffMessage> for HotstuffMessage {
+impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::HotStuffMessage> for HotstuffMessage<TAddr> {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::HotStuffMessage) -> Result<Self, Self::Error> {
@@ -112,15 +112,15 @@ impl TryFrom<proto::consensus::NewViewMessage> for NewViewMessage {
 
 //---------------------------------- ProposalMessage --------------------------------------------//
 
-impl From<ProposalMessage> for proto::consensus::ProposalMessage {
-    fn from(value: ProposalMessage) -> Self {
+impl<TAddr: NodeAddressable> From<ProposalMessage<TAddr>> for proto::consensus::ProposalMessage {
+    fn from(value: ProposalMessage<TAddr>) -> Self {
         Self {
             block: Some(value.block.into()),
         }
     }
 }
 
-impl TryFrom<proto::consensus::ProposalMessage> for ProposalMessage {
+impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::ProposalMessage> for ProposalMessage<TAddr> {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::ProposalMessage) -> Result<Self, Self::Error> {
@@ -221,8 +221,8 @@ impl TryFrom<proto::consensus::RequestedTransactionMessage> for RequestedTransac
 }
 //---------------------------------- Block --------------------------------------------//
 
-impl From<tari_dan_storage::consensus_models::Block> for proto::consensus::Block {
-    fn from(value: tari_dan_storage::consensus_models::Block) -> Self {
+impl<TAddr: NodeAddressable> From<tari_dan_storage::consensus_models::Block<TAddr>> for proto::consensus::Block {
+    fn from(value: tari_dan_storage::consensus_models::Block<TAddr>) -> Self {
         Self {
             height: value.height().as_u64(),
             epoch: value.epoch().as_u64(),
@@ -235,7 +235,9 @@ impl From<tari_dan_storage::consensus_models::Block> for proto::consensus::Block
     }
 }
 
-impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Block {
+impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::Block>
+    for tari_dan_storage::consensus_models::Block<TAddr>
+{
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::Block) -> Result<Self, Self::Error> {
@@ -247,7 +249,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
                 .try_into()?,
             NodeHeight(value.height),
             Epoch(value.epoch),
-            value.proposed_by.try_into()?,
+            TAddr::from_bytes(&value.proposed_by).ok_or_else(|| anyhow!("Block conversion: Invalid proposed_by"))?,
             value
                 .commands
                 .into_iter()
@@ -395,7 +397,7 @@ impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
 
     fn try_from(value: proto::consensus::ValidatorMetadata) -> Result<Self, Self::Error> {
         Ok(ValidatorMetadata {
-            public_key: PublicKey::from_bytes(&value.public_key)?,
+            public_key: ByteArray::from_bytes(&value.public_key)?,
             vn_shard_key: value.vn_shard_key.try_into()?,
             signature: value
                 .signature

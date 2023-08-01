@@ -22,15 +22,18 @@ use crate::support::{address::TestAddress, transaction::build_transaction_from, 
 pub fn spawn_network(channels: Vec<ValidatorChannels>, default_decision: Decision, default_fee: u64) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
-        .map(|c| (c.address, (c.bucket, c.tx_new_transactions.clone())))
+        .map(|c| (c.address.clone(), (c.bucket, c.tx_new_transactions.clone())))
         .collect();
-    let tx_hs_message = channels.iter().map(|c| (c.address, c.tx_hs_message.clone())).collect();
+    let tx_hs_message = channels
+        .iter()
+        .map(|c| (c.address.clone(), c.tx_hs_message.clone()))
+        .collect();
     let (rx_broadcast, rx_leader, rx_mempool) = channels
         .into_iter()
         .map(|c| {
             (
-                (c.address, c.rx_broadcast),
-                (c.address, c.rx_leader),
+                (c.address.clone(), c.rx_broadcast),
+                (c.address.clone(), c.rx_leader),
                 (c.address, c.rx_mempool),
             )
         })
@@ -79,7 +82,7 @@ pub struct TestNetwork {
     tx_new_transaction: mpsc::Sender<(TestNetworkDestination, ExecutedTransaction)>,
     network_status: watch::Sender<NetworkStatus>,
     num_sent_messages: Arc<AtomicUsize>,
-    _on_message: watch::Receiver<Option<HotstuffMessage>>,
+    _on_message: watch::Receiver<Option<HotstuffMessage<TestAddress>>>,
 }
 
 impl TestNetwork {
@@ -88,7 +91,7 @@ impl TestNetwork {
     }
 
     #[allow(dead_code)]
-    pub async fn on_message(&mut self) -> Option<HotstuffMessage> {
+    pub async fn on_message(&mut self) -> Option<HotstuffMessage<TestAddress>> {
         self._on_message.changed().await.unwrap();
         self._on_message.borrow().clone()
     }
@@ -107,7 +110,7 @@ impl TestNetwork {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub enum TestNetworkDestination {
     All,
     Address(TestAddress),
@@ -115,11 +118,11 @@ pub enum TestNetworkDestination {
 }
 
 impl TestNetworkDestination {
-    pub fn is_for(self, addr: &TestAddress, bucket: u32) -> bool {
+    pub fn is_for(&self, addr: &TestAddress, bucket: u32) -> bool {
         match self {
             TestNetworkDestination::All => true,
-            TestNetworkDestination::Address(a) => a == *addr,
-            TestNetworkDestination::Bucket(b) => b == bucket,
+            TestNetworkDestination::Address(a) => a == addr,
+            TestNetworkDestination::Bucket(b) => *b == bucket,
         }
     }
 }
@@ -127,13 +130,14 @@ impl TestNetworkDestination {
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
     tx_new_transactions: HashMap<TestAddress, (u32, mpsc::Sender<ExecutedTransaction>)>,
-    tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
+    tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage<TestAddress>)>>,
     #[allow(clippy::type_complexity)]
-    rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>>>,
-    rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage)>>>,
+    rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>>>,
+    #[allow(clippy::type_complexity)]
+    rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage<TestAddress>)>>>,
     rx_mempool: Option<HashMap<TestAddress, mpsc::Receiver<Transaction>>>,
     network_status: watch::Receiver<NetworkStatus>,
-    on_message: watch::Sender<Option<HotstuffMessage>>,
+    on_message: watch::Sender<Option<HotstuffMessage<TestAddress>>>,
     num_sent_messages: Arc<AtomicUsize>,
     default_decision: Decision,
     default_fee: u64,
@@ -174,16 +178,16 @@ impl TestNetworkWorker {
         loop {
             let mut rx_broadcast = rx_broadcast
                 .iter_mut()
-                .map(|(from, rx)| rx.recv().map(|r| (*from, r.unwrap())))
+                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r.unwrap())))
                 .collect::<FuturesUnordered<_>>();
             let mut rx_leader = rx_leader
                 .iter_mut()
-                .map(|(from, rx)| rx.recv().map(|r| (*from, r.unwrap())))
+                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r.unwrap())))
                 .collect::<FuturesUnordered<_>>();
 
             let mut rx_mempool = rx_mempool
                 .iter_mut()
-                .map(|(from, rx)| rx.recv().map(|r| (*from, r.unwrap())))
+                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r.unwrap())))
                 .collect::<FuturesUnordered<_>>();
 
             tokio::select! {
@@ -207,21 +211,26 @@ impl TestNetworkWorker {
         }
     }
 
-    pub async fn handle_broadcast(&mut self, from: TestAddress, to: Committee<TestAddress>, msg: HotstuffMessage) {
+    pub async fn handle_broadcast(
+        &mut self,
+        from: TestAddress,
+        to: Committee<TestAddress>,
+        msg: HotstuffMessage<TestAddress>,
+    ) {
         self.num_sent_messages
             .fetch_add(to.len(), std::sync::atomic::Ordering::Relaxed);
         for vn in to {
             self.tx_hs_message
                 .get(&vn)
                 .unwrap()
-                .send((from, msg.clone()))
+                .send((from.clone(), msg.clone()))
                 .await
                 .unwrap();
         }
         self.on_message.send(Some(msg.clone())).unwrap();
     }
 
-    pub async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage) {
+    pub async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage<TestAddress>) {
         self.on_message.send(Some(msg.clone())).unwrap();
         self.num_sent_messages
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);

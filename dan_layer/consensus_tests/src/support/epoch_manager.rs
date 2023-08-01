@@ -54,10 +54,11 @@ impl TestEpochManager {
         let num_committees = committees.len() as u32;
         for (bucket, committee) in committees {
             for address in &committee.members {
-                state
-                    .validator_shards
-                    .insert(*address, (bucket, random_shard_in_bucket(bucket, num_committees)));
-                state.address_bucket.insert(*address, bucket);
+                state.validator_shards.insert(
+                    address.clone(),
+                    (bucket, random_shard_in_bucket(bucket, num_committees)),
+                );
+                state.address_bucket.insert(address.clone(), bucket);
             }
 
             state.committees.insert(bucket, committee);
@@ -69,7 +70,7 @@ impl TestEpochManager {
             .await
             .validator_shards
             .iter()
-            .map(|(a, (bucket, shard))| (*a, *bucket, *shard))
+            .map(|(a, (bucket, shard))| (a.clone(), *bucket, *shard))
             .collect()
     }
 
@@ -100,7 +101,7 @@ impl EpochManagerReader for TestEpochManager {
         let (bucket, shard_key) = self.state_lock().await.validator_shards[addr];
 
         Ok(ValidatorNode {
-            address: *addr,
+            address: addr.clone(),
             shard_key,
             epoch,
             committee_bucket: Some(bucket),
@@ -182,7 +183,7 @@ impl EpochManagerReader for TestEpochManager {
                 .iter()
                 .filter(|(_, (_, s))| range.contains(s))
                 .map(|(a, _)| a)
-                .copied()
+                .cloned()
                 .collect(),
         ))
     }
