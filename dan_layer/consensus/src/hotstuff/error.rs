@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{BlockId, TransactionPoolError},
     StorageError,
@@ -47,6 +47,11 @@ pub enum HotStuffError {
     ReceivedVoteForUnknownBlock { block_id: BlockId, sent_by: String },
     #[error("Pacemaker channel dropped: {details}")]
     PacemakerChannelDropped { details: String },
+    #[error("Bad new view message: expected height {expected_height}, received new height {received_new_height}")]
+    BadNewViewMessage {
+        expected_height: NodeHeight,
+        received_new_height: NodeHeight,
+    },
 }
 
 impl From<EpochManagerError> for HotStuffError {

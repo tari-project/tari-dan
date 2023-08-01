@@ -23,7 +23,7 @@ pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
-    newview_message_counts: HashMap<BlockId, HashSet<TConsensusSpec::Addr>>,
+    newview_message_counts: HashMap<BlockId, HashMap<NodeHeight, HashSet<TConsensusSpec::Addr>>>,
     on_beat: PaceMakerHandle,
 }
 
@@ -72,7 +72,12 @@ where TConsensusSpec: ConsensusSpec
         self.store.with_write_tx(|tx| update_high_qc(tx, &high_qc))?;
 
         // Take note of unique NEWVIEWs so that we can count them
-        let entry = self.newview_message_counts.entry(*high_qc.block_id()).or_default();
+        let entry = self
+            .newview_message_counts
+            .entry(*high_qc.block_id())
+            .or_default()
+            .entry(new_height)
+            .or_default();
         entry.insert(from);
         let threshold = self
             .epoch_manager
@@ -87,7 +92,7 @@ where TConsensusSpec: ConsensusSpec
         );
         // look at equal to, so that we only propose once
         if entry.len() == threshold {
-            debug!(target: LOG_TARGET, "🔥 NEWVIEW for block {} has reached quorum", high_qc.block_id());
+            debug!(target: LOG_TARGET, "🔥 NEWVIEW for block {} new height {} has reached quorum", high_qc.block_id(), new_height);
 
             // Determine how many missing blocks we must fill.
             let local_committee = self.epoch_manager.get_local_committee(high_qc.epoch()).await?;
@@ -100,21 +105,21 @@ where TConsensusSpec: ConsensusSpec
             let mut leaf_block = self
                 .store
                 .with_read_tx(|tx| LeafBlock::get(tx, high_qc.epoch())?.get_block(tx))?;
+            // TODO: check if this is an old new view message
+            //                 if leaf_block.height() > new_height {
+            //                     warn!(target: LOG_TARGET, "🔥 New View failed, we have already moved on from this new
+            // view. potentially a bad new view? leaf block:{} new height: {}", leaf_block.height(), new_height);
+            //                     return
+            //                 }
             self.store.with_write_tx(|tx| {
-
-
-
-                // let missing_blocks = local_committee
-                //     .calculate_steps_between(leaf_block.proposed_by(), &our_node)
-                //     .ok_or_else(|| HotStuffError::MismatchBetweenCommittees {
-                //         epoch: high_qc.epoch(),
-                //         context: "Could not calculate steps between committees".to_string(),
-                //     })?;
-
-                todo!("This logic is wrong");
                 let mut leader = self.leader_strategy.get_leader_for_next_block(&local_committee,  leaf_block.height());
                 debug!(target: LOG_TARGET, "🔥 New View failed leader is {} at height:{}", leader, leaf_block.height() + NodeHeight(1)   );
                 while leader != &our_node {
+                    if leaf_block.height() > new_height {
+                        warn!(target: LOG_TARGET, "🔥 New View failed, leaf block height {} is greater than new height {}", leaf_block.height(), new_height);
+                        return Err(HotStuffError::BadNewViewMessage{ expected_height: leaf_block.height(), received_new_height: new_height });
+                    }
+
                     info!(target: LOG_TARGET, "Creating dummy block for leader {}, height: {}", leader, leaf_block.height() + NodeHeight(1));
                     // TODO: replace with actual leader's propose
                     leaf_block = Block::dummy_block(leaf_block.id().clone(), our_node.clone(), leaf_block.height() + NodeHeight(1), high_qc.epoch());
