@@ -80,9 +80,7 @@ impl PaceMaker {
                        PacemakerEvent::ResetLeaderTimeout { last_seen_height } => {
                             error!(target: LOG_TARGET, "XX Resetting leader timeout. Last seen height: {}", last_seen_height);
                             self.current_height = last_seen_height + NodeHeight(1);
-                           sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
-                            // set a timer for when we must send an empty block...
-                            empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
+
 
                             // if the last time we reset was less than half delta, then we reduce delta
                             if last_reset.elapsed() < self.current_delta / 2 {
@@ -91,6 +89,9 @@ impl PaceMaker {
                                     self.current_delta = MIN_DELTA;
                                 }
                             }
+                            sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
+                            // set a timer for when we must send an empty block...
+                            empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
 
                             last_reset = Instant::now();
                        },
@@ -120,6 +121,8 @@ impl PaceMaker {
                     }
                     // TODO: perhaps we should track the height
                     sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
+                    empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
+                    last_reset = Instant::now();
                 },
                 // _ = self.on_leader_timeout.wait() => {
                 //     if let Err(e) = self.on_leader_timeout().await {
