@@ -60,6 +60,28 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         block
     }
 
+    pub fn load(
+        id: BlockId,
+        parent: BlockId,
+        justify: QuorumCertificate,
+        height: NodeHeight,
+        epoch: Epoch,
+        proposed_by: TAddr,
+        commands: BTreeSet<Command>,
+    ) -> Self {
+        Self {
+            id,
+            parent,
+            justify,
+            height,
+            epoch,
+            proposed_by,
+            // TODO
+            merkle_root: FixedHash::zero(),
+            commands,
+        }
+    }
+
     pub fn genesis() -> Self {
         Self::new(
             BlockId::genesis(),

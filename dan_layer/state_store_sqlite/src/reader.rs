@@ -14,6 +14,7 @@ use diesel::{
     RunQueryDsl,
     SqliteConnection,
 };
+use log::warn;
 use serde::Serialize;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
@@ -342,19 +343,21 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
                   SELECT block_id, parent_block_id FROM blocks where block_id = ?
                 UNION ALL
                   SELECT block_id, parent_block_id
-                    FROM blocks JOIN tree ON block_id = tree.parent AND block_id != ?
+                    FROM blocks JOIN tree ON block_id = tree.parent AND tree.bid != tree.parent -- stop recursing at zero block (or any self referencing block)
             )
             SELECT count(1) as "count" FROM tree WHERE bid = ? LIMIT 1
         "#,
         )
         .bind::<Text, _>(serialize_hex(descendant))
-        .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
+        // .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
         .bind::<Text, _>(serialize_hex(ancestor))
         .get_result::<Count>(self.connection())
         .map_err(|e| SqliteStorageError::DieselError {
             operation: "blocks_is_ancestor",
             source: e,
         })?;
+
+        warn!(target: "tari::dan_layer::storage::state_store_sqlite::reader", "blocks_is_ancestor: is_ancestor: {:?}", is_ancestor.count);
 
         Ok(is_ancestor.count > 0)
     }

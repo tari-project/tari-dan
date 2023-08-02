@@ -30,7 +30,8 @@ impl Block {
         self,
         qc: sql_models::QuorumCertificate,
     ) -> Result<consensus_models::Block<TAddr>, StorageError> {
-        Ok(consensus_models::Block::new(
+        Ok(consensus_models::Block::load(
+            deserialize_hex_try_from(&self.block_id)?,
             deserialize_hex_try_from(&self.parent_block_id)?,
             qc.try_into()?,
             NodeHeight(self.height as u64),

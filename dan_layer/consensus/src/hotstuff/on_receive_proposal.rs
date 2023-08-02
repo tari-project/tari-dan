@@ -732,7 +732,11 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        if candidate_block.height().saturating_sub(justify_block.height()).0 > local_committee.max_failures() as u64 {
+        // if candidate_block.height().saturating_sub(justify_block.height()).0 > local_committee.max_failures() as u64
+        // { TODO: We should maybe relax this constraint during GST, before the first block, many leaders might
+        // fail....
+        // Note: we are adding at least one more block from b_leaf, so we need to add 1 to the max_failures
+        if candidate_block.height().saturating_sub(justify_block.height()).0 > local_committee.len() as u64 + 1 {
             return Err(ProposalValidationError::CandidateBlockHigherThanMaxFailures {
                 proposed_by: from.to_string(),
                 justify_block_height: justify_block.height(),
