@@ -77,11 +77,10 @@ impl<'a, TAddr> SqliteStateStoreReadTransaction<'a, TAddr> {
 impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_, TAddr> {
     type Addr = TAddr;
 
-    fn last_voted_get(&mut self, epoch: Epoch) -> Result<LastVoted, StorageError> {
+    fn last_voted_get(&mut self) -> Result<LastVoted, StorageError> {
         use crate::schema::last_voted;
 
         let last_voted = last_voted::table
-            .filter(last_voted::epoch.eq(epoch.as_u64() as i64))
             .order_by(last_voted::id.desc())
             .first::<sql_models::LastVoted>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -92,11 +91,10 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
         last_voted.try_into()
     }
 
-    fn last_executed_get(&mut self, epoch: Epoch) -> Result<LastExecuted, StorageError> {
+    fn last_executed_get(&mut self) -> Result<LastExecuted, StorageError> {
         use crate::schema::last_executed;
 
         let last_executed = last_executed::table
-            .filter(last_executed::epoch.eq(epoch.as_u64() as i64))
             .order_by(last_executed::id.desc())
             .first::<sql_models::LastExecuted>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -107,11 +105,10 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
         last_executed.try_into()
     }
 
-    fn last_proposed_get(&mut self, epoch: Epoch) -> Result<LastProposed, StorageError> {
+    fn last_proposed_get(&mut self) -> Result<LastProposed, StorageError> {
         use crate::schema::last_proposed;
 
         let last_proposed = last_proposed::table
-            .filter(last_proposed::epoch.eq(epoch.as_u64() as i64))
             .order_by(last_proposed::id.desc())
             .first::<sql_models::LastProposed>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -122,11 +119,10 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
         last_proposed.try_into()
     }
 
-    fn locked_block_get(&mut self, epoch: Epoch) -> Result<LockedBlock, StorageError> {
+    fn locked_block_get(&mut self) -> Result<LockedBlock, StorageError> {
         use crate::schema::locked_block;
 
         let locked_block = locked_block::table
-            .filter(locked_block::epoch.eq(epoch.as_u64() as i64))
             .order_by(locked_block::id.desc())
             .first::<sql_models::LockedBlock>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -137,11 +133,10 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
         locked_block.try_into()
     }
 
-    fn leaf_block_get(&mut self, epoch: Epoch) -> Result<LeafBlock, StorageError> {
+    fn leaf_block_get(&mut self) -> Result<LeafBlock, StorageError> {
         use crate::schema::leaf_blocks;
 
         let leaf_block = leaf_blocks::table
-            .filter(leaf_blocks::epoch.eq(epoch.as_u64() as i64))
             .order_by(leaf_blocks::id.desc())
             .first::<sql_models::LeafBlock>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -152,11 +147,10 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
         leaf_block.try_into()
     }
 
-    fn high_qc_get(&mut self, epoch: Epoch) -> Result<HighQc, StorageError> {
+    fn high_qc_get(&mut self) -> Result<HighQc, StorageError> {
         use crate::schema::high_qcs;
 
         let high_qc = high_qcs::table
-            .filter(high_qcs::epoch.eq(epoch.as_u64() as i64))
             .order_by(high_qcs::id.desc())
             .first::<sql_models::HighQc>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {

@@ -375,8 +375,9 @@ impl BaseLayerScanner {
         let epoch = self.epoch_manager.current_epoch().await?;
         self.state_store
             .with_write_tx(|tx| {
-                let genesis = Block::<PublicKey>::genesis(epoch);
+                let genesis = Block::<PublicKey>::genesis();
 
+                // TODO: This should be proposed in a block...
                 SubstateRecord {
                     address,
                     version: 0,

@@ -23,7 +23,7 @@ where
     TTx: StateStoreWriteTransaction + DerefMut,
     TTx::Target: StateStoreReadTransaction,
 {
-    let high_qc = HighQc::get(tx.deref_mut(), qc.epoch())?;
+    let high_qc = HighQc::get(tx.deref_mut())?;
     let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
     // high_qc.node
     let high_qc_block = high_qc.get_block(tx.deref_mut())?;

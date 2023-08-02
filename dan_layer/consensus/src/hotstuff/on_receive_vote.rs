@@ -136,7 +136,7 @@ where TConsensusSpec: ConsensusSpec
         }
         {
             let mut tx = self.store.create_write_tx()?;
-            let high_qc = HighQc::get(tx.deref_mut(), block.epoch())?;
+            let high_qc = HighQc::get(tx.deref_mut())?;
             if high_qc.block_id == *block.id() {
                 debug!(
                     target: LOG_TARGET,

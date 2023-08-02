@@ -11,7 +11,6 @@ use crate::{error::SqliteStorageError, serialization::deserialize_hex};
 #[derive(Debug, Clone, Queryable)]
 pub struct LeafBlock {
     pub id: i32,
-    pub epoch: i64,
     pub block_id: String,
     pub block_height: i64,
     pub created_at: PrimitiveDateTime,
@@ -22,7 +21,6 @@ impl TryFrom<LeafBlock> for consensus_models::LeafBlock {
 
     fn try_from(value: LeafBlock) -> Result<Self, Self::Error> {
         Ok(Self {
-            epoch: Epoch(value.epoch as u64),
             block_id: BlockId::try_from(deserialize_hex(&value.block_id)?).map_err(|e| {
                 SqliteStorageError::MalformedDbData {
                     operation: "TryFrom<LeafBlock> block_id",

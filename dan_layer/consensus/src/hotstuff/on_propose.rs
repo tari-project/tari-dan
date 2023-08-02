@@ -65,7 +65,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee: Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
     ) -> Result<(), HotStuffError> {
-        let last_proposed = self.store.with_read_tx(|tx| LastProposed::get(tx, epoch).optional())?;
+        let last_proposed = self.store.with_read_tx(|tx| LastProposed::get(tx).optional())?;
         let last_proposed_height = last_proposed.map(|lp| lp.height).unwrap_or(NodeHeight(0));
         if last_proposed_height >= leaf_block.height + NodeHeight(1) {
             info!(
@@ -85,7 +85,7 @@ where TConsensusSpec: ConsensusSpec
         let next_block;
         {
             let mut tx = self.store.create_write_tx()?;
-            let high_qc = HighQc::get(&mut *tx, epoch)?;
+            let high_qc = HighQc::get(&mut *tx)?;
             let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
 
             let parent_block = leaf_block.get_block(&mut *tx)?;

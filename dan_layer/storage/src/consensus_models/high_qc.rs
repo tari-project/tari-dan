@@ -31,14 +31,13 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighQc {
-    pub epoch: Epoch,
     pub block_id: BlockId,
     pub qc_id: QcId,
 }
 
 impl HighQc {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
-        tx.high_qc_get(epoch)
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx) -> Result<Self, StorageError> {
+        tx.high_qc_get()
     }
 
     pub fn get_quorum_certificate<TTx: StateStoreReadTransaction + ?Sized>(

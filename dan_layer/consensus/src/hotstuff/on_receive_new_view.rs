@@ -102,9 +102,7 @@ where TConsensusSpec: ConsensusSpec
                 .await?
                 .address;
 
-            let mut leaf_block = self
-                .store
-                .with_read_tx(|tx| LeafBlock::get(tx, high_qc.epoch())?.get_block(tx))?;
+            let mut leaf_block = self.store.with_read_tx(|tx| LeafBlock::get(tx)?.get_block(tx))?;
             // TODO: check if this is an old new view message
             //                 if leaf_block.height() > new_height {
             //                     warn!(target: LOG_TARGET, "🔥 New View failed, we have already moved on from this new
@@ -122,7 +120,7 @@ where TConsensusSpec: ConsensusSpec
 
                     info!(target: LOG_TARGET, "Creating dummy block for leader {}, height: {}", leader, leaf_block.height() + NodeHeight(1));
                     // TODO: replace with actual leader's propose
-                    leaf_block = Block::dummy_block(leaf_block.id().clone(), our_node.clone(), leaf_block.height() + NodeHeight(1), high_qc.epoch());
+                    leaf_block = Block::dummy_block(leaf_block.id().clone(), leader.clone(), leaf_block.height() + NodeHeight(1), high_qc.epoch());
                     leaf_block.save(tx)?;
                     leaf_block.as_leaf_block().set(tx)?;
                     leader = self.leader_strategy.get_leader_for_next_block(&local_committee, leaf_block.height());

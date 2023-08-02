@@ -86,4 +86,24 @@ pub enum ProposalValidationError {
         block_id: BlockId,
         details: String,
     },
+    #[error("Candidate block {candidate_block_height} is not higher than justify block {justify_block_height}")]
+    CandidateBlockNotHigherThanJustifyBlock {
+        justify_block_height: NodeHeight,
+        candidate_block_height: NodeHeight,
+    },
+    #[error(
+        "Candidate block {candidate_block_height} is higher than max failures {max_failures}. Proposed by \
+         {proposed_by}, justify block height {justify_block_height}"
+    )]
+    CandidateBlockHigherThanMaxFailures {
+        proposed_by: String,
+        justify_block_height: NodeHeight,
+        candidate_block_height: NodeHeight,
+        max_failures: usize,
+    },
+    #[error("Candidate block {candidate_block_height} does not extend justify block {justify_block_height}")]
+    CandidateBlockDoesNotExtendJustify {
+        justify_block_height: NodeHeight,
+        candidate_block_height: NodeHeight,
+    },
 }

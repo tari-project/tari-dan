@@ -159,6 +159,7 @@ where
     }
 
     pub async fn run(mut self) -> Result<(), HotStuffError> {
+        self.create_genesis_block_if_required(Epoch(0))?;
         let (mut on_beat, mut on_force_beat, mut on_leader_timeout) = self.pacemaker.take().map(|p| p.spawn()).unwrap();
 
         loop {
@@ -178,7 +179,7 @@ where
                 Some((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg.clone()).await {
                         // self.publish_event(HotStuffEvent::Failed(e.to_string()));
-                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {:?} {}", msg,e);
+                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {} {:?}", e, msg);
                     }
                 },
 
@@ -215,7 +216,7 @@ where
     async fn on_epoch_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
         match event {
             EpochManagerEvent::EpochChanged(epoch) => {
-                self.create_genesis_block_if_required(epoch)?;
+                // self.create_genesis_block_if_required(epoch)?;
 
                 self.is_epoch_synced = true;
                 // TODO: merge chain(s) from previous epoch?
@@ -300,7 +301,7 @@ where
         let epoch = self.epoch_manager.current_epoch().await?;
         debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", epoch);
 
-        self.create_genesis_block_if_required(epoch)?;
+        // self.create_genesis_block_if_required(epoch)?;
 
         // Are there any transactions in the pools?
         // If not, only propose an empty block if we are close to exceeding the timeout
@@ -314,7 +315,7 @@ where
         }
 
         // Are we the leader?
-        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
+        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?;
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         // TODO: If there were leader failures, the leaf block would be empty and we need to create empty blocks.
         let is_leader =
@@ -347,7 +348,7 @@ where
             });
         }
 
-        self.create_genesis_block_if_required(msg.epoch())?;
+        // self.create_genesis_block_if_required(msg.epoch())?;
 
         match msg {
             HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
@@ -377,18 +378,22 @@ where
             debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;
             zero_block.insert(&mut tx)?;
+            zero_block.as_locked().set(&mut tx)?;
+            zero_block.as_leaf_block().set(&mut tx)?;
+            zero_block.as_last_executed().set(&mut tx)?;
+            zero_block.justify().as_high_qc().set(&mut tx)?;
         }
 
-        let genesis = Block::genesis(epoch);
-        if !genesis.exists(tx.deref_mut())? {
-            debug!(target: LOG_TARGET, "Creating genesis block");
-            genesis.justify().save(&mut tx)?;
-            genesis.insert(&mut tx)?;
-            genesis.as_locked().set(&mut tx)?;
-            genesis.as_leaf_block().set(&mut tx)?;
-            genesis.as_last_executed().set(&mut tx)?;
-            genesis.justify().as_high_qc().set(&mut tx)?;
-        }
+        // let genesis = Block::genesis();
+        // if !genesis.exists(tx.deref_mut())? {
+        //     debug!(target: LOG_TARGET, "Creating genesis block");
+        //     genesis.justify().save(&mut tx)?;
+        //     genesis.insert(&mut tx)?;
+        //     genesis.as_locked().set(&mut tx)?;
+        //     genesis.as_leaf_block().set(&mut tx)?;
+        //     genesis.as_last_executed().set(&mut tx)?;
+        //     genesis.justify().as_high_qc().set(&mut tx)?;
+        // }
 
         tx.commit()?;
 

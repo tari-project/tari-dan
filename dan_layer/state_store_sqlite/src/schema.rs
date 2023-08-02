@@ -26,7 +26,6 @@ diesel::table! {
 diesel::table! {
     high_qcs (id) {
         id -> Integer,
-        epoch -> BigInt,
         block_id -> Text,
         qc_id -> Text,
         created_at -> Timestamp,
@@ -36,7 +35,6 @@ diesel::table! {
 diesel::table! {
     last_executed (id) {
         id -> Integer,
-        epoch -> BigInt,
         block_id -> Text,
         height -> BigInt,
         created_at -> Timestamp,
@@ -46,7 +44,6 @@ diesel::table! {
 diesel::table! {
     last_proposed (id) {
         id -> Integer,
-        epoch -> BigInt,
         block_id -> Text,
         height -> BigInt,
         created_at -> Timestamp,
@@ -56,7 +53,6 @@ diesel::table! {
 diesel::table! {
     last_voted (id) {
         id -> Integer,
-        epoch -> BigInt,
         block_id -> Text,
         height -> BigInt,
         created_at -> Timestamp,
@@ -66,7 +62,6 @@ diesel::table! {
 diesel::table! {
     leaf_blocks (id) {
         id -> Integer,
-        epoch -> BigInt,
         block_id -> Text,
         block_height -> BigInt,
         created_at -> Timestamp,
@@ -76,7 +71,6 @@ diesel::table! {
 diesel::table! {
     locked_block (id) {
         id -> Integer,
-        epoch -> BigInt,
         block_id -> Text,
         height -> BigInt,
         created_at -> Timestamp,

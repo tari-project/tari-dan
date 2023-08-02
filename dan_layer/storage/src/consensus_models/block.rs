@@ -60,12 +60,12 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         block
     }
 
-    pub fn genesis(epoch: Epoch) -> Self {
+    pub fn genesis() -> Self {
         Self::new(
             BlockId::genesis(),
-            QuorumCertificate::genesis(epoch),
+            QuorumCertificate::genesis(),
             NodeHeight(0),
-            epoch,
+            Epoch(0),
             TAddr::zero(),
             Default::default(),
         )
@@ -76,7 +76,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         Self {
             id: BlockId::genesis(),
             parent: BlockId::genesis(),
-            justify: QuorumCertificate::genesis(Epoch(0)),
+            justify: QuorumCertificate::genesis(),
             height: NodeHeight(0),
             epoch: Epoch(0),
             proposed_by: TAddr::zero(),
@@ -88,7 +88,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
     pub fn dummy_block(parent: BlockId, proposed_by: TAddr, node_height: NodeHeight, epoch: Epoch) -> Self {
         Self::new(
             parent,
-            QuorumCertificate::genesis(epoch),
+            QuorumCertificate::genesis(),
             node_height,
             epoch,
             proposed_by,
@@ -124,7 +124,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_locked(&self) -> LockedBlock {
         LockedBlock {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -132,7 +131,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_last_executed(&self) -> LastExecuted {
         LastExecuted {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -140,7 +138,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_last_voted(&self) -> LastVoted {
         LastVoted {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -148,7 +145,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_leaf_block(&self) -> LeafBlock {
         LeafBlock {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -156,7 +152,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_last_proposed(&self) -> LastProposed {
         LastProposed {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }

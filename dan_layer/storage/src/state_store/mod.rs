@@ -79,12 +79,12 @@ pub trait StateStore {
 pub trait StateStoreReadTransaction {
     type Addr: NodeAddressable;
 
-    fn last_voted_get(&mut self, epoch: Epoch) -> Result<LastVoted, StorageError>;
-    fn last_executed_get(&mut self, epoch: Epoch) -> Result<LastExecuted, StorageError>;
-    fn last_proposed_get(&mut self, epoch: Epoch) -> Result<LastProposed, StorageError>;
-    fn locked_block_get(&mut self, epoch: Epoch) -> Result<LockedBlock, StorageError>;
-    fn leaf_block_get(&mut self, epoch: Epoch) -> Result<LeafBlock, StorageError>;
-    fn high_qc_get(&mut self, epoch: Epoch) -> Result<HighQc, StorageError>;
+    fn last_voted_get(&mut self) -> Result<LastVoted, StorageError>;
+    fn last_executed_get(&mut self) -> Result<LastExecuted, StorageError>;
+    fn last_proposed_get(&mut self) -> Result<LastProposed, StorageError>;
+    fn locked_block_get(&mut self) -> Result<LockedBlock, StorageError>;
+    fn leaf_block_get(&mut self) -> Result<LeafBlock, StorageError>;
+    fn high_qc_get(&mut self) -> Result<HighQc, StorageError>;
     fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError>;
     fn transactions_exists(&mut self, tx_id: &TransactionId) -> Result<bool, StorageError>;
     fn transactions_get_any<'a, I: IntoIterator<Item = &'a TransactionId>>(

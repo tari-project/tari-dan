@@ -84,8 +84,6 @@ impl Validator {
     }
 
     pub fn get_leaf_block(&self) -> LeafBlock {
-        self.state_store
-            .with_read_tx(|tx| LeafBlock::get(tx, Epoch(0)))
-            .unwrap()
+        self.state_store.with_read_tx(|tx| LeafBlock::get(tx)).unwrap()
     }
 }

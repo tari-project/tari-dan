@@ -48,7 +48,7 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
 
         let high_qc = self
             .store
-            .with_read_tx(|tx| HighQc::get(tx, epoch).and_then(|qc| qc.get_quorum_certificate(tx)))?;
+            .with_read_tx(|tx| HighQc::get(tx).and_then(|qc| qc.get_quorum_certificate(tx)))?;
 
         let message = NewViewMessage { high_qc, new_height };
 

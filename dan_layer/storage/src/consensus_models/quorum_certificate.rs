@@ -65,7 +65,7 @@ impl QuorumCertificate {
         qc
     }
 
-    pub fn genesis(epoch: Epoch) -> Self {
+    pub fn genesis() -> Self {
         // TODO: Should be easy to create an empty proof. Nice to have: decoupled proof.
         let bmt = ValidatorNodeBalancedMerkleTree::create(vec![]);
         let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, 0).unwrap();
@@ -73,7 +73,7 @@ impl QuorumCertificate {
         Self::new(
             BlockId::genesis(),
             NodeHeight::zero(),
-            epoch,
+            Epoch(0),
             vec![],
             merged_proof,
             vec![],
@@ -132,7 +132,6 @@ impl QuorumCertificate {
 
     pub fn as_high_qc(&self) -> HighQc {
         HighQc {
-            epoch: self.epoch,
             block_id: self.block_id,
             qc_id: self.qc_id,
         }
@@ -140,7 +139,6 @@ impl QuorumCertificate {
 
     pub fn as_leaf_block(&self) -> LeafBlock {
         LeafBlock {
-            epoch: self.epoch,
             block_id: self.block_id,
             height: self.block_height,
         }
