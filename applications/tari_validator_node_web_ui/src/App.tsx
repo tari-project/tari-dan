@@ -30,7 +30,6 @@ import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
 import Templates from './routes/Templates/Templates';
 import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
 import ErrorPage from './routes/ErrorPage';
-import Transaction from './routes/Transaction/Transaction';
 import TemplateFunctions from './routes/VN/Components/TemplateFunctions';
 import Layout from './theme/LayoutMain';
 import CommitteeMembers from './routes/Committees/CommitteeMembers';
@@ -42,6 +41,7 @@ import {
   getRecentTransactions,
   getShardKey,
 } from './utils/json_rpc';
+import TransactionDetails from './routes/Transactions/TransactionDetails';
 
 interface IContext {
   epoch: IEpoch | undefined;
@@ -99,7 +99,7 @@ export const breadcrumbRoutes = [
     dynamic: false,
   },
   {
-    label: 'Transaction',
+    label: 'Transactions',
     path: '/transactions/:payloadId',
     dynamic: true,
   },
@@ -182,7 +182,7 @@ export default function App() {
             <Route path="templates" element={<Templates />} />
             <Route path="vns" element={<ValidatorNodes />} />
             <Route path="mempool" element={<Mempool />} />
-            <Route path="transactions/:payloadId" element={<Transaction />} />
+            <Route path="transactions/:transactionHash" element={<TransactionDetails />} />
             <Route path="templates/:address" element={<TemplateFunctions />} />
             <Route path="committees/:address" element={<CommitteeMembers />} />
             <Route path="*" element={<ErrorPage />} />

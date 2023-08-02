@@ -83,10 +83,10 @@ const TransactionFilter: React.FC<ISearchProps> = ({
       });
 
       // Create a new array that is a copy of the original
-      const updatedObject = [...stateObject];
+      const updatedObject = JSON.parse(JSON.stringify(stateObject));
 
       // Set the "show" property of all transactions in the copy to false
-      updatedObject.forEach((template) => {
+      updatedObject.forEach((template : any) => {
         template.show = false;
       });
 
@@ -94,7 +94,7 @@ const TransactionFilter: React.FC<ISearchProps> = ({
       // original array, and set its "show" property to true
       filteredRows.forEach((filteredRow: any) => {
         const index = updatedObject.findIndex(
-          (item) => item.id === filteredRow.id
+          (item : any) => item.transaction_hash === filteredRow.transaction_hash
         );
         if (index !== -1) {
           updatedObject[index].show = true;
@@ -106,7 +106,7 @@ const TransactionFilter: React.FC<ISearchProps> = ({
       let changed = updatedObject.length !== stateObject.length;
       if (!changed) {
         for (let i = 0; i < stateObject.length && !changed; ++i) {
-          changed = stateObject[i] !== updatedObject[i];
+          changed ||= stateObject[i] !== updatedObject[i] || stateObject[i]?.["show"] != updatedObject[i]?.["show"];
         }
       }
       if (changed) {
@@ -197,8 +197,8 @@ const TransactionFilter: React.FC<ISearchProps> = ({
             endAdornment: (
               <InputAdornment position="end">
                 {showClearBtn && (
-                  <IconButton>
-                    <CloseRoundedIcon onClick={cancelSearch} />
+                  <IconButton onClick={cancelSearch} >
+                    <CloseRoundedIcon />
                   </IconButton>
                 )}
               </InputAdornment>

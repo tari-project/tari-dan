@@ -141,6 +141,11 @@ pub trait StateStoreReadTransaction {
         &mut self,
         tx_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
+
+    fn substates_get_many_by_destroyed_transaction(
+        &mut self,
+        tx_id: &TransactionId,
+    ) -> Result<Vec<SubstateRecord>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
