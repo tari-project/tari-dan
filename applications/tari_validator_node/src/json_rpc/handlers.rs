@@ -505,7 +505,7 @@ impl JsonRpcHandlers {
             JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
+                    JsonRpcErrorReason::InternalError,
                     format!("Could not get current epoch: {}", e),
                     json::Value::Null,
                 ),
@@ -515,7 +515,7 @@ impl JsonRpcHandlers {
             JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
+                    JsonRpcErrorReason::InternalError,
                     format!("Could not get current block height: {}", e),
                     json::Value::Null,
                 ),
@@ -526,7 +526,7 @@ impl JsonRpcHandlers {
             JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
+                    JsonRpcErrorReason::InternalError,
                     format!("Epoch is not valid:{}", err),
                     json::Value::Null,
                 ),
