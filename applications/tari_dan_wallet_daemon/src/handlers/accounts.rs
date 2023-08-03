@@ -874,6 +874,8 @@ pub async fn handle_transfer(
         .substate_api()
         .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
         .await?;
+    let resource_shard_id =
+        ShardId::from_address(&resource_substate.address.address, resource_substate.address.version);
     inputs.push(resource_substate.address);
 
     // get destination account information
@@ -909,6 +911,7 @@ pub async fn handle_transfer(
 
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
+        .with_input_refs(vec![resource_shard_id])
         .sign(&account_secret_key.key)
         .build();
 
