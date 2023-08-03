@@ -32,7 +32,7 @@ async function jsonRpc(method: string, params: any = null) {
       address = text;
     }
   } catch {}
-  let response = await fetch(`http://${address}`, {
+  let response = await fetch(`http://127.0.0.1:18010`, {
     method: 'POST',
     body: JSON.stringify({
       method: method,
@@ -88,7 +88,7 @@ async function getRecentTransactions() {
   return await jsonRpc('get_recent_transactions');
 }
 async function getTransaction(payload_id: string) {
-  return await jsonRpc('get_transaction', [fromHexString(payload_id)]);
+  return await jsonRpc('get_transaction', [payload_id]);
 }
 async function getFees(epoch: number, claim_leader_public_key: string) {
   return await jsonRpc('get_fees', [
@@ -96,16 +96,20 @@ async function getFees(epoch: number, claim_leader_public_key: string) {
     epoch,
   ]);
 }
-async function getSubstates(payload_id: string) {
+async function getUpSubstates(payload_id: string) {
   return await jsonRpc('get_substates_created_by_transaction', [
-    fromHexString(payload_id),
+    payload_id,
+  ]);
+}
+async function getDownSubstates(payload_id: string) {
+  return await jsonRpc('get_substates_destroyed_by_transaction', [
+    payload_id,
   ]);
 }
 async function getTemplates(limit: number) {
   return await jsonRpc('get_templates', [limit]);
 }
 async function getTemplate(address: string) {
-  console.log(address);
   return await jsonRpc('get_template', [address]);
 }
 
@@ -124,6 +128,7 @@ export {
   getTemplates,
   getTransaction,
   getFees,
-  getSubstates,
+  getUpSubstates,
+  getDownSubstates,
   registerValidatorNode,
 };

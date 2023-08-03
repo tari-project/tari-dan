@@ -600,6 +600,23 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
 
         substates.into_iter().map(TryInto::try_into).collect()
     }
+
+    fn substates_get_many_by_destroyed_transaction(
+        &mut self,
+        tx_id: &TransactionId,
+    ) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+
+        let substates = substates::table
+            .filter(substates::destroyed_by_transaction.eq(serialize_hex(tx_id)))
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_many_by_destroyed_transaction",
+                source: e,
+            })?;
+
+        substates.into_iter().map(TryInto::try_into).collect()
+    }
 }
 
 #[derive(QueryableByName)]

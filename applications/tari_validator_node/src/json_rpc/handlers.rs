@@ -344,6 +344,19 @@ impl JsonRpcHandlers {
         }))
     }
 
+    pub async fn get_substates_destroyed_by_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: GetSubstatesByTransactionRequest = value.parse_params()?;
+        let substates = self
+            .state_store
+            .with_read_tx(|tx| SubstateRecord::get_many_by_destroyed_transaction(tx, &data.transaction_id))
+            .map_err(internal_error(answer_id))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetSubstatesByTransactionResponse {
+            substates,
+        }))
+    }
+
     pub async fn get_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let _data: GetClaimableFeesRequest = value.parse_params()?;
@@ -505,7 +518,7 @@ impl JsonRpcHandlers {
             JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
+                    JsonRpcErrorReason::InternalError,
                     format!("Could not get current epoch: {}", e),
                     json::Value::Null,
                 ),
@@ -515,7 +528,7 @@ impl JsonRpcHandlers {
             JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
+                    JsonRpcErrorReason::InternalError,
                     format!("Could not get current block height: {}", e),
                     json::Value::Null,
                 ),
@@ -526,7 +539,7 @@ impl JsonRpcHandlers {
             JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
+                    JsonRpcErrorReason::InternalError,
                     format!("Epoch is not valid:{}", err),
                     json::Value::Null,
                 ),

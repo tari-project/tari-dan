@@ -189,6 +189,13 @@ impl SubstateRecord {
         tx.substates_get_many_by_created_transaction(transaction_id)
     }
 
+    pub fn get_many_by_destroyed_transaction<TTx: StateStoreReadTransaction>(
+        tx: &mut TTx,
+        transaction_id: &TransactionId,
+    ) -> Result<Vec<SubstateRecord>, StorageError> {
+        tx.substates_get_many_by_destroyed_transaction(transaction_id)
+    }
+
     pub fn get_created_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
