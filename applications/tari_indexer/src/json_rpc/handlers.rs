@@ -41,7 +41,7 @@ use tari_comms::{
 };
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{optional::Optional, Epoch};
-use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_client::types::{
     AddAddressRequest,
     DeleteAddressRequest,
@@ -58,7 +58,12 @@ use tari_indexer_client::types::{
     SubmitTransactionRequest,
     SubmitTransactionResponse,
 };
-use tari_validator_node_client::types::{AddPeerRequest, AddPeerResponse, GetIdentityResponse};
+use tari_validator_node_client::types::{
+    AddPeerRequest,
+    AddPeerResponse,
+    GetEpochManagerStatsResponse,
+    GetIdentityResponse,
+};
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
 
 use crate::{
@@ -91,6 +96,7 @@ pub struct JsonRpcHandlers {
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
     substate_manager: Arc<SubstateManager>,
+    epoch_manager: EpochManagerHandle,
     transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
     dry_run_transaction_processor: DryRunTransactionProcessor<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
 }
@@ -113,6 +119,7 @@ impl JsonRpcHandlers {
             comms: services.comms.clone(),
             base_node_client,
             substate_manager,
+            epoch_manager: services.epoch_manager.clone(),
             transaction_manager,
             dry_run_transaction_processor,
         }
@@ -538,6 +545,47 @@ impl JsonRpcHandlers {
                 transaction_id,
             }))
         }
+    }
+
+    pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let current_epoch = self.epoch_manager.current_epoch().await.map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InternalError,
+                    format!("Could not get current epoch: {}", e),
+                    json::Value::Null,
+                ),
+            )
+        })?;
+        let current_block_height = self.epoch_manager.current_block_height().await.map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InternalError,
+                    format!("Could not get current block height: {}", e),
+                    json::Value::Null,
+                ),
+            )
+        })?;
+
+        let is_valid = self.epoch_manager.is_epoch_active(current_epoch).await.map_err(|err| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InternalError,
+                    format!("Epoch is not valid:{}", err),
+                    json::Value::Null,
+                ),
+            )
+        })?;
+        let response = GetEpochManagerStatsResponse {
+            current_epoch,
+            current_block_height,
+            is_valid,
+        };
+        Ok(JsonRpcResponse::success(answer_id, response))
     }
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
