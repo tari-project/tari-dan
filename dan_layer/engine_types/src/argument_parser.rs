@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json as json;
 use tari_template_lib::{arg, args::Arg, models::Amount};
 
-use crate::substate::SubstateAddress;
+use crate::{substate::SubstateAddress, TemplateAddress};
 
 pub fn json_deserialize<'de, D>(d: D) -> Result<Vec<Arg>, D::Error>
 where D: Deserializer<'de> {
@@ -69,7 +69,13 @@ fn try_parse_special_string_arg(s: &str) -> Result<StringArg<'_>, ArgParseError>
     }
 
     if let Ok(address) = SubstateAddress::from_str(s) {
-        return Ok(StringArg::Address(address));
+        return Ok(StringArg::SubstateAddress(address));
+    }
+
+    if let Some(hash_str) = s.strip_prefix("template_") {
+        if let Ok(address) = TemplateAddress::from_str(hash_str) {
+            return Ok(StringArg::TemplateAddress(address));
+        }
     }
 
     match s {
@@ -93,7 +99,8 @@ pub enum StringArg<'a> {
     Amount(Amount),
     String(&'a str),
     Workspace(Vec<u8>),
-    Address(SubstateAddress),
+    SubstateAddress(SubstateAddress),
+    TemplateAddress(TemplateAddress),
     UnsignedInteger(u64),
     SignedInteger(i64),
     Bool(bool),
@@ -104,7 +111,7 @@ impl From<StringArg<'_>> for Arg {
         match value {
             StringArg::Amount(v) => arg!(v),
             StringArg::String(v) => arg!(v),
-            StringArg::Address(v) => match v {
+            StringArg::SubstateAddress(v) => match v {
                 SubstateAddress::Component(v) => arg!(v),
                 SubstateAddress::Resource(v) => arg!(v),
                 SubstateAddress::Vault(v) => arg!(v),
@@ -113,6 +120,7 @@ impl From<StringArg<'_>> for Arg {
                 SubstateAddress::NonFungibleIndex(v) => arg!(v),
                 SubstateAddress::TransactionReceipt(v) => arg!(v),
             },
+            StringArg::TemplateAddress(v) => arg!(v),
             StringArg::UnsignedInteger(v) => arg!(v),
             StringArg::SignedInteger(v) => arg!(v),
             StringArg::Bool(v) => arg!(v),
@@ -231,6 +239,24 @@ mod tests {
                 _ => unreachable!(),
             }
         }
+    }
+
+    #[test]
+    fn it_parses_template_addresses() {
+        // valid template addreses are parsed
+        let valid_template_address = "template_a9c017256ed22cb004c001b0db965a40b91ad557e1ace408ce306227d95f0f1c";
+        let a = parse_arg(valid_template_address).unwrap();
+        assert_eq!(
+            a,
+            arg!(TemplateAddress::from_str(
+                "a9c017256ed22cb004c001b0db965a40b91ad557e1ace408ce306227d95f0f1c"
+            ))
+        );
+
+        // invalid template addreses are ignored
+        let invalid_template_address = "template_xxxxxx";
+        let a = parse_arg(invalid_template_address).unwrap();
+        assert_eq!(a, arg!(invalid_template_address));
     }
 
     #[test]
