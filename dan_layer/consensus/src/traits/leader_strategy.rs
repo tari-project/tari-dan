@@ -21,7 +21,6 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_dan_common_types::{committee::Committee, NodeAddressable, NodeHeight};
-use tari_dan_storage::consensus_models::BlockId;
 
 pub trait LeaderStrategy<TAddr: NodeAddressable> {
     fn calculate_leader(&self, committee: &Committee<TAddr>, height: NodeHeight) -> u32;

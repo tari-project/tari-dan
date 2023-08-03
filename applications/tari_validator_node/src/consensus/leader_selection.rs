@@ -3,7 +3,6 @@
 
 use tari_consensus::traits::LeaderStrategy;
 use tari_dan_common_types::{committee::Committee, NodeAddressable, NodeHeight};
-use tari_dan_storage::consensus_models::BlockId;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct RoundRobinLeaderStrategy;

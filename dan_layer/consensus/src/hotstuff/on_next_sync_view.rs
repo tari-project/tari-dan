@@ -3,10 +3,7 @@
 
 use log::info;
 use tari_dan_common_types::{Epoch, NodeHeight};
-use tari_dan_storage::{
-    consensus_models::{HighQc, LeafBlock},
-    StateStore,
-};
+use tari_dan_storage::{consensus_models::HighQc, StateStore};
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 

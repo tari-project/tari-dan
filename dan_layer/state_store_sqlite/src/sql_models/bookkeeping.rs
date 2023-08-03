@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{consensus_models, StorageError};
 use time::PrimitiveDateTime;
 

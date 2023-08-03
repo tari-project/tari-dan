@@ -68,7 +68,7 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
     pub fn calculate_steps_between(&self, member_a: &TAddr, member_b: &TAddr) -> Option<usize> {
         let index_a = self.members.iter().position(|x| x == member_a)? as isize;
         let index_b = self.members.iter().position(|x| x == member_b)? as isize;
-        let mut steps = index_a - index_b;
+        let steps = index_a - index_b;
         if steps < 0 {
             Some((self.members.len() as isize + steps) as usize)
         } else {

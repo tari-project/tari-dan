@@ -4,7 +4,7 @@
 use std::ops::DerefMut;
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, Epoch, NodeHeight};
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, Decision, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
     StateStore,
@@ -215,7 +215,7 @@ where
 
     async fn on_epoch_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
         match event {
-            EpochManagerEvent::EpochChanged(epoch) => {
+            EpochManagerEvent::EpochChanged(_epoch) => {
                 // self.create_genesis_block_if_required(epoch)?;
 
                 self.is_epoch_synced = true;

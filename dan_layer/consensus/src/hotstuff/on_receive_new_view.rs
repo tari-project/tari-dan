@@ -120,7 +120,7 @@ where TConsensusSpec: ConsensusSpec
 
                     info!(target: LOG_TARGET, "Creating dummy block for leader {}, height: {}", leader, leaf_block.height() + NodeHeight(1));
                     // TODO: replace with actual leader's propose
-                    leaf_block = Block::dummy_block(leaf_block.id().clone(), leader.clone(), leaf_block.height() + NodeHeight(1), high_qc.epoch());
+                    leaf_block = Block::dummy_block(*leaf_block.id(), leader.clone(), leaf_block.height() + NodeHeight(1), high_qc.epoch());
                     leaf_block.save(tx)?;
                     leaf_block.as_leaf_block().set(tx)?;
                     leader = self.leader_strategy.get_leader_for_next_block(&local_committee, leaf_block.height());

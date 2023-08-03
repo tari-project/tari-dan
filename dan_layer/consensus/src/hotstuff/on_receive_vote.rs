@@ -171,7 +171,7 @@ where TConsensusSpec: ConsensusSpec
                 .any(|x| x.signature.public_key.as_bytes() == vn.address.as_bytes())
             {
                 warn!(target: LOG_TARGET, "🔥 Received enough votes but waiting for our own vote for block {}", message.block_id);
-                tx.rollback();
+                tx.rollback()?;
                 return Ok(());
             }
 

@@ -189,7 +189,6 @@ where TConsensusSpec: ConsensusSpec
         if !missing_tx_ids.is_empty() {
             self.send_to_leader(
                 local_committee,
-                block.id(),
                 block.height(),
                 HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
                     block_id: *block.id(),
@@ -316,7 +315,6 @@ where TConsensusSpec: ConsensusSpec
     async fn send_to_leader(
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        block_id: &BlockId,
         height: NodeHeight,
         message: HotstuffMessage<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
@@ -760,7 +758,7 @@ where TConsensusSpec: ConsensusSpec
 
             let mut leader = self
                 .leader_strategy
-                .get_leader_for_next_block(&local_committee, last_dummy_block.height());
+                .get_leader_for_next_block(local_committee, last_dummy_block.height());
             while last_dummy_block.id() != candidate_block.parent() {
                 if last_dummy_block.height() > candidate_block.height() {
                     warn!(target: LOG_TARGET, "🔥 Bad proposal, leaf block height {} is greater than new height {}", last_dummy_block.height(), candidate_block.height());
@@ -773,7 +771,7 @@ where TConsensusSpec: ConsensusSpec
                 info!(target: LOG_TARGET, "Creating dummy block for leader {}, height: {}", leader, last_dummy_block.height() + NodeHeight(1));
                 // TODO: replace with actual leader's propose
                 last_dummy_block = Block::dummy_block(
-                    last_dummy_block.id().clone(),
+                    *last_dummy_block.id(),
                     leader.clone(),
                     last_dummy_block.height() + NodeHeight(1),
                     candidate_block.epoch(),
@@ -782,7 +780,7 @@ where TConsensusSpec: ConsensusSpec
                 // last_dummy_block.as_leaf_block().set(tx)?;
                 leader = self
                     .leader_strategy
-                    .get_leader_for_next_block(&local_committee, last_dummy_block.height());
+                    .get_leader_for_next_block(local_committee, last_dummy_block.height());
             }
         }
 

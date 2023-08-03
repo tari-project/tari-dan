@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::{hotstuff::HotstuffEvent, messages::HotstuffMessage};
-use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, ShardId};
 use tari_dan_storage::{
     consensus_models::{BlockId, ExecutedTransaction, LeafBlock},
     StateStore,

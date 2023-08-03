@@ -49,7 +49,7 @@ use tari_engine_types::{
     confidential::UnclaimedConfidentialOutput,
     substate::{SubstateAddress, SubstateValue},
 };
-use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerReader};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError};
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::models::{EncryptedData, TemplateAddress, UnclaimedConfidentialOutputAddress};
@@ -372,7 +372,6 @@ impl BaseLayerScanner {
             commitment: output.commitment.clone(),
             encrypted_data: EncryptedData(output.encrypted_data.to_bytes()),
         });
-        let epoch = self.epoch_manager.current_epoch().await?;
         self.state_store
             .with_write_tx(|tx| {
                 let genesis = Block::<PublicKey>::genesis();
