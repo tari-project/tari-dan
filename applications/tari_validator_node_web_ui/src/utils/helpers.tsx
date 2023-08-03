@@ -20,6 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import { ChangeEvent } from 'react';
 import { toHexString } from '../routes/VN/Components/helpers';
 
 const renderJson = (json: any) => {
@@ -36,7 +37,7 @@ const renderJson = (json: any) => {
         [
         <ol>
           {json.map((val) => (
-            <li>{renderJson(val)},</li>
+            <li key={val}>{renderJson(val)},</li>
           ))}
         </ol>
         ],
@@ -48,7 +49,7 @@ const renderJson = (json: any) => {
         {'{'}
         <ul>
           {Object.keys(json).map((key) => (
-            <li>
+            <li key={key}>
               <b>"{key}"</b>:{renderJson(json[key])}
             </li>
           ))}
@@ -63,4 +64,55 @@ const renderJson = (json: any) => {
   }
 };
 
-export { renderJson };
+function removeTagged(obj: any) {
+  if (obj === undefined) {
+    return 'undefined';
+  }
+  if (obj['@@TAGGED@@'] !== undefined) {
+    return obj['@@TAGGED@@'][1];
+  }
+  return obj;
+}
+
+function fromHexString(hexString: string) {
+  let res = [];
+  for (let i = 0; i < hexString.length; i += 2) {
+    res.push(Number('0x' + hexString.substring(i, i + 2)));
+  }
+  return res;
+}
+
+function shortenString(string: string, start: number = 8, end: number = 8) {
+  return string.substring(0, start) + '...' + string.slice(-end);
+}
+
+function emptyRows(page: number, rowsPerPage: number, array: any[]) {
+  return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
+}
+
+function handleChangePage(
+  event: unknown,
+  newPage: number,
+  setPage: React.Dispatch<React.SetStateAction<number>>
+) {
+  setPage(newPage);
+}
+
+function handleChangeRowsPerPage(
+  event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  setRowsPerPage: React.Dispatch<React.SetStateAction<number>>,
+  setPage: React.Dispatch<React.SetStateAction<number>>
+) {
+  setRowsPerPage(parseInt(event.target.value, 10));
+  setPage(0);
+}
+
+export {
+  renderJson,
+  fromHexString,
+  shortenString,
+  removeTagged,
+  emptyRows,
+  handleChangePage,
+  handleChangeRowsPerPage,
+};

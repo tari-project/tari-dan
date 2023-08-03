@@ -55,7 +55,7 @@ where
     TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
     TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
-    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
+    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(100000);
 
     let mempool = MempoolService::new(
         new_transactions,
