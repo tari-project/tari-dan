@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json as json;
 use tari_template_lib::{arg, args::Arg, models::Amount};
 
-use crate::{substate::SubstateAddress, TemplateAddress};
+use crate::{substate::SubstateAddress, TemplateAddress, template::parse_template_address};
 
 pub fn json_deserialize<'de, D>(d: D) -> Result<Vec<Arg>, D::Error>
 where D: Deserializer<'de> {
@@ -72,10 +72,8 @@ fn try_parse_special_string_arg(s: &str) -> Result<StringArg<'_>, ArgParseError>
         return Ok(StringArg::SubstateAddress(address));
     }
 
-    if let Some(hash_str) = s.strip_prefix("template_") {
-        if let Ok(address) = TemplateAddress::from_str(hash_str) {
-            return Ok(StringArg::TemplateAddress(address));
-        }
+    if let Some(address) = parse_template_address(s.to_owned()) {
+        return Ok(StringArg::TemplateAddress(address));
     }
 
     match s {
@@ -250,7 +248,7 @@ mod tests {
             a,
             arg!(TemplateAddress::from_str(
                 "a9c017256ed22cb004c001b0db965a40b91ad557e1ace408ce306227d95f0f1c"
-            ))
+            ).unwrap())
         );
 
         // invalid template addreses are ignored
