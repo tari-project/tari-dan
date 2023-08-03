@@ -35,8 +35,9 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
     instruction::Instruction,
     instruction_result::InstructionResult,
+    parse_template_address,
     substate::{SubstateAddress, SubstateValue},
-    TemplateAddress, parse_template_address,
+    TemplateAddress,
 };
 use tari_template_lib::{
     arg,

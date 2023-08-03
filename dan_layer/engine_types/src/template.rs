@@ -36,7 +36,7 @@ pub fn parse_template_address(s: String) -> Option<TemplateAddress> {
             return Some(address);
         }
     }
-    
+
     None
 }
 

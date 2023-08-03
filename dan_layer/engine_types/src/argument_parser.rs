@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json as json;
 use tari_template_lib::{arg, args::Arg, models::Amount};
 
-use crate::{substate::SubstateAddress, TemplateAddress, template::parse_template_address};
+use crate::{substate::SubstateAddress, template::parse_template_address, TemplateAddress};
 
 pub fn json_deserialize<'de, D>(d: D) -> Result<Vec<Arg>, D::Error>
 where D: Deserializer<'de> {
@@ -246,9 +246,9 @@ mod tests {
         let a = parse_arg(valid_template_address).unwrap();
         assert_eq!(
             a,
-            arg!(TemplateAddress::from_str(
-                "a9c017256ed22cb004c001b0db965a40b91ad557e1ace408ce306227d95f0f1c"
-            ).unwrap())
+            arg!(
+                TemplateAddress::from_str("a9c017256ed22cb004c001b0db965a40b91ad557e1ace408ce306227d95f0f1c").unwrap()
+            )
         );
 
         // invalid template addreses are ignored
