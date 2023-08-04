@@ -24,4 +24,4 @@ pub mod transaction_receipt;
 pub mod vault;
 
 mod template;
-pub use template::{calculate_template_binary_hash, TemplateAddress};
+pub use template::{calculate_template_binary_hash, parse_template_address, TemplateAddress};

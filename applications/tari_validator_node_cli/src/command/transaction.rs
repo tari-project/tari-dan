@@ -35,6 +35,7 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
     instruction::Instruction,
     instruction_result::InstructionResult,
+    parse_template_address,
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
@@ -593,6 +594,7 @@ pub enum CliArg {
     Amount(i64),
     NonFungibleId(NonFungibleId),
     SubstateAddress(SubstateAddress),
+    TemplateAddress(TemplateAddress),
 }
 
 impl FromStr for CliArg {
@@ -629,6 +631,10 @@ impl FromStr for CliArg {
 
         if let Ok(v) = s.parse::<SubstateAddress>() {
             return Ok(CliArg::SubstateAddress(v));
+        }
+
+        if let Some(v) = parse_template_address(s.to_owned()) {
+            return Ok(CliArg::TemplateAddress(v));
         }
 
         if let Some(("nft", nft_id)) = s.split_once('_') {
@@ -685,6 +691,7 @@ impl CliArg {
                 SubstateAddress::NonFungibleIndex(v) => arg!(v),
                 SubstateAddress::TransactionReceipt(v) => arg!(v),
             },
+            CliArg::TemplateAddress(v) => arg!(v),
             CliArg::NonFungibleId(v) => arg!(v),
             CliArg::Amount(v) => arg!(Amount(v)),
         }
