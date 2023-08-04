@@ -156,4 +156,13 @@ impl CommitteeShard {
             .into_iter()
             .filter(|shard_id| self.includes_shard(shard_id.borrow()))
     }
+
+    /// Calculates the number of distinct buckets for a given shard set
+    pub fn count_distinct_buckets<'a, I: IntoIterator<Item = &'a ShardId>>(&self, shards: I) -> usize {
+        shards
+            .into_iter()
+            .map(|shard| shard.to_committee_bucket(self.num_committees))
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+    }
 }

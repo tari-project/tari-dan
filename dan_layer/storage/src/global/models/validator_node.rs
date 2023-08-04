@@ -17,3 +17,17 @@ impl<TAddr: NodeAddressable> ValidatorNode<TAddr> {
         vn_node_hash(&self.address, &self.shard_key)
     }
 }
+
+impl<TAddr> PartialEq for ValidatorNode<TAddr> {
+    fn eq(&self, other: &Self) -> bool {
+        self.shard_key == other.shard_key
+    }
+}
+
+impl<TAddr> Eq for ValidatorNode<TAddr> {}
+
+impl<TAddr> std::hash::Hash for ValidatorNode<TAddr> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.shard_key.hash(state);
+    }
+}

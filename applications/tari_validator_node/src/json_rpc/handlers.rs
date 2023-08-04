@@ -45,7 +45,7 @@ use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_app_utilities::template_manager::interface::TemplateManagerHandle;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, QuorumDecision, SubstateRecord, TransactionRecord},
+    consensus_models::{ExecutedTransaction, QuorumDecision, SubstateRecord, TransactionRecord, ValidatorFee},
     Ordering,
     StateStore,
 };
@@ -55,7 +55,6 @@ use tari_validator_node_client::types::{
     AddPeerRequest,
     AddPeerResponse,
     DryRunTransactionFinalizeResult,
-    GetClaimableFeesRequest,
     GetCommitteeRequest,
     GetEpochManagerStatsResponse,
     GetIdentityResponse,
@@ -75,6 +74,8 @@ use tari_validator_node_client::types::{
     GetTransactionResponse,
     GetTransactionResultRequest,
     GetTransactionResultResponse,
+    GetValidatorFeesRequest,
+    GetValidatorFeesResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     SubstateStatus,
@@ -355,19 +356,6 @@ impl JsonRpcHandlers {
         Ok(JsonRpcResponse::success(answer_id, GetSubstatesByTransactionResponse {
             substates,
         }))
-    }
-
-    pub async fn get_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
-        let answer_id = value.get_answer_id();
-        let _data: GetClaimableFeesRequest = value.parse_params()?;
-        Err(JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::MethodNotFound,
-                "Not implemented".to_string(),
-                json::Value::Null,
-            ),
-        ))
     }
 
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -687,6 +675,24 @@ impl JsonRpcHandlers {
         let messages = logger.get_messages_by_tag(message_tag);
         let response = json!({ "messages": messages });
         Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_validator_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request = value.parse_params::<GetValidatorFeesRequest>()?;
+
+        let fees = self
+            .state_store
+            .with_read_tx(|tx| {
+                ValidatorFee::get_any_with_epoch_range_for_validator(
+                    tx,
+                    request.epoch_range,
+                    request.validator_public_key.as_ref(),
+                )
+            })
+            .map_err(internal_error(answer_id))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetValidatorFeesResponse { fees }))
     }
 }
 

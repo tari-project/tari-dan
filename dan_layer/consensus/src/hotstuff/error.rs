@@ -79,4 +79,6 @@ pub enum ProposalValidationError {
         block_id: BlockId,
         details: String,
     },
+    #[error("Block {block_id} proposed by {proposed_by} is not the leader")]
+    NotLeader { proposed_by: String, block_id: BlockId },
 }

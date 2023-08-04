@@ -3,7 +3,7 @@
 
 use std::time::SystemTime;
 
-use tari_dan_wallet_sdk::models::TransactionStatus;
+use tari_dan_wallet_sdk::models::{TransactionStatus, WalletTransaction};
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     substate::SubstateAddress,
@@ -81,8 +81,7 @@ pub struct AccountChangedEvent {
 #[derive(Debug, Clone)]
 pub struct TransactionInvalidEvent {
     pub transaction_id: TransactionId,
-    pub status: TransactionStatus,
-    pub final_fee: Amount,
+    pub transaction: WalletTransaction,
 }
 
 #[derive(Debug, Clone)]

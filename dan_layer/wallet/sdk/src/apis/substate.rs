@@ -127,6 +127,7 @@ where
                             substate_addresses.insert(addr.address, addr.version);
                         },
                         SubstateValue::UnclaimedConfidentialOutput(_) => {},
+                        SubstateValue::FeeClaim(_) => {},
                     }
                 },
             }

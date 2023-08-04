@@ -43,6 +43,7 @@ use tari_template_lib::{
 use crate::{
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
+    fee_claim::{ClaimedFeeAddress, FeeClaim},
     hashing::{hasher, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
@@ -97,6 +98,7 @@ pub enum SubstateAddress {
     NonFungible(NonFungibleAddress),
     NonFungibleIndex(NonFungibleIndexAddress),
     TransactionReceipt(TransactionReceiptAddress),
+    ClaimedFee(ClaimedFeeAddress),
 }
 
 impl SubstateAddress {
@@ -143,6 +145,7 @@ impl SubstateAddress {
                 .chain(&address.index())
                 .result(),
             SubstateAddress::TransactionReceipt(address) => *address.hash(),
+            SubstateAddress::ClaimedFee(address) => *address.hash(),
         }
     }
 
@@ -244,6 +247,7 @@ impl Display for SubstateAddress {
             SubstateAddress::NonFungibleIndex(addr) => write!(f, "{}", addr),
             SubstateAddress::UnclaimedConfidentialOutput(commitment_address) => write!(f, "{}", commitment_address),
             SubstateAddress::TransactionReceipt(addr) => write!(f, "{}", addr),
+            SubstateAddress::ClaimedFee(addr) => write!(f, "{}", addr),
         }
     }
 }
@@ -345,6 +349,7 @@ pub enum SubstateValue {
     NonFungibleIndex(NonFungibleIndex),
     UnclaimedConfidentialOutput(UnclaimedConfidentialOutput),
     TransactionReceipt(TransactionReceipt),
+    FeeClaim(FeeClaim),
 }
 
 impl SubstateValue {
@@ -482,6 +487,12 @@ impl From<NonFungibleContainer> for SubstateValue {
 impl From<NonFungibleIndex> for SubstateValue {
     fn from(index: NonFungibleIndex) -> Self {
         Self::NonFungibleIndex(index)
+    }
+}
+
+impl From<FeeClaim> for SubstateValue {
+    fn from(fee_claim: FeeClaim) -> Self {
+        Self::FeeClaim(fee_claim)
     }
 }
 

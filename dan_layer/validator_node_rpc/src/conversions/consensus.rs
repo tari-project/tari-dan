@@ -292,9 +292,10 @@ impl From<TransactionAtom> for proto::consensus::TransactionAtom {
     fn from(value: TransactionAtom) -> Self {
         Self {
             id: value.id.as_bytes().to_vec(),
-            decision: i32::from(value.decision.as_u8()),
+            decision: proto::consensus::Decision::from(value.decision) as i32,
             evidence: Some(value.evidence.into()),
-            fee: value.fee,
+            fee: value.transaction_fee,
+            leader_fee: value.leader_fee,
         }
     }
 }
@@ -305,14 +306,39 @@ impl TryFrom<proto::consensus::TransactionAtom> for TransactionAtom {
     fn try_from(value: proto::consensus::TransactionAtom) -> Result<Self, Self::Error> {
         Ok(TransactionAtom {
             id: TransactionId::try_from(value.id)?,
-            decision: Decision::from_u8(u8::try_from(value.decision)?)
-                .ok_or_else(|| anyhow!("Invalid Decision byte {}", value.decision))?,
+            decision: proto::consensus::Decision::from_i32(value.decision)
+                .ok_or_else(|| anyhow!("Invalid decision value {}", value.decision))?
+                .try_into()?,
             evidence: value
                 .evidence
                 .ok_or_else(|| anyhow!("evidence not provided"))?
                 .try_into()?,
-            fee: value.fee,
+            transaction_fee: value.fee,
+            leader_fee: value.leader_fee,
         })
+    }
+}
+
+// -------------------------------- Decision -------------------------------- //
+
+impl From<Decision> for proto::consensus::Decision {
+    fn from(value: Decision) -> Self {
+        match value {
+            Decision::Commit => proto::consensus::Decision::Commit,
+            Decision::Abort => proto::consensus::Decision::Abort,
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::Decision> for Decision {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::Decision) -> Result<Self, Self::Error> {
+        match value {
+            proto::consensus::Decision::Commit => Ok(Decision::Commit),
+            proto::consensus::Decision::Abort => Ok(Decision::Abort),
+            proto::consensus::Decision::Unknown => Err(anyhow!("Decision not provided")),
+        }
     }
 }
 

@@ -58,12 +58,13 @@ message TransactionAtom {
   Decision decision = 3;
   Evidence evidence = 4;
   uint64 fee = 5;
+  uint64 leader_fee = 6;
 }
 
 enum Decision {
   UNKNOWN = 0;
-  ACCEPT = 1;
-  REJECT = 2;
+  COMMIT = 1;
+  ABORT = 2;
 }
 
 message Evidence {

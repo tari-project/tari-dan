@@ -181,7 +181,7 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
         .start()
         .await;
     for _ in 0..20 {
-        test.send_transaction_to_all(Decision::Commit, 1, 5).await;
+        test.send_transaction_to_all(Decision::Commit, 100, 5).await;
     }
 
     test.wait_all_have_at_least_n_new_transactions_in_pool(20).await;

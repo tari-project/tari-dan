@@ -125,7 +125,8 @@ create table transactions
     filled_outputs    text      not NULL,
     result            text      NULL,
     execution_time_ms bigint    NULL,
-    final_decision   text      NULL,
+    final_decision    text      NULL,
+    abort_details     text      NULL,
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -139,7 +140,8 @@ create table transaction_pool
     original_decision text      not null,
     pending_decision  text      null,
     evidence          text      not null,
-    fee               bigint    not null,
+    transaction_fee   bigint    not null,
+    leader_fee        bigint    not null,
     stage             text      not null,
     is_ready          boolean   not null,
     updated_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -172,8 +174,19 @@ CREATE TABLE block_missing_txs
 
 CREATE TABLE missing_tx
 (
-    id              integer   not NULL primary key AUTOINCREMENT,
-    transaction_id  text      not NULL,
-    block_id        text      not NULL,
-    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+    id             integer   not NULL primary key AUTOINCREMENT,
+    transaction_id text      not NULL,
+    block_id       text      not NULL,
+    created_at     timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE validator_fees
+(
+    id                    integer   not NULL primary key AUTOINCREMENT,
+    validator_addr        text      not NULL,
+    epoch                 bigint    not NULL,
+    block_id              text      not NULL,
+    total_transaction_fee bigint    not NULL,
+    total_fee_due         bigint    not NULL,
+    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );

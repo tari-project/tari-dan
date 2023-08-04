@@ -28,6 +28,7 @@ use crate::command::{
     key::KeysSubcommand,
     proof::ProofsSubcommand,
     transaction::TransactionSubcommand,
+    validator::ValidatorSubcommand,
 };
 
 mod account;
@@ -36,6 +37,7 @@ mod key;
 mod nfts;
 mod proof;
 pub mod transaction;
+mod validator;
 mod webrtc;
 
 #[allow(clippy::large_enum_variant)]
@@ -55,4 +57,6 @@ pub enum Command {
     Auth(AuthSubcommand),
     #[clap(subcommand, alias = "nfts")]
     AccountNft(AccountNftSubcommand),
+    #[clap(subcommand)]
+    Validator(ValidatorSubcommand),
 }

@@ -3,9 +3,9 @@
 
 use log::*;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
+use tari_dan_common_types::Epoch;
 use tari_dan_engine::{
     bootstrap_state,
-    runtime::ConsensusContext,
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
 };
 use tari_dan_storage::consensus_models::ExecutedTransaction;
@@ -25,19 +25,24 @@ pub async fn execute_transaction<TSubstateResolver, TExecutor>(
     transaction: Transaction,
     substate_resolver: TSubstateResolver,
     executor: TExecutor,
-    consensus_context: ConsensusContext,
+    current_epoch: Epoch,
 ) -> Result<ExecutionResult, MempoolError>
 where
     TSubstateResolver: SubstateResolver<Error = SubstateResolverError>,
     TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Send + Sync + 'static,
 {
-    let mut state_db = new_state_db();
+    let id = *transaction.id();
 
-    match substate_resolver.resolve(&transaction, &mut state_db).await {
+    let state_db = new_state_db();
+    let virtual_substates = substate_resolver
+        .resolve_virtual_substates(&transaction, current_epoch)
+        .await?;
+    info!(target: LOG_TARGET, "Transaction {} executing. virtual_substates = [{}]", transaction.id(), virtual_substates.keys().map(|addr| addr.to_string()).collect::<Vec<_>>().join(", "));
+
+    match substate_resolver.resolve(&transaction, &state_db).await {
         Ok(()) => {
             let res = task::spawn_blocking(move || {
-                let id = *transaction.id();
-                let result = executor.execute(transaction, state_db, consensus_context);
+                let result = executor.execute(transaction, state_db, virtual_substates);
                 (id, result.map_err(MempoolError::from))
             })
             .await;

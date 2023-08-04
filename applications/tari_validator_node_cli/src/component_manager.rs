@@ -97,8 +97,8 @@ impl ComponentManager {
                         version: substate.version(),
                     });
                 },
-                _addr @ SubstateAddress::UnclaimedConfidentialOutput(_hash) => {
-                    todo!("Not expected");
+                addr => {
+                    todo!("{} not expected", addr);
                 },
             }
         }

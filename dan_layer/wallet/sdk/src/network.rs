@@ -3,6 +3,7 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateAddress},
@@ -48,6 +49,25 @@ pub struct SubstateQueryResult {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionQueryResult {
+    pub result: TransactionFinalizedResult,
     pub transaction_id: TransactionId,
-    pub execution_result: Option<ExecuteResult>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransactionFinalizedResult {
+    Pending,
+    Finalized {
+        final_decision: Decision,
+        execution_result: Option<ExecuteResult>,
+        abort_details: Option<String>,
+    },
+}
+
+impl TransactionFinalizedResult {
+    pub fn into_execute_result(self) -> Option<ExecuteResult> {
+        match self {
+            TransactionFinalizedResult::Pending => None,
+            TransactionFinalizedResult::Finalized { execution_result, .. } => execution_result,
+        }
+    }
 }

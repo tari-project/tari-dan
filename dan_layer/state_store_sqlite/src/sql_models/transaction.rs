@@ -24,6 +24,7 @@ pub struct Transaction {
     pub result: Option<String>,
     pub execution_time_ms: Option<i64>,
     pub final_decision: Option<String>,
+    pub abort_details: Option<String>,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -73,11 +74,14 @@ impl TryFrom<Transaction> for consensus_models::TransactionRecord {
             })?;
         let execution_time = value.execution_time_ms.map(|ms| Duration::from_millis(ms as u64));
         let result = value.result.as_deref().map(deserialize_json).transpose()?;
+        let abort_details = value.abort_details.clone();
+
         Ok(Self::new_with_details(
             value.try_into()?,
             result,
             execution_time,
             final_decision,
+            abort_details,
         ))
     }
 }

@@ -26,9 +26,6 @@ pub use auth::{AuthParams, AuthorizationScope};
 mod r#impl;
 pub use r#impl::{RuntimeInterfaceImpl, StateFinalize};
 
-mod consensus;
-pub use consensus::ConsensusContext;
-
 mod engine_args;
 pub use crate::runtime::engine_args::EngineArgs;
 
@@ -43,11 +40,17 @@ pub use module::{RuntimeModule, RuntimeModuleError};
 
 mod fee_state;
 mod tracker;
+
+mod virtual_substate;
+pub use virtual_substate::VirtualSubstates;
+
 mod working_state;
 mod workspace;
 
 use std::{fmt::Debug, sync::Arc};
 
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::Epoch;
 use tari_engine_types::{
     component::ComponentHeader,
     confidential::{ConfidentialClaim, ConfidentialOutput},
@@ -131,6 +134,8 @@ pub trait RuntimeInterface: Send + Sync {
     fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
 
     fn claim_burn(&self, claim: ConfidentialClaim) -> Result<(), RuntimeError>;
+
+    fn claim_validator_fees(&self, epoch: Epoch, validator_public_key: PublicKey) -> Result<(), RuntimeError>;
 
     fn create_free_test_coins(
         &self,

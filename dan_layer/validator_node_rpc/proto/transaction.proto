@@ -49,6 +49,7 @@ message Instruction {
     PUT_OUTPUT_IN_WORKSPACE = 2;
     EMIT_LOG = 3;
     CLAIM_BURN = 4;
+    CLAIM_VALIDATOR_FEES = 5;
     CREATE_FREE_TEST_COINS = 101;
   }
   InstructionType instruction_type = 1;
@@ -76,6 +77,9 @@ message Instruction {
   bytes claim_burn_public_key = 13;
   ConfidentialWithdrawProof claim_burn_withdraw_proof = 14;
 
+  bytes claim_validator_fees_validator_public_key = 15;
+  uint64 claim_validator_fees_epoch = 16;
+
   // DEBUGGING: Test coins
   uint64 create_free_test_coins_amount = 101;
   bytes create_free_test_coins_output_blob = 102;
@@ -88,13 +92,6 @@ message Arg {
   }
   ArgType arg_type = 1;
   bytes data = 2;
-}
-
-message TransactionMeta {
-  repeated bytes involved_shard_ids = 1;
-  repeated SubstateRef involved_substates = 2;
-  uint32 max_outputs = 3;
-  repeated SubstateRequirement required_inputs = 4;
 }
 
 message SubstateRequirement {

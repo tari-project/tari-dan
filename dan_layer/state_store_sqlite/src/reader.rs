@@ -1,8 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, marker::PhantomData};
+use std::{borrow::Borrow, collections::HashSet, marker::PhantomData, ops::RangeInclusive};
 
+use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::{
     sql_query,
     sql_types::Text,
@@ -33,6 +34,7 @@ use tari_dan_storage::{
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionRecord,
+        ValidatorFee,
         Vote,
     },
     Ordering,
@@ -564,6 +566,25 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
         substates.into_iter().map(TryInto::try_into).collect()
     }
 
+    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
+        &mut self,
+        shard_ids: I,
+    ) -> Result<bool, StorageError> {
+        use crate::schema::substates;
+
+        let count = substates::table
+            .count()
+            .filter(substates::shard_id.eq_any(shard_ids.into_iter().map(|s| serialize_hex(s.borrow()))))
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_any",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
+
     fn substates_get_many_within_range(
         &mut self,
         start: &ShardId,
@@ -616,6 +637,54 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
             })?;
 
         substates.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn validator_fees_get_total_fee_for_epoch(
+        &mut self,
+        epoch: Epoch,
+        validator_public_key: &Self::Addr,
+    ) -> Result<u64, StorageError> {
+        use crate::schema::validator_fees;
+
+        let total_fee = validator_fees::table
+            .select(diesel::dsl::sum(validator_fees::total_fee_due))
+            .filter(validator_fees::epoch.eq(epoch.as_u64() as i64))
+            .filter(validator_fees::validator_addr.eq(serialize_hex(validator_public_key.as_bytes())))
+            .first::<Option<BigDecimal>>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "validator_fees_get_total_fee_for_epoch",
+                source: e,
+            })?
+            .unwrap_or(BigDecimal::default());
+
+        Ok(total_fee.to_u64().expect("total fee overflows u64"))
+    }
+
+    fn validator_fees_get_any_with_epoch_range(
+        &mut self,
+        epoch_range: RangeInclusive<Epoch>,
+        validator_public_key: Option<&Self::Addr>,
+    ) -> Result<Vec<ValidatorFee<Self::Addr>>, StorageError> {
+        use crate::schema::validator_fees;
+
+        let mut query = validator_fees::table
+            .filter(
+                validator_fees::epoch.between(epoch_range.start().as_u64() as i64, epoch_range.end().as_u64() as i64),
+            )
+            .into_boxed();
+
+        if let Some(vn) = validator_public_key {
+            query = query.filter(validator_fees::validator_addr.eq(serialize_hex(vn.as_bytes())));
+        }
+
+        let fees = query
+            .get_results::<sql_models::ValidatorFee>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "validator_fees_get_any_with_epoch_range_for_validator",
+                source: e,
+            })?;
+
+        fees.into_iter().map(TryInto::try_into).collect()
     }
 }
 

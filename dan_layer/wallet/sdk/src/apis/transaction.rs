@@ -11,7 +11,7 @@ use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 use crate::{
     models::{TransactionStatus, VersionedSubstateAddress, WalletTransaction},
-    network::{TransactionQueryResult, WalletNetworkInterface},
+    network::{TransactionFinalizedResult, TransactionQueryResult, WalletNetworkInterface},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
 
@@ -70,28 +70,36 @@ where
         self.store
             .with_write_tx(|tx| tx.transactions_insert(&transaction, true))?;
 
-        let result = self
+        let query = self
             .network_interface
             .submit_dry_run_transaction(transaction, required_substates)
             .await
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
-        let execution_result = result.execution_result.as_ref().ok_or_else(|| {
-            TransactionApiError::NetworkInterfaceError("No execution result returned from dry run".to_string())
-        })?;
+        match &query.result {
+            TransactionFinalizedResult::Pending => {
+                return Err(TransactionApiError::NetworkInterfaceError(
+                    "Pending execution result returned from dry run".to_string(),
+                ));
+            },
+            TransactionFinalizedResult::Finalized { execution_result, .. } => {
+                self.store.with_write_tx(|tx| {
+                    tx.transactions_set_result_and_status(
+                        query.transaction_id,
+                        execution_result.as_ref().map(|e| &e.finalize),
+                        execution_result.as_ref().and_then(|e| e.transaction_failure.as_ref()),
+                        execution_result
+                            .as_ref()
+                            .and_then(|e| e.fee_receipt.as_ref())
+                            .map(|f| f.total_fees_charged()),
+                        None,
+                        TransactionStatus::DryRun,
+                    )
+                })?;
+            },
+        }
 
-        self.store.with_write_tx(|tx| {
-            tx.transactions_set_result_and_status(
-                result.transaction_id,
-                Some(&execution_result.finalize),
-                execution_result.transaction_failure.as_ref(),
-                execution_result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
-                None,
-                TransactionStatus::DryRun,
-            )
-        })?;
-
-        Ok(result)
+        Ok(query)
     }
 
     pub fn fetch_all_by_status(
@@ -153,9 +161,15 @@ where
             }));
         };
 
-        match resp.execution_result {
-            Some(result) => {
-                let new_status = if result.finalize.result.is_accept() && result.transaction_failure.is_none() {
+        match resp.result {
+            TransactionFinalizedResult::Pending => Ok(None),
+            TransactionFinalizedResult::Finalized {
+                final_decision,
+                execution_result,
+                // TODO: incorporate abort_details
+                abort_details: _abort_details,
+            } => {
+                let new_status = if final_decision.is_commit() {
                     TransactionStatus::Accepted
                 } else {
                     TransactionStatus::Rejected
@@ -167,17 +181,28 @@ where
                 //     .map_err(TransactionApiError::ValidatorNodeClientError)?;
 
                 self.store.with_write_tx(|tx| {
-                    if !transaction.is_dry_run {
-                        if let Some(diff) = result.finalize.result.accept() {
-                            self.commit_result(tx, transaction_id, diff)?;
-                        }
+                    if !transaction.is_dry_run && final_decision.is_commit() {
+                        let diff = execution_result
+                            .as_ref()
+                            .and_then(|e| e.finalize.result.accept())
+                            .ok_or_else(|| TransactionApiError::InvalidTransactionQueryResponse {
+                                details: format!(
+                                    "NEVERHAPPEN: Finalize decision is COMMIT but transaction failed: {:?}",
+                                    execution_result.as_ref().and_then(|e| e.finalize.result.reject())
+                                ),
+                            })?;
+
+                        self.commit_result(tx, transaction_id, diff)?;
                     }
 
                     tx.transactions_set_result_and_status(
                         transaction_id,
-                        Some(&result.finalize),
-                        result.transaction_failure.as_ref(),
-                        result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
+                        execution_result.as_ref().map(|e| &e.finalize),
+                        execution_result.as_ref().and_then(|e| e.transaction_failure.as_ref()),
+                        execution_result
+                            .as_ref()
+                            .and_then(|e| e.fee_receipt.as_ref())
+                            .map(|f| f.total_fees_charged()),
                         // TODO: readd qcs
                         None,
                         // Some(&qc_resp.qcs),
@@ -202,16 +227,18 @@ where
                 Ok(Some(WalletTransaction {
                     transaction: transaction.transaction,
                     status: new_status,
-                    finalize: Some(result.finalize),
-                    transaction_failure: result.transaction_failure,
-                    final_fee: result.fee_receipt.as_ref().map(|f| f.total_fees_charged()),
+                    finalize: execution_result.as_ref().map(|e| e.finalize.clone()),
+                    transaction_failure: execution_result.as_ref().and_then(|e| e.transaction_failure.clone()),
+                    final_fee: execution_result
+                        .as_ref()
+                        .and_then(|e| e.fee_receipt.as_ref())
+                        .map(|f| f.total_fees_charged()),
                     // TODO: re-add QCs
                     // qcs: qc_resp.qcs,
                     qcs: vec![],
                     is_dry_run: transaction.is_dry_run,
                 }))
             },
-            None => Ok(None),
         }
     }
 
@@ -284,6 +311,8 @@ pub enum TransactionApiError {
     NetworkInterfaceError(String),
     #[error("Failed to extract known type data from value: {0}")]
     ValueVisitorError(#[from] IndexedValueVisitorError),
+    #[error("Invalid transaction query response: {details}")]
+    InvalidTransactionQueryResponse { details: String },
 }
 
 impl IsNotFoundError for TransactionApiError {

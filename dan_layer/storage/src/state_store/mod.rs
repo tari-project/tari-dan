@@ -2,8 +2,9 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    borrow::Borrow,
     collections::HashSet,
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, RangeInclusive},
 };
 
 use tari_common_types::types::FixedHash;
@@ -16,7 +17,6 @@ use crate::{
         BlockId,
         Decision,
         Evidence,
-        ExecutedTransaction,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -32,6 +32,7 @@ use crate::{
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionRecord,
+        ValidatorFee,
         Vote,
     },
     StorageError,
@@ -131,6 +132,10 @@ pub trait StateStoreReadTransaction {
     //---------------------------------- Substates --------------------------------------------//
     fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError>;
     fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
+        &mut self,
+        substates: I,
+    ) -> Result<bool, StorageError>;
     fn substates_get_many_within_range(
         &mut self,
         start: &ShardId,
@@ -146,6 +151,17 @@ pub trait StateStoreReadTransaction {
         &mut self,
         tx_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
+    // -------------------------------- ValidatorFess -------------------------------- //
+    fn validator_fees_get_total_fee_for_epoch(
+        &mut self,
+        epoch: Epoch,
+        validator_public_key: &Self::Addr,
+    ) -> Result<u64, StorageError>;
+    fn validator_fees_get_any_with_epoch_range(
+        &mut self,
+        epoch_range: RangeInclusive<Epoch>,
+        validator_public_key: Option<&Self::Addr>,
+    ) -> Result<Vec<ValidatorFee<Self::Addr>>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -170,7 +186,7 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Transaction -------------------------------- //
     fn transactions_insert(&mut self, transaction: &Transaction) -> Result<(), StorageError>;
-    fn executed_transactions_update(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError>;
+    fn transactions_update(&mut self, transaction: &TransactionRecord) -> Result<(), StorageError>;
     // -------------------------------- Transaction Pool -------------------------------- //
     fn transaction_pool_insert(
         &mut self,
@@ -222,6 +238,9 @@ pub trait StateStoreWriteTransaction {
         destroyed_transaction_id: &TransactionId,
     ) -> Result<(), StorageError>;
     fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
+
+    // -------------------------------- Validator Fees -------------------------------- //
+    fn validator_fees_insert(&mut self, validator_fee: &ValidatorFee<Self::Addr>) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy)]

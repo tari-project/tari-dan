@@ -8,6 +8,7 @@ mod quorum_certificate;
 mod substate;
 mod transaction;
 mod transaction_pool;
+mod validator_fee;
 mod vote;
 
 pub use block::*;
@@ -17,4 +18,5 @@ pub use quorum_certificate::*;
 pub use substate::*;
 pub use transaction::*;
 pub use transaction_pool::*;
+pub use validator_fee::*;
 pub use vote::*;

@@ -43,14 +43,14 @@ impl<T> FromHex<T> {
 
 impl<T> FromStr for FromHex<T>
 where
-    T: TryFrom<Vec<u8>>,
-    T::Error: std::error::Error + Send + Sync + 'static,
+    T: for<'a> TryFrom<&'a [u8]>,
+    for<'a> <T as TryFrom<&'a [u8]>>::Error: std::error::Error + Send + Sync + 'static,
 {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let a = from_hex(s)?;
-        let item = T::try_from(a)?;
+        let item = T::try_from(&a)?;
         Ok(Self(item))
     }
 }

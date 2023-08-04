@@ -29,6 +29,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
     substate::SubstateAddress,
+    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_template_lib::{
     args,
@@ -279,7 +280,6 @@ mod errors {
 }
 
 mod consensus {
-    use tari_dan_engine::runtime::ConsensusContext;
 
     use super::*;
 
@@ -293,8 +293,7 @@ mod consensus {
 
         // set the value of current epoch to "1" and call the template function again to check that it reads the new
         // value
-        let new_consensus_context = ConsensusContext { current_epoch: 1 };
-        template_test.set_consensus_context(new_consensus_context);
+        template_test.set_virtual_substate(VirtualSubstateAddress::CurrentEpoch, VirtualSubstate::CurrentEpoch(1));
         let result: u64 = template_test.call_function("TestConsensus", "current_epoch", args![], vec![]);
         assert_eq!(result, 1);
     }

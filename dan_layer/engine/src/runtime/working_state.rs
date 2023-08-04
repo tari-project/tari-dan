@@ -3,18 +3,21 @@
 
 use std::collections::HashMap;
 
-use tari_dan_common_types::optional::Optional;
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_engine_types::{
     bucket::Bucket,
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     events::Event,
+    fee_claim::{ClaimedFeeAddress, FeeClaim},
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
     substate::{Substate, SubstateAddress},
     vault::Vault,
+    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_template_lib::models::{
     BucketId,
@@ -28,7 +31,7 @@ use tari_template_lib::models::{
 
 use super::workspace::Workspace;
 use crate::{
-    runtime::{RuntimeError, RuntimeState, TransactionCommitError},
+    runtime::{RuntimeError, RuntimeState, TransactionCommitError, VirtualSubstates},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
@@ -44,6 +47,8 @@ pub(super) struct WorkingState {
     pub new_non_fungibles: HashMap<NonFungibleAddress, NonFungibleContainer>,
     pub new_non_fungible_indexes: HashMap<NonFungibleIndexAddress, NonFungibleIndex>,
     pub claimed_confidential_outputs: Vec<UnclaimedConfidentialOutputAddress>,
+    pub new_fee_claims: HashMap<ClaimedFeeAddress, FeeClaim>,
+    pub virtual_substates: VirtualSubstates,
 
     pub runtime_state: Option<RuntimeState>,
     pub last_instruction_output: Option<Vec<u8>>,
@@ -52,7 +57,7 @@ pub(super) struct WorkingState {
 }
 
 impl WorkingState {
-    pub fn new(state_store: MemoryStateStore) -> Self {
+    pub fn new(state_store: MemoryStateStore, virtual_substates: VirtualSubstates) -> Self {
         Self {
             events: Vec::new(),
             logs: Vec::new(),
@@ -67,6 +72,8 @@ impl WorkingState {
             last_instruction_output: None,
             workspace: Workspace::default(),
             state_store,
+            virtual_substates,
+            new_fee_claims: HashMap::default(),
         }
     }
 
@@ -267,6 +274,40 @@ impl WorkingState {
         self.buckets
             .remove(&bucket_id)
             .ok_or(RuntimeError::BucketNotFound { bucket_id })
+    }
+
+    pub fn take_fee_claim(&mut self, epoch: Epoch, validator_public_key: PublicKey) -> Result<FeeClaim, RuntimeError> {
+        let substate = self
+            .virtual_substates
+            .remove(&VirtualSubstateAddress::UnclaimedValidatorFee {
+                epoch: epoch.as_u64(),
+                address: validator_public_key.clone(),
+            })
+            .ok_or(RuntimeError::FeeClaimNotPermitted {
+                epoch,
+                address: validator_public_key.clone(),
+            })?;
+
+        let VirtualSubstate::UnclaimedValidatorFee(fee_claim) = substate else {
+            return Err(RuntimeError::FeeClaimNotPermitted {
+                epoch, address: validator_public_key
+            });
+        };
+        Ok(fee_claim)
+    }
+
+    pub fn get_current_epoch(&self) -> Result<Epoch, RuntimeError> {
+        let address = VirtualSubstateAddress::CurrentEpoch;
+        let current_epoch =
+            self.virtual_substates
+                .get(&address)
+                .ok_or_else(|| RuntimeError::VirtualSubstateNotFound {
+                    address: address.clone(),
+                })?;
+        let VirtualSubstate::CurrentEpoch(epoch) = current_epoch else {
+            return Err(RuntimeError::VirtualSubstateNotFound { address});
+        };
+        Ok(Epoch(*epoch))
     }
 
     pub(super) fn validate_finalized(&self) -> Result<(), TransactionCommitError> {

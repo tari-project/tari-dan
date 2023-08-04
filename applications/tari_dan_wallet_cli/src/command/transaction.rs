@@ -366,19 +366,19 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
 
     let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
 
-    let fee = common.fee.map(|f| f.try_into()).transpose()?.unwrap_or(Amount(1000));
+    let fee = common.fee.map(|f| f.try_into()).transpose()?;
     let resp = client
         .accounts_transfer(TransferRequest {
             account: source_account_name,
             amount: Amount::from(amount),
             resource_address,
             destination_public_key,
-            fee: Some(fee),
+            fee,
         })
         .await?;
 
     println!("Transaction: {}", resp.transaction_id);
-    println!("Fee: {} ({} refunded)", resp.fee, fee - resp.fee);
+    println!("Fee: {} ({} refunded)", resp.fee, resp.fee_refunded);
     println!();
     summarize_finalize_result(&resp.result);
 
@@ -404,7 +404,7 @@ pub async fn handle_confidential_transfer(
             account: source_account,
             amount: Amount::from(amount),
             resource_address: resource_address.unwrap_or(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
-            destination_public_key,
+            validator_public_key: destination_public_key,
             fee: common.fee.map(|f| f.try_into()).transpose()?,
         })
         .await?;
@@ -538,6 +538,14 @@ pub fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::NonFungibleIndex(index) => {
                         let referenced_address = SubstateAddress::from(index.referenced_address().clone());
                         println!("      ▶ NFT index {} referencing {}", address, referenced_address);
+                    },
+                    SubstateValue::FeeClaim(fee_claim) => {
+                        println!("      ▶ Fee claim: {}", address);
+                        println!("        ▶ Amount: {}", fee_claim.amount);
+                        println!(
+                            "        ▶ validator: {}",
+                            to_hex(fee_claim.validator_public_key.as_bytes())
+                        );
                     },
                 }
                 println!();
@@ -799,6 +807,7 @@ impl CliArg {
                 SubstateAddress::NonFungible(v) => arg!(v),
                 SubstateAddress::NonFungibleIndex(v) => arg!(v),
                 SubstateAddress::TransactionReceipt(v) => arg!(v),
+                SubstateAddress::ClaimedFee(v) => arg!(v),
             },
             CliArg::TemplateAddress(v) => arg!(v),
             CliArg::NonFungibleId(v) => arg!(v),

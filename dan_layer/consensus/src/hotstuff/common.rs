@@ -15,6 +15,11 @@ use crate::{hotstuff::error::HotStuffError, messages::HotstuffMessage};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff";
 
+/// The value that fees are divided by to determine the amount of fees to burn. 0 means no fees are burned.
+/// This is a placeholder for the fee exhaust consensus constant so that we know where it's used later.
+/// TODO: exhaust > 0
+pub const EXHAUST_DIVISOR: u64 = 0;
+
 // To avoid clippy::type_complexity
 pub(super) type CommitteeAndMessage<TAddr> = (Committee<TAddr>, HotstuffMessage<TAddr>);
 

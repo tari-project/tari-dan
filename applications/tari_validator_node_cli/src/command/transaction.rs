@@ -47,7 +47,7 @@ use tari_template_lib::{
 };
 use tari_transaction::{Transaction, TransactionId};
 use tari_transaction_manifest::parse_manifest;
-use tari_utilities::hex::to_hex;
+use tari_utilities::{hex::to_hex, ByteArray};
 use tari_validator_node_client::{
     types::{
         DryRunTransactionFinalizeResult,
@@ -396,6 +396,14 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                         let referenced_address = SubstateAddress::from(index.referenced_address().clone());
                         println!("      ▶ NFT index {} referencing {}", address, referenced_address);
                     },
+                    SubstateValue::FeeClaim(fee_claim) => {
+                        println!("      ▶ fee_claim: {}", address);
+                        println!("        ▶ amount: {}", fee_claim.amount);
+                        println!(
+                            "        ▶ recipient: {}",
+                            to_hex(fee_claim.validator_public_key.as_bytes())
+                        );
+                    },
                 }
                 println!();
             }
@@ -690,6 +698,7 @@ impl CliArg {
                 SubstateAddress::NonFungible(v) => arg!(v),
                 SubstateAddress::NonFungibleIndex(v) => arg!(v),
                 SubstateAddress::TransactionReceipt(v) => arg!(v),
+                SubstateAddress::ClaimedFee(v) => arg!(v),
             },
             CliArg::TemplateAddress(v) => arg!(v),
             CliArg::NonFungibleId(v) => arg!(v),

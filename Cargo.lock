@@ -7102,6 +7102,7 @@ dependencies = [
  "tari_common_types",
  "tari_core",
  "tari_dan_common_types",
+ "tari_engine_types",
  "tari_utilities",
  "thiserror",
  "tonic 0.6.2",
@@ -7909,6 +7910,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "tari_dan_common_types",
+ "tari_dan_storage",
  "tari_engine_types",
  "tari_transaction",
  "thiserror",
@@ -8095,6 +8097,7 @@ name = "tari_state_store_sqlite"
 version = "0.50.0-pre.0"
 dependencies = [
  "anyhow",
+ "bigdecimal",
  "diesel",
  "diesel_migrations",
  "hex",

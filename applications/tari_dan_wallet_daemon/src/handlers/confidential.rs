@@ -24,7 +24,10 @@ use tari_wallet_daemon_client::types::{
     ProofsGenerateResponse,
 };
 
-use crate::handlers::{get_account_or_default, invalid_params, HandlerContext};
+use crate::handlers::{
+    helpers::{get_account_or_default, invalid_params},
+    HandlerContext,
+};
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc::confidential";
 

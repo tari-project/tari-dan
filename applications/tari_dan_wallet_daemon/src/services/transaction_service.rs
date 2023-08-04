@@ -128,7 +128,7 @@ where
             info!(
                 target: LOG_TARGET,
                 "Requesting result for transaction {}",
-                transaction.transaction.hash()
+                transaction.transaction.id()
             );
             let maybe_finalized_transaction = transaction_api
                 .check_and_store_finalized_transaction(*transaction.transaction.id())
@@ -138,8 +138,8 @@ where
                 Some(transaction) => {
                     debug!(
                         target: LOG_TARGET,
-                        "Transaction {} has been finalized: {:?}",
-                        transaction.transaction.hash(),
+                        "Transaction {} has been finalized: {}",
+                        transaction.transaction.id(),
                         transaction.status,
                     );
 
@@ -155,8 +155,7 @@ where
                         },
                         None => notify.notify(TransactionInvalidEvent {
                             transaction_id: *transaction.transaction.id(),
-                            status: transaction.status,
-                            final_fee: transaction.final_fee.unwrap_or_default(),
+                            transaction,
                         }),
                     }
                 },

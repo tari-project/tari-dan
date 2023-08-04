@@ -51,7 +51,7 @@ use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_common::initialize_logging;
 use tari_common_types::types::PublicKey;
 use tari_comms::multiaddr::Multiaddr;
-use tari_crypto::{ristretto::RistrettoPublicKey, tari_utilities::hex::Hex};
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_engine::abi::Type;
 use tari_dan_storage::consensus_models::QuorumDecision;
 use tari_shutdown::Shutdown;
@@ -131,7 +131,7 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: Stri
         .filter(|vn| vn.name != name)
         .map(|vn| {
             (
-                PublicKey::from_hex(&vn.public_key).unwrap(),
+                vn.public_key.clone(),
                 Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
             )
         })
@@ -148,6 +148,11 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: Stri
         .await
         .unwrap();
     }
+}
+
+#[given(expr = "fees are enabled")]
+async fn fees_are_enabled(world: &mut TariWorld) {
+    world.fees_enabled = true;
 }
 
 #[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
@@ -848,7 +853,7 @@ async fn given_all_validator_connects_to_other_vns(world: &mut TariWorld) {
         .values()
         .map(|vn| {
             (
-                PublicKey::from_hex(&vn.public_key).unwrap(),
+                vn.public_key.clone(),
                 Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
             )
         })
@@ -860,9 +865,8 @@ async fn given_all_validator_connects_to_other_vns(world: &mut TariWorld) {
             continue;
         }
         let mut cli = vn.create_client();
-        let this_pk = RistrettoPublicKey::from_hex(&vn.public_key).unwrap();
         for (pk, addr) in details.iter().cloned() {
-            if pk == this_pk {
+            if pk == vn.public_key {
                 continue;
             }
             cli.add_peer(AddPeerRequest {

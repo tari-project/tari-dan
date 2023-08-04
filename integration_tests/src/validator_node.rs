@@ -31,8 +31,10 @@ use tari_common::{
     configuration::{CommonConfig, StringList},
     exit_codes::ExitError,
 };
+use tari_common_types::types::PublicKey;
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tari_validator_node::{run_validator_node, ApplicationConfig, ValidatorNodeConfig};
@@ -48,7 +50,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ValidatorNodeProcess {
     pub name: String,
-    pub public_key: String,
+    pub public_key: PublicKey,
     pub port: u16,
     pub json_rpc_port: u16,
     pub http_ui_port: u16,
@@ -100,6 +102,7 @@ pub async fn spawn_validator_node(
         &validator_node_name,
     );
     let temp_dir_path = temp_dir.clone();
+    let enable_fees = world.fees_enabled;
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
             common: CommonConfig::default(),
@@ -134,8 +137,7 @@ pub async fn spawn_validator_node(
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
 
-        // TODO: test fees in cucumber
-        config.validator_node.no_fees = true;
+        config.validator_node.no_fees = !enable_fees;
 
         // The VNS will try to auto register upon startup
         config.validator_node.auto_register = false;
@@ -178,13 +180,13 @@ pub fn get_vn_client(port: u16) -> ValidatorNodeClient {
     ValidatorNodeClient::connect(endpoint).unwrap()
 }
 
-async fn get_vn_identity(jrpc_port: u16) -> String {
+async fn get_vn_identity(jrpc_port: u16) -> PublicKey {
     // send the JSON RPC "get_identity" request to the VN
     let mut client = get_vn_client(jrpc_port);
     let resp = client.get_identity().await.unwrap();
 
     assert!(!resp.public_key.is_empty());
-    resp.public_key
+    PublicKey::from_hex(&resp.public_key).unwrap()
 }
 
 impl ValidatorNodeProcess {

@@ -15,7 +15,8 @@ tari_transaction = { path = "../transaction" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
 
 anyhow = "1.0"
-diesel = { version = "2", default-features = false, features = ["sqlite", "time"] }
+bigdecimal = "0.3.1"
+diesel = { version = "2", default-features = false, features = ["sqlite", "time", "numeric"] }
 diesel_migrations = "2"
 log = "0.4"
 hex = "0.4"

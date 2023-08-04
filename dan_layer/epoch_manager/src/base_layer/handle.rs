@@ -189,6 +189,19 @@ impl EpochManagerReader for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    async fn get_many_validator_nodes(
+        &self,
+        query: Vec<(Epoch, CommsPublicKey)>,
+    ) -> Result<HashMap<(Epoch, Self::Addr), ValidatorNode<Self::Addr>>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetManyValidatorNodes { query, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     async fn get_validator_node_merkle_proof(
         &self,
         epoch: Epoch,

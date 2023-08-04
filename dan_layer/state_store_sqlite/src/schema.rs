@@ -135,7 +135,8 @@ diesel::table! {
         original_decision -> Text,
         pending_decision -> Nullable<Text>,
         evidence -> Text,
-        fee -> BigInt,
+        transaction_fee -> BigInt,
+        leader_fee -> BigInt,
         stage -> Text,
         is_ready -> Bool,
         updated_at -> Timestamp,
@@ -158,6 +159,19 @@ diesel::table! {
         result -> Nullable<Text>,
         execution_time_ms -> Nullable<BigInt>,
         final_decision -> Nullable<Text>,
+        abort_details -> Nullable<Text>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    validator_fees (id) {
+        id -> Integer,
+        validator_addr -> Text,
+        epoch -> BigInt,
+        block_id -> Text,
+        total_transaction_fee -> BigInt,
+        total_fee_due -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -190,5 +204,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     substates,
     transaction_pool,
     transactions,
+    validator_fees,
     votes,
 );

@@ -36,6 +36,10 @@ pub enum EpochManagerRequest {
         addr: CommsPublicKey,
         reply: Reply<ValidatorNode<CommsPublicKey>>,
     },
+    GetManyValidatorNodes {
+        query: Vec<(Epoch, CommsPublicKey)>,
+        reply: Reply<HashMap<(Epoch, CommsPublicKey), ValidatorNode<CommsPublicKey>>>,
+    },
     AddValidatorNodeRegistration {
         block_height: u64,
         registration: ValidatorNodeRegistration,
