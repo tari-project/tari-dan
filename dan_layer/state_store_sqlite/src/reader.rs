@@ -304,6 +304,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
             .filter(blocks::parent_block_id.eq(serialize_hex(parent_id)))
+            .filter(blocks::block_id.ne(blocks::parent_block_id)) // Exclude the genesis block
             .first::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_get_by_parent",
