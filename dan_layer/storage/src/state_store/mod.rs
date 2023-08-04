@@ -104,7 +104,7 @@ pub trait StateStoreReadTransaction {
     fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
 
-    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError>;
+    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
     fn transaction_pool_get(&mut self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError>;
@@ -125,9 +125,9 @@ pub trait StateStoreReadTransaction {
         &mut self,
         block_id: &BlockId,
         sender_leaf_hash: &FixedHash,
-    ) -> Result<Vote, StorageError>;
+    ) -> Result<Vote<Self::Addr>, StorageError>;
     fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError>;
-    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError>;
+    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote<Self::Addr>>, StorageError>;
     //---------------------------------- Substates --------------------------------------------//
     fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError>;
     fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError>;
@@ -153,7 +153,7 @@ pub trait StateStoreWriteTransaction {
     fn blocks_insert(&mut self, block: &Block<Self::Addr>) -> Result<(), StorageError>;
 
     // -------------------------------- QuorumCertificate -------------------------------- //
-    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError>;
+    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError>;
 
     // -------------------------------- Bookkeeping -------------------------------- //
     fn last_voted_set(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
@@ -192,7 +192,7 @@ pub trait StateStoreWriteTransaction {
     fn remove_missing_transaction(&mut self, transaction_id: TransactionId) -> Result<Option<BlockId>, StorageError>;
 
     // -------------------------------- Votes -------------------------------- //
-    fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
+    fn votes_insert(&mut self, vote: &Vote<Self::Addr>) -> Result<(), StorageError>;
 
     //---------------------------------- Substates --------------------------------------------//
     fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(

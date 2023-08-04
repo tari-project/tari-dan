@@ -25,7 +25,7 @@ pub struct Block<TAddr> {
     // Header
     id: BlockId,
     parent: BlockId,
-    justify: QuorumCertificate,
+    justify: QuorumCertificate<TAddr>,
     height: NodeHeight,
     epoch: Epoch,
     proposed_by: TAddr,
@@ -39,7 +39,7 @@ pub struct Block<TAddr> {
 impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
     pub fn new(
         parent: BlockId,
-        justify: QuorumCertificate,
+        justify: QuorumCertificate<TAddr>,
         height: NodeHeight,
         epoch: Epoch,
         proposed_by: TAddr,
@@ -63,7 +63,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
     pub fn load(
         id: BlockId,
         parent: BlockId,
-        justify: QuorumCertificate,
+        justify: QuorumCertificate<TAddr>,
         height: NodeHeight,
         epoch: Epoch,
         proposed_by: TAddr,
@@ -187,7 +187,7 @@ impl<TAddr> Block<TAddr> {
         &self.parent
     }
 
-    pub fn justify(&self) -> &QuorumCertificate {
+    pub fn justify(&self) -> &QuorumCertificate<TAddr> {
         &self.justify
     }
 
@@ -287,7 +287,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
     pub fn get_votes<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         &self,
         tx: &mut TTx,
-    ) -> Result<Vec<Vote>, StorageError> {
+    ) -> Result<Vec<Vote<TAddr>>, StorageError> {
         Vote::get_for_block(tx, &self.id)
     }
 

@@ -330,7 +330,7 @@ where TConsensusSpec: ConsensusSpec
     async fn send_vote_to_leader(
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        vote: VoteMessage,
+        vote: VoteMessage<TConsensusSpec::Addr>,
         height: NodeHeight,
     ) -> Result<(), HotStuffError> {
         let leader = self.leader_strategy.get_leader_for_next_block(local_committee, height);
@@ -541,7 +541,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         block: &Block<TConsensusSpec::Addr>,
         decision: QuorumDecision,
-    ) -> Result<VoteMessage, HotStuffError> {
+    ) -> Result<VoteMessage<TConsensusSpec::Addr>, HotStuffError> {
         let merkle_proof = self
             .epoch_manager
             .get_validator_node_merkle_proof(block.epoch())

@@ -5,18 +5,14 @@ use std::ops::DerefMut;
 
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{
-    committee::CommitteeShard,
-    hashing::MergedValidatorNodeMerkleProof,
-    optional::Optional,
-    NodeAddressable,
-};
+use tari_dan_common_types::{committee::CommitteeShard, hashing::MergedValidatorNodeMerkleProof, optional::Optional};
 use tari_dan_storage::{
     consensus_models::{Block, HighQc, QuorumCertificate, QuorumDecision, Vote},
     StateStore,
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
+use thiserror::__private::DisplayAsDisplay;
 
 use crate::{
     hotstuff::{common::update_high_qc, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
@@ -54,7 +50,11 @@ where TConsensusSpec: ConsensusSpec
     }
 
     #[allow(clippy::too_many_lines)]
-    pub async fn handle(&self, from: TConsensusSpec::Addr, message: VoteMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(
+        &self,
+        from: TConsensusSpec::Addr,
+        message: VoteMessage<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
             "🔥 Receive VOTE for node {} from {}", message.block_id, from,
@@ -117,7 +117,7 @@ where TConsensusSpec: ConsensusSpec
             }
             .save(tx)?;
 
-            let count = Vote::count_for_block(tx.deref_mut(), &message.block_id)?;
+            let count = Vote::<TConsensusSpec::Addr>::count_for_block(tx.deref_mut(), &message.block_id)?;
             Ok::<_, HotStuffError>((block, count))
         })?;
 
@@ -166,10 +166,7 @@ where TConsensusSpec: ConsensusSpec
 
             // Wait for our own vote to make sure we've processed all transactions and we also have an up to date
             // database
-            if !votes
-                .iter()
-                .any(|x| x.signature.public_key.as_bytes() == vn.address.as_bytes())
-            {
+            if !votes.iter().any(|x| x.signature.public_key == vn.address) {
                 warn!(target: LOG_TARGET, "🔥 Received enough votes but waiting for our own vote for block {}", message.block_id);
                 tx.rollback()?;
                 return Ok(());
@@ -200,7 +197,10 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    fn calculate_threshold_decision(votes: &[Vote], local_committee_shard: &CommitteeShard) -> Option<QuorumDecision> {
+    fn calculate_threshold_decision(
+        votes: &[Vote<TConsensusSpec::Addr>],
+        local_committee_shard: &CommitteeShard,
+    ) -> Option<QuorumDecision> {
         let mut count_accept = 0;
         let mut count_reject = 0;
         for vote in votes {
@@ -221,13 +221,17 @@ where TConsensusSpec: ConsensusSpec
         None
     }
 
-    fn validate_vote_message(&self, message: &VoteMessage, sender_leaf_hash: &FixedHash) -> Result<(), HotStuffError> {
+    fn validate_vote_message(
+        &self,
+        message: &VoteMessage<TConsensusSpec::Addr>,
+        sender_leaf_hash: &FixedHash,
+    ) -> Result<(), HotStuffError> {
         let challenge =
             self.vote_signature_service
                 .create_challenge(sender_leaf_hash, &message.block_id, &message.decision);
-        if !message.signature.verify(challenge) {
+        if !self.vote_signature_service.verify(&message.signature, &challenge) {
             return Err(HotStuffError::InvalidVoteSignature {
-                signer_public_key: message.signature.public_key().clone(),
+                signer_public_key: message.signature.public_key().as_display().to_string(),
             });
         }
         Ok(())

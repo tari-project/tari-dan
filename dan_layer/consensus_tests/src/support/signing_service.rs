@@ -2,32 +2,42 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use rand::rngs::OsRng;
-use tari_common_types::types::{PrivateKey, PublicKey};
+use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
 use tari_crypto::keys::PublicKey as _;
-use tari_dan_storage::consensus_models::ValidatorSchnorrSignature;
+use tari_dan_common_types::NodeAddressable;
+use tari_dan_storage::consensus_models::{ValidatorSchnorrSignature, ValidatorSignature};
 
 #[derive(Debug, Clone)]
-pub struct TestVoteSignatureService {
-    pub public_key: PublicKey,
+pub struct TestVoteSignatureService<TAddr> {
+    pub public_key: TAddr,
     pub secret_key: PrivateKey,
+    pub is_signature_valid: bool,
 }
 
-impl TestVoteSignatureService {
-    pub fn new() -> Self {
-        let (secret_key, public_key) = PublicKey::random_keypair(&mut OsRng);
-        Self { public_key, secret_key }
+impl<TAddr> TestVoteSignatureService<TAddr> {
+    pub fn new(public_key: TAddr) -> Self {
+        let (secret_key, _public_key) = PublicKey::random_keypair(&mut OsRng);
+        Self {
+            public_key,
+            secret_key,
+            is_signature_valid: true,
+        }
     }
 }
 
-impl ValidatorSignatureService for TestVoteSignatureService {
+impl<TAddr> ValidatorSignatureService<TAddr> for TestVoteSignatureService<TAddr> {
     fn sign<M: AsRef<[u8]>>(&self, message: M) -> ValidatorSchnorrSignature {
         ValidatorSchnorrSignature::sign_message(&self.secret_key, message).unwrap()
     }
 
-    fn public_key(&self) -> &PublicKey {
+    fn public_key(&self) -> &TAddr {
         &self.public_key
     }
 }
 
-impl VoteSignatureService for TestVoteSignatureService {}
+impl<TAddr: NodeAddressable> VoteSignatureService<TAddr> for TestVoteSignatureService<TAddr> {
+    fn verify(&self, _signature: &ValidatorSignature<TAddr>, _challenge: &FixedHash) -> bool {
+        self.is_signature_valid
+    }
+}

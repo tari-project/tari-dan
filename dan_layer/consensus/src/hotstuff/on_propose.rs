@@ -181,7 +181,7 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         epoch: Epoch,
         parent_block: &Block<TConsensusSpec::Addr>,
-        high_qc: QuorumCertificate,
+        high_qc: QuorumCertificate<TConsensusSpec::Addr>,
         proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
     ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
         // TODO: Configure

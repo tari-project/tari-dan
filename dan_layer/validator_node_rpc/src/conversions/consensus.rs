@@ -20,10 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    borrow::Borrow,
-    convert::{TryFrom, TryInto},
-};
+use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
 use serde::Serialize;
@@ -90,8 +87,8 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::HotStuffMessa
 
 //---------------------------------- NewView --------------------------------------------//
 
-impl From<NewViewMessage> for proto::consensus::NewViewMessage {
-    fn from(value: NewViewMessage) -> Self {
+impl<TAddr: NodeAddressable> From<NewViewMessage<TAddr>> for proto::consensus::NewViewMessage {
+    fn from(value: NewViewMessage<TAddr>) -> Self {
         Self {
             high_qc: Some(value.high_qc.into()),
             new_height: value.new_height.0,
@@ -99,7 +96,7 @@ impl From<NewViewMessage> for proto::consensus::NewViewMessage {
     }
 }
 
-impl TryFrom<proto::consensus::NewViewMessage> for NewViewMessage {
+impl<TAddr: NodeAddressable> TryFrom<proto::consensus::NewViewMessage> for NewViewMessage<TAddr> {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::NewViewMessage) -> Result<Self, Self::Error> {
@@ -132,8 +129,8 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::ProposalMessa
 
 // -------------------------------- VoteMessage -------------------------------- //
 
-impl From<VoteMessage> for proto::consensus::VoteMessage {
-    fn from(msg: VoteMessage) -> Self {
+impl<TAddr: NodeAddressable> From<VoteMessage<TAddr>> for proto::consensus::VoteMessage {
+    fn from(msg: VoteMessage<TAddr>) -> Self {
         Self {
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
@@ -144,7 +141,7 @@ impl From<VoteMessage> for proto::consensus::VoteMessage {
     }
 }
 
-impl TryFrom<proto::consensus::VoteMessage> for VoteMessage {
+impl<TAddr: NodeAddressable> TryFrom<proto::consensus::VoteMessage> for VoteMessage<TAddr> {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::VoteMessage) -> Result<Self, Self::Error> {
@@ -229,7 +226,7 @@ impl<TAddr: NodeAddressable> From<tari_dan_storage::consensus_models::Block<TAdd
             parent_id: value.parent().as_bytes().to_vec(),
             proposed_by: value.proposed_by().as_bytes().to_vec(),
             merkle_root: value.merkle_root().as_slice().to_vec(),
-            justify: Some(value.justify().into()),
+            justify: Some(value.justify().clone().into()),
             commands: value.into_commands().into_iter().map(Into::into).collect(),
         }
     }
@@ -337,9 +334,9 @@ impl TryFrom<proto::consensus::Evidence> for Evidence {
 
 // -------------------------------- QuorumCertificate -------------------------------- //
 
-impl<T: Borrow<QuorumCertificate>> From<T> for proto::consensus::QuorumCertificate {
-    fn from(value: T) -> Self {
-        let source = value.borrow();
+impl<TAddr: NodeAddressable> From<QuorumCertificate<TAddr>> for proto::consensus::QuorumCertificate {
+    fn from(source: QuorumCertificate<TAddr>) -> Self {
+        // let source = value.borrow();
         // TODO: unwrap
         let merged_merkle_proof = encode(&source.merged_proof()).unwrap();
         Self {
@@ -354,7 +351,7 @@ impl<T: Borrow<QuorumCertificate>> From<T> for proto::consensus::QuorumCertifica
     }
 }
 
-impl TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate {
+impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::QuorumCertificate> for QuorumCertificate<TAddr> {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::consensus::QuorumCertificate) -> Result<Self, Self::Error> {

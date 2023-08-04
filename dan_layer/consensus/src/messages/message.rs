@@ -10,9 +10,9 @@ use crate::messages::RequestMissingTransactionsMessage;
 
 #[derive(Debug, Clone, Serialize)]
 pub enum HotstuffMessage<TAddr> {
-    NewView(NewViewMessage),
+    NewView(NewViewMessage<TAddr>),
     Proposal(ProposalMessage<TAddr>),
-    Vote(VoteMessage),
+    Vote(VoteMessage<TAddr>),
     RequestMissingTransactions(RequestMissingTransactionsMessage),
     RequestedTransaction(RequestedTransactionMessage),
 }

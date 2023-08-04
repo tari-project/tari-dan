@@ -201,7 +201,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         }
     }
 
-    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError> {
+    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError> {
         use crate::schema::quorum_certificates;
 
         let insert = (
@@ -481,7 +481,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError> {
+    fn votes_insert(&mut self, vote: &Vote<Self::Addr>) -> Result<(), StorageError> {
         use crate::schema::votes;
 
         let insert = (

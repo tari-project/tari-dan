@@ -192,14 +192,14 @@ impl SubstateRecord {
     pub fn get_created_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<QuorumCertificate, StorageError> {
+    ) -> Result<QuorumCertificate<TTx::Addr>, StorageError> {
         tx.quorum_certificates_get(self.created_justify())
     }
 
     pub fn get_destroyed_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<Option<QuorumCertificate>, StorageError> {
+    ) -> Result<Option<QuorumCertificate<TTx::Addr>>, StorageError> {
         self.destroyed_justify()
             .map(|justify| tx.quorum_certificates_get(justify))
             .transpose()

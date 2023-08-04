@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
     indexed_value::{IndexedValue, IndexedValueVisitorError},
@@ -35,7 +36,7 @@ where
         }
     }
 
-    pub fn get(&self, tx_id: TransactionId) -> Result<WalletTransaction, TransactionApiError> {
+    pub fn get(&self, tx_id: TransactionId) -> Result<WalletTransaction<PublicKey>, TransactionApiError> {
         let mut tx = self.store.create_read_tx()?;
         let transaction = tx.transaction_get(tx_id)?;
         Ok(transaction)
@@ -97,13 +98,13 @@ where
     pub fn fetch_all_by_status(
         &self,
         status: TransactionStatus,
-    ) -> Result<Vec<WalletTransaction>, TransactionApiError> {
+    ) -> Result<Vec<WalletTransaction<PublicKey>>, TransactionApiError> {
         let mut tx = self.store.create_read_tx()?;
         let transactions = tx.transactions_fetch_all_by_status(status)?;
         Ok(transactions)
     }
 
-    pub fn fetch_all(&self) -> Result<Vec<WalletTransaction>, TransactionApiError> {
+    pub fn fetch_all(&self) -> Result<Vec<WalletTransaction<PublicKey>>, TransactionApiError> {
         let mut tx = self.store.create_read_tx()?;
         let transactions = tx.transactions_fetch_all()?;
         Ok(transactions)
@@ -112,7 +113,7 @@ where
     pub async fn check_and_store_finalized_transaction(
         &self,
         transaction_id: TransactionId,
-    ) -> Result<Option<WalletTransaction>, TransactionApiError> {
+    ) -> Result<Option<WalletTransaction<PublicKey>>, TransactionApiError> {
         // Multithreaded considerations: The transaction result could be requested more than once because db
         // transactions cannot be used around await points.
         let transaction = self.store.with_read_tx(|tx| tx.transaction_get(transaction_id))?;

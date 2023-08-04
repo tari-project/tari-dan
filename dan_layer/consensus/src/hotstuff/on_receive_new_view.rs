@@ -45,7 +45,11 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: NewViewMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(
+        &mut self,
+        from: TConsensusSpec::Addr,
+        message: NewViewMessage<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
         let NewViewMessage { high_qc, new_height } = message;
         debug!(
             target: LOG_TARGET,
@@ -134,7 +138,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    fn validate_qc(&self, _qc: &QuorumCertificate) -> Result<(), HotStuffError> {
+    fn validate_qc(&self, _qc: &QuorumCertificate<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
         // TODO
         Ok(())
     }

@@ -41,7 +41,7 @@ impl HighQc {
     pub fn get_quorum_certificate<TTx: StateStoreReadTransaction + ?Sized>(
         &self,
         tx: &mut TTx,
-    ) -> Result<QuorumCertificate, StorageError> {
+    ) -> Result<QuorumCertificate<TTx::Addr>, StorageError> {
         QuorumCertificate::get(tx, &self.qc_id)
     }
 

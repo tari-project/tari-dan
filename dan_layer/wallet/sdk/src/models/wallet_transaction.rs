@@ -11,13 +11,13 @@ use tari_template_lib::models::Amount;
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WalletTransaction {
+pub struct WalletTransaction<TAddr> {
     pub transaction: Transaction,
     pub status: TransactionStatus,
     pub finalize: Option<FinalizeResult>,
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Option<Amount>,
-    pub qcs: Vec<QuorumCertificate>,
+    pub qcs: Vec<QuorumCertificate<TAddr>>,
     pub is_dry_run: bool,
 }
 

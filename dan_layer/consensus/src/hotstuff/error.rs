@@ -1,7 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{BlockId, TransactionPoolError},
@@ -38,7 +37,7 @@ pub enum HotStuffError {
     #[error("State manager error: {0}")]
     StateManagerError(anyhow::Error),
     #[error("Invalid vote signature from {signer_public_key} (unauthenticated)")]
-    InvalidVoteSignature { signer_public_key: PublicKey },
+    InvalidVoteSignature { signer_public_key: String },
     #[error("Transaction pool error: {0}")]
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]

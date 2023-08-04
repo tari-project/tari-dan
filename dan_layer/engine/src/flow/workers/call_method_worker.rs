@@ -34,7 +34,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             .ok_or_else(|| anyhow::anyhow!("could not find arg `self`"))?;
         let component_address = String::from_utf8(component_address.as_bytes()?.to_vec())?;
         let component_address = ComponentAddress::from_str(&component_address)?;
-        dbg!(&component_address);
 
         let method_name = &node
             .get_data::<String>("method")?

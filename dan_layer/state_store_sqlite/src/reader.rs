@@ -15,7 +15,7 @@ use diesel::{
     SqliteConnection,
 };
 use log::warn;
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
@@ -75,7 +75,9 @@ impl<'a, TAddr> SqliteStateStoreReadTransaction<'a, TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_, TAddr> {
+impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransaction
+    for SqliteStateStoreReadTransaction<'_, TAddr>
+{
     type Addr = TAddr;
 
     fn last_voted_get(&mut self) -> Result<LastVoted, StorageError> {
@@ -376,7 +378,7 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
         deserialize_json(&txs)
     }
 
-    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError> {
+    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
         use crate::schema::quorum_certificates;
 
         let qc_json = quorum_certificates::table
@@ -445,7 +447,7 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
         Ok(count as u64)
     }
 
-    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError> {
+    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote<Self::Addr>>, StorageError> {
         use crate::schema::votes;
 
         let votes = votes::table
@@ -463,7 +465,7 @@ impl<TAddr: NodeAddressable + Serialize> StateStoreReadTransaction for SqliteSta
         &mut self,
         block_id: &BlockId,
         sender_leaf_hash: &FixedHash,
-    ) -> Result<Vote, StorageError> {
+    ) -> Result<Vote<Self::Addr>, StorageError> {
         use crate::schema::votes;
 
         let vote = votes::table
