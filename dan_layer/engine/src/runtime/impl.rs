@@ -27,11 +27,12 @@ use std::{
 
 use log::warn;
 use tari_bor::encode;
+use tari_common_types::types::PublicKey;
 use tari_crypto::{
     range_proof::RangeProofService,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_common_types::services::template_provider::TemplateProvider;
+use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     base_layer_hashing::ownership_proof_hasher,
     commit_result::FinalizeResult,
@@ -87,7 +88,6 @@ use crate::{
         engine_args::EngineArgs,
         tracker::StateTracker,
         AuthParams,
-        ConsensusContext,
         RuntimeError,
         RuntimeInterface,
         RuntimeModule,
@@ -101,7 +101,6 @@ const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
     tracker: StateTracker<TTemplateProvider>,
     _auth_params: AuthParams,
-    consensus: ConsensusContext,
     sender_public_key: RistrettoPublicKey,
     modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
 }
@@ -115,14 +114,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     pub fn initialize(
         tracker: StateTracker<TTemplateProvider>,
         auth_params: AuthParams,
-        consensus: ConsensusContext,
         sender_public_key: RistrettoPublicKey,
         modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
     ) -> Result<Self, RuntimeError> {
         let runtime = Self {
             tracker,
             _auth_params: auth_params,
-            consensus,
             sender_public_key,
             modules,
         };
@@ -718,7 +715,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn consensus_invoke(&self, action: ConsensusAction) -> Result<InvokeResult, RuntimeError> {
         self.invoke_modules_on_runtime_call("consensus_invoke")?;
         match action {
-            ConsensusAction::GetCurrentEpoch => Ok(InvokeResult::encode(&self.consensus.current_epoch)?),
+            ConsensusAction::GetCurrentEpoch => {
+                let epoch = self.tracker.get_current_epoch()?;
+                Ok(InvokeResult::encode(&epoch)?)
+            },
         }
     }
 
@@ -742,7 +742,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             AuthParams {
                 initial_ownership_proofs: vec![],
             },
-            self.consensus.clone(),
             self.sender_public_key.clone(),
             self.modules.clone(),
         )?;
@@ -919,6 +918,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         let bucket_id = self.tracker.new_bucket(resource)?;
 
+        self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
+        Ok(())
+    }
+
+    fn claim_validator_fees(&self, epoch: Epoch, validator_public_key: PublicKey) -> Result<(), RuntimeError> {
+        let resource = self.tracker.claim_fee(epoch, validator_public_key)?;
+        let bucket_id = self.tracker.new_bucket(resource)?;
         self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
         Ok(())
     }

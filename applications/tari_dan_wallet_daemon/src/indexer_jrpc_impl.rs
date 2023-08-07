@@ -3,13 +3,23 @@
 
 use axum::async_trait;
 use reqwest::{IntoUrl, Url};
-use tari_dan_common_types::optional::{IsNotFoundError, Optional};
-use tari_dan_wallet_sdk::network::{SubstateQueryResult, TransactionQueryResult, WalletNetworkInterface};
+use tari_dan_common_types::optional::IsNotFoundError;
+use tari_dan_wallet_sdk::network::{
+    SubstateQueryResult,
+    TransactionFinalizedResult,
+    TransactionQueryResult,
+    WalletNetworkInterface,
+};
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer_client::{
     error::IndexerClientError,
     json_rpc_client::IndexerJsonRpcClient,
-    types::{GetSubstateRequest, GetTransactionResultRequest, SubmitTransactionRequest},
+    types::{
+        GetSubstateRequest,
+        GetTransactionResultRequest,
+        IndexerTransactionFinalizedResult,
+        SubmitTransactionRequest,
+    },
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
@@ -81,16 +91,17 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
         required_substates: Vec<SubstateRequirement>,
     ) -> Result<TransactionQueryResult, Self::Error> {
         let mut client = self.get_client()?;
-        let result = client
+        let resp = client
             .submit_transaction(SubmitTransactionRequest {
                 transaction,
                 required_substates,
                 is_dry_run: true,
             })
             .await?;
+
         Ok(TransactionQueryResult {
-            transaction_id: result.transaction_id,
-            execution_result: result.execution_result,
+            transaction_id: resp.transaction_id,
+            result: convert_indexer_result_to_wallet_result(resp.result),
         })
     }
 
@@ -99,21 +110,13 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
         transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error> {
         let mut client = self.get_client()?;
-        let maybe_result = client
+        let resp = client
             .get_transaction_result(GetTransactionResultRequest { transaction_id })
-            .await
-            .optional()?;
-
-        let Some(result) = maybe_result else {
-            return Ok(TransactionQueryResult {
-                execution_result: None,
-                transaction_id,
-            });
-        };
+            .await?;
 
         Ok(TransactionQueryResult {
-            execution_result: result.execution_result,
             transaction_id,
+            result: convert_indexer_result_to_wallet_result(resp.result),
         })
     }
 }
@@ -129,5 +132,24 @@ impl IsNotFoundError for IndexerJrpcError {
         match self {
             IndexerJrpcError::IndexerClientError(err) => err.is_not_found_error(),
         }
+    }
+}
+
+/// These types are identical, however in order to keep the wallet decoupled from the indexer, we define two types and
+/// this conversion function.
+// TODO: the common interface and types between the wallet and indexer could be made into a shared "view of the network"
+// interface and we can avoid defining two types.
+fn convert_indexer_result_to_wallet_result(result: IndexerTransactionFinalizedResult) -> TransactionFinalizedResult {
+    match result {
+        IndexerTransactionFinalizedResult::Pending => TransactionFinalizedResult::Pending,
+        IndexerTransactionFinalizedResult::Finalized {
+            final_decision,
+            execution_result,
+            abort_details,
+        } => TransactionFinalizedResult::Finalized {
+            final_decision,
+            execution_result,
+            abort_details,
+        },
     }
 }

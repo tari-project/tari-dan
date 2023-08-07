@@ -151,7 +151,15 @@ impl SubstateRecord {
         tx: &mut TTx,
         shard: &ShardId,
     ) -> Result<bool, StorageError> {
+        // TODO: optimise
         Ok(Self::get(tx, shard).optional()?.is_some())
+    }
+
+    pub fn any_exist<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
+        tx: &mut TTx,
+        substates: I,
+    ) -> Result<bool, StorageError> {
+        tx.substates_any_exist(substates)
     }
 
     pub fn get<TTx: StateStoreReadTransaction + ?Sized>(
@@ -161,7 +169,7 @@ impl SubstateRecord {
         tx.substates_get(shard)
     }
 
-    pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn get_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a ShardId>>(
         tx: &mut TTx,
         shards: I,
     ) -> Result<(Vec<SubstateRecord>, HashSet<ShardId>), StorageError> {

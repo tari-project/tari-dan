@@ -20,11 +20,13 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::ops::RangeInclusive;
+
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
-use tari_dan_storage::consensus_models::{ExecutedTransaction, QuorumDecision, SubstateRecord};
+use tari_dan_storage::consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     fees::FeeCostBreakdown,
@@ -128,11 +130,6 @@ pub struct SubmitTransactionResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetClaimableFeesResponse {
-    pub total_accrued_fees: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DryRunTransactionFinalizeResult {
     // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
     pub decision: QuorumDecision,
@@ -149,12 +146,6 @@ pub struct GetTransactionRequest {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetTransactionResponse {
     pub transaction: ExecutedTransaction,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetClaimableFeesRequest {
-    pub claim_leader_public_key: PublicKey,
-    pub epoch: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -258,4 +249,41 @@ pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
     pub current_block_height: u64,
     pub is_valid: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetValidatorFeesRequest {
+    pub epoch_range: RangeInclusive<Epoch>,
+    pub validator_public_key: Option<PublicKey>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetValidatorFeesResponse {
+    pub fees: Vec<ValidatorFee<PublicKey>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidatorFee<TAddr> {
+    pub validator_addr: TAddr,
+    pub epoch: Epoch,
+    pub block_id: BlockId,
+    pub total_fee_due: u64,
+    pub total_transaction_fee: u64,
+}
+
+impl<TAddr: Clone> From<Block<TAddr>> for ValidatorFee<TAddr> {
+    fn from(value: Block<TAddr>) -> Self {
+        Self {
+            validator_addr: value.proposed_by().clone(),
+            epoch: value.epoch(),
+            block_id: *value.id(),
+            total_fee_due: value.total_leader_fee(),
+            total_transaction_fee: value
+                .commands()
+                .iter()
+                .filter_map(|c| c.accept())
+                .map(|t| t.transaction_fee)
+                .sum(),
+        }
+    }
 }

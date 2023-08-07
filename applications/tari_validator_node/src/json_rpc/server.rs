@@ -23,7 +23,7 @@
 use std::{net::SocketAddr, sync::Arc};
 
 use axum::{extract::Extension, routing::post, Router};
-use axum_jrpc::{JrpcResult, JsonRpcExtractor};
+use axum_jrpc::{JrpcResult, JsonRpcAnswer, JsonRpcExtractor};
 use log::*;
 use tower_http::cors::CorsLayer;
 
@@ -56,7 +56,7 @@ pub fn spawn_json_rpc(preferred_address: SocketAddr, handlers: JsonRpcHandlers) 
 
 async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: JsonRpcExtractor) -> JrpcResult {
     debug!(target: LOG_TARGET, "🌐 JSON-RPC request: {}", value.method);
-    match value.method.as_str() {
+    let result = match value.method.as_str() {
         // Transaction
         // "get_transaction_status" => handlers.get_transaction_status(value).await,
         "submit_transaction" => handlers.submit_transaction(value).await,
@@ -79,7 +79,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_shard_key" => handlers.get_shard_key(value).await,
         "get_committee" => handlers.get_committee(value).await,
         "get_all_vns" => handlers.get_all_vns(value).await,
-        "get_fees" => handlers.get_fees(value).await,
+        "get_fees" => handlers.get_validator_fees(value).await,
         // Comms
         "add_peer" => handlers.add_peer(value).await,
         "get_comms_stats" => handlers.get_comms_stats(value).await,
@@ -87,5 +87,17 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         // Debug
         "get_logged_messages" => handlers.get_logged_messages(value).await,
         method => Ok(value.method_not_found(method)),
+    };
+
+    if let Err(ref e) = result {
+        match &e.result {
+            JsonRpcAnswer::Result(val) => {
+                error!(target: LOG_TARGET, "🚨 JSON-RPC request failed: {}", serde_json::to_string_pretty(val).unwrap_or_else(|e| e.to_string()));
+            },
+            JsonRpcAnswer::Error(err) => {
+                error!(target: LOG_TARGET, "🚨 JSON-RPC request failed: {}", err);
+            },
+        }
     }
+    result
 }

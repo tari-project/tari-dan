@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use log::*;
 use tari_bor::encode;
-use tari_dan_common_types::services::template_provider::TemplateProvider;
+use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     indexed_value::IndexedValue,
@@ -46,7 +46,6 @@ use crate::{
     runtime::{
         AuthParams,
         AuthorizationScope,
-        ConsensusContext,
         FunctionIdent,
         Runtime,
         RuntimeInterfaceImpl,
@@ -54,6 +53,7 @@ use crate::{
         RuntimeState,
         StateFinalize,
         StateTracker,
+        VirtualSubstates,
     },
     state_store::memory::MemoryStateStore,
     traits::Invokable,
@@ -69,7 +69,7 @@ pub struct TransactionProcessor<TTemplateProvider> {
     template_provider: Arc<TTemplateProvider>,
     state_db: MemoryStateStore,
     auth_params: AuthParams,
-    consensus: ConsensusContext,
+    virtual_substates: VirtualSubstates,
     modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
 }
 
@@ -78,31 +78,32 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         template_provider: Arc<TTemplateProvider>,
         state_db: MemoryStateStore,
         auth_params: AuthParams,
-        consensus: ConsensusContext,
+        virtual_substates: VirtualSubstates,
         modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
     ) -> Self {
         Self {
             template_provider,
             state_db,
             auth_params,
-            consensus,
+            virtual_substates,
             modules,
         }
     }
 
     pub fn execute(self, transaction: Transaction) -> Result<ExecuteResult, TransactionError> {
         let id_provider = IdProvider::new(transaction.hash(), 1000);
-        // TODO: We can avoid this for each execution with improved design
-        let tracker = StateTracker::new(self.state_db.clone(), id_provider, self.template_provider.clone());
-        let initial_proofs = self.auth_params.initial_ownership_proofs.clone();
-        let template_provider = self.template_provider.clone();
-        let runtime_interface = RuntimeInterfaceImpl::initialize(
-            tracker,
-            self.auth_params,
-            self.consensus,
-            transaction.signer_public_key().clone(),
-            self.modules,
-        )?;
+        let Self {
+            template_provider,
+            state_db,
+            auth_params,
+            virtual_substates,
+            modules,
+        } = self;
+
+        let tracker = StateTracker::new(state_db, id_provider, template_provider.clone(), virtual_substates);
+        let initial_proofs = auth_params.initial_ownership_proofs.clone();
+        let runtime_interface =
+            RuntimeInterfaceImpl::initialize(tracker, auth_params, transaction.signer_public_key().clone(), modules)?;
 
         let auth_scope = AuthorizationScope::new(Arc::new(initial_proofs));
         let runtime = Runtime::new(Arc::new(runtime_interface));
@@ -110,18 +111,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
         let (fee_instructions, instructions) = transaction.into_instructions();
 
-        let fee_exec_results = fee_instructions
-            .into_iter()
-            .map(|instruction| {
-                Self::process_instruction(
-                    template_provider.clone(),
-                    &runtime,
-                    auth_scope.clone(),
-                    instruction,
-                    MAX_CALL_DEPTH,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>();
+        let fee_exec_results = Self::process_instructions(
+            template_provider.clone(),
+            &runtime,
+            auth_scope.clone(),
+            fee_instructions,
+        );
 
         let fee_exec_result = match fee_exec_results {
             Ok(execution_results) => {
@@ -148,18 +143,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             },
         };
 
-        let instruction_result = instructions
-            .into_iter()
-            .map(|instruction| {
-                Self::process_instruction(
-                    template_provider.clone(),
-                    &runtime,
-                    auth_scope.clone(),
-                    instruction,
-                    MAX_CALL_DEPTH,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>();
+        let instruction_result = Self::process_instructions(template_provider, &runtime, auth_scope, instructions);
 
         match instruction_result {
             Ok(execution_results) => {
@@ -206,6 +190,26 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 })
             },
         }
+    }
+
+    fn process_instructions(
+        template_provider: Arc<TTemplateProvider>,
+        runtime: &Runtime,
+        auth_scope: AuthorizationScope,
+        instructions: Vec<Instruction>,
+    ) -> Result<Vec<InstructionResult>, TransactionError> {
+        instructions
+            .into_iter()
+            .map(|instruction| {
+                Self::process_instruction(
+                    template_provider.clone(),
+                    runtime,
+                    auth_scope.clone(),
+                    instruction,
+                    MAX_CALL_DEPTH,
+                )
+            })
+            .collect()
     }
 
     fn process_instruction(
@@ -258,6 +262,15 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             Instruction::ClaimBurn { claim } => {
                 // Need to call it on the runtime so that a bucket is created.
                 runtime.interface().claim_burn(*claim)?;
+                Ok(InstructionResult::empty())
+            },
+            Instruction::ClaimValidatorFees {
+                epoch,
+                validator_public_key,
+            } => {
+                runtime
+                    .interface()
+                    .claim_validator_fees(Epoch(epoch), validator_public_key)?;
                 Ok(InstructionResult::empty())
             },
             Instruction::CreateFreeTestCoins {

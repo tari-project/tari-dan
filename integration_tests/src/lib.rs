@@ -70,6 +70,7 @@ pub struct TariWorld {
     pub account_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
+    pub fees_enabled: bool,
 }
 
 impl TariWorld {
@@ -134,6 +135,7 @@ impl TariWorld {
         self.commitments.clear();
         self.commitment_ownership_proofs.clear();
         self.miners.clear();
+        self.fees_enabled = false;
     }
 
     pub async fn wait_until_base_nodes_have_transaction_in_mempool(&self, min_tx_count: usize, timeout: Duration) {

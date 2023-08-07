@@ -41,6 +41,7 @@ use tari_comms::{
 };
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{optional::Optional, Epoch};
+use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_client::types::{
     AddAddressRequest,
@@ -52,6 +53,7 @@ use tari_indexer_client::types::{
     GetSubstateResponse,
     GetTransactionResultRequest,
     GetTransactionResultResponse,
+    IndexerTransactionFinalizedResult,
     InspectSubstateRequest,
     InspectSubstateResponse,
     NonFungibleSubstate,
@@ -64,7 +66,7 @@ use tari_validator_node_client::types::{
     GetEpochManagerStatsResponse,
     GetIdentityResponse,
 };
-use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
+use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory, TransactionResultStatus};
 
 use crate::{
     bootstrap::Services,
@@ -530,7 +532,11 @@ impl JsonRpcHandlers {
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                execution_result: Some(exec_result),
+                result: IndexerTransactionFinalizedResult::Finalized {
+                    execution_result: Some(exec_result),
+                    final_decision: Decision::Commit,
+                    abort_details: None,
+                },
                 transaction_id,
             }))
         } else {
@@ -541,7 +547,7 @@ impl JsonRpcHandlers {
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                execution_result: None,
+                result: IndexerTransactionFinalizedResult::Pending,
                 transaction_id,
             }))
         }
@@ -601,9 +607,20 @@ impl JsonRpcHandlers {
 
         let result = maybe_result.ok_or_else(|| Self::not_found(answer_id, "Transaction not found"))?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetTransactionResultResponse {
-            execution_result: result.into_finalized(),
-        }))
+        let resp = match result {
+            TransactionResultStatus::Pending => GetTransactionResultResponse {
+                result: IndexerTransactionFinalizedResult::Pending,
+            },
+            TransactionResultStatus::Finalized(finalized) => GetTransactionResultResponse {
+                result: IndexerTransactionFinalizedResult::Finalized {
+                    final_decision: finalized.final_decision,
+                    execution_result: finalized.execute_result,
+                    abort_details: finalized.abort_details,
+                },
+            },
+        };
+
+        Ok(JsonRpcResponse::success(answer_id, resp))
     }
 
     fn error_response<T: Display>(answer_id: i64, reason: JsonRpcErrorReason, message: T) -> JsonRpcResponse {

@@ -72,7 +72,7 @@ pub fn change_decision(tx: ExecutedTransaction, new_decision: Decision) -> Execu
         .fee_receipt
         .as_ref()
         .unwrap()
-        .total_fee_payment
+        .total_fees_paid()
         .as_u64_checked()
         .unwrap();
     build_transaction_from(tx.into_transaction(), new_decision, total_fees_charged)

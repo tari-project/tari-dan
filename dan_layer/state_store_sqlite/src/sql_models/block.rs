@@ -22,6 +22,7 @@ pub struct Block {
     pub proposed_by: String,
     pub qc_id: String,
     pub commands: String,
+    pub total_leader_fees: i64,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -42,6 +43,7 @@ impl Block {
                 details: format!("Block #{} proposed_by is malformed", self.id),
             })?,
             deserialize_json(&self.commands)?,
+            self.total_leader_fees as u64,
         ))
     }
 }

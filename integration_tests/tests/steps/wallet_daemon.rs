@@ -100,6 +100,43 @@ async fn when_i_claim_burn_via_wallet_daemon_it_fails(
     .unwrap_err();
 }
 
+#[when(expr = "I claim fees for validator {word} and epoch {int} into account {word} using the wallet daemon {word}")]
+async fn when_i_claim_fees_for_validator_and_epoch(
+    world: &mut TariWorld,
+    validator_node: String,
+    epoch: u64,
+    account_name: String,
+    wallet_daemon_name: String,
+) {
+    let resp = wallet_daemon_cli::claim_fees(world, wallet_daemon_name, account_name, validator_node, epoch)
+        .await
+        .unwrap();
+    resp.result.result.accept().unwrap_or_else(|| {
+        panic!(
+            "Expected fee claim to succeeded but failed with {}",
+            resp.result.result.reject().unwrap()
+        )
+    });
+}
+
+#[when(
+    expr = "I claim fees for validator {word} and epoch {int} into account {word} using the wallet daemon {word}, it \
+            fails"
+)]
+async fn when_i_claim_fees_for_validator_and_epoch_fails(
+    world: &mut TariWorld,
+    validator_node: String,
+    epoch: u64,
+    account_name: String,
+    wallet_daemon_name: String,
+) {
+    let err = wallet_daemon_cli::claim_fees(world, wallet_daemon_name, account_name, validator_node, epoch)
+        .await
+        .unwrap_err();
+
+    println!("Expected error: {}", err);
+}
+
 #[then(
     expr = "I make a confidential transfer with amount {int} from {word} to {word} creating output {word} via the \
             wallet_daemon {word}"

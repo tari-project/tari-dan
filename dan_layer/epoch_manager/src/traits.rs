@@ -100,6 +100,21 @@ pub trait EpochManagerReader: Send + Sync {
         epoch: Epoch,
         addr: &Self::Addr,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError>;
+
+    /// Returns a list of validator nodes with the given epoch and public key. If any validator node is not found, an
+    /// error is returned.
+    async fn get_many_validator_nodes(
+        &self,
+        query: Vec<(Epoch, Self::Addr)>,
+    ) -> Result<HashMap<(Epoch, Self::Addr), ValidatorNode<Self::Addr>>, EpochManagerError> {
+        let mut results = HashMap::with_capacity(query.len());
+        for (epoch, addr) in query {
+            let vn = self.get_validator_node(epoch, &addr).await?;
+            results.insert((epoch, addr.clone()), vn);
+        }
+        Ok(results)
+    }
+
     async fn get_validator_node_merkle_proof(
         &self,
         epoch: Epoch,

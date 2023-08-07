@@ -1,9 +1,9 @@
-//   Copyright 2023 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Clause
+//    Copyright 2023 The Tari Project
+//    SPDX-License-Identifier: BSD-3-Clause
 
 use async_trait::async_trait;
 
-use crate::p2p::services::mempool::Validator;
+use super::Validator;
 
 pub struct AndThen<A, U> {
     first: A,

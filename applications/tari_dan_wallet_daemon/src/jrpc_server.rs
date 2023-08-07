@@ -26,7 +26,18 @@ use tari_shutdown::ShutdownSignal;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use super::handlers::HandlerContext;
-use crate::handlers::{accounts, confidential, error::HandlerError, keys, nfts, rpc, transaction, webrtc, Handler};
+use crate::handlers::{
+    accounts,
+    confidential,
+    error::HandlerError,
+    keys,
+    nfts,
+    rpc,
+    transaction,
+    validator,
+    webrtc,
+    Handler,
+};
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon::json_rpc";
 
@@ -141,6 +152,11 @@ async fn handler(
             "mint_account_nft" => call_handler(context, value, token, nfts::handle_mint_account_nft).await,
             "get" => call_handler(context, value, token, nfts::handle_get_nft).await,
             "list" => call_handler(context, value, token, nfts::handle_list_nfts).await,
+            _ => Ok(value.method_not_found(&value.method)),
+        },
+        Some(("validators", method)) => match method {
+            "get_fee_summary" => call_handler(context, value, token, validator::handle_get_validator_fees).await,
+            "claim_fees" => call_handler(context, value, token, validator::handle_claim_validator_fees).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         _ => Ok(value.method_not_found(&value.method)),

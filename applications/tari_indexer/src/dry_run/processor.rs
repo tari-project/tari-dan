@@ -32,12 +32,13 @@ use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ShardId};
 use tari_dan_engine::{
     bootstrap_state,
     fees::FeeTable,
-    runtime::ConsensusContext,
+    runtime::VirtualSubstates,
     state_store::{memory::MemoryStateStore, AtomicDb, StateWriter},
 };
 use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateAddress},
+    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller};
@@ -97,13 +98,13 @@ where
 
         let payload_processor = self.build_payload_processor(&transaction);
 
-        // execute the payload in the WASM engine and return the result
-        let consensus_context = Self::get_consensus_context(&epoch).await?;
+        let virtual_substates = Self::get_virtual_substates(epoch);
 
         let mut state_store = new_state_store();
         state_store.extend(found_substates);
 
-        let result = task::block_in_place(|| payload_processor.execute(transaction, state_store, consensus_context))?;
+        // execute the payload in the WASM engine and return the result
+        let result = task::block_in_place(|| payload_processor.execute(transaction, state_store, virtual_substates))?;
 
         Ok(result.into_result())
     }
@@ -191,10 +192,15 @@ where
         })
     }
 
-    async fn get_consensus_context(epoch: &Epoch) -> Result<ConsensusContext, DryRunTransactionProcessorError> {
-        let current_epoch = epoch.as_u64();
-        let consensus_context = ConsensusContext { current_epoch };
-        Ok(consensus_context)
+    fn get_virtual_substates(epoch: Epoch) -> VirtualSubstates {
+        let mut virtual_substates = VirtualSubstates::new();
+
+        virtual_substates.insert(
+            VirtualSubstateAddress::CurrentEpoch,
+            VirtualSubstate::CurrentEpoch(epoch.as_u64()),
+        );
+
+        virtual_substates
     }
 }
 

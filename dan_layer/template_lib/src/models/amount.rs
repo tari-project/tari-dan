@@ -33,6 +33,8 @@ use tari_template_abi::rust::{
 pub struct Amount(pub i64);
 
 impl Amount {
+    pub const MAX: Amount = Amount(i64::MAX);
+
     pub const fn new(amount: i64) -> Self {
         Amount(amount)
     }

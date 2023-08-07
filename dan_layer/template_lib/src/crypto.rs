@@ -4,7 +4,10 @@
 use serde::{Deserialize, Serialize};
 // #[cfg(not(feature = "hex"))]
 use serde_big_array::BigArray;
-use tari_template_abi::rust::string::String;
+use tari_template_abi::rust::{
+    fmt::{Display, Formatter},
+    string::String,
+};
 
 use crate::Hash;
 
@@ -54,6 +57,12 @@ impl TryFrom<&[u8]> for RistrettoPublicKeyBytes {
     }
 }
 
+impl AsRef<[u8]> for RistrettoPublicKeyBytes {
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct InvalidByteLengthError {
     size: usize,
@@ -72,6 +81,15 @@ impl InvalidByteLengthError {
         )
     }
 }
+
+impl Display for InvalidByteLengthError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_error_string())
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for InvalidByteLengthError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]

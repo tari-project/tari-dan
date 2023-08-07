@@ -24,11 +24,13 @@ use std::fmt::Display;
 
 use anyhow::anyhow;
 use tari_bor::BorError;
-use tari_dan_common_types::optional::IsNotFoundError;
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{optional::IsNotFoundError, Epoch};
 use tari_engine_types::{
     resource_container::ResourceError,
     substate::SubstateAddress,
     transaction_receipt::TransactionReceiptAddress,
+    virtual_substate::VirtualSubstateAddress,
 };
 use tari_template_lib::models::{
     Amount,
@@ -147,6 +149,12 @@ pub enum RuntimeError {
         method: String,
         details: String,
     },
+    #[error("Fee claim not permitted for epoch {epoch} vn address {address:.10}")]
+    FeeClaimNotPermitted { epoch: Epoch, address: PublicKey },
+    #[error("Virtual substate not found: {address}")]
+    VirtualSubstateNotFound { address: VirtualSubstateAddress },
+    #[error("Double claimed fee for epoch {epoch} vn address {address:.10}")]
+    DoubleClaimedFee { address: PublicKey, epoch: Epoch },
 }
 
 impl RuntimeError {

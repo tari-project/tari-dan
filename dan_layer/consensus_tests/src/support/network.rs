@@ -178,22 +178,22 @@ impl TestNetworkWorker {
         loop {
             let mut rx_broadcast = rx_broadcast
                 .iter_mut()
-                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r.unwrap())))
+                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r)))
                 .collect::<FuturesUnordered<_>>();
             let mut rx_leader = rx_leader
                 .iter_mut()
-                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r.unwrap())))
+                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r)))
                 .collect::<FuturesUnordered<_>>();
 
             let mut rx_mempool = rx_mempool
                 .iter_mut()
-                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r.unwrap())))
+                .map(|(from, rx)| rx.recv().map(|r| (from.clone(), r)))
                 .collect::<FuturesUnordered<_>>();
 
             tokio::select! {
-                Some((from, (to, msg))) = rx_broadcast.next() => self.handle_broadcast(from, to, msg).await,
-                Some((from, (to, msg))) = rx_leader.next() => self.handle_leader(from, to, msg).await,
-                Some((from, msg)) = rx_mempool.next() => self.handle_mempool(from, msg).await,
+                Some((from, Some((to, msg)))) = rx_broadcast.next() => self.handle_broadcast(from, to, msg).await,
+                Some((from, Some((to, msg)))) = rx_leader.next() => self.handle_leader(from, to, msg).await,
+                Some((from, Some(msg))) = rx_mempool.next() => self.handle_mempool(from, msg).await,
 
                 Ok(_) = self.network_status.changed() => {
                     if let NetworkStatus::Started = *self.network_status.borrow() {

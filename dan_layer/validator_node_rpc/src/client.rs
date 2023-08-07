@@ -6,7 +6,7 @@ use std::convert::{TryFrom, TryInto};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use tari_bor::decode;
+use tari_bor::{decode, decode_exact, encode};
 use tari_common_types::types::PublicKey;
 use tari_comms::{
     connectivity::ConnectivityRequester,
@@ -19,14 +19,17 @@ use tari_comms::{
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_dan_p2p::DanPeer;
+use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateAddress, SubstateValue},
+    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_transaction::{Transaction, TransactionId};
 use tokio_stream::StreamExt;
 
 use crate::{
+    proto,
     proto::rpc::{
         GetPeersRequest,
         GetTransactionResultRequest,
@@ -59,21 +62,20 @@ pub trait ValidatorNodeRpcClient: Send + Sync {
     async fn get_peers(&mut self) -> Result<Vec<DanPeer<Self::Addr>>, Self::Error>;
 
     async fn get_substate(&mut self, shard: ShardId) -> Result<SubstateResult, Self::Error>;
+    async fn get_virtual_substate(&mut self, address: VirtualSubstateAddress) -> Result<VirtualSubstate, Self::Error>;
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum TransactionResultStatus {
     Pending,
-    Finalized(ExecuteResult),
+    Finalized(FinalizedResult),
 }
 
-impl TransactionResultStatus {
-    pub fn into_finalized(self) -> Option<ExecuteResult> {
-        match self {
-            Self::Pending => None,
-            Self::Finalized(result) => Some(result),
-        }
-    }
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct FinalizedResult {
+    pub execute_result: Option<ExecuteResult>,
+    pub final_decision: Decision,
+    pub abort_details: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -233,6 +235,23 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
         }
     }
 
+    async fn get_virtual_substate(&mut self, address: VirtualSubstateAddress) -> Result<VirtualSubstate, Self::Error> {
+        let mut client = self.client_connection().await?;
+
+        let request = proto::rpc::GetVirtualSubstateRequest {
+            address: encode(&address)?,
+        };
+
+        let resp = client.get_virtual_substate(request).await?;
+
+        // TODO: verify the quorum certificates
+        // for qc in resp.quorum_certificates {
+        //     let qc = QuorumCertificate::try_from(&qc)?;
+        // }
+
+        decode_exact(&resp.substate).map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))
+    }
+
     async fn get_finalized_transaction_result(
         &mut self,
         transaction_id: TransactionId,
@@ -246,12 +265,30 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
         match PayloadResultStatus::from_i32(response.status) {
             Some(PayloadResultStatus::Pending) => Ok(TransactionResultStatus::Pending),
             Some(PayloadResultStatus::Finalized) => {
-                let execution_result = decode(&response.execution_result).map_err(|_| {
-                    ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
-                        "Node returned an invalid or empty payload id"
-                    ))
-                })?;
-                Ok(TransactionResultStatus::Finalized(execution_result))
+                let proto_decision =
+                    proto::consensus::Decision::from_i32(response.final_decision).ok_or_else(|| {
+                        ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                            "Invalid decision value {}",
+                            response.final_decision
+                        ))
+                    })?;
+                let final_decision = proto_decision
+                    .try_into()
+                    .map_err(ValidatorNodeRpcClientError::InvalidResponse)?;
+                let execution_result = match final_decision {
+                    Decision::Commit => decode(&response.execution_result).map(Some).map_err(|_| {
+                        ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                            "Node returned an invalid or empty execution result"
+                        ))
+                    })?,
+                    Decision::Abort => None,
+                };
+
+                Ok(TransactionResultStatus::Finalized(FinalizedResult {
+                    execute_result: execution_result,
+                    final_decision,
+                    abort_details: Some(response.abort_details).filter(|s| s.is_empty()),
+                }))
             },
             None => Err(ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
                 "Node returned invalid payload status {}",

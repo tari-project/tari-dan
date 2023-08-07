@@ -25,6 +25,7 @@ pub struct ExecutedTransaction {
     result: ExecuteResult,
     execution_time: Duration,
     final_decision: Option<Decision>,
+    abort_details: Option<String>,
 }
 
 impl ExecutedTransaction {
@@ -34,6 +35,7 @@ impl ExecutedTransaction {
             result,
             execution_time,
             final_decision: None,
+            abort_details: None,
         }
     }
 
@@ -42,16 +44,22 @@ impl ExecutedTransaction {
         result: ExecuteResult,
         execution_time: Duration,
         final_decision: Option<Decision>,
+        abort_details: Option<String>,
     ) -> Self {
         Self {
             transaction,
             result,
             execution_time,
             final_decision,
+            abort_details,
         }
     }
 
     pub fn as_decision(&self) -> Decision {
+        if let Some(decision) = self.final_decision {
+            return decision;
+        }
+
         if self.result.finalize.is_accept() {
             Decision::Commit
         } else {
@@ -84,7 +92,12 @@ impl ExecutedTransaction {
                 ExecuteResult {
                     finalize: FinalizeResult::reject(
                         self.result.finalize.transaction_hash,
-                        RejectReason::ShardRejected("Validators decided to abort".to_string()),
+                        RejectReason::ShardRejected(format!(
+                            "Validators decided to abort: {}",
+                            self.abort_details
+                                .as_deref()
+                                .unwrap_or("<invalid state, no abort details>")
+                        )),
                     ),
                     transaction_failure: None,
                     fee_receipt: None,
@@ -120,8 +133,28 @@ impl ExecutedTransaction {
         self.final_decision
     }
 
+    pub fn abort_details(&self) -> Option<&String> {
+        self.abort_details.as_ref()
+    }
+
     pub fn set_final_decision(&mut self, decision: Decision) -> &mut Self {
         self.final_decision = Some(decision);
+        if decision.is_abort() {
+            self.abort_details = Some(
+                self.result
+                    .finalize
+                    .result
+                    .reject()
+                    .map(|reason| reason.to_string())
+                    .unwrap_or_else(|| "Transaction execution succeeded but ABORT decision made".to_string()),
+            );
+        }
+        self
+    }
+
+    pub fn set_abort<T: Into<String>>(&mut self, details: T) -> &mut Self {
+        self.final_decision = Some(Decision::Abort);
+        self.abort_details = Some(details.into());
         self
     }
 }
@@ -129,7 +162,7 @@ impl ExecutedTransaction {
 impl ExecutedTransaction {
     pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.transactions_insert(self.transaction())?;
-        tx.executed_transactions_update(self)
+        self.update(tx)
     }
 
     pub fn upsert<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
@@ -145,7 +178,7 @@ impl ExecutedTransaction {
     }
 
     pub fn update<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        tx.executed_transactions_update(self)
+        TransactionRecord::from(self.clone()).update(tx)
     }
 
     pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, tx_id: &TransactionId) -> Result<Self, StorageError> {
@@ -211,6 +244,7 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
             result: value.result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
             final_decision: value.final_decision,
+            abort_details: value.abort_details,
         })
     }
 }

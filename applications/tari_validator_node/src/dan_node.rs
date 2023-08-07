@@ -179,8 +179,8 @@ impl DanNode {
 
         let shard_id = match res {
             Ok(vn) => vn.shard_key,
-            Err(EpochManagerError::ValidatorNodeNotRegistered) => {
-                info!(target: LOG_TARGET, "Validator node registered for this epoch");
+            Err(EpochManagerError::ValidatorNodeNotRegistered { address }) => {
+                info!(target: LOG_TARGET, "Validator node {address} registered for this epoch");
                 return Ok(());
             },
             Err(EpochManagerError::BaseLayerConsensusConstantsNotSet) => {

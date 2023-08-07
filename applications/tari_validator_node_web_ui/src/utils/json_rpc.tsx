@@ -29,10 +29,11 @@ async function jsonRpc(method: string, params: any = null) {
   try {
     let text = await (await fetch('/json_rpc_address')).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
+      console.log(`Setting JSON RPC address to ${text}`);
       address = text;
     }
   } catch {}
-  let response = await fetch(`http://127.0.0.1:18010`, {
+  let response = await fetch(`http://${address}`, {
     method: 'POST',
     body: JSON.stringify({
       method: method,
