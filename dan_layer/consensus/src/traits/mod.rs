@@ -20,6 +20,6 @@ pub trait ConsensusSpec: Send + Sync + 'static {
     type StateStore: StateStore<Addr = Self::Addr> + Send + Sync + 'static;
     type EpochManager: EpochManagerReader<Addr = Self::Addr> + Send + Sync + 'static;
     type LeaderStrategy: LeaderStrategy<Self::Addr> + Send + Sync + 'static;
-    type VoteSignatureService: VoteSignatureService + Send + Sync + 'static;
+    type VoteSignatureService: VoteSignatureService<Self::Addr> + Send + Sync + 'static;
     type StateManager: StateManager<Self::StateStore> + Send + Sync + 'static;
 }

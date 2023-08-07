@@ -3,10 +3,10 @@
 
 use std::sync::Arc;
 
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::NodeIdentity;
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
-use tari_dan_storage::consensus_models::ValidatorSchnorrSignature;
+use tari_dan_storage::consensus_models::{ValidatorSchnorrSignature, ValidatorSignature};
 
 #[derive(Debug, Clone)]
 pub struct TariSignatureService {
@@ -19,7 +19,7 @@ impl TariSignatureService {
     }
 }
 
-impl ValidatorSignatureService for TariSignatureService {
+impl ValidatorSignatureService<PublicKey> for TariSignatureService {
     fn sign<M: AsRef<[u8]>>(&self, message: M) -> ValidatorSchnorrSignature {
         ValidatorSchnorrSignature::sign_message(self.node_identity.secret_key(), message).unwrap()
     }
@@ -29,4 +29,8 @@ impl ValidatorSignatureService for TariSignatureService {
     }
 }
 
-impl VoteSignatureService for TariSignatureService {}
+impl VoteSignatureService<PublicKey> for TariSignatureService {
+    fn verify(&self, signature: &ValidatorSignature<PublicKey>, challenge: &FixedHash) -> bool {
+        signature.verify(challenge)
+    }
+}

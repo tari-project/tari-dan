@@ -28,24 +28,24 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct QuorumCertificate {
+pub struct QuorumCertificate<TAddr> {
     qc_id: QcId,
     block_id: BlockId,
     block_height: NodeHeight,
     epoch: Epoch,
-    signatures: Vec<ValidatorSignature>,
+    signatures: Vec<ValidatorSignature<TAddr>>,
     merged_proof: MergedValidatorNodeMerkleProof,
     #[serde(with = "serde_with::hex::vec")]
     leaf_hashes: Vec<FixedHash>,
     decision: QuorumDecision,
 }
 
-impl QuorumCertificate {
+impl<TAddr: Serialize> QuorumCertificate<TAddr> {
     pub fn new(
         block: BlockId,
         block_height: NodeHeight,
         epoch: Epoch,
-        signatures: Vec<ValidatorSignature>,
+        signatures: Vec<ValidatorSignature<TAddr>>,
         merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>,
         mut leaf_hashes: Vec<FixedHash>,
         decision: QuorumDecision,
@@ -65,7 +65,7 @@ impl QuorumCertificate {
         qc
     }
 
-    pub fn genesis(epoch: Epoch) -> Self {
+    pub fn genesis() -> Self {
         // TODO: Should be easy to create an empty proof. Nice to have: decoupled proof.
         let bmt = ValidatorNodeBalancedMerkleTree::create(vec![]);
         let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, 0).unwrap();
@@ -73,7 +73,7 @@ impl QuorumCertificate {
         Self::new(
             BlockId::genesis(),
             NodeHeight::zero(),
-            epoch,
+            Epoch(0),
             vec![],
             merged_proof,
             vec![],
@@ -81,6 +81,21 @@ impl QuorumCertificate {
         )
     }
 
+    pub fn calculate_id(&self) -> QcId {
+        quorum_certificate_hasher()
+            .chain(&self.epoch)
+            .chain(&self.block_id)
+            .chain(&self.block_height)
+            .chain(&self.signatures)
+            .chain(&self.merged_proof)
+            .chain(&self.leaf_hashes)
+            .chain(&self.decision)
+            .result()
+            .into()
+    }
+}
+
+impl<TAddr> QuorumCertificate<TAddr> {
     pub fn is_genesis(&self) -> bool {
         self.block_id.is_genesis()
     }
@@ -101,7 +116,7 @@ impl QuorumCertificate {
         &self.leaf_hashes
     }
 
-    pub fn signatures(&self) -> &[ValidatorSignature] {
+    pub fn signatures(&self) -> &[ValidatorSignature<TAddr>] {
         &self.signatures
     }
 
@@ -113,26 +128,12 @@ impl QuorumCertificate {
         self.decision
     }
 
-    pub fn calculate_id(&self) -> QcId {
-        quorum_certificate_hasher()
-            .chain(&self.epoch)
-            .chain(&self.block_id)
-            .chain(&self.block_height)
-            .chain(&self.signatures)
-            .chain(&self.merged_proof)
-            .chain(&self.leaf_hashes)
-            .chain(&self.decision)
-            .result()
-            .into()
-    }
-
     pub fn block_id(&self) -> &BlockId {
         &self.block_id
     }
 
     pub fn as_high_qc(&self) -> HighQc {
         HighQc {
-            epoch: self.epoch,
             block_id: self.block_id,
             qc_id: self.qc_id,
         }
@@ -140,15 +141,17 @@ impl QuorumCertificate {
 
     pub fn as_leaf_block(&self) -> LeafBlock {
         LeafBlock {
-            epoch: self.epoch,
             block_id: self.block_id,
             height: self.block_height,
         }
     }
 }
 
-impl QuorumCertificate {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, qc_id: &QcId) -> Result<Self, StorageError> {
+impl<TAddr> QuorumCertificate<TAddr> {
+    pub fn get<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        qc_id: &QcId,
+    ) -> Result<Self, StorageError> {
         tx.quorum_certificates_get(qc_id)
     }
 
@@ -159,7 +162,7 @@ impl QuorumCertificate {
         Block::get(tx, &self.block_id)
     }
 
-    pub fn insert<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.quorum_certificates_insert(self)
     }
 
@@ -169,7 +172,7 @@ impl QuorumCertificate {
 
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
         TTx::Target: StateStoreReadTransaction,
     {
         if self.exists(tx.deref_mut())? {

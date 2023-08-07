@@ -41,6 +41,14 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
         len - max_failures
     }
 
+    pub fn max_failures(&self) -> usize {
+        let len = self.members.len();
+        if len == 0 {
+            return 0;
+        }
+        (len - 1) / 3
+    }
+
     pub fn is_empty(&self) -> bool {
         self.members.is_empty()
     }
@@ -55,6 +63,17 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
 
     pub fn shuffle(&mut self) {
         self.members.shuffle(&mut OsRng);
+    }
+
+    pub fn calculate_steps_between(&self, member_a: &TAddr, member_b: &TAddr) -> Option<usize> {
+        let index_a = self.members.iter().position(|x| x == member_a)? as isize;
+        let index_b = self.members.iter().position(|x| x == member_b)? as isize;
+        let steps = index_a - index_b;
+        if steps < 0 {
+            Some((self.members.len() as isize + steps) as usize)
+        } else {
+            Some(steps as usize)
+        }
     }
 }
 

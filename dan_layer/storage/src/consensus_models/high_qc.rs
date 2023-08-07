@@ -20,8 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::Epoch;
-
 use crate::{
     consensus_models::{BlockId, QcId, QuorumCertificate},
     StateStoreReadTransaction,
@@ -31,20 +29,19 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighQc {
-    pub epoch: Epoch,
     pub block_id: BlockId,
     pub qc_id: QcId,
 }
 
 impl HighQc {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
-        tx.high_qc_get(epoch)
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx) -> Result<Self, StorageError> {
+        tx.high_qc_get()
     }
 
     pub fn get_quorum_certificate<TTx: StateStoreReadTransaction + ?Sized>(
         &self,
         tx: &mut TTx,
-    ) -> Result<QuorumCertificate, StorageError> {
+    ) -> Result<QuorumCertificate<TTx::Addr>, StorageError> {
         QuorumCertificate::get(tx, &self.qc_id)
     }
 

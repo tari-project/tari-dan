@@ -141,7 +141,6 @@ pub async fn create_component(
             new_non_fungible_index_outputs: vec![],
         },
     };
-    dbg!(args.clone());
     let mut client = get_validator_node_client(world, vn_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
@@ -329,8 +328,6 @@ pub async fn submit_manifest(
             }
         })
         .collect();
-
-    dbg!(new_non_fungible_outputs.clone());
 
     // parse the minting specific outputs (if any) specified in the manifest as comments
     let non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput> = manifest_content
