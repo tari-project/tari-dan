@@ -20,5 +20,5 @@ impl ConsensusSpec for TestConsensusSpec {
     type LeaderStrategy = SelectedIndexLeaderStrategy;
     type StateManager = NoopStateManager;
     type StateStore = SqliteStateStore<Self::Addr>;
-    type VoteSignatureService = TestVoteSignatureService;
+    type VoteSignatureService = TestVoteSignatureService<Self::Addr>;
 }

@@ -280,7 +280,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         result: Option<&FinalizeResult>,
         transaction_failure: Option<&RejectReason>,
         final_fee: Option<Amount>,
-        qcs: Option<&[QuorumCertificate]>,
+        qcs: Option<&[QuorumCertificate<PublicKey>]>,
         new_status: TransactionStatus,
     ) -> Result<(), WalletStorageError> {
         use crate::schema::transactions;

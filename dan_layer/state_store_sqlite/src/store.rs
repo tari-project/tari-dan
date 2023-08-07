@@ -9,7 +9,7 @@ use std::{
 
 use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::{StateStore, StorageError};
 
@@ -57,7 +57,7 @@ impl<TAddr> fmt::Debug for SqliteStateStore<TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable + Serialize> StateStore for SqliteStateStore<TAddr> {
+impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStore for SqliteStateStore<TAddr> {
     type Addr = TAddr;
     type ReadTransaction<'a> = SqliteStateStoreReadTransaction<'a, Self::Addr> where TAddr: 'a;
     type WriteTransaction<'a> = SqliteStateStoreWriteTransaction<'a, Self::Addr> where TAddr: 'a;

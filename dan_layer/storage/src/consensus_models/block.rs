@@ -25,10 +25,9 @@ pub struct Block<TAddr> {
     // Header
     id: BlockId,
     parent: BlockId,
-    justify: QuorumCertificate,
+    justify: QuorumCertificate<TAddr>,
     height: NodeHeight,
     epoch: Epoch,
-    round: u64,
     proposed_by: TAddr,
 
     // Body
@@ -40,10 +39,9 @@ pub struct Block<TAddr> {
 impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
     pub fn new(
         parent: BlockId,
-        justify: QuorumCertificate,
+        justify: QuorumCertificate<TAddr>,
         height: NodeHeight,
         epoch: Epoch,
-        round: u64,
         proposed_by: TAddr,
         commands: BTreeSet<Command>,
     ) -> Self {
@@ -53,7 +51,6 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             justify,
             height,
             epoch,
-            round,
             proposed_by,
             // TODO
             merkle_root: FixedHash::zero(),
@@ -63,13 +60,34 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         block
     }
 
-    pub fn genesis(epoch: Epoch) -> Self {
+    pub fn load(
+        id: BlockId,
+        parent: BlockId,
+        justify: QuorumCertificate<TAddr>,
+        height: NodeHeight,
+        epoch: Epoch,
+        proposed_by: TAddr,
+        commands: BTreeSet<Command>,
+    ) -> Self {
+        Self {
+            id,
+            parent,
+            justify,
+            height,
+            epoch,
+            proposed_by,
+            // TODO
+            merkle_root: FixedHash::zero(),
+            commands,
+        }
+    }
+
+    pub fn genesis() -> Self {
         Self::new(
             BlockId::genesis(),
-            QuorumCertificate::genesis(epoch),
+            QuorumCertificate::genesis(),
             NodeHeight(0),
-            epoch,
-            0,
+            Epoch(0),
             TAddr::zero(),
             Default::default(),
         )
@@ -80,14 +98,24 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         Self {
             id: BlockId::genesis(),
             parent: BlockId::genesis(),
-            justify: QuorumCertificate::genesis(Epoch(0)),
+            justify: QuorumCertificate::genesis(),
             height: NodeHeight(0),
             epoch: Epoch(0),
-            round: 0,
             proposed_by: TAddr::zero(),
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
         }
+    }
+
+    pub fn dummy_block(parent: BlockId, proposed_by: TAddr, node_height: NodeHeight, epoch: Epoch) -> Self {
+        Self::new(
+            parent,
+            QuorumCertificate::genesis(),
+            node_height,
+            epoch,
+            proposed_by,
+            Default::default(),
+        )
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
@@ -118,7 +146,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_locked(&self) -> LockedBlock {
         LockedBlock {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -126,7 +153,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_last_executed(&self) -> LastExecuted {
         LastExecuted {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -134,7 +160,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_last_voted(&self) -> LastVoted {
         LastVoted {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -142,7 +167,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_leaf_block(&self) -> LeafBlock {
         LeafBlock {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -150,7 +174,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn as_last_proposed(&self) -> LastProposed {
         LastProposed {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -164,7 +187,7 @@ impl<TAddr> Block<TAddr> {
         &self.parent
     }
 
-    pub fn justify(&self) -> &QuorumCertificate {
+    pub fn justify(&self) -> &QuorumCertificate<TAddr> {
         &self.justify
     }
 
@@ -174,10 +197,6 @@ impl<TAddr> Block<TAddr> {
 
     pub fn epoch(&self) -> Epoch {
         self.epoch
-    }
-
-    pub fn round(&self) -> u64 {
-        self.round
     }
 
     pub fn proposed_by(&self) -> &TAddr {
@@ -268,7 +287,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
     pub fn get_votes<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         &self,
         tx: &mut TTx,
-    ) -> Result<Vec<Vote>, StorageError> {
+    ) -> Result<Vec<Vote<TAddr>>, StorageError> {
         Vote::get_for_block(tx, &self.id)
     }
 

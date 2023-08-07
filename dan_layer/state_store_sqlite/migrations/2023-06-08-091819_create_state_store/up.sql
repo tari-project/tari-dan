@@ -15,7 +15,6 @@ create table blocks
     block_id        text      not NULL,
     parent_block_id text      not NULL,
     height          bigint    not NULL,
-    leader_round    bigint    not NULL DEFAULT 0,
     epoch           bigint    not NULL,
     proposed_by     text      not NULL,
     qc_id           text      not NULL,
@@ -30,7 +29,6 @@ create unique index blocks_uniq_idx_id on blocks (block_id);
 create table leaf_blocks
 (
     id           integer   not null primary key AUTOINCREMENT,
-    epoch        bigint    not NULL,
     block_id     text      not NULL,
     block_height bigint    not NULL,
     created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -66,7 +64,6 @@ create unique index substates_uniq_shard_id on substates (shard_id);
 create table high_qcs
 (
     id         integer   not null primary key autoincrement,
-    epoch      bigint    not NULL,
     block_id   text      not null,
     qc_id      text      not null,
     created_at timestamp NOT NULL default current_timestamp,
@@ -78,7 +75,6 @@ create unique index high_qcs_uniq_idx_qc_id on high_qcs (qc_id);
 create table last_voted
 (
     id         integer   not null primary key autoincrement,
-    epoch      bigint    not null,
     block_id   text      not null,
     height     bigint    not null,
     created_at timestamp NOT NULL default current_timestamp
@@ -87,7 +83,6 @@ create table last_voted
 create table last_executed
 (
     id         integer   not null primary key autoincrement,
-    epoch      bigint    not null,
     block_id   text      not null,
     height     bigint    not null,
     created_at timestamp NOT NULL default current_timestamp
@@ -96,7 +91,6 @@ create table last_executed
 create table last_proposed
 (
     id         integer   not null primary key autoincrement,
-    epoch      bigint    not null,
     block_id   text      not null,
     height     bigint    not null,
     created_at timestamp NOT NULL default current_timestamp
@@ -105,7 +99,6 @@ create table last_proposed
 create table locked_block
 (
     id         integer   not null primary key autoincrement,
-    epoch      bigint    not null,
     block_id   text      not null,
     height     bigint    not null,
     created_at timestamp NOT NULL default current_timestamp

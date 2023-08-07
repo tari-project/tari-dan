@@ -145,7 +145,6 @@ impl TariWorld {
                 let mut client = bn.create_client();
                 let tx_count = client.get_mempool_transaction_count().await.unwrap();
 
-                dbg!(tx_count);
                 if tx_count < min_tx_count {
                     // println!(
                     //     "Waiting for {} to have {} transaction(s) in mempool (currently has {})",

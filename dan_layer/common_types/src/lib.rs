@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 pub mod crypto;
-pub mod proto;
 
 mod epoch;
 pub use epoch::Epoch;

@@ -18,7 +18,6 @@ pub struct Block {
     pub block_id: String,
     pub parent_block_id: String,
     pub height: i64,
-    pub leader_round: i64,
     pub epoch: i64,
     pub proposed_by: String,
     pub qc_id: String,
@@ -31,12 +30,12 @@ impl Block {
         self,
         qc: sql_models::QuorumCertificate,
     ) -> Result<consensus_models::Block<TAddr>, StorageError> {
-        Ok(consensus_models::Block::new(
+        Ok(consensus_models::Block::load(
+            deserialize_hex_try_from(&self.block_id)?,
             deserialize_hex_try_from(&self.parent_block_id)?,
             qc.try_into()?,
             NodeHeight(self.height as u64),
             Epoch(self.epoch as u64),
-            self.leader_round as u64,
             TAddr::from_bytes(&deserialize_hex(&self.proposed_by)?).ok_or_else(|| StorageError::DecodingError {
                 operation: "try_convert",
                 item: "block",

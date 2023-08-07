@@ -1,8 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_common_types::types::PublicKey;
-use tari_dan_common_types::Epoch;
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{BlockId, TransactionPoolError},
     StorageError,
@@ -38,13 +37,20 @@ pub enum HotStuffError {
     #[error("State manager error: {0}")]
     StateManagerError(anyhow::Error),
     #[error("Invalid vote signature from {signer_public_key} (unauthenticated)")]
-    InvalidVoteSignature { signer_public_key: PublicKey },
+    InvalidVoteSignature { signer_public_key: String },
     #[error("Transaction pool error: {0}")]
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]
     TransactionDoesNotExist { transaction_id: TransactionId },
     #[error("Received vote for unknown block {block_id} from {sent_by}")]
     ReceivedVoteForUnknownBlock { block_id: BlockId, sent_by: String },
+    #[error("Pacemaker channel dropped: {details}")]
+    PacemakerChannelDropped { details: String },
+    #[error("Bad new view message: expected height {expected_height}, received new height {received_new_height}")]
+    BadNewViewMessage {
+        expected_height: NodeHeight,
+        received_new_height: NodeHeight,
+    },
 }
 
 impl From<EpochManagerError> for HotStuffError {
@@ -78,6 +84,26 @@ pub enum ProposalValidationError {
         proposed_by: String,
         block_id: BlockId,
         details: String,
+    },
+    #[error("Candidate block {candidate_block_height} is not higher than justify block {justify_block_height}")]
+    CandidateBlockNotHigherThanJustifyBlock {
+        justify_block_height: NodeHeight,
+        candidate_block_height: NodeHeight,
+    },
+    #[error(
+        "Candidate block {candidate_block_height} is higher than max failures {max_failures}. Proposed by \
+         {proposed_by}, justify block height {justify_block_height}"
+    )]
+    CandidateBlockHigherThanMaxFailures {
+        proposed_by: String,
+        justify_block_height: NodeHeight,
+        candidate_block_height: NodeHeight,
+        max_failures: usize,
+    },
+    #[error("Candidate block {candidate_block_height} does not extend justify block {justify_block_height}")]
+    CandidateBlockDoesNotExtendJustify {
+        justify_block_height: NodeHeight,
+        candidate_block_height: NodeHeight,
     },
     #[error("Block {block_id} proposed by {proposed_by} is not the leader")]
     NotLeader { proposed_by: String, block_id: BlockId },

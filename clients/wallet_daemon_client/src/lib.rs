@@ -390,7 +390,6 @@ impl WalletDaemonClient {
         &mut self,
         req: T,
     ) -> Result<AuthLoginResponse, WalletDaemonClientError> {
-        dbg!();
         self.send_request("auth.request", req.borrow()).await
     }
 
