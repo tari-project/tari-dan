@@ -10,9 +10,10 @@ use tari_comms::{
     protocol::rpc::{RpcError, RpcStatus},
     types::CommsPublicKey,
 };
+use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 use tari_dan_storage::{
-    consensus_models::SubstateRecord,
+    consensus_models::{Block, BlockId, SubstateRecord},
     global::{GlobalDb, MetadataKey},
     StateStore,
     StorageError,
@@ -52,8 +53,13 @@ impl CommitteeStateSync {
         }
     }
 
-    pub async fn sync_state(&self, epoch: Epoch) -> Result<(), CommitteeStateSyncError> {
-        if self.is_synced_to(epoch)? {
+    pub async fn sync_state(
+        &self,
+        epoch: Epoch,
+        tip: &BlockId,
+        force_resync: bool,
+    ) -> Result<(), CommitteeStateSyncError> {
+        if !force_resync && self.is_synced_to(epoch)? {
             info!(target: LOG_TARGET, "🌍️ Already synced to epoch {}", epoch);
             return Ok(());
         }
@@ -103,7 +109,8 @@ impl CommitteeStateSync {
 
         // synchronize state with committee validator nodes
         // TODO: some mechanism for retry
-        self.sync_peers_state(prev_committee, new_local_shard_range).await?;
+        self.sync_peers_state(prev_committee, new_local_shard_range, tip, epoch)
+            .await?;
 
         let mut tx = self.global_db.create_transaction()?;
         self.global_db
@@ -118,6 +125,8 @@ impl CommitteeStateSync {
         &self,
         committee_vns: Committee<CommsPublicKey>,
         shard_range: RangeInclusive<ShardId>,
+        tip: &BlockId,
+        epoch: Epoch,
     ) -> Result<(), CommitteeStateSyncError> {
         let inventory = self
             .shard_store
@@ -149,7 +158,7 @@ impl CommitteeStateSync {
                 inventory: inventory.clone(),
             };
             let mut vn_state_stream = sync_vn_rpc_client.vn_state_sync(request).await?;
-            info!(target: LOG_TARGET, "🌍 Syncing...");
+            info!(target: LOG_TARGET, "🌍 Syncing substates...");
             let mut substate_count = 0;
             while let Some(resp) = vn_state_stream.next().await {
                 let msg = resp?;
@@ -164,9 +173,31 @@ impl CommitteeStateSync {
                 substate_count += 1;
             }
 
+            let mut vn_blocks_stream = sync_vn_rpc_client
+                .sync_blocks(tari_validator_node_rpc::proto::rpc::BlockSyncRequest {
+                    block_id: tip.as_bytes().to_vec(),
+                    epoch: epoch.as_u64(),
+                })
+                .await?;
+            info!(target: LOG_TARGET, "🌍 Syncing blocks...");
+            let mut block_count = 0;
+            while let Some(resp) = vn_blocks_stream.next().await {
+                let msg = resp?;
+                let blokc: Block<CommsPublicKey> = msg
+                    .block
+                    .ok_or(CommitteeStateSyncError::InvalidStateSyncData(anyhow::anyhow!(
+                        "No block"
+                    )))?
+                    .try_into()
+                    .map_err(CommitteeStateSyncError::InvalidStateSyncData)?;
+                self.shard_store.with_write_tx(|tx| blokc.justify().save(tx))?;
+                self.shard_store.with_write_tx(|tx| blokc.insert(tx))?;
+                block_count += 1;
+            }
+
             info!(
                 target: LOG_TARGET,
-                "🌍 Sync from peer {} complete. {} substate(s)", sync_vn, substate_count
+                "🌍 Sync from peer {} complete. {} substate(s), {} block(s)", sync_vn, substate_count, block_count
             );
         }
 

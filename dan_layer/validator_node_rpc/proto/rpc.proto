@@ -152,3 +152,12 @@ message GetVirtualSubstateResponse {
   bytes substate = 1;
   repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 2;
 }
+
+message BlockSyncRequest {
+    bytes block_id = 1;
+    uint64 epoch = 2;
+}
+
+message BlockSyncResponse {
+    tari.dan.consensus.Block block = 1;
+}

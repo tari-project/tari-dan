@@ -66,6 +66,24 @@ impl DanNode {
 
         let mut epoch_manager_events = self.services.epoch_manager.subscribe().await?;
 
+        let sync_service = CommitteeStateSync::new(
+            self.services.epoch_manager.clone(),
+            self.services.validator_node_client_factory.clone(),
+            self.services.state_store.clone(),
+            self.services.global_db.clone(),
+            self.services.comms.node_identity().public_key().clone(),
+        );
+
+        let epoch = self.services.epoch_manager.current_epoch().await?;
+        let tip = self.services.state_store.with_read_tx(|tx| Block::get_tip(tx, epoch))?;
+
+        if let Err(e) = sync_service.sync_state(epoch, tip.id(), true).await {
+            error!(
+                target: LOG_TARGET,
+                "Failed to sync peers state for epoch {}: {}", epoch, e
+            );
+        }
+
         loop {
             tokio::select! {
                 // Wait until killed
@@ -156,8 +174,10 @@ impl DanNode {
 
                 // EpochChanged should only happen once per epoch and the event is not emitted during initial sync. So
                 // spawning state sync for each event should be ok.
+
+                let tip = self.services.state_store.with_read_tx(|tx| Block::get_tip(tx, epoch))?;
                 task::spawn(async move {
-                    if let Err(e) = sync_service.sync_state(epoch).await {
+                    if let Err(e) = sync_service.sync_state(epoch, tip.id(), false).await {
                         error!(
                             target: LOG_TARGET,
                             "Failed to sync peers state for epoch {}: {}", epoch, e

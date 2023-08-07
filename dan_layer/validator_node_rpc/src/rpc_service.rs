@@ -5,7 +5,6 @@ use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_comms_rpc_macros::tari_rpc;
 
 use crate::proto::rpc as proto;
-
 #[tari_rpc(protocol_name = b"t/vn/1", server_struct = ValidatorNodeRpcServer, client_struct = ValidatorNodeRpcClient)]
 pub trait ValidatorNodeRpcService: Send + Sync + 'static {
     #[rpc(method = 1)]
@@ -43,4 +42,10 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
         &self,
         req: Request<proto::GetVirtualSubstateRequest>,
     ) -> Result<Response<proto::GetVirtualSubstateResponse>, RpcStatus>;
+
+    #[rpc(method = 7)]
+    async fn sync_blocks(
+        &self,
+        req: Request<proto::BlockSyncRequest>,
+    ) -> Result<Streaming<proto::BlockSyncResponse>, RpcStatus>;
 }

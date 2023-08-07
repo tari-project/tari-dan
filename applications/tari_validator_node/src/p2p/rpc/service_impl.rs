@@ -28,7 +28,7 @@ use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
 use tari_dan_p2p::PeerProvider;
 use tari_dan_storage::{
-    consensus_models::{SubstateRecord, TransactionRecord},
+    consensus_models::{Block, BlockId, SubstateRecord, TransactionRecord},
     StateStore,
 };
 use tari_engine_types::virtual_substate::VirtualSubstateAddress;
@@ -39,6 +39,8 @@ use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::{
     proto,
     proto::rpc::{
+        BlockSyncRequest,
+        BlockSyncResponse,
         GetSubstateRequest,
         GetSubstateResponse,
         GetTransactionResultRequest,
@@ -287,6 +289,50 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         };
 
         Ok(Response::new(resp))
+    }
+
+    async fn sync_blocks(&self, req: Request<BlockSyncRequest>) -> Result<Streaming<BlockSyncResponse>, RpcStatus> {
+        let (sender, receiver) = mpsc::channel(100);
+        let req = req.into_message();
+
+        let block_id = BlockId::try_from(req.block_id)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded block id: {}", e)))?;
+        let epoch = req.epoch;
+        let shard_db = self.shard_state_store.clone();
+        task::spawn(async move {
+            let block = shard_db.with_read_tx(|tx| Block::get_tip(tx, tari_dan_common_types::Epoch(epoch)));
+            match block {
+                Ok(block) => {
+                    let mut block = block;
+                    while *block.id() != block_id {
+                        if sender
+                            .send(Ok(BlockSyncResponse {
+                                block: Some(block.clone().into()),
+                            }))
+                            .await
+                            .is_err()
+                        {
+                            debug!(
+                                target: LOG_TARGET,
+                                "Peer stream closed by client before completing. Aborting"
+                            );
+                        }
+                        let x = shard_db.with_read_tx(|tx| block.get_parent(tx));
+                        block = match x {
+                            Ok(block) => block,
+                            Err(e) => {
+                                let _ignore = sender.send(Err(RpcStatus::general(&e))).await;
+                                return;
+                            },
+                        };
+                    }
+                },
+                Err(e) => {
+                    let _ignore = sender.send(Err(RpcStatus::general(&e))).await;
+                },
+            }
+        });
+        Ok(Streaming::new(receiver))
     }
 
     async fn get_transaction_result(
