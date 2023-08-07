@@ -5,6 +5,7 @@ mod bootstrap;
 pub mod fees;
 pub mod flow;
 pub mod function_definitions;
+pub mod json_encoder;
 pub mod packager;
 pub mod runtime;
 pub mod state_store;

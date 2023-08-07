@@ -46,4 +46,6 @@ pub enum TransactionError {
     BorError(#[from] tari_bor::BorError),
     #[error("Value visitor error: {0}")]
     ValueVisitorError(#[from] IndexedValueVisitorError),
+    #[error("JSON decoding error: {0}")]
+    JsonError(#[from] serde_json::Error),
 }

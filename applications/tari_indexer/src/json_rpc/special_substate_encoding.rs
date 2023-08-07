@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde_json as json;
+use tari_dan_engine::json_encoder::fix_invalid_object_keys;
 use tari_engine_types::{
     component::ComponentHeader,
     non_fungible::NonFungibleContainer,
@@ -9,7 +10,6 @@ use tari_engine_types::{
 };
 
 type JsonObject = json::Map<String, json::Value>;
-type CborValue = tari_bor::Value;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SubstateDecoderError {
@@ -96,49 +96,6 @@ fn encode_component_into_json(
     decode_cbor_field_into_json(header.state(), component_object, "state")?;
 
     Ok(())
-}
-
-/// In JSON, all object keys must be string values.
-/// But ciborium sometimes will use other types (e.g. Tags) as keys,
-/// so in that case we transform the object into an array so it can be safely converted to JSON
-/// AND we need to to it recursively
-fn fix_invalid_object_keys(value: &CborValue) -> CborValue {
-    match value {
-        CborValue::Tag(tag, content) => {
-            let fixed_content = fix_invalid_object_keys(content);
-            CborValue::Tag(*tag, Box::new(fixed_content))
-        },
-        CborValue::Array(arr) => {
-            let fixed_items = arr.iter().map(fix_invalid_object_keys).collect();
-            CborValue::Array(fixed_items)
-        },
-        CborValue::Map(map) => {
-            let has_invalid_keys = map.iter().any(|(k, _)| !k.is_text());
-
-            if has_invalid_keys {
-                let map_entries_as_arrays = map
-                    .iter()
-                    .map(|(k, v)| {
-                        let fixed_key = fix_invalid_object_keys(k);
-                        let fixed_value = fix_invalid_object_keys(v);
-                        CborValue::Array(vec![fixed_key, fixed_value])
-                    })
-                    .collect();
-                return CborValue::Array(map_entries_as_arrays);
-            }
-
-            let fixed_entries = map
-                .iter()
-                .map(|(k, v)| {
-                    let fixed_value = fix_invalid_object_keys(v);
-                    (k.to_owned(), fixed_value)
-                })
-                .collect();
-            CborValue::Map(fixed_entries)
-        },
-        // other types are atomic and do not cause problems, so we just return them directly
-        _ => value.to_owned(),
-    }
 }
 
 #[cfg(test)]

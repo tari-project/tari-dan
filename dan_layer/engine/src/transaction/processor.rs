@@ -281,6 +281,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 let encoded = encode(&bucket_id)?;
                 Ok(InstructionResult {
                     value: IndexedValue::from_raw(&encoded)?,
+                    json: serde_json::to_value(bucket_id)?,
                     raw: encoded,
                     return_type: Type::Other {
                         name: "BucketId".to_string(),

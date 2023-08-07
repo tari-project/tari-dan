@@ -290,7 +290,8 @@ impl WorkingState {
 
         let VirtualSubstate::UnclaimedValidatorFee(fee_claim) = substate else {
             return Err(RuntimeError::FeeClaimNotPermitted {
-                epoch, address: validator_public_key
+                epoch,
+                address: validator_public_key,
             });
         };
         Ok(fee_claim)
@@ -305,7 +306,7 @@ impl WorkingState {
                     address: address.clone(),
                 })?;
         let VirtualSubstate::CurrentEpoch(epoch) = current_epoch else {
-            return Err(RuntimeError::VirtualSubstateNotFound { address});
+            return Err(RuntimeError::VirtualSubstateNotFound { address });
         };
         Ok(Epoch(*epoch))
     }

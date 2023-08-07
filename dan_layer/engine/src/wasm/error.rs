@@ -6,7 +6,7 @@ use tari_engine_types::indexed_value::IndexedValueVisitorError;
 use thiserror::Error;
 use wasmer::{ExportError, HostEnvInitError, InstantiationError};
 
-use crate::runtime::RuntimeError;
+use crate::{json_encoder::JsonEncodingError, runtime::RuntimeError};
 
 #[derive(Debug, Error)]
 pub enum WasmError {
@@ -61,6 +61,8 @@ pub enum WasmExecutionError {
     },
     #[error("Value visitor error: {0}")]
     ValueVisitorError(#[from] IndexedValueVisitorError),
+    #[error("JSON encoding error: {0}")]
+    JsonEncodingError(#[from] JsonEncodingError),
 }
 impl From<wasmer::InstantiationError> for WasmExecutionError {
     fn from(value: InstantiationError) -> Self {

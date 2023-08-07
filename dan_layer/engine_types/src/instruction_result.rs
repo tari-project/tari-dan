@@ -21,6 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_json::Value;
 use tari_bor::BorError;
 use tari_template_abi::Type;
 
@@ -30,6 +31,7 @@ use crate::{indexed_value::IndexedValue, serde_with};
 pub struct InstructionResult {
     #[serde(with = "serde_with::hex")]
     pub raw: Vec<u8>,
+    pub json: Value,
     pub value: IndexedValue,
     pub return_type: Type,
 }
@@ -38,6 +40,7 @@ impl InstructionResult {
     pub fn empty() -> Self {
         InstructionResult {
             raw: Vec::new(),
+            json: Value::Null,
             value: IndexedValue::default(),
             return_type: Type::Unit,
         }

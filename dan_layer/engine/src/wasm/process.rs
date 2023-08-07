@@ -46,6 +46,7 @@ use tari_template_lib::{
 use wasmer::{Function, Instance, Module, Val, WasmerEnv};
 
 use crate::{
+    json_encoder,
     runtime::Runtime,
     traits::Invokable,
     wasm::{
@@ -250,9 +251,11 @@ impl Invokable for WasmProcess {
         }
 
         let value = IndexedValue::from_raw(&raw)?;
+        let json = json_encoder::cbor_to_json(&raw)?;
 
         Ok(InstructionResult {
             raw,
+            json,
             value,
             return_type: func_def.output.clone(),
         })
