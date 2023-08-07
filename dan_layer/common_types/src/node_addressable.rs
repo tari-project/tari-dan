@@ -6,10 +6,11 @@ use std::{
     hash::Hash,
 };
 
+use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_utilities::ByteArray;
 
-pub trait NodeAddressable: Eq + Hash + Clone + Debug + Send + Sync + Display {
+pub trait NodeAddressable: Eq + Hash + Clone + Debug + Send + Sync + Display + Serialize + DeserializeOwned {
     fn zero() -> Self;
     fn as_bytes(&self) -> &[u8];
 

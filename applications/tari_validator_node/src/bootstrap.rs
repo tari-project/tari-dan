@@ -340,7 +340,7 @@ where
     TTx::Target: StateStoreReadTransaction,
     TTx::Addr: NodeAddressable + Serialize,
 {
-    let genesis_block = Block::<TTx::Addr>::genesis(Epoch(0));
+    let genesis_block = Block::<TTx::Addr>::genesis();
     let address = SubstateAddress::Resource(*PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {

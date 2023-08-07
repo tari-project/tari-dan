@@ -79,7 +79,7 @@ impl ValidatorBuilder {
         let (tx_mempool, rx_mempool) = mpsc::channel(10);
 
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
-        let signing_service = TestVoteSignatureService::new();
+        let signing_service = TestVoteSignatureService::new(self.address.clone());
         let shutdown = Shutdown::new();
         let shutdown_signal = shutdown.to_signal();
         let transaction_pool = TransactionPool::new();

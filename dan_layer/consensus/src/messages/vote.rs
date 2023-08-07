@@ -6,10 +6,10 @@ use tari_dan_common_types::{hashing::ValidatorNodeMerkleProof, Epoch};
 use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSignature};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct VoteMessage {
+pub struct VoteMessage<TAddr> {
     pub epoch: Epoch,
     pub block_id: BlockId,
     pub decision: QuorumDecision,
-    pub signature: ValidatorSignature,
+    pub signature: ValidatorSignature<TAddr>,
     pub merkle_proof: ValidatorNodeMerkleProof,
 }

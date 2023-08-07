@@ -64,10 +64,8 @@ impl ValidatorNodeProcess {
     }
 
     pub async fn save_database(&self, database_name: String, to: &Path) {
-        dbg!(to);
         fs::create_dir_all(to).expect("Could not create directory");
         let from = &self.temp_dir_path.join(format!("{}.db", database_name));
-        dbg!(&from);
         fs::copy(from, to.join(format!("{}.sqlite", database_name))).expect("Could not copy file");
     }
 }

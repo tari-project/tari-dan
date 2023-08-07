@@ -43,7 +43,7 @@ use crate::{
         common::update_high_qc,
         error::HotStuffError,
         event::HotstuffEvent,
-        on_beat::OnBeat,
+        pacemaker_handle::PaceMakerHandle,
         ProposalValidationError,
     },
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage, VoteMessage},
@@ -62,7 +62,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
     tx_events: broadcast::Sender<HotstuffEvent>,
-    on_beat: OnBeat,
+    pacemaker: PaceMakerHandle,
 }
 
 impl<TConsensusSpec> OnReceiveProposalHandler<TConsensusSpec>
@@ -78,7 +78,7 @@ where TConsensusSpec: ConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
-        on_beat: OnBeat,
+        pacemaker: PaceMakerHandle,
     ) -> Self {
         Self {
             validator_addr,
@@ -90,7 +90,7 @@ where TConsensusSpec: ConsensusSpec
             transaction_pool,
             tx_leader,
             tx_events,
-            on_beat,
+            pacemaker,
         }
     }
 
@@ -135,7 +135,8 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<(), HotStuffError> {
         // First save the block in one db transaction
         self.store.with_write_tx(|tx| {
-            self.validate_local_proposed_block(&mut *tx, &from, &block)?;
+            // TODO: We should move the safe_block check to here
+            self.validate_local_proposed_block_and_fill_dummy_blocks(&mut *tx, &from, &block, &local_committee)?;
             // Insert the block if it doesnt already exist
             block.justify().save(tx)?;
             block.save(tx)?;
@@ -188,7 +189,6 @@ where TConsensusSpec: ConsensusSpec
         if !missing_tx_ids.is_empty() {
             self.send_to_leader(
                 local_committee,
-                block.id(),
                 block.height(),
                 HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
                     block_id: *block.id(),
@@ -227,6 +227,7 @@ where TConsensusSpec: ConsensusSpec
         })?;
 
         if let Some(decision) = maybe_decision {
+            self.pacemaker.reset_leader_timeout(block.height()).await?;
             let vote = self.generate_vote_message(block, decision).await?;
             debug!(
                 target: LOG_TARGET,
@@ -257,7 +258,7 @@ where TConsensusSpec: ConsensusSpec
             .with_write_tx(|tx| self.on_receive_foreign_block(tx, &block, &committee_shard))?;
 
         // We could have ready transactions at this point, so if we're the leader for the next block we can propose
-        self.on_beat.beat();
+        self.pacemaker.beat().await?;
 
         Ok(())
     }
@@ -314,11 +315,10 @@ where TConsensusSpec: ConsensusSpec
     async fn send_to_leader(
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        block_id: &BlockId,
         height: NodeHeight,
         message: HotstuffMessage<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
-        let leader = self.leader_strategy.get_leader(local_committee, block_id, height);
+        let leader = self.leader_strategy.get_leader(local_committee, height);
         self.tx_leader
             .send((leader.clone(), message))
             .await
@@ -330,12 +330,10 @@ where TConsensusSpec: ConsensusSpec
     async fn send_vote_to_leader(
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
-        vote: VoteMessage,
+        vote: VoteMessage<TConsensusSpec::Addr>,
         height: NodeHeight,
     ) -> Result<(), HotStuffError> {
-        let leader = self
-            .leader_strategy
-            .get_leader_for_next_block(local_committee, &vote.block_id, height);
+        let leader = self.leader_strategy.get_leader_for_next_block(local_committee, height);
         self.tx_leader
             .send((leader.clone(), HotstuffMessage::Vote(vote)))
             .await
@@ -485,7 +483,7 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
-        info!(target: LOG_TARGET, "✅ Accepting block {}", block.id());
+        info!(target: LOG_TARGET, "✅ Voting to accept block {}", block.id());
         Ok(Some(QuorumDecision::Accept))
     }
 
@@ -543,7 +541,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         block: &Block<TConsensusSpec::Addr>,
         decision: QuorumDecision,
-    ) -> Result<VoteMessage, HotStuffError> {
+    ) -> Result<VoteMessage<TConsensusSpec::Addr>, HotStuffError> {
         let merkle_proof = self
             .epoch_manager
             .get_validator_node_merkle_proof(block.epoch())
@@ -583,7 +581,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         };
 
-        let locked_block = LockedBlock::get(tx.deref_mut(), block.epoch())?;
+        let locked_block = LockedBlock::get(tx.deref_mut())?;
         if precommit_node.height() > locked_block.height {
             debug!(target: LOG_TARGET, "LOCKED NODE SET: {} {}", precommit_node.height(), precommit_node.id());
             // precommit_node is at COMMIT phase
@@ -603,7 +601,7 @@ where TConsensusSpec: ConsensusSpec
                 prepare_node,
             );
 
-            let last_executed = LastExecuted::get(tx.deref_mut(), block.epoch())?;
+            let last_executed = LastExecuted::get(tx.deref_mut())?;
             self.on_commit(tx, &last_executed, block, local_committee_shard)?;
             block.as_last_executed().set(tx)?;
         } else {
@@ -696,16 +694,17 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    fn validate_local_proposed_block(
+    fn validate_local_proposed_block_and_fill_dummy_blocks(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         from: &TConsensusSpec::Addr,
         candidate_block: &Block<TConsensusSpec::Addr>,
+        local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), ProposalValidationError> {
         self.validate_proposed_block(from, candidate_block)?;
 
         // Check that details included in the justify match previously added blocks
-        let Some(justify_block) = candidate_block.justify().get_block(tx).optional()? else {
+        let Some(justify_block) = candidate_block.justify().get_block(tx.deref_mut()).optional()? else {
             // TODO: This may mean that we have to catch up
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: from.to_string(),
@@ -723,6 +722,73 @@ where TConsensusSpec: ConsensusSpec
                     justify_block.height(),
                     candidate_block.justify().block_height()
                 ),
+            });
+        }
+
+        // Special case for genesis block
+        if candidate_block.parent().is_genesis() && candidate_block.justify().is_genesis() {
+            return Ok(());
+        }
+
+        // if candidate_block.height().saturating_sub(justify_block.height()).0 > local_committee.max_failures() as u64
+        // { TODO: We should maybe relax this constraint during GST, before the first block, many leaders might
+        // fail....
+        // Note: we are adding at least one more block from b_leaf, so we need to add 1 to the max_failures
+        if candidate_block.height().saturating_sub(justify_block.height()).0 > local_committee.len() as u64 + 1 {
+            return Err(ProposalValidationError::CandidateBlockHigherThanMaxFailures {
+                proposed_by: from.to_string(),
+                justify_block_height: justify_block.height(),
+                candidate_block_height: candidate_block.height(),
+                max_failures: local_committee.max_failures(),
+            });
+        }
+
+        // if the block parent is not the justify parent, then we have experienced a leader failure
+        // and should make dummy blocks to fill in the gaps.
+        if candidate_block.parent() != justify_block.parent() {
+            if candidate_block.height() < justify_block.height() {
+                return Err(ProposalValidationError::CandidateBlockNotHigherThanJustifyBlock {
+                    justify_block_height: justify_block.height(),
+                    candidate_block_height: candidate_block.height(),
+                });
+            }
+
+            let justify_block_height = justify_block.height();
+            let mut last_dummy_block = justify_block;
+
+            let mut leader = self
+                .leader_strategy
+                .get_leader_for_next_block(local_committee, last_dummy_block.height());
+            while last_dummy_block.id() != candidate_block.parent() {
+                if last_dummy_block.height() > candidate_block.height() {
+                    warn!(target: LOG_TARGET, "🔥 Bad proposal, leaf block height {} is greater than new height {}", last_dummy_block.height(), candidate_block.height());
+                    return Err(ProposalValidationError::CandidateBlockDoesNotExtendJustify {
+                        justify_block_height,
+                        candidate_block_height: candidate_block.height(),
+                    });
+                }
+
+                info!(target: LOG_TARGET, "Creating dummy block for leader {}, height: {}", leader, last_dummy_block.height() + NodeHeight(1));
+                // TODO: replace with actual leader's propose
+                last_dummy_block = Block::dummy_block(
+                    *last_dummy_block.id(),
+                    leader.clone(),
+                    last_dummy_block.height() + NodeHeight(1),
+                    candidate_block.epoch(),
+                );
+                last_dummy_block.save(tx)?;
+                // last_dummy_block.as_leaf_block().set(tx)?;
+                leader = self
+                    .leader_strategy
+                    .get_leader_for_next_block(local_committee, last_dummy_block.height());
+            }
+        }
+
+        // TODO: remove other call to should_vote
+        if !self.should_vote(tx, candidate_block)? {
+            return Err(ProposalValidationError::NotSafeBlock {
+                proposed_by: from.to_string(),
+                hash: *candidate_block.id(),
             });
         }
 
@@ -763,8 +829,8 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         block: &Block<TConsensusSpec::Addr>,
-    ) -> Result<bool, HotStuffError> {
-        let Some(last_voted) = LastVoted::get(tx, block.epoch()).optional()? else {
+    ) -> Result<bool, ProposalValidationError> {
+        let Some(last_voted) = LastVoted::get(tx).optional()? else {
             // Never voted, then validated.block.height() > last_voted.height (0)
             return Ok(true);
         };
@@ -781,7 +847,7 @@ where TConsensusSpec: ConsensusSpec
             return Ok(false);
         }
 
-        let locked = LockedBlock::get(tx, block.epoch())?;
+        let locked = LockedBlock::get(tx)?;
         let locked_block = locked.get_block(tx)?;
 
         // (b_new extends b_lock && b_new .justify.node.height > b_lock .height)
@@ -810,7 +876,7 @@ fn is_safe_block<TTx: StateStoreReadTransaction>(
     tx: &mut TTx,
     block: &Block<TTx::Addr>,
     locked_block: &Block<TTx::Addr>,
-) -> Result<bool, HotStuffError> {
+) -> Result<bool, ProposalValidationError> {
     // Liveness
     if block.justify().block_height() <= locked_block.height() {
         debug!(
