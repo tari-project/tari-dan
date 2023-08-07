@@ -289,10 +289,10 @@ pub async fn handle_wait_result(
             Some(WalletEvent::TransactionInvalid(event)) if event.transaction_id == req.transaction_id => {
                 return Ok(TransactionWaitResultResponse {
                     transaction_id: req.transaction_id,
-                    result: event.transaction.finalize,
-                    status: event.transaction.status,
-                    transaction_failure: event.transaction.transaction_failure,
-                    final_fee: event.transaction.final_fee.unwrap_or_default(),
+                    result: event.finalize,
+                    status: event.status,
+                    transaction_failure: event.transaction_failure,
+                    final_fee: event.final_fee.unwrap_or_default(),
                     timed_out: false,
                 });
             },

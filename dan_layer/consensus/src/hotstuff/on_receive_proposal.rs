@@ -783,7 +783,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<(), ProposalValidationError> {
         let leader = self
             .leader_strategy
-            .get_leader(local_committee, candidate_block.id(), candidate_block.height());
+            .get_leader(local_committee, candidate_block.height());
         if leader != from {
             return Err(ProposalValidationError::NotLeader {
                 proposed_by: from.to_string(),

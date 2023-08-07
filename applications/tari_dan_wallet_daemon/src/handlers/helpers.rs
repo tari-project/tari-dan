@@ -31,11 +31,10 @@ pub async fn wait_for_result(
                 return Err(anyhow::anyhow!(
                     "Transaction invalid: {} [status: {}]",
                     event
-                        .transaction
                         .transaction_failure
                         .map(|f| f.to_string())
                         .unwrap_or_else(|| "Unknown".to_string()),
-                    event.transaction.status,
+                    event.status,
                 ));
             },
             _ => {},

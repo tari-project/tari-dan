@@ -155,7 +155,11 @@ where
                         },
                         None => notify.notify(TransactionInvalidEvent {
                             transaction_id: *transaction.transaction.id(),
-                            transaction,
+                            status: transaction.status,
+                            finalize: transaction.finalize,
+                            transaction_failure: transaction.transaction_failure,
+                            final_fee: transaction.final_fee,
+                            is_dry_run: transaction.is_dry_run,
                         }),
                     }
                 },
