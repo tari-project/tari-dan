@@ -19,6 +19,7 @@ diesel::table! {
         proposed_by -> Text,
         qc_id -> Text,
         commands -> Text,
+        total_leader_fee -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -158,18 +159,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    validator_fees (id) {
-        id -> Integer,
-        validator_addr -> Text,
-        epoch -> BigInt,
-        block_id -> Text,
-        total_transaction_fee -> BigInt,
-        total_fee_due -> BigInt,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
     votes (id) {
         id -> Integer,
         hash -> Text,
@@ -197,6 +186,5 @@ diesel::allow_tables_to_appear_in_same_query!(
     substates,
     transaction_pool,
     transactions,
-    validator_fees,
     votes,
 );

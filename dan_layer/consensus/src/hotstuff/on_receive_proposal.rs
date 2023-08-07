@@ -29,7 +29,6 @@ use tari_dan_storage::{
         TransactionPool,
         TransactionPoolStage,
         TransactionRecord,
-        ValidatorFee,
     },
     StateStore,
     StateStoreReadTransaction,
@@ -358,6 +357,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<Option<QuorumDecision>, HotStuffError> {
         block.as_last_voted().set(tx)?;
 
+        let mut total_leader_fee = 0;
         for cmd in block.commands() {
             let mut tx_rec = self.transaction_pool.get(tx, cmd.transaction_id())?;
             // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
@@ -526,6 +526,7 @@ where TConsensusSpec: ConsensusSpec
                         );
                         return Ok(None);
                     }
+                    total_leader_fee += calculated_leader_fee;
                     // If the decision was changed to Abort, which can only happen when a foreign shard decides ABORT
                     // and we decide COMMIT, we set SomePrepared, otherwise AllPrepared. These are
                     // the last stages.
@@ -536,6 +537,17 @@ where TConsensusSpec: ConsensusSpec
                     }
                 },
             }
+        }
+
+        if total_leader_fee != block.total_leader_fee() {
+            warn!(
+                target: LOG_TARGET,
+                "❌ Leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
+                block.id(),
+                block.total_leader_fee(),
+                total_leader_fee
+            );
+            return Ok(None);
         }
 
         info!(target: LOG_TARGET, "✅ Voting to accept block {}", block.id());
@@ -752,24 +764,13 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
-        if total_fee_due > 0 {
-            info!(
-                target: LOG_TARGET,
-                "🪙 Recording validator fee for {} (amount due = {}, total fees = {})",
-                block.proposed_by(),
-                total_fee_due,
-                total_transaction_fee
-            );
-
-            ValidatorFee {
-                validator_addr: block.proposed_by().clone(),
-                epoch: block.epoch(),
-                block_id: *block.id(),
-                total_fee_due,
-                total_transaction_fee,
-            }
-            .create(tx)?;
-        }
+        info!(
+            target: LOG_TARGET,
+            "🪙 Validator fee for block {} (amount due = {}, total fees = {})",
+            block.proposed_by(),
+            total_fee_due,
+            total_transaction_fee
+        );
 
         Ok(())
     }

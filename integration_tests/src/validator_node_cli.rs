@@ -219,7 +219,7 @@ pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String
                 );
                 counters[6] += 1;
             },
-            SubstateAddress::ClaimedFee(_) => {
+            SubstateAddress::FeeClaim(_) => {
                 outputs.insert(format!("fee_claim/{}", counters[7]), VersionedSubstateAddress {
                     address: addr.clone(),
                     version: data.version(),

@@ -28,7 +28,6 @@ use tari_dan_storage::{
         TransactionAtom,
         TransactionPoolStage,
         TransactionRecord,
-        ValidatorFee,
         Vote,
     },
     StateStoreWriteTransaction,
@@ -88,6 +87,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::epoch.eq(block.epoch().as_u64() as i64),
             blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
             blocks::commands.eq(serialize_json(block.commands())?),
+            blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
         );
 
@@ -763,28 +763,6 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substate_create",
-                source: e,
-            })?;
-
-        Ok(())
-    }
-
-    fn validator_fees_insert(&mut self, validator_fee: &ValidatorFee<Self::Addr>) -> Result<(), StorageError> {
-        use crate::schema::validator_fees;
-
-        let values = (
-            validator_fees::epoch.eq(validator_fee.epoch.as_u64() as i64),
-            validator_fees::block_id.eq(serialize_hex(validator_fee.block_id)),
-            validator_fees::validator_addr.eq(serialize_hex(validator_fee.validator_addr.as_bytes())),
-            validator_fees::total_transaction_fee.eq(validator_fee.total_transaction_fee as i64),
-            validator_fees::total_fee_due.eq(validator_fee.total_fee_due as i64),
-        );
-
-        diesel::insert_into(validator_fees::table)
-            .values(values)
-            .execute(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "validator_fees_insert",
                 source: e,
             })?;
 

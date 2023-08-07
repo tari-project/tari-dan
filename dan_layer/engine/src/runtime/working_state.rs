@@ -10,7 +10,7 @@ use tari_engine_types::{
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     events::Event,
-    fee_claim::{ClaimedFeeAddress, FeeClaim},
+    fee_claim::{FeeClaim, FeeClaimAddress},
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
@@ -47,7 +47,7 @@ pub(super) struct WorkingState {
     pub new_non_fungibles: HashMap<NonFungibleAddress, NonFungibleContainer>,
     pub new_non_fungible_indexes: HashMap<NonFungibleIndexAddress, NonFungibleIndex>,
     pub claimed_confidential_outputs: Vec<UnclaimedConfidentialOutputAddress>,
-    pub new_fee_claims: HashMap<ClaimedFeeAddress, FeeClaim>,
+    pub new_fee_claims: HashMap<FeeClaimAddress, FeeClaim>,
     pub virtual_substates: VirtualSubstates,
 
     pub runtime_state: Option<RuntimeState>,

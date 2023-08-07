@@ -16,7 +16,6 @@ mod substate;
 mod transaction;
 mod transaction_decision;
 mod transaction_pool;
-mod validator_fee;
 mod vote;
 mod vote_signature;
 
@@ -35,6 +34,5 @@ pub use substate::*;
 pub use transaction::*;
 pub use transaction_decision::*;
 pub use transaction_pool::*;
-pub use validator_fee::*;
 pub use vote::*;
 pub use vote_signature::*;

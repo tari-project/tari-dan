@@ -45,7 +45,7 @@ use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_app_utilities::template_manager::interface::TemplateManagerHandle;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, QuorumDecision, SubstateRecord, TransactionRecord, ValidatorFee},
+    consensus_models::{Block, ExecutedTransaction, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
     StateStore,
 };
@@ -681,10 +681,10 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request = value.parse_params::<GetValidatorFeesRequest>()?;
 
-        let fees = self
+        let blocks = self
             .state_store
             .with_read_tx(|tx| {
-                ValidatorFee::get_any_with_epoch_range_for_validator(
+                Block::get_any_with_epoch_range_for_validator(
                     tx,
                     request.epoch_range,
                     request.validator_public_key.as_ref(),
@@ -692,7 +692,13 @@ impl JsonRpcHandlers {
             })
             .map_err(internal_error(answer_id))?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetValidatorFeesResponse { fees }))
+        Ok(JsonRpcResponse::success(answer_id, GetValidatorFeesResponse {
+            fees: blocks
+                .into_iter()
+                .filter(|b| b.total_leader_fee() > 0)
+                .map(Into::into)
+                .collect(),
+        }))
     }
 }
 

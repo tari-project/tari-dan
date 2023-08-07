@@ -698,7 +698,7 @@ impl CliArg {
                 SubstateAddress::NonFungible(v) => arg!(v),
                 SubstateAddress::NonFungibleIndex(v) => arg!(v),
                 SubstateAddress::TransactionReceipt(v) => arg!(v),
-                SubstateAddress::ClaimedFee(v) => arg!(v),
+                SubstateAddress::FeeClaim(v) => arg!(v),
             },
             CliArg::TemplateAddress(v) => arg!(v),
             CliArg::NonFungibleId(v) => arg!(v),

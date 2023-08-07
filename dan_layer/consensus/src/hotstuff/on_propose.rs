@@ -205,6 +205,7 @@ where TConsensusSpec: ConsensusSpec
         const TARGET_BLOCK_SIZE: usize = 1000;
         let ready = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
 
+        let mut total_leader_fee = 0;
         let commands = ready
             .into_iter()
             .map(|t| match t.stage {
@@ -219,6 +220,7 @@ where TConsensusSpec: ConsensusSpec
                 TransactionPoolStage::LocalPrepared => {
                     let involved = local_committee_shard.count_distinct_buckets(t.transaction.evidence.shards_iter());
                     let leader_fee = t.calculate_leader_fee(involved as u64, EXHAUST_DIVISOR);
+                    total_leader_fee += leader_fee;
                     Command::Accept(t.get_final_transaction_atom(leader_fee))
                 },
                 // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes agreed
@@ -246,6 +248,7 @@ where TConsensusSpec: ConsensusSpec
             epoch,
             proposed_by,
             commands,
+            total_leader_fee,
         );
 
         Ok(next_block)

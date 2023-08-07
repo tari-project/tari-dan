@@ -42,7 +42,7 @@ use tari_engine_types::{
     component::{ComponentBody, ComponentHeader},
     confidential::UnclaimedConfidentialOutput,
     events::Event,
-    fee_claim::ClaimedFeeAddress,
+    fee_claim::FeeClaimAddress,
     fees::{FeeReceipt, FeeSource},
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -406,7 +406,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn claim_fee(&self, epoch: Epoch, validator_public_key: PublicKey) -> Result<ResourceContainer, RuntimeError> {
         self.write_with(|state| {
-            let fee_claim_addr = ClaimedFeeAddress::from_addr(epoch.as_u64(), validator_public_key.as_bytes());
+            let fee_claim_addr = FeeClaimAddress::from_addr(epoch.as_u64(), validator_public_key.as_bytes());
             let claim = state.take_fee_claim(epoch, validator_public_key.clone())?;
             let amount = claim.amount;
             if state.new_fee_claims.insert(fee_claim_addr, claim).is_some() {
@@ -751,7 +751,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             }
 
             for (address, substate) in state.new_fee_claims.drain() {
-                let addr = SubstateAddress::ClaimedFee(address);
+                let addr = SubstateAddress::FeeClaim(address);
                 up_states.insert(addr, substate.into());
             }
 

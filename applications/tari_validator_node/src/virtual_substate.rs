@@ -1,14 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-//    Copyright 2023 The Tari Project
-//    SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::Epoch;
 use tari_dan_engine::runtime::VirtualSubstates;
-use tari_dan_storage::{consensus_models::ValidatorFee, StateStore, StorageError};
+use tari_dan_storage::{consensus_models::Block, StateStore, StorageError};
 use tari_engine_types::{
     fee_claim::FeeClaim,
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
@@ -91,7 +89,7 @@ where
         epoch: Epoch,
         address: &PublicKey,
     ) -> Result<FeeClaim, VirtualSubstateError> {
-        let validator_fee = ValidatorFee::get_total_due_for_epoch(tx, epoch, address)?;
+        let validator_fee = Block::get_total_due_for_epoch(tx, epoch, address)?;
         // If validator_fee == 0:
         // A validator may claim without knowing that they have no fees for the epoch.
         // As long as they can pay the fee for the transaction, we can add the 0 claim.

@@ -227,6 +227,7 @@ impl<TAddr: NodeAddressable> From<tari_dan_storage::consensus_models::Block<TAdd
             proposed_by: value.proposed_by().as_bytes().to_vec(),
             merkle_root: value.merkle_root().as_slice().to_vec(),
             justify: Some(value.justify().clone().into()),
+            total_leader_fee: value.total_leader_fee(),
             commands: value.into_commands().into_iter().map(Into::into).collect(),
         }
     }
@@ -252,6 +253,7 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::Block>
                 .into_iter()
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
+            value.total_leader_fee,
         ))
     }
 }

@@ -43,7 +43,7 @@ use tari_template_lib::{
 use crate::{
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
-    fee_claim::{ClaimedFeeAddress, FeeClaim},
+    fee_claim::{FeeClaim, FeeClaimAddress},
     hashing::{hasher, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
@@ -98,7 +98,7 @@ pub enum SubstateAddress {
     NonFungible(NonFungibleAddress),
     NonFungibleIndex(NonFungibleIndexAddress),
     TransactionReceipt(TransactionReceiptAddress),
-    ClaimedFee(ClaimedFeeAddress),
+    FeeClaim(FeeClaimAddress),
 }
 
 impl SubstateAddress {
@@ -145,7 +145,7 @@ impl SubstateAddress {
                 .chain(&address.index())
                 .result(),
             SubstateAddress::TransactionReceipt(address) => *address.hash(),
-            SubstateAddress::ClaimedFee(address) => *address.hash(),
+            SubstateAddress::FeeClaim(address) => *address.hash(),
         }
     }
 
@@ -247,7 +247,7 @@ impl Display for SubstateAddress {
             SubstateAddress::NonFungibleIndex(addr) => write!(f, "{}", addr),
             SubstateAddress::UnclaimedConfidentialOutput(commitment_address) => write!(f, "{}", commitment_address),
             SubstateAddress::TransactionReceipt(addr) => write!(f, "{}", addr),
-            SubstateAddress::ClaimedFee(addr) => write!(f, "{}", addr),
+            SubstateAddress::FeeClaim(addr) => write!(f, "{}", addr),
         }
     }
 }

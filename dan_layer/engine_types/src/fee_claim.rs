@@ -13,9 +13,9 @@ use crate::hashing::{hasher, EngineHashDomainLabel};
 const TAG: u64 = BinaryTag::FeeClaim.as_u64();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ClaimedFeeAddress(BorTag<Hash, TAG>);
+pub struct FeeClaimAddress(BorTag<Hash, TAG>);
 
-impl ClaimedFeeAddress {
+impl FeeClaimAddress {
     pub const fn new(address: Hash) -> Self {
         Self(BorTag::new(address))
     }
@@ -33,13 +33,13 @@ impl ClaimedFeeAddress {
     }
 }
 
-impl<T: Into<Hash>> From<T> for ClaimedFeeAddress {
+impl<T: Into<Hash>> From<T> for FeeClaimAddress {
     fn from(address: T) -> Self {
         Self::new(address.into())
     }
 }
 
-impl Display for ClaimedFeeAddress {
+impl Display for FeeClaimAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "feeclaim_{}", self.hash())
     }

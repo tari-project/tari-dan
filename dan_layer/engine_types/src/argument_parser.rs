@@ -117,7 +117,7 @@ impl From<StringArg<'_>> for Arg {
                 SubstateAddress::NonFungible(v) => arg!(v),
                 SubstateAddress::NonFungibleIndex(v) => arg!(v),
                 SubstateAddress::TransactionReceipt(v) => arg!(v),
-                SubstateAddress::ClaimedFee(v) => arg!(v),
+                SubstateAddress::FeeClaim(v) => arg!(v),
             },
             StringArg::TemplateAddress(v) => arg!(v),
             StringArg::UnsignedInteger(v) => arg!(v),

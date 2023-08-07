@@ -32,7 +32,6 @@ use crate::{
         TransactionPoolRecord,
         TransactionPoolStage,
         TransactionRecord,
-        ValidatorFee,
         Vote,
     },
     StorageError,
@@ -104,6 +103,16 @@ pub trait StateStoreReadTransaction {
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
+    fn blocks_get_total_leader_fee_for_epoch(
+        &mut self,
+        epoch: Epoch,
+        validator_public_key: &Self::Addr,
+    ) -> Result<u64, StorageError>;
+    fn blocks_get_any_with_epoch_range(
+        &mut self,
+        epoch_range: RangeInclusive<Epoch>,
+        validator_public_key: Option<&Self::Addr>,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
 
@@ -151,17 +160,6 @@ pub trait StateStoreReadTransaction {
         &mut self,
         tx_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
-    // -------------------------------- ValidatorFess -------------------------------- //
-    fn validator_fees_get_total_fee_for_epoch(
-        &mut self,
-        epoch: Epoch,
-        validator_public_key: &Self::Addr,
-    ) -> Result<u64, StorageError>;
-    fn validator_fees_get_any_with_epoch_range(
-        &mut self,
-        epoch_range: RangeInclusive<Epoch>,
-        validator_public_key: Option<&Self::Addr>,
-    ) -> Result<Vec<ValidatorFee<Self::Addr>>, StorageError>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -238,9 +236,6 @@ pub trait StateStoreWriteTransaction {
         destroyed_transaction_id: &TransactionId,
     ) -> Result<(), StorageError>;
     fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
-
-    // -------------------------------- Validator Fees -------------------------------- //
-    fn validator_fees_insert(&mut self, validator_fee: &ValidatorFee<Self::Addr>) -> Result<(), StorageError>;
 }
 
 #[derive(Debug, Clone, Copy)]

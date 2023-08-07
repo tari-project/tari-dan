@@ -12,7 +12,7 @@ use tari_template_lib::{
 };
 
 use crate::{
-    fee_claim::ClaimedFeeAddress,
+    fee_claim::FeeClaimAddress,
     serde_with,
     substate::SubstateAddress,
     transaction_receipt::TransactionReceiptAddress,
@@ -60,7 +60,7 @@ impl IndexedValue {
             SubstateAddress::UnclaimedConfidentialOutput(_) => false,
             // TODO: should we index this value?
             SubstateAddress::NonFungibleIndex(_) => false,
-            SubstateAddress::ClaimedFee(_) => false,
+            SubstateAddress::FeeClaim(_) => false,
         }
     }
 
@@ -106,7 +106,7 @@ pub enum TariValue {
     BucketId(BucketId),
     Metadata(Metadata),
     VaultId(VaultId),
-    FeeClaim(ClaimedFeeAddress),
+    FeeClaim(FeeClaimAddress),
 }
 
 impl FromTagAndValue for TariValue {
