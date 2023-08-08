@@ -23,46 +23,35 @@
 mod steps;
 use std::{
     collections::{BTreeMap, HashMap},
-    convert::TryFrom,
     fs,
     future,
     io,
     panic,
     str::FromStr,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, World, WriterExt};
 use integration_tests::{
-    base_node::{get_base_node_client, spawn_base_node},
+    base_node::spawn_base_node,
     http_server::{spawn_template_http_server, MockHttpServer},
     indexer::{spawn_indexer, IndexerProcess},
     logging::{create_log_config_file, get_base_dir},
     miner::{mine_blocks, register_miner_process},
-    template::{send_template_registration, RegisteredTemplate},
-    validator_node::{get_vn_client, spawn_validator_node},
+    validator_node::spawn_validator_node,
     validator_node_cli,
     wallet::spawn_wallet,
     wallet_daemon::spawn_wallet_daemon,
     wallet_daemon_cli,
     TariWorld,
 };
-use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_common::initialize_logging;
-use tari_common_types::types::PublicKey;
 use tari_comms::multiaddr::Multiaddr;
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_engine::abi::Type;
 use tari_dan_storage::consensus_models::QuorumDecision;
 use tari_shutdown::Shutdown;
-use tari_template_lib::Hash;
-use tari_validator_node_client::types::{
-    AddPeerRequest,
-    GetIdentityResponse,
-    GetRecentTransactionsRequest,
-    GetTemplateRequest,
-    GetTransactionResultRequest,
-};
+use tari_validator_node_client::types::{AddPeerRequest, GetRecentTransactionsRequest, GetTransactionResultRequest};
 
 #[tokio::main]
 async fn main() {
@@ -110,46 +99,6 @@ async fn start_base_node(world: &mut TariWorld, bn_name: String) {
     spawn_base_node(world, bn_name).await;
 }
 
-#[given(expr = "a seed validator node {word} connected to base node {word} and wallet {word}")]
-async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_name: String) {
-    spawn_validator_node(world, seed_vn_name.clone(), bn_name, wallet_name, true).await;
-}
-
-#[given(expr = "{int} validator nodes connected to base node {word} and wallet {word}")]
-async fn start_multiple_validator_nodes(world: &mut TariWorld, num_nodes: u64, bn_name: String, wallet_name: String) {
-    for i in 1..=num_nodes {
-        let vn_name = format!("VAL_{i}");
-        spawn_validator_node(world, vn_name, bn_name.clone(), wallet_name.clone(), false).await;
-    }
-}
-
-#[given(expr = "validator {word} nodes connect to all other validators")]
-async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: String) {
-    let details = world
-        .validator_nodes
-        .values()
-        .filter(|vn| vn.name != name)
-        .map(|vn| {
-            (
-                vn.public_key.clone(),
-                Multiaddr::from_str(&format!("/ip4/127.0.0.1/tcp/{}", vn.port)).unwrap(),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    let vn = world.validator_nodes.get_mut(&name).unwrap();
-    let mut cli = vn.create_client();
-    for (pk, addr) in details {
-        cli.add_peer(AddPeerRequest {
-            public_key: pk,
-            addresses: vec![addr],
-            wait_for_dial: true,
-        })
-        .await
-        .unwrap();
-    }
-}
-
 #[given(expr = "fees are enabled")]
 async fn fees_are_enabled(world: &mut TariWorld) {
     world.fees_enabled = true;
@@ -157,7 +106,8 @@ async fn fees_are_enabled(world: &mut TariWorld) {
 
 #[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_validator_node(world: &mut TariWorld, vn_name: String, bn_name: String, wallet_name: String) {
-    spawn_validator_node(world, vn_name, bn_name, wallet_name, false).await;
+    let vn = spawn_validator_node(world, vn_name.clone(), bn_name, wallet_name).await;
+    world.validator_nodes.insert(vn_name, vn);
 }
 
 #[when(expr = "I stop validator node {word}")]
@@ -175,167 +125,6 @@ async fn start_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String, 
 async fn stop_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String) {
     let walletd_ps = world.wallet_daemons.get_mut(&wallet_daemon_name).unwrap();
     walletd_ps.stop();
-}
-
-#[when(expr = "validator node {word} sends a registration transaction")]
-async fn send_vn_registration(world: &mut TariWorld, vn_name: String) {
-    let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
-    let mut client = get_vn_client(jrpc_port);
-
-    if let Err(e) = client.register_validator_node().await {
-        println!("register_validator_node error = {}", e);
-        panic!("register_validator_node error = {}", e);
-    }
-
-    world
-        .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
-        .await;
-}
-
-#[when(expr = "all validator nodes send registration transactions")]
-async fn all_vns_send_registration(world: &mut TariWorld) {
-    for vn_ps in world.validator_nodes.values() {
-        let jrpc_port = vn_ps.json_rpc_port;
-        let mut client = get_vn_client(jrpc_port);
-        let _resp = client.register_validator_node().await.unwrap();
-    }
-
-    world
-        .wait_until_base_nodes_have_transaction_in_mempool(world.validator_nodes.len(), Duration::from_secs(10))
-        .await;
-}
-
-#[when(expr = "validator node {word} registers the template \"{word}\"")]
-async fn register_template(world: &mut TariWorld, vn_name: String, template_name: String) {
-    let resp = match send_template_registration(world, template_name.clone(), vn_name).await {
-        Ok(resp) => resp,
-        Err(e) => {
-            println!("register_template error = {}", e);
-            panic!("register_template error = {}", e);
-        },
-    };
-    assert_ne!(resp.transaction_id, 0);
-    assert!(!resp.template_address.is_empty());
-
-    // store the template address for future reference
-    let registered_template = RegisteredTemplate {
-        name: template_name.clone(),
-        address: Hash::try_from(resp.template_address.as_slice()).unwrap(),
-    };
-    world.templates.insert(template_name, registered_template);
-
-    world
-        .wait_until_base_nodes_have_transaction_in_mempool(1, Duration::from_secs(10))
-        .await;
-}
-
-#[then(expr = "all validator nodes are listed as registered")]
-async fn assert_all_vns_are_registered(world: &mut TariWorld) {
-    for vn_ps in world.validator_nodes.values() {
-        // create a base node client
-        let base_node_grpc_port = vn_ps.base_node_grpc_port;
-        let mut base_node_client: GrpcBaseNodeClient = get_base_node_client(base_node_grpc_port);
-
-        // get the list of registered vns from the base node
-        let height = base_node_client.get_tip_info().await.unwrap().height_of_longest_chain;
-        let vns = base_node_client.get_validator_nodes(height).await.unwrap();
-        assert!(!vns.is_empty());
-
-        // retrieve the VN's public key
-        let jrpc_port = vn_ps.json_rpc_port;
-        let mut client = get_vn_client(jrpc_port);
-        let identity: GetIdentityResponse = client.get_identity().await.unwrap();
-        let public_key: PublicKey = PublicKey::from_hex(&identity.public_key).unwrap();
-
-        // check that the vn's public key is in the list of registered vns
-        assert!(vns.iter().any(|vn| vn.public_key == public_key));
-    }
-}
-
-#[then(expr = "the validator node {word} is listed as registered")]
-async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
-    // create a base node client
-    let base_node_grpc_port = world.validator_nodes.get(&vn_name).unwrap().base_node_grpc_port;
-    let mut base_node_client: GrpcBaseNodeClient = get_base_node_client(base_node_grpc_port);
-
-    // get the list of registered vns from the base node
-    let height = base_node_client.get_tip_info().await.unwrap().height_of_longest_chain;
-    let vns = base_node_client.get_validator_nodes(height).await.unwrap();
-    assert!(!vns.is_empty());
-
-    // retrieve the VN's public key
-    let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
-    let mut client = get_vn_client(jrpc_port);
-
-    let identity: GetIdentityResponse = client.get_identity().await.unwrap();
-    let public_key: PublicKey = PublicKey::from_hex(&identity.public_key).unwrap();
-
-    // check that the vn's public key is in the list of registered vns
-    assert!(vns.iter().any(|vn| vn.public_key == public_key));
-}
-
-#[then(expr = "the template \"{word}\" is listed as registered by the validator node {word}")]
-async fn assert_template_is_registered(world: &mut TariWorld, template_name: String, vn_name: String) {
-    // give it some time for the template tx to be picked up by the VNs
-    // tokio::time::sleep(Duration::from_secs(4)).await;
-
-    // retrieve the template address
-    let template_address = world.templates.get(&template_name).unwrap().address;
-
-    // try to get the template from the VN
-    let timer = Instant::now();
-    let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
-    let mut client = get_vn_client(jrpc_port);
-    loop {
-        let req = GetTemplateRequest { template_address };
-        let resp = client.get_template(req).await.ok();
-
-        if resp.is_none() {
-            if timer.elapsed() > Duration::from_secs(10) {
-                panic!("Timed out waiting for template to be registered by all VNs");
-            }
-
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            continue;
-        }
-
-        // check that the template is indeed in the response
-        assert_eq!(resp.unwrap().registration_metadata.address, template_address);
-        break;
-    }
-}
-
-#[then(expr = "the template \"{word}\" is listed as registered by all validator nodes")]
-async fn assert_template_is_registered_by_all(world: &mut TariWorld, template_name: String) {
-    // give it some time for the template tx to be picked up by the VNs
-    // tokio::time::sleep(Duration::from_secs(4)).await;
-
-    // retrieve the template address
-    let template_address = world.templates.get(&template_name).unwrap().address;
-
-    // try to get the template for each VN
-    let timer = Instant::now();
-    'outer: loop {
-        for vn_ps in world.validator_nodes.values() {
-            let jrpc_port = vn_ps.json_rpc_port;
-            let mut client = get_vn_client(jrpc_port);
-            let req = GetTemplateRequest { template_address };
-            let resp = client.get_template(req).await.ok();
-
-            if resp.is_none() {
-                if timer.elapsed() > Duration::from_secs(10) {
-                    panic!("Timed out waiting for template to be registered by all VNs");
-                }
-
-                tokio::time::sleep(Duration::from_secs(1)).await;
-                continue 'outer;
-            }
-            let resp = resp.unwrap();
-            // check that the template is indeed in the response
-            assert_eq!(resp.registration_metadata.address, template_address);
-        }
-        break;
-    }
 }
 
 #[when(
@@ -891,8 +680,7 @@ async fn successful_transaction(world: &mut TariWorld) {
     // loop over each validator node to check if transaction
     // was accepted by each
     for vn_ps in world.validator_nodes.values() {
-        let jrpc_port = vn_ps.json_rpc_port;
-        let mut client = get_vn_client(jrpc_port);
+        let mut client = vn_ps.create_client();
 
         let request = GetRecentTransactionsRequest {};
         let recent_transactions_res = client.get_recent_transactions(request).await.unwrap();

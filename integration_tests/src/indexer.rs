@@ -68,14 +68,14 @@ impl IndexerProcess {
     pub async fn add_address(&self, world: &TariWorld, output_ref: String) {
         let address = get_address_from_output(world, output_ref);
 
-        let mut jrpc_client = self.get_jrpc_indexer_client().await;
+        let mut jrpc_client = self.get_jrpc_indexer_client();
         jrpc_client.add_address(address.clone()).await.unwrap();
     }
 
     pub async fn get_substate(&self, world: &TariWorld, output_ref: String, version: u32) -> GetSubstateResponse {
         let address = get_address_from_output(world, output_ref);
 
-        let mut jrpc_client = self.get_jrpc_indexer_client().await;
+        let mut jrpc_client = self.get_jrpc_indexer_client();
         jrpc_client
             .get_substate(GetSubstateRequest {
                 address: address.clone(),
@@ -101,7 +101,7 @@ impl IndexerProcess {
             end_index,
         };
 
-        let mut jrpc_client = self.get_jrpc_indexer_client().await;
+        let mut jrpc_client = self.get_jrpc_indexer_client();
         let resp = jrpc_client.get_non_fungibles(params).await.unwrap();
         resp.non_fungibles
     }
@@ -130,7 +130,7 @@ impl IndexerProcess {
         assert_eq!(res.component_address, Some([0u8; 32]));
     }
 
-    pub async fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {
+    pub fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {
         let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.json_rpc_port)).unwrap();
         IndexerJsonRpcClient::connect(endpoint).unwrap()
     }

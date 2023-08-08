@@ -105,7 +105,7 @@ pub async fn handle_create(
         .locate_dependent_substates(&[&default_account.address])
         .await?;
 
-    let signing_key_index = default_account.key_index;
+    let signing_key_index = req.key_id.unwrap_or(default_account.key_index);
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
 
     let owner_key = key_manager_api.next_key(key_manager::TRANSACTION_BRANCH)?;
@@ -706,7 +706,6 @@ pub async fn handle_create_free_test_coins(
 
     let accounts_api = sdk.accounts_api();
     let mut inputs = vec![];
-    let mut outputs = vec![];
 
     // Get the account if one is specified and exists.
     let maybe_account = match req.account {
@@ -723,11 +722,13 @@ pub async fn handle_create_free_test_coins(
 
     let (account_address, account_secret_key, new_account_name) = match maybe_account {
         Some(account) => {
+            let key_index = req.key_id.unwrap_or(account.key_index);
             let account_secret_key = sdk
                 .key_manager_api()
-                .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+                .derive_key(key_manager::TRANSACTION_BRANCH, key_index)?;
             let account_substate = sdk.substate_api().get_substate(&account.address)?;
             inputs.push((account_substate.address.address, account_substate.address.version));
+
             (account.address, account_secret_key, None)
         },
         None => {
@@ -737,14 +738,16 @@ pub async fn handle_create_free_test_coins(
                 .unwrap()
                 .name()
                 .ok_or_else(|| anyhow!("Account name must be provided when creating a new account"))?;
-            let account_secret_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+            let account_secret_key = req
+                .key_id
+                .map(|idx| sdk.key_manager_api().derive_key(key_manager::TRANSACTION_BRANCH, idx))
+                .unwrap_or_else(|| sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH))?;
             let account_pk = PublicKey::from_secret_key(&account_secret_key.key);
 
             let component_id = Hash::try_from(account_pk.as_bytes())?;
             let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
 
             // We have no involved shards, so we need to add an output
-            outputs.push((SubstateAddress::from(account_address), 0));
             (account_address.into(), account_secret_key, Some(name.to_string()))
         },
     };
@@ -804,7 +807,6 @@ pub async fn handle_create_free_test_coins(
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_substate_inputs(inputs)
-        .with_substate_outputs(outputs)
         .sign(&account_secret_key.key)
         .build();
 

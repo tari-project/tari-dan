@@ -30,7 +30,6 @@ use tari_crypto::{
     tari_utilities::ByteArray,
 };
 use tari_dan_common_types::Epoch;
-use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
@@ -48,9 +47,6 @@ use tari_wallet_daemon_client::{
         AccountsCreateFreeTestCoinsRequest,
         AccountsCreateRequest,
         AccountsGetBalancesRequest,
-        AuthLoginAcceptRequest,
-        AuthLoginRequest,
-        AuthLoginResponse,
         ClaimBurnRequest,
         ClaimBurnResponse,
         ClaimValidatorFeesRequest,
@@ -68,7 +64,6 @@ use tari_wallet_daemon_client::{
     WalletDaemonClient,
 };
 
-use super::wallet_daemon::get_walletd_client;
 use crate::{validator_node_cli::add_substate_addresses, TariWorld};
 
 pub async fn claim_burn(
@@ -109,11 +104,11 @@ pub async fn claim_fees(
 ) -> Result<ClaimValidatorFeesResponse, WalletDaemonClientError> {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
-    let vn = world.validator_nodes.get(&validator_name).unwrap();
+    let vn = world.get_validator_node(&validator_name);
 
     let request = ClaimValidatorFeesRequest {
-        account: Some(ComponentAddressOrName::Name(account_name.clone())),
-        fee: Some(Amount(2000)),
+        account: Some(ComponentAddressOrName::Name(account_name)),
+        fee: None,
         validator_public_key: vn.public_key.clone(),
         epoch: Epoch(epoch),
     };
@@ -262,8 +257,9 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
     let request = AccountsCreateRequest {
         account_name: Some(account_name.clone()),
         custom_access_rules: None,
-        is_default: true,
+        is_default: false,
         fee: None,
+        key_id: None,
     };
 
     let resp = client.create_account(request).await.unwrap();
@@ -273,12 +269,6 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         account_name.clone(),
         (RistrettoSecretKey::default(), resp.public_key.clone()),
     );
-
-    let wait_req = TransactionWaitResultRequest {
-        transaction_id: resp.result.transaction_hash.into_array().into(),
-        timeout_secs: Some(120),
-    };
-    let _wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
 
     add_substate_addresses(
         world,
@@ -292,13 +282,21 @@ pub async fn create_account_with_free_coins(
     account_name: String,
     wallet_daemon_name: String,
     amount: Amount,
+    key_name: Option<String>,
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
+    let key_index = key_name.map(|k| {
+        *world
+            .wallet_keys
+            .get(&k)
+            .unwrap_or_else(|| panic!("Wallet {} not found", wallet_daemon_name))
+    });
     let request = AccountsCreateFreeTestCoinsRequest {
         account: Some(ComponentAddressOrName::Name(account_name.clone())),
         amount,
         fee: None,
+        key_id: key_index,
     };
 
     let resp = client.create_free_test_coins(request).await.unwrap();
@@ -781,28 +779,11 @@ pub async fn confidential_transfer(
     add_substate_addresses(world, outputs_name, resp.result.result.accept().unwrap());
 }
 
-pub(crate) async fn get_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: &str) -> WalletDaemonClient {
-    let port = world.wallet_daemons.get(wallet_daemon_name).unwrap().json_rpc_port;
-    get_walletd_client(port).await
-}
-
 pub async fn get_auth_wallet_daemon_client(world: &TariWorld, wallet_daemon_name: &str) -> WalletDaemonClient {
-    let mut client = get_wallet_daemon_client(world, wallet_daemon_name).await;
-    // authentication
-    let AuthLoginResponse { auth_token } = client
-        .auth_request(AuthLoginRequest {
-            permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
-            duration: None,
-        })
+    world
+        .wallet_daemons
+        .get(wallet_daemon_name)
+        .unwrap_or_else(|| panic!("Wallet daemon not found with name {}", wallet_daemon_name))
+        .get_authed_client()
         .await
-        .unwrap();
-    let auth_response = client
-        .auth_accept(AuthLoginAcceptRequest {
-            auth_token,
-            name: "Testing Token".to_string(),
-        })
-        .await
-        .unwrap();
-    client.set_auth_token(auth_response.permissions_token);
-    client
 }

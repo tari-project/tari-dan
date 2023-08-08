@@ -137,4 +137,11 @@ pub enum EpochManagerRequest {
         buckets: HashSet<ShardBucket>,
         reply: Reply<HashMap<ShardBucket, Committee<PublicKey>>>,
     },
+    GetFeeClaimPublicKey {
+        reply: Reply<Option<PublicKey>>,
+    },
+    SetFeeClaimPublicKey {
+        public_key: PublicKey,
+        reply: Reply<()>,
+    },
 }

@@ -31,6 +31,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableRow from "@mui/material/TableRow";
 import Button from "@mui/material/Button";
 import { DataTableCell } from "../../../Components/StyledComponents";
+import {TextField} from "@mui/material";
 
 function Info({
   epoch,
@@ -43,9 +44,10 @@ function Info({
 }) {
   const [registering, setRegistering] = useState(false);
   const [registerMessage, setRegisterMessage] = useState("");
+  const [feeClaimPublicKey, setRegisterFeeClaimPublicKey] = useState('');
   const register = () => {
     setRegistering(true);
-    registerValidatorNode().then((response) => {
+    registerValidatorNode(feeClaimPublicKey).then((response) => {
       if (response.message) {
         setRegistering(false);
         setRegisterMessage(response.message);
@@ -76,6 +78,12 @@ function Info({
           <TableRow>
             <TableCell>Shard key</TableCell>
             <DataTableCell>
+              <TextField
+                  disabled={registering}
+                  name="feeClaimFublicKey"
+                  label="Fee Claim Public Key"
+                  style={{ flexGrow: 1 }}
+                  value={feeClaimPublicKey} onChange={(e) => setRegisterFeeClaimPublicKey(e.target.value)} />
               <Button
                 disabled={registering}
                 variant="contained"

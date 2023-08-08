@@ -195,7 +195,15 @@ impl WalletDaemonClient {
     // }
 
     pub async fn create_key(&mut self) -> Result<KeysCreateResponse, WalletDaemonClientError> {
-        self.send_request("keys.create", &KeysCreateRequest {}).await
+        self.send_request("keys.create", &KeysCreateRequest { specific_index: None })
+            .await
+    }
+
+    pub async fn create_specific_key(&mut self, index: u64) -> Result<KeysCreateResponse, WalletDaemonClientError> {
+        self.send_request("keys.create", &KeysCreateRequest {
+            specific_index: Some(index),
+        })
+        .await
     }
 
     pub async fn set_active_key(&mut self, index: u64) -> Result<KeysSetActiveResponse, WalletDaemonClientError> {

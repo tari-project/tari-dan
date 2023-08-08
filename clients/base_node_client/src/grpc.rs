@@ -26,8 +26,8 @@ use std::{convert::TryInto, net::SocketAddr};
 
 use async_trait::async_trait;
 use log::*;
-use tari_app_grpc::tari_rpc::{self as grpc, GetShardKeyRequest};
-use tari_base_node_grpc_client::BaseNodeGrpcClient;
+use minotari_app_grpc::tari_rpc::{self as grpc, GetShardKeyRequest};
+use minotari_node_grpc_client::BaseNodeGrpcClient;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeTemplateRegistration};
 use tari_dan_common_types::ShardId;

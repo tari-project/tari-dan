@@ -22,7 +22,7 @@
 
 use std::net::SocketAddr;
 
-use tari_app_grpc::tari_rpc::{
+use minotari_app_grpc::tari_rpc::{
     BuildInfo,
     CreateTemplateRegistrationRequest,
     CreateTemplateRegistrationResponse,
@@ -35,11 +35,12 @@ use tari_app_grpc::tari_rpc::{
     TemplateType,
     WasmInfo,
 };
+use minotari_wallet_grpc_client::Client as GrpcWallet;
+use tari_common_types::types::PublicKey;
 use tari_comms::NodeIdentity;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_validator_node_client::types::TemplateRegistrationRequest;
-use tari_wallet_grpc_client::Client as GrpcWallet;
 
 use crate::{grpc::base_layer_wallet::WalletGrpcError, template_registration_signing::sign_template_registration};
 
@@ -78,12 +79,14 @@ impl GrpcWalletClient {
     pub async fn register_validator_node(
         &mut self,
         node_identity: &NodeIdentity,
+        fee_claim_public_key: &PublicKey,
     ) -> Result<RegisterValidatorNodeResponse, WalletGrpcError> {
         let inner = self.connection().await?;
-        let signature = ValidatorNodeSignature::sign(node_identity.secret_key(), b"");
+        let signature = ValidatorNodeSignature::sign(node_identity.secret_key(), fee_claim_public_key, b"");
         let request = RegisterValidatorNodeRequest {
             validator_node_public_key: node_identity.public_key().to_vec(),
             validator_node_signature: Some(signature.signature().into()),
+            validator_node_claim_public_key: fee_claim_public_key.to_vec(),
             fee_per_gram: 1,
             message: "Registering VN".to_string(),
         };
@@ -113,9 +116,9 @@ impl GrpcWalletClient {
                 template_type: Some(TemplateType {
                     template_type: Some(match data.template_type.as_str() {
                         "wasm" => {
-                            tari_app_grpc::tari_rpc::template_type::TemplateType::Wasm(WasmInfo { abi_version: 1 })
+                            minotari_app_grpc::tari_rpc::template_type::TemplateType::Wasm(WasmInfo { abi_version: 1 })
                         },
-                        "flow" => tari_app_grpc::tari_rpc::template_type::TemplateType::Flow(FlowInfo {}),
+                        "flow" => minotari_app_grpc::tari_rpc::template_type::TemplateType::Flow(FlowInfo {}),
                         _ => return Err(WalletGrpcError::FatalError("Unknown template type".into())),
                     }),
                 }),

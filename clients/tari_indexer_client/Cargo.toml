@@ -9,6 +9,8 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_transaction = { path = "../../dan_layer/transaction" }
@@ -16,6 +18,7 @@ tari_dan_storage = { path = "../../dan_layer/storage" }
 
 anyhow = "1.0.65"
 reqwest = { version = "0.11.11", features = ["json"] }
+multiaddr = "0.14"
 serde = "1.0.144"
 serde_json = "1.0.85"
 serde_with = "2.3"

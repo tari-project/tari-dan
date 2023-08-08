@@ -27,7 +27,7 @@ use std::{
     sync::Arc,
 };
 
-use tari_app_utilities::{identity_management, identity_management::load_from_json};
+use minotari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},

@@ -31,7 +31,7 @@ use crate::{cli_range::CliRange, from_hex::FromHex, table::Table, table_row};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum VnSubcommand {
-    Register,
+    Register(RegisterArgs),
     #[clap(alias = "get-fees")]
     GetFeeInfo(GetFeesArgs),
 }
@@ -39,8 +39,9 @@ pub enum VnSubcommand {
 impl VnSubcommand {
     pub async fn handle(self, mut client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
         match self {
-            VnSubcommand::Register => {
-                let tx_id = client.register_validator_node().await?;
+            VnSubcommand::Register(args) => {
+                let claim_public_key = PublicKey::from_bytes(args.claim_public_key.into_inner().as_bytes())?;
+                let tx_id = client.register_validator_node(claim_public_key).await?;
                 println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
             },
             VnSubcommand::GetFeeInfo(args) => {
@@ -49,6 +50,11 @@ impl VnSubcommand {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct RegisterArgs {
+    claim_public_key: FromHex<RistrettoPublicKeyBytes>,
 }
 
 #[derive(Debug, Args, Clone)]
