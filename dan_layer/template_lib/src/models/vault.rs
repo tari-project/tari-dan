@@ -38,12 +38,13 @@ use crate::{
     args::{ConfidentialRevealArg, InvokeResult, PayFeeArg, VaultAction, VaultInvokeArg, VaultWithdrawArg},
     hash::HashParseError,
     models::{Amount, Bucket, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
+    newtype_struct_serde_impl,
     Hash,
 };
 
 const TAG: u64 = BinaryTag::VaultId as u64;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VaultId(BorTag<Hash, TAG>);
 
 impl VaultId {
@@ -97,6 +98,8 @@ impl TryFrom<Vec<u8>> for VaultId {
         Ok(Self::new(hash))
     }
 }
+
+newtype_struct_serde_impl!(VaultId, BorTag<Hash, TAG>);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum VaultRef {
