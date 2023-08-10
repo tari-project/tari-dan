@@ -177,7 +177,7 @@ pub struct NonFungibleAddressContents {
 }
 
 impl NonFungibleAddress {
-    pub fn new(resource_address: ResourceAddress, id: NonFungibleId) -> Self {
+    pub const fn new(resource_address: ResourceAddress, id: NonFungibleId) -> Self {
         let inner = NonFungibleAddressContents { resource_address, id };
         Self(BorTag::new(inner))
     }
@@ -192,13 +192,13 @@ impl NonFungibleAddress {
 
     pub fn from_public_key(public_key: RistrettoPublicKeyBytes) -> Self {
         Self::new(
-            *PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+            PUBLIC_IDENTITY_RESOURCE_ADDRESS,
             NonFungibleId::U256(public_key.into_array()),
         )
     }
 
     pub fn to_public_key(&self) -> Option<RistrettoPublicKeyBytes> {
-        if self.0.resource_address != *PUBLIC_IDENTITY_RESOURCE_ADDRESS {
+        if self.0.resource_address != PUBLIC_IDENTITY_RESOURCE_ADDRESS {
             return None;
         }
         match self.id() {

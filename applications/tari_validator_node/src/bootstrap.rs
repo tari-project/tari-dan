@@ -369,7 +369,7 @@ where
     TTx::Addr: NodeAddressable + Serialize,
 {
     let genesis_block = Block::<TTx::Addr>::genesis();
-    let address = SubstateAddress::Resource(*PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         // Create the resource for public identity
@@ -391,7 +391,7 @@ where
         .create(tx)?;
     }
 
-    let address = SubstateAddress::Resource(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         SubstateRecord {

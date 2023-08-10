@@ -186,7 +186,7 @@ pub async fn transfer_confidential(
         .expect("Failed to get component address from destination account");
     let destination_public_key = destination_account_resp.public_key;
 
-    let resource_address = *CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
+    let resource_address = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;
 
     let create_transfer_proof_req = ProofsGenerateRequest {
         account: Some(source_account_name),
@@ -774,7 +774,7 @@ pub async fn confidential_transfer(
         amount,
         validator_public_key: destination_public_key,
         fee,
-        resource_address: *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+        resource_address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     };
 
     let resp = client.accounts_confidential_transfer(request).await.unwrap();

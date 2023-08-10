@@ -3098,7 +3098,6 @@ version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
- "serde",
  "typenum",
  "version_check 0.9.4",
 ]
@@ -8142,8 +8141,6 @@ dependencies = [
 name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
- "generic-array",
- "lazy_static",
  "newtype-ops",
  "serde",
  "serde-big-array 0.5.1",

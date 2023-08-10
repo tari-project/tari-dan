@@ -32,7 +32,7 @@ pub struct NonFungibleIndexAddress {
 }
 
 impl NonFungibleIndexAddress {
-    pub fn new(resource_address: ResourceAddress, index: u64) -> Self {
+    pub const fn new(resource_address: ResourceAddress, index: u64) -> Self {
         Self {
             resource_address,
             index,
