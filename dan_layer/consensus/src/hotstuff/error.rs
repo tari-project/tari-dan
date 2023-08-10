@@ -105,4 +105,6 @@ pub enum ProposalValidationError {
         justify_block_height: NodeHeight,
         candidate_block_height: NodeHeight,
     },
+    #[error("Block {block_id} proposed by {proposed_by} is not the leader")]
+    NotLeader { proposed_by: String, block_id: BlockId },
 }

@@ -81,7 +81,8 @@ pub struct TransactionAtom {
     pub id: TransactionId,
     pub decision: Decision,
     pub evidence: Evidence,
-    pub fee: u64,
+    pub transaction_fee: u64,
+    pub leader_fee: u64,
 }
 
 impl TransactionAtom {

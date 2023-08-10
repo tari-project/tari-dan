@@ -279,6 +279,31 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         Ok(vn)
     }
 
+    pub fn get_many_validator_nodes(
+        &self,
+        epoch_validators: Vec<(Epoch, CommsPublicKey)>,
+    ) -> Result<HashMap<(Epoch, CommsPublicKey), ValidatorNode<CommsPublicKey>>, EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        #[allow(clippy::mutable_key_type)]
+        let mut validators = HashMap::new();
+
+        for (epoch, public_key) in epoch_validators {
+            let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+            let vn = self
+                .global_db
+                .validator_nodes(&mut tx)
+                .get(start_epoch, end_epoch, ByteArray::as_bytes(&public_key))
+                .optional()?
+                .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
+                    address: public_key.to_string(),
+                })?;
+
+            validators.insert((epoch, public_key), vn);
+        }
+
+        Ok(validators)
+    }
+
     pub fn last_registration_epoch(&self) -> Result<Option<Epoch>, EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         let mut metadata = self.global_db.metadata(&mut tx);
@@ -460,9 +485,11 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
     pub fn get_validator_node_merkle_proof(&self, epoch: Epoch) -> Result<ValidatorNodeMerkleProof, EpochManagerError> {
         let bmt = self.get_validator_node_balanced_merkle_tree(epoch)?;
 
-        let vn = self
-            .get_validator_node(epoch, &self.node_public_key)?
-            .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered)?;
+        let vn = self.get_validator_node(epoch, &self.node_public_key)?.ok_or_else(|| {
+            EpochManagerError::ValidatorNodeNotRegistered {
+                address: self.node_public_key.to_string(),
+            }
+        })?;
         let leaf_index = bmt.find_leaf_index_for_hash(&vn.node_hash().to_vec())?;
 
         let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, leaf_index as usize)?;
@@ -505,9 +532,12 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         epoch: Epoch,
         addr: &CommsPublicKey,
     ) -> Result<RangeInclusive<ShardId>, EpochManagerError> {
-        let vn = self
-            .get_validator_node(epoch, addr)?
-            .ok_or(EpochManagerError::ValidatorNodeNotRegistered)?;
+        let vn =
+            self.get_validator_node(epoch, addr)?
+                .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
+                    address: addr.to_string(),
+                })?;
+
         let num_committees = self.get_number_of_committees(epoch)?;
         debug!(
             target: LOG_TARGET,
@@ -539,9 +569,11 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
     }
 
     pub fn get_our_validator_node(&self, epoch: Epoch) -> Result<ValidatorNode<CommsPublicKey>, EpochManagerError> {
-        let vn = self
-            .get_validator_node(epoch, &self.node_public_key)?
-            .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered)?;
+        let vn = self.get_validator_node(epoch, &self.node_public_key)?.ok_or_else(|| {
+            EpochManagerError::ValidatorNodeNotRegistered {
+                address: self.node_public_key.to_string(),
+            }
+        })?;
         Ok(vn)
     }
 
@@ -576,7 +608,9 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
     pub fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError> {
         let shard_key = self
             .current_shard_key
-            .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered)?;
+            .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
+                address: self.node_public_key.to_string(),
+            })?;
         self.get_committee_shard(epoch, shard_key)
     }
 

@@ -35,6 +35,7 @@ mod p2p;
 mod registration;
 mod substate_resolver;
 mod template_registration_signing;
+mod virtual_substate;
 
 use std::{
     fs,

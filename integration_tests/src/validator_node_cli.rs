@@ -157,7 +157,7 @@ pub async fn create_component(
 
 pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
     let outputs = world.outputs.entry(outputs_name).or_default();
-    let mut counters = [0usize, 0, 0, 0, 0, 0, 0, 0];
+    let mut counters = [0usize, 0, 0, 0, 0, 0, 0, 0, 0];
     for (addr, data) in diff.up_iter() {
         match addr {
             SubstateAddress::Component(_) => {
@@ -218,6 +218,13 @@ pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String
                     },
                 );
                 counters[6] += 1;
+            },
+            SubstateAddress::FeeClaim(_) => {
+                outputs.insert(format!("fee_claim/{}", counters[7]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[7] += 1;
             },
         }
     }

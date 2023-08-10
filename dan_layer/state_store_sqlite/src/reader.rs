@@ -1,8 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, marker::PhantomData};
+use std::{borrow::Borrow, collections::HashSet, marker::PhantomData, ops::RangeInclusive};
 
+use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::{
     sql_query,
     sql_types::Text,
@@ -379,6 +380,67 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         deserialize_json(&txs)
     }
 
+    fn blocks_get_total_leader_fee_for_epoch(
+        &mut self,
+        epoch: Epoch,
+        validator_public_key: &Self::Addr,
+    ) -> Result<u64, StorageError> {
+        use crate::schema::blocks;
+
+        let total_fee = blocks::table
+            .select(diesel::dsl::sum(blocks::total_leader_fee))
+            .filter(blocks::epoch.eq(epoch.as_u64() as i64))
+            .filter(blocks::proposed_by.eq(serialize_hex(validator_public_key.as_bytes())))
+            .first::<Option<BigDecimal>>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "validator_fees_get_total_fee_for_epoch",
+                source: e,
+            })?
+            .unwrap_or(BigDecimal::default());
+
+        Ok(total_fee.to_u64().expect("total fee overflows u64"))
+    }
+
+    fn blocks_get_any_with_epoch_range(
+        &mut self,
+        epoch_range: RangeInclusive<Epoch>,
+        validator_public_key: Option<&Self::Addr>,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let mut query = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .filter(blocks::epoch.between(epoch_range.start().as_u64() as i64, epoch_range.end().as_u64() as i64))
+            .into_boxed();
+
+        if let Some(vn) = validator_public_key {
+            query = query.filter(blocks::proposed_by.eq(serialize_hex(vn.as_bytes())));
+        }
+
+        let blocks_and_qcs = query
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "validator_fees_get_any_with_epoch_range_for_validator",
+                source: e,
+            })?;
+
+        blocks_and_qcs
+            .into_iter()
+            .map(|(block, qc)| {
+                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "blocks_get_by_parent",
+                    details: format!(
+                        "block {} references non-existent quorum certificate {}",
+                        block.id, block.qc_id
+                    ),
+                })?;
+
+                block.try_convert(qc)
+            })
+            .collect()
+    }
+
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
         use crate::schema::quorum_certificates;
 
@@ -562,6 +624,25 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             })?;
 
         substates.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
+        &mut self,
+        shard_ids: I,
+    ) -> Result<bool, StorageError> {
+        use crate::schema::substates;
+
+        let count = substates::table
+            .count()
+            .filter(substates::shard_id.eq_any(shard_ids.into_iter().map(|s| serialize_hex(s.borrow()))))
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_any",
+                source: e,
+            })?;
+
+        Ok(count > 0)
     }
 
     fn substates_get_many_within_range(

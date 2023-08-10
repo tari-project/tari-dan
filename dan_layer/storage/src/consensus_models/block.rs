@@ -4,7 +4,7 @@
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::{Debug, Display},
-    ops::DerefMut,
+    ops::{DerefMut, RangeInclusive},
 };
 
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,7 @@ pub struct Block<TAddr> {
     height: NodeHeight,
     epoch: Epoch,
     proposed_by: TAddr,
+    total_leader_fee: u64,
 
     // Body
     merkle_root: FixedHash,
@@ -44,6 +45,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         epoch: Epoch,
         proposed_by: TAddr,
         commands: BTreeSet<Command>,
+        total_leader_fee: u64,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
@@ -55,6 +57,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             // TODO
             merkle_root: FixedHash::zero(),
             commands,
+            total_leader_fee,
         };
         block.id = block.calculate_hash().into();
         block
@@ -68,6 +71,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         epoch: Epoch,
         proposed_by: TAddr,
         commands: BTreeSet<Command>,
+        total_leader_fee: u64,
     ) -> Self {
         Self {
             id,
@@ -79,6 +83,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             // TODO
             merkle_root: FixedHash::zero(),
             commands,
+            total_leader_fee,
         }
     }
 
@@ -90,6 +95,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             Epoch(0),
             TAddr::zero(),
             Default::default(),
+            0,
         )
     }
 
@@ -104,6 +110,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             proposed_by: TAddr::zero(),
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
+            total_leader_fee: 0,
         }
     }
 
@@ -115,6 +122,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             epoch,
             proposed_by,
             Default::default(),
+            0,
         )
     }
 
@@ -197,6 +205,10 @@ impl<TAddr> Block<TAddr> {
 
     pub fn epoch(&self) -> Epoch {
         self.epoch
+    }
+
+    pub fn total_leader_fee(&self) -> u64 {
+        self.total_leader_fee
     }
 
     pub fn proposed_by(&self) -> &TAddr {
@@ -293,6 +305,22 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
 
     pub fn get_child<TTx: StateStoreReadTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<Self, StorageError> {
         tx.blocks_get_by_parent(self.id())
+    }
+
+    pub fn get_total_due_for_epoch<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        tx: &mut TTx,
+        epoch: Epoch,
+        validator_public_key: &TAddr,
+    ) -> Result<u64, StorageError> {
+        tx.blocks_get_total_leader_fee_for_epoch(epoch, validator_public_key)
+    }
+
+    pub fn get_any_with_epoch_range_for_validator<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        tx: &mut TTx,
+        range: RangeInclusive<Epoch>,
+        validator_public_key: Option<&TAddr>,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.blocks_get_any_with_epoch_range(range, validator_public_key)
     }
 }
 

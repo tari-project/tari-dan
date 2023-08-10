@@ -87,16 +87,22 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, req: EpochManagerRequest) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockHeight { reply } => handle(reply, Ok(self.inner.current_block_height())),
             EpochManagerRequest::GetValidatorNode { epoch, addr, reply } => handle(
                 reply,
-                self.inner
-                    .get_validator_node(epoch, &addr)
-                    .and_then(|x| x.ok_or(EpochManagerError::ValidatorNodeNotRegistered)),
+                self.inner.get_validator_node(epoch, &addr).and_then(|x| {
+                    x.ok_or(EpochManagerError::ValidatorNodeNotRegistered {
+                        address: addr.to_string(),
+                    })
+                }),
             ),
+            EpochManagerRequest::GetManyValidatorNodes { query, reply } => {
+                handle(reply, self.inner.get_many_validator_nodes(query));
+            },
             EpochManagerRequest::UpdateEpoch {
                 block_height,
                 block_hash,

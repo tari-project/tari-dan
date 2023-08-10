@@ -11,15 +11,16 @@ create unique index quorum_certificates_uniq_idx_id on quorum_certificates (qc_i
 
 create table blocks
 (
-    id              integer   not null primary key AUTOINCREMENT,
-    block_id        text      not NULL,
-    parent_block_id text      not NULL,
-    height          bigint    not NULL,
-    epoch           bigint    not NULL,
-    proposed_by     text      not NULL,
-    qc_id           text      not NULL,
-    commands        text      not NULL,
-    created_at      timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                integer   not null primary key AUTOINCREMENT,
+    block_id          text      not NULL,
+    parent_block_id   text      not NULL,
+    height            bigint    not NULL,
+    epoch             bigint    not NULL,
+    proposed_by       text      not NULL,
+    qc_id             text      not NULL,
+    commands          text      not NULL,
+    total_leader_fee  bigint    not NULL,
+    created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
 
@@ -118,7 +119,8 @@ create table transactions
     filled_outputs    text      not NULL,
     result            text      NULL,
     execution_time_ms bigint    NULL,
-    final_decision   text      NULL,
+    final_decision    text      NULL,
+    abort_details     text      NULL,
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -132,7 +134,8 @@ create table transaction_pool
     original_decision text      not null,
     pending_decision  text      null,
     evidence          text      not null,
-    fee               bigint    not null,
+    transaction_fee   bigint    not null,
+    leader_fee        bigint    not null,
     stage             text      not null,
     is_ready          boolean   not null,
     updated_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -165,8 +168,8 @@ CREATE TABLE block_missing_txs
 
 CREATE TABLE missing_tx
 (
-    id              integer   not NULL primary key AUTOINCREMENT,
-    transaction_id  text      not NULL,
-    block_id        text      not NULL,
-    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+    id             integer   not NULL primary key AUTOINCREMENT,
+    transaction_id text      not NULL,
+    block_id       text      not NULL,
+    created_at     timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );

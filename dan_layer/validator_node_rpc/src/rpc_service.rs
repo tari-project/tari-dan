@@ -37,4 +37,10 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
         &self,
         req: Request<proto::GetTransactionResultRequest>,
     ) -> Result<Response<proto::GetTransactionResultResponse>, RpcStatus>;
+
+    #[rpc(method = 6)]
+    async fn get_virtual_substate(
+        &self,
+        req: Request<proto::GetVirtualSubstateRequest>,
+    ) -> Result<Response<proto::GetVirtualSubstateResponse>, RpcStatus>;
 }

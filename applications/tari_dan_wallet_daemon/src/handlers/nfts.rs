@@ -38,7 +38,7 @@ use tokio::sync::broadcast;
 
 use super::context::HandlerContext;
 use crate::{
-    handlers::get_account,
+    handlers::helpers::get_account,
     services::{TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
     DEFAULT_FEE,
 };

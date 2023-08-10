@@ -19,6 +19,7 @@ diesel::table! {
         proposed_by -> Text,
         qc_id -> Text,
         commands -> Text,
+        total_leader_fee -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -128,7 +129,8 @@ diesel::table! {
         original_decision -> Text,
         pending_decision -> Nullable<Text>,
         evidence -> Text,
-        fee -> BigInt,
+        transaction_fee -> BigInt,
+        leader_fee -> BigInt,
         stage -> Text,
         is_ready -> Bool,
         updated_at -> Timestamp,
@@ -151,6 +153,7 @@ diesel::table! {
         result -> Nullable<Text>,
         execution_time_ms -> Nullable<BigInt>,
         final_decision -> Nullable<Text>,
+        abort_details -> Nullable<Text>,
         created_at -> Timestamp,
     }
 }

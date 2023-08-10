@@ -40,7 +40,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::{
     hotstuff::{
-        common::update_high_qc,
+        common::{update_high_qc, EXHAUST_DIVISOR},
         error::HotStuffError,
         event::HotstuffEvent,
         pacemaker_handle::PaceMakerHandle,
@@ -204,6 +204,12 @@ where TConsensusSpec: ConsensusSpec
 
     pub async fn reprocess_block(&self, block_id: &BlockId) -> Result<(), HotStuffError> {
         let block = self.store.with_read_tx(|tx| Block::get(tx, block_id))?;
+        if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
+            return Err(HotStuffError::EpochNotActive {
+                epoch: block.epoch(),
+                details: "Cannot reprocess block from inactive epoch".to_string(),
+            });
+        }
         let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
         self.process_block(&local_committee, &block).await
     }
@@ -351,6 +357,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<Option<QuorumDecision>, HotStuffError> {
         block.as_last_voted().set(tx)?;
 
+        let mut total_leader_fee = 0;
         for cmd in block.commands() {
             let mut tx_rec = self.transaction_pool.get(tx, cmd.transaction_id())?;
             // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
@@ -376,15 +383,27 @@ where TConsensusSpec: ConsensusSpec
                         );
                         return Ok(None);
                     }
+
+                    if tx_rec.transaction.transaction_fee != t.transaction_fee {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ Accept transaction fee disagreement for block {}. Leader proposed {}, we calculated {}",
+                            block.id(),
+                            t.transaction_fee,
+                            tx_rec.transaction.transaction_fee
+                        );
+                        return Ok(None);
+                    }
+
                     if tx_rec.original_decision() == t.decision {
                         if tx_rec.original_decision().is_commit() {
                             let transaction = ExecutedTransaction::get(tx.deref_mut(), cmd.transaction_id())?;
                             // Lock all inputs for the transaction as part of LocalPrepare
                             if !self.lock_inputs(tx, transaction.transaction(), local_committee_shard)? {
-                                // Unable to lock all inputs - abstain? or vote reject?
+                                // Unable to lock all inputs - do not vote
                                 warn!(
                                     target: LOG_TARGET,
-                                    "❌ Unable to lock inputs for block {}. Leader proposed {}, we decided {}",
+                                    "❌ Unable to lock all inputs for block {}. Leader proposed {}, we decided {}",
                                     block.id(),
                                     t.decision,
                                     tx_rec.original_decision()
@@ -432,6 +451,17 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(None);
                     }
 
+                    if tx_rec.transaction.transaction_fee != t.transaction_fee {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ Accept transaction fee disagreement for block {}. Leader proposed {}, we calculated {}",
+                            block.id(),
+                            t.transaction_fee,
+                            tx_rec.transaction.transaction_fee
+                        );
+                        return Ok(None);
+                    }
+
                     tx_rec.transition(
                         tx,
                         TransactionPoolStage::LocalPrepared,
@@ -471,6 +501,32 @@ where TConsensusSpec: ConsensusSpec
                         );
                         return Ok(None);
                     }
+
+                    if tx_rec.transaction.transaction_fee != t.transaction_fee {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ Accept transaction fee disagreement for block {}. Leader proposed {}, we calculated {}",
+                            block.id(),
+                            t.transaction_fee,
+                            tx_rec.transaction.transaction_fee
+                        );
+                        return Ok(None);
+                    }
+
+                    let distinct_shards =
+                        local_committee_shard.count_distinct_buckets(tx_rec.transaction.evidence.shards_iter());
+                    let calculated_leader_fee = tx_rec.calculate_leader_fee(distinct_shards as u64, EXHAUST_DIVISOR);
+                    if calculated_leader_fee != t.leader_fee {
+                        warn!(
+                            target: LOG_TARGET,
+                            "❌ Accept leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
+                            block.id(),
+                            t.leader_fee,
+                            calculated_leader_fee
+                        );
+                        return Ok(None);
+                    }
+                    total_leader_fee += calculated_leader_fee;
                     // If the decision was changed to Abort, which can only happen when a foreign shard decides ABORT
                     // and we decide COMMIT, we set SomePrepared, otherwise AllPrepared. These are
                     // the last stages.
@@ -481,6 +537,17 @@ where TConsensusSpec: ConsensusSpec
                     }
                 },
             }
+        }
+
+        if total_leader_fee != block.total_leader_fee() {
+            warn!(
+                target: LOG_TARGET,
+                "❌ Leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
+                block.id(),
+                block.total_leader_fee(),
+                total_leader_fee
+            );
+            return Ok(None);
         }
 
         info!(target: LOG_TARGET, "✅ Voting to accept block {}", block.id());
@@ -654,6 +721,8 @@ where TConsensusSpec: ConsensusSpec
         block: &Block<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
+        let mut total_transaction_fee = 0;
+        let mut total_fee_due = 0;
         for cmd in block.commands() {
             let tx_rec = self.transaction_pool.get(tx, cmd.transaction_id())?;
             match cmd {
@@ -666,6 +735,10 @@ where TConsensusSpec: ConsensusSpec
                         target: LOG_TARGET,
                         "Transaction {} is finalized ({})", tx_rec.transaction.id, t.decision
                     );
+
+                    total_transaction_fee += tx_rec.transaction.transaction_fee;
+                    total_fee_due += t.leader_fee;
+
                     let mut executed = t.get_transaction(tx.deref_mut())?;
                     match t.decision {
                         // Commit the transaction substate changes.
@@ -684,12 +757,20 @@ where TConsensusSpec: ConsensusSpec
                         },
                     }
 
-                    // We are now committing the containing an Accept so can remove the transaction from the pool
+                    // We are accepting the transaction so can remove the transaction from the pool
                     tx_rec.remove(tx)?;
                     executed.set_final_decision(t.decision).update(tx)?;
                 },
             }
         }
+
+        info!(
+            target: LOG_TARGET,
+            "🪙 Validator fee for block {} (amount due = {}, total fees = {})",
+            block.proposed_by(),
+            total_fee_due,
+            total_transaction_fee
+        );
 
         Ok(())
     }
@@ -701,6 +782,15 @@ where TConsensusSpec: ConsensusSpec
         candidate_block: &Block<TConsensusSpec::Addr>,
         local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), ProposalValidationError> {
+        let leader = self
+            .leader_strategy
+            .get_leader(local_committee, candidate_block.height());
+        if leader != from {
+            return Err(ProposalValidationError::NotLeader {
+                proposed_by: from.to_string(),
+                block_id: *candidate_block.id(),
+            });
+        }
         self.validate_proposed_block(from, candidate_block)?;
 
         // Check that details included in the justify match previously added blocks

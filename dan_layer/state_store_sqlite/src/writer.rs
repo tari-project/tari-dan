@@ -15,7 +15,6 @@ use tari_dan_storage::{
         BlockId,
         Decision,
         Evidence,
-        ExecutedTransaction,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -28,6 +27,7 @@ use tari_dan_storage::{
         SubstateRecord,
         TransactionAtom,
         TransactionPoolStage,
+        TransactionRecord,
         Vote,
     },
     StateStoreWriteTransaction,
@@ -87,6 +87,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::epoch.eq(block.epoch().as_u64() as i64),
             blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
             blocks::commands.eq(serialize_json(block.commands())?),
+            blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
         );
 
@@ -360,24 +361,38 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn executed_transactions_update(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError> {
+    fn transactions_update(&mut self, transaction_rec: &TransactionRecord) -> Result<(), StorageError> {
         use crate::schema::transactions;
 
-        let transaction = executed_transaction.transaction();
-        let result = executed_transaction.result();
+        let transaction = transaction_rec.transaction();
 
-        let update = (
-            transactions::result.eq(serialize_json(result)?),
-            transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
-            transactions::filled_outputs.eq(serialize_json(transaction.filled_outputs())?),
-            transactions::execution_time_ms
-                .eq(i64::try_from(executed_transaction.execution_time().as_millis()).unwrap_or(i64::MAX)),
-            transactions::final_decision.eq(executed_transaction.final_decision().map(|d| d.to_string())),
-        );
+        #[derive(AsChangeset)]
+        #[diesel(table_name = transactions)]
+        struct Changes {
+            result: Option<Option<String>>,
+            filled_inputs: Option<String>,
+            filled_outputs: Option<String>,
+            execution_time_ms: Option<Option<i64>>,
+            final_decision: Option<Option<String>>,
+            abort_details: Option<Option<String>>,
+        }
+
+        let change_set = Changes {
+            result: Some(transaction_rec.result().map(serialize_json).transpose()?),
+            filled_inputs: Some(serialize_json(transaction.filled_inputs())?),
+            filled_outputs: Some(serialize_json(transaction.filled_outputs())?),
+            execution_time_ms: Some(
+                transaction_rec
+                    .execution_time()
+                    .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
+            ),
+            final_decision: Some(transaction_rec.final_decision().map(|d| d.to_string())),
+            abort_details: Some(transaction_rec.abort_details.clone()),
+        };
 
         let num_affected = diesel::update(transactions::table)
             .filter(transactions::transaction_id.eq(serialize_hex(transaction.id())))
-            .set(update)
+            .set(change_set)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transactions_update",
@@ -408,7 +423,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                 &transaction.evidence.shards_iter().copied().collect::<Vec<_>>(),
             )?),
             transaction_pool::original_decision.eq(transaction.decision.to_string()),
-            transaction_pool::fee.eq(transaction.fee as i64),
+            transaction_pool::transaction_fee.eq(transaction.transaction_fee as i64),
+            transaction_pool::leader_fee.eq(transaction.leader_fee as i64),
             transaction_pool::evidence.eq(serialize_json(&transaction.evidence)?),
             transaction_pool::stage.eq(stage.to_string()),
             transaction_pool::is_ready.eq(is_ready),
@@ -613,6 +629,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
 
                 diesel::update(substates::table)
                     .filter(substates::shard_id.eq_any(objects))
+                    .filter(substates::locked_by.eq(serialize_hex(locked_by_tx)))
                     .set((
                         substates::is_locked_w.eq(false),
                         substates::locked_by.eq(None::<String>),
@@ -650,7 +667,6 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                     }
                     .into());
                 }
-
                 diesel::update(substates::table)
                     .filter(substates::shard_id.eq_any(objects))
                     .set(substates::read_locks.eq(substates::read_locks - 1))
@@ -746,7 +762,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .values(values)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substate_up",
+                operation: "substate_create",
                 source: e,
             })?;
 

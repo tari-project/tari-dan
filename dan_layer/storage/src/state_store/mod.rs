@@ -2,8 +2,9 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    borrow::Borrow,
     collections::HashSet,
-    ops::{Deref, DerefMut},
+    ops::{Deref, DerefMut, RangeInclusive},
 };
 
 use tari_common_types::types::FixedHash;
@@ -16,7 +17,6 @@ use crate::{
         BlockId,
         Decision,
         Evidence,
-        ExecutedTransaction,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -103,6 +103,16 @@ pub trait StateStoreReadTransaction {
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
+    fn blocks_get_total_leader_fee_for_epoch(
+        &mut self,
+        epoch: Epoch,
+        validator_public_key: &Self::Addr,
+    ) -> Result<u64, StorageError>;
+    fn blocks_get_any_with_epoch_range(
+        &mut self,
+        epoch_range: RangeInclusive<Epoch>,
+        validator_public_key: Option<&Self::Addr>,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
 
@@ -131,6 +141,10 @@ pub trait StateStoreReadTransaction {
     //---------------------------------- Substates --------------------------------------------//
     fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError>;
     fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
+        &mut self,
+        substates: I,
+    ) -> Result<bool, StorageError>;
     fn substates_get_many_within_range(
         &mut self,
         start: &ShardId,
@@ -170,7 +184,7 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Transaction -------------------------------- //
     fn transactions_insert(&mut self, transaction: &Transaction) -> Result<(), StorageError>;
-    fn executed_transactions_update(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError>;
+    fn transactions_update(&mut self, transaction: &TransactionRecord) -> Result<(), StorageError>;
     // -------------------------------- Transaction Pool -------------------------------- //
     fn transaction_pool_insert(
         &mut self,

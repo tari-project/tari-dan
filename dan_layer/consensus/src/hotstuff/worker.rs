@@ -6,7 +6,7 @@ use std::ops::DerefMut;
 use log::*;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, Decision, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
+    consensus_models::{Block, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -237,21 +237,18 @@ where
         self.state_store.with_write_tx(|tx| {
             executed.upsert(tx)?;
 
-            let decision = if executed.result().finalize.is_accept() {
-                Decision::Commit
-            } else {
-                Decision::Abort
-            };
             self.transaction_pool.insert(tx, TransactionAtom {
                 id: *executed.transaction().id(),
-                decision,
+                decision: executed.as_decision(),
                 evidence: executed.to_initial_evidence(),
-                fee: executed
+                transaction_fee: executed
                     .result()
                     .fee_receipt
                     .as_ref()
-                    .and_then(|f| f.total_fee_payment.as_u64_checked())
+                    .and_then(|f| f.total_fees_paid().as_u64_checked())
                     .unwrap_or(0),
+                // We calculate the leader fee later depending on the epoch of the block
+                leader_fee: 0,
             })?;
 
             Ok::<_, HotStuffError>(())

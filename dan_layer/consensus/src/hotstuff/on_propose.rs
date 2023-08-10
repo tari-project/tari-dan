@@ -8,7 +8,12 @@ use std::{
 };
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeShard},
+    optional::Optional,
+    Epoch,
+    NodeHeight,
+};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -28,7 +33,10 @@ use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
 use crate::{
-    hotstuff::{common::CommitteeAndMessage, error::HotStuffError},
+    hotstuff::{
+        common::{CommitteeAndMessage, EXHAUST_DIVISOR},
+        error::HotStuffError,
+    },
     messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
@@ -77,6 +85,7 @@ where TConsensusSpec: ConsensusSpec
         }
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
         let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
         let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
@@ -90,7 +99,14 @@ where TConsensusSpec: ConsensusSpec
 
             let parent_block = leaf_block.get_block(&mut *tx)?;
 
-            next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator.address)?;
+            next_block = self.build_next_block(
+                &mut tx,
+                epoch,
+                &parent_block,
+                high_qc,
+                validator.address,
+                &local_committee_shard,
+            )?;
             next_block.insert(&mut tx)?;
             next_block.as_last_proposed().set(&mut tx)?;
 
@@ -183,11 +199,13 @@ where TConsensusSpec: ConsensusSpec
         parent_block: &Block<TConsensusSpec::Addr>,
         high_qc: QuorumCertificate<TConsensusSpec::Addr>,
         proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
+        local_committee_shard: &CommitteeShard,
     ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
         let ready = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
 
+        let mut total_leader_fee = 0;
         let commands = ready
             .into_iter()
             .map(|t| match t.stage {
@@ -199,7 +217,12 @@ where TConsensusSpec: ConsensusSpec
                 // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
                 // prepared. We can now propose to Accept it. We also propose the decision change which everyone should
                 // agree with if they received the same foreign LocalPrepare.
-                TransactionPoolStage::LocalPrepared => Command::Accept(t.get_transaction_atom_with_decision_change()),
+                TransactionPoolStage::LocalPrepared => {
+                    let involved = local_committee_shard.count_distinct_buckets(t.transaction.evidence.shards_iter());
+                    let leader_fee = t.calculate_leader_fee(involved as u64, EXHAUST_DIVISOR);
+                    total_leader_fee += leader_fee;
+                    Command::Accept(t.get_final_transaction_atom(leader_fee))
+                },
                 // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes agreed
                 // with the Accept, more (possibly empty) blocks with QCs will be proposed and accepted,
                 // otherwise the Accept block will not be committed.
@@ -225,6 +248,7 @@ where TConsensusSpec: ConsensusSpec
             epoch,
             proposed_by,
             commands,
+            total_leader_fee,
         );
 
         Ok(next_block)

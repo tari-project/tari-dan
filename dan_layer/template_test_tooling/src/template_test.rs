@@ -1,6 +1,5 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
-//
 
 use std::{
     collections::{HashMap, HashSet},
@@ -20,7 +19,7 @@ use tari_dan_engine::{
     bootstrap_state,
     fees::{FeeModule, FeeTable},
     packager::{LoadedTemplate, Package, TemplateModuleLoader},
-    runtime::{AuthParams, ConsensusContext, RuntimeModule},
+    runtime::{AuthParams, RuntimeModule, VirtualSubstates},
     state_store::{
         memory::{MemoryStateStore, MemoryWriteTransaction},
         AtomicDb,
@@ -39,6 +38,7 @@ use tari_engine_types::{
     resource_container::ResourceContainer,
     substate::{Substate, SubstateAddress, SubstateDiff},
     vault::Vault,
+    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_template_builtin::{get_template_builtin, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
@@ -65,10 +65,9 @@ pub struct TemplateTest {
     last_outputs: HashSet<SubstateAddress>,
     name_to_template: HashMap<String, TemplateAddress>,
     state_store: MemoryStateStore,
-    // TODO: cleanup
-    consensus_context: ConsensusContext,
     enable_fees: bool,
     fee_table: FeeTable,
+    virtual_substates: VirtualSubstates,
 }
 
 impl TemplateTest {
@@ -110,6 +109,9 @@ impl TemplateTest {
             tx.commit().unwrap();
         }
 
+        let mut virtual_substates = VirtualSubstates::new();
+        virtual_substates.insert(VirtualSubstateAddress::CurrentEpoch, VirtualSubstate::CurrentEpoch(0));
+
         Self {
             package: Arc::new(package),
             track_calls: TrackCallsModule::new(),
@@ -117,8 +119,7 @@ impl TemplateTest {
             name_to_template,
             last_outputs: HashSet::new(),
             state_store,
-            // TODO: cleanup
-            consensus_context: ConsensusContext { current_epoch: 0 },
+            virtual_substates,
             enable_fees: false,
             fee_table: FeeTable::new(1, 1),
         }
@@ -179,8 +180,8 @@ impl TemplateTest {
         self
     }
 
-    pub fn set_consensus_context(&mut self, consensus: ConsensusContext) -> &mut Self {
-        self.consensus_context = consensus;
+    pub fn set_virtual_substate(&mut self, address: VirtualSubstateAddress, value: VirtualSubstate) -> &mut Self {
+        self.virtual_substates.insert(address, value);
         self
     }
 
@@ -377,7 +378,7 @@ impl TemplateTest {
             self.package.clone(),
             self.state_store.clone(),
             auth_params,
-            self.consensus_context.clone(),
+            self.virtual_substates.clone(),
             modules,
         );
 
