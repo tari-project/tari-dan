@@ -75,7 +75,11 @@ impl DanNode {
         );
 
         let epoch = self.services.epoch_manager.current_epoch().await?;
-        let tip = self.services.state_store.with_read_tx(|tx| Block::get_tip(tx, epoch))?;
+        let tip = self
+            .services
+            .state_store
+            .with_read_tx(|tx| Block::get_tip(tx, epoch))
+            .unwrap_or(Block::genesis());
 
         if let Err(e) = sync_service.sync_state(epoch, tip.id(), true).await {
             error!(
