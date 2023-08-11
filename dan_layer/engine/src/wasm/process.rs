@@ -167,6 +167,9 @@ impl WasmProcess {
             }
             eprintln!("{}", err);
             log::error!(target: LOG_TARGET, "{}", err);
+            if let WasmExecutionError::RuntimeError(e) = err {
+                env.set_last_engine_error(e);
+            }
             0
         })
     }
@@ -222,6 +225,9 @@ impl Invokable for WasmProcess {
         let val = match res {
             Ok(res) => res,
             Err(err) => {
+                if let Some(err) = self.env.take_last_engine_error() {
+                    return Err(WasmExecutionError::RuntimeError(err));
+                }
                 if let Some(message) = self.env.take_last_panic_message() {
                     return Err(WasmExecutionError::Panic {
                         message,

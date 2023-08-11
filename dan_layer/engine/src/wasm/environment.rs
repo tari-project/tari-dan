@@ -40,7 +40,7 @@ use wasmer::{
     WasmerEnv,
 };
 
-use crate::wasm::WasmExecutionError;
+use crate::{runtime::RuntimeError, wasm::WasmExecutionError};
 
 #[derive(Clone)]
 pub struct WasmEnv<T> {
@@ -49,6 +49,7 @@ pub struct WasmEnv<T> {
     mem_free: LazyInit<NativeFunc<i32>>,
     state: T,
     last_panic: Arc<Mutex<Option<String>>>,
+    last_engine_error: Arc<Mutex<Option<RuntimeError>>>,
 }
 
 impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
@@ -59,6 +60,7 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
             mem_alloc: LazyInit::new(),
             mem_free: LazyInit::new(),
             last_panic: Arc::new(Mutex::new(None)),
+            last_engine_error: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -78,6 +80,14 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
 
     pub(super) fn take_last_panic_message(&self) -> Option<String> {
         self.last_panic.lock().unwrap().take()
+    }
+
+    pub(super) fn set_last_engine_error(&self, error: RuntimeError) {
+        *self.last_engine_error.lock().unwrap() = Some(error);
+    }
+
+    pub(super) fn take_last_engine_error(&self) -> Option<RuntimeError> {
+        self.last_engine_error.lock().unwrap().take()
     }
 
     pub(super) fn write_to_memory(&self, ptr: &AllocPtr, data: &[u8]) -> Result<(), WasmExecutionError> {
