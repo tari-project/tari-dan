@@ -10,7 +10,6 @@ use tari_comms::{
     protocol::rpc::{RpcError, RpcStatus},
     types::CommsPublicKey,
 };
-use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, SubstateRecord},
