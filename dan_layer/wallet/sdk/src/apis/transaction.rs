@@ -137,29 +137,9 @@ where
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
         let Some(resp) = maybe_resp else {
-            warn!( target: LOG_TARGET, "Transaction result not found for transaction with hash {}. Marking transaction as invalid", transaction_id);
-            self.store.with_write_tx(|tx| {
-                tx.transactions_set_result_and_status(
-                    transaction_id,
-                    None,
-                    None,
-                    None,
-                    None,
-                    TransactionStatus::InvalidTransaction,
-                )
-            })?;
-
-            // Not found - TODO: this probably means the transaction was rejected in the mempool, but we cant be sure.
-            // Perhaps we should store it in its entirety and allow the user to resubmit it.
-            return Ok(Some(WalletTransaction {
-                transaction: transaction.transaction,
-                status: TransactionStatus::InvalidTransaction,
-                finalize: None,
-                transaction_failure: None,
-                final_fee: None,
-                qcs: vec![],
-                is_dry_run: transaction.is_dry_run,
-            }));
+            // TODO: if this happens forever we might want to resubmit or mark as invalid
+            warn!( target: LOG_TARGET, "Transaction result not found for transaction with hash {}. Will check again later.", transaction_id);
+            return Ok(None);
         };
 
         match resp.result {
