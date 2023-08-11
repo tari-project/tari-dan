@@ -179,7 +179,11 @@ impl DanNode {
                 // EpochChanged should only happen once per epoch and the event is not emitted during initial sync. So
                 // spawning state sync for each event should be ok.
 
-                let tip = self.services.state_store.with_read_tx(|tx| Block::get_tip(tx, epoch))?;
+                let tip = self
+                    .services
+                    .state_store
+                    .with_read_tx(|tx| Block::get_tip(tx, epoch))
+                    .unwrap_or(Block::genesis());
                 task::spawn(async move {
                     if let Err(e) = sync_service.sync_state(epoch, tip.id(), false).await {
                         error!(
