@@ -275,14 +275,15 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                 let final_decision = proto_decision
                     .try_into()
                     .map_err(ValidatorNodeRpcClientError::InvalidResponse)?;
-                let execution_result = match final_decision {
-                    Decision::Commit => decode(&response.execution_result).map(Some).map_err(|_| {
+                let execution_result = Some(response.execution_result)
+                    .filter(|r| !r.is_empty())
+                    .map(|r| decode(&r))
+                    .transpose()
+                    .map_err(|_| {
                         ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
                             "Node returned an invalid or empty execution result"
                         ))
-                    })?,
-                    Decision::Abort => None,
-                };
+                    })?;
 
                 Ok(TransactionResultStatus::Finalized(FinalizedResult {
                     execute_result: execution_result,
