@@ -297,8 +297,12 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 
         let block_id = BlockId::try_from(req.block_id)
             .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded block id: {}", e)))?;
-        let epoch = req.epoch;
         let shard_db = self.shard_state_store.clone();
+        // Check if we have such block
+        shard_db
+            .with_read_tx(|tx| Block::get(tx, &block_id))
+            .map_err(|e| RpcStatus::general(&e))?;
+        let epoch = req.epoch;
         task::spawn(async move {
             let block = shard_db.with_read_tx(|tx| Block::get_tip(tx, tari_dan_common_types::Epoch(epoch)));
             match block {
