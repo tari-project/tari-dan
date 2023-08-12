@@ -301,7 +301,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         // Check if we have such block
         shard_db
             .with_read_tx(|tx| Block::get(tx, &block_id))
-            .map_err(|e| RpcStatus::general(&e))?;
+            .map_err(|e| RpcStatus::bad_request(&e))?;
         let epoch = req.epoch;
         task::spawn(async move {
             let block = shard_db.with_read_tx(|tx| Block::get_tip(tx, tari_dan_common_types::Epoch(epoch)));
