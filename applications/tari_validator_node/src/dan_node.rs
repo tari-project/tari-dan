@@ -22,6 +22,7 @@
 
 use std::time::Duration;
 
+use anyhow::anyhow;
 use log::*;
 use tari_comms::{connection_manager::LivenessStatus, connectivity::ConnectivityEvent, peer_manager::NodeId};
 use tari_consensus::hotstuff::HotstuffEvent;
@@ -137,22 +138,40 @@ impl DanNode {
     }
 
     async fn handle_hotstuff_event(&self, event: HotstuffEvent) -> Result<(), anyhow::Error> {
-        let HotstuffEvent::BlockCommitted { block_id } = event else {
-            return Ok(());
-        };
+        match event {
+            HotstuffEvent::BlockSyncRequest { block_id, epoch } => {
+                let sync_service = CommitteeStateSync::new(
+                    self.services.epoch_manager.clone(),
+                    self.services.validator_node_client_factory.clone(),
+                    self.services.state_store.clone(),
+                    self.services.global_db.clone(),
+                    self.services.comms.node_identity().public_key().clone(),
+                );
+                sync_service
+                    .sync_state(epoch, &block_id, true)
+                    .await
+                    .map_err(|e| anyhow!(e))
+            },
+            HotstuffEvent::BlockCommitted { block_id } => {
+                let committed_transactions = self.services.state_store.with_read_tx(|tx| {
+                    let block = Block::get(tx, &block_id)?;
+                    info!(target: LOG_TARGET, "🏁 Block {} committed", block_id);
+                    Ok::<_, anyhow::Error>(
+                        block
+                            .commands()
+                            .iter()
+                            .filter_map(|cmd| cmd.accept())
+                            .map(|t| t.id)
+                            .collect::<Vec<_>>(),
+                    )
+                })?;
 
-        let committed_transactions = self.services.state_store.with_read_tx(|tx| {
-            let block = Block::get(tx, &block_id)?;
-            info!(target: LOG_TARGET, "🏁 Block {} committed", block_id);
-            Ok::<_, anyhow::Error>(
-                block
-                    .commands()
-                    .iter()
-                    .filter_map(|cmd| cmd.accept())
-                    .map(|t| t.id)
-                    .collect::<Vec<_>>(),
-            )
-        })?;
+                for tx_id in committed_transactions {
+                    info!(target: LOG_TARGET, "🏁 Removing finalized transaction {} from mempool", tx_id);
+                    if let Err(err) = self.services.mempool.remove_transaction(tx_id).await {
+                        error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
+                    }
+                }
 
         info!(target: LOG_TARGET, "🏁 Removing {} finalized transaction(s) from mempool", committed_transactions.len());
         for tx_id in committed_transactions {
@@ -160,8 +179,6 @@ impl DanNode {
                 error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
             }
         }
-
-        Ok(())
     }
 
     async fn handle_epoch_manager_event(&self, event: EpochManagerEvent) -> Result<(), anyhow::Error> {

@@ -137,6 +137,15 @@ where TConsensusSpec: ConsensusSpec
         local_committee: Committee<TConsensusSpec::Addr>,
         block: Block<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
+        if self.store.with_read_tx(|tx| block.get_parent(tx)).is_err() {
+            // We don't have the parent of the block. We request all the blocks from our tip.
+            let tip = self.store.with_read_tx(|tx| Block::get_tip(tx, block.epoch()))?;
+            self.publish_event(HotstuffEvent::BlockSyncRequest {
+                block_id: *tip.id(),
+                epoch: block.epoch(),
+            });
+        }
+
         // First save the block in one db transaction
         let (missing_tx_ids, awaiting_execution) = self.store.with_write_tx(|tx| {
             self.validate_local_proposed_block_and_fill_dummy_blocks(&mut *tx, &from, &block, &local_committee)?;
