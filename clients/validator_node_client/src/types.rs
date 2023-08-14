@@ -25,8 +25,11 @@ use std::ops::RangeInclusive;
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
-use tari_dan_storage::consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord};
+use tari_dan_common_types::{committee::CommitteeShard, shard_bucket::ShardBucket, Epoch, ShardId};
+use tari_dan_storage::{
+    consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord},
+    global::models::ValidatorNode,
+};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     fees::FeeCostBreakdown,
@@ -197,6 +200,18 @@ pub struct GetCommitteeRequest {
     pub epoch: Epoch,
     pub shard_id: ShardId,
 }
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetNetworkCommitteeResponse {
+    pub current_epoch: Epoch,
+    pub committees: Vec<CommitteeShardInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CommitteeShardInfo {
+    pub bucket: ShardBucket,
+    pub shard_range: RangeInclusive<ShardId>,
+    pub validators: Vec<ValidatorNode<PublicKey>>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetShardKey {
@@ -249,6 +264,7 @@ pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
     pub current_block_height: u64,
     pub is_valid: bool,
+    pub committee_shard: Option<CommitteeShard>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

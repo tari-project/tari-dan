@@ -46,6 +46,7 @@ clap = { version = "3.2.5", features = ["env"] }
 config = "0.13.0"
 futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
+indexmap = "2.0.0"
 json5 = "0.2.2"
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }
 lmdb-zero = "0.4.4"

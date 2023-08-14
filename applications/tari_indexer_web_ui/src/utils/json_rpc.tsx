@@ -61,7 +61,7 @@ async function getCommsStats() {
   return await jsonRpc('get_comms_stats');
 }
 async function getAllVns(epoch: number) {
-  return await jsonRpc('get_all_vns', epoch);
+  return await jsonRpc('get_network_validators', {epoch});
 }
 async function getConnections() {
   return await jsonRpc('get_connections');

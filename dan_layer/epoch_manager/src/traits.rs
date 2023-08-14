@@ -29,6 +29,7 @@ use async_trait::async_trait;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::ValidatorNodeMerkleProof,
+    shard_bucket::ShardBucket,
     Epoch,
     NodeAddressable,
     ShardId,
@@ -137,8 +138,8 @@ pub trait EpochManagerReader: Send + Sync {
     async fn get_committees_by_buckets(
         &self,
         epoch: Epoch,
-        buckets: HashSet<u32>,
-    ) -> Result<HashMap<u32, Committee<Self::Addr>>, EpochManagerError>;
+        buckets: HashSet<ShardBucket>,
+    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, EpochManagerError>;
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let validator = self.get_our_validator_node(epoch).await?;

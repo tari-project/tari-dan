@@ -58,7 +58,7 @@ pub fn build_transaction(decision: Decision, fee: u64, num_shards: usize, num_co
         // We fill these outputs so that the test VNs dont have to have any UP substates
         // Equal potion of shards to each committee
         tx.filled_outputs_mut().extend(
-            iter::repeat_with(|| random_shard_in_bucket(bucket, num_committees))
+            iter::repeat_with(|| random_shard_in_bucket(bucket.into(), num_committees))
                 .take(num_shards / num_committees as usize),
         );
     }

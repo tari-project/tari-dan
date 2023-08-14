@@ -28,6 +28,7 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
+use indexmap::IndexMap;
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
@@ -54,10 +55,12 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tari_validator_node_client::types::{
     AddPeerRequest,
     AddPeerResponse,
+    CommitteeShardInfo,
     DryRunTransactionFinalizeResult,
     GetCommitteeRequest,
     GetEpochManagerStatsResponse,
     GetIdentityResponse,
+    GetNetworkCommitteeResponse,
     GetRecentTransactionsResponse,
     GetShardKey,
     GetStateRequest,
@@ -533,10 +536,29 @@ impl JsonRpcHandlers {
                 ),
             )
         })?;
+        let committee_shard = if is_valid {
+            self.epoch_manager
+                .get_local_committee_shard(current_epoch)
+                .await
+                .map(Some)
+                .map_err(|err| {
+                    JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            JsonRpcErrorReason::InternalError,
+                            format!("Could not get committee shard:{}", err),
+                            json::Value::Null,
+                        ),
+                    )
+                })?
+        } else {
+            None
+        };
         let response = GetEpochManagerStatsResponse {
             current_epoch,
             current_block_height,
             is_valid,
+            committee_shard,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }
@@ -635,6 +657,54 @@ impl JsonRpcHandlers {
                 ),
             ))
         }
+    }
+
+    pub async fn get_network_committees(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let current_epoch = self
+            .epoch_manager
+            .current_epoch()
+            .await
+            .map_err(internal_error(answer_id))?;
+        let num_committees = self
+            .epoch_manager
+            .get_num_committees(current_epoch)
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        let mut validators = self
+            .epoch_manager
+            .get_all_validator_nodes(current_epoch)
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        validators.sort_by(|vn_a, vn_b| vn_b.committee_bucket.cmp(&vn_a.committee_bucket));
+        // Group by bucket, IndexMap used to preserve ordering
+        let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
+        for validator in validators {
+            validators_per_bucket
+                .entry(
+                    validator
+                        .committee_bucket
+                        .expect("validator committee bucket must have been populated within valid epoch"),
+                )
+                .or_insert_with(Vec::new)
+                .push(validator);
+        }
+
+        let committees = validators_per_bucket
+            .into_iter()
+            .map(|(bucket, validators)| CommitteeShardInfo {
+                bucket,
+                shard_range: bucket.to_shard_range(num_committees),
+                validators,
+            })
+            .collect();
+
+        Ok(JsonRpcResponse::success(answer_id, GetNetworkCommitteeResponse {
+            current_epoch,
+            committees,
+        }))
     }
 
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
