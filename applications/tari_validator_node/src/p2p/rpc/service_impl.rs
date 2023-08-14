@@ -121,8 +121,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 if tx
                     .send(Ok(proto::rpc::GetPeersResponse {
                         identity: peer.identity.as_bytes().to_vec(),
-                        addresses: peer.addresses.iter().map(|(a, _)| a.to_vec()).collect(),
-                        claims: peer.addresses.into_iter().map(|(_, c)| c.into()).collect(),
+                        claims: peer.claims.into_iter().map(Into::into).collect(),
                     }))
                     .await
                     .is_err()
