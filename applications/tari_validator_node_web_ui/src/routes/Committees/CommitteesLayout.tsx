@@ -20,37 +20,29 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState, useContext } from 'react';
-import PageHeading from '../../Components/PageHeading';
-import Typography from '@mui/material/Typography';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import { VNContext } from '../../App';
-import Committees from './Committees';
-import CommitteesRadial from './CommitteesRadial';
-import CommitteesPieChart from './CommitteesPieChart';
-import { get_all_committees } from './helpers';
+import { useEffect, useState, useContext } from "react";
+import PageHeading from "../../Components/PageHeading";
+import Typography from "@mui/material/Typography";
+import Grid from "@mui/material/Grid";
+import { StyledPaper } from "../../Components/StyledComponents";
+import { VNContext } from "../../App";
+import Committees from "./Committees";
+import CommitteesRadial from "./CommitteesRadial";
+import CommitteesPieChart from "./CommitteesPieChart";
+import { getNetworkCommittees } from "../../utils/json_rpc";
+import { GetNetworkCommitteesResponse } from "../../utils/interfaces";
 
 function CommitteesLayout() {
-  const [committees, setCommittees] = useState<
-    Array<[string, string, Array<string>]>
-  >([]);
+  const [committees, setCommittees] =
+    useState<GetNetworkCommitteesResponse | null>(null);
 
-  const { epoch, shardKey, identity, error } = useContext(VNContext);
+  const { epoch, identity, error } = useContext(VNContext);
 
   useEffect(() => {
-    if (identity?.public_key && shardKey && epoch) {
-      get_all_committees(
-        epoch.current_epoch,
-        shardKey,
-        identity.public_key
-      ).then((response) => {
-        if (response) setCommittees(response);
-      });
-    }
-  }, [epoch?.current_epoch, shardKey, identity?.public_key, epoch]);
+    getNetworkCommittees().then(setCommittees);
+  }, []);
 
-  if (error !== '') {
+  if (error !== "") {
     return <div className="error">{error}</div>;
   }
   if (epoch === undefined || identity === undefined) return <div>Loading</div>;
@@ -63,6 +55,29 @@ function CommitteesLayout() {
     <>
       <Grid item xs={12} md={12} lg={12}>
         <PageHeading>Committees</PageHeading>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          Current epoch: {epoch.current_epoch}
+          <br />
+          Total number of validators:{" "}
+          {committees.committees.reduce(
+            (acc, info) => acc + info.validators.length,
+            0,
+          )}
+          <br />
+          Total buckets: {committees.committees.length}
+          <br />
+          Min committee size:{" "}
+          {committees.committees
+            .map((vn) => vn.validators.length)
+            .reduce((acc, curr) => Math.min(acc, curr), 100000)}
+          <br />
+          Max committee size:{" "}
+          {committees.committees
+            .map((vn) => vn.validators.length)
+            .reduce((acc, curr) => Math.max(acc, curr), 0)}
+        </StyledPaper>
       </Grid>
       <Grid item xs={12} md={12} lg={8}>
         <StyledPaper>
@@ -77,13 +92,10 @@ function CommitteesLayout() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Typography>
-            {shardKey ? (
-              <Committees
-                currentEpoch={epoch.current_epoch}
-                shardKey={shardKey}
-                publicKey={identity.public_key}
-              />
-            ) : null}
+            <Committees
+              committees={committees.committees}
+              publicKey={identity.public_key}
+            />
           </Typography>
         </StyledPaper>
       </Grid>

@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { fromHexString } from '../routes/VN/Components/helpers';
+import { GetNetworkCommitteesResponse } from './interfaces';
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
@@ -66,11 +67,14 @@ async function getMempoolStats() {
 async function getShardKey(height: number, public_key: string) {
   return await jsonRpc('get_shard_key', [height, public_key]);
 }
-async function getCommittee(height: number, shard_key: string) {
-  return await jsonRpc('get_committee', [height, shard_key]);
+async function getCommittee(epoch: number, shard_id: string) {
+  return await jsonRpc('get_committee', {epoch, shard_id});
 }
 async function getAllVns(epoch: number) {
   return await jsonRpc('get_all_vns', epoch);
+}
+async function getNetworkCommittees() : Promise<GetNetworkCommitteesResponse> {
+  return await jsonRpc('get_network_committees', {});
 }
 async function getConnections() {
   return await jsonRpc('get_connections');
@@ -131,5 +135,6 @@ export {
   getFees,
   getUpSubstates,
   getDownSubstates,
+  getNetworkCommittees,
   registerValidatorNode,
 };

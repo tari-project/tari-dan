@@ -9,7 +9,7 @@ use std::{
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_common_types::committee::Committee;
+use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket};
 use tari_dan_storage::consensus_models::{Decision, ExecutedTransaction};
 use tari_transaction::Transaction;
 use tokio::sync::{
@@ -118,7 +118,7 @@ pub enum TestNetworkDestination {
 }
 
 impl TestNetworkDestination {
-    pub fn is_for(&self, addr: &TestAddress, bucket: u32) -> bool {
+    pub fn is_for(&self, addr: &TestAddress, bucket: ShardBucket) -> bool {
         match self {
             TestNetworkDestination::All => true,
             TestNetworkDestination::Address(a) => a == addr,
@@ -129,7 +129,7 @@ impl TestNetworkDestination {
 
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
-    tx_new_transactions: HashMap<TestAddress, (u32, mpsc::Sender<ExecutedTransaction>)>,
+    tx_new_transactions: HashMap<TestAddress, (ShardBucket, mpsc::Sender<ExecutedTransaction>)>,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage<TestAddress>)>>,
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>>>,

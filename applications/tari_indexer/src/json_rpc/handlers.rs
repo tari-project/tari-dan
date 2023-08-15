@@ -586,10 +586,12 @@ impl JsonRpcHandlers {
                 ),
             )
         })?;
+
         let response = GetEpochManagerStatsResponse {
             current_epoch,
             current_block_height,
             is_valid,
+            committee_shard: None,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }

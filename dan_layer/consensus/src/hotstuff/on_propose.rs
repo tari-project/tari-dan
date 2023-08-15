@@ -11,6 +11,7 @@ use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
+    shard_bucket::ShardBucket,
     Epoch,
     NodeHeight,
 };
@@ -152,14 +153,15 @@ where TConsensusSpec: ConsensusSpec
         &self,
         epoch: Epoch,
         next_block: Block<TConsensusSpec::Addr>,
-        non_local_buckets: HashSet<u32>,
+        non_local_buckets: HashSet<ShardBucket>,
         local_committee: Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         // Find non-local shard committees to include in the broadcast
         debug!(
             target: LOG_TARGET,
             "non_local_buckets : [{}]",
-            non_local_buckets.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","));
+            non_local_buckets.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","),
+        );
 
         let non_local_committees = self
             .epoch_manager

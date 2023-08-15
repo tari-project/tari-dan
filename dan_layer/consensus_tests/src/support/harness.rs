@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use futures::{stream::FuturesUnordered, StreamExt};
 use tari_consensus::hotstuff::HotstuffEvent;
-use tari_dan_common_types::{committee::Committee, Epoch};
+use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, Decision, TransactionPoolStage},
     StateStore,
@@ -249,7 +249,7 @@ impl Test {
 }
 
 pub struct TestBuilder {
-    committees: HashMap<u32, Committee<TestAddress>>,
+    committees: HashMap<ShardBucket, Committee<TestAddress>>,
     sql_address: String,
     default_decision: Decision,
     default_fee: u64,
@@ -271,9 +271,9 @@ impl TestBuilder {
         self
     }
 
-    pub fn add_committee(&mut self, bucket: u32, addresses: Vec<&'static str>) -> &mut Self {
+    pub fn add_committee<T: Into<ShardBucket>>(&mut self, bucket: T, addresses: Vec<&'static str>) -> &mut Self {
         self.committees
-            .insert(bucket, addresses.into_iter().map(TestAddress::new).collect());
+            .insert(bucket.into(), addresses.into_iter().map(TestAddress::new).collect());
         self
     }
 
