@@ -5,6 +5,7 @@ use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
+    commit_result::RejectReason,
     indexed_value::{IndexedValue, IndexedValueVisitorError},
     substate::SubstateDiff,
 };
@@ -147,8 +148,7 @@ where
             TransactionFinalizedResult::Finalized {
                 final_decision,
                 execution_result,
-                // TODO: incorporate abort_details
-                abort_details: _abort_details,
+                abort_details,
             } => {
                 let new_status = if final_decision.is_commit() {
                     TransactionStatus::Accepted
@@ -176,10 +176,14 @@ where
                         self.commit_result(tx, transaction_id, diff)?;
                     }
 
+                    let transaction_failure = execution_result
+                        .as_ref()
+                        .and_then(|e| e.transaction_failure.clone())
+                        .or_else(|| abort_details.map(RejectReason::ExecutionFailure));
                     tx.transactions_set_result_and_status(
                         transaction_id,
                         execution_result.as_ref().map(|e| &e.finalize),
-                        execution_result.as_ref().and_then(|e| e.transaction_failure.as_ref()),
+                        transaction_failure.as_ref(),
                         execution_result
                             .as_ref()
                             .and_then(|e| e.fee_receipt.as_ref())

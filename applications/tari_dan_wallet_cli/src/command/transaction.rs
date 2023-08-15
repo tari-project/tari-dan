@@ -137,7 +137,7 @@ pub struct SubmitManifestArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct SendArgs {
-    amount: u32,
+    amount: u64,
     resource_address: ResourceAddress,
     destination_public_key: FromHex<Vec<u8>>,
     #[clap(flatten)]
@@ -147,7 +147,7 @@ pub struct SendArgs {
 
 #[derive(Debug, Args, Clone)]
 pub struct ConfidentialTransferArgs {
-    amount: u32,
+    amount: u64,
     destination_public_key: FromHex<Vec<u8>>,
     #[clap(flatten)]
     common: CommonSubmitArgs,
@@ -370,7 +370,7 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
     let resp = client
         .accounts_transfer(TransferRequest {
             account: source_account_name,
-            amount: Amount::from(amount),
+            amount: Amount::try_from(amount)?,
             resource_address,
             destination_public_key,
             fee,
@@ -402,7 +402,7 @@ pub async fn handle_confidential_transfer(
     let resp = client
         .accounts_confidential_transfer(ConfidentialTransferRequest {
             account: source_account,
-            amount: Amount::from(amount),
+            amount: Amount::try_from(amount)?,
             resource_address: resource_address.unwrap_or(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
             validator_public_key: destination_public_key,
             fee: common.fee.map(|f| f.try_into()).transpose()?,
