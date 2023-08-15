@@ -123,7 +123,7 @@ impl SubstateRecord {
 }
 
 impl SubstateRecord {
-    pub fn try_lock_many<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn try_lock_all<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,
         inputs: I,
@@ -230,8 +230,9 @@ pub enum SubstateLockFlag {
 }
 
 pub enum SubstateLockState {
-    SomeWriteLocked,
-    SomeReadLocked,
+    /// Some substates are locked for write
+    SomeAlreadyWriteLocked,
+    /// The lock was successfully acquired
     LockAcquired,
 }
 

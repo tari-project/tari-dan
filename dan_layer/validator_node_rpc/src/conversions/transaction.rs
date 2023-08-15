@@ -25,6 +25,7 @@ use std::convert::{TryFrom, TryInto};
 use anyhow::anyhow;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
+use tari_dan_p2p::NewTransactionMessage;
 use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{
     args::Arg,
@@ -42,8 +43,36 @@ use crate::{
     utils::checked_copy_fixed,
 };
 
-//---------------------------------- Transaction --------------------------------------------//
+// -------------------------------- NewTransactionMessage -------------------------------- //
 
+impl From<NewTransactionMessage> for proto::transaction::NewTransactionMessage {
+    fn from(msg: NewTransactionMessage) -> Self {
+        Self {
+            transaction: Some(msg.transaction.into()),
+            output_shards: msg.output_shards.into_iter().map(|s| s.as_bytes().to_vec()).collect(),
+        }
+    }
+}
+
+impl TryFrom<proto::transaction::NewTransactionMessage> for NewTransactionMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::transaction::NewTransactionMessage) -> Result<Self, Self::Error> {
+        Ok(NewTransactionMessage {
+            transaction: value
+                .transaction
+                .ok_or_else(|| anyhow!("Transaction not provided"))?
+                .try_into()?,
+            output_shards: value
+                .output_shards
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+//---------------------------------- Transaction --------------------------------------------//
 impl TryFrom<proto::transaction::Transaction> for Transaction {
     type Error = anyhow::Error;
 
@@ -52,12 +81,12 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             .instructions
             .into_iter()
             .map(TryInto::try_into)
-            .collect::<Result<Vec<tari_engine_types::instruction::Instruction>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let fee_instructions = request
             .fee_instructions
             .into_iter()
             .map(TryInto::try_into)
-            .collect::<Result<Vec<tari_engine_types::instruction::Instruction>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let signature = request
             .signature
             .ok_or_else(|| anyhow!("invalid signature"))?
@@ -82,11 +111,6 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
-        let filled_outputs = request
-            .filled_outputs
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
         let transaction = Transaction::new(
             fee_instructions,
             instructions,
@@ -95,7 +119,6 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             input_refs,
             outputs,
             filled_inputs,
-            filled_outputs,
         );
 
         Ok(transaction)
@@ -113,11 +136,6 @@ impl From<Transaction> for proto::transaction::Transaction {
             .iter()
             .map(|s| s.as_bytes().to_vec())
             .collect();
-        let filled_outputs = transaction
-            .filled_outputs()
-            .iter()
-            .map(|s| s.as_bytes().to_vec())
-            .collect();
         let (fee_instructions, instructions) = transaction.into_instructions();
         let fee_instructions = fee_instructions.into_iter().map(Into::into).collect();
         let instructions = instructions.into_iter().map(Into::into).collect();
@@ -130,7 +148,6 @@ impl From<Transaction> for proto::transaction::Transaction {
             input_refs,
             outputs,
             filled_inputs,
-            filled_outputs,
         }
     }
 }

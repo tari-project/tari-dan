@@ -9,7 +9,6 @@ use tari_dan_storage::{
     StateStoreReadTransaction,
 };
 use tari_epoch_manager::EpochManagerEvent;
-use tari_shutdown::Shutdown;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::Transaction;
 use tokio::{
@@ -43,7 +42,6 @@ pub struct Validator {
     pub state_store: SqliteStateStore<TestAddress>,
     pub epoch_manager: TestEpochManager,
     pub leader_strategy: SelectedIndexLeaderStrategy,
-    pub shutdown: Shutdown,
     pub events: broadcast::Receiver<HotstuffEvent>,
     pub tx_epoch_events: broadcast::Sender<EpochManagerEvent>,
     pub state_manager: NoopStateManager,

@@ -23,6 +23,7 @@ use crate::{
         LastVoted,
         LeafBlock,
         LockedBlock,
+        LockedOutput,
         QcId,
         QuorumCertificate,
         SubstateLockFlag,
@@ -236,6 +237,21 @@ pub trait StateStoreWriteTransaction {
         destroyed_transaction_id: &TransactionId,
     ) -> Result<(), StorageError>;
     fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
+    // -------------------------------- Locked Outputs -------------------------------- //
+    fn locked_outputs_acquire_all<I, B>(
+        &mut self,
+        block_id: &BlockId,
+        transaction_id: &TransactionId,
+        output_shards: I,
+    ) -> Result<SubstateLockState, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>;
+
+    fn locked_outputs_release_all<I, B>(&mut self, output_shards: I) -> Result<Vec<LockedOutput>, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>;
 }
 
 #[derive(Debug, Clone, Copy)]

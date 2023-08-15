@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    borrow::Borrow,
     collections::HashSet,
     ops::{Deref, DerefMut},
 };
@@ -21,6 +22,7 @@ use tari_dan_storage::{
         LastVoted,
         LeafBlock,
         LockedBlock,
+        LockedOutput,
         QuorumCertificate,
         SubstateLockFlag,
         SubstateLockState,
@@ -40,6 +42,7 @@ use crate::{
     error::SqliteStorageError,
     reader::SqliteStateStoreReadTransaction,
     serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex, serialize_json},
+    sql_models,
     sqlite_transaction::SqliteTransaction,
 };
 
@@ -347,7 +350,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             transactions::input_refs.eq(serialize_json(transaction.input_refs())?),
             transactions::outputs.eq(serialize_json(transaction.outputs())?),
             transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
-            transactions::filled_outputs.eq(serialize_json(transaction.filled_outputs())?),
+            transactions::resulting_outputs.eq(serialize_json(&serde_json::Value::Array(vec![]))?),
         );
 
         diesel::insert_into(transactions::table)
@@ -371,7 +374,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         struct Changes {
             result: Option<Option<String>>,
             filled_inputs: Option<String>,
-            filled_outputs: Option<String>,
+            resulting_outputs: Option<String>,
             execution_time_ms: Option<Option<i64>>,
             final_decision: Option<Option<String>>,
             abort_details: Option<Option<String>>,
@@ -380,7 +383,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         let change_set = Changes {
             result: Some(transaction_rec.result().map(serialize_json).transpose()?),
             filled_inputs: Some(serialize_json(transaction.filled_inputs())?),
-            filled_outputs: Some(serialize_json(transaction.filled_outputs())?),
+            resulting_outputs: Some(serialize_json(transaction_rec.resulting_outputs())?),
             execution_time_ms: Some(
                 transaction_rec
                     .execution_time()
@@ -542,7 +545,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             })?;
         if locked_w.len() < objects.len() {
             return Err(SqliteStorageError::NotAllSubstatesFound {
-                operation: "substates_try_lock_many",
+                operation: "substates_try_lock_all",
                 details: format!(
                     "{:?}: Found {} substates, but {} were requested",
                     lock_flag,
@@ -553,7 +556,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .into());
         }
         if locked_w.iter().any(|w| *w) {
-            return Ok(SubstateLockState::SomeWriteLocked);
+            return Ok(SubstateLockState::SomeAlreadyWriteLocked);
         }
 
         match lock_flag {
@@ -651,7 +654,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                     })?;
                 if locked_r.len() < objects.len() {
                     return Err(SqliteStorageError::NotAllSubstatesFound {
-                        operation: "substates_try_lock_many",
+                        operation: "substates_try_lock_all",
                         details: format!(
                             "Found {} substates, but {} were requested",
                             locked_r.len(),
@@ -767,6 +770,92 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             })?;
 
         Ok(())
+    }
+
+    fn locked_outputs_acquire_all<I, B>(
+        &mut self,
+        block_id: &BlockId,
+        transaction_id: &TransactionId,
+        output_shards: I,
+    ) -> Result<SubstateLockState, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>,
+    {
+        use crate::schema::locked_outputs;
+        let block_id_hex = serialize_hex(block_id);
+        let transaction_id_hex = serialize_hex(transaction_id);
+
+        let insert = output_shards
+            .into_iter()
+            .map(|shard_id| {
+                (
+                    locked_outputs::block_id.eq(&block_id_hex),
+                    locked_outputs::transaction_id.eq(&transaction_id_hex),
+                    locked_outputs::shard_id.eq(serialize_hex(shard_id.borrow())),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let lock_state = diesel::insert_into(locked_outputs::table)
+            .values(insert)
+            .execute(self.connection())
+            .map(|_| SubstateLockState::LockAcquired)
+            .or_else(|e| {
+                if let diesel::result::Error::DatabaseError(diesel::result::DatabaseErrorKind::UniqueViolation, _) = e {
+                    Ok(SubstateLockState::SomeAlreadyWriteLocked)
+                } else {
+                    Err(SqliteStorageError::DieselError {
+                        operation: "locked_outputs_acquire",
+                        source: e,
+                    })
+                }
+            })?;
+
+        Ok(lock_state)
+    }
+
+    fn locked_outputs_release_all<I, B>(&mut self, output_shards: I) -> Result<Vec<LockedOutput>, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>,
+    {
+        use crate::schema::locked_outputs;
+
+        let output_shards = output_shards
+            .into_iter()
+            .map(|shard_id| serialize_hex(shard_id.borrow()))
+            .collect::<Vec<_>>();
+
+        let locked = locked_outputs::table
+            .filter(locked_outputs::shard_id.eq_any(&output_shards))
+            .get_results::<sql_models::LockedOutput>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "locked_outputs_release",
+                source: e,
+            })?;
+
+        if locked.len() != output_shards.len() {
+            return Err(SqliteStorageError::NotAllSubstatesFound {
+                operation: "locked_outputs_release",
+                details: format!(
+                    "Found {} locked outputs, but {} were requested",
+                    locked.len(),
+                    output_shards.len()
+                ),
+            }
+            .into());
+        }
+
+        diesel::delete(locked_outputs::table)
+            .filter(locked_outputs::shard_id.eq_any(&output_shards))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "locked_outputs_release",
+                source: e,
+            })?;
+
+        locked.into_iter().map(TryInto::try_into).collect()
     }
 }
 

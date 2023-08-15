@@ -7,28 +7,15 @@ package tari.dan.transaction;
 
 import "common.proto";
 
-message Node {
-  bytes hash = 1;
-  bytes parent = 2;
-  uint32 height = 3;
-  bool is_committed = 4;
-}
-
-message SignerSignature {
-  bytes signer = 1;
-  tari.dan.common.Signature signature = 2;
+message NewTransactionMessage {
+  Transaction transaction = 1;
+  repeated bytes output_shards = 2;
 }
 
 message CommitmentSignature {
   bytes public_nonce_commitment = 1;
   bytes signature_u = 2;
   bytes signature_v = 3;
-}
-
-message MerkleProof {
-  repeated bytes branch = 1;
-  uint32 depth = 2;
-  uint32 path_bitmap = 3;
 }
 
 message Transaction {
@@ -39,7 +26,6 @@ message Transaction {
   repeated bytes input_refs = 5;
   repeated bytes outputs = 6;
   repeated bytes filled_inputs = 7;
-  repeated bytes filled_outputs = 8;
 }
 
 message Instruction {
@@ -101,17 +87,6 @@ message SubstateRequirement {
 
 message OptionalVersion {
   uint32 version = 1;
-}
-
-message SubstateRef {
-  SubstateChange change = 1;
-  // claim = 2
-}
-
-enum SubstateChange {
-  Create = 0;
-  Destroy = 1;
-  Exists = 2;
 }
 
 message ConfidentialWithdrawProof {
