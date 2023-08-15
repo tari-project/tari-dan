@@ -10,7 +10,6 @@ use tari_bor::{decode, decode_exact, encode};
 use tari_common_types::types::PublicKey;
 use tari_comms::{
     connectivity::ConnectivityRequester,
-    multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerIdentityClaim},
     protocol::rpc::RpcPoolClient,
     types::CommsPublicKey,
@@ -149,26 +148,15 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
             .await?
             .map(|result| {
                 let p = result?;
-                let addresses: Vec<Multiaddr> = p
-                    .addresses
-                    .into_iter()
-                    .map(|a| {
-                        Multiaddr::try_from(a)
-                            .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Invalid address")))
-                    })
-                    .collect::<Result<_, _>>()?;
-                let claims: Vec<PeerIdentityClaim> = p
+                let claims = p
                     .claims
                     .into_iter()
-                    .map(|c| {
-                        PeerIdentityClaim::try_from(c)
-                            .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Invalid claim")))
-                    })
-                    .collect::<Result<_, _>>()?;
+                    .map(|a| PeerIdentityClaim::try_from(a).map_err(ValidatorNodeRpcClientError::InvalidResponse))
+                    .collect::<Result<Vec<_>, _>>()?;
                 Result::<_, ValidatorNodeRpcClientError>::Ok(DanPeer {
                     identity: ByteArray::from_bytes(&p.identity)
                         .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Invalid identity")))?,
-                    addresses: addresses.into_iter().zip(claims).collect(),
+                    claims,
                 })
             })
             .collect::<Result<Vec<_>, _>>()
