@@ -294,46 +294,49 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
     async fn sync_blocks(&self, req: Request<BlockSyncRequest>) -> Result<Streaming<BlockSyncResponse>, RpcStatus> {
         let (sender, receiver) = mpsc::channel(100);
         let req = req.into_message();
-
-        let block_id = BlockId::try_from(req.block_id)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded block id: {}", e)))?;
         let shard_db = self.shard_state_store.clone();
-        // Check if we have such block
+
+        let start_block_id = BlockId::try_from(req.start_block_id)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded block id: {}", e)))?;
+        // Check if we have the blocks
         shard_db
-            .with_read_tx(|tx| Block::get(tx, &block_id))
+            .with_read_tx(|tx| Block::get(tx, &start_block_id))
             .map_err(|e| RpcStatus::bad_request(&e))?;
         let epoch = req.epoch;
+        // Sync from tip, or from the block that the requester has.
+        let mut block = match req.end_block_id.len() {
+            0 => shard_db.with_read_tx(|tx| Block::get_tip(tx, tari_dan_common_types::Epoch(epoch))),
+            _ => {
+                // The end block is known to the requester, so we want to send blocks starting with its parent block;
+                let end_block_id = BlockId::try_from(req.end_block_id)
+                    .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded block id: {}", e)))?;
+                // TODO: Once we have the merge chain block, it will have more than one parent.
+                shard_db.with_read_tx(|tx| Block::get(tx, &end_block_id)?.get_parent(tx))
+            },
+        }
+        .map_err(|e| RpcStatus::bad_request(&e))?;
         task::spawn(async move {
-            let block = shard_db.with_read_tx(|tx| Block::get_tip(tx, tari_dan_common_types::Epoch(epoch)));
-            match block {
-                Ok(block) => {
-                    let mut block = block;
-                    while *block.id() != block_id {
-                        if sender
-                            .send(Ok(BlockSyncResponse {
-                                block: Some(block.clone().into()),
-                            }))
-                            .await
-                            .is_err()
-                        {
-                            debug!(
-                                target: LOG_TARGET,
-                                "Peer stream closed by client before completing. Aborting"
-                            );
-                        }
-                        let x = shard_db.with_read_tx(|tx| block.get_parent(tx));
-                        block = match x {
-                            Ok(block) => block,
-                            Err(e) => {
-                                let _ignore = sender.send(Err(RpcStatus::general(&e))).await;
-                                return;
-                            },
-                        };
-                    }
-                },
-                Err(e) => {
-                    let _ignore = sender.send(Err(RpcStatus::general(&e))).await;
-                },
+            while *block.id() != start_block_id {
+                if sender
+                    .send(Ok(BlockSyncResponse {
+                        block: Some(block.clone().into()),
+                    }))
+                    .await
+                    .is_err()
+                {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Peer stream closed by client before completing. Aborting"
+                    );
+                }
+                // TODO: as above, the get_parent will receive more blocks.
+                block = match shard_db.with_read_tx(|tx| block.get_parent(tx)) {
+                    Ok(block) => block,
+                    Err(e) => {
+                        let _ignore = sender.send(Err(RpcStatus::general(&e))).await;
+                        return;
+                    },
+                };
             }
         });
         Ok(Streaming::new(receiver))

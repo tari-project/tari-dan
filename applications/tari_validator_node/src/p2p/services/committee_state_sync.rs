@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{convert::TryInto, ops::RangeInclusive};
+use std::{collections::HashSet, convert::TryInto, ops::RangeInclusive};
 
 use futures::StreamExt;
 use log::info;
@@ -52,12 +52,7 @@ impl CommitteeStateSync {
         }
     }
 
-    pub async fn sync_state(
-        &self,
-        epoch: Epoch,
-        tip: &BlockId,
-        force_resync: bool,
-    ) -> Result<(), CommitteeStateSyncError> {
+    pub async fn sync_state(&self, epoch: Epoch, force_resync: bool) -> Result<(), CommitteeStateSyncError> {
         if !force_resync && self.is_synced_to(epoch)? {
             info!(target: LOG_TARGET, "🌍️ Already synced to epoch {}", epoch);
             return Ok(());
@@ -108,10 +103,14 @@ impl CommitteeStateSync {
 
         // synchronize state with committee validator nodes
         // TODO: some mechanism for retry
-        self.sync_peers_state(prev_committee, new_local_shard_range, tip, epoch)
+        let missing_blocks = self
+            .sync_peers_state(prev_committee, new_local_shard_range, epoch)
             .await?;
 
         let mut tx = self.global_db.create_transaction()?;
+        self.global_db
+            .metadata(&mut tx)
+            .set_metadata(MetadataKey::MissingBlocks, &missing_blocks)?;
         self.global_db
             .metadata(&mut tx)
             .set_metadata(MetadataKey::EpochManagerLastSyncedEpoch, &epoch)?;
@@ -124,9 +123,22 @@ impl CommitteeStateSync {
         &self,
         committee_vns: Committee<CommsPublicKey>,
         shard_range: RangeInclusive<ShardId>,
-        tip: &BlockId,
         epoch: Epoch,
-    ) -> Result<(), CommitteeStateSyncError> {
+    ) -> Result<Vec<(BlockId, BlockId)>, CommitteeStateSyncError> {
+        let tip = self.shard_store.with_read_tx(|tx| Block::get_tip(tx, epoch))?;
+        // Missing children is an array (from, to), where we have `from` and `to` blocks, but nothing in between. In
+        // case the `to` is `None`, then we want everything up to the tip.
+
+        let mut tx = self.global_db.create_transaction()?;
+        let mut missing_blocks = match self
+            .global_db
+            .metadata(&mut tx)
+            .get_metadata::<Vec<(BlockId, BlockId)>>(MetadataKey::MissingBlocks)?
+        {
+            Some(metadata) => metadata.into_iter().map(|(from, to)| (from, Some(to))).collect(),
+            None => vec![],
+        };
+
         let inventory = self
             .shard_store
             .with_read_tx(|tx| SubstateRecord::get_many_within_range(tx, &shard_range, &[]))?;
@@ -171,28 +183,50 @@ impl CommitteeStateSync {
                 // inventory.push(sync_vn_shard.into());
                 substate_count += 1;
             }
-
-            let mut vn_blocks_stream = sync_vn_rpc_client
-                .sync_blocks(tari_validator_node_rpc::proto::rpc::BlockSyncRequest {
-                    block_id: tip.as_bytes().to_vec(),
-                    epoch: epoch.as_u64(),
-                })
-                .await?;
-            info!(target: LOG_TARGET, "🌍 Syncing blocks...");
+            let mut new_missing_blocks = Vec::new();
             let mut block_count = 0;
-            while let Some(resp) = vn_blocks_stream.next().await {
-                let msg = resp?;
-                let blokc: Block<CommsPublicKey> = msg
-                    .block
-                    .ok_or(CommitteeStateSyncError::InvalidStateSyncData(anyhow::anyhow!(
-                        "No block"
-                    )))?
-                    .try_into()
-                    .map_err(CommitteeStateSyncError::InvalidStateSyncData)?;
-                self.shard_store.with_write_tx(|tx| blokc.justify().save(tx))?;
-                self.shard_store.with_write_tx(|tx| blokc.insert(tx))?;
-                block_count += 1;
+            // We always want to sync from our tip to anything new.
+            missing_blocks.push((*tip.id(), None));
+            for (from, to) in missing_blocks {
+                let mut vn_blocks_stream = sync_vn_rpc_client
+                    .sync_blocks(tari_validator_node_rpc::proto::rpc::BlockSyncRequest {
+                        start_block_id: from.as_bytes().to_vec(),
+                        end_block_id: match to {
+                            Some(to) => to.as_bytes().to_vec(),
+                            None => vec![],
+                        },
+                        epoch: epoch.as_u64(),
+                    })
+                    .await?;
+                info!(target: LOG_TARGET, "🌍 Syncing blocks...");
+                let mut last_synced_block = to;
+                while let Some(resp) = vn_blocks_stream.next().await {
+                    let msg = resp?;
+                    let block: Block<CommsPublicKey> = msg
+                        .block
+                        .ok_or(CommitteeStateSyncError::InvalidStateSyncData(anyhow::anyhow!(
+                            "No block"
+                        )))?
+                        .try_into()
+                        .map_err(CommitteeStateSyncError::InvalidStateSyncData)?;
+                    self.shard_store.with_write_tx(|tx| block.justify().save(tx))?;
+                    self.shard_store.with_write_tx(|tx| block.insert(tx))?;
+                    last_synced_block = Some(*block.id());
+                    // TODO: When we start splitting chain this will be very diffirent.
+                    block_count += 1;
+                }
+                if let Some(last_synced_block) = last_synced_block {
+                    if self
+                        .shard_store
+                        .with_read_tx(|tx| Block::get(tx, &last_synced_block)?.get_parent(tx))
+                        .is_err()
+                    {
+                        // If we don't have the parrent, the sync didn't sync all the way to `from` block.
+                        new_missing_blocks.push((from, Some(last_synced_block)));
+                    }
+                }
             }
+            missing_blocks = new_missing_blocks;
 
             info!(
                 target: LOG_TARGET,
@@ -202,7 +236,10 @@ impl CommitteeStateSync {
 
         info!(target: LOG_TARGET, "🌍 Sync complete.");
 
-        Ok(())
+        Ok(missing_blocks
+            .into_iter()
+            .map(|(from, to)| (from, to.unwrap()))
+            .collect())
     }
 
     fn is_synced_to(&self, epoch: Epoch) -> Result<bool, CommitteeStateSyncError> {

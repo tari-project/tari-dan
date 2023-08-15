@@ -154,8 +154,9 @@ message GetVirtualSubstateResponse {
 }
 
 message BlockSyncRequest {
-    bytes block_id = 1;
-    uint64 epoch = 2;
+    bytes start_block_id = 1;
+    bytes end_block_id = 2;
+    uint64 epoch = 3;
 }
 
 message BlockSyncResponse {

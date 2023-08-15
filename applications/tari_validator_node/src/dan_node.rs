@@ -82,7 +82,7 @@ impl DanNode {
             .with_read_tx(|tx| Block::get_tip(tx, epoch))
             .unwrap_or(Block::genesis());
 
-        if let Err(e) = sync_service.sync_state(epoch, tip.id(), true).await {
+        if let Err(e) = sync_service.sync_state(epoch, true).await {
             error!(
                 target: LOG_TARGET,
                 "Failed to sync peers state for epoch {}: {}", epoch, e
@@ -147,10 +147,7 @@ impl DanNode {
                     self.services.global_db.clone(),
                     self.services.comms.node_identity().public_key().clone(),
                 );
-                sync_service
-                    .sync_state(epoch, &block_id, true)
-                    .await
-                    .map_err(|e| anyhow!(e))
+                sync_service.sync_state(epoch, true).await.map_err(|e| anyhow!(e))
             },
             HotstuffEvent::BlockCommitted { block_id } => {
                 let committed_transactions = self.services.state_store.with_read_tx(|tx| {
@@ -202,7 +199,7 @@ impl DanNode {
                     .with_read_tx(|tx| Block::get_tip(tx, epoch))
                     .unwrap_or(Block::genesis());
                 task::spawn(async move {
-                    if let Err(e) = sync_service.sync_state(epoch, tip.id(), false).await {
+                    if let Err(e) = sync_service.sync_state(epoch, false).await {
                         error!(
                             target: LOG_TARGET,
                             "Failed to sync peers state for epoch {}: {}", epoch, e
