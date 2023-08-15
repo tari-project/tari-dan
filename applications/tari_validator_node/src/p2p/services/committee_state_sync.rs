@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashSet, convert::TryInto, ops::RangeInclusive};
+use std::{convert::TryInto, ops::RangeInclusive};
 
 use futures::StreamExt;
 use log::info;
@@ -129,14 +129,16 @@ impl CommitteeStateSync {
         // Missing children is an array (from, to), where we have `from` and `to` blocks, but nothing in between. In
         // case the `to` is `None`, then we want everything up to the tip.
 
-        let mut tx = self.global_db.create_transaction()?;
-        let mut missing_blocks = match self
-            .global_db
-            .metadata(&mut tx)
-            .get_metadata::<Vec<(BlockId, BlockId)>>(MetadataKey::MissingBlocks)?
-        {
-            Some(metadata) => metadata.into_iter().map(|(from, to)| (from, Some(to))).collect(),
-            None => vec![],
+        let mut missing_blocks = {
+            let mut tx = self.global_db.create_transaction()?;
+            match self
+                .global_db
+                .metadata(&mut tx)
+                .get_metadata::<Vec<(BlockId, BlockId)>>(MetadataKey::MissingBlocks)?
+            {
+                Some(metadata) => metadata.into_iter().map(|(from, to)| (from, Some(to))).collect(),
+                None => vec![],
+            }
         };
 
         let inventory = self

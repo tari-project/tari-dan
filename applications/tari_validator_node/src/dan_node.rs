@@ -76,11 +76,6 @@ impl DanNode {
         );
 
         let epoch = self.services.epoch_manager.current_epoch().await?;
-        let tip = self
-            .services
-            .state_store
-            .with_read_tx(|tx| Block::get_tip(tx, epoch))
-            .unwrap_or(Block::genesis());
 
         if let Err(e) = sync_service.sync_state(epoch, true).await {
             error!(
@@ -139,7 +134,7 @@ impl DanNode {
 
     async fn handle_hotstuff_event(&self, event: HotstuffEvent) -> Result<(), anyhow::Error> {
         match event {
-            HotstuffEvent::BlockSyncRequest { block_id, epoch } => {
+            HotstuffEvent::BlockSyncRequest { block_id: _, epoch } => {
                 let sync_service = CommitteeStateSync::new(
                     self.services.epoch_manager.clone(),
                     self.services.validator_node_client_factory.clone(),
@@ -193,11 +188,6 @@ impl DanNode {
                 // EpochChanged should only happen once per epoch and the event is not emitted during initial sync. So
                 // spawning state sync for each event should be ok.
 
-                let tip = self
-                    .services
-                    .state_store
-                    .with_read_tx(|tx| Block::get_tip(tx, epoch))
-                    .unwrap_or(Block::genesis());
                 task::spawn(async move {
                     if let Err(e) = sync_service.sync_state(epoch, false).await {
                         error!(
