@@ -525,39 +525,29 @@ impl JsonRpcHandlers {
                 ),
             )
         })?;
-
-        let is_valid = self.epoch_manager.is_epoch_active(current_epoch).await.map_err(|err| {
-            JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InternalError,
-                    format!("Epoch is not valid:{}", err),
-                    json::Value::Null,
-                ),
-            )
-        })?;
-        let committee_shard = if is_valid {
-            self.epoch_manager
-                .get_local_committee_shard(current_epoch)
-                .await
-                .map(Some)
-                .map_err(|err| {
-                    JsonRpcResponse::error(
+        let committee_shard = self
+            .epoch_manager
+            .get_local_committee_shard(current_epoch)
+            .await
+            .map(Some)
+            .or_else(|err| {
+                if err.is_not_registered_error() {
+                    Ok(None)
+                } else {
+                    Err(JsonRpcResponse::error(
                         answer_id,
                         JsonRpcError::new(
                             JsonRpcErrorReason::InternalError,
                             format!("Could not get committee shard:{}", err),
                             json::Value::Null,
                         ),
-                    )
-                })?
-        } else {
-            None
-        };
+                    ))
+                }
+            })?;
         let response = GetEpochManagerStatsResponse {
             current_epoch,
             current_block_height,
-            is_valid,
+            is_valid: committee_shard.is_some(),
             committee_shard,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
