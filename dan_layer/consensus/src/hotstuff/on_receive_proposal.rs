@@ -753,7 +753,10 @@ where TConsensusSpec: ConsensusSpec
                         },
                         // Unlock the aborted inputs.
                         Decision::Abort => {
-                            self.unlock_inputs(tx, executed.transaction(), local_committee_shard)?;
+                            // We only locked the inputs if we originally decided to commit
+                            if tx_rec.original_decision().is_commit() {
+                                self.unlock_inputs(tx, executed.transaction(), local_committee_shard)?;
+                            }
                         },
                     }
 

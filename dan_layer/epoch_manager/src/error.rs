@@ -38,4 +38,6 @@ pub enum EpochManagerError {
     BalancedBinaryMerkleProofError(anyhow::Error),
     #[error("Integer overflow: {func}")]
     IntegerOverflow { func: &'static str },
+    #[error("Invalid epoch: {epoch}")]
+    InvalidEpoch { epoch: Epoch },
 }

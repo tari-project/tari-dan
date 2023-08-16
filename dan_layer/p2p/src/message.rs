@@ -2,7 +2,7 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use serde::Serialize;
-use tari_comms::{multiaddr::Multiaddr, peer_manager::IdentitySignature};
+use tari_comms::peer_manager::PeerIdentityClaim;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::NodeAddressable;
 use tari_transaction::Transaction;
@@ -38,6 +38,5 @@ impl<TAddr: NodeAddressable> DanMessage<TAddr> {
 #[derive(Debug, Clone, Serialize)]
 pub struct NetworkAnnounce<TAddr> {
     pub identity: TAddr,
-    pub addresses: Vec<Multiaddr>,
-    pub identity_signature: IdentitySignature,
+    pub claim: PeerIdentityClaim,
 }

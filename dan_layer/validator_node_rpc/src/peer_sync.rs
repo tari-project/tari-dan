@@ -20,10 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::convert::TryInto;
-
 use log::*;
-use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerIdentityClaim, types::CommsPublicKey, PeerConnection};
+use tari_comms::{peer_manager::PeerIdentityClaim, types::CommsPublicKey, PeerConnection};
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_p2p::{DanPeer, PeerProvider};
 use tokio_stream::StreamExt;
@@ -65,23 +63,13 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
                 continue;
             }
 
-            let addresses: Vec<Multiaddr> = resp
-                .addresses
-                .clone()
-                .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?;
-            let claims: Vec<PeerIdentityClaim> = resp
+            let claims = resp
                 .claims
-                .clone()
                 .into_iter()
-                .map(TryInto::try_into)
-                .collect::<Result<_, _>>()?;
+                .map(PeerIdentityClaim::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
 
-            let peer = DanPeer {
-                identity,
-                addresses: addresses.into_iter().zip(claims).collect(),
-            };
+            let peer = DanPeer { identity, claims };
             debug!(target: LOG_TARGET, "Received peer: {}", peer);
             if !peer.is_valid() {
                 return Err(anyhow::anyhow!(

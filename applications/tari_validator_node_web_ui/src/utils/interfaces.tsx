@@ -23,6 +23,7 @@
 interface IEpoch {
   current_epoch: number;
   is_valid: boolean;
+  committee_shard: CommitteeShard | null;
 }
 
 interface IIdentity {
@@ -30,6 +31,13 @@ interface IIdentity {
   public_address: string;
   public_key: string;
 }
+
+interface CommitteeShard {
+  bucket: number,
+  num_committees: number,
+  num_members: number,
+}
+
 
 interface IFunction {
   name: string;
@@ -59,6 +67,27 @@ interface ICommitteeChart {
   activeright: number[];
 }
 
+interface GetNetworkCommitteesResponse {
+  current_epoch: number;
+  committees: Array<CommitteeShardInfo>;
+}
+
+interface CommitteeShardInfo {
+  bucket: number;
+  shard_range: {
+    end: string;
+    start: string;
+  };
+  validators: Array<CommitteeValidatorInfo>;
+}
+
+interface CommitteeValidatorInfo {
+  address: string;
+  committee_bucket: number;
+  epoch: number;
+  shard_key: string;
+}
+
 export {
   type IEpoch,
   type IIdentity,
@@ -66,4 +95,7 @@ export {
   type ICommittees,
   type ICommitteeChart,
   type ICommitteeMap,
+  type GetNetworkCommitteesResponse,
+  type CommitteeShardInfo,
+  type CommitteeValidatorInfo,
 };

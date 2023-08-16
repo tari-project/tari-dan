@@ -38,6 +38,7 @@ use tari_template_lib::{
     prelude::{NonFungibleId, ResourceAddress},
 };
 use tari_template_test_tooling::{SubstateType, TemplateTest};
+use tari_transaction::Transaction;
 use tari_transaction_manifest::ManifestValue;
 use tari_utilities::hex::to_hex;
 
@@ -170,6 +171,38 @@ fn test_private_function() {
     template_test.call_method::<()>(component, "increase", args![], vec![]);
     let value: u32 = template_test.call_method(component, "get", args![], vec![]);
     assert_eq!(value, 1);
+}
+
+#[test]
+fn test_engine_errors() {
+    // instantiate the counter
+    let mut test = TemplateTest::new(vec!["tests/templates/errors"]);
+
+    // check that public methods can still internally call private ones
+    let result = test
+        .try_execute(
+            Transaction::builder()
+                .call_function(test.get_template_address("Errors"), "invalid_engine_call", args![])
+                .sign(&Default::default())
+                .build(),
+            vec![],
+        )
+        .unwrap();
+
+    let RejectReason::ExecutionFailure(reason) = result.transaction_failure.as_ref().unwrap() else {
+        panic!(
+            "Unexpected transaction reject reason: {}",
+            result.transaction_failure.unwrap()
+        );
+    };
+
+    // Check that the engine error is captured in the execution result rather than the WASM panic message (Panic! Engine
+    // call returned null for op VaultInvoke)
+    assert_eq!(
+        reason,
+        "Runtime error: Resource not found with address \
+         resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+    );
 }
 
 #[test]

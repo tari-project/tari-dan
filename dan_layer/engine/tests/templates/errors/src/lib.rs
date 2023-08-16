@@ -35,5 +35,11 @@ mod template {
         pub fn please_pass_invalid_args(amount: Amount) {
             panic!("You didn't pass an invalid arg! {}", amount);
         }
+
+        pub fn invalid_engine_call() {
+            let resource_addr = ResourceAddress::new([123u8; 32].into());
+            // Cannot create a vault for a resource that doesnt exist
+            let vault = Vault::new_empty(resource_addr);
+        }
     }
 }

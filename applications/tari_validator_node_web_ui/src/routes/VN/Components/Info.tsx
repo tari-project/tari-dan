@@ -20,17 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import { IEpoch, IIdentity } from '../../../utils/interfaces';
-import { registerValidatorNode } from '../../../utils/json_rpc';
-import './Info.css';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableRow from '@mui/material/TableRow';
-import Button from '@mui/material/Button';
-import { DataTableCell } from '../../../Components/StyledComponents';
+import { useState } from "react";
+import { IEpoch, IIdentity } from "../../../utils/interfaces";
+import { registerValidatorNode } from "../../../utils/json_rpc";
+import "./Info.css";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableRow from "@mui/material/TableRow";
+import Button from "@mui/material/Button";
+import { DataTableCell } from "../../../Components/StyledComponents";
 
 function Info({
   epoch,
@@ -42,7 +42,7 @@ function Info({
   shardKey: string | null;
 }) {
   const [registering, setRegistering] = useState(false);
-  const [registerMessage, setRegisterMessage] = useState('');
+  const [registerMessage, setRegisterMessage] = useState("");
   const register = () => {
     setRegistering(true);
     registerValidatorNode().then((response) => {
@@ -51,7 +51,7 @@ function Info({
         setRegisterMessage(response.message);
       } else {
         setRegisterMessage(
-          `Registration successful, the TxId ${response.transaction_id}`
+          `Registration successful, the TxId ${response.transaction_id}`,
         );
       }
     });
@@ -77,14 +77,14 @@ function Info({
             <TableCell>Shard key</TableCell>
             <DataTableCell>
               <Button
-                disabled={registering ? true : false}
+                disabled={registering}
                 variant="contained"
                 onClick={registering ? () => {} : register}
               >
                 Register
               </Button>
               {registerMessage ? (
-                <span style={{ marginLeft: '20px' }}>{registerMessage}</span>
+                <span style={{ marginLeft: "20px" }}>{registerMessage}</span>
               ) : null}
             </DataTableCell>
           </TableRow>
@@ -105,7 +105,7 @@ function Info({
             <TableRow>
               <TableCell>Epoch</TableCell>
               <DataTableCell>
-                {epoch.current_epoch} ({epoch.is_valid ? 'Valid' : 'Not valid'})
+                {epoch.current_epoch} ({epoch.is_valid ? "Valid" : "Not valid"})
               </DataTableCell>
             </TableRow>
             <TableRow>
@@ -119,6 +119,22 @@ function Info({
             <TableRow>
               <TableCell>Public key</TableCell>
               <DataTableCell>{identity.public_key}</DataTableCell>
+            </TableRow>
+            <TableRow>
+              <TableCell>Committee info</TableCell>
+              <DataTableCell>
+                {epoch.committee_shard ? (
+                  <>
+                    Bucket: {epoch.committee_shard.bucket}
+                    <br />
+                    Num committees: {epoch.committee_shard.num_committees}
+                    <br />
+                    Num members: {epoch.committee_shard.num_members}
+                  </>
+                ) : (
+                  "Validator not registered"
+                )}
+              </DataTableCell>
             </TableRow>
             {renderShardKey()}
           </TableBody>
