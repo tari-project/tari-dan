@@ -98,12 +98,6 @@ pub enum EpochManagerRequest {
         identity: PublicKey,
         reply: Reply<bool>,
     },
-    FilterToLocalShards {
-        epoch: Epoch,
-        for_addr: PublicKey,
-        available_shards: Vec<ShardId>,
-        reply: Reply<Vec<ShardId>>,
-    },
     Subscribe {
         reply: Reply<broadcast::Receiver<EpochManagerEvent>>,
     },
