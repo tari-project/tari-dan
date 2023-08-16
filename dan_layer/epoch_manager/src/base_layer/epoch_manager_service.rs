@@ -131,17 +131,6 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
                 let epoch = self.inner.current_epoch();
                 handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity));
             },
-            EpochManagerRequest::FilterToLocalShards {
-                epoch,
-                for_addr,
-                available_shards,
-                reply,
-            } => {
-                handle(
-                    reply,
-                    self.inner.filter_to_local_shards(epoch, &for_addr, available_shards),
-                );
-            },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe())),
             EpochManagerRequest::GetValidatorNodeBalancedMerkleTree { epoch, reply } => {
                 handle(reply, self.inner.get_validator_node_balanced_merkle_tree(epoch))
