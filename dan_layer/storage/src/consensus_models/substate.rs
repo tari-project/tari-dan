@@ -230,10 +230,13 @@ pub enum SubstateLockFlag {
 }
 
 pub enum SubstateLockState {
-    /// Some substates are locked for write
-    SomeAlreadyWriteLocked,
     /// The lock was successfully acquired
     LockAcquired,
+    /// Some substates are locked for write
+    SomeAlreadyWriteLocked,
+    /// Some outputs substates exist. This indicates that that we attempted to lock an output but the output is already
+    /// a substate (Up or DOWN)
+    SomeOutputSubstatesExist,
 }
 
 impl SubstateLockState {

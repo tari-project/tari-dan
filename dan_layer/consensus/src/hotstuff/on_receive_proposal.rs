@@ -412,7 +412,7 @@ where TConsensusSpec: ConsensusSpec
                                 tx_rec.set_pending_decision(tx, Decision::Abort)?;
                                 return Ok(None);
                             }
-                            if !self.lock_outputs(tx, block.id(), &transaction, local_committee_shard)? {
+                            if !self.lock_outputs(tx, block.id(), &transaction)? {
                                 // Unable to lock all outputs - do not vote
                                 warn!(
                                     target: LOG_TARGET,
@@ -630,14 +630,8 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block_id: &BlockId,
         transaction: &ExecutedTransaction,
-        local_committee_shard: &CommitteeShard,
     ) -> Result<bool, HotStuffError> {
-        let state = LockedOutput::try_acquire_all(
-            tx,
-            block_id,
-            transaction.id(),
-            local_committee_shard.filter(transaction.resulting_outputs()),
-        )?;
+        let state = LockedOutput::try_acquire_all(tx, block_id, transaction.id(), transaction.resulting_outputs())?;
 
         if !state.is_acquired() {
             return Ok(false);

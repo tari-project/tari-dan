@@ -142,10 +142,11 @@ pub trait StateStoreReadTransaction {
     //---------------------------------- Substates --------------------------------------------//
     fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError>;
     fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError>;
-    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
-        &mut self,
-        substates: I,
-    ) -> Result<bool, StorageError>;
+    fn substates_any_exist<I, S>(&mut self, substates: I) -> Result<bool, StorageError>
+    where
+        I: IntoIterator<Item = S>,
+        S: Borrow<ShardId>;
+
     fn substates_get_many_within_range(
         &mut self,
         start: &ShardId,
