@@ -20,9 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useContext, useEffect, useState } from 'react';
-import { getFees } from '../../../utils/json_rpc';
-import { VNContext } from '../../../App';
+import { useContext, useEffect, useState } from "react";
+import { getFees } from "../../../utils/json_rpc";
+import { VNContext } from "../../../App";
 import EChartsReact from "echarts-for-react";
 
 function Fees() {
@@ -36,15 +36,14 @@ function Fees() {
   useEffect(() => {
     if (epoch !== undefined && identity !== undefined) {
       // console.log(identity)
-      getFees(0,epoch.current_epoch, identity.public_key).then(resp => {
+      getFees(0, epoch.current_epoch, identity.public_key).then((resp) => {
         let min_epoch = epoch.current_epoch;
         let max_epoch = 0;
-        let total_fees : {[epoch:number]: number} = {};
-        let fees_due : {[epoch:number]: number}= {};
+        let total_fees: { [epoch: number]: number } = {};
+        let fees_due: { [epoch: number]: number } = {};
         for (let fees of resp.fees) {
-          console.log(fees)
-          min_epoch = Math.min(min_epoch,fees.epoch);
-          max_epoch = Math.max(max_epoch,fees.epoch);
+          min_epoch = Math.min(min_epoch, fees.epoch);
+          max_epoch = Math.max(max_epoch, fees.epoch);
           if (!(fees.epoch in total_fees)) {
             total_fees[fees.epoch] = fees.total_transaction_fee;
             fees_due[fees.epoch] = fees.total_fee_due;
@@ -53,115 +52,62 @@ function Fees() {
             fees_due[fees.epoch] += fees.total_fee_due;
           }
         }
-        min_epoch -= 2;
-        total_fees[min_epoch] = 1000;
-        fees_due[min_epoch] = 500;
-        console.log(total_fees);
         setMinEpoch(min_epoch);
         setMaxEpoch(max_epoch);
-        setTotalFeesPerEpoch(Array.from({length:max_epoch-min_epoch+1 }, (_,i) => total_fees[i+min_epoch] || 0));
-        setDueFeesPerEpoch(Array.from({length:max_epoch-min_epoch+1 }, (_,i) => fees_due[i+min_epoch] || 0));
-      })
+        setTotalFeesPerEpoch(
+          Array.from({ length: max_epoch - min_epoch + 1 }, (_, i) => total_fees[i + min_epoch] || 0)
+        );
+        setDueFeesPerEpoch(Array.from({ length: max_epoch - min_epoch + 1 }, (_, i) => fees_due[i + min_epoch] || 0));
+      });
     }
-  },[identity, epoch])
+  }, [identity, epoch]);
 
   if (epoch === undefined || identity === undefined) return <div>Loading</div>;
-  console.log(totalFeesPerEpoch);
 
   const options = {
     title: {
-      text: 'Fees per epoch',
+      text: "Fees per epoch",
     },
     legend: {
-      data: ['Total fees', "Due fees"]
+      data: ["Total fees", "Due fees"],
     },
     xAxis: {
-      type: 'category',
+      type: "category",
       boundaryGap: false,
-      data: Array.from({length:maxEpoch-minEpoch+1}, (_,i) => (i+minEpoch)),
+      data: Array.from({ length: maxEpoch - minEpoch + 1 }, (_, i) => i + minEpoch),
     },
     yAxis: {
-      type: 'value',
+      type: "value",
     },
     series: [
       {
-        name: 'Total fees',
-        type: 'line',
+        name: "Total fees",
+        type: "line",
         data: totalFeesPerEpoch,
         areaStyle: {},
         label: {
-          show:true,
-          position:'top'
-        }
+          show: true,
+          position: "top",
+        },
       },
       {
-        name: 'Due fees',
-        type: 'line',
+        name: "Due fees",
+        type: "line",
         data: dueFeesPerEpoch,
         areaStyle: {},
         label: {
-          show:true,
-          position:'top'
-        }
-      }
+          show: true,
+          position: "top",
+        },
+      },
     ],
   };
 
-  return (<>
-  <EChartsReact option={options} style={{ height: "600px" }}/>
-  </>);
-
-  // return (
-  //   <>
-  //     <Form onSubmit={getVNFees} className="flex-container">
-  //       <TextField
-  //         name="epoch"
-  //         label="Epoch"
-  //         value={formState.epoch}
-  //         onChange={onChange}
-  //         style={{ flexGrow: 1 }}
-  //       />
-  //       <TextField
-  //         name="publicKey"
-  //         label="VN Public Key"
-  //         value={formState.publicKey}
-  //         onChange={onChange}
-  //         style={{ flexGrow: 10 }}
-  //       />
-  //       <>
-  //         <Button variant="contained" type="submit">
-  //           Calculate Fees
-  //         </Button>
-  //         <Button variant="outlined" onClick={onCancel}>
-  //           Clear
-  //         </Button>
-  //       </>
-  //     </Form>
-  //     {showFees && (
-  //       <Fade in={showFees}>
-  //         <div>
-  //           <Divider style={{ marginBottom: '10px', marginTop: '20px' }} />
-  //           <TableContainer>
-  //             <Table>
-  //               <TableRow>
-  //                 <TableCell width={200}>Epoch</TableCell>
-  //                 <DataTableCell>{fees.epoch}</DataTableCell>
-  //               </TableRow>
-  //               <TableRow>
-  //                 <TableCell>Public Key</TableCell>
-  //                 <DataTableCell>{fees.claimablePublicKey}</DataTableCell>
-  //               </TableRow>
-  //               <TableRow>
-  //                 <TableCell>Fees</TableCell>
-  //                 <DataTableCell>{fees.totalAccruedFee} Tari</DataTableCell>
-  //               </TableRow>
-  //             </Table>
-  //           </TableContainer>
-  //         </div>
-  //       </Fade>
-  //     )}
-  //   </>
-  // );
+  return (
+    <>
+      <EChartsReact option={options} style={{ height: "600px" }} />
+    </>
+  );
 }
 
 export default Fees;
