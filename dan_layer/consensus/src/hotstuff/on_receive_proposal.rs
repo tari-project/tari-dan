@@ -668,9 +668,11 @@ where TConsensusSpec: ConsensusSpec
                 prepare_node,
             );
 
+            // Commit prepare_node (b)
+            let prepare_node = Block::get(tx.deref_mut(), prepare_node)?;
             let last_executed = LastExecuted::get(tx.deref_mut())?;
-            self.on_commit(tx, &last_executed, block, local_committee_shard)?;
-            block.as_last_executed().set(tx)?;
+            self.on_commit(tx, &last_executed, &prepare_node, local_committee_shard)?;
+            prepare_node.as_last_executed().set(tx)?;
         } else {
             debug!(
                 target: LOG_TARGET,
