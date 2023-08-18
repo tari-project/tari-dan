@@ -18,6 +18,7 @@ diesel::table! {
         epoch -> BigInt,
         proposed_by -> Text,
         qc_id -> Text,
+        command_count -> BigInt,
         commands -> Text,
         total_leader_fee -> BigInt,
         created_at -> Timestamp,

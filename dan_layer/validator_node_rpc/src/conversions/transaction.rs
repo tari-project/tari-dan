@@ -25,7 +25,11 @@ use std::convert::{TryFrom, TryInto};
 use anyhow::anyhow;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
-use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{
+    confidential::{ConfidentialClaim, ConfidentialOutput},
+    instruction::Instruction,
+    substate::SubstateAddress,
+};
 use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
@@ -256,8 +260,9 @@ impl From<Instruction> for proto::transaction::Instruction {
             } => {
                 result.instruction_type = InstructionType::CreateFreeTestCoins as i32;
                 result.create_free_test_coins_amount = amount.value() as u64;
-                result.create_free_test_coins_output_blob =
-                    output.map(|o| tari_bor::encode(&o).unwrap()).unwrap_or_default();
+                result.create_free_test_coins_output_blob = output
+                    .map(|o| tari_bor::encode(&o).unwrap())
+                    .unwrap_or_else(|| tari_bor::encode(&None::<ConfidentialOutput>).unwrap());
             },
             Instruction::ClaimValidatorFees {
                 epoch,
