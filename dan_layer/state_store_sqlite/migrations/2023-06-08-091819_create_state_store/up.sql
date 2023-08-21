@@ -117,7 +117,7 @@ create table transactions
     input_refs        text      not NULL,
     outputs           text      not NULL,
     filled_inputs     text      not NULL,
-    filled_outputs    text      not NULL,
+    resulting_outputs text      NULL,
     result            text      NULL,
     execution_time_ms bigint    NULL,
     final_decision    text      NULL,
@@ -145,6 +145,18 @@ create table transaction_pool
 );
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
 create index transaction_pool_idx_is_ready on transaction_pool (is_ready);
+
+create table locked_outputs
+(
+    id             integer   not null primary key AUTOINCREMENT,
+    block_id       text      not null,
+    transaction_id text      not null,
+    shard_id       text      not null,
+    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id),
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+);
+create unique index locked_outputs_uniq_idx_shard_id on locked_outputs (shard_id);
 
 create table votes
 (

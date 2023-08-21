@@ -80,6 +80,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    locked_outputs (id) {
+        id -> Integer,
+        block_id -> Text,
+        transaction_id -> Text,
+        shard_id -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     missing_tx (id) {
         id -> Integer,
         transaction_id -> Text,
@@ -150,7 +160,7 @@ diesel::table! {
         input_refs -> Text,
         outputs -> Text,
         filled_inputs -> Text,
-        filled_outputs -> Text,
+        resulting_outputs -> Nullable<Text>,
         result -> Nullable<Text>,
         execution_time_ms -> Nullable<BigInt>,
         final_decision -> Nullable<Text>,
@@ -182,6 +192,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     last_voted,
     leaf_blocks,
     locked_block,
+    locked_outputs,
     missing_tx,
     quorum_certificates,
     substates,

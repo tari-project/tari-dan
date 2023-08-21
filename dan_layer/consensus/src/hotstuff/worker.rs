@@ -44,6 +44,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
 
     rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
     rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+    tx_events: broadcast::Sender<HotstuffEvent>,
 
     // on_leader_timeout: OnLeaderTimeout,
     on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
@@ -98,6 +99,7 @@ where
             validator_addr: validator_addr.clone(),
             rx_new_transactions,
             rx_hs_message,
+            tx_events: tx_events.clone(),
             on_next_sync_view: OnNextSyncViewHandler::new(
                 state_store.clone(),
                 tx_leader.clone(),
@@ -178,7 +180,7 @@ where
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg.clone()).await {
-                        // self.publish_event(HotStuffEvent::Failed(e.to_string()));
+                        self.publish_event(HotstuffEvent::Failure{message: e.to_string()});
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {} {:?}", e, msg);
                     }
                 },
@@ -232,13 +234,13 @@ where
         info!(
             target: LOG_TARGET,
             "🚀 Consensus READY for new transaction with id: {}",
-            executed.transaction().id()
+            executed.id()
         );
         self.state_store.with_write_tx(|tx| {
             executed.upsert(tx)?;
 
             self.transaction_pool.insert(tx, TransactionAtom {
-                id: *executed.transaction().id(),
+                id: *executed.id(),
                 decision: executed.as_decision(),
                 evidence: executed.to_initial_evidence(),
                 transaction_fee: executed
@@ -403,5 +405,9 @@ where
         self.latest_epoch = Some(epoch);
 
         Ok(())
+    }
+
+    fn publish_event(&self, event: HotstuffEvent) {
+        let _ignore = self.tx_events.send(event);
     }
 }

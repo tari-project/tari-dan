@@ -3,7 +3,6 @@
 
 use async_trait::async_trait;
 use log::*;
-use tari_dan_common_types::ShardId;
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, SubstateRecord},
     StateStore,
@@ -31,16 +30,18 @@ where TStateStore: StateStore + Send + Sync
     type Error = MempoolError;
 
     async fn validate(&self, executed: &ExecutedTransaction) -> Result<(), Self::Error> {
-        let Some(diff) = executed.result().finalize.result.accept().cloned() else {
+        if executed.resulting_outputs().is_empty() {
+            info!(target: LOG_TARGET, "OutputsDontExistLocally - OK");
             return Ok(());
-        };
+        }
 
-        let shards = diff.up_iter().map(|(s, v)| ShardId::from_address(s, v.version()));
-
-        if self.store.with_read_tx(|tx| SubstateRecord::any_exist(tx, shards))? {
+        if self
+            .store
+            .with_read_tx(|tx| SubstateRecord::any_exist(tx, executed.resulting_outputs()))?
+        {
             info!(target: LOG_TARGET, "OutputsDontExistLocally - FAIL");
             return Err(MempoolError::OutputSubstateExists {
-                transaction_id: *executed.transaction().id(),
+                transaction_id: *executed.id(),
             });
         }
 

@@ -69,7 +69,6 @@ impl Transaction {
                 input_refs,
                 outputs,
                 vec![],
-                vec![],
             ),
             status: TransactionStatus::from_str(&self.status).map_err(|e| WalletStorageError::DecodingError {
                 operation: "transaction_get",

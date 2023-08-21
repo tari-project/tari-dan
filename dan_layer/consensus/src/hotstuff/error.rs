@@ -51,6 +51,8 @@ pub enum HotStuffError {
         expected_height: NodeHeight,
         received_new_height: NodeHeight,
     },
+    #[error("BUG Invariant error occurred: {0}")]
+    InvariantError(String),
 }
 
 impl From<EpochManagerError> for HotStuffError {

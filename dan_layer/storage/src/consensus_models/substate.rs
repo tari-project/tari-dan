@@ -123,7 +123,7 @@ impl SubstateRecord {
 }
 
 impl SubstateRecord {
-    pub fn try_lock_many<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn try_lock_all<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,
         inputs: I,
@@ -230,9 +230,13 @@ pub enum SubstateLockFlag {
 }
 
 pub enum SubstateLockState {
-    SomeWriteLocked,
-    SomeReadLocked,
+    /// The lock was successfully acquired
     LockAcquired,
+    /// Some substates are locked for write
+    SomeAlreadyWriteLocked,
+    /// Some outputs substates exist. This indicates that that we attempted to lock an output but the output is already
+    /// a substate (Up or DOWN)
+    SomeOutputSubstatesExist,
 }
 
 impl SubstateLockState {

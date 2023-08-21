@@ -26,9 +26,18 @@ use tokio::sync::{mpsc, oneshot};
 use crate::p2p::services::mempool::MempoolError;
 
 pub enum MempoolRequest {
-    SubmitTransaction(Box<Transaction>, oneshot::Sender<Result<(), MempoolError>>),
-    RemoveTransaction { transaction_id: TransactionId },
-    GetMempoolSize { reply: oneshot::Sender<usize> },
+    SubmitTransaction {
+        transaction: Box<Transaction>,
+        /// If true, the transaction will be propagated to peers
+        should_propagate: bool,
+        reply: oneshot::Sender<Result<(), MempoolError>>,
+    },
+    RemoveTransaction {
+        transaction_id: TransactionId,
+    },
+    GetMempoolSize {
+        reply: oneshot::Sender<usize>,
+    },
 }
 
 #[derive(Debug)]
@@ -50,9 +59,25 @@ impl MempoolHandle {
     }
 
     pub async fn submit_transaction(&self, transaction: Transaction) -> Result<(), MempoolError> {
-        let (tx, rx) = oneshot::channel();
+        let (reply, rx) = oneshot::channel();
         self.tx_mempool_request
-            .send(MempoolRequest::SubmitTransaction(Box::new(transaction), tx))
+            .send(MempoolRequest::SubmitTransaction {
+                transaction: Box::new(transaction),
+                should_propagate: true,
+                reply,
+            })
+            .await?;
+        rx.await?
+    }
+
+    pub async fn submit_transaction_without_propagating(&self, transaction: Transaction) -> Result<(), MempoolError> {
+        let (reply, rx) = oneshot::channel();
+        self.tx_mempool_request
+            .send(MempoolRequest::SubmitTransaction {
+                transaction: Box::new(transaction),
+                should_propagate: false,
+                reply,
+            })
             .await?;
         rx.await?
     }

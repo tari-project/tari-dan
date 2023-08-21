@@ -5,7 +5,7 @@ use std::{sync::Arc, time::Instant};
 
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::services::template_provider::TemplateProvider;
+use tari_dan_common_types::{services::template_provider::TemplateProvider, ShardId};
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
     packager::LoadedTemplate,
@@ -83,7 +83,18 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             },
         };
 
-        Ok(ExecutedTransaction::new(transaction, result, timer.elapsed()))
+        let outputs = result
+            .finalize
+            .result
+            .accept()
+            .map(|diff| {
+                diff.up_iter()
+                    .map(|(addr, substate)| ShardId::from_address(addr, substate.version()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(ExecutedTransaction::new(transaction, result, outputs, timer.elapsed()))
     }
 }
 
