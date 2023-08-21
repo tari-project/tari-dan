@@ -211,6 +211,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
 
         let insert = (
             quorum_certificates::qc_id.eq(serialize_hex(qc.id())),
+            quorum_certificates::block_id.eq(serialize_hex(qc.block_id())),
             quorum_certificates::json.eq(serialize_json(qc)?),
         );
 
@@ -450,7 +451,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
         stage: Option<TransactionPoolStage>,
-        pending_decision: Option<Decision>,
+        local_decision: Option<Decision>,
+        remote_decision: Option<Decision>,
         is_ready: Option<bool>,
     ) -> Result<(), StorageError> {
         use crate::schema::transaction_pool;
@@ -460,7 +462,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         struct Changes {
             evidence: Option<String>,
             stage: Option<String>,
-            pending_decision: Option<String>,
+            local_decision: Option<String>,
+            remote_decision: Option<String>,
             is_ready: Option<bool>,
             updated_at: PrimitiveDateTime,
         }
@@ -470,7 +473,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         let change_set = Changes {
             evidence: evidence.map(serialize_json).transpose()?,
             stage: stage.map(|s| s.to_string()),
-            pending_decision: pending_decision.map(|d| d.to_string()),
+            local_decision: local_decision.map(|d| d.to_string()),
+            remote_decision: remote_decision.map(|d| d.to_string()),
             is_ready,
             updated_at: PrimitiveDateTime::new(now.date(), now.time()),
         };
@@ -536,28 +540,33 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         // Lock unique shards
         let objects: HashSet<String> = objects.into_iter().map(serialize_hex).collect();
 
-        let locked_w = substates::table
-            .select(substates::is_locked_w)
+        let locked_details = substates::table
+            .select((substates::is_locked_w, substates::destroyed_by_transaction))
             .filter(substates::shard_id.eq_any(&objects))
-            .get_results::<bool>(self.connection())
+            .get_results::<(bool, Option<String>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transactions_try_lock_many",
                 source: e,
             })?;
-        if locked_w.len() < objects.len() {
+        if locked_details.len() < objects.len() {
             return Err(SqliteStorageError::NotAllSubstatesFound {
                 operation: "substates_try_lock_all",
                 details: format!(
                     "{:?}: Found {} substates, but {} were requested",
                     lock_flag,
-                    locked_w.len(),
+                    locked_details.len(),
                     objects.len()
                 ),
             }
             .into());
         }
-        if locked_w.iter().any(|w| *w) {
+
+        if locked_details.iter().any(|(w, _)| *w) {
             return Ok(SubstateLockState::SomeAlreadyWriteLocked);
+        }
+
+        if locked_details.iter().any(|(_, downed)| downed.is_some()) {
+            return Ok(SubstateLockState::SomeDestroyed);
         }
 
         match lock_flag {

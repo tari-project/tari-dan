@@ -102,6 +102,7 @@ diesel::table! {
     quorum_certificates (id) {
         id -> Integer,
         qc_id -> Text,
+        block_id -> Text,
         json -> Text,
         created_at -> Timestamp,
     }
@@ -138,7 +139,8 @@ diesel::table! {
         transaction_id -> Text,
         involved_shards -> Text,
         original_decision -> Text,
-        pending_decision -> Nullable<Text>,
+        local_decision -> Nullable<Text>,
+        remote_decision -> Nullable<Text>,
         evidence -> Text,
         transaction_fee -> BigInt,
         leader_fee -> BigInt,

@@ -58,16 +58,6 @@ impl Evidence {
     }
 }
 
-// impl Evidence {
-//     pub fn get_all_qcs<TTx: StateStoreReadTransaction>(
-//         &self,
-//         tx: &mut TTx,
-//     ) -> Result<Vec<QuorumCertificate>, StorageError> { let mut qcs = Vec::with_capacity(self.evidence.len()); //
-//       TODO(perf): O(n*m) queries for qc_ids in self.evidence.values() { for qc_id in qc_ids { let qc =
-//       QuorumCertificate::get(tx, qc_id)?; qcs.push(qc); } } Ok(qcs)
-//     }
-// }
-
 impl FromIterator<(ShardId, Vec<QcId>)> for Evidence {
     fn from_iter<T: IntoIterator<Item = (ShardId, Vec<QcId>)>>(iter: T) -> Self {
         Evidence {
@@ -116,6 +106,13 @@ impl Command {
             Command::Prepare(tx) => tx.decision,
             Command::LocalPrepared(tx) => tx.decision,
             Command::Accept(tx) => tx.decision,
+        }
+    }
+
+    pub fn prepare(&self) -> Option<&TransactionAtom> {
+        match self {
+            Command::Prepare(tx) => Some(tx),
+            _ => None,
         }
     }
 

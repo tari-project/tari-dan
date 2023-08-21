@@ -80,7 +80,7 @@ where TConsensusSpec: ConsensusSpec
         if last_proposed_height >= leaf_block.height + NodeHeight(1) {
             info!(
                 target: LOG_TARGET,
-                "Skipping on_propose for next block because we have already proposed a block at height {}",
+                "⤵️ Skipping on_propose for next block because we have already proposed a block at height {}",
                 last_proposed_height
             );
             return Ok(());
@@ -109,7 +109,8 @@ where TConsensusSpec: ConsensusSpec
                 validator.address,
                 &local_committee_shard,
             )?;
-            next_block.insert(&mut tx)?;
+            // Save the block - if it already exists we'll rebroadcast it
+            next_block.save(&mut tx)?;
             next_block.as_last_proposed().set(&mut tx)?;
 
             // Get involved shards for all LocalPrepared commands in the block.
@@ -120,10 +121,10 @@ where TConsensusSpec: ConsensusSpec
                 .iter()
                 .filter_map(|cmd| cmd.local_prepared())
                 .map(|t| &t.id);
-            let prepared_txs = ExecutedTransaction::get_any(tx.deref_mut(), prepared_iter)?;
+            let prepared_txs = ExecutedTransaction::get_involved_shards(tx.deref_mut(), prepared_iter)?;
             non_local_buckets = prepared_txs
-                .iter()
-                .flat_map(|tx| tx.involved_shards_iter().copied())
+                .into_iter()
+                .flat_map(|(_, shards)| shards)
                 .map(|shard| shard.to_committee_bucket(num_committees))
                 .filter(|bucket| *bucket != local_bucket)
                 .collect::<HashSet<_>>();
@@ -213,10 +214,10 @@ where TConsensusSpec: ConsensusSpec
             .into_iter()
             .map(|t| match t.stage {
                 // If the transaction is New, propose to Prepare it
-                TransactionPoolStage::New => Ok(Command::Prepare(t.transaction)),
+                TransactionPoolStage::New => Ok(Command::Prepare(t.get_local_transaction_atom())),
                 // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
                 // accepted Prepared so we propose LocalPrepared
-                TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.transaction)),
+                TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.get_local_transaction_atom())),
                 // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
                 // prepared. We can now propose to Accept it. We also propose the decision change which everyone should
                 // agree with if they received the same foreign LocalPrepare.

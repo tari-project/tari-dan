@@ -2,12 +2,15 @@ create table quorum_certificates
 (
     id         integer   not null primary key AUTOINCREMENT,
     qc_id      text      not NULL,
+    block_id   text      not NULL,
     json       text      not NULL,
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- fetching by qc_id will be a very common operation
 create unique index quorum_certificates_uniq_idx_id on quorum_certificates (qc_id);
+-- only one QC permitted for a block
+create unique index quorum_certificates_uniq_block_id on quorum_certificates (block_id);
 
 create table blocks
 (
@@ -133,7 +136,8 @@ create table transaction_pool
     transaction_id    text      not null,
     involved_shards   text      not null,
     original_decision text      not null,
-    pending_decision  text      null,
+    local_decision    text      null,
+    remote_decision   text      null,
     evidence          text      not null,
     transaction_fee   bigint    not null,
     leader_fee        bigint    not null,

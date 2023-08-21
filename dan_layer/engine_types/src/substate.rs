@@ -89,7 +89,7 @@ impl Substate {
 }
 
 /// Base object address, version tuples
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SubstateAddress {
     Component(#[serde(with = "serde_with::string")] ComponentAddress),
     Resource(#[serde(with = "serde_with::string")] ResourceAddress),
@@ -198,6 +198,10 @@ impl SubstateAddress {
 
     pub fn is_layer1_commitment(&self) -> bool {
         matches!(self, Self::UnclaimedConfidentialOutput(_))
+    }
+
+    pub fn is_transaction_receipt(&self) -> bool {
+        matches!(self, Self::TransactionReceipt(_))
     }
 }
 

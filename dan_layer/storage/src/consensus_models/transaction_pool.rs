@@ -123,7 +123,10 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx: &mut TStateStore::ReadTransaction<'_>,
         max: usize,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
-        let recs = tx.transaction_pool_get_many_ready(max)?;
+        let mut recs = tx.transaction_pool_get_many_ready(max)?;
+        // We require the records to be canonically sorted by transaction ID
+        // TODO(perf): might be able to delegate this to the storage layer
+        recs.sort_by(|a, b| a.transaction.id.cmp(&b.transaction.id));
         Ok(recs)
     }
 
@@ -156,21 +159,32 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
 pub struct TransactionPoolRecord {
     pub transaction: TransactionAtom,
     pub stage: TransactionPoolStage,
-    pub pending_decision: Option<Decision>,
+    pub local_decision: Option<Decision>,
+    pub remote_decision: Option<Decision>,
     pub is_ready: bool,
 }
 
 impl TransactionPoolRecord {
-    pub fn final_decision(&self) -> Decision {
-        self.pending_decision().unwrap_or(self.original_decision())
+    pub fn current_decision(&self) -> Decision {
+        self.local_decision()
+            .or_else(|| self.remote_decision())
+            .unwrap_or(self.original_decision())
+    }
+
+    pub fn current_local_decision(&self) -> Decision {
+        self.local_decision().unwrap_or(self.original_decision())
     }
 
     pub fn original_decision(&self) -> Decision {
         self.transaction.decision
     }
 
-    pub fn pending_decision(&self) -> Option<Decision> {
-        self.pending_decision
+    pub fn local_decision(&self) -> Option<Decision> {
+        self.local_decision
+    }
+
+    pub fn remote_decision(&self) -> Option<Decision> {
+        self.remote_decision
     }
 
     pub fn transaction_id(&self) -> &TransactionId {
@@ -183,8 +197,15 @@ impl TransactionPoolRecord {
 
     pub fn get_final_transaction_atom(&self, leader_fee: u64) -> TransactionAtom {
         TransactionAtom {
-            decision: self.final_decision(),
+            decision: self.current_decision(),
             leader_fee,
+            ..self.transaction.clone()
+        }
+    }
+
+    pub fn get_local_transaction_atom(&self) -> TransactionAtom {
+        TransactionAtom {
+            decision: self.current_local_decision(),
             ..self.transaction.clone()
         }
     }
@@ -210,6 +231,16 @@ impl TransactionPoolRecord {
         let adjusted_burn = target_exhaust_burn.saturating_sub(due_rem);
 
         due_fee - adjusted_burn
+    }
+
+    pub fn set_remote_decision(&mut self, decision: Decision) -> &mut Self {
+        self.remote_decision = Some(decision);
+        self
+    }
+
+    pub fn set_local_decision(&mut self, decision: Decision) -> &mut Self {
+        self.local_decision = Some(decision);
+        self
     }
 }
 
@@ -237,23 +268,29 @@ impl TransactionPoolRecord {
             },
         }
 
-        tx.transaction_pool_update(&self.transaction.id, None, Some(next_stage), None, Some(is_ready))?;
+        tx.transaction_pool_update(&self.transaction.id, None, Some(next_stage), None, None, Some(is_ready))?;
         self.stage = next_stage;
 
         Ok(())
     }
 
-    pub fn set_pending_decision<TTx: StateStoreWriteTransaction>(
+    pub fn update_remote_decision<TTx: StateStoreWriteTransaction>(
         &mut self,
         tx: &mut TTx,
         decision: Decision,
     ) -> Result<(), TransactionPoolError> {
-        if self.original_decision() == decision {
-            return Ok(());
-        }
+        self.set_remote_decision(decision);
+        tx.transaction_pool_update(&self.transaction.id, None, None, None, Some(decision), None)?;
+        Ok(())
+    }
 
-        self.pending_decision = Some(decision);
-        tx.transaction_pool_update(&self.transaction.id, None, None, Some(decision), None)?;
+    pub fn update_local_decision<TTx: StateStoreWriteTransaction>(
+        &mut self,
+        tx: &mut TTx,
+        decision: Decision,
+    ) -> Result<(), TransactionPoolError> {
+        self.set_local_decision(decision);
+        tx.transaction_pool_update(&self.transaction.id, None, None, Some(decision), None, None)?;
         Ok(())
     }
 
@@ -269,7 +306,7 @@ impl TransactionPoolRecord {
                 qcs_mut.push(qc_id);
             }
         }
-        tx.transaction_pool_update(&self.transaction.id, Some(evidence), None, None, None)?;
+        tx.transaction_pool_update(&self.transaction.id, Some(evidence), None, None, None, None)?;
 
         Ok(())
     }
@@ -318,7 +355,8 @@ mod tests {
                     leader_fee: 0,
                 },
                 stage: TransactionPoolStage::New,
-                pending_decision: None,
+                local_decision: None,
+                remote_decision: None,
                 is_ready: false,
             }
         }

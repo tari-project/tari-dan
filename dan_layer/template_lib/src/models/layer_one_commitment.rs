@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{hash::HashParseError, Hash};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct UnclaimedConfidentialOutputAddress(Hash);
 

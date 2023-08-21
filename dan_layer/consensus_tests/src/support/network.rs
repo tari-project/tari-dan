@@ -198,9 +198,11 @@ impl TestNetworkWorker {
                 .collect::<FuturesUnordered<_>>();
 
             tokio::select! {
-                Some((from, Some((to, msg)))) = rx_broadcast.next() => self.handle_broadcast(from, to, msg).await,
-                Some((from, Some((to, msg)))) = rx_leader.next() => self.handle_leader(from, to, msg).await,
-                Some((from, Some(msg))) = rx_mempool.next() => self.handle_mempool(from, msg).await,
+                biased;
+
+                  _ = self.shutdown_signal.wait() => {
+                    break;
+                }
 
                 Ok(_) = self.network_status.changed() => {
                     if let NetworkStatus::Started = *self.network_status.borrow() {
@@ -213,9 +215,10 @@ impl TestNetworkWorker {
                         }
                     }
                 }
-                _ = self.shutdown_signal.wait() => {
-                    break;
-                }
+
+                Some((from, Some((to, msg)))) = rx_broadcast.next() => self.handle_broadcast(from, to, msg).await,
+                Some((from, Some((to, msg)))) = rx_leader.next() => self.handle_leader(from, to, msg).await,
+                Some((from, Some(msg))) = rx_mempool.next() => self.handle_mempool(from, msg).await,
             }
         }
     }

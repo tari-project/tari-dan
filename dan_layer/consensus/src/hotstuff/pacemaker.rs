@@ -1,6 +1,9 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
-use std::time::{Duration, Instant};
+use std::{
+    cmp,
+    time::{Duration, Instant},
+};
 
 use log::*;
 use tari_dan_common_types::NodeHeight;
@@ -11,7 +14,7 @@ use crate::hotstuff::{
     on_beat::OnBeat,
     on_force_beat::OnForceBeat,
     on_leader_timeout::OnLeaderTimeout,
-    pacemaker_handle::{PaceMakerHandle, PacemakerEvent},
+    pacemaker_handle::{PaceMakerHandle, PacemakerRequest},
     HotStuffError,
 };
 
@@ -21,7 +24,7 @@ const MIN_DELTA: Duration = Duration::from_millis(1000);
 
 pub struct PaceMaker {
     pace_maker_handle: PaceMakerHandle,
-    handle_receiver: mpsc::Receiver<PacemakerEvent>,
+    handle_receiver: mpsc::Receiver<PacemakerRequest>,
     shutdown: ShutdownSignal,
     current_delta: Duration,
     current_height: NodeHeight,
@@ -67,35 +70,45 @@ impl PaceMaker {
         on_leader_timeout: OnLeaderTimeout,
     ) -> Result<(), HotStuffError> {
         // Don't start the timer until we receive a reset event
-        let sleep = tokio::time::sleep(Duration::from_secs(31_000_000));
-        let empty_block_deadline = tokio::time::sleep(Duration::from_secs(31_000_000));
+        let sleep = tokio::time::sleep(Duration::MAX);
+        let empty_block_deadline = tokio::time::sleep(Duration::MAX);
         tokio::pin!(sleep);
         tokio::pin!(empty_block_deadline);
+        let mut timer_started = false;
         let mut last_reset = Instant::now();
         loop {
             tokio::select! {
                 // biased;
                 Some(event) = self.handle_receiver.recv() => {
                     match event {
-                       PacemakerEvent::ResetLeaderTimeout { last_seen_height } => {
+                       PacemakerRequest::ResetLeaderTimeout { last_seen_height } => {
                             self.current_height = last_seen_height + NodeHeight(1);
 
 
                             // if the last time we reset was less than half delta, then we reduce delta
                             if last_reset.elapsed() < self.current_delta / 2 {
-                                self.current_delta = self.current_delta * 9 / 10;
-                                if self.current_delta < MIN_DELTA {
-                                    self.current_delta = MIN_DELTA;
-                                }
+                                self.current_delta = cmp::max(self.current_delta * 9 / 10, MIN_DELTA);
                             }
                             sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
                             // set a timer for when we must send an empty block...
                             empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
 
+                            timer_started = true;
                             last_reset = Instant::now();
                        },
-                        PacemakerEvent::Beat => {
+                        PacemakerRequest::TriggerBeat => {
                            on_beat.beat();
+                        }
+                        PacemakerRequest::StartTimer => {
+                            if !timer_started {
+                                if last_reset.elapsed() < self.current_delta / 2 {
+                                    self.current_delta = cmp::max(self.current_delta * 9 / 10, MIN_DELTA);
+                                }
+                                sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
+                                empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
+                                last_reset = Instant::now();
+                                timer_started = true;
+                            }
                         }
                     }
                     // if let Err(e) = self.on_beat().await {
@@ -111,10 +124,7 @@ impl PaceMaker {
                     // tx_on_leader_timeout.send(()).map_err(|e| HotStuffError::PacemakerChannelDropped{ details: e.to_string()})?;
                     on_leader_timeout.leader_timed_out(self.current_height);
                     self.current_height =  self.current_height + NodeHeight(1);
-                    self.current_delta *= 2;
-                    if self.current_delta > MAX_DELTA {
-                        self.current_delta = MAX_DELTA;
-                    }
+                    self.current_delta = cmp::min(self.current_delta * 2, MAX_DELTA);
                     // TODO: perhaps we should track the height
                     sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
                     empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);

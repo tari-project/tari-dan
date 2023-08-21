@@ -4,7 +4,7 @@
 use tari_consensus::{hotstuff::HotstuffEvent, messages::HotstuffMessage};
 use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, ShardId};
 use tari_dan_storage::{
-    consensus_models::{BlockId, ExecutedTransaction, LeafBlock},
+    consensus_models::{ExecutedTransaction, LeafBlock},
     StateStore,
     StateStoreReadTransaction,
 };
@@ -67,18 +67,6 @@ impl Validator {
         self.state_store
             .with_read_tx(|tx| tx.transaction_pool_count(None, None))
             .unwrap()
-    }
-
-    #[allow(dead_code)]
-    pub async fn on_block_committed(&mut self) -> BlockId {
-        loop {
-            let event = self.events.recv().await.unwrap();
-            #[allow(clippy::single_match)]
-            match event {
-                HotstuffEvent::BlockCommitted { block_id } => break block_id,
-                _ => {},
-            }
-        }
     }
 
     pub fn get_leaf_block(&self) -> LeafBlock {

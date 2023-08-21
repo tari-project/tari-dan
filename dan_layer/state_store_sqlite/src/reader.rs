@@ -15,7 +15,7 @@ use diesel::{
     RunQueryDsl,
     SqliteConnection,
 };
-use log::warn;
+use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
@@ -49,6 +49,8 @@ use crate::{
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
+
+const LOG_TARGET: &str = "tari::dan_layer::storage::state_store_sqlite::reader";
 
 pub struct SqliteStateStoreReadTransaction<'a, TAddr> {
     transaction: SqliteTransaction<'a>,
@@ -273,13 +275,12 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         block.try_convert(qc)
     }
 
-    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block<TAddr>, StorageError> {
+    fn blocks_get_tip(&mut self) -> Result<Block<TAddr>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
-            .filter(blocks::epoch.eq(epoch.as_u64() as i64))
             .order_by(blocks::height.desc())
             .first::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -361,7 +362,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             source: e,
         })?;
 
-        warn!(target: "tari::dan_layer::storage::state_store_sqlite::reader", "blocks_is_ancestor: is_ancestor: {:?}", is_ancestor.count);
+        debug!(target: LOG_TARGET, "blocks_is_ancestor: is_ancestor: {}", is_ancestor.count);
 
         Ok(is_ancestor.count > 0)
     }
@@ -450,6 +451,24 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .first::<String>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "quorum_certificates_get",
+                source: e,
+            })?;
+
+        deserialize_json(&qc_json)
+    }
+
+    fn quorum_certificates_get_by_block_id(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
+        use crate::schema::quorum_certificates;
+
+        let qc_json = quorum_certificates::table
+            .select(quorum_certificates::json)
+            .filter(quorum_certificates::block_id.eq(serialize_hex(block_id)))
+            .first::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "quorum_certificates_get_by_block_id",
                 source: e,
             })?;
 

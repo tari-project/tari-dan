@@ -99,7 +99,7 @@ pub trait StateStoreReadTransaction {
         asc_desc_created_at: Option<Ordering>,
     ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
-    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block<Self::Addr>, StorageError>;
+    fn blocks_get_tip(&mut self) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
@@ -116,6 +116,10 @@ pub trait StateStoreReadTransaction {
     ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
+    fn quorum_certificates_get_by_block_id(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
     fn transaction_pool_get(&mut self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError>;
@@ -199,7 +203,8 @@ pub trait StateStoreWriteTransaction {
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
         stage: Option<TransactionPoolStage>,
-        decision: Option<Decision>,
+        local_decision: Option<Decision>,
+        remote_decision: Option<Decision>,
         is_ready: Option<bool>,
     ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;

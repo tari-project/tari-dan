@@ -39,7 +39,6 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
 
     pub async fn handle(&mut self, epoch: Epoch, new_height: NodeHeight) -> Result<(), HotStuffError> {
         info!(target: LOG_TARGET, "🔥 Handle NEXTSYNCVIEW for epoch {} and node height {}", epoch, new_height);
-        // let leaf_block = self.store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let next_leader = self.leader_strategy.get_leader(&local_committee, new_height);
 

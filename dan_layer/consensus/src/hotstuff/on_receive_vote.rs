@@ -123,15 +123,15 @@ where TConsensusSpec: ConsensusSpec
 
         // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
         // in the QC.
+        info!(
+            target: LOG_TARGET,
+            "🔥 Received vote for block {} from {} ({} of {})",
+            message.block_id,
+            from,
+            count,
+            local_committee_shard.quorum_threshold()
+        );
         if count < local_committee_shard.quorum_threshold() as usize {
-            info!(
-                target: LOG_TARGET,
-                "🔥 Received vote for block {} from {} ({} of {})",
-                message.block_id,
-                from,
-                count,
-                local_committee_shard.quorum_threshold()
-            );
             return Ok(());
         }
         {

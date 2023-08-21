@@ -22,8 +22,8 @@ impl Validator<ExecutedTransaction> for InputRefsValidator {
 
     async fn validate(&self, executed: &ExecutedTransaction) -> Result<(), Self::Error> {
         let Some(diff) = executed.result().finalize.result.accept() else {
-                return Ok(());
-            };
+            return Ok(());
+        };
 
         let is_input_refs_downed = diff
             .down_iter()

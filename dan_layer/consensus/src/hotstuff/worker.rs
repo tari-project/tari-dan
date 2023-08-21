@@ -166,8 +166,6 @@ where
 
         loop {
             tokio::select! {
-                // biased;
-
                 Ok(event) = self.epoch_events.recv() => {
                     if let Err(e) = self.on_epoch_event(event).await {
                         error!(target: LOG_TARGET, "Error while processing epoch change (on_epoch_event): {}", e);
@@ -180,8 +178,9 @@ where
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg.clone()).await {
-                        self.publish_event(HotstuffEvent::Failure{message: e.to_string()});
-                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {} {:?}", e, msg);
+                        self.publish_event(HotstuffEvent::Failure { message: e.to_string() });
+                        debug!(target: LOG_TARGET, "on_new_hs_message error: {} {:?}", e, msg);
+                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
                     }
                 },
 
@@ -218,8 +217,6 @@ where
     async fn on_epoch_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
         match event {
             EpochManagerEvent::EpochChanged(_epoch) => {
-                // self.create_genesis_block_if_required(epoch)?;
-
                 self.is_epoch_synced = true;
                 // TODO: merge chain(s) from previous epoch?
 
@@ -287,6 +284,8 @@ where
 
         self.on_next_sync_view.handle(epoch, new_height).await?;
 
+        self.publish_event(HotstuffEvent::LeaderTimeout { new_height });
+
         Ok(())
     }
 
@@ -297,10 +296,8 @@ where
             return Ok(());
         }
 
-        let epoch = self.epoch_manager.current_epoch().await?;
-        debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", epoch);
-
-        // self.create_genesis_block_if_required(epoch)?;
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", current_epoch);
 
         // Are there any transactions in the pools?
         // If not, only propose an empty block if we are close to exceeding the timeout
@@ -315,21 +312,24 @@ where
 
         // Are we the leader?
         let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?;
-        let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
+        let local_committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         // TODO: If there were leader failures, the leaf block would be empty and we need to create empty blocks.
         let is_leader =
             self.leader_strategy
                 .is_leader_for_next_block(&self.validator_addr, &local_committee, leaf_block.height);
         info!(
             target: LOG_TARGET,
-            "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}",
+            "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}, must_propose: {}",
             is_leader,
             leaf_block.block_id,
             local_committee
-                .len()
+                .len(),
+            must_propose
         );
         if is_leader {
-            self.on_propose.handle(epoch, local_committee, leaf_block).await?;
+            self.on_propose
+                .handle(current_epoch, local_committee, leaf_block)
+                .await?;
         }
 
         Ok(())
@@ -347,18 +347,22 @@ where
             });
         }
 
-        // self.create_genesis_block_if_required(msg.epoch())?;
-
         match msg {
-            HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
-            HotstuffMessage::Proposal(msg) => self.on_receive_proposal.handle(from, msg).await?,
-            HotstuffMessage::Vote(msg) => self.on_receive_vote.handle(from, msg).await?,
-            HotstuffMessage::RequestMissingTransactions(msg) => {
-                self.on_receive_request_missing_txs.handle(from, msg).await?
+            HotstuffMessage::NewView(msg) => {
+                log_err("on_receive_new_view", self.on_receive_new_view.handle(from, msg).await)
             },
-            HotstuffMessage::RequestedTransaction(msg) => {
-                self.on_receive_requested_txs.handle(from, msg).await?;
+            HotstuffMessage::Proposal(msg) => {
+                log_err("on_receive_proposal", self.on_receive_proposal.handle(from, msg).await)
             },
+            HotstuffMessage::Vote(msg) => log_err("on_receive_vote", self.on_receive_vote.handle(from, msg).await),
+            HotstuffMessage::RequestMissingTransactions(msg) => log_err(
+                "on_receive_request_missing_transactions",
+                self.on_receive_request_missing_txs.handle(from, msg).await,
+            ),
+            HotstuffMessage::RequestedTransaction(msg) => log_err(
+                "on_receive_requested_txs",
+                self.on_receive_requested_txs.handle(from, msg).await,
+            ),
         }
         Ok(())
     }
@@ -409,5 +413,11 @@ where
 
     fn publish_event(&self, event: HotstuffEvent) {
         let _ignore = self.tx_events.send(event);
+    }
+}
+
+fn log_err(context: &'static str, result: Result<(), HotStuffError>) {
+    if let Err(e) = result {
+        error!(target: LOG_TARGET, "Error while processing new hotstuff message ({context}): {e}");
     }
 }

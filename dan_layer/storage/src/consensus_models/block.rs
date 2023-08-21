@@ -236,11 +236,8 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_get(id)
     }
 
-    pub fn get_tip<TTx: StateStoreReadTransaction<Addr = TAddr>>(
-        tx: &mut TTx,
-        epoch: Epoch,
-    ) -> Result<Self, StorageError> {
-        tx.blocks_get_tip(epoch)
+    pub fn get_tip<TTx: StateStoreReadTransaction<Addr = TAddr>>(tx: &mut TTx) -> Result<Self, StorageError> {
+        tx.blocks_get_tip()
     }
 
     pub fn exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(

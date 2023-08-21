@@ -5,13 +5,16 @@ use std::{
     fmt,
     marker::PhantomData,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use log::log;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::{StateStore, StorageError};
+use time::Instant;
 
 use crate::{
     error::SqliteStorageError,
@@ -20,7 +23,7 @@ use crate::{
     writer::SqliteStateStoreWriteTransaction,
 };
 
-const _LOG_TARGET: &str = "tari::dan::storage::sqlite::state_store";
+const LOG_TARGET: &str = "tari::dan::storage::sqlite::state_store";
 
 pub struct SqliteStateStore<TAddr> {
     connection: Arc<Mutex<SqliteConnection>>,
@@ -68,8 +71,21 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStore for Sqlit
     }
 
     fn create_write_tx(&self) -> Result<Self::WriteTransaction<'_>, StorageError> {
+        let timer = Instant::now();
         let tx = SqliteTransaction::begin(self.connection.lock().unwrap())?;
-        Ok(SqliteStateStoreWriteTransaction::new(tx))
+        let tx = SqliteStateStoreWriteTransaction::new(tx);
+        let elapsed = timer.elapsed();
+        let level = if elapsed > Duration::from_secs(1) {
+            log::Level::Warn
+        } else {
+            log::Level::Debug
+        };
+        log!(
+            target: LOG_TARGET,
+            level,
+            "Write transaction obtained in {:.2}", elapsed
+        );
+        Ok(tx)
     }
 }
 

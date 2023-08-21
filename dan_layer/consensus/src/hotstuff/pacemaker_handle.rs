@@ -6,19 +6,20 @@ use tokio::sync::mpsc;
 
 use crate::hotstuff::HotStuffError;
 
-pub enum PacemakerEvent {
+pub enum PacemakerRequest {
     ResetLeaderTimeout { last_seen_height: NodeHeight },
-    Beat,
+    TriggerBeat,
+    StartTimer,
 }
 
 #[derive(Debug, Clone)]
 pub struct PaceMakerHandle {
     // receiver: mpsc::Receiver<PacemakerEvent>,
-    sender: mpsc::Sender<PacemakerEvent>,
+    sender: mpsc::Sender<PacemakerRequest>,
 }
 
 impl PaceMakerHandle {
-    pub fn new(sender: mpsc::Sender<PacemakerEvent>) -> Self {
+    pub fn new(sender: mpsc::Sender<PacemakerRequest>) -> Self {
         // let (sender, receiver) = mpsc::channel();
         Self {
             // receiver,
@@ -32,14 +33,22 @@ impl PaceMakerHandle {
 
     pub async fn beat(&self) -> Result<(), HotStuffError> {
         self.sender
-            .send(PacemakerEvent::Beat)
+            .send(PacemakerRequest::TriggerBeat)
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
     pub async fn reset_leader_timeout(&self, last_seen_height: NodeHeight) -> Result<(), HotStuffError> {
         self.sender
-            .send(PacemakerEvent::ResetLeaderTimeout { last_seen_height })
+            .send(PacemakerRequest::ResetLeaderTimeout { last_seen_height })
+            .await
+            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    }
+
+    /// Start the timer. If the timer is already started, this is a no-op
+    pub async fn start_timer(&self) -> Result<(), HotStuffError> {
+        self.sender
+            .send(PacemakerRequest::StartTimer)
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }

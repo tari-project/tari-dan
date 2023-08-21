@@ -212,16 +212,36 @@ impl ExecutedTransaction {
     pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         tx_ids: I,
+    ) -> Result<(Vec<Self>, HashSet<&'a TransactionId>), StorageError> {
+        let mut tx_ids = tx_ids.into_iter().collect::<HashSet<_>>();
+        let recs = tx.transactions_get_any(tx_ids.iter().copied())?;
+        for found in &recs {
+            tx_ids.remove(found.transaction.id());
+        }
+
+        let recs = recs.into_iter().map(|rec| rec.try_into()).collect::<Result<_, _>>()?;
+        Ok((recs, tx_ids))
+    }
+
+    pub fn get_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+        tx: &mut TTx,
+        tx_ids: I,
     ) -> Result<Vec<Self>, StorageError> {
-        let recs = tx.transactions_get_any(tx_ids)?;
-        recs.into_iter().map(|rec| rec.try_into()).collect()
+        let (recs, missing) = Self::get_any(tx, tx_ids)?;
+        if !missing.is_empty() {
+            return Err(StorageError::NotFound {
+                item: "ExecutedTransaction".to_string(),
+                key: missing.into_iter().next().unwrap().to_string(),
+            });
+        }
+        Ok(recs)
     }
 
     pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         transactions: I,
     ) -> Result<HashMap<TransactionId, HashSet<ShardId>>, StorageError> {
-        let transactions = Self::get_any(tx, transactions)?;
+        let transactions = Self::get_all(tx, transactions)?;
         Ok(transactions
             .into_iter()
             .map(|t| (*t.transaction.id(), t.involved_shards_iter().copied().collect()))

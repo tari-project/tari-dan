@@ -46,6 +46,14 @@ impl LeafBlock {
             height: NodeHeight(0),
         }
     }
+
+    pub fn height(&self) -> NodeHeight {
+        self.height
+    }
+
+    pub fn block_id(&self) -> &BlockId {
+        &self.block_id
+    }
 }
 
 impl LeafBlock {
