@@ -89,6 +89,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::height.eq(block.height().as_u64() as i64),
             blocks::epoch.eq(block.epoch().as_u64() as i64),
             blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
+            blocks::command_count.eq(block.commands().len() as i64),
             blocks::commands.eq(serialize_json(block.commands())?),
             blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),

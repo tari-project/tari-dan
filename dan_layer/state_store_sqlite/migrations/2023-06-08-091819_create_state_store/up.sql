@@ -18,6 +18,7 @@ create table blocks
     epoch            bigint    not NULL,
     proposed_by      text      not NULL,
     qc_id            text      not NULL,
+    command_count    bigint    not NULL,
     commands         text      not NULL,
     total_leader_fee bigint    not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,

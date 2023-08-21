@@ -21,6 +21,7 @@ pub struct Block {
     pub epoch: i64,
     pub proposed_by: String,
     pub qc_id: String,
+    pub command_count: i64,
     pub commands: String,
     pub total_leader_fees: i64,
     pub created_at: PrimitiveDateTime,
