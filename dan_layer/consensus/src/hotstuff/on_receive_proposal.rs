@@ -5,7 +5,7 @@
 // ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
 // Complete
 
-use std::ops::DerefMut;
+use std::{num::NonZeroU64, ops::DerefMut};
 
 use log::*;
 use tari_dan_common_types::{
@@ -23,6 +23,7 @@ use tari_dan_storage::{
         LastExecuted,
         LastVoted,
         LockedBlock,
+        LockedOutput,
         QuorumDecision,
         SubstateLockFlag,
         SubstateRecord,
@@ -408,6 +409,19 @@ where TConsensusSpec: ConsensusSpec
                                     t.decision,
                                     tx_rec.original_decision()
                                 );
+                                tx_rec.set_pending_decision(tx, Decision::Abort)?;
+                                return Ok(None);
+                            }
+                            if !self.lock_outputs(tx, block.id(), &transaction)? {
+                                // Unable to lock all outputs - do not vote
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "❌ Unable to lock all outputs for block {}. Leader proposed {}, we decided {}",
+                                    block.id(),
+                                    t.decision,
+                                    tx_rec.original_decision()
+                                );
+                                tx_rec.set_pending_decision(tx, Decision::Abort)?;
                                 return Ok(None);
                             }
                         }
@@ -515,7 +529,14 @@ where TConsensusSpec: ConsensusSpec
 
                     let distinct_shards =
                         local_committee_shard.count_distinct_buckets(tx_rec.transaction.evidence.shards_iter());
-                    let calculated_leader_fee = tx_rec.calculate_leader_fee(distinct_shards as u64, EXHAUST_DIVISOR);
+                    let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
+                        HotStuffError::InvariantError(format!(
+                            "Distinct shards is zero for transaction {} in block {}",
+                            tx_rec.transaction.id,
+                            block.id()
+                        ))
+                    })?;
+                    let calculated_leader_fee = tx_rec.calculate_leader_fee(distinct_shards, EXHAUST_DIVISOR);
                     if calculated_leader_fee != t.leader_fee {
                         warn!(
                             target: LOG_TARGET,
@@ -560,7 +581,7 @@ where TConsensusSpec: ConsensusSpec
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<bool, HotStuffError> {
-        let state = SubstateRecord::try_lock_many(
+        let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
             local_committee_shard.filter(transaction.inputs().iter().chain(transaction.filled_inputs())),
@@ -569,7 +590,7 @@ where TConsensusSpec: ConsensusSpec
         if !state.is_acquired() {
             return Ok(false);
         }
-        let state = SubstateRecord::try_lock_many(
+        let state = SubstateRecord::try_lock_all(
             tx,
             transaction.id(),
             local_committee_shard.filter(transaction.input_refs()),
@@ -601,6 +622,31 @@ where TConsensusSpec: ConsensusSpec
             local_committee_shard.filter(transaction.input_refs()),
             SubstateLockFlag::Read,
         )?;
+        Ok(())
+    }
+
+    fn lock_outputs(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        block_id: &BlockId,
+        transaction: &ExecutedTransaction,
+    ) -> Result<bool, HotStuffError> {
+        let state = LockedOutput::try_acquire_all(tx, block_id, transaction.id(), transaction.resulting_outputs())?;
+
+        if !state.is_acquired() {
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
+    fn unlock_outputs(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        transaction: &ExecutedTransaction,
+        local_committee_shard: &CommitteeShard,
+    ) -> Result<(), HotStuffError> {
+        LockedOutput::try_release_all(tx, local_committee_shard.filter(transaction.resulting_outputs()))?;
         Ok(())
     }
 
@@ -742,24 +788,20 @@ where TConsensusSpec: ConsensusSpec
                     total_fee_due += t.leader_fee;
 
                     let mut executed = t.get_transaction(tx.deref_mut())?;
-                    match t.decision {
-                        // Commit the transaction substate changes.
-                        Decision::Commit => {
-                            self.state_manager
-                                .commit_transaction(tx, block, &executed)
-                                .map_err(|e| HotStuffError::StateManagerError(e.into()))?;
+                    // Commit the transaction substate changes.
+                    if t.decision.is_commit() {
+                        self.state_manager
+                            .commit_transaction(tx, block, &executed)
+                            .map_err(|e| HotStuffError::StateManagerError(e.into()))?;
+                    }
 
-                            // We unlock just so that inputs that were not mutated are unlocked, even though those
-                            // should be in input_refs
-                            self.unlock_inputs(tx, executed.transaction(), local_committee_shard)?;
-                        },
-                        // Unlock the aborted inputs.
-                        Decision::Abort => {
-                            // We only locked the inputs if we originally decided to commit
-                            if tx_rec.original_decision().is_commit() {
-                                self.unlock_inputs(tx, executed.transaction(), local_committee_shard)?;
-                            }
-                        },
+                    // Only unlock substates if we locked them in the first place
+                    if tx_rec.original_decision().is_commit() {
+                        // We unlock just so that inputs that were not mutated are unlocked, even though those
+                        // should be in input_refs
+                        self.unlock_inputs(tx, executed.transaction(), local_committee_shard)?;
+                        // Unlock any outputs that were locked
+                        self.unlock_outputs(tx, &executed, local_committee_shard)?;
                     }
 
                     // We are accepting the transaction so can remove the transaction from the pool

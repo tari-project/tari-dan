@@ -5,6 +5,8 @@ use tari_dan_storage::consensus_models::BlockId;
 
 #[derive(Debug, Clone)]
 pub enum HotstuffEvent {
+    /// A block has been committed
     BlockCommitted { block_id: BlockId },
+    /// A critical failure occurred in consensus
     Failure { message: String },
 }

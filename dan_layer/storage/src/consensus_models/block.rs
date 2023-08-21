@@ -366,6 +366,14 @@ impl TryFrom<Vec<u8>> for BlockId {
     type Error = FixedHashSizeError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_slice())
+    }
+}
+
+impl TryFrom<&[u8]> for BlockId {
+    type Error = FixedHashSizeError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         FixedHash::try_from(value).map(Self)
     }
 }

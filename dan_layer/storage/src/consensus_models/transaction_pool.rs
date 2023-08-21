@@ -4,6 +4,7 @@
 use std::{
     fmt::{Display, Formatter},
     marker::PhantomData,
+    num::NonZeroU64,
     str::FromStr,
 };
 
@@ -188,19 +189,19 @@ impl TransactionPoolRecord {
         }
     }
 
-    pub fn calculate_leader_fee(&self, involved: u64, exhaust_divisor: u64) -> u64 {
+    pub fn calculate_leader_fee(&self, involved: NonZeroU64, exhaust_divisor: u64) -> u64 {
         // TODO: We essentially burn a random amount depending on the shards involved in the transaction. This means it
         //       is hard to tell how much is actually in circulation unless we track this in the Resource. Right
         //       now we'll set exhaust to 0, which is just transaction_fee / involved.
         let transaction_fee = self.transaction.transaction_fee;
-        let due_fee = transaction_fee / involved;
+        let due_fee = transaction_fee / involved.get();
         // The extra amount that is burnt
-        let due_rem = transaction_fee % involved;
+        let due_rem = transaction_fee % involved.get();
 
         // How much we want to burn due to exhaust per involved shard
         let target_exhaust_burn = if exhaust_divisor > 0 {
             let base_fee = transaction_fee.checked_div(exhaust_divisor).unwrap_or(transaction_fee);
-            base_fee / involved
+            base_fee / involved.get()
         } else {
             0
         };
@@ -326,30 +327,30 @@ mod tests {
         fn it_calculates_the_correct_fee_due() {
             let record = create_record_with_fee(100);
 
-            let fee = record.calculate_leader_fee(1, 0);
+            let fee = record.calculate_leader_fee(1.try_into().unwrap(), 0);
             assert_eq!(fee, 100);
 
-            let fee = record.calculate_leader_fee(1, 10);
+            let fee = record.calculate_leader_fee(1.try_into().unwrap(), 10);
             assert_eq!(fee, 90);
 
-            let fee = record.calculate_leader_fee(2, 0);
+            let fee = record.calculate_leader_fee(2.try_into().unwrap(), 0);
             assert_eq!(fee, 50);
 
-            let fee = record.calculate_leader_fee(2, 10);
+            let fee = record.calculate_leader_fee(2.try_into().unwrap(), 10);
             assert_eq!(fee, 45);
 
-            let fee = record.calculate_leader_fee(3, 0);
+            let fee = record.calculate_leader_fee(3.try_into().unwrap(), 0);
             assert_eq!(fee, 33);
 
-            let fee = record.calculate_leader_fee(3, 10);
+            let fee = record.calculate_leader_fee(3.try_into().unwrap(), 10);
             assert_eq!(fee, 31);
 
             let record = create_record_with_fee(98);
 
-            let fee = record.calculate_leader_fee(3, 10);
+            let fee = record.calculate_leader_fee(3.try_into().unwrap(), 10);
             assert_eq!(fee, 31);
 
-            let fee = record.calculate_leader_fee(10, 10);
+            let fee = record.calculate_leader_fee(10.try_into().unwrap(), 10);
             assert_eq!(fee, 9);
         }
     }

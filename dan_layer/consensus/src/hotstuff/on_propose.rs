@@ -4,6 +4,7 @@
 use std::{
     collections::{BTreeSet, HashSet},
     iter,
+    num::NonZeroU64,
     ops::DerefMut,
 };
 
@@ -122,7 +123,7 @@ where TConsensusSpec: ConsensusSpec
             let prepared_txs = ExecutedTransaction::get_any(tx.deref_mut(), prepared_iter)?;
             non_local_buckets = prepared_txs
                 .iter()
-                .flat_map(|tx| tx.transaction().involved_shards_iter().copied())
+                .flat_map(|tx| tx.involved_shards_iter().copied())
                 .map(|shard| shard.to_committee_bucket(num_committees))
                 .filter(|bucket| *bucket != local_bucket)
                 .collect::<HashSet<_>>();
@@ -212,18 +213,24 @@ where TConsensusSpec: ConsensusSpec
             .into_iter()
             .map(|t| match t.stage {
                 // If the transaction is New, propose to Prepare it
-                TransactionPoolStage::New => Command::Prepare(t.transaction),
+                TransactionPoolStage::New => Ok(Command::Prepare(t.transaction)),
                 // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
                 // accepted Prepared so we propose LocalPrepared
-                TransactionPoolStage::Prepared => Command::LocalPrepared(t.transaction),
+                TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.transaction)),
                 // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
                 // prepared. We can now propose to Accept it. We also propose the decision change which everyone should
                 // agree with if they received the same foreign LocalPrepare.
                 TransactionPoolStage::LocalPrepared => {
                     let involved = local_committee_shard.count_distinct_buckets(t.transaction.evidence.shards_iter());
-                    let leader_fee = t.calculate_leader_fee(involved as u64, EXHAUST_DIVISOR);
+                    let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
+                        HotStuffError::InvariantError(format!(
+                            "Number of involved shards is zero for transaction {}",
+                            t.transaction.id
+                        ))
+                    })?;
+                    let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
                     total_leader_fee += leader_fee;
-                    Command::Accept(t.get_final_transaction_atom(leader_fee))
+                    Ok(Command::Accept(t.get_final_transaction_atom(leader_fee)))
                 },
                 // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes agreed
                 // with the Accept, more (possibly empty) blocks with QCs will be proposed and accepted,
@@ -235,7 +242,7 @@ where TConsensusSpec: ConsensusSpec
                     )
                 },
             })
-            .collect::<BTreeSet<_>>();
+            .collect::<Result<BTreeSet<_>, HotStuffError>>()?;
 
         debug!(
             target: LOG_TARGET,

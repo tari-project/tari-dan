@@ -244,6 +244,7 @@ pub async fn spawn_services(
         rx_executed_transaction,
         rx_consensus_message,
         outbound_messaging,
+        mempool.clone(),
         shutdown.clone(),
     )
     .await;
