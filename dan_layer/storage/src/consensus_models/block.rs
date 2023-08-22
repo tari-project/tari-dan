@@ -268,6 +268,10 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         Ok(false)
     }
 
+    pub fn commit<TTx: StateStoreWriteTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        tx.blocks_commit(self.id())
+    }
+
     pub fn find_involved_shards<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         &self,
         tx: &mut TTx,

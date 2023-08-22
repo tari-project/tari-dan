@@ -21,6 +21,7 @@ diesel::table! {
         command_count -> BigInt,
         commands -> Text,
         total_leader_fee -> BigInt,
+        is_committed -> Bool,
         created_at -> Timestamp,
     }
 }

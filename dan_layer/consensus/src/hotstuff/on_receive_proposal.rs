@@ -866,6 +866,8 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
+        block.commit(tx)?;
+
         info!(
             target: LOG_TARGET,
             "🪙 Validator fee for block {} (amount due = {}, total fees = {})",

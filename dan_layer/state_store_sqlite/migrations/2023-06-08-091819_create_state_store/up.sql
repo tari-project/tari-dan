@@ -24,6 +24,7 @@ create table blocks
     command_count    bigint    not NULL,
     commands         text      not NULL,
     total_leader_fee bigint    not NULL,
+    is_committed     boolean   not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );

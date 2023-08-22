@@ -24,6 +24,7 @@ pub struct Block {
     pub command_count: i64,
     pub commands: String,
     pub total_leader_fees: i64,
+    pub is_committed: bool,
     pub created_at: PrimitiveDateTime,
 }
 

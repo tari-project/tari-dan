@@ -93,6 +93,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::commands.eq(serialize_json(block.commands())?),
             blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
+            blocks::is_committed.eq(false),
         );
 
         diesel::insert_into(blocks::table)
@@ -100,6 +101,21 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn blocks_commit(&mut self, block_id: &BlockId) -> Result<(), StorageError> {
+        use crate::schema::blocks;
+
+        diesel::update(blocks::table)
+            .filter(blocks::block_id.eq(serialize_hex(block_id)))
+            .set(blocks::is_committed.eq(true))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_commit",
                 source: e,
             })?;
 
