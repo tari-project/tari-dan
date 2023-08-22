@@ -3,7 +3,7 @@
 
 use std::{
     collections::{BTreeSet, HashSet},
-    fmt::{Debug, Display},
+    fmt::{Debug, Display, Formatter},
     ops::{DerefMut, RangeInclusive},
 };
 
@@ -322,6 +322,18 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         validator_public_key: Option<&TAddr>,
     ) -> Result<Vec<Self>, StorageError> {
         tx.blocks_get_any_with_epoch_range(range, validator_public_key)
+    }
+}
+
+impl<TAddr> Display for Block<TAddr> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}, {}, {} command(s)]",
+            self.height(),
+            self.id(),
+            self.commands().len()
+        )
     }
 }
 

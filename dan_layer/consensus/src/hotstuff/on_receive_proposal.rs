@@ -180,7 +180,7 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🔥 Block {} has {} missing transactions and {} awaiting execution", block.id(), missing_tx_ids.len(), awaiting_execution.len(),
+            "🔥 Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
         );
 
         self.store.with_write_tx(|tx| {
