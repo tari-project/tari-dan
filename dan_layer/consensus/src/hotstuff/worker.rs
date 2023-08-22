@@ -233,7 +233,7 @@ where
             "🚀 Consensus READY for new transaction with id: {}",
             executed.id()
         );
-        self.state_store.with_write_tx(|tx| {
+        let maybe_block_id = self.state_store.with_write_tx(|tx| {
             executed.upsert(tx)?;
 
             self.transaction_pool.insert(tx, TransactionAtom {
@@ -250,15 +250,10 @@ where
                 leader_fee: 0,
             })?;
 
-            Ok::<_, HotStuffError>(())
+            let maybe_block_id = tx.remove_missing_transaction(*executed.into_transaction().id())?;
+            Ok::<_, HotStuffError>(maybe_block_id)
         })?;
-        let block_id;
-        {
-            let mut tx = self.state_store.create_write_tx()?;
-            block_id = tx.remove_missing_transaction(*executed.into_transaction().id())?;
-            tx.commit()?;
-        }
-        if let Some(block_id) = block_id {
+        if let Some(block_id) = maybe_block_id {
             self.on_receive_proposal.reprocess_block(&block_id).await?;
         }
         self.pacemaker_handle.beat().await?;

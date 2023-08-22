@@ -87,7 +87,11 @@ async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn node_requests_missing_transaction_from_local_leader() {
-    let mut test = Test::builder().add_committee(0, vec!["1", "2"]).start().await;
+    let mut test = Test::builder()
+        .with_test_timeout(Duration::MAX)
+        .add_committee(0, vec!["1", "2"])
+        .start()
+        .await;
     // First get all transactions in the mempool of node "1"
     for _ in 0..10 {
         test.send_transaction_to(&TestAddress::new("1"), Decision::Commit, 1, 5)

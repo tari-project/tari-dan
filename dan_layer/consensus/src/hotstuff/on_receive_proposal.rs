@@ -36,7 +36,7 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{broadcast, mpsc};
 
 use crate::{
@@ -135,61 +135,21 @@ where TConsensusSpec: ConsensusSpec
         block: Block<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         // First save the block in one db transaction
-        self.store.with_write_tx(|tx| {
+        let missing_tx_ids = self.store.with_write_tx(|tx| {
             // TODO: We should move the safe_block check to here
             self.validate_local_proposed_block_and_fill_dummy_blocks(&mut *tx, &from, &block, &local_committee)?;
             // Insert the block if it doesnt already exist
             block.justify().save(tx)?;
             block.save(tx)?;
-            Ok::<_, HotStuffError>(())
+
+            self.block_get_missing_transaction(tx, &block)
         })?;
 
-        if self.block_has_missing_transaction(&local_committee, &block).await? {
-            Ok(())
-        } else {
+        if missing_tx_ids.is_empty() {
             self.process_block(&local_committee, &block).await
-        }
-    }
-
-    async fn block_has_missing_transaction(
-        &self,
-        local_committee: &Committee<TConsensusSpec::Addr>,
-        block: &Block<TConsensusSpec::Addr>,
-    ) -> Result<bool, HotStuffError> {
-        let mut missing_tx_ids = Vec::new();
-        let mut awaiting_execution = Vec::new();
-        // TODO(perf): n queries
-        self.store.with_read_tx(|tx| {
-            for tx_id in block.all_transaction_ids() {
-                match TransactionRecord::get(tx, tx_id).optional()? {
-                    Some(tx) => {
-                        // If execution is in progress, we need to note down the transactions without requesting them
-                        if tx.result.is_none() {
-                            awaiting_execution.push(*tx_id);
-                        }
-                    },
-                    None => missing_tx_ids.push(*tx_id),
-                }
-            }
-            Ok::<_, HotStuffError>(())
-        })?;
-
-        if missing_tx_ids.is_empty() && awaiting_execution.is_empty() {
-            return Ok(false);
-        }
-
-        info!(
-            target: LOG_TARGET,
-            "🔥 Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
-        );
-
-        self.store.with_write_tx(|tx| {
-            tx.insert_missing_transactions(block.id(), missing_tx_ids.iter().chain(&awaiting_execution))
-        })?;
-
-        if !missing_tx_ids.is_empty() {
+        } else {
             self.send_to_leader(
-                local_committee,
+                &local_committee,
                 block.height(),
                 HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
                     block_id: *block.id(),
@@ -198,9 +158,34 @@ where TConsensusSpec: ConsensusSpec
                 }),
             )
             .await?;
+            Ok(())
+        }
+    }
+
+    fn block_get_missing_transaction(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        block: &Block<TConsensusSpec::Addr>,
+    ) -> Result<Vec<TransactionId>, HotStuffError> {
+        let (transactions, missing_tx_ids) = TransactionRecord::get_any(tx.deref_mut(), block.all_transaction_ids())?;
+        let awaiting_execution = transactions
+            .into_iter()
+            .filter(|tx| tx.result.is_none())
+            .map(|tx| *tx.transaction.id())
+            .collect::<Vec<_>>();
+
+        if missing_tx_ids.is_empty() && awaiting_execution.is_empty() {
+            return Ok(Vec::new());
         }
 
-        Ok(true)
+        info!(
+            target: LOG_TARGET,
+            "🔥 Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
+        );
+
+        tx.insert_missing_transactions(block.id(), missing_tx_ids.iter().chain(&awaiting_execution))?;
+
+        Ok(missing_tx_ids.into_iter().chain(awaiting_execution).collect())
     }
 
     pub async fn reprocess_block(&self, block_id: &BlockId) -> Result<(), HotStuffError> {
@@ -868,13 +853,15 @@ where TConsensusSpec: ConsensusSpec
 
         block.commit(tx)?;
 
-        info!(
-            target: LOG_TARGET,
-            "🪙 Validator fee for block {} (amount due = {}, total fees = {})",
-            block.proposed_by(),
-            total_fee_due,
-            total_transaction_fee
-        );
+        if total_transaction_fee > 0 {
+            info!(
+                target: LOG_TARGET,
+                "🪙 Validator fee for block {} (amount due = {}, total fees = {})",
+                block.proposed_by(),
+                total_fee_due,
+                total_transaction_fee
+            );
+        }
 
         Ok(())
     }

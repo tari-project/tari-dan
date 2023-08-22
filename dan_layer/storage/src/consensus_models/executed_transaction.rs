@@ -231,7 +231,11 @@ impl ExecutedTransaction {
         if !missing.is_empty() {
             return Err(StorageError::NotFound {
                 item: "ExecutedTransaction".to_string(),
-                key: missing.into_iter().next().unwrap().to_string(),
+                key: missing
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
             });
         }
         Ok(recs)

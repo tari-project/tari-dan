@@ -32,6 +32,7 @@ use tari_dan_storage::{
         TransactionRecord,
         Vote,
     },
+    StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
@@ -167,6 +168,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
 
     fn remove_missing_transaction(&mut self, transaction_id: TransactionId) -> Result<Option<BlockId>, StorageError> {
         use crate::schema::{block_missing_txs, missing_tx};
+
         let block_id = missing_tx::table
             .select(missing_tx::block_id)
             .filter(missing_tx::transaction_id.eq(serialize_hex(transaction_id)))
@@ -176,50 +178,95 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                 operation: "remove_missing_transaction",
                 source: e,
             })?;
-        if let Some(block_id) = block_id {
-            diesel::delete(missing_tx::table)
-                .filter(missing_tx::transaction_id.eq(serialize_hex(transaction_id)))
+        let Some(block_id) = block_id else {
+            return Ok(None);
+        };
+
+        diesel::delete(missing_tx::table)
+            .filter(missing_tx::transaction_id.eq(serialize_hex(transaction_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "remove_missing_transaction",
+                source: e,
+            })?;
+        let missing_transactions = block_missing_txs::table
+            .select(block_missing_txs::transaction_ids)
+            .filter(block_missing_txs::block_id.eq(&block_id))
+            .first::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "remove_missing_transaction",
+                source: e,
+            })?;
+
+        let mut missing_transactions = deserialize_json::<Vec<TransactionId>>(&missing_transactions)?;
+
+        missing_transactions.retain(|&transaction| transaction != transaction_id);
+
+        if missing_transactions.is_empty() {
+            diesel::delete(block_missing_txs::table)
+                .filter(block_missing_txs::block_id.eq(&block_id))
                 .execute(self.connection())
                 .map_err(|e| SqliteStorageError::DieselError {
                     operation: "remove_missing_transaction",
                     source: e,
                 })?;
-            let missing_transactions = block_missing_txs::table
-                .select(block_missing_txs::transaction_ids)
-                .filter(block_missing_txs::block_id.eq(block_id.clone()))
-                .first::<String>(self.connection())
+            return Ok(Some(deserialize_hex_try_from(&block_id)?));
+        }
+
+        // Make double sure that we dont have these transactions due to a race condition between inserting
+        // missing transactions and them completing execution.
+        // TODO: this should not really be needed but can help detect bugs
+        let found_transactions = self.transactions_get_any(&missing_transactions)?;
+        let found_transactions = found_transactions
+            .into_iter()
+            .filter(|tx| tx.result.is_some())
+            .collect::<Vec<_>>();
+        if !found_transactions.is_empty() {
+            warn!(
+                target: LOG_TARGET,
+                "🐞 Found missing transactions that have already been executed. Removing from missing transactions list. This could indicate a bug.",
+            );
+        }
+        missing_transactions.retain(|transaction| {
+            found_transactions
+                .iter()
+                .all(|found| found.transaction.id() != transaction)
+        });
+
+        if missing_transactions.is_empty() {
+            diesel::delete(missing_tx::table)
+                .filter(
+                    missing_tx::transaction_id.eq_any(
+                        found_transactions
+                            .iter()
+                            .map(|tx| tx.transaction.id())
+                            .map(serialize_hex),
+                    ),
+                )
+                .execute(self.connection())
                 .map_err(|e| SqliteStorageError::DieselError {
                     operation: "remove_missing_transaction",
                     source: e,
                 })?;
-
-            let mut missing_transactions = deserialize_json::<Vec<TransactionId>>(&missing_transactions)?;
-
-            missing_transactions.retain(|&transaction| transaction != transaction_id);
-
-            if missing_transactions.is_empty() {
-                diesel::delete(block_missing_txs::table)
-                    .filter(block_missing_txs::block_id.eq(block_id.clone()))
-                    .execute(self.connection())
-                    .map_err(|e| SqliteStorageError::DieselError {
-                        operation: "remove_missing_transaction",
-                        source: e,
-                    })?;
-                Ok(Some(deserialize_hex_try_from(&block_id)?))
-            } else {
-                diesel::update(block_missing_txs::table)
-                    .filter(block_missing_txs::block_id.eq(block_id))
-                    .set(block_missing_txs::transaction_ids.eq(serialize_json(&missing_transactions)?))
-                    .execute(self.connection())
-                    .map_err(|e| SqliteStorageError::DieselError {
-                        operation: "remove_missing_transaction",
-                        source: e,
-                    })?;
-                Ok(None)
-            }
-        } else {
-            Ok(None)
+            diesel::delete(block_missing_txs::table)
+                .filter(block_missing_txs::block_id.eq(&block_id))
+                .execute(self.connection())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "remove_missing_transaction (2)",
+                    source: e,
+                })?;
+            return Ok(Some(deserialize_hex_try_from(&block_id)?));
         }
+
+        diesel::update(block_missing_txs::table)
+            .filter(block_missing_txs::block_id.eq(block_id))
+            .set(block_missing_txs::transaction_ids.eq(serialize_json(&missing_transactions)?))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "remove_missing_transaction",
+                source: e,
+            })?;
+        Ok(None)
     }
 
     fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError> {
