@@ -79,7 +79,7 @@ impl TemplateTest {
         let mut builder = Package::builder();
 
         // Add Account template builtin
-        let wasm = get_template_builtin(*ACCOUNT_TEMPLATE_ADDRESS);
+        let wasm = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
         let template = WasmModule::from_code(wasm.to_vec()).load_template().unwrap();
         builder.add_template(*ACCOUNT_TEMPLATE_ADDRESS, template);
         name_to_template.insert("Account".to_string(), *ACCOUNT_TEMPLATE_ADDRESS);
