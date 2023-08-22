@@ -82,16 +82,20 @@ impl<TAddr: Serialize> QuorumCertificate<TAddr> {
     }
 
     pub fn calculate_id(&self) -> QcId {
-        quorum_certificate_hasher()
-            .chain(&self.epoch)
-            .chain(&self.block_id)
-            .chain(&self.block_height)
-            .chain(&self.signatures)
-            .chain(&self.merged_proof)
-            .chain(&self.leaf_hashes)
-            .chain(&self.decision)
-            .result()
-            .into()
+        if self.is_genesis() {
+            QcId::genesis()
+        } else {
+            quorum_certificate_hasher()
+                .chain(&self.epoch)
+                .chain(&self.block_id)
+                .chain(&self.block_height)
+                .chain(&self.signatures)
+                .chain(&self.merged_proof)
+                .chain(&self.leaf_hashes)
+                .chain(&self.decision)
+                .result()
+                .into()
+        }
     }
 }
 

@@ -128,6 +128,7 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: Stri
     let details = world
         .validator_nodes
         .values()
+        .chain(world.vn_seeds.values())
         .filter(|vn| vn.name != name)
         .map(|vn| {
             (

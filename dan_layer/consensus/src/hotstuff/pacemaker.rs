@@ -19,6 +19,9 @@ use crate::hotstuff::{
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::pacemaker";
+#[cfg(test)]
+const MAX_DELTA: Duration = Duration::from_secs(1);
+#[cfg(not(test))]
 const MAX_DELTA: Duration = Duration::from_secs(300);
 
 pub struct PaceMaker {

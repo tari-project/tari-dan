@@ -259,6 +259,13 @@ where
             .with_write_tx(|tx| tx.remove_missing_transaction(transaction_id))?;
         if let Some(block_id) = maybe_block_id {
             self.on_receive_proposal.reprocess_block(&block_id).await?;
+        } else {
+            let current_epoch = self.epoch_manager.current_epoch().await?;
+            let height = match self.state_store.with_read_tx(|tx| Block::get_tip(tx, current_epoch)) {
+                Ok(block) => block.height(),
+                Err(_) => NodeHeight(0),
+            };
+            self.pacemaker_handle.reset_leader_timeout(height).await?;
         }
         self.pacemaker_handle.beat().await?;
         Ok(())
