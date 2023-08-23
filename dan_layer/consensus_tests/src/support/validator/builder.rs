@@ -109,6 +109,7 @@ impl ValidatorBuilder {
         let channels = ValidatorChannels {
             address: self.address.clone(),
             bucket: self.bucket,
+            state_store: store.clone(),
             tx_new_transactions,
             tx_hs_message,
             rx_broadcast,

@@ -103,7 +103,7 @@ pub trait StateStoreReadTransaction {
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
-    fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
+    fn blocks_get_pending_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
     fn blocks_get_total_leader_fee_for_epoch(
         &mut self,
         epoch: Epoch,
@@ -203,17 +203,26 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
-        stage: Option<TransactionPoolStage>,
+        pending_stage: Option<TransactionPoolStage>,
         local_decision: Option<Decision>,
         remote_decision: Option<Decision>,
         is_ready: Option<bool>,
     ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;
+    fn transaction_pool_set_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        tx_ids: I,
+    ) -> Result<(), StorageError>;
 
-    fn insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    fn insert_missing_transactions<
+        'a,
+        IMissing: IntoIterator<Item = &'a TransactionId>,
+        IAwaiting: IntoIterator<Item = &'a TransactionId>,
+    >(
         &mut self,
         block_id: &BlockId,
-        transaction_ids: I,
+        missing_transaction_ids: IMissing,
+        awaiting_transaction_ids: IAwaiting,
     ) -> Result<(), StorageError>;
 
     fn remove_missing_transaction(&mut self, transaction_id: TransactionId) -> Result<Option<BlockId>, StorageError>;

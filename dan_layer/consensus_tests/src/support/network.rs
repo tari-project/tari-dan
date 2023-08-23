@@ -10,8 +10,12 @@ use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket};
-use tari_dan_storage::consensus_models::ExecutedTransaction;
+use tari_dan_storage::{
+    consensus_models::{ExecutedTransaction, TransactionPool},
+    StateStore,
+};
 use tari_shutdown::ShutdownSignal;
+use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{
     mpsc::{self},
@@ -24,7 +28,12 @@ use crate::support::{address::TestAddress, ValidatorChannels};
 pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: ShutdownSignal) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
-        .map(|c| (c.address.clone(), (c.bucket, c.tx_new_transactions.clone())))
+        .map(|c| {
+            (
+                c.address.clone(),
+                (c.bucket, c.tx_new_transactions.clone(), c.state_store.clone()),
+            )
+        })
         .collect();
     let tx_hs_message = channels
         .iter()
@@ -131,7 +140,8 @@ impl TestNetworkDestination {
 
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
-    tx_new_transactions: HashMap<TestAddress, (ShardBucket, mpsc::Sender<ExecutedTransaction>)>,
+    tx_new_transactions:
+        HashMap<TestAddress, (ShardBucket, mpsc::Sender<TransactionId>, SqliteStateStore<TestAddress>)>,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage<TestAddress>)>>,
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>>>,
@@ -159,15 +169,22 @@ impl TestNetworkWorker {
         let tx_new_transactions = self.tx_new_transactions.clone();
         let transaction_store = self.transaction_store.clone();
 
+        // Handle transactions that come in from the test
         tokio::spawn(async move {
-            while let Some((dest, tx)) = rx_new_transaction.recv().await {
+            while let Some((dest, executed)) = rx_new_transaction.recv().await {
                 transaction_store
                     .write()
                     .await
-                    .insert(*tx.transaction().id(), tx.clone());
-                for (addr, (bucket, tx_new_transaction)) in &tx_new_transactions {
+                    .insert(*executed.transaction().id(), executed.clone());
+                for (addr, (bucket, tx_new_transaction, state_store)) in &tx_new_transactions {
                     if dest.is_for(addr, *bucket) {
-                        tx_new_transaction.send(tx.clone()).await.unwrap();
+                        state_store
+                            .with_write_tx(|tx| {
+                                executed.upsert(tx)?;
+                                TransactionPool::<SqliteStateStore<TestAddress>>::new().insert(tx, executed.to_atom())
+                            })
+                            .unwrap();
+                        tx_new_transaction.send(*executed.id()).await.unwrap();
                     }
                 }
             }
@@ -249,8 +266,9 @@ impl TestNetworkWorker {
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
     }
 
+    /// Handles transactions that come in from missing transactions
     pub async fn handle_mempool(&mut self, from: TestAddress, msg: Transaction) {
-        let (_, sender) = self
+        let (_, sender, state_store) = self
             .tx_new_transactions
             .get(&from)
             .unwrap_or_else(|| panic!("No new transaction channel for {}", from));
@@ -258,7 +276,13 @@ impl TestNetworkWorker {
         // In the normal case, we need to provide the same execution results to consensus. In future we could add code
         // here to make a local decision to ABORT.
         let existing_executed_tx = self.transaction_store.read().await.get(msg.id()).unwrap().clone();
+        state_store
+            .with_write_tx(|tx| {
+                existing_executed_tx.upsert(tx)?;
+                TransactionPool::<SqliteStateStore<TestAddress>>::new().insert(tx, existing_executed_tx.to_atom())
+            })
+            .unwrap();
 
-        sender.send(existing_executed_tx).await.unwrap();
+        sender.send(*existing_executed_tx.id()).await.unwrap();
     }
 }

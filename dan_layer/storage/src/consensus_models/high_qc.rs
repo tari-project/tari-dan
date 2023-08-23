@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_dan_common_types::NodeHeight;
+
 use crate::{
     consensus_models::{BlockId, QcId, QuorumCertificate},
     StateStoreReadTransaction,
@@ -30,7 +32,22 @@ use crate::{
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighQc {
     pub block_id: BlockId,
+    pub block_height: NodeHeight,
     pub qc_id: QcId,
+}
+
+impl HighQc {
+    pub fn block_id(&self) -> &BlockId {
+        &self.block_id
+    }
+
+    pub fn block_height(&self) -> NodeHeight {
+        self.block_height
+    }
+
+    pub fn qc_id(&self) -> &QcId {
+        &self.qc_id
+    }
 }
 
 impl HighQc {

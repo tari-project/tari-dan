@@ -13,7 +13,7 @@ use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReas
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
-    consensus_models::{Decision, Evidence, TransactionRecord},
+    consensus_models::{Decision, Evidence, TransactionAtom, TransactionRecord},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -161,6 +161,22 @@ impl ExecutedTransaction {
         self.final_decision = Some(Decision::Abort);
         self.abort_details = Some(details.into());
         self
+    }
+
+    pub fn to_atom(&self) -> TransactionAtom {
+        TransactionAtom {
+            id: *self.id(),
+            decision: self.as_decision(),
+            evidence: self.to_initial_evidence(),
+            transaction_fee: self
+                .result()
+                .fee_receipt
+                .as_ref()
+                .and_then(|f| f.total_fees_paid().as_u64_checked())
+                .unwrap_or(0),
+            // We calculate the leader fee later depending on the epoch of the block
+            leader_fee: 0,
+        }
     }
 }
 

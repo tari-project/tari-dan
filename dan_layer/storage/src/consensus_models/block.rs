@@ -114,16 +114,14 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         }
     }
 
-    pub fn dummy_block(parent: BlockId, proposed_by: TAddr, node_height: NodeHeight, epoch: Epoch) -> Self {
-        Self::new(
-            parent,
-            QuorumCertificate::genesis(),
-            node_height,
-            epoch,
-            proposed_by,
-            Default::default(),
-            0,
-        )
+    pub fn dummy_block(
+        parent: BlockId,
+        proposed_by: TAddr,
+        node_height: NodeHeight,
+        high_qc: QuorumCertificate<TAddr>,
+    ) -> Self {
+        let epoch = high_qc.epoch();
+        Self::new(parent, high_qc, node_height, epoch, proposed_by, Default::default(), 0)
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
@@ -244,7 +242,14 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         &self,
         tx: &mut TTx,
     ) -> Result<bool, StorageError> {
-        tx.blocks_exists(self.id())
+        Self::record_exists(tx, self.id())
+    }
+
+    pub fn record_exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<bool, StorageError> {
+        tx.blocks_exists(block_id)
     }
 
     pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr> + ?Sized>(
@@ -287,6 +292,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         if self.parent == *ancestor {
             return Ok(true);
         }
+
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 

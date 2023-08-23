@@ -7,10 +7,6 @@
 //!
 //! Use `Test::builder().debug_sql("/tmp/test{}.db")...` to create a database file for each validator
 //! where {} is replaced with the node address.
-//!
-//! Logs:
-//! The easiest is to use env_logger. Add `env_logger::init();` to the start of the test and set the env var
-//! RUST_LOG=debug.
 
 use std::time::Duration;
 
@@ -27,6 +23,7 @@ use crate::support::{
     build_transaction,
     build_transaction_from,
     change_decision,
+    logging::setup_logger,
     Test,
     TestAddress,
     TestNetworkDestination,
@@ -36,6 +33,7 @@ use crate::support::{
 // conditions can be picked up, plus tests run a little quicker.
 #[tokio::test(flavor = "multi_thread")]
 async fn single_transaction() {
+    setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     // First get transaction in the mempool
     test.send_transaction_to_all(Decision::Commit, 1, 1).await;
@@ -61,6 +59,7 @@ async fn single_transaction() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
+    setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     // First get all transactions in the mempool
     for _ in 0..10 {
@@ -87,6 +86,7 @@ async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn node_requests_missing_transaction_from_local_leader() {
+    setup_logger();
     let mut test = Test::builder()
         .with_test_timeout(Duration::MAX)
         .add_committee(0, vec!["1", "2"])
@@ -117,7 +117,8 @@ async fn node_requests_missing_transaction_from_local_leader() {
         .with_read_tx(|tx| {
             let mut block_id = BlockId::genesis();
             while let Ok(block) = tx.blocks_get_by_parent(&block_id) {
-                assert!(tx.blocks_get_missing_transactions(block.id()).is_err());
+                let missing = tx.blocks_get_pending_transactions(block.id()).unwrap();
+                assert!(missing.is_empty());
                 block_id = *block.id();
             }
             Ok::<_, HotStuffError>(())
@@ -131,6 +132,7 @@ async fn node_requests_missing_transaction_from_local_leader() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn propose_blocks_with_new_transactions_until_all_committed() {
+    setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     let mut remaining_txs = 10;
     test.network().start();
@@ -156,6 +158,7 @@ async fn propose_blocks_with_new_transactions_until_all_committed() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn multi_validator_propose_blocks_with_new_transactions_until_all_committed() {
+    setup_logger();
     let mut test = Test::builder()
         .add_committee(0, vec!["1", "2", "3", "4", "5"])
         .start()
@@ -187,6 +190,7 @@ async fn multi_validator_propose_blocks_with_new_transactions_until_all_committe
 
 #[tokio::test(flavor = "multi_thread")]
 async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() {
+    setup_logger();
     let mut test = Test::builder()
         .add_committee(0, vec!["1", "2", "3"])
         .add_committee(1, vec!["4", "5", "6"])
@@ -227,6 +231,7 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
 
 #[tokio::test(flavor = "multi_thread")]
 async fn foreign_shard_decides_to_abort() {
+    setup_logger();
     let mut test = Test::builder()
         .with_test_timeout(Duration::from_secs(20))
         .add_committee(0, vec!["1", "3", "4"])
@@ -275,10 +280,12 @@ async fn foreign_shard_decides_to_abort() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn leader_failure_output_conflict() {
+    setup_logger();
     let mut test = Test::builder()
+        .debug_sql("/tmp/test{}.db")
         .with_test_timeout(Duration::from_secs(60))
-        .add_committee(0, vec!["1"])
-        .add_committee(1, vec!["2"])
+        .add_committee(0, vec!["1", "2"])
+        .add_committee(1, vec!["3", "4"])
         .start()
         .await;
 

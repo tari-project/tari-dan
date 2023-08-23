@@ -135,6 +135,7 @@ impl<TAddr> QuorumCertificate<TAddr> {
     pub fn as_high_qc(&self) -> HighQc {
         HighQc {
             block_id: self.block_id,
+            block_height: self.block_height,
             qc_id: self.qc_id,
         }
     }
@@ -144,6 +145,16 @@ impl<TAddr> QuorumCertificate<TAddr> {
             block_id: self.block_id,
             height: self.block_height,
         }
+    }
+}
+
+impl Display for HighQc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "(block_id: {}, height: {}, qc_id: {})",
+            self.block_id, self.block_height, self.qc_id
+        )
     }
 }
 

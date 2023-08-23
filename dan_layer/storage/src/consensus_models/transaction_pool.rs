@@ -153,18 +153,46 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         let count = tx.transaction_pool_count(None, None)?;
         Ok(count)
     }
+
+    pub fn confirm_all_transitions<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+        &self,
+        tx: &mut TTx,
+        tx_ids: I,
+    ) -> Result<(), TransactionPoolError> {
+        tx.transaction_pool_set_all_transitions(tx_ids)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct TransactionPoolRecord {
-    pub transaction: TransactionAtom,
-    pub stage: TransactionPoolStage,
-    pub local_decision: Option<Decision>,
-    pub remote_decision: Option<Decision>,
-    pub is_ready: bool,
+    transaction: TransactionAtom,
+    stage: TransactionPoolStage,
+    pending_stage: Option<TransactionPoolStage>,
+    local_decision: Option<Decision>,
+    remote_decision: Option<Decision>,
+    is_ready: bool,
 }
 
 impl TransactionPoolRecord {
+    pub fn load(
+        transaction: TransactionAtom,
+        stage: TransactionPoolStage,
+        pending_stage: Option<TransactionPoolStage>,
+        local_decision: Option<Decision>,
+        remote_decision: Option<Decision>,
+        is_ready: bool,
+    ) -> Self {
+        Self {
+            transaction,
+            stage,
+            pending_stage,
+            local_decision,
+            remote_decision,
+            is_ready,
+        }
+    }
+
     pub fn current_decision(&self) -> Decision {
         self.local_decision()
             .or_else(|| self.remote_decision())
@@ -191,8 +219,24 @@ impl TransactionPoolRecord {
         &self.transaction.id
     }
 
+    pub fn transaction(&self) -> &TransactionAtom {
+        &self.transaction
+    }
+
     pub fn stage(&self) -> TransactionPoolStage {
         self.stage
+    }
+
+    pub fn pending_stage(&self) -> Option<TransactionPoolStage> {
+        self.pending_stage
+    }
+
+    pub fn current_stage(&self) -> TransactionPoolStage {
+        self.pending_stage.unwrap_or(self.stage)
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.is_ready
     }
 
     pub fn get_final_transaction_atom(&self, leader_fee: u64) -> TransactionAtom {
@@ -245,14 +289,14 @@ impl TransactionPoolRecord {
 }
 
 impl TransactionPoolRecord {
-    pub fn transition<TTx: StateStoreWriteTransaction>(
+    pub fn prepare_transition<TTx: StateStoreWriteTransaction>(
         &mut self,
         tx: &mut TTx,
-        next_stage: TransactionPoolStage,
+        pending_stage: TransactionPoolStage,
         is_ready: bool,
     ) -> Result<(), TransactionPoolError> {
         // Check that only permitted stage transactions are performed
-        match ((self.stage, next_stage), is_ready) {
+        match ((self.current_stage(), pending_stage), is_ready) {
             ((TransactionPoolStage::New, TransactionPoolStage::Prepared), true) |
             ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), _) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
@@ -262,14 +306,21 @@ impl TransactionPoolRecord {
             _ => {
                 return Err(TransactionPoolError::InvalidTransactionTransition {
                     from: self.stage,
-                    to: next_stage,
+                    to: pending_stage,
                     is_ready,
                 })
             },
         }
 
-        tx.transaction_pool_update(&self.transaction.id, None, Some(next_stage), None, None, Some(is_ready))?;
-        self.stage = next_stage;
+        tx.transaction_pool_update(
+            &self.transaction.id,
+            None,
+            Some(pending_stage),
+            None,
+            None,
+            Some(is_ready),
+        )?;
+        self.stage = pending_stage;
 
         Ok(())
     }
@@ -355,6 +406,7 @@ mod tests {
                     leader_fee: 0,
                 },
                 stage: TransactionPoolStage::New,
+                pending_stage: None,
                 local_decision: None,
                 remote_decision: None,
                 is_ready: false,

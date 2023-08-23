@@ -185,7 +185,7 @@ impl TryFrom<proto::consensus::RequestMissingTransactionsMessage> for RequestMis
                 .transaction_ids
                 .into_iter()
                 .map(|tx_id| tx_id.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect::<Result<_, _>>()?,
         })
     }
 }

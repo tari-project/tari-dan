@@ -37,7 +37,8 @@ create table leaf_blocks
     id           integer   not null primary key AUTOINCREMENT,
     block_id     text      not NULL,
     block_height bigint    not NULL,
-    created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
 create table substates
@@ -69,11 +70,13 @@ create unique index substates_uniq_shard_id on substates (shard_id);
 
 create table high_qcs
 (
-    id         integer   not null primary key autoincrement,
-    block_id   text      not null,
-    qc_id      text      not null,
-    created_at timestamp NOT NULL default current_timestamp,
-    FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
+    id           integer   not null primary key autoincrement,
+    block_id     text      not null,
+    block_height bigint    not null,
+    qc_id        text      not null,
+    created_at   timestamp NOT NULL default current_timestamp,
+    FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id),
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
 create unique index high_qcs_uniq_idx_qc_id on high_qcs (qc_id);
@@ -83,7 +86,8 @@ create table last_voted
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
-    created_at timestamp NOT NULL default current_timestamp
+    created_at timestamp NOT NULL default current_timestamp,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
 create table last_executed
@@ -91,7 +95,8 @@ create table last_executed
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
-    created_at timestamp NOT NULL default current_timestamp
+    created_at timestamp NOT NULL default current_timestamp,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
 create table last_proposed
@@ -99,7 +104,8 @@ create table last_proposed
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
-    created_at timestamp NOT NULL default current_timestamp
+    created_at timestamp NOT NULL default current_timestamp,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
 create table locked_block
@@ -107,7 +113,8 @@ create table locked_block
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
-    created_at timestamp NOT NULL default current_timestamp
+    created_at timestamp NOT NULL default current_timestamp,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
 create table transactions
@@ -143,6 +150,7 @@ create table transaction_pool
     transaction_fee   bigint    not null,
     leader_fee        bigint    not null,
     stage             text      not null,
+    pending_stage     text      null,
     is_ready          boolean   not null,
     updated_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -176,18 +184,19 @@ create table votes
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE block_missing_txs
+CREATE TABLE block_missing_transactions
 (
     id              integer   not NULL PRIMARY KEY AUTOINCREMENT,
-    transaction_ids text      not NULL,
     block_id        text      not NULL,
+    transaction_ids text      not NULL,
     created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE missing_tx
+CREATE TABLE missing_transactions
 (
-    id             integer   not NULL primary key AUTOINCREMENT,
-    transaction_id text      not NULL,
-    block_id       text      not NULL,
-    created_at     timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+    id                    integer   not NULL primary key AUTOINCREMENT,
+    block_id              text      not NULL,
+    transaction_id        text      not NULL,
+    is_awaiting_execution boolean   not NULL,
+    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );

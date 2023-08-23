@@ -30,7 +30,7 @@ use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, Transact
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_p2p::{DanMessage, NewTransactionMessage, OutboundService};
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, TransactionRecord},
+    consensus_models::{ExecutedTransaction, TransactionPool, TransactionRecord},
     StateStore,
 };
 use tari_engine_types::instruction::Instruction;
@@ -62,7 +62,7 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     new_transactions: mpsc::Receiver<NewTransactionMessage>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     outbound: OutboundMessaging,
-    tx_executed_transactions: mpsc::Sender<ExecutedTransaction>,
+    tx_executed_transactions: mpsc::Sender<TransactionId>,
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
     before_execute_validator: TValidator,
@@ -70,6 +70,7 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,
     state_store: SqliteStateStore<PublicKey>,
+    transaction_pool: TransactionPool<SqliteStateStore<PublicKey>>,
 }
 
 impl<TValidator, TExecutedValidator, TExecutor, TSubstateResolver>
@@ -84,7 +85,7 @@ where
         new_transactions: mpsc::Receiver<NewTransactionMessage>,
         mempool_requests: mpsc::Receiver<MempoolRequest>,
         outbound: OutboundMessaging,
-        tx_executed_transactions: mpsc::Sender<ExecutedTransaction>,
+        tx_executed_transactions: mpsc::Sender<TransactionId>,
         epoch_manager: EpochManagerHandle,
         node_identity: Arc<NodeIdentity>,
         transaction_executor: TExecutor,
@@ -107,6 +108,7 @@ where
             before_execute_validator,
             after_execute_validator,
             state_store,
+            transaction_pool: TransactionPool::new(),
         }
     }
 
@@ -319,12 +321,21 @@ where
                     executed.execution_time()
                 );
                 match self.after_execute_validator.validate(&executed).await {
-                    Ok(_) => {},
+                    Ok(_) => {
+                        // Add the transaction result and push it into the pool for consensus. This is done in a single
+                        // transaction so that if we receive a proposal for this transaction, we
+                        // either are awaiting execution OR execution is complete and it's in the pool.
+                        self.state_store.with_write_tx(|tx| {
+                            executed.update(tx)?;
+                            self.transaction_pool.insert(tx, executed.to_atom())
+                        })?;
+                    },
                     Err(e) => {
                         self.state_store.with_write_tx(|tx| {
                             executed
                                 .set_abort(format!("Mempool after execution validation failed: {}", e))
-                                .update(tx)
+                                .update(tx)?;
+                            self.transaction_pool.insert(tx, executed.to_atom())
                         })?;
                         // We want this to go though to consensus, because validation may only fail in this shard (e.g
                         // outputs already exist) so we need to send LocalPrepared(ABORT) to
@@ -376,7 +387,8 @@ where
             )
         }
 
-        if self.tx_executed_transactions.send(executed).await.is_err() {
+        // Notify consensus that a transaction is ready to go!
+        if self.tx_executed_transactions.send(*executed.id()).await.is_err() {
             debug!(
                 target: LOG_TARGET,
                 "Executed transaction channel closed before executed transaction could be sent"

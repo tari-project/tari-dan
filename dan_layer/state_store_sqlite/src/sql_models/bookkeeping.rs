@@ -12,6 +12,7 @@ use crate::serialization::deserialize_hex_try_from;
 pub struct HighQc {
     pub id: i32,
     pub block_id: String,
+    pub block_height: i64,
     pub qc_id: String,
     pub created_at: PrimitiveDateTime,
 }
@@ -22,6 +23,7 @@ impl TryFrom<HighQc> for consensus_models::HighQc {
     fn try_from(value: HighQc) -> Result<Self, Self::Error> {
         Ok(Self {
             block_id: deserialize_hex_try_from(&value.block_id)?,
+            block_height: NodeHeight(value.block_height as u64),
             qc_id: deserialize_hex_try_from(&value.qc_id)?,
         })
     }

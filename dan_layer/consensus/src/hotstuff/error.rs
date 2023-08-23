@@ -3,7 +3,7 @@
 
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{BlockId, TransactionPoolError},
+    consensus_models::{BlockId, LeafBlock, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
@@ -109,4 +109,10 @@ pub enum ProposalValidationError {
     },
     #[error("Block {block_id} proposed by {proposed_by} is not the leader")]
     NotLeader { proposed_by: String, block_id: BlockId },
+    #[error("Block {candidate_block} proposed by {proposed_by} is less than the current leaf {leaf_block}")]
+    CandidateBlockNotHigherThanLeafBlock {
+        proposed_by: String,
+        leaf_block: LeafBlock,
+        candidate_block: LeafBlock,
+    },
 }

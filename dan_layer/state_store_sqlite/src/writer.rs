@@ -7,7 +7,15 @@ use std::{
     ops::{Deref, DerefMut},
 };
 
-use diesel::{AsChangeset, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
+use diesel::{
+    AsChangeset,
+    ExpressionMethods,
+    NullableExpressionMethods,
+    OptionalExtension,
+    QueryDsl,
+    RunQueryDsl,
+    SqliteConnection,
+};
 use log::*;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
@@ -123,21 +131,38 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    fn insert_missing_transactions<
+        'a,
+        IMissing: IntoIterator<Item = &'a TransactionId>,
+        IAwaiting: IntoIterator<Item = &'a TransactionId>,
+    >(
         &mut self,
         block_id: &BlockId,
-        transaction_ids: I,
+        missing_transaction_ids: IMissing,
+        awaiting_transaction_ids: IAwaiting,
     ) -> Result<(), StorageError> {
-        use crate::schema::{block_missing_txs, missing_tx};
+        use crate::schema::{block_missing_transactions, missing_transactions};
 
-        let transaction_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
+        let missing_transaction_ids = missing_transaction_ids
+            .into_iter()
+            .map(serialize_hex)
+            .collect::<Vec<_>>();
+        let awaiting_transaction_ids = awaiting_transaction_ids
+            .into_iter()
+            .map(serialize_hex)
+            .collect::<Vec<_>>();
         let block_id_hex = serialize_hex(block_id);
         let insert = (
-            block_missing_txs::block_id.eq(&block_id_hex),
-            block_missing_txs::transaction_ids.eq(serialize_json(&transaction_ids)?),
+            block_missing_transactions::block_id.eq(&block_id_hex),
+            block_missing_transactions::transaction_ids.eq(serialize_json(
+                &missing_transaction_ids
+                    .iter()
+                    .chain(awaiting_transaction_ids.iter())
+                    .collect::<Vec<_>>(),
+            )?),
         );
 
-        diesel::insert_into(block_missing_txs::table)
+        diesel::insert_into(block_missing_transactions::table)
             .values(insert)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -145,17 +170,25 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                 source: e,
             })?;
 
-        let values = transaction_ids
+        let values = missing_transaction_ids
             .iter()
             .map(|tx_id| {
                 (
-                    missing_tx::block_id.eq(&block_id_hex),
-                    missing_tx::transaction_id.eq(tx_id),
+                    missing_transactions::block_id.eq(&block_id_hex),
+                    missing_transactions::transaction_id.eq(tx_id),
+                    missing_transactions::is_awaiting_execution.eq(false),
                 )
             })
+            .chain(awaiting_transaction_ids.iter().map(|tx_id| {
+                (
+                    missing_transactions::block_id.eq(&block_id_hex),
+                    missing_transactions::transaction_id.eq(tx_id),
+                    missing_transactions::is_awaiting_execution.eq(true),
+                )
+            }))
             .collect::<Vec<_>>();
 
-        diesel::insert_into(missing_tx::table)
+        diesel::insert_into(missing_transactions::table)
             .values(values)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -167,11 +200,11 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
     }
 
     fn remove_missing_transaction(&mut self, transaction_id: TransactionId) -> Result<Option<BlockId>, StorageError> {
-        use crate::schema::{block_missing_txs, missing_tx};
+        use crate::schema::{block_missing_transactions, missing_transactions};
 
-        let block_id = missing_tx::table
-            .select(missing_tx::block_id)
-            .filter(missing_tx::transaction_id.eq(serialize_hex(transaction_id)))
+        let block_id = missing_transactions::table
+            .select(missing_transactions::block_id)
+            .filter(missing_transactions::transaction_id.eq(serialize_hex(transaction_id)))
             .first::<String>(self.connection())
             .optional()
             .map_err(|e| SqliteStorageError::DieselError {
@@ -182,16 +215,16 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             return Ok(None);
         };
 
-        diesel::delete(missing_tx::table)
-            .filter(missing_tx::transaction_id.eq(serialize_hex(transaction_id)))
+        diesel::delete(missing_transactions::table)
+            .filter(missing_transactions::transaction_id.eq(serialize_hex(transaction_id)))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "remove_missing_transaction",
                 source: e,
             })?;
-        let missing_transactions = block_missing_txs::table
-            .select(block_missing_txs::transaction_ids)
-            .filter(block_missing_txs::block_id.eq(&block_id))
+        let missing_transactions = block_missing_transactions::table
+            .select(block_missing_transactions::transaction_ids)
+            .filter(block_missing_transactions::block_id.eq(&block_id))
             .first::<String>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "remove_missing_transaction",
@@ -203,8 +236,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         missing_transactions.retain(|&transaction| transaction != transaction_id);
 
         if missing_transactions.is_empty() {
-            diesel::delete(block_missing_txs::table)
-                .filter(block_missing_txs::block_id.eq(&block_id))
+            diesel::delete(block_missing_transactions::table)
+                .filter(block_missing_transactions::block_id.eq(&block_id))
                 .execute(self.connection())
                 .map_err(|e| SqliteStorageError::DieselError {
                     operation: "remove_missing_transaction",
@@ -234,9 +267,9 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         });
 
         if missing_transactions.is_empty() {
-            diesel::delete(missing_tx::table)
+            diesel::delete(missing_transactions::table)
                 .filter(
-                    missing_tx::transaction_id.eq_any(
+                    missing_transactions::transaction_id.eq_any(
                         found_transactions
                             .iter()
                             .map(|tx| tx.transaction.id())
@@ -248,8 +281,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                     operation: "remove_missing_transaction",
                     source: e,
                 })?;
-            diesel::delete(block_missing_txs::table)
-                .filter(block_missing_txs::block_id.eq(&block_id))
+            diesel::delete(block_missing_transactions::table)
+                .filter(block_missing_transactions::block_id.eq(&block_id))
                 .execute(self.connection())
                 .map_err(|e| SqliteStorageError::DieselError {
                     operation: "remove_missing_transaction (2)",
@@ -258,9 +291,9 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             return Ok(Some(deserialize_hex_try_from(&block_id)?));
         }
 
-        diesel::update(block_missing_txs::table)
-            .filter(block_missing_txs::block_id.eq(block_id))
-            .set(block_missing_txs::transaction_ids.eq(serialize_json(&missing_transactions)?))
+        diesel::update(block_missing_transactions::table)
+            .filter(block_missing_transactions::block_id.eq(block_id))
+            .set(block_missing_transactions::transaction_ids.eq(serialize_json(&missing_transactions)?))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "remove_missing_transaction",
@@ -389,6 +422,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
 
         let insert = (
             high_qcs::block_id.eq(serialize_hex(high_qc.block_id)),
+            high_qcs::block_height.eq(high_qc.block_height().as_u64() as i64),
             high_qcs::qc_id.eq(serialize_hex(high_qc.qc_id)),
         );
 
@@ -513,7 +547,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         &mut self,
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
-        stage: Option<TransactionPoolStage>,
+        pending_stage: Option<TransactionPoolStage>,
         local_decision: Option<Decision>,
         remote_decision: Option<Decision>,
         is_ready: Option<bool>,
@@ -524,22 +558,20 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         #[diesel(table_name=transaction_pool)]
         struct Changes {
             evidence: Option<String>,
-            stage: Option<String>,
+            pending_stage: Option<Option<String>>,
             local_decision: Option<String>,
             remote_decision: Option<String>,
             is_ready: Option<bool>,
             updated_at: PrimitiveDateTime,
         }
 
-        let now = time::OffsetDateTime::now_utc();
-
         let change_set = Changes {
             evidence: evidence.map(serialize_json).transpose()?,
-            stage: stage.map(|s| s.to_string()),
+            pending_stage: pending_stage.map(|s| s.to_string()).map(Some),
             local_decision: local_decision.map(|d| d.to_string()),
             remote_decision: remote_decision.map(|d| d.to_string()),
             is_ready,
-            updated_at: PrimitiveDateTime::new(now.date(), now.time()),
+            updated_at: now(),
         };
 
         diesel::update(transaction_pool::table)
@@ -562,6 +594,57 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pool_remove",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn transaction_pool_set_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        tx_ids: I,
+    ) -> Result<(), StorageError> {
+        use crate::schema::transaction_pool;
+
+        let tx_ids = tx_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
+
+        let count = transaction_pool::table
+            .count()
+            .filter(transaction_pool::transaction_id.eq_any(&tx_ids))
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_set_all_transitions",
+                source: e,
+            })?;
+
+        if count != tx_ids.len() as i64 {
+            return Err(SqliteStorageError::NotAllTransactionsFound {
+                operation: "transaction_pool_set_all_transitions",
+                details: format!("Found {} transactions, but {} were queried", count, tx_ids.len()),
+            }
+            .into());
+        }
+
+        diesel::update(transaction_pool::table)
+            .filter(transaction_pool::transaction_id.eq_any(&tx_ids))
+            .filter(transaction_pool::pending_stage.is_not_null())
+            .set(transaction_pool::stage.eq(transaction_pool::pending_stage.assume_not_null()))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_set_all_transitions",
+                source: e,
+            })?;
+
+        diesel::update(transaction_pool::table)
+            .filter(transaction_pool::transaction_id.eq_any(&tx_ids))
+            .filter(transaction_pool::pending_stage.is_not_null())
+            .set((
+                transaction_pool::pending_stage.eq(None::<String>),
+                transaction_pool::updated_at.eq(now()),
+            ))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_set_all_transitions",
                 source: e,
             })?;
 
@@ -955,4 +1038,9 @@ impl<TAddr> Drop for SqliteStateStoreWriteTransaction<'_, TAddr> {
             );
         }
     }
+}
+
+fn now() -> PrimitiveDateTime {
+    let now = time::OffsetDateTime::now_utc();
+    PrimitiveDateTime::new(now.date(), now.time())
 }

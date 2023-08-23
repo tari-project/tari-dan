@@ -78,7 +78,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStore for Sqlit
         let level = if elapsed > Duration::from_secs(1) {
             log::Level::Warn
         } else {
-            log::Level::Debug
+            log::Level::Trace
         };
         log!(
             target: LOG_TARGET,

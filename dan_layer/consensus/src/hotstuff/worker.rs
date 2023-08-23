@@ -6,13 +6,13 @@ use std::ops::DerefMut;
 use log::*;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
+    consensus_models::{Block, HighQc, LeafBlock, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -42,7 +42,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
 
-    rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
+    rx_new_transactions: mpsc::Receiver<TransactionId>,
     rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
     tx_events: broadcast::Sender<HotstuffEvent>,
 
@@ -79,7 +79,7 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
-        rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
+        rx_new_transactions: mpsc::Receiver<TransactionId>,
         rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         state_store: TConsensusSpec::StateStore,
         epoch_events: broadcast::Receiver<EpochManagerEvent>,
@@ -220,6 +220,12 @@ where
                 self.is_epoch_synced = true;
                 // TODO: merge chain(s) from previous epoch?
 
+                let (leaf_block, high_qc) = self
+                    .state_store
+                    .with_read_tx(|tx| Ok::<_, HotStuffError>((LeafBlock::get(tx)?, HighQc::get(tx)?)))?;
+                self.pacemaker_handle
+                    .start(leaf_block.height(), high_qc.block_height())
+                    .await?;
                 self.pacemaker_handle.beat().await?;
             },
         }
@@ -227,32 +233,15 @@ where
         Ok(())
     }
 
-    async fn on_new_executed_transaction(&mut self, executed: ExecutedTransaction) -> Result<(), HotStuffError> {
+    async fn on_new_executed_transaction(&mut self, transaction_id: TransactionId) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
             "🚀 Consensus READY for new transaction with id: {}",
-            executed.id()
+            transaction_id
         );
-        let maybe_block_id = self.state_store.with_write_tx(|tx| {
-            executed.upsert(tx)?;
-
-            self.transaction_pool.insert(tx, TransactionAtom {
-                id: *executed.id(),
-                decision: executed.as_decision(),
-                evidence: executed.to_initial_evidence(),
-                transaction_fee: executed
-                    .result()
-                    .fee_receipt
-                    .as_ref()
-                    .and_then(|f| f.total_fees_paid().as_u64_checked())
-                    .unwrap_or(0),
-                // We calculate the leader fee later depending on the epoch of the block
-                leader_fee: 0,
-            })?;
-
-            let maybe_block_id = tx.remove_missing_transaction(*executed.into_transaction().id())?;
-            Ok::<_, HotStuffError>(maybe_block_id)
-        })?;
+        let maybe_block_id = self
+            .state_store
+            .with_write_tx(|tx| tx.remove_missing_transaction(transaction_id))?;
         if let Some(block_id) = maybe_block_id {
             self.on_receive_proposal.reprocess_block(&block_id).await?;
         }
@@ -316,7 +305,7 @@ where
             target: LOG_TARGET,
             "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}, must_propose: {}",
             is_leader,
-            leaf_block.block_id,
+            leaf_block,
             local_committee
                 .len(),
             must_propose

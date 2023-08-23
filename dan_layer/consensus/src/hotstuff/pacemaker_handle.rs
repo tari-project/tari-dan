@@ -7,48 +7,64 @@ use tokio::sync::mpsc;
 use crate::hotstuff::HotStuffError;
 
 pub enum PacemakerRequest {
-    ResetLeaderTimeout { last_seen_height: NodeHeight },
-    TriggerBeat,
-    StartTimer,
+    ResetLeaderTimeout {
+        last_seen_height: NodeHeight,
+        high_qc_height: NodeHeight,
+    },
+    TriggerBeat {
+        is_forced: bool,
+    },
+    Start {
+        current_height: NodeHeight,
+        high_qc_height: NodeHeight,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub struct PaceMakerHandle {
-    // receiver: mpsc::Receiver<PacemakerEvent>,
     sender: mpsc::Sender<PacemakerRequest>,
 }
 
 impl PaceMakerHandle {
     pub fn new(sender: mpsc::Sender<PacemakerRequest>) -> Self {
-        // let (sender, receiver) = mpsc::channel();
-        Self {
-            // receiver,
-            sender,
-        }
+        Self { sender }
     }
 
-    // pub async fn wait(&mut self) {
-    //     self.
-    // }
+    /// Start the pacemaker if it hasn't already been started. If it has, this is a no-op
+    pub async fn start(&self, current_height: NodeHeight, high_qc_height: NodeHeight) -> Result<(), HotStuffError> {
+        self.sender
+            .send(PacemakerRequest::Start {
+                current_height,
+                high_qc_height,
+            })
+            .await
+            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    }
 
     pub async fn beat(&self) -> Result<(), HotStuffError> {
         self.sender
-            .send(PacemakerRequest::TriggerBeat)
+            .send(PacemakerRequest::TriggerBeat { is_forced: false })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
-    pub async fn reset_leader_timeout(&self, last_seen_height: NodeHeight) -> Result<(), HotStuffError> {
+    pub async fn force_beat(&self) -> Result<(), HotStuffError> {
         self.sender
-            .send(PacemakerRequest::ResetLeaderTimeout { last_seen_height })
+            .send(PacemakerRequest::TriggerBeat { is_forced: true })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
-    /// Start the timer. If the timer is already started, this is a no-op
-    pub async fn start_timer(&self) -> Result<(), HotStuffError> {
+    pub async fn reset_leader_timeout(
+        &self,
+        last_seen_height: NodeHeight,
+        high_qc_height: NodeHeight,
+    ) -> Result<(), HotStuffError> {
         self.sender
-            .send(PacemakerRequest::StartTimer)
+            .send(PacemakerRequest::ResetLeaderTimeout {
+                last_seen_height,
+                high_qc_height,
+            })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }

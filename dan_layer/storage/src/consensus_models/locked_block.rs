@@ -17,6 +17,16 @@ pub struct LockedBlock {
 }
 
 impl LockedBlock {
+    pub fn height(&self) -> NodeHeight {
+        self.height
+    }
+
+    pub fn block_id(&self) -> &BlockId {
+        &self.block_id
+    }
+}
+
+impl LockedBlock {
     pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<Self, StorageError> {
         tx.locked_block_get()
     }
