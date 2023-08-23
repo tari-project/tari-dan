@@ -91,7 +91,7 @@ where
         tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
-        tx_mempool: mpsc::Sender<Transaction>,
+        tx_mempool: mpsc::UnboundedSender<Transaction>,
         shutdown: ShutdownSignal,
     ) -> Self {
         let pacemaker = PaceMaker::new(shutdown.clone());
@@ -380,6 +380,7 @@ where
             zero_block.as_leaf_block().set(&mut tx)?;
             zero_block.as_last_executed().set(&mut tx)?;
             zero_block.justify().as_high_qc().set(&mut tx)?;
+            zero_block.commit(&mut tx)?;
         }
 
         // let genesis = Block::genesis();

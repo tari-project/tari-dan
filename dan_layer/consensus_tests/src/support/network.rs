@@ -137,7 +137,7 @@ pub struct TestNetworkWorker {
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>>>,
     #[allow(clippy::type_complexity)]
     rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage<TestAddress>)>>>,
-    rx_mempool: Option<HashMap<TestAddress, mpsc::Receiver<Transaction>>>,
+    rx_mempool: Option<HashMap<TestAddress, mpsc::UnboundedReceiver<Transaction>>>,
     network_status: watch::Receiver<NetworkStatus>,
     on_message: watch::Sender<Option<HotstuffMessage<TestAddress>>>,
     num_sent_messages: Arc<AtomicUsize>,

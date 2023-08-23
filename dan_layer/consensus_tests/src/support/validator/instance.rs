@@ -32,7 +32,7 @@ pub struct ValidatorChannels {
     pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage<TestAddress>)>,
     pub rx_broadcast: mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>,
     pub rx_leader: mpsc::Receiver<(TestAddress, HotstuffMessage<TestAddress>)>,
-    pub rx_mempool: mpsc::Receiver<Transaction>,
+    pub rx_mempool: mpsc::UnboundedReceiver<Transaction>,
 }
 
 pub struct Validator {
