@@ -190,7 +190,8 @@ where TConsensusSpec: ConsensusSpec
             "🌿 Broadcasting proposal {} to committees ({} local, {} foreign)",
             next_block,
             local_committee.len(),
-            non_local_committees.len());
+            non_local_committees.len(),
+        );
 
         // Broadcast to local and foreign committees
         // TODO: only broadcast to f + 1 foreign committee members. They can gossip the proposal around from there.

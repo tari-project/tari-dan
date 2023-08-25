@@ -300,7 +300,7 @@ async fn leader_failure_output_conflict() {
     assert_ne!(tx1.id(), tx2.id());
     // Transactions are sorted in the blocks, because we have a "first come first serve" policy for locking objects
     // the "first" will be Committed and the "last" Aborted
-    let mut sorted_tx_ids = vec![tx1.id(), tx2.id()];
+    let mut sorted_tx_ids = [tx1.id(), tx2.id()];
     sorted_tx_ids.sort();
 
     test.network()

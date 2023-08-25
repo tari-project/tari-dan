@@ -181,7 +181,12 @@ impl TestNetworkWorker {
                         state_store
                             .with_write_tx(|tx| {
                                 executed.upsert(tx)?;
-                                TransactionPool::<SqliteStateStore<TestAddress>>::new().insert(tx, executed.to_atom())
+                                let atom = executed.to_atom();
+                                let pool = TransactionPool::<SqliteStateStore<TestAddress>>::new();
+                                if !pool.exists(tx, &atom.id)? {
+                                    pool.insert(tx, atom)?;
+                                }
+                                Ok::<_, anyhow::Error>(())
                             })
                             .unwrap();
                         tx_new_transaction.send(*executed.id()).await.unwrap();
@@ -279,7 +284,12 @@ impl TestNetworkWorker {
         state_store
             .with_write_tx(|tx| {
                 existing_executed_tx.upsert(tx)?;
-                TransactionPool::<SqliteStateStore<TestAddress>>::new().insert(tx, existing_executed_tx.to_atom())
+                let atom = existing_executed_tx.to_atom();
+                let pool = TransactionPool::<SqliteStateStore<TestAddress>>::new();
+                if !pool.exists(tx, &atom.id)? {
+                    pool.insert(tx, atom)?;
+                }
+                Ok::<_, anyhow::Error>(())
             })
             .unwrap();
 

@@ -18,6 +18,7 @@ pub enum PacemakerRequest {
         current_height: NodeHeight,
         high_qc_height: NodeHeight,
     },
+    Stop,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +42,15 @@ impl PaceMakerHandle {
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
+    /// Stop the pacemaker. If it hasn't been started, this is a no-op
+    pub async fn stop(&self) -> Result<(), HotStuffError> {
+        self.sender
+            .send(PacemakerRequest::Stop)
+            .await
+            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    }
+
+    /// Signal the pacemaker trigger a beat. If the pacemaker has not been started, this is a no-op
     pub async fn beat(&self) -> Result<(), HotStuffError> {
         self.sender
             .send(PacemakerRequest::TriggerBeat { is_forced: false })
@@ -48,6 +58,7 @@ impl PaceMakerHandle {
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
+    /// Signal the pacemaker trigger a forced beat. If the pacemaker has not been started, this is a no-op
     pub async fn force_beat(&self) -> Result<(), HotStuffError> {
         self.sender
             .send(PacemakerRequest::TriggerBeat { is_forced: true })
@@ -55,6 +66,7 @@ impl PaceMakerHandle {
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
+    /// Reset the leader timeout. This should be called when a valid leader proposal is received.
     pub async fn reset_leader_timeout(
         &self,
         last_seen_height: NodeHeight,

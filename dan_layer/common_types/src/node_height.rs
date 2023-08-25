@@ -3,7 +3,7 @@
 
 use std::{
     fmt::{Display, Formatter},
-    ops::{Add, Sub},
+    ops::{Add, AddAssign, Sub},
 };
 
 use serde::{Deserialize, Serialize};
@@ -46,6 +46,11 @@ impl Add for NodeHeight {
 
     fn add(self, rhs: Self) -> Self::Output {
         NodeHeight(self.0 + rhs.0)
+    }
+}
+impl AddAssign for NodeHeight {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
     }
 }
 

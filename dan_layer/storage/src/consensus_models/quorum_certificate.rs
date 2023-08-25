@@ -147,17 +147,6 @@ impl<TAddr> QuorumCertificate<TAddr> {
         }
     }
 }
-
-impl Display for HighQc {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "(block_id: {}, height: {}, qc_id: {})",
-            self.block_id, self.block_height, self.qc_id
-        )
-    }
-}
-
 impl<TAddr> QuorumCertificate<TAddr> {
     pub fn get<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
         tx: &mut TTx,
@@ -198,6 +187,20 @@ impl<TAddr> QuorumCertificate<TAddr> {
         }
         self.insert(tx)?;
         Ok(false)
+    }
+}
+
+impl<TAddr: Display> Display for QuorumCertificate<TAddr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Qc(block: {} {}, qc_id: {}, epoch: {}, {} signatures)",
+            self.block_id,
+            self.block_height,
+            self.qc_id,
+            self.epoch,
+            self.signatures.len()
+        )
     }
 }
 

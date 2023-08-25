@@ -1,6 +1,9 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
-use std::{cmp, time::Duration};
+use std::{
+    cmp,
+    time::{Duration, Instant},
+};
 
 use log::*;
 use tari_dan_common_types::NodeHeight;
@@ -70,54 +73,75 @@ impl PaceMaker {
     ) -> Result<(), HotStuffError> {
         // Don't start the timer until we receive a reset event
         let leader_timeout = tokio::time::sleep(Duration::MAX);
-        let empty_block_deadline = tokio::time::sleep(Duration::MAX);
+        let block_timer = tokio::time::sleep(Duration::MAX);
         tokio::pin!(leader_timeout);
-        tokio::pin!(empty_block_deadline);
+        tokio::pin!(block_timer);
+
         let mut started = false;
+
         loop {
             tokio::select! {
                 // biased;
                 Some(event) = self.handle_receiver.recv() => {
                     match event {
                        PacemakerRequest::ResetLeaderTimeout { last_seen_height, high_qc_height } => {
+                            if !started {
+                                continue;
+                            }
+
                             self.current_height = cmp::max(self.current_height, last_seen_height);
                             assert!(self.current_high_qc_height <= high_qc_height, "high_qc_height must be monotonically increasing");
                             self.current_high_qc_height = high_qc_height;
 
                             leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
                             // set a timer for when we must send an empty block...
-                            empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.block_time);
-
-                            started = true;
+                            block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                        },
-                        PacemakerRequest::TriggerBeat {is_forced} => {
+                        PacemakerRequest::TriggerBeat { is_forced} => {
+                            if !started {
+                                continue;
+                            }
                             if is_forced{
                                 on_force_beat.beat();
                             } else {
-                               on_beat.beat();
+                                on_beat.beat();
                             }
                         }
                         PacemakerRequest::Start { current_height, high_qc_height } => {
-                            if !started {
-                                self.current_height = current_height;
-                                self.current_high_qc_height = high_qc_height;
-                                leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
-                                empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.block_time);
-                                started = true;
+                            info!(target: LOG_TARGET, "🚀 Starting pacemaker");
+                            if started {
+                                continue;
                             }
+                            self.current_height = current_height;
+                            self.current_high_qc_height = high_qc_height;
+                            leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
+                            block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                            on_beat.beat();
+                            started = true;
+                        }
+                        PacemakerRequest::Stop => {
+                            info!(target: LOG_TARGET, "💤 Stopping pacemaker");
+                            started = false;
+                            // TODO: we could use futures-rs Either
+                            leader_timeout.as_mut().reset(far_future());
+                            block_timer.as_mut().reset(far_future());
                         }
                     }
                 },
-                () = &mut empty_block_deadline => {
-                    empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                () = &mut block_timer => {
+                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                     on_force_beat.beat();
                 }
                 () = &mut leader_timeout => {
-                    debug!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}", self.current_height);
-                    self.current_height =  self.current_height + NodeHeight(1);
-                    on_leader_timeout.leader_timed_out(self.current_height);
+                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                     leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
-                    empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                    // Dont leader fail on genesis
+                    if self.current_height == NodeHeight::zero() {
+                        continue;
+                    }
+                    info!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}", self.current_height);
+                    self.current_height += NodeHeight(1);
+                    on_leader_timeout.leader_timed_out(self.current_height);
                 },
 
                 _ = self.shutdown.wait() => {
@@ -136,7 +160,10 @@ impl PaceMaker {
     fn delta_time(&self) -> Duration {
         let exp = u32::try_from(cmp::min(
             u64::from(u32::MAX),
-            self.current_height.saturating_sub(self.current_high_qc_height).as_u64(),
+            cmp::max(
+                1,
+                self.current_height.saturating_sub(self.current_high_qc_height).as_u64(),
+            ),
         ))
         .unwrap_or(u32::MAX);
         let delta = cmp::min(
@@ -145,4 +172,13 @@ impl PaceMaker {
         );
         self.block_time + delta
     }
+}
+
+fn far_future() -> tokio::time::Instant {
+    // Taken verbatim from the tokio library:
+    // Roughly 30 years from now.
+    // API does not provide a way to obtain max `Instant`
+    // or convert specific date in the future to instant.
+    // 1000 years overflows on macOS, 100 years overflows on FreeBSD.
+    tokio::time::Instant::from_std(Instant::now() + Duration::from_secs(86400 * 365 * 30))
 }

@@ -139,6 +139,16 @@ where TConsensusSpec: ConsensusSpec
         // First save the block in one db transaction
         let (missing_tx_ids, awaiting_execution) = self.store.with_write_tx(|tx| {
             self.validate_local_proposed_block_and_fill_dummy_blocks(&mut *tx, &from, &block, &local_committee)?;
+            // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
+            // Specifically, it should extend the locked block via the dummy blocks.
+            if !is_safe_block(tx.deref_mut(), &block)? {
+                return Err(ProposalValidationError::NotSafeBlock {
+                    proposed_by: from.to_string(),
+                    hash: *block.id(),
+                }
+                .into());
+            }
+
             // Insert the block if it doesnt already exist
             block.justify().save(tx)?;
             block.save(tx)?;
@@ -148,7 +158,7 @@ where TConsensusSpec: ConsensusSpec
 
         if missing_tx_ids.is_empty() && awaiting_execution.is_empty() {
             self.process_block(&local_committee, &block).await
-        } else {
+        } else if !missing_tx_ids.is_empty() {
             self.send_to_leader(
                 &local_committee,
                 block.height(),
@@ -159,6 +169,8 @@ where TConsensusSpec: ConsensusSpec
                 }),
             )
             .await?;
+            Ok(())
+        } else {
             Ok(())
         }
     }
@@ -237,14 +249,7 @@ where TConsensusSpec: ConsensusSpec
                 .reset_leader_timeout(block.height(), high_qc.block_height())
                 .await?;
             let vote = self.generate_vote_message(block, decision).await?;
-            debug!(
-                target: LOG_TARGET,
-                "🔥 Send {:?} VOTE for block {}, parent {}, height {}",
-                decision,
-                block.id(),
-                block.parent(),
-                block.height(),
-            );
+
             self.send_vote_to_leader(local_committee, vote, block.height()).await?;
         }
 
@@ -313,7 +318,7 @@ where TConsensusSpec: ConsensusSpec
             // transaction as ready to propose ACCEPT. If we have not received the local LocalPrepared, the transition
             // will happen when we receive the local block.
             if tx_rec.current_stage().is_local_prepared() && tx_rec.transaction().evidence.all_shards_complete() {
-                tx_rec.prepare_transition(tx, TransactionPoolStage::LocalPrepared, true)?;
+                tx_rec.pending_transition(tx, TransactionPoolStage::LocalPrepared, true)?;
             }
         }
 
@@ -342,6 +347,13 @@ where TConsensusSpec: ConsensusSpec
         height: NodeHeight,
     ) -> Result<(), HotStuffError> {
         let leader = self.leader_strategy.get_leader_for_next_block(local_committee, height);
+        info!(
+            target: LOG_TARGET,
+            "🔥 VOTE {:?} for block {} to next leader {:.4}",
+            vote.decision,
+            vote.block_id,
+            leader,
+        );
         self.tx_leader
             .send((leader.clone(), HotstuffMessage::Vote(vote)))
             .await
@@ -443,7 +455,7 @@ where TConsensusSpec: ConsensusSpec
                             }
                         }
 
-                        tx_rec.prepare_transition(tx, TransactionPoolStage::Prepared, true)?;
+                        tx_rec.pending_transition(tx, TransactionPoolStage::Prepared, true)?;
                     } else {
                         // If we disagree with any local decision we abstain from voting
                         warn!(
@@ -496,7 +508,7 @@ where TConsensusSpec: ConsensusSpec
                         return Ok(None);
                     }
 
-                    tx_rec.prepare_transition(
+                    tx_rec.pending_transition(
                         tx,
                         TransactionPoolStage::LocalPrepared,
                         tx_rec.transaction().evidence.all_shards_complete(),
@@ -572,9 +584,9 @@ where TConsensusSpec: ConsensusSpec
                     // and we decide COMMIT, we set SomePrepared, otherwise AllPrepared. There are no further stages
                     // after these, so these MUST never be ready to propose.
                     if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
-                        tx_rec.prepare_transition(tx, TransactionPoolStage::SomePrepared, false)?;
+                        tx_rec.pending_transition(tx, TransactionPoolStage::SomePrepared, false)?;
                     } else {
-                        tx_rec.prepare_transition(tx, TransactionPoolStage::AllPrepared, false)?;
+                        tx_rec.pending_transition(tx, TransactionPoolStage::AllPrepared, false)?;
                     }
                 },
             }
@@ -591,7 +603,6 @@ where TConsensusSpec: ConsensusSpec
             return Ok(None);
         }
 
-        info!(target: LOG_TARGET, "✅ Voting to accept block {} {}", block.id(), block.height());
         Ok(Some(QuorumDecision::Accept))
     }
 
@@ -931,7 +942,7 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        let leaf_block = self.store.with_write_tx(|tx| LeafBlock::get(tx.deref_mut()))?;
+        let leaf_block = LeafBlock::get(tx.deref_mut())?;
         if candidate_block.height() <= leaf_block.height() {
             return Err(ProposalValidationError::CandidateBlockNotHigherThanLeafBlock {
                 proposed_by: from.to_string(),
@@ -991,19 +1002,19 @@ where TConsensusSpec: ConsensusSpec
 
                 debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);
                 // TODO: replace with actual leader's propose
-                last_dummy_block =
-                    Block::dummy_block(*last_dummy_block.id(), leader.clone(), next_height, high_qc.clone());
+                last_dummy_block = Block::dummy_block(
+                    *last_dummy_block.id(),
+                    leader.clone(),
+                    next_height,
+                    high_qc.clone(),
+                    candidate_block.epoch(),
+                );
                 last_dummy_block.save(tx)?;
+                // We dont set this as the leaf block because we are not proposing next from these dummy blocks, if the
+                // candidate block is valid it will become the leaf block.
+                // TODO: We must "undo" the TransactionAtom stage changes from conflicting (same height) blocks that
+                //       have been processed
             }
-        }
-
-        // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
-        // Specifically, it should extend the locked block via the dummy blocks.
-        if !is_safe_block(tx.deref_mut(), candidate_block)? {
-            return Err(ProposalValidationError::NotSafeBlock {
-                proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
-            });
         }
 
         Ok(())

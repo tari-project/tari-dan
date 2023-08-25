@@ -216,18 +216,26 @@ where
 
     async fn on_epoch_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
         match event {
-            EpochManagerEvent::EpochChanged(_epoch) => {
+            EpochManagerEvent::EpochChanged(epoch) => {
                 self.is_epoch_synced = true;
                 // TODO: merge chain(s) from previous epoch?
 
-                let (leaf_block, high_qc) = self
-                    .state_store
-                    .with_read_tx(|tx| Ok::<_, HotStuffError>((LeafBlock::get(tx)?, HighQc::get(tx)?)))?;
-                self.pacemaker_handle
-                    .start(leaf_block.height(), high_qc.block_height())
-                    .await?;
-                self.pacemaker_handle.beat().await?;
+                if self
+                    .epoch_manager
+                    .is_local_validator_registered_for_epoch(epoch)
+                    .await?
+                {
+                    let (leaf_block, high_qc) = self
+                        .state_store
+                        .with_read_tx(|tx| Ok::<_, HotStuffError>((LeafBlock::get(tx)?, HighQc::get(tx)?)))?;
+                    self.pacemaker_handle
+                        .start(leaf_block.height(), high_qc.block_height())
+                        .await?;
+                } else {
+                    self.pacemaker_handle.stop().await?;
+                }
             },
+            EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
         }
 
         Ok(())
@@ -324,7 +332,11 @@ where
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
-        if !self.epoch_manager.is_epoch_active(msg.epoch()).await? {
+        if !self
+            .epoch_manager
+            .is_local_validator_registered_for_epoch(msg.epoch())
+            .await?
+        {
             return Err(HotStuffError::EpochNotActive {
                 epoch: msg.epoch(),
                 details: "Received message for inactive epoch".to_string(),

@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::Display;
+
 use tari_dan_common_types::NodeHeight;
 
 use crate::{
@@ -64,5 +66,15 @@ impl HighQc {
 
     pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.high_qc_set(self)
+    }
+}
+
+impl Display for HighQc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "(block_id: {}, height: {}, qc_id: {})",
+            self.block_id, self.block_height, self.qc_id
+        )
     }
 }

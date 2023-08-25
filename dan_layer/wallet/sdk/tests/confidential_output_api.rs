@@ -237,7 +237,7 @@ impl WalletNetworkInterface for PanicIndexer {
         _version: Option<u32>,
         _local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 
     async fn submit_transaction(
@@ -245,7 +245,7 @@ impl WalletNetworkInterface for PanicIndexer {
         _transaction: Transaction,
         _required_substates: Vec<SubstateRequirement>,
     ) -> Result<TransactionId, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 
     async fn submit_dry_run_transaction(
@@ -253,13 +253,13 @@ impl WalletNetworkInterface for PanicIndexer {
         _transaction: Transaction,
         _required_substates: Vec<SubstateRequirement>,
     ) -> Result<TransactionQueryResult, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 
     async fn query_transaction_result(
         &self,
         _transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 }

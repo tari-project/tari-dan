@@ -165,6 +165,7 @@ impl DanNode {
                     }
                 });
             },
+            EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
         }
         Ok(())
     }

@@ -46,10 +46,13 @@ pub enum HotStuffError {
     ReceivedVoteForUnknownBlock { block_id: BlockId, sent_by: String },
     #[error("Pacemaker channel dropped: {details}")]
     PacemakerChannelDropped { details: String },
-    #[error("Bad new view message: expected height {expected_height}, received new height {received_new_height}")]
+    #[error(
+        "Bad new view message: HighQC height {high_qc_height}, received new height {received_new_height}: {details}"
+    )]
     BadNewViewMessage {
-        expected_height: NodeHeight,
+        high_qc_height: NodeHeight,
         received_new_height: NodeHeight,
+        details: String,
     },
     #[error("BUG Invariant error occurred: {0}")]
     InvariantError(String),

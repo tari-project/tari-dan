@@ -119,8 +119,8 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         proposed_by: TAddr,
         node_height: NodeHeight,
         high_qc: QuorumCertificate<TAddr>,
+        epoch: Epoch,
     ) -> Self {
-        let epoch = high_qc.epoch();
         Self::new(parent, high_qc, node_height, epoch, proposed_by, Default::default(), 0)
     }
 
@@ -259,7 +259,8 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_insert(self)
     }
 
-    /// Inserts the block if it doesnt exist. Returns true if the block exists, otherwise false.
+    /// Inserts the block if it doesnt exist. Returns true if the block was saved and did not exist previously,
+    /// otherwise false.
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
         TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
@@ -267,10 +268,10 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
     {
         let exists = self.exists(tx.deref_mut())?;
         if exists {
-            return Ok(true);
+            return Ok(false);
         }
         self.insert(tx)?;
-        Ok(false)
+        Ok(true)
     }
 
     pub fn commit<TTx: StateStoreWriteTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<(), StorageError> {

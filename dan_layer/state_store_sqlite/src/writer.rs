@@ -17,7 +17,7 @@ use diesel::{
     SqliteConnection,
 };
 use log::*;
-use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -400,6 +400,17 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
 
     fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError> {
         use crate::schema::locked_block;
+
+        if let Some(existing) = self.locked_block_get().optional()? {
+            if locked_block.height <= existing.height {
+                return Err(StorageError::QueryError {
+                    reason: format!(
+                        "Locked block height {} is not greater than existing height {}",
+                        locked_block.height, existing.height
+                    ),
+                });
+            }
+        }
 
         let insert = (
             locked_block::block_id.eq(serialize_hex(locked_block.block_id)),

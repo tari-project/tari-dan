@@ -89,24 +89,7 @@ where TConsensusSpec: ConsensusSpec
 
         self.validate_vote_message(&message, &sender_leaf_hash)?;
 
-        let (block, count) = self.store.with_write_tx(|tx| {
-            let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
-                return Err(HotStuffError::ReceivedVoteForUnknownBlock {
-                    block_id: message.block_id,
-                    sent_by: from.to_string(),
-                });
-            };
-            if !self
-                .leader_strategy
-                .is_leader_for_next_block(&vn.address, &committee, block.height())
-            {
-                return Err(HotStuffError::NotTheLeader {
-                    details: format!(
-                        "Not this leader for block {}, vote sent by {}",
-                        message.block_id, vn.address
-                    ),
-                });
-            }
+        let count = self.store.with_write_tx(|tx| {
             Vote {
                 epoch: message.epoch,
                 block_id: message.block_id,
@@ -118,7 +101,7 @@ where TConsensusSpec: ConsensusSpec
             .save(tx)?;
 
             let count = Vote::<TConsensusSpec::Addr>::count_for_block(tx.deref_mut(), &message.block_id)?;
-            Ok::<_, HotStuffError>((block, count))
+            Ok::<_, HotStuffError>(count)
         })?;
 
         // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
@@ -136,6 +119,23 @@ where TConsensusSpec: ConsensusSpec
         }
         {
             let mut tx = self.store.create_write_tx()?;
+            let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
+                return Err(HotStuffError::ReceivedVoteForUnknownBlock {
+                    block_id: message.block_id,
+                    sent_by: from.to_string(),
+                });
+            };
+            if !self
+                .leader_strategy
+                .is_leader_for_next_block(&vn.address, &committee, block.height())
+            {
+                return Err(HotStuffError::NotTheLeader {
+                    details: format!(
+                        "Not this leader for block {}, vote sent by {}",
+                        message.block_id, vn.address
+                    ),
+                });
+            }
             let high_qc = HighQc::get(tx.deref_mut())?;
             if high_qc.block_id == *block.id() {
                 debug!(
@@ -188,6 +188,8 @@ where TConsensusSpec: ConsensusSpec
                 leaf_hashes,
                 quorum_decision,
             );
+
+            info!(target: LOG_TARGET, "🔥 New QC {}", qc);
 
             update_high_qc(&mut tx, &qc)?;
             tx.commit()?;

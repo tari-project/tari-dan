@@ -289,7 +289,7 @@ impl TransactionPoolRecord {
 }
 
 impl TransactionPoolRecord {
-    pub fn prepare_transition<TTx: StateStoreWriteTransaction>(
+    pub fn pending_transition<TTx: StateStoreWriteTransaction>(
         &mut self,
         tx: &mut TTx,
         pending_stage: TransactionPoolStage,
@@ -320,7 +320,7 @@ impl TransactionPoolRecord {
             None,
             Some(is_ready),
         )?;
-        self.stage = pending_stage;
+        self.pending_stage = Some(pending_stage);
 
         Ok(())
     }
