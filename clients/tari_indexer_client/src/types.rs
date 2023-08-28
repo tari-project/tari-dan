@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use serde_with::{serde_as, DisplayFromStr};
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
@@ -10,7 +11,6 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
-use serde_json::Value as JsonValue;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateRequest {

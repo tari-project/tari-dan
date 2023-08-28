@@ -3,9 +3,10 @@
 
 use serde_json as json;
 use tari_engine_types::{
+    commit_result::ExecuteResult,
     component::ComponentHeader,
     non_fungible::NonFungibleContainer,
-    substate::{Substate, SubstateValue}, commit_result::ExecuteResult,
+    substate::{Substate, SubstateValue},
 };
 use tari_validator_node_rpc::client::FinalizedResult;
 
@@ -38,7 +39,12 @@ pub fn encode_finalized_result_into_json(result: &FinalizedResult) -> Result<Vec
 }
 
 pub fn encode_execute_result_into_json(result: &ExecuteResult) -> Result<Vec<json::Value>, JsonEncodingError> {
-    let encoded_results = result.finalize.execution_results.iter().map(|r| cbor_to_json(&r.raw)).collect::<Result<_, JsonEncodingError>>()?;
+    let encoded_results = result
+        .finalize
+        .execution_results
+        .iter()
+        .map(|r| cbor_to_json(&r.raw))
+        .collect::<Result<_, JsonEncodingError>>()?;
     Ok(encoded_results)
 }
 

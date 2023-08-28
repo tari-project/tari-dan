@@ -68,6 +68,7 @@ use tari_validator_node_client::types::{
 };
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory, TransactionResultStatus};
 
+use super::json_encoding::{encode_execute_result_into_json, encode_finalized_result_into_json};
 use crate::{
     bootstrap::Services,
     dry_run::processor::DryRunTransactionProcessor,
@@ -75,8 +76,6 @@ use crate::{
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
 };
-
-use super::json_encoding::{encode_execute_result_into_json, encode_finalized_result_into_json};
 
 const LOG_TARGET: &str = "tari::indexer::json_rpc::handlers";
 
@@ -533,7 +532,8 @@ impl JsonRpcHandlers {
                 .await
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
-            let json_results = encode_execute_result_into_json(&exec_result).map_err(|e| Self::internal_error(answer_id, e))?;
+            let json_results =
+                encode_execute_result_into_json(&exec_result).map_err(|e| Self::internal_error(answer_id, e))?;
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
                 result: IndexerTransactionFinalizedResult::Finalized {
@@ -619,16 +619,17 @@ impl JsonRpcHandlers {
                 result: IndexerTransactionFinalizedResult::Pending,
             },
             TransactionResultStatus::Finalized(finalized) => {
-                let json_results = encode_finalized_result_into_json(&finalized).map_err(|e| Self::internal_error(answer_id, e))?;
+                let json_results =
+                    encode_finalized_result_into_json(&finalized).map_err(|e| Self::internal_error(answer_id, e))?;
                 GetTransactionResultResponse {
                     result: IndexerTransactionFinalizedResult::Finalized {
                         final_decision: finalized.final_decision,
                         execution_result: finalized.execute_result,
                         abort_details: finalized.abort_details,
                         json_results,
-                    }
+                    },
                 }
-            }
+            },
         };
 
         Ok(JsonRpcResponse::success(answer_id, resp))
