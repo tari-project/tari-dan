@@ -5,14 +5,15 @@ use serde_json as json;
 use tari_engine_types::{
     component::ComponentHeader,
     non_fungible::NonFungibleContainer,
-    substate::{Substate, SubstateValue},
+    substate::{Substate, SubstateValue}, commit_result::ExecuteResult,
 };
+use tari_validator_node_rpc::client::FinalizedResult;
 
 type JsonObject = json::Map<String, json::Value>;
 type CborValue = tari_bor::Value;
 
 #[derive(Debug, thiserror::Error)]
-pub enum SubstateDecoderError {
+pub enum JsonEncodingError {
     #[error("Could not decode the substate: {0}")]
     BinaryEncoding(#[from] tari_bor::BorError),
     #[error("Serde error: {0}")]
@@ -21,7 +22,27 @@ pub enum SubstateDecoderError {
     Unexpected(String),
 }
 
-pub fn encode_substate_into_json(substate: &Substate) -> Result<json::Value, SubstateDecoderError> {
+pub fn cbor_to_json(raw: &[u8]) -> Result<json::Value, JsonEncodingError> {
+    let decoded_cbor: CborValue = tari_bor::decode(raw)?;
+    let decoded_cbor = fix_invalid_object_keys(&decoded_cbor);
+    let result = serde_json::to_value(decoded_cbor)?;
+
+    Ok(result)
+}
+
+pub fn encode_finalized_result_into_json(result: &FinalizedResult) -> Result<Vec<json::Value>, JsonEncodingError> {
+    match &result.execute_result {
+        Some(res) => encode_execute_result_into_json(res),
+        None => Ok(vec![]),
+    }
+}
+
+pub fn encode_execute_result_into_json(result: &ExecuteResult) -> Result<Vec<json::Value>, JsonEncodingError> {
+    let encoded_results = result.finalize.execution_results.iter().map(|r| cbor_to_json(&r.raw)).collect::<Result<_, JsonEncodingError>>()?;
+    Ok(encoded_results)
+}
+
+pub fn encode_substate_into_json(substate: &Substate) -> Result<json::Value, JsonEncodingError> {
     let substate_cbor = tari_bor::decode(&substate.to_bytes())?;
     let substate_cbor = fix_invalid_object_keys(&substate_cbor);
     let mut result = json::to_value(substate_cbor)?;
@@ -43,18 +64,18 @@ pub fn encode_substate_into_json(substate: &Substate) -> Result<json::Value, Sub
 fn get_mut_json_field<'a>(
     value: &'a mut json::Value,
     field_name: &str,
-) -> Result<&'a mut json::Value, SubstateDecoderError> {
+) -> Result<&'a mut json::Value, JsonEncodingError> {
     let json_field = json_value_as_object(value)?
         .get_mut(field_name)
-        .ok_or(SubstateDecoderError::Unexpected("field does not exist".to_owned()))?;
+        .ok_or(JsonEncodingError::Unexpected("field does not exist".to_owned()))?;
 
     Ok(json_field)
 }
 
-fn json_value_as_object(value: &mut json::Value) -> Result<&mut JsonObject, SubstateDecoderError> {
+fn json_value_as_object(value: &mut json::Value) -> Result<&mut JsonObject, JsonEncodingError> {
     let json_object = value
         .as_object_mut()
-        .ok_or(SubstateDecoderError::Unexpected("invalid object".to_owned()))?;
+        .ok_or(JsonEncodingError::Unexpected("invalid object".to_owned()))?;
 
     Ok(json_object)
 }
@@ -62,7 +83,7 @@ fn json_value_as_object(value: &mut json::Value) -> Result<&mut JsonObject, Subs
 fn encode_non_fungible_into_json(
     nf_container: &NonFungibleContainer,
     substate_json_field: &mut json::Value,
-) -> Result<(), SubstateDecoderError> {
+) -> Result<(), JsonEncodingError> {
     if let Some(nf) = nf_container.contents() {
         let non_fungible_field = get_mut_json_field(substate_json_field, "NonFungible")?;
         let non_fungible_object = json_value_as_object(non_fungible_field)?;
@@ -78,7 +99,7 @@ fn decode_cbor_field_into_json(
     bytes: &[u8],
     parent_object: &mut JsonObject,
     field_name: &str,
-) -> Result<(), SubstateDecoderError> {
+) -> Result<(), JsonEncodingError> {
     let cbor_value = tari_bor::decode(bytes)?;
     let cbor_value = fix_invalid_object_keys(&cbor_value);
     let json_value = serde_json::to_value(cbor_value)?;
@@ -90,7 +111,7 @@ fn decode_cbor_field_into_json(
 fn encode_component_into_json(
     header: &ComponentHeader,
     substate_json_field: &mut json::Value,
-) -> Result<(), SubstateDecoderError> {
+) -> Result<(), JsonEncodingError> {
     let component_field = get_mut_json_field(substate_json_field, "Component")?;
     let component_object = json_value_as_object(component_field)?;
     decode_cbor_field_into_json(header.state(), component_object, "state")?;

@@ -10,6 +10,7 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use serde_json::Value as JsonValue;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateRequest {
@@ -77,6 +78,7 @@ pub enum IndexerTransactionFinalizedResult {
         final_decision: Decision,
         execution_result: Option<ExecuteResult>,
         abort_details: Option<String>,
+        json_results: Vec<JsonValue>,
     },
 }
 

@@ -149,6 +149,7 @@ where
                 final_decision,
                 execution_result,
                 abort_details,
+                json_results: _,
             } => {
                 let new_status = if final_decision.is_commit() {
                     TransactionStatus::Accepted
