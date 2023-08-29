@@ -19,7 +19,9 @@
     "react-dom": "^18.2.0",
     "react-icons": "^4.9.0",
     "react-router-dom": "^6.9.0",
-    "use-react-router-breadcrumbs": "^4.0.1"
+    "use-react-router-breadcrumbs": "^4.0.1",
+    "zustand": "^4.4.1",
+    "zustand-persist": "^0.1.6"
   },
   "devDependencies": {
     "@types/react": "^18.0.28",

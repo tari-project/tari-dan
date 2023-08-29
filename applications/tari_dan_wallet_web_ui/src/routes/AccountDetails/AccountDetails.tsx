@@ -137,10 +137,7 @@ function AccountDetailsLayout() {
               <TableBody>
                 {state && (
                   <TableRow>
-                    <DataTableCell>
-                      {shortenString(state.account.name)}
-                      <CopyToClipboard copy={state.account.name} />
-                    </DataTableCell>
+                    <DataTableCell>{state.account.name}</DataTableCell>
                     <DataTableCell>
                       {shortenString(state.account.address.Component)}
                       <CopyToClipboard copy={state.account.address.Component} />

@@ -38,10 +38,13 @@ import {
   TableCell,
   Fade,
   Alert,
+  IconButton,
 } from '@mui/material';
 import { DataTableCell } from '../../Components/StyledComponents';
 import Loading from '../../Components/Loading';
 import StatusChip from '../../Components/StatusChip';
+import { ChevronRight } from '@mui/icons-material';
+import { useTheme } from '@mui/material/styles';
 
 export default function Transactions() {
   const [transactions, setTransactions] = useState<any>([]);
@@ -49,6 +52,7 @@ export default function Transactions() {
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const theme = useTheme();
 
   const loadTransactions = () => {
     setLoading(true);
@@ -96,6 +100,7 @@ export default function Transactions() {
                 <TableCell>Transaction Hash</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Total Fees</TableCell>
+                <TableCell>Details</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -109,7 +114,10 @@ export default function Transactions() {
                           <DataTableCell>
                             <Link
                               to={`/transactions/${transaction_hash}`}
-                              style={{ textDecoration: 'none' }}
+                              style={{
+                                textDecoration: 'none',
+                                color: theme.palette.text.secondary,
+                              }}
                             >
                               {transaction_hash}
                             </Link>
@@ -118,6 +126,17 @@ export default function Transactions() {
                             <StatusChip status={status} showTitle />
                           </DataTableCell>
                           <DataTableCell>{total_fees_charged}</DataTableCell>
+                          <DataTableCell>
+                            <IconButton
+                              component={Link}
+                              to={`/transactions/${transaction_hash}`}
+                              style={{
+                                color: theme.palette.text.secondary,
+                              }}
+                            >
+                              <ChevronRight />
+                            </IconButton>
+                          </DataTableCell>
                         </TableRow>
                       );
                     }

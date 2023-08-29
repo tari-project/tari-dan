@@ -20,28 +20,28 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { createTheme } from '@mui/material/styles';
+import { ThemeOptions } from '@mui/material/styles';
+import {
+  tariPurple,
+  blue,
+  red,
+  green,
+  orange,
+  grey,
+  teal,
+  gothic,
+} from './colors';
 
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#9330FF',
-    },
-    secondary: {
-      main: '#40388A',
-    },
-    divider: '#f5f5f5',
-  },
+export const componentSettings: ThemeOptions = {
   shape: {
-    borderRadius: 10,
+    borderRadius: 8,
   },
+  spacing: 8,
   typography: {
     fontFamily: '"AvenirMedium", sans-serif',
-    body1: {
-      color: '#000000',
-    },
+    fontSize: 14,
+    body1: {},
     body2: {
-      color: '#000000',
       lineHeight: '1.5rem',
     },
     h1: {
@@ -78,29 +78,30 @@ const theme = createTheme({
   components: {
     MuiButton: {
       defaultProps: {
-        disableRipple: true,
+        size: 'large',
         sx: {
-          minHeight: '55px',
-          boxShadow: 'none',
           textTransform: 'none',
-          fontSize: '1rem',
-          fontWeight: 500,
-          fontFamily: '"AvenirMedium", sans-serif',
-          letterSpacing: '0.5px',
+        },
+      },
+    },
+    MuiPaper: {
+      defaultProps: {
+        sx: {
+          background: (theme) => theme.palette.background.paper,
         },
       },
     },
     MuiTableCell: {
       defaultProps: {
         sx: {
-          borderBottom: '1px solid #f5f5f5',
+          borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
         },
       },
     },
     MuiDivider: {
       defaultProps: {
         sx: {
-          borderBottom: '1px solid #f5f5f5',
+          borderBottom: (theme) => `1px solid ${theme.palette.divider}`,
         },
       },
     },
@@ -110,21 +111,118 @@ const theme = createTheme({
           '& .MuiTypography-root': {
             fontSize: '0.875rem',
             lineHeight: '1.8rem',
-            color: 'rgba(0, 0, 0, 0.6)',
+            color: (theme) => theme.palette.text.disabled,
           },
         },
       },
     },
     MuiCircularProgress: {
       defaultProps: {
-        // size: 20,
         thickness: 4,
         sx: {
-          color: '#EAEAEA',
+          color: (theme) => theme.palette.primary.main,
         },
       },
     },
   },
-});
+};
 
-export default theme;
+export const light: ThemeOptions = {
+  palette: {
+    mode: 'light',
+    primary: {
+      main: tariPurple[600],
+      dark: tariPurple[700],
+      light: tariPurple[500],
+    },
+    secondary: {
+      main: gothic[400],
+      dark: gothic[500],
+      light: teal[400],
+    },
+    divider: 'rgba(0,0,0,0.08)',
+    text: {
+      primary: grey[950],
+      secondary: grey[600],
+      disabled: grey[400],
+    },
+    background: {
+      default: grey[50],
+      paper: '#fff',
+    },
+    success: {
+      main: green[500],
+      dark: green[600],
+      light: green[400],
+      contrastText: '#ffffff',
+    },
+    warning: {
+      main: orange[300],
+      dark: orange[400],
+      light: orange[200],
+      contrastText: '#ffffff',
+    },
+    error: {
+      main: red[500],
+      dark: red[600],
+      light: red[400],
+      contrastText: '#ffffff',
+    },
+    info: {
+      main: blue[500],
+      dark: blue[700],
+      light: blue[400],
+      contrastText: '#ffffff',
+    },
+  },
+};
+
+export const dark: ThemeOptions = {
+  palette: {
+    mode: 'dark',
+    primary: {
+      main: tariPurple[500],
+      dark: tariPurple[400],
+      light: tariPurple[50],
+    },
+    secondary: {
+      main: teal[400],
+      dark: teal[300],
+      light: gothic[400],
+    },
+    divider: 'rgba(255,255,255,0.04)',
+    text: {
+      primary: '#FFFFFF',
+      secondary: grey[300],
+      disabled: 'rgba(255,255,255,0.4)',
+    },
+    background: {
+      default: grey[950],
+      paper: grey[900],
+    },
+    success: {
+      main: green[500],
+      dark: green[400],
+      light: green[600],
+      contrastText: '#ffffff',
+    },
+    warning: {
+      main: orange[300],
+      dark: orange[200],
+      light: orange[400],
+      contrastText: '#ffffff',
+    },
+    error: {
+      main: red[500],
+      dark: red[400],
+      light: red[500],
+      contrastText: '#ffffff',
+    },
+    info: {
+      main: blue[500],
+      dark: blue[700],
+      light: blue[400],
+      contrastText: '#ffffff',
+    },
+  },
+};

@@ -61,6 +61,7 @@ code {
   }
   .flex-container {
     flex-direction: row;
+    align-items: stretch;
   }
 }
 
@@ -70,16 +71,16 @@ code {
 
 @keyframes purple-flash {
   0% {
-    background-color: #ffffff;
+    background-color: rgb(159, 66, 255, 0);
   }
   25% {
-    background-color: #f9f4ff;
+    background-color: rgb(159, 66, 255, 0.1);
   }
   75% {
-    background-color: #f9f4ff;
+    background-color: rgb(159, 66, 255, 0.1);
   }
   100% {
-    background-color: #ffffff;
+    background-color: rgb(159, 66, 255, 0);
   }
 }
 

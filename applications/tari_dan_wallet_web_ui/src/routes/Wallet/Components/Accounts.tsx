@@ -20,44 +20,52 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { ReactNode, useEffect, useState } from 'react';
-import {
-  accountsClaimBurn,
-  accountsCreate,
-  accountsCreateFreeTestCoins,
-  accountsList,
-} from '../../../utils/json_rpc';
-import Error from './Error';
+import { useEffect, useState } from 'react';
+import { Form, Link, useLocation } from 'react-router-dom';
+import AddIcon from '@mui/icons-material/Add';
+import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button/Button';
+import Fade from '@mui/material/Fade';
+import MenuItem from '@mui/material/MenuItem';
+import Select, { SelectChangeEvent } from '@mui/material/Select/Select';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import {
-  fromHexString,
-  toHexString,
-  shortenString,
-} from '../../../utils/helpers';
-import CopyToClipboard from '../../../Components/CopyToClipboard';
-import { BoxHeading2 } from '../../../Components/StyledComponents';
-import Fade from '@mui/material/Fade';
-import { Form } from 'react-router-dom';
 import TextField from '@mui/material/TextField/TextField';
-import Select, { SelectChangeEvent } from '@mui/material/Select/Select';
-import Button from '@mui/material/Button/Button';
-import AddIcon from '@mui/icons-material/Add';
-import { removeTagged } from '../../../utils/helpers';
-import MenuItem from '@mui/material/MenuItem';
-import Alert from '@mui/material/Alert';
-import Link from '@mui/material/Link';
-import { DataTableCell } from '../../../Components/StyledComponents';
+import CopyToClipboard from '../../../Components/CopyToClipboard';
+import { ChevronRight } from '@mui/icons-material';
+import IconButton from '@mui/material/IconButton';
+import {
+  BoxHeading2,
+  DataTableCell,
+} from '../../../Components/StyledComponents';
+import { shortenString, toHexString } from '../../../utils/helpers';
+import {
+  accountsClaimBurn,
+  accountsCreate,
+  accountsCreateFreeTestCoins,
+  accountsList,
+} from '../../../utils/json_rpc';
 
 function Account(account: any) {
+  const { pathname } = useLocation();
   return (
     <TableRow key={toHexString(account.account.address.Component)}>
       <DataTableCell>
-        <Link href={'accounts/' + account.account.name}>
+        <Link
+          to={
+            pathname.includes('/accounts')
+              ? account.account.name
+              : `accounts/${account.account.name}`
+          }
+          style={{
+            textDecoration: 'none',
+            color: 'inherit',
+          }}
+        >
           {account.account.name}
         </Link>
       </DataTableCell>
@@ -69,6 +77,18 @@ function Account(account: any) {
       <DataTableCell>
         {shortenString(account.public_key)}
         <CopyToClipboard copy={account.public_key} />
+      </DataTableCell>
+      <DataTableCell>
+        <IconButton
+          component={Link}
+          to={
+            pathname.includes('/accounts')
+              ? account.account.name
+              : `accounts/${account.account.name}`
+          }
+        >
+          <ChevronRight />
+        </IconButton>
       </DataTableCell>
     </TableRow>
   );
@@ -103,7 +123,6 @@ function Accounts() {
   const loadAccounts = () => {
     accountsList(0, 10)
       .then((response) => {
-        console.log(response);
         setState(response);
         setError(undefined);
       })
@@ -153,11 +172,9 @@ function Accounts() {
       +claimBurnFormState.fee
     )
       .then((response) => {
-        console.log(response);
         loadAccounts();
       })
       .catch((err) => {
-        console.log(err);
         setError(
           err && err.message
             ? err.message
@@ -324,6 +341,7 @@ function Accounts() {
               <TableCell>Address</TableCell>
               <TableCell>Key index</TableCell>
               <TableCell>Public key</TableCell>
+              <TableCell>Details</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>

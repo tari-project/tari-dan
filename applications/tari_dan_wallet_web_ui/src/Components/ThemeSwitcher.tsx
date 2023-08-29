@@ -20,26 +20,37 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useRouteError, isRouteErrorResponse } from 'react-router-dom';
-import { StyledPaper } from '../Components/StyledComponents';
-import Typography from '@mui/material/Typography';
-import Grid from '@mui/material/Grid';
-import Container from '@mui/material/Container';
+import { Button } from '@mui/material';
+import { IoMoonOutline, IoSunny } from 'react-icons/io5';
+import useThemeStore from '../store/themeStore';
+import { useTheme } from '@mui/material/styles';
 
-export default function ErrorPage() {
-  let error: any = useRouteError();
-  console.log('Error', error);
+const ThemeSwitcher = () => {
+  const { themeMode, setThemeMode } = useThemeStore();
+  const theme = useTheme();
 
   return (
-    <Grid item xs={12} md={12} lg={12}>
-      <StyledPaper sx={{ textAlign: 'center' }}>
-        <Typography variant="h3">Oops!</Typography>
-        {/* <Typography>Sorry, an unexpected error has occurred.</Typography> */}
-        <Typography>
-          {!isRouteErrorResponse(error) ? 'Invalid page' : 'Unexpected Error'}
-          <i>{error?.statusText || error?.message}</i>
-        </Typography>
-      </StyledPaper>
-    </Grid>
+    <Button
+      onClick={() => setThemeMode(themeMode === 'light' ? 'dark' : 'light')}
+      style={{
+        borderRadius: 0,
+        color: theme.palette.text.secondary,
+        padding: '0.8rem 28px',
+        width: '100%',
+        justifyContent: 'flex-start',
+      }}
+      startIcon={themeMode === 'light' ? <IoMoonOutline /> : <IoSunny />}
+    >
+      <span
+        style={{
+          marginLeft: '1rem',
+          fontSize: '14px',
+        }}
+      >
+        {themeMode === 'light' ? 'Dark Mode' : 'Light Mode'}
+      </span>
+    </Button>
   );
-}
+};
+
+export default ThemeSwitcher;

@@ -43,7 +43,6 @@ import {
   Fade,
   Alert,
 } from '@mui/material';
-import theme from '../../../theme';
 import { shortenString } from '../../../utils/helpers';
 import CopyToClipboard from '../../../Components/CopyToClipboard';
 import { IoCloseCircleOutline } from 'react-icons/io5';
@@ -56,6 +55,7 @@ import {
   AccordionIconButton,
 } from '../../../Components/StyledComponents';
 import Loading from '../../../Components/Loading';
+import { useTheme } from '@mui/material/styles';
 
 interface IToken {
   id: number;
@@ -117,8 +117,9 @@ export default function AccessTokens() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [error, setError] = useState<String>();
   const [loading, setLoading] = useState(true);
+  const theme = useTheme();
 
-  console.log('tokens', tokens);
+  console.log('theme', theme);
 
   const loadTokens = () => {
     getAllTokens()
@@ -316,7 +317,7 @@ export default function AccessTokens() {
                               >
                                 <CircularProgress
                                   style={{
-                                    color: theme.palette.primary.main,
+                                    color: theme.palette.text.disabled,
                                     height: '1.5rem',
                                     width: '1.5rem',
                                   }}

@@ -27,12 +27,14 @@ import App from './App';
 import './theme/theme.css';
 import Accounts from './routes/Accounts/Accounts';
 import TransactionDetails from './routes/Transactions/TransactionDetails';
+import ErrorPage from './routes/ErrorPage';
 
 const router = createBrowserRouter([
   {
     path: '*',
     element: <App />,
     errorElement: <div />,
+    // errorElement: <ErrorPage />,
     children: [
       {
         path: 'accounts',
@@ -41,7 +43,6 @@ const router = createBrowserRouter([
       {
         path: 'transactions/:id',
         element: <TransactionDetails />,
-        // loader: transactionLoader,
       },
     ],
   },
