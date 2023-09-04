@@ -6,7 +6,10 @@ use anyhow::anyhow;
 use futures::{future, future::Either};
 use log::*;
 use tari_dan_common_types::optional::Optional;
-use tari_dan_wallet_sdk::{apis::{jwt::JrpcPermission, key_manager}, network::{TransactionQueryResult, TransactionFinalizedResult}};
+use tari_dan_wallet_sdk::{
+    apis::{jwt::JrpcPermission, key_manager},
+    network::{TransactionFinalizedResult, TransactionQueryResult},
+};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{args, models::Amount};
 use tari_transaction::Transaction;
@@ -138,7 +141,7 @@ pub async fn handle_submit(
             .submit_dry_run_transaction(transaction, inputs.clone())
             .await?;
 
-        let json_result  = match &response.result {
+        let json_result = match &response.result {
             TransactionFinalizedResult::Pending => None,
             TransactionFinalizedResult::Finalized { json_results, .. } => Some(json_results.clone()),
         };

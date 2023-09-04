@@ -81,7 +81,11 @@ impl Transaction {
             final_fee: self.final_fee.map(|f| f.into()),
             qcs: self.qcs.map(|q| deserialize_json(&q)).transpose()?.unwrap_or_default(),
             is_dry_run: self.is_dry_run,
-            json_result: self.json_result.map(|r| deserialize_json(&r)).transpose()?.unwrap_or_default(),
+            json_result: self
+                .json_result
+                .map(|r| deserialize_json(&r))
+                .transpose()?
+                .unwrap_or_default(),
         })
     }
 }
