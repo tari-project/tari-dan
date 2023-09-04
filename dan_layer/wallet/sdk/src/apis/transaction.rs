@@ -149,7 +149,7 @@ where
                 final_decision,
                 execution_result,
                 abort_details,
-                json_results: _,
+                json_results,
             } => {
                 let new_status = if final_decision.is_commit() {
                     TransactionStatus::Accepted
@@ -223,6 +223,7 @@ where
                     // qcs: qc_resp.qcs,
                     qcs: vec![],
                     is_dry_run: transaction.is_dry_run,
+                    json_result: Some(json_results),
                 }))
             },
         }
