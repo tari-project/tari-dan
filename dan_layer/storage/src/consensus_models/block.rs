@@ -35,6 +35,9 @@ pub struct Block<TAddr> {
     merkle_root: FixedHash,
     // BTreeSet is used for the deterministic block hash, that is, transactions are always ordered by TransactionId.
     commands: BTreeSet<Command>,
+    /// If the block is a dummy block. This is metadata and not sent over
+    /// the wire or part of the block hash.
+    is_dummy: bool,
 }
 
 impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
@@ -58,6 +61,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             merkle_root: FixedHash::zero(),
             commands,
             total_leader_fee,
+            is_dummy: false,
         };
         block.id = block.calculate_hash().into();
         block
@@ -72,6 +76,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         proposed_by: TAddr,
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
+        is_dummy: bool,
     ) -> Self {
         Self {
             id,
@@ -84,6 +89,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             merkle_root: FixedHash::zero(),
             commands,
             total_leader_fee,
+            is_dummy,
         }
     }
 
@@ -111,6 +117,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
             total_leader_fee: 0,
+            is_dummy: false,
         }
     }
 
@@ -121,7 +128,9 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         high_qc: QuorumCertificate<TAddr>,
         epoch: Epoch,
     ) -> Self {
-        Self::new(parent, high_qc, node_height, epoch, proposed_by, Default::default(), 0)
+        let mut block = Self::new(parent, high_qc, node_height, epoch, proposed_by, Default::default(), 0);
+        block.is_dummy = true;
+        block
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
@@ -223,6 +232,10 @@ impl<TAddr> Block<TAddr> {
 
     pub fn into_commands(self) -> BTreeSet<Command> {
         self.commands
+    }
+
+    pub fn is_dummy(&self) -> bool {
+        self.is_dummy
     }
 }
 

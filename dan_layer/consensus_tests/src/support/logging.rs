@@ -8,7 +8,7 @@ pub fn setup_logger() {
             out.finish(format_args!(
                 "{} [{}] {} {}",
                 humantime::format_rfc3339(std::time::SystemTime::now()),
-                record.target(),
+                record.target().strip_prefix("tari::dan::consensus::hotstuff").unwrap_or(record.target()),
                 record.level(),
                 message
             ))

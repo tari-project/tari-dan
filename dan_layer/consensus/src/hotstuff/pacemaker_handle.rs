@@ -2,6 +2,7 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 use tari_dan_common_types::NodeHeight;
+use tari_dan_storage::consensus_models::LeafBlock;
 use tokio::sync::mpsc;
 
 use crate::hotstuff::HotStuffError;
@@ -12,7 +13,7 @@ pub enum PacemakerRequest {
         high_qc_height: NodeHeight,
     },
     TriggerBeat {
-        is_forced: bool,
+        parent_block: Option<LeafBlock>,
     },
     Start {
         current_height: NodeHeight,
@@ -53,15 +54,17 @@ impl PaceMakerHandle {
     /// Signal the pacemaker trigger a beat. If the pacemaker has not been started, this is a no-op
     pub async fn beat(&self) -> Result<(), HotStuffError> {
         self.sender
-            .send(PacemakerRequest::TriggerBeat { is_forced: false })
+            .send(PacemakerRequest::TriggerBeat { parent_block: None })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
 
     /// Signal the pacemaker trigger a forced beat. If the pacemaker has not been started, this is a no-op
-    pub async fn force_beat(&self) -> Result<(), HotStuffError> {
+    pub async fn force_beat(&self, parent_block: LeafBlock) -> Result<(), HotStuffError> {
         self.sender
-            .send(PacemakerRequest::TriggerBeat { is_forced: true })
+            .send(PacemakerRequest::TriggerBeat {
+                parent_block: Some(parent_block),
+            })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }

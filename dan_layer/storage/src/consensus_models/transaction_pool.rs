@@ -57,6 +57,25 @@ impl TransactionPoolStage {
     pub fn is_all_prepared(&self) -> bool {
         matches!(self, Self::AllPrepared)
     }
+
+    pub fn next_stage(&self) -> Option<Self> {
+        match self {
+            TransactionPoolStage::New => Some(TransactionPoolStage::Prepared),
+            TransactionPoolStage::Prepared => Some(TransactionPoolStage::LocalPrepared),
+            TransactionPoolStage::LocalPrepared => Some(TransactionPoolStage::AllPrepared),
+            TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => None,
+        }
+    }
+
+    pub fn prev_stage(&self) -> Option<Self> {
+        match self {
+            TransactionPoolStage::New => None,
+            TransactionPoolStage::Prepared => Some(TransactionPoolStage::New),
+            TransactionPoolStage::LocalPrepared => Some(TransactionPoolStage::Prepared),
+            TransactionPoolStage::AllPrepared => Some(TransactionPoolStage::LocalPrepared),
+            TransactionPoolStage::SomePrepared => Some(TransactionPoolStage::LocalPrepared),
+        }
+    }
 }
 
 impl Display for TransactionPoolStage {
@@ -160,6 +179,17 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx_ids: I,
     ) -> Result<(), TransactionPoolError> {
         tx.transaction_pool_set_all_transitions(tx_ids)?;
+        Ok(())
+    }
+
+    pub fn clear_pending_stages<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+        &self,
+        tx: &mut TTx,
+        tx_ids: I,
+    ) -> Result<(), TransactionPoolError> {
+        for tx_id in tx_ids {
+            tx.transaction_pool_update(tx_id, None, Some(None), None, None, None)?;
+        }
         Ok(())
     }
 }
@@ -315,13 +345,23 @@ impl TransactionPoolRecord {
         tx.transaction_pool_update(
             &self.transaction.id,
             None,
-            Some(pending_stage),
+            Some(Some(pending_stage)),
             None,
             None,
             Some(is_ready),
         )?;
         self.pending_stage = Some(pending_stage);
 
+        Ok(())
+    }
+
+    pub fn set_pending_stage<TTx: StateStoreWriteTransaction>(
+        &mut self,
+        tx: &mut TTx,
+        pending_stage: TransactionPoolStage,
+    ) -> Result<(), TransactionPoolError> {
+        self.pending_stage = Some(pending_stage);
+        tx.transaction_pool_update(&self.transaction.id, None, Some(Some(pending_stage)), None, None, None)?;
         Ok(())
     }
 

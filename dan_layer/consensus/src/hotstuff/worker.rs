@@ -185,13 +185,13 @@ where
                 },
 
                 _ = on_beat.wait() => {
-                    if let Err(e) = self.on_beat(false ).await {
+                    if let Err(e) = self.on_beat().await {
                         error!(target: LOG_TARGET, "Error (on_beat): {}", e);
                     }
                 },
-                _ = on_force_beat.wait() => {
-                    if let Err(e) = self.on_beat(true).await {
-                        error!(target: LOG_TARGET, "Error (on_beat forced): {}", e);
+                maybe_leaf_block = on_force_beat.wait() => {
+                    if let Err(e) = self.propose_if_leader(maybe_leaf_block).await {
+                        error!(target: LOG_TARGET, "Error (propose_if_leader): {}", e);
                     }
                 }
                 new_height = on_leader_timeout.wait() => {
@@ -228,6 +228,13 @@ where
                     let (leaf_block, high_qc) = self
                         .state_store
                         .with_read_tx(|tx| Ok::<_, HotStuffError>((LeafBlock::get(tx)?, HighQc::get(tx)?)))?;
+                    info!(
+                        target: LOG_TARGET,
+                        "⏰ Pacemaker starting for epoch {}, leaf_block: {}, high_qc: {}",
+                        epoch,
+                        leaf_block,
+                        high_qc
+                    );
                     self.pacemaker_handle
                         .start(leaf_block.height(), high_qc.block_height())
                         .await?;
@@ -281,29 +288,41 @@ where
         Ok(())
     }
 
-    async fn on_beat(&mut self, must_propose: bool) -> Result<(), HotStuffError> {
+    async fn on_beat(&mut self) -> Result<(), HotStuffError> {
         // TODO: This is a temporary hack to ensure that the VN has synced the blockchain before proposing
         if !self.is_epoch_synced {
             warn!(target: LOG_TARGET, "Waiting for epoch change before proposing");
             return Ok(());
         }
 
-        let current_epoch = self.epoch_manager.current_epoch().await?;
-        debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", current_epoch);
-
         // Are there any transactions in the pools?
-        // If not, only propose an empty block if we are close to exceeding the timeout
-        if !must_propose &&
-            !self
-                .state_store
-                .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
+        if !self
+            .state_store
+            .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
         {
             debug!(target: LOG_TARGET, "[on_beat] No transactions to propose. Waiting for a timeout.");
             return Ok(());
         }
 
-        // Are we the leader?
-        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?;
+        self.propose_if_leader(None).await?;
+
+        Ok(())
+    }
+
+    async fn propose_if_leader(&mut self, leaf_block: Option<LeafBlock>) -> Result<(), HotStuffError> {
+        // TODO: This is a temporary hack to ensure that the VN has synced the blockchain before proposing
+        if !self.is_epoch_synced {
+            warn!(target: LOG_TARGET, "Waiting for epoch change before proposing");
+            return Ok(());
+        }
+
+        let must_propose = leaf_block.is_some();
+        let leaf_block = match leaf_block {
+            Some(leaf_block) => leaf_block,
+            None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?,
+        };
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", current_epoch);
         let local_committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         // TODO: If there were leader failures, the leaf block would be empty and we need to create empty blocks.
         let is_leader =
@@ -323,7 +342,6 @@ where
                 .handle(current_epoch, local_committee, leaf_block)
                 .await?;
         }
-
         Ok(())
     }
 

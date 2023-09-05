@@ -282,7 +282,6 @@ async fn foreign_shard_decides_to_abort() {
 async fn leader_failure_output_conflict() {
     setup_logger();
     let mut test = Test::builder()
-        .debug_sql("/tmp/test{}.db")
         .with_test_timeout(Duration::from_secs(60))
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])

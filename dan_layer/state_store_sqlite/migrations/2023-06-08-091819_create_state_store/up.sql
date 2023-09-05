@@ -25,6 +25,7 @@ create table blocks
     commands         text      not NULL,
     total_leader_fee bigint    not NULL,
     is_committed     boolean   not NULL,
+    is_dummy         boolean   not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
@@ -104,8 +105,7 @@ create table last_proposed
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
-    created_at timestamp NOT NULL default current_timestamp,
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+    created_at timestamp NOT NULL default current_timestamp
 );
 
 create table locked_block

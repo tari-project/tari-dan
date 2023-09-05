@@ -97,12 +97,12 @@ impl PaceMaker {
                             // set a timer for when we must send an empty block...
                             block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                        },
-                        PacemakerRequest::TriggerBeat { is_forced} => {
+                        PacemakerRequest::TriggerBeat {  parent_block} => {
                             if !started {
                                 continue;
                             }
-                            if is_forced{
-                                on_force_beat.beat();
+                            if let Some(parent_block) = parent_block {
+                                on_force_beat.beat(Some(parent_block));
                             } else {
                                 on_beat.beat();
                             }
@@ -130,7 +130,7 @@ impl PaceMaker {
                 },
                 () = &mut block_timer => {
                     block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
-                    on_force_beat.beat();
+                    on_force_beat.beat(None);
                 }
                 () = &mut leader_timeout => {
                     block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
@@ -140,8 +140,9 @@ impl PaceMaker {
                         continue;
                     }
                     info!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}", self.current_height);
-                    self.current_height += NodeHeight(1);
+                    // The leader of the next block proposes, so increment height after sending the leader timeout
                     on_leader_timeout.leader_timed_out(self.current_height);
+                    self.current_height += NodeHeight(1);
                 },
 
                 _ = self.shutdown.wait() => {

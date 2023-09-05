@@ -117,7 +117,7 @@ impl ValidatorBuilder {
             rx_mempool,
         };
 
-        // Fire off initial epoch change event
+        // Fire off initial epoch change event so that the pacemaker starts
         tx_epoch_events.send(EpochManagerEvent::EpochChanged(Epoch(0))).unwrap();
 
         let validator = Validator {

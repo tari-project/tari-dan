@@ -103,6 +103,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
             blocks::is_committed.eq(false),
+            blocks::is_dummy.eq(block.is_dummy()),
         );
 
         diesel::insert_into(blocks::table)
@@ -558,7 +559,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         &mut self,
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
-        pending_stage: Option<TransactionPoolStage>,
+        pending_stage: Option<Option<TransactionPoolStage>>,
         local_decision: Option<Decision>,
         remote_decision: Option<Decision>,
         is_ready: Option<bool>,
@@ -578,7 +579,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
 
         let change_set = Changes {
             evidence: evidence.map(serialize_json).transpose()?,
-            pending_stage: pending_stage.map(|s| s.to_string()).map(Some),
+            pending_stage: pending_stage.map(|s| s.map(|s| s.to_string())),
             local_decision: local_decision.map(|d| d.to_string()),
             remote_decision: remote_decision.map(|d| d.to_string()),
             is_ready,

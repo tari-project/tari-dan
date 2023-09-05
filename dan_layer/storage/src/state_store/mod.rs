@@ -203,7 +203,7 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
-        pending_stage: Option<TransactionPoolStage>,
+        pending_stage: Option<Option<TransactionPoolStage>>,
         local_decision: Option<Decision>,
         remote_decision: Option<Decision>,
         is_ready: Option<bool>,

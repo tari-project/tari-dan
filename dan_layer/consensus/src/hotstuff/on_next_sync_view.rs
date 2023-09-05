@@ -5,10 +5,7 @@ use std::ops::DerefMut;
 
 use log::*;
 use tari_dan_common_types::{Epoch, NodeHeight};
-use tari_dan_storage::{
-    consensus_models::{Block, HighQc},
-    StateStore,
-};
+use tari_dan_storage::{consensus_models::HighQc, StateStore};
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
@@ -47,29 +44,9 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let current_epoch = self.epoch_manager.current_epoch().await?;
 
-        let high_qc = self.store.with_write_tx(|tx| {
-            let high_qc = HighQc::get(tx.deref_mut())?.get_quorum_certificate(tx.deref_mut())?;
-            let mut current_height = high_qc.block_height() + NodeHeight(1);
-            let mut parent_block_id = *high_qc.block_id();
-            while current_height <= new_height {
-                let leader = self.leader_strategy.get_leader(&local_committee, current_height);
-                let dummy_block = Block::dummy_block(
-                    parent_block_id,
-                    leader.clone(),
-                    current_height,
-                    high_qc.clone(),
-                    current_epoch,
-                );
-                debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", dummy_block, leader);
-                if dummy_block.save(tx)? {
-                    dummy_block.as_leaf_block().set(tx)?;
-                }
-                current_height += NodeHeight(1);
-                parent_block_id = *dummy_block.id();
-            }
-
-            Ok::<_, HotStuffError>(high_qc)
-        })?;
+        let high_qc = self
+            .store
+            .with_write_tx(|tx| HighQc::get(tx.deref_mut())?.get_quorum_certificate(tx.deref_mut()))?;
 
         let next_leader = self
             .leader_strategy

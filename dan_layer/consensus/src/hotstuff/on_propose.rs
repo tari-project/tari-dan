@@ -128,18 +128,14 @@ where TConsensusSpec: ConsensusSpec
             let high_qc = HighQc::get(&mut *tx)?;
             let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
 
-            let parent_block = leaf_block.get_block(&mut *tx)?;
-
             next_block = self.build_next_block(
                 &mut tx,
                 epoch,
-                &parent_block,
+                &leaf_block,
                 high_qc,
                 validator.address,
                 &local_committee_shard,
             )?;
-            // Save the block - if it already exists we'll rebroadcast it
-            next_block.save(&mut tx)?;
             next_block.as_last_proposed().set(&mut tx)?;
 
             // Get involved shards for all LocalPrepared commands in the block.
@@ -214,9 +210,9 @@ where TConsensusSpec: ConsensusSpec
 
     fn build_next_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         epoch: Epoch,
-        parent_block: &Block<TConsensusSpec::Addr>,
+        parent_block: &LeafBlock,
         high_qc: QuorumCertificate<TConsensusSpec::Addr>,
         proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
         local_committee_shard: &CommitteeShard,
@@ -268,7 +264,7 @@ where TConsensusSpec: ConsensusSpec
         );
 
         let next_block = Block::new(
-            *parent_block.id(),
+            *parent_block.block_id(),
             high_qc,
             parent_block.height() + NodeHeight(1),
             epoch,

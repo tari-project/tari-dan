@@ -3,6 +3,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    hash::Hash,
     ops::DerefMut,
     time::Duration,
 };
@@ -50,11 +51,15 @@ impl ExecutedTransaction {
         self.transaction.id()
     }
 
-    pub fn as_decision(&self) -> Decision {
+    pub fn decision(&self) -> Decision {
         if let Some(decision) = self.final_decision {
             return decision;
         }
 
+        self.original_decision()
+    }
+
+    pub fn original_decision(&self) -> Decision {
         if self.result.finalize.is_accept() {
             Decision::Commit
         } else {
@@ -166,7 +171,7 @@ impl ExecutedTransaction {
     pub fn to_atom(&self) -> TransactionAtom {
         TransactionAtom {
             id: *self.id(),
-            decision: self.as_decision(),
+            decision: self.decision(),
             evidence: self.to_initial_evidence(),
             transaction_fee: self
                 .result()
@@ -287,5 +292,19 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
             resulting_outputs: value.resulting_outputs,
             abort_details: value.abort_details,
         })
+    }
+}
+
+impl PartialEq for ExecutedTransaction {
+    fn eq(&self, other: &Self) -> bool {
+        self.transaction.id() == other.transaction.id()
+    }
+}
+
+impl Eq for ExecutedTransaction {}
+
+impl Hash for ExecutedTransaction {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.transaction.id().hash(state);
     }
 }
