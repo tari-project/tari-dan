@@ -38,4 +38,12 @@ pub enum EpochManagerError {
     BalancedBinaryMerkleProofError(anyhow::Error),
     #[error("Integer overflow: {func}")]
     IntegerOverflow { func: &'static str },
+    #[error("Invalid epoch: {epoch}")]
+    InvalidEpoch { epoch: Epoch },
+}
+
+impl EpochManagerError {
+    pub fn is_not_registered_error(&self) -> bool {
+        matches!(self, Self::ValidatorNodeNotRegistered { .. })
+    }
 }

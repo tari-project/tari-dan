@@ -33,7 +33,10 @@ members = [
     "dan_layer/validator_node_rpc",
     "dan_layer/wallet/sdk",
     "dan_layer/wallet/storage_sqlite",
-    "integration_tests"
+    "integration_tests",
+
+    "utilities/transaction_generator",
+    "utilities/transaction_submitter",
 ]
 #
 resolver = "2"

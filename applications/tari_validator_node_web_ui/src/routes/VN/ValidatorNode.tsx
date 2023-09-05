@@ -20,25 +20,34 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useContext } from 'react';
-import AllVNs from './Components/AllVNs';
-import Committees from '../Committees/Committees';
-import Connections from './Components/Connections';
-import Fees from './Components/Fees';
-import Info from './Components/Info';
-import Mempool from './Components/Mempool';
-import RecentTransactions from './Components/RecentTransactions';
-import Templates from './Components/Templates';
-import './ValidatorNode.css';
-import { StyledPaper } from '../../Components/StyledComponents';
-import Grid from '@mui/material/Grid';
-import SecondaryHeading from '../../Components/SecondaryHeading';
-import { VNContext } from '../../App';
+import { useContext, useEffect, useState } from "react";
+import AllVNs from "./Components/AllVNs";
+import Committees from "../Committees/Committees";
+import Connections from "./Components/Connections";
+import Fees from "./Components/Fees";
+import Info from "./Components/Info";
+import Mempool from "./Components/Mempool";
+import RecentTransactions from "./Components/RecentTransactions";
+import Templates from "./Components/Templates";
+import "./ValidatorNode.css";
+import { StyledPaper } from "../../Components/StyledComponents";
+import Grid from "@mui/material/Grid";
+import SecondaryHeading from "../../Components/SecondaryHeading";
+import { VNContext } from "../../App";
+import { GetNetworkCommitteesResponse } from "../../utils/interfaces";
+import { getNetworkCommittees } from "../../utils/json_rpc";
 
 function ValidatorNode() {
+  const [committees, setCommittees] =
+    useState<GetNetworkCommitteesResponse | null>(null);
+
   const { epoch, identity, shardKey, error } = useContext(VNContext);
 
-  if (error !== '') {
+  useEffect(() => {
+    getNetworkCommittees().then(setCommittees);
+  }, []);
+
+  if (error !== "") {
     return <div className="error">{error}</div>;
   }
   if (epoch === undefined || identity === undefined) return <div>Loading</div>;
@@ -58,12 +67,13 @@ function ValidatorNode() {
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
-          {shardKey ? (
-            <Committees
-              currentEpoch={epoch.current_epoch}
-              shardKey={shardKey}
-              publicKey={identity.public_key}
-            />
+          {committees ? (
+            <>
+              <Committees
+                publicKey={identity.public_key}
+                committees={committees.committees}
+              />
+            </>
           ) : null}
         </StyledPaper>
       </Grid>

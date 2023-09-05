@@ -220,14 +220,15 @@ async fn foreign_shard_decides_to_abort() {
         .start()
         .await;
 
-    let tx = build_transaction(Decision::Commit, 1, 5, 2);
+    let tx1 = build_transaction(Decision::Commit, 1, 5, 2);
     test.network()
-        .send_transaction(TestNetworkDestination::Bucket(0), tx.clone())
+        .send_transaction(TestNetworkDestination::Bucket(0), tx1.clone())
         .await;
-    let tx = change_decision(tx, Decision::Abort);
+    let tx2 = change_decision(tx1.clone(), Decision::Abort);
     test.network()
-        .send_transaction(TestNetworkDestination::Bucket(1), tx)
+        .send_transaction(TestNetworkDestination::Bucket(1), tx2.clone())
         .await;
+    assert_eq!(tx1.id(), tx2.id());
 
     test.wait_all_have_at_least_n_new_transactions_in_pool(1).await;
     test.network().start();
@@ -250,9 +251,61 @@ async fn foreign_shard_decides_to_abort() {
     }
 
     test.assert_all_validators_at_same_height().await;
-    test.assert_all_validators_have_decision(Decision::Abort).await;
+    test.assert_all_validators_have_decision(tx1.id(), Decision::Abort)
+        .await;
     test.assert_all_validators_did_not_commit();
 
     log::info!("total messages sent: {}", test.network().total_messages_sent());
     test.assert_clean_shutdown().await;
 }
+
+// #[tokio::test(flavor = "multi_thread")]
+// async fn output_conflict() {
+//     let mut test = Test::builder()
+//         .add_committee(0, vec!["1"])
+//         .add_committee(1, vec!["2"])
+//         .start()
+//         .await;
+//
+//     let tx1 = build_transaction(Decision::Commit, 1, 5, 2);
+//     let resulting_outputs = tx1.resulting_outputs().to_vec();
+//     test.network()
+//         .send_transaction(TestNetworkDestination::All, tx1.clone())
+//         .await;
+//
+//     let tx = Transaction::builder().sign(&Default::default()).build();
+//     let tx2 = build_transaction_from(tx, Decision::Commit, 1, resulting_outputs);
+//     assert_ne!(tx1.id(), tx2.id());
+//
+//     test.network()
+//         .send_transaction(TestNetworkDestination::All, tx2.clone())
+//         .await;
+//
+//     test.wait_all_have_at_least_n_new_transactions_in_pool(1).await;
+//     test.network().start();
+//
+//     loop {
+//         test.on_block_committed().await;
+//
+//         if test.is_transaction_pool_empty() {
+//             break;
+//         }
+//
+//         let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
+//         let leaf2 = test.get_validator(&TestAddress::new("2")).get_leaf_block();
+//         if leaf1.height > NodeHeight(6) || leaf2.height > NodeHeight(6) {
+//             panic!(
+//                 "Not all transaction committed after {}/{} blocks",
+//                 leaf1.height, leaf2.height,
+//             );
+//         }
+//     }
+//
+//     test.assert_all_validators_at_same_height().await;
+//     test.assert_all_validators_have_decision(tx1.id(), Decision::Abort)
+//         .await;
+//     test.assert_all_validators_did_not_commit();
+//
+//     log::info!("total messages sent: {}", test.network().total_messages_sent());
+//     test.assert_clean_shutdown().await;
+// }

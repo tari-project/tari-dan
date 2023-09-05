@@ -261,8 +261,8 @@ impl FromStr for SubstateAddress {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.split_once('_') {
-            Some(("component", _)) => {
-                let addr = ComponentAddress::from_str(s).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+            Some(("component", addr)) => {
+                let addr = ComponentAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Component(addr))
             },
             Some(("resource", addr)) => {
@@ -310,6 +310,10 @@ impl FromStr for SubstateAddress {
                 let tx_receipt_addr = TransactionReceiptAddress::from_hex(addr)
                     .map_err(|_| InvalidSubstateAddressFormat(addr.to_string()))?;
                 Ok(SubstateAddress::TransactionReceipt(tx_receipt_addr))
+            },
+            Some(("feeclaim", addr)) => {
+                let addr = Hash::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(addr.to_string()))?;
+                Ok(SubstateAddress::FeeClaim(addr.into()))
             },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }

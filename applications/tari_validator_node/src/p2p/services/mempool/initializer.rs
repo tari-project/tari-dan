@@ -25,6 +25,7 @@ use std::sync::Arc;
 use tari_common_types::types::PublicKey;
 use tari_comms::NodeIdentity;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
+use tari_dan_p2p::NewTransactionMessage;
 use tari_dan_storage::consensus_models::ExecutedTransaction;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -40,7 +41,7 @@ use crate::{
 };
 
 pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
-    new_transactions: mpsc::Receiver<Transaction>,
+    new_transactions: mpsc::Receiver<NewTransactionMessage>,
     outbound: OutboundMessaging,
     tx_executed_transactions: mpsc::Sender<ExecutedTransaction>,
     epoch_manager: EpochManagerHandle,

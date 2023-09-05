@@ -63,6 +63,12 @@ impl AsRef<[u8]> for RistrettoPublicKeyBytes {
     }
 }
 
+impl From<[u8; 32]> for RistrettoPublicKeyBytes {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct InvalidByteLengthError {
     size: usize,

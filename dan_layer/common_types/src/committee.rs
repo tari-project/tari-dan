@@ -4,9 +4,9 @@
 use std::borrow::Borrow;
 
 use rand::{rngs::OsRng, seq::SliceRandom};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::{NodeAddressable, ShardId};
+use crate::{shard_bucket::ShardBucket, NodeAddressable, ShardId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 pub struct Committee<TAddr> {
@@ -114,15 +114,15 @@ impl<TAddr: NodeAddressable> FromIterator<Committee<TAddr>> for Committee<TAddr>
 }
 
 /// Represents a "slice" of the 256-bit shard space
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CommitteeShard {
     num_committees: u32,
     num_members: u32,
-    bucket: u32,
+    bucket: ShardBucket,
 }
 
 impl CommitteeShard {
-    pub fn new(num_committees: u32, num_members: u32, bucket: u32) -> Self {
+    pub fn new(num_committees: u32, num_members: u32, bucket: ShardBucket) -> Self {
         Self {
             num_committees,
             num_members,
@@ -148,7 +148,7 @@ impl CommitteeShard {
         self.num_members
     }
 
-    pub fn bucket(&self) -> u32 {
+    pub fn bucket(&self) -> ShardBucket {
         self.bucket
     }
 

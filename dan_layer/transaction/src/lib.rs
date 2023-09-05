@@ -26,7 +26,6 @@ mod signature;
 mod transaction;
 mod transaction_id;
 
-// pub use change::SubstateChange;
 pub use signature::TransactionSignature;
 pub use transaction::*;
 pub use transaction_id::*;

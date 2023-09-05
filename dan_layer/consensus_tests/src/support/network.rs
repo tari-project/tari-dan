@@ -9,17 +9,19 @@ use std::{
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_common_types::committee::Committee;
-use tari_dan_storage::consensus_models::{Decision, ExecutedTransaction};
-use tari_transaction::Transaction;
+use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket};
+use tari_dan_storage::consensus_models::ExecutedTransaction;
+use tari_shutdown::ShutdownSignal;
+use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{
     mpsc::{self},
     watch,
+    RwLock,
 };
 
-use crate::support::{address::TestAddress, transaction::build_transaction_from, ValidatorChannels};
+use crate::support::{address::TestAddress, ValidatorChannels};
 
-pub fn spawn_network(channels: Vec<ValidatorChannels>, default_decision: Decision, default_fee: u64) -> TestNetwork {
+pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: ShutdownSignal) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
         .map(|c| (c.address.clone(), (c.bucket, c.tx_new_transactions.clone())))
@@ -53,8 +55,8 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, default_decision: Decisio
         rx_mempool: Some(rx_mempool),
         on_message: tx_on_message,
         num_sent_messages: num_sent_messages.clone(),
-        default_decision,
-        default_fee,
+        transaction_store: Arc::new(Default::default()),
+        shutdown_signal,
     }
     .spawn();
 
@@ -118,7 +120,7 @@ pub enum TestNetworkDestination {
 }
 
 impl TestNetworkDestination {
-    pub fn is_for(&self, addr: &TestAddress, bucket: u32) -> bool {
+    pub fn is_for(&self, addr: &TestAddress, bucket: ShardBucket) -> bool {
         match self {
             TestNetworkDestination::All => true,
             TestNetworkDestination::Address(a) => a == addr,
@@ -129,7 +131,7 @@ impl TestNetworkDestination {
 
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
-    tx_new_transactions: HashMap<TestAddress, (u32, mpsc::Sender<ExecutedTransaction>)>,
+    tx_new_transactions: HashMap<TestAddress, (ShardBucket, mpsc::Sender<ExecutedTransaction>)>,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage<TestAddress>)>>,
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>>>,
@@ -139,8 +141,8 @@ pub struct TestNetworkWorker {
     network_status: watch::Receiver<NetworkStatus>,
     on_message: watch::Sender<Option<HotstuffMessage<TestAddress>>>,
     num_sent_messages: Arc<AtomicUsize>,
-    default_decision: Decision,
-    default_fee: u64,
+    transaction_store: Arc<RwLock<HashMap<TransactionId, ExecutedTransaction>>>,
+    shutdown_signal: ShutdownSignal,
 }
 
 impl TestNetworkWorker {
@@ -155,9 +157,14 @@ impl TestNetworkWorker {
 
         let mut rx_new_transaction = self.rx_new_transaction.take().unwrap();
         let tx_new_transactions = self.tx_new_transactions.clone();
+        let transaction_store = self.transaction_store.clone();
 
         tokio::spawn(async move {
             while let Some((dest, tx)) = rx_new_transaction.recv().await {
+                transaction_store
+                    .write()
+                    .await
+                    .insert(*tx.transaction().id(), tx.clone());
                 for (addr, (bucket, tx_new_transaction)) in &tx_new_transactions {
                     if dest.is_for(addr, *bucket) {
                         tx_new_transaction.send(tx.clone()).await.unwrap();
@@ -206,7 +213,9 @@ impl TestNetworkWorker {
                         }
                     }
                 }
-                else => break,
+                _ = self.shutdown_signal.wait() => {
+                    break;
+                }
             }
         }
     }
@@ -238,11 +247,15 @@ impl TestNetworkWorker {
     }
 
     pub async fn handle_mempool(&mut self, from: TestAddress, msg: Transaction) {
-        let (_, sender) = self.tx_new_transactions.get(&from).unwrap();
+        let (_, sender) = self
+            .tx_new_transactions
+            .get(&from)
+            .unwrap_or_else(|| panic!("No new transaction channel for {}", from));
 
-        sender
-            .send(build_transaction_from(msg, self.default_decision, self.default_fee))
-            .await
-            .unwrap();
+        // In the normal case, we need to provide the same execution results to consensus. In future we could add code
+        // here to make a local decision to ABORT.
+        let existing_executed_tx = self.transaction_store.read().await.get(msg.id()).unwrap().clone();
+
+        sender.send(existing_executed_tx).await.unwrap();
     }
 }

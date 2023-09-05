@@ -5,13 +5,15 @@ use std::collections::HashMap;
 
 use futures::{stream::FuturesUnordered, StreamExt};
 use tari_consensus::hotstuff::HotstuffEvent;
-use tari_dan_common_types::{committee::Committee, Epoch};
+use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, Decision, TransactionPoolStage},
     StateStore,
     StateStoreReadTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
+use tari_shutdown::{Shutdown, ShutdownSignal};
+use tari_transaction::TransactionId;
 use tokio::task;
 
 use crate::support::{
@@ -29,6 +31,7 @@ pub struct Test {
     network: TestNetwork,
     _leader_strategy: SelectedIndexLeaderStrategy,
     epoch_manager: TestEpochManager,
+    shutdown: Shutdown,
 }
 
 impl Test {
@@ -64,10 +67,9 @@ impl Test {
     pub async fn on_block_committed(&mut self) -> BlockId {
         loop {
             let event = self.on_hotstuff_event().await;
-            #[allow(clippy::single_match)]
             match event {
                 HotstuffEvent::BlockCommitted { block_id } => return block_id,
-                _ => {},
+                HotstuffEvent::Failure { message } => panic!("Consensus failure: {}", message),
             }
         }
     }
@@ -196,7 +198,11 @@ impl Test {
         }
     }
 
-    pub async fn assert_all_validators_have_decision(&self, expected_decision: Decision) {
+    pub async fn assert_all_validators_have_decision(
+        &self,
+        transaction_id: &TransactionId,
+        expected_decision: Decision,
+    ) {
         let epoch = self.epoch_manager.current_epoch().await.unwrap();
         let mut attempts = 0usize;
         'outer: loop {
@@ -207,6 +213,7 @@ impl Test {
                     .unwrap()
                     .commands()
                     .iter()
+                    .filter(|cmd| cmd.transaction_id() == transaction_id)
                     .map(|cmd| cmd.decision())
                     .collect::<Vec<_>>();
                 (v.address.clone(), decisions)
@@ -239,9 +246,7 @@ impl Test {
     }
 
     pub async fn assert_clean_shutdown(mut self) {
-        for v in self.validators.values_mut() {
-            v.shutdown.trigger();
-        }
+        self.shutdown.trigger();
         for v in self.validators.into_values() {
             v.handle.await.unwrap();
         }
@@ -249,10 +254,8 @@ impl Test {
 }
 
 pub struct TestBuilder {
-    committees: HashMap<u32, Committee<TestAddress>>,
+    committees: HashMap<ShardBucket, Committee<TestAddress>>,
     sql_address: String,
-    default_decision: Decision,
-    default_fee: u64,
 }
 
 impl TestBuilder {
@@ -260,8 +263,6 @@ impl TestBuilder {
         Self {
             committees: HashMap::new(),
             sql_address: ":memory:".to_string(),
-            default_decision: Decision::Commit,
-            default_fee: 1,
         }
     }
 
@@ -271,9 +272,9 @@ impl TestBuilder {
         self
     }
 
-    pub fn add_committee(&mut self, bucket: u32, addresses: Vec<&'static str>) -> &mut Self {
+    pub fn add_committee<T: Into<ShardBucket>>(&mut self, bucket: T, addresses: Vec<&'static str>) -> &mut Self {
         self.committees
-            .insert(bucket, addresses.into_iter().map(TestAddress::new).collect());
+            .insert(bucket.into(), addresses.into_iter().map(TestAddress::new).collect());
         self
     }
 
@@ -281,6 +282,7 @@ impl TestBuilder {
         &self,
         leader_strategy: &SelectedIndexLeaderStrategy,
         epoch_manager: &TestEpochManager,
+        shutdown_signal: ShutdownSignal,
     ) -> (Vec<ValidatorChannels>, HashMap<TestAddress, Validator>) {
         epoch_manager
             .all_validators()
@@ -296,7 +298,7 @@ impl TestBuilder {
                     .with_bucket(bucket)
                     .with_epoch_manager(epoch_manager.clone_for(address.clone(), shard))
                     .with_leader_strategy(leader_strategy)
-                    .spawn();
+                    .spawn(shutdown_signal.clone());
                 (channels, (address, validator))
             })
             .unzip()
@@ -306,14 +308,18 @@ impl TestBuilder {
         let leader_strategy = SelectedIndexLeaderStrategy::new(0);
         let epoch_manager = TestEpochManager::new();
         epoch_manager.add_committees(self.committees.clone()).await;
-        let (channels, validators) = self.build_validators(&leader_strategy, &epoch_manager).await;
-        let network = spawn_network(channels, self.default_decision, self.default_fee);
+        let shutdown = Shutdown::new();
+        let (channels, validators) = self
+            .build_validators(&leader_strategy, &epoch_manager, shutdown.to_signal())
+            .await;
+        let network = spawn_network(channels, shutdown.to_signal());
 
         Test {
             validators,
             network,
             _leader_strategy: leader_strategy,
             epoch_manager,
+            shutdown,
         }
     }
 }

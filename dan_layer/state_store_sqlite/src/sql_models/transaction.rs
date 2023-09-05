@@ -20,7 +20,7 @@ pub struct Transaction {
     pub input_refs: String,
     pub outputs: String,
     pub filled_inputs: String,
-    pub filled_outputs: String,
+    pub resulting_outputs: Option<String>,
     pub result: Option<String>,
     pub execution_time_ms: Option<i64>,
     pub final_decision: Option<String>,
@@ -40,7 +40,6 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
         let input_refs = deserialize_json(&value.input_refs)?;
         let outputs = deserialize_json(&value.outputs)?;
         let filled_inputs = deserialize_json(&value.filled_inputs)?;
-        let filled_outputs = deserialize_json(&value.filled_outputs)?;
 
         Ok(Self::new(
             fee_instructions,
@@ -50,7 +49,6 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
             input_refs,
             outputs,
             filled_inputs,
-            filled_outputs,
         ))
     }
 }
@@ -74,13 +72,20 @@ impl TryFrom<Transaction> for consensus_models::TransactionRecord {
             })?;
         let execution_time = value.execution_time_ms.map(|ms| Duration::from_millis(ms as u64));
         let result = value.result.as_deref().map(deserialize_json).transpose()?;
+        let resulting_outputs = value
+            .resulting_outputs
+            .as_deref()
+            .map(deserialize_json)
+            .transpose()?
+            .unwrap_or_default();
         let abort_details = value.abort_details.clone();
 
-        Ok(Self::new_with_details(
+        Ok(Self::load(
             value.try_into()?,
             result,
             execution_time,
             final_decision,
+            resulting_outputs,
             abort_details,
         ))
     }

@@ -2,10 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::hotstuff::HotstuffWorker;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, ShardId};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::EpochManagerEvent;
-use tari_shutdown::Shutdown;
+use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tokio::sync::{broadcast, mpsc};
 
@@ -23,7 +23,7 @@ use crate::support::{
 pub struct ValidatorBuilder {
     pub address: TestAddress,
     pub shard: ShardId,
-    pub bucket: u32,
+    pub bucket: ShardBucket,
     pub sql_url: String,
     pub leader_strategy: SelectedIndexLeaderStrategy,
     pub epoch_manager: TestEpochManager,
@@ -34,7 +34,7 @@ impl ValidatorBuilder {
         Self {
             address: TestAddress::new("default"),
             shard: ShardId::zero(),
-            bucket: 0,
+            bucket: ShardBucket::from(0),
             sql_url: ":memory".to_string(),
             leader_strategy: SelectedIndexLeaderStrategy::new(0),
             epoch_manager: TestEpochManager::new(),
@@ -46,7 +46,7 @@ impl ValidatorBuilder {
         self
     }
 
-    pub fn with_bucket(&mut self, bucket: u32) -> &mut Self {
+    pub fn with_bucket(&mut self, bucket: ShardBucket) -> &mut Self {
         self.bucket = bucket;
         self
     }
@@ -71,7 +71,7 @@ impl ValidatorBuilder {
         self
     }
 
-    pub fn spawn(&self) -> (ValidatorChannels, Validator) {
+    pub fn spawn(&self, shutdown_signal: ShutdownSignal) -> (ValidatorChannels, Validator) {
         let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
         let (tx_new_transactions, rx_new_transactions) = mpsc::channel(100);
         let (tx_hs_message, rx_hs_message) = mpsc::channel(10);
@@ -80,8 +80,6 @@ impl ValidatorBuilder {
 
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
         let signing_service = TestVoteSignatureService::new(self.address.clone());
-        let shutdown = Shutdown::new();
-        let shutdown_signal = shutdown.to_signal();
         let transaction_pool = TransactionPool::new();
         let noop_state_manager = NoopStateManager::new();
         let (tx_events, _) = broadcast::channel(100);
@@ -126,7 +124,6 @@ impl ValidatorBuilder {
             shard: self.shard,
             state_store: store,
             epoch_manager: self.epoch_manager.clone_for(self.address.clone(), self.shard),
-            shutdown,
             tx_epoch_events,
             state_manager: noop_state_manager,
             leader_strategy: self.leader_strategy.clone(),

@@ -5,6 +5,7 @@ use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
+    commit_result::RejectReason,
     indexed_value::{IndexedValue, IndexedValueVisitorError},
     substate::SubstateDiff,
 };
@@ -137,29 +138,9 @@ where
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
         let Some(resp) = maybe_resp else {
-            warn!( target: LOG_TARGET, "Transaction result not found for transaction with hash {}. Marking transaction as invalid", transaction_id);
-            self.store.with_write_tx(|tx| {
-                tx.transactions_set_result_and_status(
-                    transaction_id,
-                    None,
-                    None,
-                    None,
-                    None,
-                    TransactionStatus::InvalidTransaction,
-                )
-            })?;
-
-            // Not found - TODO: this probably means the transaction was rejected in the mempool, but we cant be sure.
-            // Perhaps we should store it in its entirety and allow the user to resubmit it.
-            return Ok(Some(WalletTransaction {
-                transaction: transaction.transaction,
-                status: TransactionStatus::InvalidTransaction,
-                finalize: None,
-                transaction_failure: None,
-                final_fee: None,
-                qcs: vec![],
-                is_dry_run: transaction.is_dry_run,
-            }));
+            // TODO: if this happens forever we might want to resubmit or mark as invalid
+            warn!( target: LOG_TARGET, "Transaction result not found for transaction with hash {}. Will check again later.", transaction_id);
+            return Ok(None);
         };
 
         match resp.result {
@@ -167,8 +148,7 @@ where
             TransactionFinalizedResult::Finalized {
                 final_decision,
                 execution_result,
-                // TODO: incorporate abort_details
-                abort_details: _abort_details,
+                abort_details,
             } => {
                 let new_status = if final_decision.is_commit() {
                     TransactionStatus::Accepted
@@ -196,10 +176,14 @@ where
                         self.commit_result(tx, transaction_id, diff)?;
                     }
 
+                    let transaction_failure = execution_result
+                        .as_ref()
+                        .and_then(|e| e.transaction_failure.clone())
+                        .or_else(|| abort_details.map(RejectReason::ExecutionFailure));
                     tx.transactions_set_result_and_status(
                         transaction_id,
                         execution_result.as_ref().map(|e| &e.finalize),
-                        execution_result.as_ref().and_then(|e| e.transaction_failure.as_ref()),
+                        transaction_failure.as_ref(),
                         execution_result
                             .as_ref()
                             .and_then(|e| e.fee_receipt.as_ref())

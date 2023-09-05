@@ -29,7 +29,7 @@ use crate::{
         state_manager::TariStateManager,
     },
     event_subscription::EventSubscription,
-    p2p::services::messaging::OutboundMessaging,
+    p2p::services::{mempool::MempoolHandle, messaging::OutboundMessaging},
 };
 
 mod leader_selection;
@@ -44,6 +44,7 @@ pub async fn spawn(
     rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
     rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
     outbound_messaging: OutboundMessaging,
+    mempool: MempoolHandle,
     shutdown_signal: ShutdownSignal,
 ) -> (JoinHandle<Result<(), anyhow::Error>>, EventSubscription<HotstuffEvent>) {
     let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
@@ -83,6 +84,7 @@ pub async fn spawn(
         rx_leader,
         rx_mempool,
         outbound_messaging,
+        mempool,
     }
     .spawn();
 
@@ -94,6 +96,7 @@ struct ConsensusWorker {
     rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
     rx_mempool: mpsc::Receiver<Transaction>,
     outbound_messaging: OutboundMessaging,
+    mempool: MempoolHandle,
 }
 
 impl ConsensusWorker {
@@ -114,7 +117,7 @@ impl ConsensusWorker {
                             .ok();
                     },
                     Some(tx) = self.rx_mempool.recv() => {
-                        self.outbound_messaging.send_self(DanMessage::NewTransaction(Box::new(tx))).await.ok();
+                        self.mempool.submit_transaction_without_propagating(tx).await.ok();
                     },
                     else => break,
                 }

@@ -23,36 +23,31 @@ use crate::{
 pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
+    resulting_outputs: Vec<ShardId>,
     execution_time: Duration,
     final_decision: Option<Decision>,
     abort_details: Option<String>,
 }
 
 impl ExecutedTransaction {
-    pub fn new(transaction: Transaction, result: ExecuteResult, execution_time: Duration) -> Self {
-        Self {
-            transaction,
-            result,
-            execution_time,
-            final_decision: None,
-            abort_details: None,
-        }
-    }
-
-    pub fn new_with_final_decision(
+    pub fn new(
         transaction: Transaction,
         result: ExecuteResult,
+        resulting_outputs: Vec<ShardId>,
         execution_time: Duration,
-        final_decision: Option<Decision>,
-        abort_details: Option<String>,
     ) -> Self {
         Self {
             transaction,
             result,
             execution_time,
-            final_decision,
-            abort_details,
+            resulting_outputs,
+            final_decision: None,
+            abort_details: None,
         }
+    }
+
+    pub fn id(&self) -> &TransactionId {
+        self.transaction.id()
     }
 
     pub fn as_decision(&self) -> Decision {
@@ -81,6 +76,10 @@ impl ExecutedTransaction {
 
     pub fn result(&self) -> &ExecuteResult {
         &self.result
+    }
+
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+        self.transaction.involved_shards_iter().chain(&self.resulting_outputs)
     }
 
     pub fn into_final_result(self) -> Option<ExecuteResult> {
@@ -114,6 +113,11 @@ impl ExecutedTransaction {
         self.execution_time
     }
 
+    /// Returns the outputs that resulted from execution.
+    pub fn resulting_outputs(&self) -> &[ShardId] {
+        &self.resulting_outputs
+    }
+
     pub fn dissolve(self) -> (Transaction, ExecuteResult) {
         (self.transaction, self.result)
     }
@@ -121,6 +125,7 @@ impl ExecutedTransaction {
     pub fn to_initial_evidence(&self) -> Evidence {
         self.transaction
             .involved_shards_iter()
+            .chain(self.resulting_outputs())
             .map(|shard| (*shard, vec![]))
             .collect()
     }
@@ -219,12 +224,7 @@ impl ExecutedTransaction {
         let transactions = Self::get_any(tx, transactions)?;
         Ok(transactions
             .into_iter()
-            .map(|t| {
-                (
-                    *t.transaction.id(),
-                    t.transaction.involved_shards_iter().copied().collect(),
-                )
-            })
+            .map(|t| (*t.transaction.id(), t.involved_shards_iter().copied().collect()))
             .collect())
     }
 }
@@ -244,6 +244,7 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
             result: value.result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
             final_decision: value.final_decision,
+            resulting_outputs: value.resulting_outputs,
             abort_details: value.abort_details,
         })
     }

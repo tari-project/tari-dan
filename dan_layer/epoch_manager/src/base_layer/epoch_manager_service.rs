@@ -73,7 +73,7 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
 
     pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), EpochManagerError> {
         // first, load initial state
-        self.inner.load_initial_state()?;
+        self.inner.load_initial_state().await?;
 
         loop {
             tokio::select! {
@@ -130,17 +130,6 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch { shard, identity, reply } => {
                 let epoch = self.inner.current_epoch();
                 handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity));
-            },
-            EpochManagerRequest::FilterToLocalShards {
-                epoch,
-                for_addr,
-                available_shards,
-                reply,
-            } => {
-                handle(
-                    reply,
-                    self.inner.filter_to_local_shards(epoch, &for_addr, available_shards),
-                );
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe())),
             EpochManagerRequest::GetValidatorNodeBalancedMerkleTree { epoch, reply } => {
