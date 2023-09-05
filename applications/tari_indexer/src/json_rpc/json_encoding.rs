@@ -24,6 +24,9 @@ pub enum JsonEncodingError {
 }
 
 pub fn cbor_to_json(raw: &[u8]) -> Result<json::Value, JsonEncodingError> {
+    if raw.is_empty() {
+        return Ok(json::Value::Null);
+    }
     let decoded_cbor: CborValue = tari_bor::decode(raw)?;
     let decoded_cbor = fix_invalid_object_keys(&decoded_cbor);
     let result = serde_json::to_value(decoded_cbor)?;
