@@ -934,7 +934,7 @@ async fn print_world(world: &mut TariWorld) {
     eprintln!();
 
     // base nodes
-    for (name, node) in world.base_nodes.iter() {
+    for (name, node) in &world.base_nodes {
         eprintln!(
             "Base node \"{}\": grpc port \"{}\", temp dir path \"{}\"",
             name,
@@ -944,7 +944,7 @@ async fn print_world(world: &mut TariWorld) {
     }
 
     // wallets
-    for (name, node) in world.wallets.iter() {
+    for (name, node) in &world.wallets {
         eprintln!(
             "Wallet \"{}\": grpc port \"{}\", temp dir path \"{}\"",
             name,
@@ -954,7 +954,7 @@ async fn print_world(world: &mut TariWorld) {
     }
 
     // vns
-    for (name, node) in world.validator_nodes.iter() {
+    for (name, node) in &world.validator_nodes {
         eprintln!(
             "Validator node \"{}\": json rpc port \"{}\", http ui port \"{}\", temp dir path \"{:?}\"",
             name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
@@ -962,7 +962,7 @@ async fn print_world(world: &mut TariWorld) {
     }
 
     // indexes
-    for (name, node) in world.indexers.iter() {
+    for (name, node) in &world.indexers {
         eprintln!(
             "Indexer \"{}\": json rpc port \"{}\", http ui port  \"{}\", temp dir path \"{}\"",
             name, node.json_rpc_port, node.http_ui_port, node.temp_dir_path
@@ -970,12 +970,12 @@ async fn print_world(world: &mut TariWorld) {
     }
 
     // templates
-    for (name, template) in world.templates.iter() {
+    for (name, template) in &world.templates {
         eprintln!("Template \"{}\" with address \"{}\"", name, template.address);
     }
 
     // templates
-    for (name, outputs) in world.outputs.iter() {
+    for (name, outputs) in &world.outputs {
         eprintln!("Outputs \"{}\"", name);
         for (name, addr) in outputs {
             eprintln!("  - {}: {}", name, addr);
@@ -983,7 +983,7 @@ async fn print_world(world: &mut TariWorld) {
     }
 
     // wallet daemons
-    for (name, daemon) in world.wallet_daemons.iter() {
+    for (name, daemon) in &world.wallet_daemons {
         eprintln!("Wallet daemons \"{}\"", name);
         eprintln!("  - {}: {}", name, daemon.name);
     }

@@ -187,7 +187,7 @@ pub async fn set_answer(pc: RtcPeerConnection) -> Result<(), JsValue> {
             serde_json::from_str(&JSON::stringify(&json).unwrap().as_string().unwrap()).unwrap();
         let ices = json.as_array().unwrap();
 
-        for ice in ices.iter() {
+        for ice in ices {
             let ic = RtcIceCandidate::from(serde_wasm_bindgen::to_value(ice).unwrap());
             JsFuture::from(pc.add_ice_candidate_with_opt_rtc_ice_candidate(Some(&ic)))
                 .await
