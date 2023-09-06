@@ -231,6 +231,7 @@ struct PanicIndexer;
 impl WalletNetworkInterface for PanicIndexer {
     type Error = Infallible;
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn query_substate(
         &self,
         _address: &SubstateAddress,
@@ -240,6 +241,7 @@ impl WalletNetworkInterface for PanicIndexer {
         panic!("PanicIndexer called")
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn submit_transaction(
         &self,
         _transaction: Transaction,
@@ -248,6 +250,7 @@ impl WalletNetworkInterface for PanicIndexer {
         panic!("PanicIndexer called")
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn submit_dry_run_transaction(
         &self,
         _transaction: Transaction,
@@ -256,6 +259,7 @@ impl WalletNetworkInterface for PanicIndexer {
         panic!("PanicIndexer called")
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn query_transaction_result(
         &self,
         _transaction_id: TransactionId,
