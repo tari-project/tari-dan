@@ -238,7 +238,7 @@ impl WalletNetworkInterface for PanicIndexer {
         _version: Option<u32>,
         _local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 
     #[allow(clippy::diverging_sub_expression)]
@@ -247,7 +247,7 @@ impl WalletNetworkInterface for PanicIndexer {
         _transaction: Transaction,
         _required_substates: Vec<SubstateRequirement>,
     ) -> Result<TransactionId, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 
     #[allow(clippy::diverging_sub_expression)]
@@ -256,7 +256,7 @@ impl WalletNetworkInterface for PanicIndexer {
         _transaction: Transaction,
         _required_substates: Vec<SubstateRequirement>,
     ) -> Result<TransactionQueryResult, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 
     #[allow(clippy::diverging_sub_expression)]
@@ -264,6 +264,6 @@ impl WalletNetworkInterface for PanicIndexer {
         &self,
         _transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 }

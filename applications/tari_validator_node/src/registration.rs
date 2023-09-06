@@ -146,7 +146,8 @@ async fn start(
                         if let Err(err) = handle_epoch_changed(&config, &node_identity, &epoch_manager).await {
                             error!(target: LOG_TARGET, "Auto-registration failed for epoch {} with error: {}", epoch, err);
                         }
-                    }
+                    },
+                    EpochManagerEvent::ThisValidatorIsRegistered {..} => {}
                 }
             },
             _ = shutdown.wait() => break
