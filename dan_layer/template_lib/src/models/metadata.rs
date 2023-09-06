@@ -77,7 +77,7 @@ impl Default for Metadata {
 impl Display for Metadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Metadata: ")?;
-        for (key, value) in self.0.iter() {
+        for (key, value) in &*self.0 {
             write!(f, "key = {}, value = {} ", key, value)?;
         }
         Ok(())
