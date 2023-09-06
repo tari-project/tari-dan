@@ -12,7 +12,7 @@ use crate::hashing::{hasher, EngineHashDomainLabel};
 
 const TAG: u64 = BinaryTag::FeeClaim.as_u64();
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct FeeClaimAddress(BorTag<Hash, TAG>);
 
 impl FeeClaimAddress {

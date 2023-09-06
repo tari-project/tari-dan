@@ -9,6 +9,7 @@ mod epoch_manager;
 mod harness;
 mod helpers;
 mod leader_strategy;
+pub mod logging;
 mod network;
 mod signing_service;
 mod spec;

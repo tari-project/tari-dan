@@ -76,7 +76,7 @@ impl ValidatorBuilder {
         let (tx_new_transactions, rx_new_transactions) = mpsc::channel(100);
         let (tx_hs_message, rx_hs_message) = mpsc::channel(10);
         let (tx_leader, rx_leader) = mpsc::channel(10);
-        let (tx_mempool, rx_mempool) = mpsc::channel(10);
+        let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
         let signing_service = TestVoteSignatureService::new(self.address.clone());
@@ -109,6 +109,7 @@ impl ValidatorBuilder {
         let channels = ValidatorChannels {
             address: self.address.clone(),
             bucket: self.bucket,
+            state_store: store.clone(),
             tx_new_transactions,
             tx_hs_message,
             rx_broadcast,
@@ -116,7 +117,7 @@ impl ValidatorBuilder {
             rx_mempool,
         };
 
-        // Fire off initial epoch change event
+        // Fire off initial epoch change event so that the pacemaker starts
         tx_epoch_events.send(EpochManagerEvent::EpochChanged(Epoch(0))).unwrap();
 
         let validator = Validator {

@@ -9,9 +9,10 @@ use tari_dan_storage::{
     consensus_models::{HighQc, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
+    StorageError,
 };
 
-use crate::{hotstuff::error::HotStuffError, messages::HotstuffMessage};
+use crate::messages::HotstuffMessage;
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff";
 
@@ -26,28 +27,27 @@ pub(super) type CommitteeAndMessage<TAddr> = (Committee<TAddr>, HotstuffMessage<
 pub fn update_high_qc<TTx, TAddr: NodeAddressable>(
     tx: &mut TTx,
     qc: &QuorumCertificate<TAddr>,
-) -> Result<(), HotStuffError>
+) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
     TTx::Target: StateStoreReadTransaction,
 {
     let high_qc = HighQc::get(tx.deref_mut())?;
     let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
-    // high_qc.node
-    let high_qc_block = high_qc.get_block(tx.deref_mut())?;
 
-    if high_qc_block.height() < qc.block_height() {
+    if high_qc.block_height() < qc.block_height() {
         debug!(
             target: LOG_TARGET,
             "🔥 UPDATE_HIGH_QC (node: {} {}, previous high QC: {} {})",
             qc.id(),
             qc.block_height(),
-            high_qc_block.id(),
-            high_qc_block.height(),
+            high_qc.block_id(),
+            high_qc.block_height(),
         );
 
-        qc.as_leaf_block().set(tx)?;
         qc.save(tx)?;
+        // This will fail if the block doesnt exist
+        qc.as_leaf_block().set(tx)?;
         qc.as_high_qc().set(tx)?;
     }
 

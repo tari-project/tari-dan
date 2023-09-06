@@ -75,6 +75,10 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
             Some(steps as usize)
         }
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = &TAddr> {
+        self.members.iter()
+    }
 }
 
 impl<TAddr: NodeAddressable> IntoIterator for Committee<TAddr> {

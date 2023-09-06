@@ -135,6 +135,7 @@ impl<TAddr> QuorumCertificate<TAddr> {
     pub fn as_high_qc(&self) -> HighQc {
         HighQc {
             block_id: self.block_id,
+            block_height: self.block_height,
             qc_id: self.qc_id,
         }
     }
@@ -146,13 +147,19 @@ impl<TAddr> QuorumCertificate<TAddr> {
         }
     }
 }
-
 impl<TAddr> QuorumCertificate<TAddr> {
     pub fn get<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
         tx: &mut TTx,
         qc_id: &QcId,
     ) -> Result<Self, StorageError> {
         tx.quorum_certificates_get(qc_id)
+    }
+
+    pub fn get_by_block_id<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<Self, StorageError> {
+        tx.quorum_certificates_get_by_block_id(block_id)
     }
 
     pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(
@@ -180,6 +187,20 @@ impl<TAddr> QuorumCertificate<TAddr> {
         }
         self.insert(tx)?;
         Ok(false)
+    }
+}
+
+impl<TAddr: Display> Display for QuorumCertificate<TAddr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Qc(block: {} {}, qc_id: {}, epoch: {}, {} signatures)",
+            self.block_id,
+            self.block_height,
+            self.qc_id,
+            self.epoch,
+            self.signatures.len()
+        )
     }
 }
 

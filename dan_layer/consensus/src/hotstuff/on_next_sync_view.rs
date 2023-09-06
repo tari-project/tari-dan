@@ -1,7 +1,9 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use log::info;
+use std::ops::DerefMut;
+
+use log::*;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{consensus_models::HighQc, StateStore};
 use tari_epoch_manager::EpochManagerReader;
@@ -38,18 +40,26 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
     }
 
     pub async fn handle(&mut self, epoch: Epoch, new_height: NodeHeight) -> Result<(), HotStuffError> {
-        info!(target: LOG_TARGET, "🔥 Handle NEXTSYNCVIEW for epoch {} and node height {}", epoch, new_height);
-        // let leaf_block = self.store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
+        info!(target: LOG_TARGET, "⚠️ Leader failure: NEXTSYNCVIEW for epoch {} and node height {}", epoch, new_height);
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
-        let next_leader = self.leader_strategy.get_leader(&local_committee, new_height);
+        let current_epoch = self.epoch_manager.current_epoch().await?;
 
         let high_qc = self
             .store
-            .with_read_tx(|tx| HighQc::get(tx).and_then(|qc| qc.get_quorum_certificate(tx)))?;
+            .with_write_tx(|tx| HighQc::get(tx.deref_mut())?.get_quorum_certificate(tx.deref_mut()))?;
 
-        let message = NewViewMessage { high_qc, new_height };
+        let next_leader = self
+            .leader_strategy
+            .get_leader_for_next_block(&local_committee, new_height);
 
-        info!(target: LOG_TARGET, "🔥 Send NEWVIEW to {}", next_leader);
+        let message = NewViewMessage {
+            high_qc,
+            new_height,
+            epoch: current_epoch,
+        };
+
+        info!(target: LOG_TARGET, "🔥 Send NEWVIEW ({new_height}) to {next_leader}");
+
         self.tx_leader
             .send((next_leader.clone(), HotstuffMessage::NewView(message)))
             .await

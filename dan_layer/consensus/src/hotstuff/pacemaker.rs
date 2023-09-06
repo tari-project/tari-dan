@@ -1,6 +1,9 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
-use std::time::{Duration, Instant};
+use std::{
+    cmp,
+    time::{Duration, Instant},
+};
 
 use log::*;
 use tari_dan_common_types::NodeHeight;
@@ -11,20 +14,20 @@ use crate::hotstuff::{
     on_beat::OnBeat,
     on_force_beat::OnForceBeat,
     on_leader_timeout::OnLeaderTimeout,
-    pacemaker_handle::{PaceMakerHandle, PacemakerEvent},
+    pacemaker_handle::{PaceMakerHandle, PacemakerRequest},
     HotStuffError,
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::pacemaker";
 const MAX_DELTA: Duration = Duration::from_secs(300);
-const MIN_DELTA: Duration = Duration::from_millis(1000);
 
 pub struct PaceMaker {
     pace_maker_handle: PaceMakerHandle,
-    handle_receiver: mpsc::Receiver<PacemakerEvent>,
+    handle_receiver: mpsc::Receiver<PacemakerRequest>,
     shutdown: ShutdownSignal,
-    current_delta: Duration,
+    block_time: Duration,
     current_height: NodeHeight,
+    current_high_qc_height: NodeHeight,
 }
 
 impl PaceMaker {
@@ -33,9 +36,11 @@ impl PaceMaker {
         Self {
             handle_receiver: receiver,
             pace_maker_handle: PaceMakerHandle::new(sender),
-            current_delta: Duration::from_millis(30000),
+            // TODO: make network constant. We're starting slow with 10s but should be 1s in the future
+            block_time: Duration::from_secs(10),
             shutdown,
             current_height: NodeHeight(0),
+            current_high_qc_height: NodeHeight(0),
         }
     }
 
@@ -67,64 +72,79 @@ impl PaceMaker {
         on_leader_timeout: OnLeaderTimeout,
     ) -> Result<(), HotStuffError> {
         // Don't start the timer until we receive a reset event
-        let sleep = tokio::time::sleep(Duration::from_secs(31_000_000));
-        let empty_block_deadline = tokio::time::sleep(Duration::from_secs(31_000_000));
-        tokio::pin!(sleep);
-        tokio::pin!(empty_block_deadline);
-        let mut last_reset = Instant::now();
+        let leader_timeout = tokio::time::sleep(Duration::MAX);
+        let block_timer = tokio::time::sleep(Duration::MAX);
+        tokio::pin!(leader_timeout);
+        tokio::pin!(block_timer);
+
+        let mut started = false;
+
         loop {
             tokio::select! {
                 // biased;
                 Some(event) = self.handle_receiver.recv() => {
                     match event {
-                       PacemakerEvent::ResetLeaderTimeout { last_seen_height } => {
-                            self.current_height = last_seen_height + NodeHeight(1);
-
-
-                            // if the last time we reset was less than half delta, then we reduce delta
-                            if last_reset.elapsed() < self.current_delta / 2 {
-                                self.current_delta = self.current_delta * 9 / 10;
-                                if self.current_delta < MIN_DELTA {
-                                    self.current_delta = MIN_DELTA;
-                                }
+                       PacemakerRequest::ResetLeaderTimeout { last_seen_height, high_qc_height } => {
+                            if !started {
+                                continue;
                             }
-                            sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
-                            // set a timer for when we must send an empty block...
-                            empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
 
-                            last_reset = Instant::now();
+                            self.current_height = cmp::max(self.current_height, last_seen_height);
+                            assert!(self.current_high_qc_height <= high_qc_height, "high_qc_height must be monotonically increasing");
+                            self.current_high_qc_height = high_qc_height;
+
+                            leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
+                            // set a timer for when we must send an empty block...
+                            block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                        },
-                        PacemakerEvent::Beat => {
-                           on_beat.beat();
+                        PacemakerRequest::TriggerBeat {  parent_block} => {
+                            if !started {
+                                continue;
+                            }
+                            if let Some(parent_block) = parent_block {
+                                on_force_beat.beat(Some(parent_block));
+                            } else {
+                                on_beat.beat();
+                            }
+                        }
+                        PacemakerRequest::Start { current_height, high_qc_height } => {
+                            info!(target: LOG_TARGET, "🚀 Starting pacemaker");
+                            if started {
+                                continue;
+                            }
+                            self.current_height = current_height;
+                            self.current_high_qc_height = high_qc_height;
+                            leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
+                            block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                            on_beat.beat();
+                            started = true;
+                        }
+                        PacemakerRequest::Stop => {
+                            info!(target: LOG_TARGET, "💤 Stopping pacemaker");
+                            started = false;
+                            // TODO: we could use futures-rs Either
+                            leader_timeout.as_mut().reset(far_future());
+                            block_timer.as_mut().reset(far_future());
                         }
                     }
-                    // if let Err(e) = self.on_beat().await {
-                    //     error!(target: LOG_TARGET, "Error (on_beat): {}", e);
-                    // }
-
                 },
-                () = &mut empty_block_deadline => {
-                    empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
-                    on_force_beat.beat();
+                () = &mut block_timer => {
+                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                    on_force_beat.beat(None);
                 }
-                () = &mut sleep => {
-                    // tx_on_leader_timeout.send(()).map_err(|e| HotStuffError::PacemakerChannelDropped{ details: e.to_string()})?;
-                    on_leader_timeout.leader_timed_out(self.current_height);
-                    self.current_height =  self.current_height + NodeHeight(1);
-                    self.current_delta *= 2;
-                    if self.current_delta > MAX_DELTA {
-                        self.current_delta = MAX_DELTA;
+                () = &mut leader_timeout => {
+                    block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                    leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
+                    // Dont leader fail on genesis
+                    if self.current_height == NodeHeight::zero() {
+                        continue;
                     }
-                    // TODO: perhaps we should track the height
-                    sleep.as_mut().reset(tokio::time::Instant::now() + self.current_delta);
-                    empty_block_deadline.as_mut().reset(tokio::time::Instant::now() + self.current_delta / 2);
-                    last_reset = Instant::now();
+                    info!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}", self.current_height);
+                    // The leader of the next block proposes, so increment height after sending the leader timeout
+                    on_leader_timeout.leader_timed_out(self.current_height);
+                    self.current_height += NodeHeight(1);
                 },
-                // _ = self.on_leader_timeout.wait() => {
-                //     if let Err(e) = self.on_leader_timeout().await {
-                //         error!(target: LOG_TARGET, "Error (on_leader_timeout): {}", e);
-                //     }
-                // }
+
                 _ = self.shutdown.wait() => {
                     info!(target: LOG_TARGET, "💤 Shutting down");
                     break;
@@ -134,4 +154,32 @@ impl PaceMaker {
 
         Ok(())
     }
+
+    /// Current delta time defined as 2^n where n is the difference in height between the last seen block height and the
+    /// high QC height. This is always greater than the block time.
+    /// Ensure that current_height and current_high_qc_height are set before calling this function.
+    fn delta_time(&self) -> Duration {
+        let exp = u32::try_from(cmp::min(
+            u64::from(u32::MAX),
+            cmp::max(
+                1,
+                self.current_height.saturating_sub(self.current_high_qc_height).as_u64(),
+            ),
+        ))
+        .unwrap_or(u32::MAX);
+        let delta = cmp::min(
+            MAX_DELTA,
+            2u64.checked_pow(exp).map(Duration::from_secs).unwrap_or(MAX_DELTA),
+        );
+        self.block_time + delta
+    }
+}
+
+fn far_future() -> tokio::time::Instant {
+    // Taken verbatim from the tokio library:
+    // Roughly 30 years from now.
+    // API does not provide a way to obtain max `Instant`
+    // or convert specific date in the future to instant.
+    // 1000 years overflows on macOS, 100 years overflows on FreeBSD.
+    tokio::time::Instant::from_std(Instant::now() + Duration::from_secs(86400 * 365 * 30))
 }

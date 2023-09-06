@@ -1,10 +1,10 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    block_missing_txs (id) {
+    block_missing_transactions (id) {
         id -> Integer,
-        transaction_ids -> Text,
         block_id -> Text,
+        transaction_ids -> Text,
         created_at -> Timestamp,
     }
 }
@@ -21,6 +21,8 @@ diesel::table! {
         command_count -> BigInt,
         commands -> Text,
         total_leader_fee -> BigInt,
+        is_committed -> Bool,
+        is_dummy -> Bool,
         created_at -> Timestamp,
     }
 }
@@ -29,6 +31,7 @@ diesel::table! {
     high_qcs (id) {
         id -> Integer,
         block_id -> Text,
+        block_height -> BigInt,
         qc_id -> Text,
         created_at -> Timestamp,
    }
@@ -90,10 +93,11 @@ diesel::table! {
 }
 
 diesel::table! {
-    missing_tx (id) {
+    missing_transactions (id) {
         id -> Integer,
-        transaction_id -> Text,
         block_id -> Text,
+        transaction_id -> Text,
+        is_awaiting_execution -> Bool,
         created_at -> Timestamp,
     }
 }
@@ -102,6 +106,7 @@ diesel::table! {
     quorum_certificates (id) {
         id -> Integer,
         qc_id -> Text,
+        block_id -> Text,
         json -> Text,
         created_at -> Timestamp,
     }
@@ -138,11 +143,13 @@ diesel::table! {
         transaction_id -> Text,
         involved_shards -> Text,
         original_decision -> Text,
-        pending_decision -> Nullable<Text>,
+        local_decision -> Nullable<Text>,
+        remote_decision -> Nullable<Text>,
         evidence -> Text,
         transaction_fee -> BigInt,
         leader_fee -> BigInt,
         stage -> Text,
+        pending_stage -> Nullable<Text>,
         is_ready -> Bool,
         updated_at -> Timestamp,
         created_at -> Timestamp,
@@ -184,7 +191,7 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-    block_missing_txs,
+    block_missing_transactions,
     blocks,
     high_qcs,
     last_executed,
@@ -193,7 +200,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     leaf_blocks,
     locked_block,
     locked_outputs,
-    missing_tx,
+    missing_transactions,
     quorum_certificates,
     substates,
     transaction_pool,
