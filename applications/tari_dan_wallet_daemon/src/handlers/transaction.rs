@@ -115,7 +115,7 @@ pub async fn handle_submit(
             .into_iter()
             .map(Into::into)
             .collect();
-        vec![req.inputs, loaded_dependent_substates].concat()
+        [req.inputs, loaded_dependent_substates].concat()
     };
 
     let transaction = Transaction::builder()
