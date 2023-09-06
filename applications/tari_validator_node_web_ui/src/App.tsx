@@ -20,28 +20,28 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Routes, Route } from 'react-router-dom';
-import Mempool from './routes/Mempool/Mempool';
-import Committees from './routes/Committees/CommitteesLayout';
-import ValidatorNode from './routes/VN/ValidatorNode';
-import Connections from './routes/Connections/Connections';
-import Fees from './routes/Fees/Fees';
-import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
-import Templates from './routes/Templates/Templates';
-import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
-import ErrorPage from './routes/ErrorPage';
-import Transaction from './routes/Transaction/Transaction';
-import TemplateFunctions from './routes/VN/Components/TemplateFunctions';
-import Layout from './theme/LayoutMain';
-import CommitteeMembers from './routes/Committees/CommitteeMembers';
-import { createContext, useState, useEffect } from 'react';
-import { IEpoch, IIdentity } from './utils/interfaces';
+import { Routes, Route } from "react-router-dom";
+import Mempool from "./routes/Mempool/Mempool";
+import Committees from "./routes/Committees/CommitteesLayout";
+import ValidatorNode from "./routes/VN/ValidatorNode";
+import Connections from "./routes/Connections/Connections";
+import Fees from "./routes/Fees/Fees";
+import RecentTransactions from "./routes/RecentTransactions/RecentTransactions";
+import Templates from "./routes/Templates/Templates";
+import ValidatorNodes from "./routes/ValidatorNodes/ValidatorNodes";
+import ErrorPage from "./routes/ErrorPage";
+import TemplateFunctions from "./routes/VN/Components/TemplateFunctions";
+import Layout from "./theme/LayoutMain";
+import CommitteeMembers from "./routes/Committees/CommitteeMembers";
+import { createContext, useState, useEffect } from "react";
+import { IEpoch, IIdentity } from "./utils/interfaces";
 import {
   getEpochManagerStats,
   getIdentity,
   getRecentTransactions,
   getShardKey,
-} from './utils/json_rpc';
+} from "./utils/json_rpc";
+import TransactionDetails from "./routes/Transactions/TransactionDetails";
 
 interface IContext {
   epoch: IEpoch | undefined;
@@ -54,63 +54,63 @@ export const VNContext = createContext<IContext>({
   epoch: undefined,
   identity: undefined,
   shardKey: null,
-  error: '',
+  error: "",
 });
 
 export const breadcrumbRoutes = [
   {
-    label: 'Home',
-    path: '/',
+    label: "Home",
+    path: "/",
     dynamic: false,
   },
   {
-    label: 'Committees',
-    path: '/committees',
+    label: "Committees",
+    path: "/committees",
     dynamic: false,
   },
   {
-    label: 'Connections',
-    path: '/connections',
+    label: "Connections",
+    path: "/connections",
     dynamic: false,
   },
   {
-    label: 'Fees',
-    path: '/fees',
+    label: "Fees",
+    path: "/fees",
     dynamic: false,
   },
   {
-    label: 'Transactions',
-    path: '/transactions',
+    label: "Transactions",
+    path: "/transactions",
     dynamic: false,
   },
   {
-    label: 'Templates',
-    path: '/templates',
+    label: "Templates",
+    path: "/templates",
     dynamic: false,
   },
   {
-    label: 'Validator Nodes',
-    path: '/vns',
+    label: "Validator Nodes",
+    path: "/vns",
     dynamic: false,
   },
   {
-    label: 'Mempool',
-    path: '/mempool',
+    label: "Mempool",
+    path: "/mempool",
     dynamic: false,
   },
   {
-    label: 'Transaction',
-    path: '/transactions/:payloadId',
+    label: "Transactions",
+    path: "/transactions/:payloadId",
     dynamic: true,
   },
   {
-    label: 'Template',
-    path: '/templates/:address',
+    label: "Template",
+    path: "/templates/:address",
     dynamic: true,
   },
   {
-    label: 'Committee',
-    path: '/committees/:address',
+    label: "Committee",
+    path: "/committees/:address",
     dynamic: true,
   },
 ];
@@ -119,7 +119,7 @@ export default function App() {
   const [epoch, setEpoch] = useState<IEpoch | undefined>(undefined);
   const [identity, setIdentity] = useState<IIdentity | undefined>(undefined);
   const [shardKey, setShardKey] = useState<string | null>(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
   // Refresh every 2 minutes
   const refreshEpoch = (epoch: IEpoch | undefined) => {
@@ -131,13 +131,16 @@ export default function App() {
       })
       .catch((reason) => {
         console.error(reason);
-        setError('Json RPC error, please check console');
+        setError("Json RPC error, please check console");
       });
   };
   useEffect(() => {
-    const id = window.setInterval(() => {
-      refreshEpoch(epoch);
-    }, 2 * 60 * 1000);
+    const id = window.setInterval(
+      () => {
+        refreshEpoch(epoch);
+      },
+      2 * 60 * 1000,
+    );
     return () => {
       window.clearInterval(id);
     };
@@ -151,7 +154,7 @@ export default function App() {
       })
       .catch((reason) => {
         console.log(reason);
-        setError('Json RPC error, please check console');
+        setError("Json RPC error, please check console");
       });
   }, []);
   // Get shard key.
@@ -161,7 +164,7 @@ export default function App() {
       getShardKey(epoch.current_epoch * 10, identity.public_key).then(
         (response) => {
           setShardKey(response.shard_key);
-        }
+        },
       );
     }
   }, [epoch, identity]);
@@ -170,7 +173,7 @@ export default function App() {
   }, []);
 
   return (
-    <div>
+    <>
       <VNContext.Provider value={{ epoch, identity, shardKey, error }}>
         <Routes>
           <Route path="/" element={<Layout />}>
@@ -182,13 +185,16 @@ export default function App() {
             <Route path="templates" element={<Templates />} />
             <Route path="vns" element={<ValidatorNodes />} />
             <Route path="mempool" element={<Mempool />} />
-            <Route path="transactions/:payloadId" element={<Transaction />} />
+            <Route
+              path="transactions/:transactionHash"
+              element={<TransactionDetails />}
+            />
             <Route path="templates/:address" element={<TemplateFunctions />} />
             <Route path="committees/:address" element={<CommitteeMembers />} />
             <Route path="*" element={<ErrorPage />} />
           </Route>
         </Routes>
       </VNContext.Provider>
-    </div>
+    </>
   );
 }

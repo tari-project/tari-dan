@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::NodeHeight;
 
 use crate::{
     consensus_models::{Block, BlockId},
@@ -31,7 +31,6 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LeafBlock {
-    pub epoch: Epoch,
     pub block_id: BlockId,
     pub height: NodeHeight,
 }
@@ -41,9 +40,8 @@ impl LeafBlock {
         self.block_id.is_genesis()
     }
 
-    pub fn genesis(epoch: Epoch) -> Self {
+    pub fn genesis() -> Self {
         Self {
-            epoch,
             block_id: BlockId::genesis(),
             height: NodeHeight(0),
         }
@@ -51,15 +49,15 @@ impl LeafBlock {
 }
 
 impl LeafBlock {
-    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
-        tx.leaf_block_get(epoch)
+    pub fn get<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<Self, StorageError> {
+        tx.leaf_block_get()
     }
 
     pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.leaf_block_set(self)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block<TTx::Addr>, StorageError> {
         tx.blocks_get(&self.block_id)
     }
 }

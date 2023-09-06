@@ -27,7 +27,6 @@ use std::{
 };
 
 use chrono::Utc;
-use lazy_static::lazy_static;
 use log::*;
 use tari_core::transactions::transaction_components::TemplateType;
 use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
@@ -40,7 +39,7 @@ use tari_dan_engine::{
 use tari_dan_storage::global::{DbTemplate, DbTemplateType, DbTemplateUpdate, GlobalDb, TemplateStatus};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_engine_types::calculate_template_binary_hash;
-use tari_template_builtin::get_template_builtin;
+use tari_template_builtin::{get_template_builtin, ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::models::TemplateAddress;
 
 use super::TemplateConfig;
@@ -53,13 +52,6 @@ use crate::template_manager::interface::{
 };
 
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
-
-lazy_static! {
-    pub static ref ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
-    pub static ref ACCOUNT_NFT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
-    ]);
-}
 
 #[derive(Debug, Clone)]
 pub struct TemplateManager {

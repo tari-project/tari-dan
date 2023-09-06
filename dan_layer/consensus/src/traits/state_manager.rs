@@ -12,7 +12,7 @@ pub trait StateManager<TStateStore: StateStore> {
     fn commit_transaction(
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
-        block: &Block,
+        block: &Block<TStateStore::Addr>,
         transaction: &ExecutedTransaction,
     ) -> Result<(), Self::Error>;
 }

@@ -25,7 +25,12 @@ use std::convert::{TryFrom, TryInto};
 use anyhow::anyhow;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
-use tari_engine_types::{confidential::ConfidentialClaim, instruction::Instruction, substate::SubstateAddress};
+use tari_dan_p2p::NewTransactionMessage;
+use tari_engine_types::{
+    confidential::{ConfidentialClaim, ConfidentialOutput},
+    instruction::Instruction,
+    substate::SubstateAddress,
+};
 use tari_template_lib::{
     args::Arg,
     crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
@@ -35,12 +40,43 @@ use tari_template_lib::{
 use tari_transaction::{SubstateRequirement, Transaction};
 
 use crate::{
-    proto::{self, transaction::OptionalVersion},
+    proto::{
+        self,
+        transaction::{instruction::InstructionType, OptionalVersion},
+    },
     utils::checked_copy_fixed,
 };
 
-//---------------------------------- Transaction --------------------------------------------//
+// -------------------------------- NewTransactionMessage -------------------------------- //
 
+impl From<NewTransactionMessage> for proto::transaction::NewTransactionMessage {
+    fn from(msg: NewTransactionMessage) -> Self {
+        Self {
+            transaction: Some(msg.transaction.into()),
+            output_shards: msg.output_shards.into_iter().map(|s| s.as_bytes().to_vec()).collect(),
+        }
+    }
+}
+
+impl TryFrom<proto::transaction::NewTransactionMessage> for NewTransactionMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::transaction::NewTransactionMessage) -> Result<Self, Self::Error> {
+        Ok(NewTransactionMessage {
+            transaction: value
+                .transaction
+                .ok_or_else(|| anyhow!("Transaction not provided"))?
+                .try_into()?,
+            output_shards: value
+                .output_shards
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+//---------------------------------- Transaction --------------------------------------------//
 impl TryFrom<proto::transaction::Transaction> for Transaction {
     type Error = anyhow::Error;
 
@@ -49,12 +85,12 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             .instructions
             .into_iter()
             .map(TryInto::try_into)
-            .collect::<Result<Vec<tari_engine_types::instruction::Instruction>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let fee_instructions = request
             .fee_instructions
             .into_iter()
             .map(TryInto::try_into)
-            .collect::<Result<Vec<tari_engine_types::instruction::Instruction>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
         let signature = request
             .signature
             .ok_or_else(|| anyhow!("invalid signature"))?
@@ -79,11 +115,6 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
-        let filled_outputs = request
-            .filled_outputs
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
         let transaction = Transaction::new(
             fee_instructions,
             instructions,
@@ -92,7 +123,6 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             input_refs,
             outputs,
             filled_inputs,
-            filled_outputs,
         );
 
         Ok(transaction)
@@ -110,11 +140,6 @@ impl From<Transaction> for proto::transaction::Transaction {
             .iter()
             .map(|s| s.as_bytes().to_vec())
             .collect();
-        let filled_outputs = transaction
-            .filled_outputs()
-            .iter()
-            .map(|s| s.as_bytes().to_vec())
-            .collect();
         let (fee_instructions, instructions) = transaction.into_instructions();
         let fee_instructions = fee_instructions.into_iter().map(Into::into).collect();
         let instructions = instructions.into_iter().map(Into::into).collect();
@@ -127,13 +152,12 @@ impl From<Transaction> for proto::transaction::Transaction {
             input_refs,
             outputs,
             filled_inputs,
-            filled_outputs,
         }
     }
 }
 // -------------------------------- Instruction -------------------------------- //
 
-impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction::Instruction {
+impl TryFrom<proto::transaction::Instruction> for Instruction {
     type Error = anyhow::Error;
 
     fn try_from(request: proto::transaction::Instruction) -> Result<Self, Self::Error> {
@@ -142,9 +166,10 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
             .into_iter()
             .map(|a| a.try_into())
             .collect::<Result<_, _>>()?;
-        let instruction = match request.instruction_type {
-            // function
-            0 => {
+        let instruction_type =
+            InstructionType::from_i32(request.instruction_type).ok_or_else(|| anyhow!("invalid instruction_type"))?;
+        let instruction = match instruction_type {
+            InstructionType::Function => {
                 let function = request.function;
                 Instruction::CallFunction {
                     template_address: request.template_address.try_into()?,
@@ -152,8 +177,7 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                     args,
                 }
             },
-            // method
-            1 => {
+            InstructionType::Method => {
                 let method = request.method;
                 let component_address = Hash::try_from(request.component_address)?.into();
                 Instruction::CallMethod {
@@ -162,12 +186,14 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                     args,
                 }
             },
-            2 => Instruction::PutLastInstructionOutputOnWorkspace { key: request.key },
-            3 => Instruction::EmitLog {
+            InstructionType::PutOutputInWorkspace => {
+                Instruction::PutLastInstructionOutputOnWorkspace { key: request.key }
+            },
+            InstructionType::EmitLog => Instruction::EmitLog {
                 level: request.log_level.parse()?,
                 message: request.log_message,
             },
-            4 => Instruction::ClaimBurn {
+            InstructionType::ClaimBurn => Instruction::ClaimBurn {
                 claim: Box::new(ConfidentialClaim {
                     public_key: PublicKey::from_bytes(&request.claim_burn_public_key)
                         .map_err(|e| anyhow!("claim_burn_public_key: {}", e))?,
@@ -185,11 +211,15 @@ impl TryFrom<proto::transaction::Instruction> for tari_engine_types::instruction
                     withdraw_proof: request.claim_burn_withdraw_proof.map(TryInto::try_into).transpose()?,
                 }),
             },
-            101 => Instruction::CreateFreeTestCoins {
+            InstructionType::ClaimValidatorFees => Instruction::ClaimValidatorFees {
+                epoch: request.claim_validator_fees_epoch,
+                validator_public_key: PublicKey::from_bytes(&request.claim_validator_fees_validator_public_key)
+                    .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
+            },
+            InstructionType::CreateFreeTestCoins => Instruction::CreateFreeTestCoins {
                 revealed_amount: request.create_free_test_coins_amount.try_into()?,
                 output: tari_bor::decode(&request.create_free_test_coins_output_blob)?,
             },
-            _ => return Err(anyhow!("invalid instruction_type")),
         };
 
         Ok(instruction)
@@ -206,7 +236,7 @@ impl From<Instruction> for proto::transaction::Instruction {
                 function,
                 args,
             } => {
-                result.instruction_type = 0;
+                result.instruction_type = InstructionType::Function as i32;
                 result.template_address = template_address.to_vec();
                 result.function = function;
                 result.args = args.into_iter().map(|a| a.into()).collect();
@@ -216,22 +246,22 @@ impl From<Instruction> for proto::transaction::Instruction {
                 method,
                 args,
             } => {
-                result.instruction_type = 1;
+                result.instruction_type = InstructionType::Method as i32;
                 result.component_address = component_address.as_bytes().to_vec();
                 result.method = method;
                 result.args = args.into_iter().map(|a| a.into()).collect();
             },
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
-                result.instruction_type = 2;
+                result.instruction_type = InstructionType::PutOutputInWorkspace as i32;
                 result.key = key;
             },
             Instruction::EmitLog { level, message } => {
-                result.instruction_type = 3;
+                result.instruction_type = InstructionType::EmitLog as i32;
                 result.log_level = level.to_string();
                 result.log_message = message;
             },
             Instruction::ClaimBurn { claim } => {
-                result.instruction_type = 4;
+                result.instruction_type = InstructionType::ClaimBurn as i32;
                 result.claim_burn_commitment_address = claim.output_address.to_vec();
                 result.claim_burn_range_proof = claim.range_proof.to_vec();
                 result.claim_burn_proof_of_knowledge = Some(claim.proof_of_knowledge.into());
@@ -245,10 +275,19 @@ impl From<Instruction> for proto::transaction::Instruction {
                 revealed_amount: amount,
                 output,
             } => {
-                result.instruction_type = 101;
+                result.instruction_type = InstructionType::CreateFreeTestCoins as i32;
                 result.create_free_test_coins_amount = amount.value() as u64;
-                result.create_free_test_coins_output_blob =
-                    output.map(|o| tari_bor::encode(&o).unwrap()).unwrap_or_default();
+                result.create_free_test_coins_output_blob = output
+                    .map(|o| tari_bor::encode(&o).unwrap())
+                    .unwrap_or_else(|| tari_bor::encode(&None::<ConfidentialOutput>).unwrap());
+            },
+            Instruction::ClaimValidatorFees {
+                epoch,
+                validator_public_key,
+            } => {
+                result.instruction_type = InstructionType::ClaimValidatorFees as i32;
+                result.claim_validator_fees_epoch = epoch;
+                result.claim_validator_fees_validator_public_key = validator_public_key.to_vec();
             },
         }
         result

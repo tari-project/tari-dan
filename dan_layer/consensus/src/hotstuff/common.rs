@@ -4,22 +4,34 @@
 use std::ops::DerefMut;
 
 use log::*;
+use tari_dan_common_types::{committee::Committee, NodeAddressable};
 use tari_dan_storage::{
     consensus_models::{HighQc, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
 };
 
-use crate::hotstuff::error::HotStuffError;
+use crate::{hotstuff::error::HotStuffError, messages::HotstuffMessage};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff";
 
-pub fn update_high_qc<TTx>(tx: &mut TTx, qc: &QuorumCertificate) -> Result<(), HotStuffError>
+/// The value that fees are divided by to determine the amount of fees to burn. 0 means no fees are burned.
+/// This is a placeholder for the fee exhaust consensus constant so that we know where it's used later.
+/// TODO: exhaust > 0
+pub const EXHAUST_DIVISOR: u64 = 0;
+
+// To avoid clippy::type_complexity
+pub(super) type CommitteeAndMessage<TAddr> = (Committee<TAddr>, HotstuffMessage<TAddr>);
+
+pub fn update_high_qc<TTx, TAddr: NodeAddressable>(
+    tx: &mut TTx,
+    qc: &QuorumCertificate<TAddr>,
+) -> Result<(), HotStuffError>
 where
-    TTx: StateStoreWriteTransaction + DerefMut,
+    TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
     TTx::Target: StateStoreReadTransaction,
 {
-    let high_qc = HighQc::get(tx.deref_mut(), qc.epoch())?;
+    let high_qc = HighQc::get(tx.deref_mut())?;
     let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
     // high_qc.node
     let high_qc_block = high_qc.get_block(tx.deref_mut())?;

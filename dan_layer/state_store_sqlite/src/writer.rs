@@ -2,55 +2,58 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    borrow::Borrow,
     collections::HashSet,
     ops::{Deref, DerefMut},
 };
 
 use diesel::{AsChangeset, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::*;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
         Decision,
         Evidence,
-        ExecutedTransaction,
         HighQc,
         LastExecuted,
         LastProposed,
         LastVoted,
         LeafBlock,
         LockedBlock,
+        LockedOutput,
         QuorumCertificate,
         SubstateLockFlag,
         SubstateLockState,
         SubstateRecord,
         TransactionAtom,
         TransactionPoolStage,
+        TransactionRecord,
         Vote,
     },
     StateStoreWriteTransaction,
     StorageError,
 };
-use tari_transaction::TransactionId;
+use tari_transaction::{Transaction, TransactionId};
 use time::PrimitiveDateTime;
 
 use crate::{
     error::SqliteStorageError,
     reader::SqliteStateStoreReadTransaction,
     serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex, serialize_json},
+    sql_models,
     sqlite_transaction::SqliteTransaction,
 };
 
 const LOG_TARGET: &str = "tari::dan::storage";
 
-pub struct SqliteStateStoreWriteTransaction<'a> {
+pub struct SqliteStateStoreWriteTransaction<'a, TAddr> {
     /// None indicates if the transaction has been explicitly committed/rolled back
-    transaction: Option<SqliteStateStoreReadTransaction<'a>>,
+    transaction: Option<SqliteStateStoreReadTransaction<'a, TAddr>>,
 }
 
-impl<'a> SqliteStateStoreWriteTransaction<'a> {
+impl<'a, TAddr> SqliteStateStoreWriteTransaction<'a, TAddr> {
     pub fn new(transaction: SqliteTransaction<'a>) -> Self {
         Self {
             transaction: Some(SqliteStateStoreReadTransaction::new(transaction)),
@@ -62,7 +65,9 @@ impl<'a> SqliteStateStoreWriteTransaction<'a> {
     }
 }
 
-impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
+impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_, TAddr> {
+    type Addr = TAddr;
+
     fn commit(mut self) -> Result<(), StorageError> {
         // Take so that we mark this transaction as complete in the drop impl
         self.transaction.take().unwrap().commit()?;
@@ -75,7 +80,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn blocks_insert(&mut self, block: &Block) -> Result<(), StorageError> {
+    fn blocks_insert(&mut self, block: &Block<TAddr>) -> Result<(), StorageError> {
         use crate::schema::blocks;
 
         let insert = (
@@ -83,9 +88,10 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             blocks::parent_block_id.eq(serialize_hex(block.parent())),
             blocks::height.eq(block.height().as_u64() as i64),
             blocks::epoch.eq(block.epoch().as_u64() as i64),
-            blocks::leader_round.eq(block.round() as i64),
-            blocks::proposed_by.eq(serialize_hex(block.proposed_by())),
+            blocks::proposed_by.eq(serialize_hex(block.proposed_by().as_bytes())),
+            blocks::command_count.eq(block.commands().len() as i64),
             blocks::commands.eq(serialize_json(block.commands())?),
+            blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
         );
 
@@ -100,15 +106,17 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn insert_missing_transactions(
+    fn insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         block_id: &BlockId,
-        transaction_ids: Vec<TransactionId>,
+        transaction_ids: I,
     ) -> Result<(), StorageError> {
         use crate::schema::{block_missing_txs, missing_tx};
 
+        let transaction_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
+        let block_id_hex = serialize_hex(block_id);
         let insert = (
-            block_missing_txs::block_id.eq(serialize_hex(block_id)),
+            block_missing_txs::block_id.eq(&block_id_hex),
             block_missing_txs::transaction_ids.eq(serialize_json(&transaction_ids)?),
         );
 
@@ -120,18 +128,24 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 source: e,
             })?;
 
-        for transaction_id in transaction_ids {
-            diesel::insert_into(missing_tx::table)
-                .values((
-                    missing_tx::block_id.eq(serialize_hex(block_id)),
-                    missing_tx::transaction_id.eq(serialize_hex(transaction_id)),
-                ))
-                .execute(self.connection())
-                .map_err(|e| SqliteStorageError::DieselError {
-                    operation: "insert_missing_txs",
-                    source: e,
-                })?;
-        }
+        let values = transaction_ids
+            .iter()
+            .map(|tx_id| {
+                (
+                    missing_tx::block_id.eq(&block_id_hex),
+                    missing_tx::transaction_id.eq(tx_id),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        diesel::insert_into(missing_tx::table)
+            .values(values)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "insert_missing_txs",
+                source: e,
+            })?;
+
         Ok(())
     }
 
@@ -192,7 +206,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         }
     }
 
-    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError> {
+    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError> {
         use crate::schema::quorum_certificates;
 
         let insert = (
@@ -215,7 +229,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         use crate::schema::last_voted;
 
         let insert = (
-            last_voted::epoch.eq(last_voted.epoch.as_u64() as i64),
             last_voted::block_id.eq(serialize_hex(last_voted.block_id)),
             last_voted::height.eq(last_voted.height.as_u64() as i64),
         );
@@ -235,7 +248,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         use crate::schema::last_executed;
 
         let insert = (
-            last_executed::epoch.eq(last_exec.epoch.as_u64() as i64),
             last_executed::block_id.eq(serialize_hex(last_exec.block_id)),
             last_executed::height.eq(last_exec.height.as_u64() as i64),
         );
@@ -255,7 +267,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         use crate::schema::last_proposed;
 
         let insert = (
-            last_proposed::epoch.eq(last_proposed.epoch.as_u64() as i64),
             last_proposed::block_id.eq(serialize_hex(last_proposed.block_id)),
             last_proposed::height.eq(last_proposed.height.as_u64() as i64),
         );
@@ -275,7 +286,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         use crate::schema::leaf_blocks;
 
         let insert = (
-            leaf_blocks::epoch.eq(leaf_node.epoch.as_u64() as i64),
             leaf_blocks::block_id.eq(serialize_hex(leaf_node.block_id)),
             leaf_blocks::block_height.eq(leaf_node.height.as_u64() as i64),
         );
@@ -295,7 +305,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         use crate::schema::locked_block;
 
         let insert = (
-            locked_block::epoch.eq(locked_block.epoch.as_u64() as i64),
             locked_block::block_id.eq(serialize_hex(locked_block.block_id)),
             locked_block::height.eq(locked_block.height.as_u64() as i64),
         );
@@ -315,7 +324,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         use crate::schema::high_qcs;
 
         let insert = (
-            high_qcs::epoch.eq(high_qc.epoch.as_u64() as i64),
             high_qcs::block_id.eq(serialize_hex(high_qc.block_id)),
             high_qcs::qc_id.eq(serialize_hex(high_qc.qc_id)),
         );
@@ -331,24 +339,19 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn transactions_insert(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError> {
+    fn transactions_insert(&mut self, transaction: &Transaction) -> Result<(), StorageError> {
         use crate::schema::transactions;
-
-        let transaction = executed_transaction.transaction();
-        let result = executed_transaction.result();
 
         let insert = (
             transactions::transaction_id.eq(serialize_hex(transaction.id())),
             transactions::fee_instructions.eq(serialize_json(transaction.fee_instructions())?),
             transactions::instructions.eq(serialize_json(transaction.instructions())?),
-            transactions::result.eq(serialize_json(result)?),
             transactions::signature.eq(serialize_json(transaction.signature())?),
             transactions::inputs.eq(serialize_json(transaction.inputs())?),
             transactions::input_refs.eq(serialize_json(transaction.input_refs())?),
             transactions::outputs.eq(serialize_json(transaction.outputs())?),
             transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
-            transactions::filled_outputs.eq(serialize_json(transaction.filled_outputs())?),
-            transactions::final_decision.eq(executed_transaction.final_decision().map(|d| d.to_string())),
+            transactions::resulting_outputs.eq(serialize_json(&serde_json::Value::Array(vec![]))?),
         );
 
         diesel::insert_into(transactions::table)
@@ -362,22 +365,38 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn transactions_update(&mut self, executed_transaction: &ExecutedTransaction) -> Result<(), StorageError> {
+    fn transactions_update(&mut self, transaction_rec: &TransactionRecord) -> Result<(), StorageError> {
         use crate::schema::transactions;
 
-        let transaction = executed_transaction.transaction();
-        let result = executed_transaction.result();
+        let transaction = transaction_rec.transaction();
 
-        let update = (
-            transactions::result.eq(serialize_json(result)?),
-            transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
-            transactions::filled_outputs.eq(serialize_json(transaction.filled_outputs())?),
-            transactions::final_decision.eq(executed_transaction.final_decision().map(|d| d.to_string())),
-        );
+        #[derive(AsChangeset)]
+        #[diesel(table_name = transactions)]
+        struct Changes {
+            result: Option<Option<String>>,
+            filled_inputs: Option<String>,
+            resulting_outputs: Option<String>,
+            execution_time_ms: Option<Option<i64>>,
+            final_decision: Option<Option<String>>,
+            abort_details: Option<Option<String>>,
+        }
+
+        let change_set = Changes {
+            result: Some(transaction_rec.result().map(serialize_json).transpose()?),
+            filled_inputs: Some(serialize_json(transaction.filled_inputs())?),
+            resulting_outputs: Some(serialize_json(transaction_rec.resulting_outputs())?),
+            execution_time_ms: Some(
+                transaction_rec
+                    .execution_time()
+                    .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
+            ),
+            final_decision: Some(transaction_rec.final_decision().map(|d| d.to_string())),
+            abort_details: Some(transaction_rec.abort_details.clone()),
+        };
 
         let num_affected = diesel::update(transactions::table)
             .filter(transactions::transaction_id.eq(serialize_hex(transaction.id())))
-            .set(update)
+            .set(change_set)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transactions_update",
@@ -408,7 +427,8 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                 &transaction.evidence.shards_iter().copied().collect::<Vec<_>>(),
             )?),
             transaction_pool::original_decision.eq(transaction.decision.to_string()),
-            transaction_pool::fee.eq(transaction.fee as i64),
+            transaction_pool::transaction_fee.eq(transaction.transaction_fee as i64),
+            transaction_pool::leader_fee.eq(transaction.leader_fee as i64),
             transaction_pool::evidence.eq(serialize_json(&transaction.evidence)?),
             transaction_pool::stage.eq(stage.to_string()),
             transaction_pool::is_ready.eq(is_ready),
@@ -481,7 +501,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
         Ok(())
     }
 
-    fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError> {
+    fn votes_insert(&mut self, vote: &Vote<Self::Addr>) -> Result<(), StorageError> {
         use crate::schema::votes;
 
         let insert = (
@@ -526,7 +546,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             })?;
         if locked_w.len() < objects.len() {
             return Err(SqliteStorageError::NotAllSubstatesFound {
-                operation: "substates_try_lock_many",
+                operation: "substates_try_lock_all",
                 details: format!(
                     "{:?}: Found {} substates, but {} were requested",
                     lock_flag,
@@ -537,7 +557,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .into());
         }
         if locked_w.iter().any(|w| *w) {
-            return Ok(SubstateLockState::SomeWriteLocked);
+            return Ok(SubstateLockState::SomeAlreadyWriteLocked);
         }
 
         match lock_flag {
@@ -613,6 +633,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
 
                 diesel::update(substates::table)
                     .filter(substates::shard_id.eq_any(objects))
+                    .filter(substates::locked_by.eq(serialize_hex(locked_by_tx)))
                     .set((
                         substates::is_locked_w.eq(false),
                         substates::locked_by.eq(None::<String>),
@@ -634,7 +655,7 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                     })?;
                 if locked_r.len() < objects.len() {
                     return Err(SqliteStorageError::NotAllSubstatesFound {
-                        operation: "substates_try_lock_many",
+                        operation: "substates_try_lock_all",
                         details: format!(
                             "Found {} substates, but {} were requested",
                             locked_r.len(),
@@ -650,7 +671,6 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
                     }
                     .into());
                 }
-
                 diesel::update(substates::table)
                     .filter(substates::shard_id.eq_any(objects))
                     .set(substates::read_locks.eq(substates::read_locks - 1))
@@ -746,29 +766,115 @@ impl StateStoreWriteTransaction for SqliteStateStoreWriteTransaction<'_> {
             .values(values)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "substate_up",
+                operation: "substate_create",
                 source: e,
             })?;
 
         Ok(())
     }
+
+    fn locked_outputs_acquire_all<I, B>(
+        &mut self,
+        block_id: &BlockId,
+        transaction_id: &TransactionId,
+        output_shards: I,
+    ) -> Result<SubstateLockState, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>,
+    {
+        use crate::schema::locked_outputs;
+        let block_id_hex = serialize_hex(block_id);
+        let transaction_id_hex = serialize_hex(transaction_id);
+
+        let insert = output_shards
+            .into_iter()
+            .map(|shard_id| {
+                (
+                    locked_outputs::block_id.eq(&block_id_hex),
+                    locked_outputs::transaction_id.eq(&transaction_id_hex),
+                    locked_outputs::shard_id.eq(serialize_hex(shard_id.borrow())),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let lock_state = diesel::insert_into(locked_outputs::table)
+            .values(insert)
+            .execute(self.connection())
+            .map(|_| SubstateLockState::LockAcquired)
+            .or_else(|e| {
+                if let diesel::result::Error::DatabaseError(diesel::result::DatabaseErrorKind::UniqueViolation, _) = e {
+                    Ok(SubstateLockState::SomeAlreadyWriteLocked)
+                } else {
+                    Err(SqliteStorageError::DieselError {
+                        operation: "locked_outputs_acquire",
+                        source: e,
+                    })
+                }
+            })?;
+
+        Ok(lock_state)
+    }
+
+    fn locked_outputs_release_all<I, B>(&mut self, output_shards: I) -> Result<Vec<LockedOutput>, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>,
+    {
+        use crate::schema::locked_outputs;
+
+        let output_shards = output_shards
+            .into_iter()
+            .map(|shard_id| serialize_hex(shard_id.borrow()))
+            .collect::<Vec<_>>();
+
+        let locked = locked_outputs::table
+            .filter(locked_outputs::shard_id.eq_any(&output_shards))
+            .get_results::<sql_models::LockedOutput>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "locked_outputs_release",
+                source: e,
+            })?;
+
+        if locked.len() != output_shards.len() {
+            return Err(SqliteStorageError::NotAllSubstatesFound {
+                operation: "locked_outputs_release",
+                details: format!(
+                    "Found {} locked outputs, but {} were requested",
+                    locked.len(),
+                    output_shards.len()
+                ),
+            }
+            .into());
+        }
+
+        diesel::delete(locked_outputs::table)
+            .filter(locked_outputs::shard_id.eq_any(&output_shards))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "locked_outputs_release",
+                source: e,
+            })?;
+
+        locked.into_iter().map(TryInto::try_into).collect()
+    }
 }
 
-impl<'a> Deref for SqliteStateStoreWriteTransaction<'a> {
-    type Target = SqliteStateStoreReadTransaction<'a>;
+impl<'a, TAddr> Deref for SqliteStateStoreWriteTransaction<'a, TAddr> {
+    type Target = SqliteStateStoreReadTransaction<'a, TAddr>;
 
     fn deref(&self) -> &Self::Target {
         self.transaction.as_ref().unwrap()
     }
 }
 
-impl<'a> DerefMut for SqliteStateStoreWriteTransaction<'a> {
+impl<'a, TAddr> DerefMut for SqliteStateStoreWriteTransaction<'a, TAddr> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.transaction.as_mut().unwrap()
     }
 }
 
-impl Drop for SqliteStateStoreWriteTransaction<'_> {
+impl<TAddr> Drop for SqliteStateStoreWriteTransaction<'_, TAddr> {
     fn drop(&mut self) {
         if self.transaction.is_some() {
             warn!(

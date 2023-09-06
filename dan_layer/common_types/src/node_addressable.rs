@@ -6,12 +6,15 @@ use std::{
     hash::Hash,
 };
 
+use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_utilities::ByteArray;
 
-pub trait NodeAddressable: Eq + Hash + Clone + Debug + Send + Sync + Display {
+pub trait NodeAddressable: Eq + Hash + Clone + Debug + Send + Sync + Display + Serialize + DeserializeOwned {
     fn zero() -> Self;
     fn as_bytes(&self) -> &[u8];
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self>;
 }
 
 impl NodeAddressable for String {
@@ -22,15 +25,9 @@ impl NodeAddressable for String {
     fn as_bytes(&self) -> &[u8] {
         self.as_bytes()
     }
-}
 
-impl NodeAddressable for &str {
-    fn zero() -> Self {
-        ""
-    }
-
-    fn as_bytes(&self) -> &[u8] {
-        str::as_bytes(self)
+    fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        String::from_utf8(bytes.to_vec()).ok()
     }
 }
 
@@ -41,5 +38,9 @@ impl NodeAddressable for PublicKey {
 
     fn as_bytes(&self) -> &[u8] {
         <PublicKey as ByteArray>::as_bytes(self)
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        ByteArray::from_bytes(bytes).ok()
     }
 }

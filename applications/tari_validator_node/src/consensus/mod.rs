@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use tari_common_types::types::PublicKey;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_consensus::{
     hotstuff::{HotstuffEvent, HotstuffWorker},
@@ -28,7 +29,7 @@ use crate::{
         state_manager::TariStateManager,
     },
     event_subscription::EventSubscription,
-    p2p::services::messaging::OutboundMessaging,
+    p2p::services::{mempool::MempoolHandle, messaging::OutboundMessaging},
 };
 
 mod leader_selection;
@@ -37,12 +38,13 @@ mod spec;
 mod state_manager;
 
 pub async fn spawn(
-    store: SqliteStateStore,
+    store: SqliteStateStore<PublicKey>,
     node_identity: Arc<NodeIdentity>,
     epoch_manager: EpochManagerHandle,
     rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-    rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage)>,
+    rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
     outbound_messaging: OutboundMessaging,
+    mempool: MempoolHandle,
     shutdown_signal: ShutdownSignal,
 ) -> (JoinHandle<Result<(), anyhow::Error>>, EventSubscription<HotstuffEvent>) {
     let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
@@ -53,7 +55,7 @@ pub async fn spawn(
     let signing_service = TariSignatureService::new(node_identity);
     let leader_strategy = RoundRobinLeaderStrategy::new();
     let transaction_pool = TransactionPool::new();
-    let noop_state_manager = TariStateManager::new();
+    let state_manager = TariStateManager::new();
     let (tx_events, _) = broadcast::channel(100);
 
     let epoch_events = epoch_manager.subscribe().await.unwrap();
@@ -67,7 +69,7 @@ pub async fn spawn(
         epoch_manager,
         leader_strategy,
         signing_service,
-        noop_state_manager,
+        state_manager,
         transaction_pool,
         tx_broadcast,
         tx_leader,
@@ -82,6 +84,7 @@ pub async fn spawn(
         rx_leader,
         rx_mempool,
         outbound_messaging,
+        mempool,
     }
     .spawn();
 
@@ -89,10 +92,11 @@ pub async fn spawn(
 }
 
 struct ConsensusWorker {
-    rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage)>,
-    rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage)>,
+    rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
+    rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
     rx_mempool: mpsc::Receiver<Transaction>,
     outbound_messaging: OutboundMessaging,
+    mempool: MempoolHandle,
 }
 
 impl ConsensusWorker {
@@ -113,7 +117,7 @@ impl ConsensusWorker {
                             .ok();
                     },
                     Some(tx) = self.rx_mempool.recv() => {
-                        self.outbound_messaging.send_self(DanMessage::NewTransaction(Box::new(tx))).await.ok();
+                        self.mempool.submit_transaction_without_propagating(tx).await.ok();
                     },
                     else => break,
                 }

@@ -1,8 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::{borrow::Borrow, collections::HashSet, marker::PhantomData, ops::RangeInclusive};
 
+use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::{
     sql_query,
     sql_types::Text,
@@ -14,13 +15,14 @@ use diesel::{
     RunQueryDsl,
     SqliteConnection,
 };
+use log::warn;
+use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
-        ExecutedTransaction,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -32,6 +34,7 @@ use tari_dan_storage::{
         SubstateRecord,
         TransactionPoolRecord,
         TransactionPoolStage,
+        TransactionRecord,
         Vote,
     },
     Ordering,
@@ -47,13 +50,17 @@ use crate::{
     sqlite_transaction::SqliteTransaction,
 };
 
-pub struct SqliteStateStoreReadTransaction<'a> {
+pub struct SqliteStateStoreReadTransaction<'a, TAddr> {
     transaction: SqliteTransaction<'a>,
+    _addr: PhantomData<TAddr>,
 }
 
-impl<'a> SqliteStateStoreReadTransaction<'a> {
+impl<'a, TAddr> SqliteStateStoreReadTransaction<'a, TAddr> {
     pub(crate) fn new(transaction: SqliteTransaction<'a>) -> Self {
-        Self { transaction }
+        Self {
+            transaction,
+            _addr: PhantomData,
+        }
     }
 
     pub(crate) fn connection(&mut self) -> &mut SqliteConnection {
@@ -69,12 +76,15 @@ impl<'a> SqliteStateStoreReadTransaction<'a> {
     }
 }
 
-impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
-    fn last_voted_get(&mut self, epoch: Epoch) -> Result<LastVoted, StorageError> {
+impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransaction
+    for SqliteStateStoreReadTransaction<'_, TAddr>
+{
+    type Addr = TAddr;
+
+    fn last_voted_get(&mut self) -> Result<LastVoted, StorageError> {
         use crate::schema::last_voted;
 
         let last_voted = last_voted::table
-            .filter(last_voted::epoch.eq(epoch.as_u64() as i64))
             .order_by(last_voted::id.desc())
             .first::<sql_models::LastVoted>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -85,11 +95,10 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         last_voted.try_into()
     }
 
-    fn last_executed_get(&mut self, epoch: Epoch) -> Result<LastExecuted, StorageError> {
+    fn last_executed_get(&mut self) -> Result<LastExecuted, StorageError> {
         use crate::schema::last_executed;
 
         let last_executed = last_executed::table
-            .filter(last_executed::epoch.eq(epoch.as_u64() as i64))
             .order_by(last_executed::id.desc())
             .first::<sql_models::LastExecuted>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -100,11 +109,10 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         last_executed.try_into()
     }
 
-    fn last_proposed_get(&mut self, epoch: Epoch) -> Result<LastProposed, StorageError> {
+    fn last_proposed_get(&mut self) -> Result<LastProposed, StorageError> {
         use crate::schema::last_proposed;
 
         let last_proposed = last_proposed::table
-            .filter(last_proposed::epoch.eq(epoch.as_u64() as i64))
             .order_by(last_proposed::id.desc())
             .first::<sql_models::LastProposed>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -115,11 +123,10 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         last_proposed.try_into()
     }
 
-    fn locked_block_get(&mut self, epoch: Epoch) -> Result<LockedBlock, StorageError> {
+    fn locked_block_get(&mut self) -> Result<LockedBlock, StorageError> {
         use crate::schema::locked_block;
 
         let locked_block = locked_block::table
-            .filter(locked_block::epoch.eq(epoch.as_u64() as i64))
             .order_by(locked_block::id.desc())
             .first::<sql_models::LockedBlock>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -130,11 +137,10 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         locked_block.try_into()
     }
 
-    fn leaf_block_get(&mut self, epoch: Epoch) -> Result<LeafBlock, StorageError> {
+    fn leaf_block_get(&mut self) -> Result<LeafBlock, StorageError> {
         use crate::schema::leaf_blocks;
 
         let leaf_block = leaf_blocks::table
-            .filter(leaf_blocks::epoch.eq(epoch.as_u64() as i64))
             .order_by(leaf_blocks::id.desc())
             .first::<sql_models::LeafBlock>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -145,11 +151,10 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         leaf_block.try_into()
     }
 
-    fn high_qc_get(&mut self, epoch: Epoch) -> Result<HighQc, StorageError> {
+    fn high_qc_get(&mut self) -> Result<HighQc, StorageError> {
         use crate::schema::high_qcs;
 
         let high_qc = high_qcs::table
-            .filter(high_qcs::epoch.eq(epoch.as_u64() as i64))
             .order_by(high_qcs::id.desc())
             .first::<sql_models::HighQc>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -160,7 +165,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         high_qc.try_into()
     }
 
-    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<ExecutedTransaction, StorageError> {
+    fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError> {
         use crate::schema::transactions;
 
         let transaction = transactions::table
@@ -174,10 +179,26 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         transaction.try_into()
     }
 
+    fn transactions_exists(&mut self, tx_id: &TransactionId) -> Result<bool, StorageError> {
+        use crate::schema::transactions;
+
+        let exists = transactions::table
+            .count()
+            .filter(transactions::transaction_id.eq(serialize_hex(tx_id)))
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transactions_exists",
+                source: e,
+            })?;
+
+        Ok(exists > 0)
+    }
+
     fn transactions_get_any<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         tx_ids: I,
-    ) -> Result<Vec<ExecutedTransaction>, StorageError> {
+    ) -> Result<Vec<TransactionRecord>, StorageError> {
         use crate::schema::transactions;
 
         let tx_ids: Vec<String> = tx_ids.into_iter().map(serialize_hex).collect();
@@ -201,7 +222,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         limit: u64,
         offset: u64,
         asc_desc_created_at: Option<Ordering>,
-    ) -> Result<Vec<ExecutedTransaction>, StorageError> {
+    ) -> Result<Vec<TransactionRecord>, StorageError> {
         use crate::schema::transactions;
 
         let mut query = transactions::table.into_boxed();
@@ -228,7 +249,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             .collect()
     }
 
-    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError> {
+    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<TAddr>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
@@ -252,7 +273,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         block.try_convert(qc)
     }
 
-    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block, StorageError> {
+    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block<TAddr>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
@@ -277,13 +298,14 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         block.try_convert(qc)
     }
 
-    fn blocks_get_by_parent(&mut self, parent_id: &BlockId) -> Result<Block, StorageError> {
+    fn blocks_get_by_parent(&mut self, parent_id: &BlockId) -> Result<Block<TAddr>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
             .filter(blocks::parent_block_id.eq(serialize_hex(parent_id)))
+            .filter(blocks::block_id.ne(blocks::parent_block_id)) // Exclude the genesis block
             .first::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_get_by_parent",
@@ -325,19 +347,21 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
                   SELECT block_id, parent_block_id FROM blocks where block_id = ?
                 UNION ALL
                   SELECT block_id, parent_block_id
-                    FROM blocks JOIN tree ON block_id = tree.parent AND block_id != ?
+                    FROM blocks JOIN tree ON block_id = tree.parent AND tree.bid != tree.parent -- stop recursing at zero block (or any self referencing block)
             )
             SELECT count(1) as "count" FROM tree WHERE bid = ? LIMIT 1
         "#,
         )
         .bind::<Text, _>(serialize_hex(descendant))
-        .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
+        // .bind::<Text, _>(serialize_hex(BlockId::genesis())) // stop recursing at zero block
         .bind::<Text, _>(serialize_hex(ancestor))
         .get_result::<Count>(self.connection())
         .map_err(|e| SqliteStorageError::DieselError {
             operation: "blocks_is_ancestor",
             source: e,
         })?;
+
+        warn!(target: "tari::dan_layer::storage::state_store_sqlite::reader", "blocks_is_ancestor: is_ancestor: {:?}", is_ancestor.count);
 
         Ok(is_ancestor.count > 0)
     }
@@ -356,7 +380,68 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         deserialize_json(&txs)
     }
 
-    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError> {
+    fn blocks_get_total_leader_fee_for_epoch(
+        &mut self,
+        epoch: Epoch,
+        validator_public_key: &Self::Addr,
+    ) -> Result<u64, StorageError> {
+        use crate::schema::blocks;
+
+        let total_fee = blocks::table
+            .select(diesel::dsl::sum(blocks::total_leader_fee))
+            .filter(blocks::epoch.eq(epoch.as_u64() as i64))
+            .filter(blocks::proposed_by.eq(serialize_hex(validator_public_key.as_bytes())))
+            .first::<Option<BigDecimal>>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "validator_fees_get_total_fee_for_epoch",
+                source: e,
+            })?
+            .unwrap_or(BigDecimal::default());
+
+        Ok(total_fee.to_u64().expect("total fee overflows u64"))
+    }
+
+    fn blocks_get_any_with_epoch_range(
+        &mut self,
+        epoch_range: RangeInclusive<Epoch>,
+        validator_public_key: Option<&Self::Addr>,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let mut query = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .filter(blocks::epoch.between(epoch_range.start().as_u64() as i64, epoch_range.end().as_u64() as i64))
+            .into_boxed();
+
+        if let Some(vn) = validator_public_key {
+            query = query.filter(blocks::proposed_by.eq(serialize_hex(vn.as_bytes())));
+        }
+
+        let blocks_and_qcs = query
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "validator_fees_get_any_with_epoch_range_for_validator",
+                source: e,
+            })?;
+
+        blocks_and_qcs
+            .into_iter()
+            .map(|(block, qc)| {
+                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "blocks_get_by_parent",
+                    details: format!(
+                        "block {} references non-existent quorum certificate {}",
+                        block.id, block.qc_id
+                    ),
+                })?;
+
+                block.try_convert(qc)
+            })
+            .collect()
+    }
+
+    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
         use crate::schema::quorum_certificates;
 
         let qc_json = quorum_certificates::table
@@ -425,7 +510,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         Ok(count as u64)
     }
 
-    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError> {
+    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote<Self::Addr>>, StorageError> {
         use crate::schema::votes;
 
         let votes = votes::table
@@ -443,7 +528,7 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         &mut self,
         block_id: &BlockId,
         sender_leaf_hash: &FixedHash,
-    ) -> Result<Vote, StorageError> {
+    ) -> Result<Vote<Self::Addr>, StorageError> {
         use crate::schema::votes;
 
         let vote = votes::table
@@ -541,6 +626,25 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
         substates.into_iter().map(TryInto::try_into).collect()
     }
 
+    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
+        &mut self,
+        shard_ids: I,
+    ) -> Result<bool, StorageError> {
+        use crate::schema::substates;
+
+        let count = substates::table
+            .count()
+            .filter(substates::shard_id.eq_any(shard_ids.into_iter().map(|s| serialize_hex(s.borrow()))))
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_any",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
+
     fn substates_get_many_within_range(
         &mut self,
         start: &ShardId,
@@ -572,6 +676,23 @@ impl StateStoreReadTransaction for SqliteStateStoreReadTransaction<'_> {
             .get_results::<sql_models::SubstateRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get_many_by_created_transaction",
+                source: e,
+            })?;
+
+        substates.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn substates_get_many_by_destroyed_transaction(
+        &mut self,
+        tx_id: &TransactionId,
+    ) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+
+        let substates = substates::table
+            .filter(substates::destroyed_by_transaction.eq(serialize_hex(tx_id)))
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_many_by_destroyed_transaction",
                 source: e,
             })?;
 

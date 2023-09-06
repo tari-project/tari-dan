@@ -112,7 +112,7 @@ pub async fn handle_submit(
             .into_iter()
             .map(Into::into)
             .collect();
-        vec![req.inputs, loaded_dependent_substates].concat()
+        [req.inputs, loaded_dependent_substates].concat()
     };
 
     let transaction = Transaction::builder()
@@ -140,7 +140,7 @@ pub async fn handle_submit(
 
         Ok(TransactionSubmitResponse {
             transaction_id: response.transaction_id,
-            result: response.execution_result,
+            result: response.result.into_execute_result(),
             inputs,
         })
     } else {
@@ -289,10 +289,10 @@ pub async fn handle_wait_result(
             Some(WalletEvent::TransactionInvalid(event)) if event.transaction_id == req.transaction_id => {
                 return Ok(TransactionWaitResultResponse {
                     transaction_id: req.transaction_id,
-                    result: None,
+                    result: event.finalize,
                     status: event.status,
-                    transaction_failure: None,
-                    final_fee: event.final_fee,
+                    transaction_failure: event.transaction_failure,
+                    final_fee: event.final_fee.unwrap_or_default(),
                     timed_out: false,
                 });
             },

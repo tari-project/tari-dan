@@ -4,6 +4,7 @@
 mod block;
 mod bookkeeping;
 mod leaf_block;
+mod locked_output;
 mod quorum_certificate;
 mod substate;
 mod transaction;
@@ -13,6 +14,7 @@ mod vote;
 pub use block::*;
 pub use bookkeeping::*;
 pub use leaf_block::*;
+pub use locked_output::*;
 pub use quorum_certificate::*;
 pub use substate::*;
 pub use transaction::*;

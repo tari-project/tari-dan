@@ -62,16 +62,9 @@ impl Evidence {
 //     pub fn get_all_qcs<TTx: StateStoreReadTransaction>(
 //         &self,
 //         tx: &mut TTx,
-//     ) -> Result<Vec<QuorumCertificate>, StorageError> {
-//         let mut qcs = Vec::with_capacity(self.evidence.len());
-//         // TODO(perf): O(n*m) queries
-//         for qc_ids in self.evidence.values() {
-//             for qc_id in qc_ids {
-//                 let qc = QuorumCertificate::get(tx, qc_id)?;
-//                 qcs.push(qc);
-//             }
-//         }
-//         Ok(qcs)
+//     ) -> Result<Vec<QuorumCertificate>, StorageError> { let mut qcs = Vec::with_capacity(self.evidence.len()); //
+//       TODO(perf): O(n*m) queries for qc_ids in self.evidence.values() { for qc_id in qc_ids { let qc =
+//       QuorumCertificate::get(tx, qc_id)?; qcs.push(qc); } } Ok(qcs)
 //     }
 // }
 
@@ -88,7 +81,8 @@ pub struct TransactionAtom {
     pub id: TransactionId,
     pub decision: Decision,
     pub evidence: Evidence,
-    pub fee: u64,
+    pub transaction_fee: u64,
+    pub leader_fee: u64,
 }
 
 impl TransactionAtom {

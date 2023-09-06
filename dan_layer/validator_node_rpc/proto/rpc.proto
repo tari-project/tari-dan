@@ -80,8 +80,7 @@ message GetPeersRequest {
 
 message GetPeersResponse {
   bytes identity = 1;
-  repeated bytes addresses = 2;
-  repeated tari.dan.network.PeerIdentityClaim claims = 3;
+  repeated tari.dan.network.PeerIdentityClaim claims = 2;
 }
 
 message VnStateSyncRequest {
@@ -135,9 +134,21 @@ message GetTransactionResultRequest {
 message GetTransactionResultResponse {
   PayloadResultStatus status = 1;
   bytes execution_result = 2;
+  tari.dan.consensus.Decision final_decision = 3;
+  string abort_details = 4;
 }
 
 enum PayloadResultStatus {
   Pending = 0;
   Finalized = 1;
+}
+
+message GetVirtualSubstateRequest {
+  bytes address = 1;
+}
+
+message GetVirtualSubstateResponse {
+  // Encoded Substate
+  bytes substate = 1;
+  repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 2;
 }

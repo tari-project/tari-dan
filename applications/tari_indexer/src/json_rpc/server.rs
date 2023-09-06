@@ -74,6 +74,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_non_fungibles" => handlers.get_non_fungibles(value).await,
         "submit_transaction" => handlers.submit_transaction(value).await,
         "get_transaction_result" => handlers.get_transaction_result(value).await,
+        "get_epoch_manager_stats" => handlers.get_epoch_manager_stats(value).await,
         method => Ok(value.method_not_found(method)),
     }
 }

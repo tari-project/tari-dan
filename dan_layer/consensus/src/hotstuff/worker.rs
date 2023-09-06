@@ -4,9 +4,9 @@
 use std::ops::DerefMut;
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, Epoch};
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, Decision, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
+    consensus_models::{Block, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -21,14 +21,17 @@ use tokio::{
 use super::on_receive_requested_transactions::OnReceiveRequestedTransactions;
 use crate::{
     hotstuff::{
+        common::CommitteeAndMessage,
         error::HotStuffError,
         event::HotstuffEvent,
-        on_beat::OnBeat,
+        on_next_sync_view::OnNextSyncViewHandler,
         on_propose::OnPropose,
         on_receive_new_view::OnReceiveNewViewHandler,
         on_receive_proposal::OnReceiveProposalHandler,
         on_receive_request_missing_transactions::OnReceiveRequestMissingTransactions,
         on_receive_vote::OnReceiveVoteHandler,
+        pacemaker::PaceMaker,
+        pacemaker_handle::PaceMakerHandle,
     },
     messages::HotstuffMessage,
     traits::{ConsensusSpec, LeaderStrategy},
@@ -40,8 +43,11 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
 
     rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-    rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+    rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+    tx_events: broadcast::Sender<HotstuffEvent>,
 
+    // on_leader_timeout: OnLeaderTimeout,
+    on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
     on_receive_proposal: OnReceiveProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
@@ -58,7 +64,8 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     latest_epoch: Option<Epoch>,
     is_epoch_synced: bool,
 
-    on_beat: OnBeat,
+    pacemaker: Option<PaceMaker>,
+    pacemaker_handle: PaceMakerHandle,
     shutdown: ShutdownSignal,
 }
 impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
@@ -73,7 +80,7 @@ where
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         state_store: TConsensusSpec::StateStore,
         epoch_events: broadcast::Receiver<EpochManagerEvent>,
         epoch_manager: TConsensusSpec::EpochManager,
@@ -81,17 +88,24 @@ where
         signing_service: TConsensusSpec::VoteSignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::Sender<Transaction>,
         shutdown: ShutdownSignal,
     ) -> Self {
-        let on_beat = OnBeat::new();
+        let pacemaker = PaceMaker::new(shutdown.clone());
         Self {
             validator_addr: validator_addr.clone(),
             rx_new_transactions,
             rx_hs_message,
+            tx_events: tx_events.clone(),
+            on_next_sync_view: OnNextSyncViewHandler::new(
+                state_store.clone(),
+                tx_leader.clone(),
+                leader_strategy.clone(),
+                epoch_manager.clone(),
+            ),
             on_receive_proposal: OnReceiveProposalHandler::new(
                 validator_addr,
                 state_store.clone(),
@@ -102,20 +116,20 @@ where
                 transaction_pool.clone(),
                 tx_leader.clone(),
                 tx_events,
-                on_beat.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_vote: OnReceiveVoteHandler::new(
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
                 signing_service,
-                on_beat.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_new_view: OnReceiveNewViewHandler::new(
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
-                on_beat.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(state_store.clone(), tx_leader),
             on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool),
@@ -125,6 +139,7 @@ where
                 transaction_pool.clone(),
                 tx_broadcast,
             ),
+            // on_leader_timeout: OnLeaderTimeout::qnew(shutdown.clone()),
             state_store,
             leader_strategy,
             epoch_manager,
@@ -132,7 +147,8 @@ where
             latest_epoch: None,
             is_epoch_synced: false,
             transaction_pool,
-            on_beat,
+            pacemaker_handle: pacemaker.clone_handle(),
+            pacemaker: Some(pacemaker),
             shutdown,
         }
     }
@@ -145,16 +161,18 @@ where
     }
 
     pub async fn run(mut self) -> Result<(), HotStuffError> {
+        self.create_genesis_block_if_required(Epoch(0))?;
+        let (mut on_beat, mut on_force_beat, mut on_leader_timeout) = self.pacemaker.take().map(|p| p.spawn()).unwrap();
+
         loop {
             tokio::select! {
-                biased;
+                // biased;
 
                 Ok(event) = self.epoch_events.recv() => {
                     if let Err(e) = self.on_epoch_event(event).await {
                         error!(target: LOG_TARGET, "Error while processing epoch change (on_epoch_event): {}", e);
                     }
                 },
-
                 Some(msg) = self.rx_new_transactions.recv() => {
                     if let Err(e) = self.on_new_executed_transaction(msg).await {
                        error!(target: LOG_TARGET, "Error while processing new payload (on_new_executed_transaction): {}", e);
@@ -162,17 +180,31 @@ where
                 },
                 Some((from, msg)) = self.rx_hs_message.recv() => {
                     if let Err(e) = self.on_new_hs_message(from, msg.clone()).await {
-                        // self.publish_event(HotStuffEvent::Failed(e.to_string()));
-                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {:?} {}", msg,e);
+                        self.publish_event(HotstuffEvent::Failure{message: e.to_string()});
+                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {} {:?}", e, msg);
                     }
                 },
 
-                _ = self.on_beat.wait() => {
-                    if let Err(e) = self.on_beat().await {
+                _ = on_beat.wait() => {
+                    if let Err(e) = self.on_beat(false ).await {
                         error!(target: LOG_TARGET, "Error (on_beat): {}", e);
                     }
+                },
+                _ = on_force_beat.wait() => {
+                    if let Err(e) = self.on_beat(true).await {
+                        error!(target: LOG_TARGET, "Error (on_beat forced): {}", e);
+                    }
                 }
-
+                new_height = on_leader_timeout.wait() => {
+                    if let Err(e) = self.on_leader_timeout(new_height).await {
+                        error!(target: LOG_TARGET, "Error (on_leader_timeout): {}", e);
+                    }
+                },
+                // _ = self.on_leader_timeout.o() => {
+                //     if let Err(e) = self.on_leader_timeout().await {
+                //         error!(target: LOG_TARGET, "Error (on_leader_timeout): {}", e);
+                //     }
+                // }
                 _ = self.shutdown.wait() => {
                     info!(target: LOG_TARGET, "💤 Shutting down");
                     break;
@@ -185,13 +217,13 @@ where
 
     async fn on_epoch_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
         match event {
-            EpochManagerEvent::EpochChanged(epoch) => {
-                self.create_genesis_block_if_required(epoch)?;
+            EpochManagerEvent::EpochChanged(_epoch) => {
+                // self.create_genesis_block_if_required(epoch)?;
 
                 self.is_epoch_synced = true;
                 // TODO: merge chain(s) from previous epoch?
 
-                self.on_beat.beat();
+                self.pacemaker_handle.beat().await?;
             },
         }
 
@@ -202,26 +234,23 @@ where
         info!(
             target: LOG_TARGET,
             "🚀 Consensus READY for new transaction with id: {}",
-            executed.transaction().id()
+            executed.id()
         );
         self.state_store.with_write_tx(|tx| {
-            executed.insert(tx)?;
+            executed.upsert(tx)?;
 
-            let decision = if executed.result().finalize.is_accept() {
-                Decision::Commit
-            } else {
-                Decision::Abort
-            };
             self.transaction_pool.insert(tx, TransactionAtom {
-                id: *executed.transaction().id(),
-                decision,
+                id: *executed.id(),
+                decision: executed.as_decision(),
                 evidence: executed.to_initial_evidence(),
-                fee: executed
+                transaction_fee: executed
                     .result()
                     .fee_receipt
                     .as_ref()
-                    .and_then(|f| f.total_fee_payment.as_u64_checked())
+                    .and_then(|f| f.total_fees_paid().as_u64_checked())
                     .unwrap_or(0),
+                // We calculate the leader fee later depending on the epoch of the block
+                leader_fee: 0,
             })?;
 
             Ok::<_, HotStuffError>(())
@@ -235,11 +264,33 @@ where
         if let Some(block_id) = block_id {
             self.on_receive_proposal.reprocess_block(&block_id).await?;
         }
-        self.on_beat.beat();
+        self.pacemaker_handle.beat().await?;
         Ok(())
     }
 
-    async fn on_beat(&mut self) -> Result<(), HotStuffError> {
+    async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
+        // TODO: perhaps the leader should not be increasing the timeout
+        if !self.is_epoch_synced {
+            warn!(target: LOG_TARGET, "Waiting for epoch change before worrying about leader timeout");
+            return Ok(());
+        }
+
+        let epoch = self.epoch_manager.current_epoch().await?;
+        // Is the VN registered?
+        if !self.epoch_manager.is_epoch_active(epoch).await? {
+            info!(
+                target: LOG_TARGET,
+                "[on_leader_timeout] Validator is not active within this epoch"
+            );
+            return Ok(());
+        }
+
+        self.on_next_sync_view.handle(epoch, new_height).await?;
+
+        Ok(())
+    }
+
+    async fn on_beat(&mut self, must_propose: bool) -> Result<(), HotStuffError> {
         // TODO: This is a temporary hack to ensure that the VN has synced the blockchain before proposing
         if !self.is_epoch_synced {
             warn!(target: LOG_TARGET, "Waiting for epoch change before proposing");
@@ -249,37 +300,26 @@ where
         let epoch = self.epoch_manager.current_epoch().await?;
         debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", epoch);
 
-        // Is the VN registered?
-        if !self.epoch_manager.is_epoch_active(epoch).await? {
-            info!(
-                target: LOG_TARGET,
-                "[on_beat] Validator is not active within this epoch"
-            );
-            return Ok(());
-        }
+        // self.create_genesis_block_if_required(epoch)?;
 
-        self.create_genesis_block_if_required(epoch)?;
-
-        // Are there any transactions in the pools? The block may still be empty if non are ready but we still need to
-        // propose a block to get to a 3-chain.
-        if !self
-            .state_store
-            .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
+        // Are there any transactions in the pools?
+        // If not, only propose an empty block if we are close to exceeding the timeout
+        if !must_propose &&
+            !self
+                .state_store
+                .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
         {
-            debug!(target: LOG_TARGET, "[on_beat] No transactions to propose");
+            debug!(target: LOG_TARGET, "[on_beat] No transactions to propose. Waiting for a timeout.");
             return Ok(());
         }
 
         // Are we the leader?
-        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
+        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?;
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         // TODO: If there were leader failures, the leaf block would be empty and we need to create empty blocks.
-        let is_leader = self.leader_strategy.is_leader_for_next_block(
-            &self.validator_addr,
-            &local_committee,
-            &leaf_block.block_id,
-            leaf_block.height,
-        );
+        let is_leader =
+            self.leader_strategy
+                .is_leader_for_next_block(&self.validator_addr, &local_committee, leaf_block.height);
         info!(
             target: LOG_TARGET,
             "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}",
@@ -298,7 +338,7 @@ where
     async fn on_new_hs_message(
         &mut self,
         from: TConsensusSpec::Addr,
-        msg: HotstuffMessage,
+        msg: HotstuffMessage<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(msg.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
@@ -307,7 +347,7 @@ where
             });
         }
 
-        self.create_genesis_block_if_required(msg.epoch())?;
+        // self.create_genesis_block_if_required(msg.epoch())?;
 
         match msg {
             HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
@@ -337,18 +377,22 @@ where
             debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;
             zero_block.insert(&mut tx)?;
+            zero_block.as_locked().set(&mut tx)?;
+            zero_block.as_leaf_block().set(&mut tx)?;
+            zero_block.as_last_executed().set(&mut tx)?;
+            zero_block.justify().as_high_qc().set(&mut tx)?;
         }
 
-        let genesis = Block::genesis(epoch);
-        if !genesis.exists(tx.deref_mut())? {
-            debug!(target: LOG_TARGET, "Creating genesis block");
-            genesis.justify().save(&mut tx)?;
-            genesis.insert(&mut tx)?;
-            genesis.as_locked().set(&mut tx)?;
-            genesis.as_leaf_block().set(&mut tx)?;
-            genesis.as_last_executed().set(&mut tx)?;
-            genesis.justify().as_high_qc().set(&mut tx)?;
-        }
+        // let genesis = Block::genesis();
+        // if !genesis.exists(tx.deref_mut())? {
+        //     debug!(target: LOG_TARGET, "Creating genesis block");
+        //     genesis.justify().save(&mut tx)?;
+        //     genesis.insert(&mut tx)?;
+        //     genesis.as_locked().set(&mut tx)?;
+        //     genesis.as_leaf_block().set(&mut tx)?;
+        //     genesis.as_last_executed().set(&mut tx)?;
+        //     genesis.justify().as_high_qc().set(&mut tx)?;
+        // }
 
         tx.commit()?;
 
@@ -361,5 +405,9 @@ where
         self.latest_epoch = Some(epoch);
 
         Ok(())
+    }
+
+    fn publish_event(&self, event: HotstuffEvent) {
+        let _ignore = self.tx_events.send(event);
     }
 }

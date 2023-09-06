@@ -8,6 +8,7 @@ pub mod commit_result;
 pub mod component;
 pub mod confidential;
 pub mod events;
+pub mod fee_claim;
 pub mod fees;
 pub mod hashing;
 pub mod indexed_value;
@@ -20,8 +21,9 @@ pub mod resource;
 pub mod resource_container;
 pub mod serde_with;
 pub mod substate;
+pub mod transaction_receipt;
 pub mod vault;
+pub mod virtual_substate;
 
 mod template;
-
-pub use template::{calculate_template_binary_hash, TemplateAddress};
+pub use template::{calculate_template_binary_hash, parse_template_address, TemplateAddress};

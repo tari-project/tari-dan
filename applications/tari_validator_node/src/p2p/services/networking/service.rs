@@ -22,10 +22,11 @@
 
 use std::sync::Arc;
 
+use anyhow::anyhow;
 use log::*;
 use tari_comms::{
     connectivity::{ConnectivityEvent, ConnectivityRequester},
-    peer_manager::{NodeId, PeerFeatures, PeerIdentityClaim},
+    peer_manager::{NodeId, PeerIdentityClaim},
     protocol::rpc::NamedProtocolService,
     types::CommsPublicKey,
     NodeIdentity,
@@ -137,15 +138,22 @@ impl Networking {
         match request {
             NetworkingRequest::Announce(reply) => {
                 info!(target: LOG_TARGET, "📢 Announcing presence to network");
-                // TODO: Identity signature can never be empty, but handle the case properly anyway
-                let identity_signature = self.node_identity.identity_signature_read().clone().unwrap();
+                let signature = self
+                    .node_identity
+                    .identity_signature_read()
+                    .clone()
+                    .ok_or_else(|| anyhow!("BUG: Our node identity is not signed!"))?;
 
                 let res = self
                     .outbound
                     .flood(DanMessage::NetworkAnnounce(Box::new(NetworkAnnounce {
                         identity: self.node_identity.public_key().clone(),
-                        addresses: self.node_identity.public_addresses(),
-                        identity_signature,
+                        claim: PeerIdentityClaim {
+                            addresses: self.node_identity.public_addresses(),
+                            features: self.node_identity.features(),
+                            signature,
+                            unverified_data: None,
+                        },
                     })))
                     .await;
                 let _ignore = reply.send(res.map_err(Into::into));
@@ -164,22 +172,9 @@ impl Networking {
 
         info!(target: LOG_TARGET, "👋 Received announce from {}", announce.identity);
 
-        let identity_signature = announce.identity_signature.clone();
         let peer = DanPeer {
             identity: announce.identity.clone(),
-            addresses: announce
-                .addresses
-                .iter()
-                .map(|a| {
-                    let claim = PeerIdentityClaim {
-                        addresses: vec![a.clone()],
-                        features: PeerFeatures::COMMUNICATION_NODE,
-                        signature: identity_signature.clone(),
-                        unverified_data: None,
-                    };
-                    (a.clone(), claim)
-                })
-                .collect(),
+            claims: vec![announce.claim.clone()],
         };
 
         if !peer.is_valid() {

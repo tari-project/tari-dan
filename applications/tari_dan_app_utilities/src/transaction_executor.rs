@@ -1,15 +1,15 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::services::template_provider::TemplateProvider;
+use tari_dan_common_types::{services::template_provider::TemplateProvider, ShardId};
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
     packager::LoadedTemplate,
-    runtime::{AuthParams, ConsensusContext, RuntimeModule},
+    runtime::{AuthParams, RuntimeModule, VirtualSubstates},
     state_store::{memory::MemoryStateStore, StateStoreError},
     transaction::{TransactionError, TransactionProcessor},
 };
@@ -25,7 +25,7 @@ pub trait TransactionExecutor {
         &self,
         transaction: Transaction,
         state_store: MemoryStateStore,
-        consensus_context: ConsensusContext,
+        virtual_substates: VirtualSubstates,
     ) -> Result<ExecutedTransaction, Self::Error>;
 }
 
@@ -53,8 +53,9 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         &self,
         transaction: Transaction,
         state_store: MemoryStateStore,
-        consensus_context: ConsensusContext,
+        virtual_substates: VirtualSubstates,
     ) -> Result<ExecutedTransaction, Self::Error> {
+        let timer = Instant::now();
         // Include ownership token for the signers of this in the auth scope
         let owner_token = get_auth_token(transaction.signer_public_key());
         let auth_params = AuthParams {
@@ -69,7 +70,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             self.template_provider.clone(),
             state_store,
             auth_params,
-            consensus_context,
+            virtual_substates,
             modules,
         );
         let tx_id = transaction.hash();
@@ -82,7 +83,18 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             },
         };
 
-        Ok(ExecutedTransaction::new(transaction, result))
+        let outputs = result
+            .finalize
+            .result
+            .accept()
+            .map(|diff| {
+                diff.up_iter()
+                    .map(|(addr, substate)| ShardId::from_address(addr, substate.version()))
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(ExecutedTransaction::new(transaction, result, outputs, timer.elapsed()))
     }
 }
 

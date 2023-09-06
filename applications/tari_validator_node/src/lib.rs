@@ -35,6 +35,7 @@ mod p2p;
 mod registration;
 mod substate_resolver;
 mod template_registration_signing;
+mod virtual_substate;
 
 use std::{
     fs,
@@ -103,6 +104,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         true,
         DAN_PEER_FEATURES,
     )?;
+
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
     db_factory
         .migrate()

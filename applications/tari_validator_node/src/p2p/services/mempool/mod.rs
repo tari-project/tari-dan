@@ -26,15 +26,12 @@ pub use handle::{MempoolHandle, MempoolRequest};
 mod initializer;
 pub use initializer::spawn;
 
-mod and_then;
-pub use and_then::AndThen;
-
 mod error;
 mod executor;
 mod service;
 mod traits;
-mod validator;
+mod validators;
 
 pub use error::*;
 pub use traits::*;
-pub use validator::*;
+pub use validators::*;

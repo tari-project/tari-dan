@@ -13,6 +13,7 @@ use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::{ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
+    shard_bucket::ShardBucket,
     Epoch,
     ShardId,
 };
@@ -35,6 +36,10 @@ pub enum EpochManagerRequest {
         epoch: Epoch,
         addr: CommsPublicKey,
         reply: Reply<ValidatorNode<CommsPublicKey>>,
+    },
+    GetManyValidatorNodes {
+        query: Vec<(Epoch, CommsPublicKey)>,
+        reply: Reply<HashMap<(Epoch, CommsPublicKey), ValidatorNode<CommsPublicKey>>>,
     },
     AddValidatorNodeRegistration {
         block_height: u64,
@@ -93,12 +98,6 @@ pub enum EpochManagerRequest {
         identity: PublicKey,
         reply: Reply<bool>,
     },
-    FilterToLocalShards {
-        epoch: Epoch,
-        for_addr: PublicKey,
-        available_shards: Vec<ShardId>,
-        reply: Reply<Vec<ShardId>>,
-    },
     Subscribe {
         reply: Reply<broadcast::Receiver<EpochManagerEvent>>,
     },
@@ -135,7 +134,7 @@ pub enum EpochManagerRequest {
     },
     GetCommitteesByBuckets {
         epoch: Epoch,
-        buckets: HashSet<u32>,
-        reply: Reply<HashMap<u32, Committee<PublicKey>>>,
+        buckets: HashSet<ShardBucket>,
+        reply: Reply<HashMap<ShardBucket, Committee<PublicKey>>>,
     },
 }

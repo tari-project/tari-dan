@@ -24,7 +24,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
     fn commit_transaction(
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
-        block: &Block,
+        block: &Block<TStateStore::Addr>,
         transaction: &ExecutedTransaction,
     ) -> Result<(), Self::Error> {
         let Some(diff) = transaction.result().finalize.result.accept() else {
@@ -35,7 +35,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
         let down_shards = diff
             .down_iter()
             .map(|(addr, version)| ShardId::from_address(addr, *version));
-        tx.substate_down_many(down_shards, block.epoch(), block.id(), transaction.transaction().id())?;
+        tx.substate_down_many(down_shards, block.epoch(), block.id(), transaction.id())?;
 
         let to_up = diff.up_iter().map(|(addr, substate)| {
             SubstateRecord::new(
@@ -45,7 +45,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
                 block.epoch(),
                 block.height(),
                 *block.id(),
-                *transaction.transaction().id(),
+                *transaction.id(),
                 *block.justify().id(),
             )
         });

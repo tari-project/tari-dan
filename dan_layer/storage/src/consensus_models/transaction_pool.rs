@@ -4,6 +4,7 @@
 use std::{
     fmt::{Display, Formatter},
     marker::PhantomData,
+    num::NonZeroU64,
     str::FromStr,
 };
 
@@ -180,11 +181,35 @@ impl TransactionPoolRecord {
         self.stage
     }
 
-    pub fn get_transaction_atom_with_decision_change(&self) -> TransactionAtom {
+    pub fn get_final_transaction_atom(&self, leader_fee: u64) -> TransactionAtom {
         TransactionAtom {
             decision: self.final_decision(),
+            leader_fee,
             ..self.transaction.clone()
         }
+    }
+
+    pub fn calculate_leader_fee(&self, involved: NonZeroU64, exhaust_divisor: u64) -> u64 {
+        // TODO: We essentially burn a random amount depending on the shards involved in the transaction. This means it
+        //       is hard to tell how much is actually in circulation unless we track this in the Resource. Right
+        //       now we'll set exhaust to 0, which is just transaction_fee / involved.
+        let transaction_fee = self.transaction.transaction_fee;
+        let due_fee = transaction_fee / involved.get();
+        // The extra amount that is burnt
+        let due_rem = transaction_fee % involved.get();
+
+        // How much we want to burn due to exhaust per involved shard
+        let target_exhaust_burn = if exhaust_divisor > 0 {
+            let base_fee = transaction_fee.checked_div(exhaust_divisor).unwrap_or(transaction_fee);
+            base_fee / involved.get()
+        } else {
+            0
+        };
+
+        // Adjust the amount to burn taking into account the remainder that we burn
+        let adjusted_burn = target_exhaust_burn.saturating_sub(due_rem);
+
+        due_fee - adjusted_burn
     }
 }
 
@@ -272,6 +297,61 @@ impl IsNotFoundError for TransactionPoolError {
         match self {
             TransactionPoolError::StorageError(e) => e.is_not_found_error(),
             _ => false,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod calculate_leader_fee {
+        use super::*;
+
+        fn create_record_with_fee(fee: u64) -> TransactionPoolRecord {
+            TransactionPoolRecord {
+                transaction: TransactionAtom {
+                    id: TransactionId::new([0; 32]),
+                    decision: Decision::Commit,
+                    evidence: Default::default(),
+                    transaction_fee: fee,
+                    leader_fee: 0,
+                },
+                stage: TransactionPoolStage::New,
+                pending_decision: None,
+                is_ready: false,
+            }
+        }
+
+        #[test]
+        fn it_calculates_the_correct_fee_due() {
+            let record = create_record_with_fee(100);
+
+            let fee = record.calculate_leader_fee(1.try_into().unwrap(), 0);
+            assert_eq!(fee, 100);
+
+            let fee = record.calculate_leader_fee(1.try_into().unwrap(), 10);
+            assert_eq!(fee, 90);
+
+            let fee = record.calculate_leader_fee(2.try_into().unwrap(), 0);
+            assert_eq!(fee, 50);
+
+            let fee = record.calculate_leader_fee(2.try_into().unwrap(), 10);
+            assert_eq!(fee, 45);
+
+            let fee = record.calculate_leader_fee(3.try_into().unwrap(), 0);
+            assert_eq!(fee, 33);
+
+            let fee = record.calculate_leader_fee(3.try_into().unwrap(), 10);
+            assert_eq!(fee, 31);
+
+            let record = create_record_with_fee(98);
+
+            let fee = record.calculate_leader_fee(3.try_into().unwrap(), 10);
+            assert_eq!(fee, 31);
+
+            let fee = record.calculate_leader_fee(10.try_into().unwrap(), 10);
+            assert_eq!(fee, 9);
         }
     }
 }

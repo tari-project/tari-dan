@@ -123,7 +123,7 @@ impl SubstateRecord {
 }
 
 impl SubstateRecord {
-    pub fn try_lock_many<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn try_lock_all<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,
         inputs: I,
@@ -151,7 +151,15 @@ impl SubstateRecord {
         tx: &mut TTx,
         shard: &ShardId,
     ) -> Result<bool, StorageError> {
+        // TODO: optimise
         Ok(Self::get(tx, shard).optional()?.is_some())
+    }
+
+    pub fn any_exist<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
+        tx: &mut TTx,
+        substates: I,
+    ) -> Result<bool, StorageError> {
+        tx.substates_any_exist(substates)
     }
 
     pub fn get<TTx: StateStoreReadTransaction + ?Sized>(
@@ -161,7 +169,7 @@ impl SubstateRecord {
         tx.substates_get(shard)
     }
 
-    pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn get_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a ShardId>>(
         tx: &mut TTx,
         shards: I,
     ) -> Result<(Vec<SubstateRecord>, HashSet<ShardId>), StorageError> {
@@ -189,17 +197,24 @@ impl SubstateRecord {
         tx.substates_get_many_by_created_transaction(transaction_id)
     }
 
+    pub fn get_many_by_destroyed_transaction<TTx: StateStoreReadTransaction>(
+        tx: &mut TTx,
+        transaction_id: &TransactionId,
+    ) -> Result<Vec<SubstateRecord>, StorageError> {
+        tx.substates_get_many_by_destroyed_transaction(transaction_id)
+    }
+
     pub fn get_created_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<QuorumCertificate, StorageError> {
+    ) -> Result<QuorumCertificate<TTx::Addr>, StorageError> {
         tx.quorum_certificates_get(self.created_justify())
     }
 
     pub fn get_destroyed_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<Option<QuorumCertificate>, StorageError> {
+    ) -> Result<Option<QuorumCertificate<TTx::Addr>>, StorageError> {
         self.destroyed_justify()
             .map(|justify| tx.quorum_certificates_get(justify))
             .transpose()
@@ -215,9 +230,13 @@ pub enum SubstateLockFlag {
 }
 
 pub enum SubstateLockState {
-    SomeWriteLocked,
-    SomeReadLocked,
+    /// The lock was successfully acquired
     LockAcquired,
+    /// Some substates are locked for write
+    SomeAlreadyWriteLocked,
+    /// Some outputs substates exist. This indicates that that we attempted to lock an output but the output is already
+    /// a substate (Up or DOWN)
+    SomeOutputSubstatesExist,
 }
 
 impl SubstateLockState {

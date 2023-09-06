@@ -141,7 +141,6 @@ pub async fn create_component(
             new_non_fungible_index_outputs: vec![],
         },
     };
-    dbg!(args.clone());
     let mut client = get_validator_node_client(world, vn_name).await;
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
@@ -158,7 +157,7 @@ pub async fn create_component(
 
 pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String, diff: &SubstateDiff) {
     let outputs = world.outputs.entry(outputs_name).or_default();
-    let mut counters = [0usize, 0, 0, 0, 0, 0, 0, 0];
+    let mut counters = [0usize, 0, 0, 0, 0, 0, 0, 0, 0];
     for (addr, data) in diff.up_iter() {
         match addr {
             SubstateAddress::Component(_) => {
@@ -219,6 +218,13 @@ pub(crate) fn add_substate_addresses(world: &mut TariWorld, outputs_name: String
                     },
                 );
                 counters[6] += 1;
+            },
+            SubstateAddress::FeeClaim(_) => {
+                outputs.insert(format!("fee_claim/{}", counters[7]), VersionedSubstateAddress {
+                    address: addr.clone(),
+                    version: data.version(),
+                });
+                counters[7] += 1;
             },
         }
     }
@@ -329,8 +335,6 @@ pub async fn submit_manifest(
             }
         })
         .collect();
-
-    dbg!(new_non_fungible_outputs.clone());
 
     // parse the minting specific outputs (if any) specified in the manifest as comments
     let non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput> = manifest_content

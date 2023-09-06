@@ -44,10 +44,8 @@ impl From<DanMessage<CommsPublicKey>> for proto::network::DanMessage {
                 message: Some(proto::network::dan_message::Message::HotStuff((*hot_stuff_msg).into())),
                 message_tag,
             },
-            DanMessage::NewTransaction(transaction) => Self {
-                message: Some(proto::network::dan_message::Message::NewTransaction(
-                    (*transaction).into(),
-                )),
+            DanMessage::NewTransaction(msg) => Self {
+                message: Some(proto::network::dan_message::Message::NewTransaction((*msg).into())),
                 message_tag,
             },
             DanMessage::NetworkAnnounce(announce) => Self {
@@ -85,8 +83,7 @@ impl<T: ByteArray> From<NetworkAnnounce<T>> for proto::network::NetworkAnnounce 
     fn from(msg: NetworkAnnounce<T>) -> Self {
         Self {
             identity: msg.identity.to_vec(),
-            addresses: msg.addresses.into_iter().map(|a| a.to_vec()).collect(),
-            identity_signature: Some(msg.identity_signature.into()),
+            claim: Some(msg.claim.into()),
         }
     }
 }
@@ -95,17 +92,12 @@ impl<T: ByteArray> TryFrom<proto::network::NetworkAnnounce> for NetworkAnnounce<
     type Error = anyhow::Error;
 
     fn try_from(value: proto::network::NetworkAnnounce) -> Result<Self, Self::Error> {
-        let identity_signature = value
-            .identity_signature
-            .ok_or_else(|| anyhow!("Identity signature not provided"))?;
         Ok(NetworkAnnounce {
             identity: T::from_bytes(&value.identity)?,
-            addresses: value
-                .addresses
-                .into_iter()
-                .map(|a| a.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
-            identity_signature: IdentitySignature::try_from(identity_signature)?,
+            claim: value
+                .claim
+                .ok_or_else(|| anyhow!("claim not provided in NetworkAnnounce"))?
+                .try_into()?,
         })
     }
 }
@@ -146,12 +138,16 @@ impl TryFrom<proto::network::PeerIdentityClaim> for PeerIdentityClaim {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::network::PeerIdentityClaim) -> Result<Self, Self::Error> {
-        let signature = IdentitySignature::try_from(value.signature.unwrap())?;
+        let signature = IdentitySignature::try_from(
+            value
+                .signature
+                .ok_or_else(|| anyhow!("Identity signature not provided"))?,
+        )?;
         let addresses = value
             .addresses
-            .iter()
-            .map(|u| u.clone().try_into())
-            .collect::<Result<Vec<_>, _>>()?;
+            .into_iter()
+            .map(|u| u.try_into())
+            .collect::<Result<_, _>>()?;
 
         Ok(Self {
             signature,

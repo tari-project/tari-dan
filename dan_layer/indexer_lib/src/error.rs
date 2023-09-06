@@ -8,6 +8,8 @@ use tari_epoch_manager::EpochManagerError;
 pub enum IndexerError {
     #[error("Epoch manager error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
+    #[error("Could not get substate from {num_requested} validator nodes")]
+    AllRequestsFailed { num_requested: usize },
     #[error("Validator node client error: {0}")]
     ValidatorNodeClientError(String),
     #[error("Invalid substate state")]

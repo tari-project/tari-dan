@@ -50,7 +50,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::wallet_daemon";
 
-const DEFAULT_FEE: Amount = Amount::new(1000);
+const DEFAULT_FEE: Amount = Amount::new(1500);
 
 pub async fn run_tari_dan_wallet_daemon(
     config: ApplicationConfig,

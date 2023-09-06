@@ -23,15 +23,18 @@
 use std::convert::{TryFrom, TryInto};
 
 use log::*;
+use tari_common_types::types::PublicKey;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
 use tari_dan_p2p::PeerProvider;
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, SubstateRecord},
+    consensus_models::{SubstateRecord, TransactionRecord},
     StateStore,
 };
+use tari_engine_types::virtual_substate::VirtualSubstateAddress;
+use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_template_lib::encode;
+use tari_template_lib::{encode, prelude::tari_bor::decode_exact};
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::{
     proto,
@@ -49,22 +52,29 @@ use tari_validator_node_rpc::{
 };
 use tokio::{sync::mpsc, task};
 
-const LOG_TARGET: &str = "tari::dan::p2p::rpc";
+use crate::{p2p::services::mempool::MempoolHandle, virtual_substate::VirtualSubstateManager};
 
-use crate::p2p::services::mempool::MempoolHandle;
+const LOG_TARGET: &str = "tari::dan::p2p::rpc";
 
 pub struct ValidatorNodeRpcServiceImpl<TPeerProvider> {
     peer_provider: TPeerProvider,
-    shard_state_store: SqliteStateStore,
+    shard_state_store: SqliteStateStore<PublicKey>,
     mempool: MempoolHandle,
+    virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PublicKey>, EpochManagerHandle>,
 }
 
 impl<TPeerProvider: PeerProvider> ValidatorNodeRpcServiceImpl<TPeerProvider> {
-    pub fn new(peer_provider: TPeerProvider, shard_state_store: SqliteStateStore, mempool: MempoolHandle) -> Self {
+    pub fn new(
+        peer_provider: TPeerProvider,
+        shard_state_store: SqliteStateStore<PublicKey>,
+        mempool: MempoolHandle,
+        virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PublicKey>, EpochManagerHandle>,
+    ) -> Self {
         Self {
             peer_provider,
             shard_state_store,
             mempool,
+            virtual_substate_manager,
         }
     }
 }
@@ -111,8 +121,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 if tx
                     .send(Ok(proto::rpc::GetPeersResponse {
                         identity: peer.identity.as_bytes().to_vec(),
-                        addresses: peer.addresses.iter().map(|(a, _)| a.to_vec()).collect(),
-                        claims: peer.addresses.into_iter().map(|(_, c)| c.into()).collect(),
+                        claims: peer.claims.into_iter().map(Into::into).collect(),
                     }))
                     .await
                     .is_err()
@@ -255,6 +264,31 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         Ok(Response::new(resp))
     }
 
+    async fn get_virtual_substate(
+        &self,
+        req: Request<proto::rpc::GetVirtualSubstateRequest>,
+    ) -> Result<Response<proto::rpc::GetVirtualSubstateResponse>, RpcStatus> {
+        let req = req.into_message();
+
+        let address = decode_exact::<VirtualSubstateAddress>(&req.address)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate address: {}", e)))?;
+
+        let substate = self
+            .virtual_substate_manager
+            .generate_for_address(&address)
+            .await
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
+
+        let resp = proto::rpc::GetVirtualSubstateResponse {
+            substate: encode(&substate)
+                .map_err(|e| RpcStatus::general(&format!("Unable to encode substate address: {}", e)))?,
+            // TODO: evidence for the correctness of the substate
+            quorum_certificates: vec![],
+        };
+
+        Ok(Response::new(resp))
+    }
+
     async fn get_transaction_result(
         &self,
         req: Request<GetTransactionResultRequest>,
@@ -266,22 +300,32 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
         let tx_id = TransactionId::try_from(req.transaction_id)
             .map_err(|_| RpcStatus::bad_request("Invalid transaction id"))?;
-        let transaction = ExecutedTransaction::get(&mut tx, &tx_id)
+        let transaction = TransactionRecord::get(&mut tx, &tx_id)
             .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .ok_or_else(|| RpcStatus::not_found("Transaction not found"))?;
 
-        let Some(result) = transaction.into_final_result() else{
+        let Some(final_decision) = transaction.final_decision() else {
             return Ok(Response::new(GetTransactionResultResponse {
                 status: PayloadResultStatus::Pending.into(),
                 ..Default::default()
             }));
         };
 
+        let abort_details = transaction.abort_details().cloned().unwrap_or_default();
+
         Ok(Response::new(GetTransactionResultResponse {
             status: PayloadResultStatus::Finalized.into(),
             // For simplicity, we simply encode the whole result as a CBOR blob.
-            execution_result: encode(&result).map_err(RpcStatus::log_internal_error(LOG_TARGET))?,
+            execution_result: transaction
+                .into_final_result()
+                .as_ref()
+                .map(encode)
+                .transpose()
+                .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+                .unwrap_or_default(),
+            final_decision: proto::consensus::Decision::from(final_decision) as i32,
+            abort_details,
         }))
     }
 }

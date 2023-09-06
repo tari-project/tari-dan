@@ -4,10 +4,12 @@
 use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_template_lib::{
     args::{Arg, LogLevel},
     models::{Amount, ComponentAddress, TemplateAddress},
 };
+use tari_utilities::hex::Hex;
 
 use crate::{
     confidential::{ConfidentialClaim, ConfidentialOutput},
@@ -39,6 +41,10 @@ pub enum Instruction {
     },
     ClaimBurn {
         claim: Box<ConfidentialClaim>,
+    },
+    ClaimValidatorFees {
+        epoch: u64,
+        validator_public_key: PublicKey,
     },
     #[cfg(feature = "debugging")]
     CreateFreeTestCoins {
@@ -77,8 +83,21 @@ impl Display for Instruction {
             Self::ClaimBurn { claim } => {
                 write!(
                     f,
-                    "ClaimBurn {{ commitment_address: {}, proof_of_knowledge: {:?} }}",
-                    claim.output_address, claim.proof_of_knowledge
+                    "ClaimBurn {{ commitment_address: {}, proof_of_knowledge: nonce({}), u({}) v({}) }}",
+                    claim.output_address,
+                    claim.proof_of_knowledge.public_nonce().to_hex(),
+                    claim.proof_of_knowledge.u().to_hex(),
+                    claim.proof_of_knowledge.v().to_hex()
+                )
+            },
+            Self::ClaimValidatorFees {
+                epoch,
+                validator_public_key,
+            } => {
+                write!(
+                    f,
+                    "ClaimValidatorFees {{ epoch: {}, validator_public_key: {:.5} }}",
+                    epoch, validator_public_key
                 )
             },
             Self::CreateFreeTestCoins { .. } => {

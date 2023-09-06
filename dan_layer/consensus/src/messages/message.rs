@@ -9,15 +9,15 @@ use super::{NewViewMessage, ProposalMessage, RequestedTransactionMessage, VoteMe
 use crate::messages::RequestMissingTransactionsMessage;
 
 #[derive(Debug, Clone, Serialize)]
-pub enum HotstuffMessage {
-    NewView(NewViewMessage),
-    Proposal(ProposalMessage),
-    Vote(VoteMessage),
+pub enum HotstuffMessage<TAddr> {
+    NewView(NewViewMessage<TAddr>),
+    Proposal(ProposalMessage<TAddr>),
+    Vote(VoteMessage<TAddr>),
     RequestMissingTransactions(RequestMissingTransactionsMessage),
     RequestedTransaction(RequestedTransactionMessage),
 }
 
-impl HotstuffMessage {
+impl<TAddr> HotstuffMessage<TAddr> {
     pub fn epoch(&self) -> Epoch {
         match self {
             Self::NewView(msg) => msg.high_qc.epoch(),

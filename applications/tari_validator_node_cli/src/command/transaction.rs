@@ -35,6 +35,7 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
     instruction::Instruction,
     instruction_result::InstructionResult,
+    parse_template_address,
     substate::{SubstateAddress, SubstateValue},
     TemplateAddress,
 };
@@ -46,7 +47,7 @@ use tari_template_lib::{
 };
 use tari_transaction::{Transaction, TransactionId};
 use tari_transaction_manifest::parse_manifest;
-use tari_utilities::hex::to_hex;
+use tari_utilities::{hex::to_hex, ByteArray};
 use tari_validator_node_client::{
     types::{
         DryRunTransactionFinalizeResult,
@@ -308,9 +309,10 @@ async fn wait_for_transaction_result(
 
         if let Some(resp) = resp {
             if resp.is_finalized {
-                if let Some(result) = resp.result {
-                    return Ok(result);
-                }
+                let result = resp
+                    .result
+                    .ok_or_else(|| anyhow!("Transaction finalized but no result returned"))?;
+                return Ok(result);
             }
         }
         if let Some(t) = timeout {
@@ -394,6 +396,14 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::NonFungibleIndex(index) => {
                         let referenced_address = SubstateAddress::from(index.referenced_address().clone());
                         println!("      ▶ NFT index {} referencing {}", address, referenced_address);
+                    },
+                    SubstateValue::FeeClaim(fee_claim) => {
+                        println!("      ▶ fee_claim: {}", address);
+                        println!("        ▶ amount: {}", fee_claim.amount);
+                        println!(
+                            "        ▶ recipient: {}",
+                            to_hex(fee_claim.validator_public_key.as_bytes())
+                        );
                     },
                 }
                 println!();
@@ -593,6 +603,7 @@ pub enum CliArg {
     Amount(i64),
     NonFungibleId(NonFungibleId),
     SubstateAddress(SubstateAddress),
+    TemplateAddress(TemplateAddress),
 }
 
 impl FromStr for CliArg {
@@ -629,6 +640,10 @@ impl FromStr for CliArg {
 
         if let Ok(v) = s.parse::<SubstateAddress>() {
             return Ok(CliArg::SubstateAddress(v));
+        }
+
+        if let Some(v) = parse_template_address(s.to_owned()) {
+            return Ok(CliArg::TemplateAddress(v));
         }
 
         if let Some(("nft", nft_id)) = s.split_once('_') {
@@ -684,7 +699,9 @@ impl CliArg {
                 SubstateAddress::NonFungible(v) => arg!(v),
                 SubstateAddress::NonFungibleIndex(v) => arg!(v),
                 SubstateAddress::TransactionReceipt(v) => arg!(v),
+                SubstateAddress::FeeClaim(v) => arg!(v),
             },
+            CliArg::TemplateAddress(v) => arg!(v),
             CliArg::NonFungibleId(v) => arg!(v),
             CliArg::Amount(v) => arg!(Amount(v)),
         }

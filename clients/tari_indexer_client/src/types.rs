@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
+use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
     serde_with as serde_tools,
@@ -56,7 +57,7 @@ pub struct SubmitTransactionRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubmitTransactionResponse {
     pub transaction_id: TransactionId,
-    pub execution_result: Option<ExecuteResult>,
+    pub result: IndexerTransactionFinalizedResult,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -66,7 +67,17 @@ pub struct GetTransactionResultRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionResultResponse {
-    pub execution_result: Option<ExecuteResult>,
+    pub result: IndexerTransactionFinalizedResult,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum IndexerTransactionFinalizedResult {
+    Pending,
+    Finalized {
+        final_decision: Decision,
+        execution_result: Option<ExecuteResult>,
+        abort_details: Option<String>,
+    },
 }
 
 #[serde_as]

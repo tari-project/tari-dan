@@ -20,11 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_wallet_sdk::{
     apis::jwt::{Claims, JrpcPermissions},
     models::{Account, ConfidentialProofId, TransactionStatus},
@@ -329,6 +329,7 @@ pub struct TransferRequest {
 pub struct TransferResponse {
     pub transaction_id: TransactionId,
     pub fee: Amount,
+    pub fee_refunded: Amount,
     pub result: FinalizeResult,
 }
 
@@ -379,7 +380,7 @@ pub struct ConfidentialTransferRequest {
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
     pub resource_address: ResourceAddress,
-    pub destination_public_key: PublicKey,
+    pub validator_public_key: PublicKey,
     pub fee: Option<Amount>,
 }
 
@@ -545,4 +546,31 @@ pub struct AuthGetAllJwtRequest {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthGetAllJwtResponse {
     pub jwt: Vec<Claims>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GetValidatorFeesRequest {
+    pub validator_public_key: PublicKey,
+    // TODO: We'll probably pass in a range of epochs and get non-zero amounts for each epoch in range
+    pub epoch: Epoch,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct GetValidatorFeesResponse {
+    pub fee_summary: HashMap<Epoch, Amount>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClaimValidatorFeesRequest {
+    pub account: Option<ComponentAddressOrName>,
+    pub fee: Option<Amount>,
+    pub validator_public_key: PublicKey,
+    pub epoch: Epoch,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClaimValidatorFeesResponse {
+    pub transaction_id: TransactionId,
+    pub fee: Amount,
+    pub result: FinalizeResult,
 }

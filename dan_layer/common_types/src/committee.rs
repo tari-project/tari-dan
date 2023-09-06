@@ -4,9 +4,9 @@
 use std::borrow::Borrow;
 
 use rand::{rngs::OsRng, seq::SliceRandom};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::{NodeAddressable, ShardId};
+use crate::{shard_bucket::ShardBucket, NodeAddressable, ShardId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 pub struct Committee<TAddr> {
@@ -41,6 +41,14 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
         len - max_failures
     }
 
+    pub fn max_failures(&self) -> usize {
+        let len = self.members.len();
+        if len == 0 {
+            return 0;
+        }
+        (len - 1) / 3
+    }
+
     pub fn is_empty(&self) -> bool {
         self.members.is_empty()
     }
@@ -55,6 +63,17 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
 
     pub fn shuffle(&mut self) {
         self.members.shuffle(&mut OsRng);
+    }
+
+    pub fn calculate_steps_between(&self, member_a: &TAddr, member_b: &TAddr) -> Option<usize> {
+        let index_a = self.members.iter().position(|x| x == member_a)? as isize;
+        let index_b = self.members.iter().position(|x| x == member_b)? as isize;
+        let steps = index_a - index_b;
+        if steps < 0 {
+            Some((self.members.len() as isize + steps) as usize)
+        } else {
+            Some(steps as usize)
+        }
     }
 }
 
@@ -95,15 +114,15 @@ impl<TAddr: NodeAddressable> FromIterator<Committee<TAddr>> for Committee<TAddr>
 }
 
 /// Represents a "slice" of the 256-bit shard space
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct CommitteeShard {
     num_committees: u32,
     num_members: u32,
-    bucket: u32,
+    bucket: ShardBucket,
 }
 
 impl CommitteeShard {
-    pub fn new(num_committees: u32, num_members: u32, bucket: u32) -> Self {
+    pub fn new(num_committees: u32, num_members: u32, bucket: ShardBucket) -> Self {
         Self {
             num_committees,
             num_members,
@@ -129,7 +148,7 @@ impl CommitteeShard {
         self.num_members
     }
 
-    pub fn bucket(&self) -> u32 {
+    pub fn bucket(&self) -> ShardBucket {
         self.bucket
     }
 
@@ -155,5 +174,14 @@ impl CommitteeShard {
         items
             .into_iter()
             .filter(|shard_id| self.includes_shard(shard_id.borrow()))
+    }
+
+    /// Calculates the number of distinct buckets for a given shard set
+    pub fn count_distinct_buckets<'a, I: IntoIterator<Item = &'a ShardId>>(&self, shards: I) -> usize {
+        shards
+            .into_iter()
+            .map(|shard| shard.to_committee_bucket(self.num_committees))
+            .collect::<std::collections::HashSet<_>>()
+            .len()
     }
 }

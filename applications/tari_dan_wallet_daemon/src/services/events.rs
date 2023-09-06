@@ -82,7 +82,10 @@ pub struct AccountChangedEvent {
 pub struct TransactionInvalidEvent {
     pub transaction_id: TransactionId,
     pub status: TransactionStatus,
-    pub final_fee: Amount,
+    pub finalize: Option<FinalizeResult>,
+    pub transaction_failure: Option<RejectReason>,
+    pub final_fee: Option<Amount>,
+    pub is_dry_run: bool,
 }
 
 #[derive(Debug, Clone)]

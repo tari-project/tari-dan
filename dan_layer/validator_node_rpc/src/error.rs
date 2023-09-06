@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_bor::BorError;
 use tari_comms::{
     connectivity::ConnectivityError,
     protocol::rpc::{RpcError, RpcStatus},
@@ -20,6 +21,8 @@ pub enum ValidatorNodeRpcClientError {
     RpcStatusError(#[from] RpcStatus),
     #[error("Node sent invalid response: {0}")]
     InvalidResponse(anyhow::Error),
+    #[error("BorError: {0}")]
+    BorError(#[from] BorError),
 }
 
 impl IsNotFoundError for ValidatorNodeRpcClientError {

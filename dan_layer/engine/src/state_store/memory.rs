@@ -41,6 +41,15 @@ impl MemoryStateStore {
     pub fn new() -> Self {
         Self::default()
     }
+
+    pub fn set_all<T: IntoIterator<Item = (K, V)>, K: Serialize, V: Serialize>(&self, iter: T) {
+        // MemoryStateStore is infallible
+        let mut state = self.write_access().unwrap();
+        for (k, v) in iter {
+            state.set_state(&k, v).unwrap();
+        }
+        state.commit().unwrap()
+    }
 }
 
 impl Default for MemoryStateStore {
@@ -136,19 +145,14 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
     }
 
     fn commit(mut self) -> Result<(), StateStoreError> {
-        self.guard.extend(self.pending.into_iter());
+        self.guard.extend(self.pending);
         Ok(())
     }
 }
 
 impl<K: Serialize, V: Serialize> Extend<(K, V)> for MemoryStateStore {
     fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
-        // MemoryStateStore is infallible
-        let mut state = self.write_access().unwrap();
-        for (k, v) in iter {
-            state.set_state(&k, v).unwrap();
-        }
-        state.commit().unwrap()
+        self.set_all(iter)
     }
 }
 

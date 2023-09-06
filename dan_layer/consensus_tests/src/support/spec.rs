@@ -19,6 +19,6 @@ impl ConsensusSpec for TestConsensusSpec {
     type EpochManager = TestEpochManager;
     type LeaderStrategy = SelectedIndexLeaderStrategy;
     type StateManager = NoopStateManager;
-    type StateStore = SqliteStateStore;
-    type VoteSignatureService = TestVoteSignatureService;
+    type StateStore = SqliteStateStore<Self::Addr>;
+    type VoteSignatureService = TestVoteSignatureService<Self::Addr>;
 }

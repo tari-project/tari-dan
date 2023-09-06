@@ -11,7 +11,12 @@ use tari_template_lib::{
     Hash,
 };
 
-use crate::{commit_result::TransactionReceiptAddress, serde_with, substate::SubstateAddress};
+use crate::{
+    fee_claim::FeeClaimAddress,
+    serde_with,
+    substate::SubstateAddress,
+    transaction_receipt::TransactionReceiptAddress,
+};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct IndexedValue {
@@ -55,6 +60,7 @@ impl IndexedValue {
             SubstateAddress::UnclaimedConfidentialOutput(_) => false,
             // TODO: should we index this value?
             SubstateAddress::NonFungibleIndex(_) => false,
+            SubstateAddress::FeeClaim(_) => false,
         }
     }
 
@@ -100,6 +106,7 @@ pub enum TariValue {
     BucketId(BucketId),
     Metadata(Metadata),
     VaultId(VaultId),
+    FeeClaim(FeeClaimAddress),
 }
 
 impl FromTagAndValue for TariValue {
@@ -136,6 +143,10 @@ impl FromTagAndValue for TariValue {
             BinaryTag::VaultId => {
                 let vault_id: Hash = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::VaultId(vault_id.into()))
+            },
+            BinaryTag::FeeClaim => {
+                let value: Hash = value.deserialized().map_err(BorError::from)?;
+                Ok(Self::FeeClaim(value.into()))
             },
         }
     }
@@ -191,6 +202,9 @@ impl ValueVisitor<TariValue> for IndexedValueVisitor {
             },
             TariValue::Metadata(metadata) => {
                 self.metadata.push(metadata);
+            },
+            TariValue::FeeClaim(_) => {
+                // Do nothing
             },
         }
         Ok(())

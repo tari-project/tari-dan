@@ -20,6 +20,7 @@ message HotStuffMessage {
 
 message NewViewMessage {
   QuorumCertificate high_qc = 1;
+  uint64 new_height = 2;
 }
 
 message ProposalMessage {
@@ -39,10 +40,10 @@ message Block {
   QuorumCertificate justify = 2;
   uint64 height = 3;
   uint64 epoch = 4;
-  uint64 round = 5;
   bytes proposed_by = 6;
   bytes merkle_root = 7;
   repeated Command commands = 8;
+  uint64 total_leader_fee = 9;
 }
 
 message Command {
@@ -58,12 +59,13 @@ message TransactionAtom {
   Decision decision = 3;
   Evidence evidence = 4;
   uint64 fee = 5;
+  uint64 leader_fee = 6;
 }
 
 enum Decision {
   UNKNOWN = 0;
-  ACCEPT = 1;
-  REJECT = 2;
+  COMMIT = 1;
+  ABORT = 2;
 }
 
 message Evidence {

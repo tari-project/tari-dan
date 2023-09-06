@@ -24,16 +24,15 @@ import { useState, useEffect } from 'react';
 import { fromHexString } from '../VN/Components/helpers';
 import EChartsReact from 'echarts-for-react';
 import {
-  ICommittees,
   ICommitteeChart,
-  ICommitteeMap,
+  GetNetworkCommitteesResponse, CommitteeShardInfo,
 } from '../../utils/interfaces';
 import '../../theme/echarts.css';
 
 export default function CommitteesRadial({
   committees,
 }: {
-  committees: ICommittees;
+  committees: GetNetworkCommitteesResponse
 }) {
   const [chartData, setChartData] = useState<ICommitteeChart>({
     activeleft: [],
@@ -53,16 +52,7 @@ export default function CommitteesRadial({
   };
 
   useEffect(() => {
-    const dataset = committees.map(
-      ([begin, end, committee]: ICommittees[number]) => {
-        const data: ICommitteeMap = [
-          fromHexString(begin)[0],
-          fromHexString(end)[0],
-          committee,
-        ];
-        return data;
-      }
-    );
+    const dataset = committees.committees;
 
     const info: ICommitteeChart = {
       activeleft: [],
@@ -72,31 +62,33 @@ export default function CommitteesRadial({
       activeright: [],
     };
 
-    dataset.forEach((data: ICommitteeMap) => {
-      const [firstValue, secondValue] = data;
+    dataset.forEach((data: CommitteeShardInfo) => {
+      const start = fromHexString(data.shard_range.start)[0];
+      const end = fromHexString(data.shard_range.end)[0];
+
       switch (true) {
-        case firstValue === secondValue:
+        case start === end:
           info.activeleft.push(0);
-          info.inactiveleft.push(firstValue);
+          info.inactiveleft.push(start);
           info.activemiddle.push(2);
           info.inactiveright.push(0);
           info.activeright.push(0);
           break;
-        case firstValue < secondValue:
+        case start < end:
           info.activeleft.push(0);
-          info.inactiveleft.push(data[0]);
-          info.activemiddle.push(data[1] - data[0]);
-          info.inactiveright.push(TOTAL_WIDTH - data[1]);
+          info.inactiveleft.push(start);
+          info.activemiddle.push(end - start);
+          info.inactiveright.push(TOTAL_WIDTH - end);
           info.activeright.push(0);
           break;
-        case firstValue > secondValue:
-          info.activeleft.push(data[1]);
+        case start > end:
+          info.activeleft.push(end);
           info.inactiveleft.push(
-            TOTAL_WIDTH - (TOTAL_WIDTH - data[0]) - data[1]
+            TOTAL_WIDTH - (TOTAL_WIDTH - start) - end
           );
           info.activemiddle.push(0);
           info.inactiveright.push(0);
-          info.activeright.push(TOTAL_WIDTH - data[0]);
+          info.activeright.push(TOTAL_WIDTH - start);
           break;
         default:
           break;
@@ -104,30 +96,27 @@ export default function CommitteesRadial({
     });
     setChartData(info);
     const newTitles = dataset.map(
-      (data: ICommitteeMap, index: number) => `Committee ${index + 1}`
+      (info) => `Committee ${info.bucket}`
     );
     setTitles(newTitles);
   }, [committees]);
 
   function tooltipFormatter(params: any) {
     const dataIndex = params[0].dataIndex;
-    const data = committees[dataIndex];
-    const members = data[2] as string[];
-    const begin = data[0] as string;
-    const end = data[1] as string;
+    const data = committees.committees[dataIndex];
+    const {validators, shard_range: {start, end}} = data;
 
-    const memberList = members
-      .map((member: string) => `<li>${member}</li>`)
+    const memberList = validators
+      .map((member) => `<li>${member.address}</li>`)
       .slice(0, 5)
       .join('');
 
     return `<b>Range:</b> <br />
-            ${begin},<br />
+            ${start},<br />
             ${end}<br />
-            <b>${members.length} Members:</b> <br />
+            <b>${validators.length} Members:</b> <br />
             <ul>${memberList}</ul>
-            <a class="tooltip-btn" href="committees/${begin},${end}">View Committee</a>
-            `;
+            <a class="tooltip-btn" href="committees/${start},${end}">View Committee</a>`;
   }
 
   const option = {

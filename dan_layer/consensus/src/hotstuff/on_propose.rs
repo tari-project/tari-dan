@@ -4,11 +4,18 @@
 use std::{
     collections::{BTreeSet, HashSet},
     iter,
+    num::NonZeroU64,
     ops::DerefMut,
 };
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeShard},
+    optional::Optional,
+    shard_bucket::ShardBucket,
+    Epoch,
+    NodeHeight,
+};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -28,7 +35,10 @@ use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
 use crate::{
-    hotstuff::error::HotStuffError,
+    hotstuff::{
+        common::{CommitteeAndMessage, EXHAUST_DIVISOR},
+        error::HotStuffError,
+    },
     messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
@@ -39,7 +49,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-    tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
+    tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
@@ -49,7 +59,7 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
+        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
     ) -> Self {
         Self {
             store,
@@ -65,7 +75,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee: Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
     ) -> Result<(), HotStuffError> {
-        let last_proposed = self.store.with_read_tx(|tx| LastProposed::get(tx, epoch).optional())?;
+        let last_proposed = self.store.with_read_tx(|tx| LastProposed::get(tx).optional())?;
         let last_proposed_height = last_proposed.map(|lp| lp.height).unwrap_or(NodeHeight(0));
         if last_proposed_height >= leaf_block.height + NodeHeight(1) {
             info!(
@@ -77,6 +87,7 @@ where TConsensusSpec: ConsensusSpec
         }
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
         let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
         let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
@@ -85,12 +96,19 @@ where TConsensusSpec: ConsensusSpec
         let next_block;
         {
             let mut tx = self.store.create_write_tx()?;
-            let high_qc = HighQc::get(&mut *tx, epoch)?;
+            let high_qc = HighQc::get(&mut *tx)?;
             let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
 
             let parent_block = leaf_block.get_block(&mut *tx)?;
 
-            next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator.shard_key)?;
+            next_block = self.build_next_block(
+                &mut tx,
+                epoch,
+                &parent_block,
+                high_qc,
+                validator.address,
+                &local_committee_shard,
+            )?;
             next_block.insert(&mut tx)?;
             next_block.as_last_proposed().set(&mut tx)?;
 
@@ -105,7 +123,7 @@ where TConsensusSpec: ConsensusSpec
             let prepared_txs = ExecutedTransaction::get_any(tx.deref_mut(), prepared_iter)?;
             non_local_buckets = prepared_txs
                 .iter()
-                .flat_map(|tx| tx.transaction().involved_shards_iter().copied())
+                .flat_map(|tx| tx.involved_shards_iter().copied())
                 .map(|shard| shard.to_committee_bucket(num_committees))
                 .filter(|bucket| *bucket != local_bucket)
                 .collect::<HashSet<_>>();
@@ -135,15 +153,16 @@ where TConsensusSpec: ConsensusSpec
     async fn broadcast_proposal(
         &self,
         epoch: Epoch,
-        next_block: Block,
-        non_local_buckets: HashSet<u32>,
+        next_block: Block<TConsensusSpec::Addr>,
+        non_local_buckets: HashSet<ShardBucket>,
         local_committee: Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         // Find non-local shard committees to include in the broadcast
         debug!(
             target: LOG_TARGET,
             "non_local_buckets : [{}]",
-            non_local_buckets.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","));
+            non_local_buckets.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","),
+        );
 
         let non_local_committees = self
             .epoch_manager
@@ -180,26 +199,39 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         epoch: Epoch,
-        parent_block: &Block,
-        high_qc: QuorumCertificate,
-        proposed_by: ShardId,
-    ) -> Result<Block, HotStuffError> {
+        parent_block: &Block<TConsensusSpec::Addr>,
+        high_qc: QuorumCertificate<TConsensusSpec::Addr>,
+        proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
+        local_committee_shard: &CommitteeShard,
+    ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
         let ready = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
 
+        let mut total_leader_fee = 0;
         let commands = ready
             .into_iter()
             .map(|t| match t.stage {
                 // If the transaction is New, propose to Prepare it
-                TransactionPoolStage::New => Command::Prepare(t.transaction),
+                TransactionPoolStage::New => Ok(Command::Prepare(t.transaction)),
                 // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
                 // accepted Prepared so we propose LocalPrepared
-                TransactionPoolStage::Prepared => Command::LocalPrepared(t.transaction),
+                TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.transaction)),
                 // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
                 // prepared. We can now propose to Accept it. We also propose the decision change which everyone should
                 // agree with if they received the same foreign LocalPrepare.
-                TransactionPoolStage::LocalPrepared => Command::Accept(t.get_transaction_atom_with_decision_change()),
+                TransactionPoolStage::LocalPrepared => {
+                    let involved = local_committee_shard.count_distinct_buckets(t.transaction.evidence.shards_iter());
+                    let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
+                        HotStuffError::InvariantError(format!(
+                            "Number of involved shards is zero for transaction {}",
+                            t.transaction.id
+                        ))
+                    })?;
+                    let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+                    total_leader_fee += leader_fee;
+                    Ok(Command::Accept(t.get_final_transaction_atom(leader_fee)))
+                },
                 // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes agreed
                 // with the Accept, more (possibly empty) blocks with QCs will be proposed and accepted,
                 // otherwise the Accept block will not be committed.
@@ -210,7 +242,7 @@ where TConsensusSpec: ConsensusSpec
                     )
                 },
             })
-            .collect::<BTreeSet<_>>();
+            .collect::<Result<BTreeSet<_>, HotStuffError>>()?;
 
         debug!(
             target: LOG_TARGET,
@@ -223,9 +255,9 @@ where TConsensusSpec: ConsensusSpec
             high_qc,
             parent_block.height() + NodeHeight(1),
             epoch,
-            0,
             proposed_by,
             commands,
+            total_leader_fee,
         );
 
         Ok(next_block)

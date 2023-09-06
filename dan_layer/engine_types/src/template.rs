@@ -20,12 +20,25 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::str::FromStr;
+
 use tari_common_types::types::FixedHash;
 
 use crate::hashing::{hasher, EngineHashDomainLabel};
 
 /// Package (template) identifier
 pub type TemplateAddress = tari_template_lib::Hash;
+
+// TODO: should we refactor TemplateAddress as a newtype to implement FromStr?
+pub fn parse_template_address(s: String) -> Option<TemplateAddress> {
+    if let Some(hash_str) = s.strip_prefix("template_") {
+        if let Ok(address) = TemplateAddress::from_str(hash_str) {
+            return Some(address);
+        }
+    }
+
+    None
+}
 
 pub fn calculate_template_binary_hash(wasm_code: &[u8]) -> FixedHash {
     let hash = hasher(EngineHashDomainLabel::Template).chain(wasm_code).result();

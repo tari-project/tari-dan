@@ -189,7 +189,6 @@ impl TransactionBuilder {
             self.input_refs,
             self.outputs,
             vec![],
-            vec![],
         )
     }
 }

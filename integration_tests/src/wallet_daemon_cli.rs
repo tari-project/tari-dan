@@ -29,6 +29,7 @@ use tari_crypto::{
     signatures::CommitmentSignature,
     tari_utilities::ByteArray,
 };
+use tari_dan_common_types::Epoch;
 use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
@@ -52,6 +53,8 @@ use tari_wallet_daemon_client::{
         AuthLoginResponse,
         ClaimBurnRequest,
         ClaimBurnResponse,
+        ClaimValidatorFeesRequest,
+        ClaimValidatorFeesResponse,
         ConfidentialTransferRequest,
         MintAccountNftRequest,
         ProofsGenerateRequest,
@@ -95,6 +98,27 @@ pub async fn claim_burn(
     };
 
     client.claim_burn(claim_burn_request).await
+}
+
+pub async fn claim_fees(
+    world: &mut TariWorld,
+    wallet_daemon_name: String,
+    account_name: String,
+    validator_name: String,
+    epoch: u64,
+) -> Result<ClaimValidatorFeesResponse, WalletDaemonClientError> {
+    let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
+
+    let vn = world.validator_nodes.get(&validator_name).unwrap();
+
+    let request = ClaimValidatorFeesRequest {
+        account: Some(ComponentAddressOrName::Name(account_name.clone())),
+        fee: Some(Amount(2000)),
+        validator_public_key: vn.public_key.clone(),
+        epoch: Epoch(epoch),
+    };
+
+    client.claim_validator_fees(request).await
 }
 
 pub async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, amount: u64, wallet_daemon_name: String) {
@@ -748,7 +772,7 @@ pub async fn confidential_transfer(
     let request = ConfidentialTransferRequest {
         account,
         amount,
-        destination_public_key,
+        validator_public_key: destination_public_key,
         fee,
         resource_address: *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     };

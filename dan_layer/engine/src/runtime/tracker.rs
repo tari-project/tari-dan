@@ -29,13 +29,20 @@ use std::{
 };
 
 use log::debug;
-use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{
+    optional::Optional,
+    services::template_provider::TemplateProvider,
+    Epoch,
+    NodeAddressable,
+};
 use tari_engine_types::{
     bucket::Bucket,
-    commit_result::{RejectReason, TransactionReceipt, TransactionResult},
+    commit_result::{RejectReason, TransactionResult},
     component::{ComponentBody, ComponentHeader},
     confidential::UnclaimedConfidentialOutput,
     events::Event,
+    fee_claim::FeeClaimAddress,
     fees::{FeeReceipt, FeeSource},
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
@@ -43,6 +50,7 @@ use tari_engine_types::{
     resource::Resource,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
+    transaction_receipt::TransactionReceipt,
     vault::Vault,
     TemplateAddress,
 };
@@ -69,7 +77,13 @@ use tari_transaction::id_provider::IdProvider;
 
 use crate::{
     packager::LoadedTemplate,
-    runtime::{fee_state::FeeState, working_state::WorkingState, RuntimeError, TransactionCommitError},
+    runtime::{
+        fee_state::FeeState,
+        working_state::WorkingState,
+        RuntimeError,
+        TransactionCommitError,
+        VirtualSubstates,
+    },
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
@@ -105,14 +119,19 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         state_store: MemoryStateStore,
         id_provider: IdProvider,
         template_provider: Arc<TTemplateProvider>,
+        virtual_substates: VirtualSubstates,
     ) -> Self {
         Self {
-            working_state: Arc::new(RwLock::new(WorkingState::new(state_store))),
+            working_state: Arc::new(RwLock::new(WorkingState::new(state_store, virtual_substates))),
             fee_state: Arc::new(RwLock::new(FeeState::new())),
             id_provider,
             template_provider,
             fee_checkpoint: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn get_current_epoch(&self) -> Result<Epoch, RuntimeError> {
+        self.read_with(|state| state.get_current_epoch())
     }
 
     pub fn add_event(&self, event: Event) {
@@ -382,6 +401,25 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             let output = state.get_unclaimed_confidential_commitment(&address)?;
             state.claim_confidential_output(&address)?;
             Ok(output)
+        })
+    }
+
+    pub fn claim_fee(&self, epoch: Epoch, validator_public_key: PublicKey) -> Result<ResourceContainer, RuntimeError> {
+        self.write_with(|state| {
+            let fee_claim_addr = FeeClaimAddress::from_addr(epoch.as_u64(), validator_public_key.as_bytes());
+            let claim = state.take_fee_claim(epoch, validator_public_key.clone())?;
+            let amount = claim.amount;
+            if state.new_fee_claims.insert(fee_claim_addr, claim).is_some() {
+                return Err(RuntimeError::DoubleClaimedFee {
+                    address: validator_public_key,
+                    epoch,
+                });
+            }
+            Ok(ResourceContainer::confidential(
+                *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                None,
+                amount,
+            ))
         })
     }
 
@@ -671,7 +709,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     fn take_working_state(&self) -> WorkingState {
         self.write_with(|current_state| {
-            mem::replace(current_state, WorkingState::new(current_state.state_store.clone()))
+            mem::replace(
+                current_state,
+                WorkingState::new(current_state.state_store.clone(), Default::default()),
+            )
         })
     }
 
@@ -706,6 +747,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
             for (address, substate) in state.new_non_fungible_indexes.drain() {
                 let addr = SubstateAddress::NonFungibleIndex(address.clone());
+                up_states.insert(addr, substate.into());
+            }
+
+            for (address, substate) in state.new_fee_claims.drain() {
+                let addr = SubstateAddress::FeeClaim(address);
                 up_states.insert(addr, substate.into());
             }
 

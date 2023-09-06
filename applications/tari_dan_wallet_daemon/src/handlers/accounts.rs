@@ -34,7 +34,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::Transaction;
 use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
@@ -66,13 +66,19 @@ use tari_wallet_daemon_client::{
     },
     ComponentAddressOrName,
 };
-use tokio::{sync::broadcast, task};
+use tokio::task;
 
 use super::context::HandlerContext;
 use crate::{
-    handlers::{get_account, get_account_or_default, invalid_params},
+    handlers::helpers::{
+        get_account,
+        get_account_or_default,
+        get_account_with_inputs,
+        invalid_params,
+        wait_for_result,
+    },
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
-    services::{NewAccountInfo, TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
+    services::{NewAccountInfo, TransactionSubmittedEvent},
     DEFAULT_FEE,
 };
 
@@ -843,24 +849,14 @@ pub async fn handle_transfer(
 ) -> Result<TransferResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
 
-    let mut instructions = vec![];
-    let mut inputs = vec![];
+    let (account, mut inputs) = get_account_with_inputs(req.account, &sdk)?;
 
     // get the source account component address
     let source_account_address = account
         .address
         .as_component_address()
         .ok_or_else(|| anyhow!("Invalid account address"))?;
-
-    // add the input for the source account component substate
-    let account_substate = sdk.substate_api().get_substate(&account.address)?;
-    inputs.push(account_substate.address);
-
-    // Add all versioned account child addresses as inputs
-    let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
-    inputs.extend(child_addresses);
 
     // add the input for the source account vault substate
     let src_vault = sdk
@@ -874,7 +870,11 @@ pub async fn handle_transfer(
         .substate_api()
         .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
         .await?;
+    let resource_shard_id =
+        ShardId::from_address(&resource_substate.address.address, resource_substate.address.version);
     inputs.push(resource_substate.address);
+
+    let mut instructions = vec![];
 
     // get destination account information
     let destination_account_address =
@@ -909,6 +909,7 @@ pub async fn handle_transfer(
 
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
+        .with_input_refs(vec![resource_shard_id])
         .sign(&account_secret_key.key)
         .build();
 
@@ -946,6 +947,7 @@ pub async fn handle_transfer(
     Ok(TransferResponse {
         transaction_id: tx_id,
         fee: finalized.final_fee,
+        fee_refunded: fee - finalized.final_fee,
         result: finalized.finalize,
     })
 }
@@ -1041,7 +1043,7 @@ pub async fn handle_confidential_transfer(
 
         // get destination account information
         let destination_account_address =
-            get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
+            get_or_create_account_address(&sdk, &req.validator_public_key, &mut inputs, &mut instructions).await?;
 
         // -------------------------------- Lock outputs for spending -------------------------------- //
         let total_amount = req.fee.unwrap_or(DEFAULT_FEE) + req.amount;
@@ -1055,7 +1057,7 @@ pub async fn handle_confidential_transfer(
         let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
             req.amount.as_u64_checked().unwrap(),
             &output_mask.key,
-            &req.destination_public_key,
+            &req.validator_public_key,
             &nonce,
         )?;
 
@@ -1167,19 +1169,6 @@ pub async fn handle_confidential_transfer(
         })
     })
     .await?
-}
-
-async fn wait_for_result(
-    events: &mut broadcast::Receiver<WalletEvent>,
-    transaction_id: TransactionId,
-) -> Result<TransactionFinalizedEvent, anyhow::Error> {
-    loop {
-        let wallet_event = events.recv().await?;
-        match wallet_event {
-            WalletEvent::TransactionFinalized(event) if event.transaction_id == transaction_id => return Ok(event),
-            _ => {},
-        }
-    }
 }
 
 fn is_account_substate(substate: &Substate) -> bool {

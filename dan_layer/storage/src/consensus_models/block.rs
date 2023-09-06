@@ -4,12 +4,12 @@
 use std::{
     collections::{BTreeSet, HashSet},
     fmt::{Debug, Display},
-    ops::DerefMut,
+    ops::{DerefMut, RangeInclusive},
 };
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_dan_common_types::{hashing, serde_with, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{hashing, serde_with, Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_transaction::TransactionId;
 
 use super::QuorumCertificate;
@@ -21,15 +21,15 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Block {
+pub struct Block<TAddr> {
     // Header
     id: BlockId,
     parent: BlockId,
-    justify: QuorumCertificate,
+    justify: QuorumCertificate<TAddr>,
     height: NodeHeight,
     epoch: Epoch,
-    round: u64,
-    proposed_by: ShardId,
+    proposed_by: TAddr,
+    total_leader_fee: u64,
 
     // Body
     merkle_root: FixedHash,
@@ -37,15 +37,15 @@ pub struct Block {
     commands: BTreeSet<Command>,
 }
 
-impl Block {
+impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
     pub fn new(
         parent: BlockId,
-        justify: QuorumCertificate,
+        justify: QuorumCertificate<TAddr>,
         height: NodeHeight,
         epoch: Epoch,
-        round: u64,
-        proposed_by: ShardId,
+        proposed_by: TAddr,
         commands: BTreeSet<Command>,
+        total_leader_fee: u64,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
@@ -53,30 +53,50 @@ impl Block {
             justify,
             height,
             epoch,
-            round,
             proposed_by,
             // TODO
             merkle_root: FixedHash::zero(),
             commands,
+            total_leader_fee,
         };
         block.id = block.calculate_hash().into();
         block
     }
 
-    pub fn genesis(epoch: Epoch) -> Self {
-        Self::new(
-            BlockId::genesis(),
-            QuorumCertificate::genesis(epoch),
-            NodeHeight(0),
+    pub fn load(
+        id: BlockId,
+        parent: BlockId,
+        justify: QuorumCertificate<TAddr>,
+        height: NodeHeight,
+        epoch: Epoch,
+        proposed_by: TAddr,
+        commands: BTreeSet<Command>,
+        total_leader_fee: u64,
+    ) -> Self {
+        Self {
+            id,
+            parent,
+            justify,
+            height,
             epoch,
-            0,
-            ShardId::zero(),
-            Default::default(),
-        )
+            proposed_by,
+            // TODO
+            merkle_root: FixedHash::zero(),
+            commands,
+            total_leader_fee,
+        }
     }
 
-    pub fn is_genesis(&self) -> bool {
-        self.parent == BlockId::genesis()
+    pub fn genesis() -> Self {
+        Self::new(
+            BlockId::genesis(),
+            QuorumCertificate::genesis(),
+            NodeHeight(0),
+            Epoch(0),
+            TAddr::zero(),
+            Default::default(),
+            0,
+        )
     }
 
     /// This is the parent block for all genesis blocks. Its block ID is always zero.
@@ -84,14 +104,26 @@ impl Block {
         Self {
             id: BlockId::genesis(),
             parent: BlockId::genesis(),
-            justify: QuorumCertificate::genesis(Epoch(0)),
+            justify: QuorumCertificate::genesis(),
             height: NodeHeight(0),
             epoch: Epoch(0),
-            round: 0,
-            proposed_by: ShardId::zero(),
+            proposed_by: TAddr::zero(),
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
+            total_leader_fee: 0,
         }
+    }
+
+    pub fn dummy_block(parent: BlockId, proposed_by: TAddr, node_height: NodeHeight, epoch: Epoch) -> Self {
+        Self::new(
+            parent,
+            QuorumCertificate::genesis(),
+            node_height,
+            epoch,
+            proposed_by,
+            Default::default(),
+            0,
+        )
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
@@ -105,6 +137,12 @@ impl Block {
             .chain(&self.commands)
             .result()
     }
+}
+
+impl<TAddr> Block<TAddr> {
+    pub fn is_genesis(&self) -> bool {
+        self.parent == BlockId::genesis()
+    }
 
     pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
         self.commands.iter().map(|d| d.transaction_id())
@@ -116,7 +154,6 @@ impl Block {
 
     pub fn as_locked(&self) -> LockedBlock {
         LockedBlock {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -124,7 +161,6 @@ impl Block {
 
     pub fn as_last_executed(&self) -> LastExecuted {
         LastExecuted {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -132,7 +168,6 @@ impl Block {
 
     pub fn as_last_voted(&self) -> LastVoted {
         LastVoted {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -140,7 +175,6 @@ impl Block {
 
     pub fn as_leaf_block(&self) -> LeafBlock {
         LeafBlock {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
@@ -148,15 +182,11 @@ impl Block {
 
     pub fn as_last_proposed(&self) -> LastProposed {
         LastProposed {
-            epoch: self.epoch,
             height: self.height,
             block_id: self.id,
         }
     }
-}
 
-// impl getters for Block
-impl Block {
     pub fn id(&self) -> &BlockId {
         &self.id
     }
@@ -165,7 +195,7 @@ impl Block {
         &self.parent
     }
 
-    pub fn justify(&self) -> &QuorumCertificate {
+    pub fn justify(&self) -> &QuorumCertificate<TAddr> {
         &self.justify
     }
 
@@ -177,11 +207,11 @@ impl Block {
         self.epoch
     }
 
-    pub fn round(&self) -> u64 {
-        self.round
+    pub fn total_leader_fee(&self) -> u64 {
+        self.total_leader_fee
     }
 
-    pub fn proposed_by(&self) -> &ShardId {
+    pub fn proposed_by(&self) -> &TAddr {
         &self.proposed_by
     }
 
@@ -198,28 +228,40 @@ impl Block {
     }
 }
 
-impl Block {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, id: &BlockId) -> Result<Self, StorageError> {
+impl<TAddr: NodeAddressable> Block<TAddr> {
+    pub fn get<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        id: &BlockId,
+    ) -> Result<Self, StorageError> {
         tx.blocks_get(id)
     }
 
-    pub fn get_tip<TTx: StateStoreReadTransaction>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
+    pub fn get_tip<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        tx: &mut TTx,
+        epoch: Epoch,
+    ) -> Result<Self, StorageError> {
         tx.blocks_get_tip(epoch)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<bool, StorageError> {
         tx.blocks_exists(self.id())
     }
 
-    pub fn insert<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr> + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
         tx.blocks_insert(self)
     }
 
     /// Inserts the block if it doesnt exist. Returns true if the block exists, otherwise false.
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction + DerefMut,
-        TTx::Target: StateStoreReadTransaction,
+        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
+        TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
     {
         let exists = self.exists(tx.deref_mut())?;
         if exists {
@@ -229,14 +271,14 @@ impl Block {
         Ok(false)
     }
 
-    pub fn find_involved_shards<TTx: StateStoreReadTransaction>(
+    pub fn find_involved_shards<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         &self,
         tx: &mut TTx,
     ) -> Result<HashSet<ShardId>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
     }
 
-    pub fn extends<TTx: StateStoreReadTransaction>(
+    pub fn extends<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         &self,
         tx: &mut TTx,
         ancestor: &BlockId,
@@ -247,16 +289,38 @@ impl Block {
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 
-    pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
+    pub fn get_parent<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Block<TAddr>, StorageError> {
         Block::get(tx, &self.parent)
     }
 
-    pub fn get_votes<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Vec<Vote>, StorageError> {
+    pub fn get_votes<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Vec<Vote<TAddr>>, StorageError> {
         Vote::get_for_block(tx, &self.id)
     }
 
-    pub fn get_child<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Self, StorageError> {
+    pub fn get_child<TTx: StateStoreReadTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<Self, StorageError> {
         tx.blocks_get_by_parent(self.id())
+    }
+
+    pub fn get_total_due_for_epoch<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        tx: &mut TTx,
+        epoch: Epoch,
+        validator_public_key: &TAddr,
+    ) -> Result<u64, StorageError> {
+        tx.blocks_get_total_leader_fee_for_epoch(epoch, validator_public_key)
+    }
+
+    pub fn get_any_with_epoch_range_for_validator<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        tx: &mut TTx,
+        range: RangeInclusive<Epoch>,
+        validator_public_key: Option<&TAddr>,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.blocks_get_any_with_epoch_range(range, validator_public_key)
     }
 }
 
@@ -302,6 +366,14 @@ impl TryFrom<Vec<u8>> for BlockId {
     type Error = FixedHashSizeError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_slice())
+    }
+}
+
+impl TryFrom<&[u8]> for BlockId {
+    type Error = FixedHashSizeError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         FixedHash::try_from(value).map(Self)
     }
 }

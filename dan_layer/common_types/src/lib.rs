@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 pub mod crypto;
-pub mod proto;
 
 mod epoch;
 pub use epoch::Epoch;
@@ -13,6 +12,7 @@ pub mod hashing;
 pub mod optional;
 
 mod node_height;
+pub mod shard_bucket;
 pub use node_height::NodeHeight;
 
 mod validator_metadata;

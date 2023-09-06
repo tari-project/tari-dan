@@ -29,6 +29,7 @@ use async_trait::async_trait;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::ValidatorNodeMerkleProof,
+    shard_bucket::ShardBucket,
     Epoch,
     NodeAddressable,
     ShardId,
@@ -100,6 +101,21 @@ pub trait EpochManagerReader: Send + Sync {
         epoch: Epoch,
         addr: &Self::Addr,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError>;
+
+    /// Returns a list of validator nodes with the given epoch and public key. If any validator node is not found, an
+    /// error is returned.
+    async fn get_many_validator_nodes(
+        &self,
+        query: Vec<(Epoch, Self::Addr)>,
+    ) -> Result<HashMap<(Epoch, Self::Addr), ValidatorNode<Self::Addr>>, EpochManagerError> {
+        let mut results = HashMap::with_capacity(query.len());
+        for (epoch, addr) in query {
+            let vn = self.get_validator_node(epoch, &addr).await?;
+            results.insert((epoch, addr.clone()), vn);
+        }
+        Ok(results)
+    }
+
     async fn get_validator_node_merkle_proof(
         &self,
         epoch: Epoch,
@@ -122,8 +138,8 @@ pub trait EpochManagerReader: Send + Sync {
     async fn get_committees_by_buckets(
         &self,
         epoch: Epoch,
-        buckets: HashSet<u32>,
-    ) -> Result<HashMap<u32, Committee<Self::Addr>>, EpochManagerError>;
+        buckets: HashSet<ShardBucket>,
+    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, EpochManagerError>;
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let validator = self.get_our_validator_node(epoch).await?;
@@ -145,5 +161,10 @@ pub trait EpochManagerReader: Send + Sync {
     async fn get_current_epoch_committee(&self, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let current_epoch = self.current_epoch().await?;
         self.get_committee(current_epoch, shard).await
+    }
+
+    async fn get_local_threshold_for_epoch(&self, epoch: Epoch) -> Result<usize, EpochManagerError> {
+        let committee = self.get_local_committee(epoch).await?;
+        Ok(committee.consensus_threshold())
     }
 }

@@ -29,6 +29,7 @@ use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
     substate::SubstateAddress,
+    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_template_lib::{
     args,
@@ -37,6 +38,7 @@ use tari_template_lib::{
     prelude::{NonFungibleId, ResourceAddress},
 };
 use tari_template_test_tooling::{SubstateType, TemplateTest};
+use tari_transaction::Transaction;
 use tari_transaction_manifest::ManifestValue;
 use tari_utilities::hex::to_hex;
 
@@ -172,6 +174,38 @@ fn test_private_function() {
 }
 
 #[test]
+fn test_engine_errors() {
+    // instantiate the counter
+    let mut test = TemplateTest::new(vec!["tests/templates/errors"]);
+
+    // check that public methods can still internally call private ones
+    let result = test
+        .try_execute(
+            Transaction::builder()
+                .call_function(test.get_template_address("Errors"), "invalid_engine_call", args![])
+                .sign(&Default::default())
+                .build(),
+            vec![],
+        )
+        .unwrap();
+
+    let RejectReason::ExecutionFailure(reason) = result.transaction_failure.as_ref().unwrap() else {
+        panic!(
+            "Unexpected transaction reject reason: {}",
+            result.transaction_failure.unwrap()
+        );
+    };
+
+    // Check that the engine error is captured in the execution result rather than the WASM panic message (Panic! Engine
+    // call returned null for op VaultInvoke)
+    assert_eq!(
+        reason,
+        "Runtime error: Resource not found with address \
+         resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+    );
+}
+
+#[test]
 fn test_tuples() {
     let mut template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
 
@@ -279,7 +313,6 @@ mod errors {
 }
 
 mod consensus {
-    use tari_dan_engine::runtime::ConsensusContext;
 
     use super::*;
 
@@ -293,8 +326,7 @@ mod consensus {
 
         // set the value of current epoch to "1" and call the template function again to check that it reads the new
         // value
-        let new_consensus_context = ConsensusContext { current_epoch: 1 };
-        template_test.set_consensus_context(new_consensus_context);
+        template_test.set_virtual_substate(VirtualSubstateAddress::CurrentEpoch, VirtualSubstate::CurrentEpoch(1));
         let result: u64 = template_test.call_function("TestConsensus", "current_epoch", args![], vec![]);
         assert_eq!(result, 1);
     }
