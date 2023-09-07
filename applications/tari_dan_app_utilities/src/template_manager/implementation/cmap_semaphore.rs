@@ -8,12 +8,12 @@ use std::{
 };
 
 #[derive(Clone)]
-pub struct CMapSemaphore<K: Hash + Eq> {
+pub struct ConcurrentMapSemaphore<K: Hash + Eq> {
     map: Arc<dashmap::DashMap<K, Arc<Mutex<()>>>>,
     global: Arc<std_semaphore::Semaphore>,
 }
 
-impl<K: Hash + Eq + Clone> CMapSemaphore<K> {
+impl<K: Hash + Eq + Clone> ConcurrentMapSemaphore<K> {
     pub fn new(max_global_access: isize) -> Self {
         Self {
             map: Arc::new(dashmap::DashMap::new()),
@@ -21,14 +21,14 @@ impl<K: Hash + Eq + Clone> CMapSemaphore<K> {
         }
     }
 
-    pub fn acquire(&self, key: K) -> CMapSemaphoreGuard<'_, K> {
+    pub fn acquire(&self, key: K) -> ConcurrentMapSemaphoreGuard<'_, K> {
         let global_access = self.global.access();
         let map_mutex = self
             .map
             .entry(key.clone())
             .or_insert_with(|| Arc::new(Mutex::new(())))
             .clone();
-        CMapSemaphoreGuard {
+        ConcurrentMapSemaphoreGuard {
             _global_access: global_access,
             map: self.map.clone(),
             map_mutex,
@@ -37,7 +37,7 @@ impl<K: Hash + Eq + Clone> CMapSemaphore<K> {
     }
 }
 
-impl<K: Hash + Eq> Debug for CMapSemaphore<K> {
+impl<K: Hash + Eq> Debug for ConcurrentMapSemaphore<K> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CMapSemaphore")
             .field("map", &self.map.len())
@@ -46,21 +46,22 @@ impl<K: Hash + Eq> Debug for CMapSemaphore<K> {
     }
 }
 
-pub struct CMapSemaphoreGuard<'a, K: Hash + Eq> {
+pub struct ConcurrentMapSemaphoreGuard<'a, K: Hash + Eq> {
+    /// The RAII handle to the global semaphore, which must be held for the duration of this guard
     _global_access: std_semaphore::SemaphoreGuard<'a>,
     map: Arc<dashmap::DashMap<K, Arc<Mutex<()>>>>,
     map_mutex: Arc<Mutex<()>>,
     key: K,
 }
 
-impl<'a, K: Hash + Eq> CMapSemaphoreGuard<'a, K> {
+impl<'a, K: Hash + Eq> ConcurrentMapSemaphoreGuard<'a, K> {
     pub fn access(&self) -> MutexGuard<'_, ()> {
         // Unwrap: only errors if the mutex is poisoned, which is a bug
         self.map_mutex.lock().unwrap()
     }
 }
 
-impl<K: Hash + Eq> Drop for CMapSemaphoreGuard<'_, K> {
+impl<K: Hash + Eq> Drop for ConcurrentMapSemaphoreGuard<'_, K> {
     fn drop(&mut self) {
         self.map.remove(&self.key);
     }

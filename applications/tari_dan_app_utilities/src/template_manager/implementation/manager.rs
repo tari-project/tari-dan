@@ -59,7 +59,7 @@ pub struct TemplateManager {
     config: TemplateConfig,
     builtin_templates: Arc<HashMap<TemplateAddress, Template>>,
     cache: mini_moka::sync::Cache<TemplateAddress, LoadedTemplate>,
-    cmap_semaphore: cmap_semaphore::CMapSemaphore<TemplateAddress>,
+    cmap_semaphore: cmap_semaphore::ConcurrentMapSemaphore<TemplateAddress>,
 }
 
 impl TemplateManager {
@@ -84,7 +84,7 @@ impl TemplateManager {
             builtin_templates: Arc::new(builtin_templates),
             cache,
             config,
-            cmap_semaphore: cmap_semaphore::CMapSemaphore::new(CONCURRENT_ACCESS_LIMIT),
+            cmap_semaphore: cmap_semaphore::ConcurrentMapSemaphore::new(CONCURRENT_ACCESS_LIMIT),
         })
     }
 
