@@ -260,12 +260,17 @@ where
         if let Some(block_id) = maybe_block_id {
             self.on_receive_proposal.reprocess_block(&block_id).await?;
         } else {
-            let current_epoch = self.epoch_manager.current_epoch().await?;
-            let height = match self.state_store.with_read_tx(|tx| Block::get_tip(tx, current_epoch)) {
-                Ok(block) => block.height(),
-                Err(_) => NodeHeight(0),
-            };
-            self.pacemaker_handle.reset_leader_timeout(height).await?;
+            let height = self
+                .state_store
+                .with_read_tx(|tx| Block::get_tip(tx))
+                .map(|block| block.height())
+                .unwrap_or(NodeHeight(0));
+            let high_qc = self
+                .state_store
+                .with_read_tx(|tx| HighQc::get(tx))
+                .map(|qc| qc.block_height())
+                .unwrap_or(NodeHeight(0));
+            self.pacemaker_handle.reset_leader_timeout(height, high_qc).await?;
         }
         self.pacemaker_handle.beat().await?;
         Ok(())
