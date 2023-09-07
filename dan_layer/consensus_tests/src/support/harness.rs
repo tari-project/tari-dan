@@ -77,6 +77,9 @@ impl Test {
                     log::info!("Leader timeout. New height {new_height}");
                     continue;
                 },
+                HotstuffEvent::BlocksOutOfSync { block_id, epoch: _ } => {
+                    log::info!("Blocks out of sync. Block {block_id}");
+                },
             }
         }
     }
