@@ -10,7 +10,7 @@ use tari_comms::{
     protocol::rpc::{RpcError, RpcStatus},
     types::CommsPublicKey,
 };
-use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, ShardId};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, SubstateRecord},
     global::{GlobalDb, MetadataKey},
@@ -125,7 +125,7 @@ impl CommitteeStateSync {
         shard_range: RangeInclusive<ShardId>,
         epoch: Epoch,
     ) -> Result<Vec<(BlockId, BlockId)>, CommitteeStateSyncError> {
-        let tip = self.shard_store.with_read_tx(|tx| Block::get_tip(tx, epoch))?;
+        let tip = self.shard_store.with_read_tx(|tx| Block::get_tip(tx))?;
         // Missing children is an array (from, to), where we have `from` and `to` blocks, but nothing in between. In
         // case the `to` is `None`, then we want everything up to the tip.
 
@@ -211,8 +211,10 @@ impl CommitteeStateSync {
                         )))?
                         .try_into()
                         .map_err(CommitteeStateSyncError::InvalidStateSyncData)?;
-                    self.shard_store.with_write_tx(|tx| block.justify().save(tx))?;
-                    self.shard_store.with_write_tx(|tx| block.insert(tx))?;
+                    self.shard_store.with_write_tx(|tx| {
+                        block.justify().save(tx)?;
+                        block.insert(tx)
+                    })?;
                     last_synced_block = Some(*block.id());
                     // TODO: When we start splitting chain this will be very diffirent.
                     block_count += 1;
@@ -221,7 +223,8 @@ impl CommitteeStateSync {
                     if self
                         .shard_store
                         .with_read_tx(|tx| Block::get(tx, &last_synced_block)?.get_parent(tx))
-                        .is_err()
+                        .optional()?
+                        .is_none()
                     {
                         // If we don't have the parrent, the sync didn't sync all the way to `from` block.
                         new_missing_blocks.push((from, Some(last_synced_block)));

@@ -293,7 +293,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
 
     async fn sync_blocks(&self, req: Request<BlockSyncRequest>) -> Result<Streaming<BlockSyncResponse>, RpcStatus> {
         let (sender, receiver) = mpsc::channel(100);
-        let req = req.into_message();
+        let req: BlockSyncRequest = req.into_message();
         let shard_db = self.shard_state_store.clone();
 
         let start_block_id = BlockId::try_from(req.start_block_id)
@@ -302,10 +302,9 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         shard_db
             .with_read_tx(|tx| Block::get(tx, &start_block_id))
             .map_err(|e| RpcStatus::bad_request(&e))?;
-        let epoch = req.epoch;
         // Sync from tip, or from the block that the requester has.
         let mut block = match req.end_block_id.len() {
-            0 => shard_db.with_read_tx(|tx| Block::get_tip(tx, tari_dan_common_types::Epoch(epoch))),
+            0 => shard_db.with_read_tx(|tx| Block::get_tip(tx)),
             _ => {
                 // The end block is known to the requester, so we want to send blocks starting with its parent block;
                 let end_block_id = BlockId::try_from(req.end_block_id)

@@ -1,7 +1,7 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::consensus_models::BlockId;
 
 #[derive(Debug, Clone)]
@@ -12,4 +12,6 @@ pub enum HotstuffEvent {
     Failure { message: String },
     /// A leader has timed out
     LeaderTimeout { new_height: NodeHeight },
+    /// Block sync request
+    BlockSyncRequest { block_id: BlockId, epoch: Epoch },
 }

@@ -137,9 +137,9 @@ where TConsensusSpec: ConsensusSpec
         local_committee: Committee<TConsensusSpec::Addr>,
         block: Block<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
-        if self.store.with_read_tx(|tx| block.get_parent(tx)).is_err() {
+        if self.store.with_read_tx(|tx| block.get_parent(tx)).optional()?.is_none() {
             // We don't have the parent of the block. We request all the blocks from our tip.
-            let tip = self.store.with_read_tx(|tx| Block::get_tip(tx, block.epoch()))?;
+            let tip = self.store.with_read_tx(|tx| Block::get_tip(tx))?;
             self.publish_event(HotstuffEvent::BlockSyncRequest {
                 block_id: *tip.id(),
                 epoch: block.epoch(),

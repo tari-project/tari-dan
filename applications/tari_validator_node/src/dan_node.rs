@@ -22,7 +22,6 @@
 
 use std::time::Duration;
 
-use anyhow::anyhow;
 use log::*;
 use tari_comms::{connection_manager::LivenessStatus, connectivity::ConnectivityEvent, peer_manager::NodeId};
 use tari_consensus::hotstuff::HotstuffEvent;
@@ -142,7 +141,7 @@ impl DanNode {
                     self.services.global_db.clone(),
                     self.services.comms.node_identity().public_key().clone(),
                 );
-                sync_service.sync_state(epoch, true).await.map_err(|e| anyhow!(e))
+                sync_service.sync_state(epoch, true).await?;
             },
             HotstuffEvent::BlockCommitted { block_id } => {
                 let committed_transactions = self.services.state_store.with_read_tx(|tx| {
@@ -165,7 +164,10 @@ impl DanNode {
                     }
                 }
             },
+            HotstuffEvent::Failure { message: _ } => (),
+            HotstuffEvent::LeaderTimeout { new_height: _ } => (),
         }
+        Ok(())
     }
 
     async fn handle_epoch_manager_event(&self, event: EpochManagerEvent) -> Result<(), anyhow::Error> {
