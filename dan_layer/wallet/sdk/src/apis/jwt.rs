@@ -26,6 +26,7 @@ pub enum JrpcPermission {
     NftGetOwnershipProof(Option<ResourceAddress>),
     AccountBalance(SubstateAddress),
     AccountList(Option<ComponentAddress>),
+    KeyList,
     TransactionGet,
     TransactionSend(Option<SubstateAddress>),
     // This can't be set via cli, after we agree on the permissions I can add the from_str.
@@ -62,6 +63,7 @@ impl FromStr for JrpcPermission {
                 "AccountInfo" => Ok(JrpcPermission::AccountInfo),
                 "NftGetOwnershipProof" => Ok(JrpcPermission::NftGetOwnershipProof(None)),
                 "AccountList" => Ok(JrpcPermission::AccountList(None)),
+                "KeyList" => Ok(JrpcPermission::KeyList),
                 "GetNft" => Ok(JrpcPermission::GetNft(None, None)),
                 "TransactionGet" => Ok(JrpcPermission::TransactionGet),
                 "TransactionSend" => Ok(JrpcPermission::TransactionSend(None)),

@@ -92,6 +92,7 @@ impl<TAddr: NodeAddressable> From<NewViewMessage<TAddr>> for proto::consensus::N
         Self {
             high_qc: Some(value.high_qc.into()),
             new_height: value.new_height.0,
+            epoch: value.epoch.as_u64(),
         }
     }
 }
@@ -103,6 +104,7 @@ impl<TAddr: NodeAddressable> TryFrom<proto::consensus::NewViewMessage> for NewVi
         Ok(NewViewMessage {
             high_qc: value.high_qc.ok_or_else(|| anyhow!("High QC is missing"))?.try_into()?,
             new_height: value.new_height.into(),
+            epoch: Epoch(value.epoch),
         })
     }
 }
@@ -185,7 +187,7 @@ impl TryFrom<proto::consensus::RequestMissingTransactionsMessage> for RequestMis
                 .transaction_ids
                 .into_iter()
                 .map(|tx_id| tx_id.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect::<Result<_, _>>()?,
         })
     }
 }

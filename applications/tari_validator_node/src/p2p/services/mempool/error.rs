@@ -6,7 +6,7 @@ use tari_dan_app_utilities::{
     transaction_executor::TransactionProcessorError,
 };
 use tari_dan_common_types::Epoch;
-use tari_dan_storage::StorageError;
+use tari_dan_storage::{consensus_models::TransactionPoolError, StorageError};
 use tari_epoch_manager::EpochManagerError;
 use tari_transaction::TransactionId;
 use tokio::sync::{mpsc, oneshot};
@@ -38,6 +38,8 @@ pub enum MempoolError {
     StorageError(#[from] StorageError),
     #[error("Virtual substate error: {0}")]
     VirtualSubstateError(#[from] VirtualSubstateError),
+    #[error("Transaction pool error: {0}")]
+    TransactionPoolError(#[from] TransactionPoolError),
 
     // TODO: move these to MempoolValidationError type
     #[error("Invalid template address: {0}")]

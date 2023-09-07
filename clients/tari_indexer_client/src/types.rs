@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use serde_with::{serde_as, DisplayFromStr};
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
@@ -77,6 +78,7 @@ pub enum IndexerTransactionFinalizedResult {
         final_decision: Decision,
         execution_result: Option<ExecuteResult>,
         abort_details: Option<String>,
+        json_results: Vec<JsonValue>,
     },
 }
 

@@ -146,10 +146,12 @@ fn convert_indexer_result_to_wallet_result(result: IndexerTransactionFinalizedRe
             final_decision,
             execution_result,
             abort_details,
+            json_results,
         } => TransactionFinalizedResult::Finalized {
             final_decision,
             execution_result,
             abort_details,
+            json_results,
         },
     }
 }

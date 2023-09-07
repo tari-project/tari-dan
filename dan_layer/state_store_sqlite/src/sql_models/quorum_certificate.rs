@@ -12,6 +12,7 @@ use crate::serialization::deserialize_json;
 pub struct QuorumCertificate {
     pub id: i32,
     pub qc_id: String,
+    pub block_id: String,
     pub json: String,
     pub created_at: PrimitiveDateTime,
 }

@@ -39,7 +39,7 @@ where TConsensusSpec: ConsensusSpec
         debug!(target: LOG_TARGET, "{:?} is requesting missing transactions from block {} with ids {:?}", from,msg.block_id, msg.transactions);
         let txs = self
             .store
-            .with_read_tx(|tx| ExecutedTransaction::get_any(tx, &msg.transactions))?;
+            .with_read_tx(|tx| ExecutedTransaction::get_all(tx, &msg.transactions))?;
         self.tx_request_missing_tx
             .send((
                 from,

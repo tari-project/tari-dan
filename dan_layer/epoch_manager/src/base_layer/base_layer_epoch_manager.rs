@@ -126,7 +126,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         Ok(())
     }
 
-    fn assign_validators_for_epoch(&self) -> Result<(), EpochManagerError> {
+    fn assign_validators_for_epoch(&mut self) -> Result<(), EpochManagerError> {
         let (start_epoch, end_epoch) = self.get_epoch_range(self.current_epoch)?;
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
@@ -135,10 +135,17 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
 
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
 
-        for vn in vns {
+        for vn in &vns {
             validator_nodes.set_committee_bucket(vn.shard_key, vn.shard_key.to_committee_bucket(num_committees))?;
         }
         tx.commit()?;
+
+        if let Some(vn) = vns.iter().find(|vn| vn.address == self.node_public_key) {
+            self.publish_event(EpochManagerEvent::ThisValidatorIsRegistered {
+                epoch: self.current_epoch,
+                shard_key: vn.shard_key,
+            });
+        }
 
         Ok(())
     }

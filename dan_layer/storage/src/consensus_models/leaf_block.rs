@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::Display;
+
 use tari_dan_common_types::NodeHeight;
 
 use crate::{
@@ -46,6 +48,14 @@ impl LeafBlock {
             height: NodeHeight(0),
         }
     }
+
+    pub fn height(&self) -> NodeHeight {
+        self.height
+    }
+
+    pub fn block_id(&self) -> &BlockId {
+        &self.block_id
+    }
 }
 
 impl LeafBlock {
@@ -59,5 +69,11 @@ impl LeafBlock {
 
     pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block<TTx::Addr>, StorageError> {
         tx.blocks_get(&self.block_id)
+    }
+}
+
+impl Display for LeafBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} #{}", self.block_id, self.height)
     }
 }

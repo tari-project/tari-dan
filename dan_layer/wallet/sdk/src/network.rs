@@ -3,6 +3,7 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
@@ -60,6 +61,7 @@ pub enum TransactionFinalizedResult {
         final_decision: Decision,
         execution_result: Option<ExecuteResult>,
         abort_details: Option<String>,
+        json_results: Vec<Value>,
     },
 }
 
