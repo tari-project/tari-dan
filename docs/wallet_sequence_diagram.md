@@ -21,8 +21,8 @@ WalletUI->>User: Displays modal to review the requested permissions
 User->>WalletUI: User accepts the permissions
 WalletUI->>WalletDaemon: webrtc.start(JWT)
 WalletDaemon->>WalletDaemon: Check that the caller has the StartWebrtc permission
-WalletDaemon->>WalletDaemon: Parse the JWT, extract permissions and generate a permission token
-WalletDaemon->>WalletDaemon: Spawn tokio task to handle the WebRTC channel, using the permission token
+WalletDaemon->>WalletDaemon: Parse the JWT, extract permissions and generate a wallet JWT
+WalletDaemon->>WalletDaemon: Spawn tokio task to handle the WebRTC channel
 
 User->>TariConnector: User clicks "SetAnswer" button
 TariConnector->>SignalingServer: getAnswer
@@ -32,5 +32,7 @@ TariConnector->>TariConnector: create the data channel with the Ice candidates
 User->>TariConnector: sendMessage(walletDaemonMethod, JWT, args)
 TariConnector->>TariConnector: generate a new messageId = previousMessageId + 1
 TariConnector->>WalletDaemon: WebRTC messaging with the user request
+WalletDaemon->>WalletDaemon: The wallet JWT is auto-injected (via callback) to the incoming message
+WalletDaemon->>WalletDaemon: Calling the requested wallet JSON RPC method and getting the response
 WalletDaemon->>TariConnector: WebRTC messaging with the response
 TariConnector->>User: response
