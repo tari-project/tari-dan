@@ -13,5 +13,5 @@ pub enum HotstuffEvent {
     /// A leader has timed out
     LeaderTimeout { new_height: NodeHeight },
     /// Block sync request
-    BlockSyncRequest { block_id: BlockId, epoch: Epoch },
+    BlocksOutOfSync { block_id: BlockId, epoch: Epoch },
 }

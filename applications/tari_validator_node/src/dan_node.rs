@@ -133,7 +133,7 @@ impl DanNode {
 
     async fn handle_hotstuff_event(&self, event: HotstuffEvent) -> Result<(), anyhow::Error> {
         match event {
-            HotstuffEvent::BlockSyncRequest { block_id: _, epoch } => {
+            HotstuffEvent::BlocksOutOfSync { block_id: _, epoch } => {
                 let sync_service = CommitteeStateSync::new(
                     self.services.epoch_manager.clone(),
                     self.services.validator_node_client_factory.clone(),
