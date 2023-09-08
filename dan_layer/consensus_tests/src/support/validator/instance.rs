@@ -16,7 +16,7 @@ use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
     NoopStateManager,
-    SelectedIndexLeaderStrategy,
+    RoundRobinLeaderStrategy,
     ValidatorBuilder,
 };
 
@@ -38,7 +38,7 @@ pub struct Validator {
 
     pub state_store: SqliteStateStore<TestAddress>,
     pub epoch_manager: TestEpochManager,
-    pub leader_strategy: SelectedIndexLeaderStrategy,
+    pub leader_strategy: RoundRobinLeaderStrategy,
     pub events: broadcast::Receiver<HotstuffEvent>,
     pub tx_epoch_events: broadcast::Sender<EpochManagerEvent>,
     pub state_manager: NoopStateManager,
@@ -52,7 +52,7 @@ impl Validator {
     }
 
     #[allow(dead_code)]
-    pub fn leader_strategy(&self) -> &SelectedIndexLeaderStrategy {
+    pub fn leader_strategy(&self) -> &RoundRobinLeaderStrategy {
         &self.leader_strategy
     }
 

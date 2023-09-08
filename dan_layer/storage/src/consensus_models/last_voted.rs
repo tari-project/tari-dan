@@ -18,4 +18,8 @@ impl LastVoted {
     pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.last_voted_set(self)
     }
+
+    pub fn unset<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        tx.last_votes_unset(self)
+    }
 }

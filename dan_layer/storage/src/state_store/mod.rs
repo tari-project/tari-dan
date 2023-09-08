@@ -102,7 +102,7 @@ pub trait StateStoreReadTransaction {
     fn blocks_get_tip(&mut self) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
-    fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
+    fn blocks_get_all_by_parent(&mut self, parent: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError>;
     fn blocks_get_pending_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
     fn blocks_get_total_leader_fee_for_epoch(
         &mut self,
@@ -176,16 +176,24 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Block -------------------------------- //
     fn blocks_insert(&mut self, block: &Block<Self::Addr>) -> Result<(), StorageError>;
-    fn blocks_commit(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
+    fn blocks_set_flags(
+        &mut self,
+        block_id: &BlockId,
+        is_committed: Option<bool>,
+        is_processed: Option<bool>,
+    ) -> Result<(), StorageError>;
 
     // -------------------------------- QuorumCertificate -------------------------------- //
     fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError>;
 
     // -------------------------------- Bookkeeping -------------------------------- //
     fn last_voted_set(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
+    fn last_votes_unset(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
     fn last_executed_set(&mut self, last_exec: &LastExecuted) -> Result<(), StorageError>;
     fn last_proposed_set(&mut self, last_proposed: &LastProposed) -> Result<(), StorageError>;
+    fn last_proposed_unset(&mut self, last_proposed: &LastProposed) -> Result<(), StorageError>;
     fn leaf_block_set(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError>;
+    fn leaf_block_unset(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError>;
     fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError>;
     fn high_qc_set(&mut self, high_qc: &HighQc) -> Result<(), StorageError>;
 

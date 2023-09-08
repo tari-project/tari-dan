@@ -120,15 +120,18 @@ where TConsensusSpec: ConsensusSpec
         {
             let mut tx = self.store.create_write_tx()?;
             let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
-                return Err(HotStuffError::ReceivedVoteForUnknownBlock {
-                    block_id: message.block_id,
-                    sent_by: from.to_string(),
-                });
+                warn!(
+                    target: LOG_TARGET,
+                    "❌ Received vote for unknown block {} from {}",message.block_id,from
+                );
+                tx.rollback()?;
+                return Ok(());
             };
             if !self
                 .leader_strategy
                 .is_leader_for_next_block(&vn.address, &committee, block.height())
             {
+                tx.rollback()?;
                 return Err(HotStuffError::NotTheLeader {
                     details: format!(
                         "Not this leader for block {}, vote sent by {}",
@@ -166,7 +169,7 @@ where TConsensusSpec: ConsensusSpec
 
             // Wait for our own vote to make sure we've processed all transactions and we also have an up to date
             // database
-            if !votes.iter().any(|x| x.signature.public_key == vn.address) {
+            if votes.iter().all(|x| x.signature.public_key != vn.address) {
                 warn!(target: LOG_TARGET, "🔥 Received enough votes but waiting for our own vote for block {}", message.block_id);
                 tx.rollback()?;
                 return Ok(());
