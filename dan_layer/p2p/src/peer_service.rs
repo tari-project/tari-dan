@@ -70,7 +70,7 @@ impl From<Peer> for DanPeer<CommsPublicKey> {
                 .addresses
                 .addresses()
                 .iter()
-                .filter_map(|a| a.source.peer_identity_claim().cloned())
+                .filter_map(|a| a.source().peer_identity_claim().cloned())
                 .collect(),
         }
     }

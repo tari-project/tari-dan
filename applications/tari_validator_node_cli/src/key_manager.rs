@@ -30,10 +30,9 @@ use anyhow::anyhow;
 use serde_json as json;
 use serde_json::json;
 use tari_common_types::types::{PrivateKey, PublicKey};
-use tari_crypto::keys::PublicKey as PublicKeyT;
+use tari_crypto::{keys::PublicKey as PublicKeyT, tari_utilities::hex::Hex};
 use tari_dan_common_types::{crypto::create_key_pair, NodeAddressable};
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, models::NonFungibleAddress};
-use tari_utilities::hex::Hex;
 
 #[derive(Debug)]
 pub struct KeyManager {
@@ -121,7 +120,7 @@ fn read_key<P: AsRef<Path>>(path: P) -> anyhow::Result<PrivateKey> {
         .get("key")
         .and_then(|k| k.as_str())
         .ok_or_else(|| anyhow!("No key"))?;
-    Ok(PrivateKey::from_hex(key)?)
+    PrivateKey::from_hex(key).map_err(anyhow::Error::msg)
 }
 
 #[derive(Debug, Clone)]

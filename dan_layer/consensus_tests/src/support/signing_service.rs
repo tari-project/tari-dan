@@ -28,7 +28,7 @@ impl<TAddr> TestVoteSignatureService<TAddr> {
 
 impl<TAddr> ValidatorSignatureService<TAddr> for TestVoteSignatureService<TAddr> {
     fn sign<M: AsRef<[u8]>>(&self, message: M) -> ValidatorSchnorrSignature {
-        ValidatorSchnorrSignature::sign_message(&self.secret_key, message).unwrap()
+        ValidatorSchnorrSignature::sign_message(&self.secret_key, message, &mut OsRng).unwrap()
     }
 
     fn public_key(&self) -> &TAddr {

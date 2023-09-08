@@ -8,15 +8,14 @@ license = "BSD-3-Clause"
 
 [dependencies]
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_utilities = "0.4.10"
-tari_crypto = { version = "0.17", features = ["borsh"] }
+tari_crypto = { version = "0.18", features = ["borsh"] }
 tari_engine_types = { path = "../engine_types" }
 tari_bor = { path = "../tari_bor" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 
-digest = "0.9"
+blake2 = "0.10.6"
 newtype-ops = "0.1.4"
-rand = "0.7"
+rand = "0.8"
 prost = "0.9"
 prost-types = "0.9"
 serde = "1.0.126"

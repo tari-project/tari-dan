@@ -10,7 +10,7 @@ pub(crate) fn random_shard_in_bucket(bucket: ShardBucket, num_committees: u32) -
     let mut bytes = [0u8; 16];
     bytes.copy_from_slice(&shard_size.as_le_bytes()[..16]);
     let offset = u128::from_le_bytes(bytes);
-    let offset = OsRng.gen_range(0, offset);
+    let offset = OsRng.gen_range(0..=offset);
     let shard = shard_size * U256::from(bucket.as_u32()) + U256::from(offset);
     ShardId::from_u256(shard)
 }

@@ -9,7 +9,7 @@ edition = "2021"
 
 [dependencies]
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_crypto = { version = "0.17" }
+tari_crypto = "0.18"
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
@@ -17,7 +17,6 @@ tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 tari_template_lib = { path = "../../dan_layer/template_lib", features = ["std"] }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
-tari_utilities = "0.4.10"
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_dan_storage = { path = "../../dan_layer/storage" }
 

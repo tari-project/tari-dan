@@ -36,8 +36,8 @@ impl<H: DomainSeparation> TryFrom<proto::common::Signature> for SchnorrSignature
     type Error = anyhow::Error;
 
     fn try_from(sig: proto::common::Signature) -> Result<Self, Self::Error> {
-        let public_nonce = ByteArray::from_bytes(&sig.public_nonce)?;
-        let signature = PrivateKey::from_bytes(&sig.signature)?;
+        let public_nonce = ByteArray::from_bytes(&sig.public_nonce).map_err(anyhow::Error::msg)?;
+        let signature = PrivateKey::from_bytes(&sig.signature).map_err(anyhow::Error::msg)?;
 
         Ok(Self::new(public_nonce, signature))
     }
@@ -57,8 +57,8 @@ impl<TAddr: NodeAddressable> TryFrom<proto::common::SignatureAndPublicKey> for V
 
     fn try_from(sig: proto::common::SignatureAndPublicKey) -> Result<Self, Self::Error> {
         let public_key = TAddr::from_bytes(&sig.public_key).ok_or_else(|| anyhow!("Public key was not valid bytes"))?;
-        let public_nonce = ByteArray::from_bytes(&sig.public_nonce)?;
-        let signature = PrivateKey::from_bytes(&sig.signature)?;
+        let public_nonce = ByteArray::from_bytes(&sig.public_nonce).map_err(anyhow::Error::msg)?;
+        let signature = PrivateKey::from_bytes(&sig.signature).map_err(anyhow::Error::msg)?;
 
         Ok(Self::new(
             public_key,
@@ -83,9 +83,9 @@ impl TryFrom<proto::common::SignatureAndPublicKey> for TransactionSignature {
     type Error = anyhow::Error;
 
     fn try_from(sig: proto::common::SignatureAndPublicKey) -> Result<Self, Self::Error> {
-        let public_key = ByteArray::from_bytes(&sig.public_key)?;
-        let public_nonce = ByteArray::from_bytes(&sig.public_nonce)?;
-        let signature = PrivateKey::from_bytes(&sig.signature)?;
+        let public_key = ByteArray::from_bytes(&sig.public_key).map_err(anyhow::Error::msg)?;
+        let public_nonce = ByteArray::from_bytes(&sig.public_nonce).map_err(anyhow::Error::msg)?;
+        let signature = PrivateKey::from_bytes(&sig.signature).map_err(anyhow::Error::msg)?;
 
         Ok(Self::new(public_key, Signature::new(public_nonce, signature)))
     }

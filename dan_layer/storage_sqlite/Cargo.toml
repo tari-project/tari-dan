@@ -7,7 +7,7 @@ license = "BSD-3-Clause"
 [dependencies]
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common_types" }
 tari_dan_common_types = { path = "../common_types" }
-tari_utilities = "0.4.10"
+tari_utilities = "0.5.1"
 tari_dan_storage = { path = "../storage" }
 
 diesel = { version = "2", default-features = false, features = ["sqlite", "chrono"] }
@@ -19,5 +19,5 @@ serde_json = "1.0.85"
 serde = "1.0"
 
 [dev-dependencies]
-rand = "0.7"
-tari_crypto = "0.17"
+rand = "0.8"
+tari_crypto = "0.18"

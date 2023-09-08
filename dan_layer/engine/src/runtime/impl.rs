@@ -31,6 +31,7 @@ use tari_common_types::types::PublicKey;
 use tari_crypto::{
     range_proof::RangeProofService,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
+    tari_utilities::ByteArray,
 };
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
@@ -79,7 +80,6 @@ use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, VaultRef},
 };
-use tari_utilities::ByteArray;
 
 use super::{tracker::FinalizeTracker, AuthorizationScope, Runtime};
 use crate::{
@@ -874,9 +874,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
         let challenge = ownership_proof_hasher()
-            .chain(proof_of_knowledge.public_nonce())
-            .chain(&unclaimed_output.commitment)
-            .chain(&self.sender_public_key)
+            .chain_update(proof_of_knowledge.public_nonce())
+            .chain_update(&unclaimed_output.commitment)
+            .chain_update(&self.sender_public_key)
             .result();
 
         if !proof_of_knowledge.verify(

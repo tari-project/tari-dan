@@ -11,6 +11,7 @@ use tari_crypto::{
     commitment::{HomomorphicCommitment as Commitment, HomomorphicCommitmentFactory},
     keys::PublicKey as _,
     ristretto::RistrettoComSig,
+    tari_utilities::ByteArray,
 };
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{
@@ -35,7 +36,6 @@ use tari_template_lib::{
     Hash,
 };
 use tari_transaction::Transaction;
-use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::{
     types::{
         AccountGetDefaultRequest,
@@ -494,7 +494,8 @@ pub async fn handle_claim_burn(
                 .ok_or_else(|| invalid_params::<&str>("reciprocal_claim_public_key", None))?,
         )
         .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e)))?,
-    )?;
+    )
+    .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e)))?;
     let commitment = base64::decode(
         claim_proof["commitment"]
             .as_str()
@@ -516,7 +517,8 @@ pub async fn handle_claim_burn(
                 .ok_or_else(|| invalid_params::<&str>("ownership_proof.public_nonce", None))?,
         )
         .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?,
-    )?;
+    )
+    .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?;
     let u = PrivateKey::from_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["u"]
@@ -524,7 +526,8 @@ pub async fn handle_claim_burn(
                 .ok_or_else(|| invalid_params::<&str>("ownership_proof.u", None))?,
         )
         .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?,
-    )?;
+    )
+    .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?;
     let v = PrivateKey::from_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["v"]
@@ -532,7 +535,8 @@ pub async fn handle_claim_burn(
                 .ok_or_else(|| invalid_params::<&str>("ownership_proof.v", None))?,
         )
         .map_err(|e| invalid_params("ownership_proof.v", Some(e)))?,
-    )?;
+    )
+    .map_err(|e| invalid_params("ownership_proof.v", Some(e)))?;
 
     let sdk = context.wallet_sdk();
 

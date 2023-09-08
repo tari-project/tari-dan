@@ -11,7 +11,7 @@ edition = "2021"
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_crypto = { version = "0.17" }
+tari_crypto = "0.18"
 
 tari_consensus = { path = "../consensus" }
 tari_dan_common_types = { path = "../common_types" }

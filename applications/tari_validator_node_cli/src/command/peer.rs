@@ -23,7 +23,7 @@
 use clap::Subcommand;
 use multiaddr::Multiaddr;
 use tari_common_types::types::PublicKey;
-use tari_utilities::hex::Hex;
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_validator_node_client::{types::AddPeerRequest, ValidatorNodeClient};
 
 #[derive(Debug, Subcommand, Clone)]
@@ -42,7 +42,7 @@ impl PeersSubcommand {
             Connect { public_key, addresses } => {
                 client
                     .add_peer(AddPeerRequest {
-                        public_key: PublicKey::from_hex(&public_key)?,
+                        public_key: PublicKey::from_hex(&public_key).map_err(anyhow::Error::msg)?,
                         addresses,
                         wait_for_dial: true,
                     })

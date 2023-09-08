@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{PublicKey, Signature};
 use tari_crypto::{
@@ -30,7 +31,7 @@ impl TransactionSignature {
             .result();
 
         Self {
-            signature: Signature::sign_message(secret_key, challenge).unwrap(),
+            signature: Signature::sign_message(secret_key, challenge, &mut OsRng).unwrap(),
             public_key,
         }
     }

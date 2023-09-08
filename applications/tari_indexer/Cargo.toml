@@ -13,7 +13,7 @@ tari_common = { git = "https://github.com/tari-project/tari.git", branch = "deve
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_crypto = { version = "0.17" }
+tari_crypto = "0.18"
 tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
 tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "development" }

@@ -22,10 +22,10 @@
 
 use std::{io, io::Write};
 
+use blake2::Blake2b;
 use borsh::BorshSerialize;
-use digest::Digest;
+use digest::{consts::U32, Digest};
 use tari_crypto::{
-    hash::blake2::Blake256,
     hash_domain,
     hashing::{DomainSeparatedHasher, DomainSeparation},
 };
@@ -43,7 +43,7 @@ fn confidential_hasher(label: &'static str) -> TariBaseLayerHasher {
     TariBaseLayerHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
 }
 
-type WalletOutputEncryptionKeysDomainHasher = DomainSeparatedHasher<Blake256, WalletOutputEncryptionKeysDomain>;
+type WalletOutputEncryptionKeysDomainHasher = DomainSeparatedHasher<Blake2b<U32>, WalletOutputEncryptionKeysDomain>;
 pub fn encrypted_data_hasher() -> WalletOutputEncryptionKeysDomainHasher {
     WalletOutputEncryptionKeysDomainHasher::new_with_label("")
 }
@@ -54,12 +54,12 @@ pub fn ownership_proof_hasher() -> TariBaseLayerHasher {
 
 #[derive(Debug, Clone)]
 pub struct TariBaseLayerHasher {
-    hasher: Blake256,
+    hasher: Blake2b<U32>,
 }
 
 impl TariBaseLayerHasher {
     pub fn new_with_label<TDomain: DomainSeparation>(label: &'static str) -> Self {
-        let mut hasher = Blake256::new();
+        let mut hasher = Blake2b::<U32>::new();
         TDomain::add_domain_separation_tag(&mut hasher, label);
         Self { hasher }
     }
@@ -74,6 +74,10 @@ impl TariBaseLayerHasher {
         self
     }
 
+    pub fn chain_update<T: BorshSerialize>(self, data: &T) -> Self {
+        self.chain(data)
+    }
+
     pub fn digest<T: BorshSerialize>(self, data: &T) -> Hash {
         self.chain(data).result()
     }
@@ -83,12 +87,12 @@ impl TariBaseLayerHasher {
         hash.into()
     }
 
-    pub fn finalize_into(self, output: &mut digest::Output<Blake256>) {
+    pub fn finalize_into(self, output: &mut digest::Output<Blake2b<U32>>) {
         digest::FixedOutput::finalize_into(self.hasher, output)
     }
 
     fn hash_writer(&mut self) -> impl Write + '_ {
-        struct HashWriter<'a>(&'a mut Blake256);
+        struct HashWriter<'a>(&'a mut Blake2b<U32>);
         impl Write for HashWriter<'_> {
             fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
                 self.0.update(buf);

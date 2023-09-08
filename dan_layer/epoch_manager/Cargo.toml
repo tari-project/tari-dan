@@ -16,7 +16,7 @@ tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "devel
 tari_dan_storage = { path = "../storage" }
 tari_dan_storage_sqlite = { path = "../storage_sqlite", optional = true }
 tari_base_node_client = { path = "../../clients/base_node_client", optional = true }
-tari_crypto = { version = "0.17" }
+tari_crypto = "0.18"
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development", optional = true }
 
 anyhow = "1.0"

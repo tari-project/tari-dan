@@ -14,7 +14,7 @@ tari_dan_wallet_sdk = { path = "../sdk" }
 tari_engine_types = { path = "../../engine_types" }
 tari_template_lib = { path = "../../template_lib" }
 tari_transaction = { path = "../../transaction" }
-tari_utilities = "0.4.10"
+tari_utilities = "0.5.1"
 # Just used for QuorumCertificate
 tari_dan_storage = { path = "../../storage" }
 
