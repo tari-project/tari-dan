@@ -372,18 +372,15 @@ impl TransactionPoolRecord {
     ) -> Result<(), TransactionPoolError> {
         // Check that only permitted stage transactions are performed
         match ((self.current_stage(), pending_stage), is_ready) {
-            ((TransactionPoolStage::New, TransactionPoolStage::Prepared), false) |
-            ((TransactionPoolStage::Prepared, TransactionPoolStage::Prepared), true) |
+            ((TransactionPoolStage::New, TransactionPoolStage::Prepared), true) |
             ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), _) |
-            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), _) |
+            ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), false) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), false) |
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), false) |
-            ((TransactionPoolStage::SomePrepared, TransactionPoolStage::SomePrepared), false) |
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), false) => {},
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), false) => {},
             _ => {
                 return Err(TransactionPoolError::InvalidTransactionTransition {
-                    from: self.current_stage(),
+                    from: self.stage,
                     to: pending_stage,
                     is_ready,
                 })

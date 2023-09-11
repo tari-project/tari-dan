@@ -328,7 +328,6 @@ impl TestBuilder {
             .await
             .into_iter()
             .map(|(address, bucket, shard)| {
-                let leader_strategy = leader_strategy.clone();
                 let sql_address = self.sql_address.replace("{}", &address.0);
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
@@ -336,7 +335,7 @@ impl TestBuilder {
                     .with_shard(shard)
                     .with_bucket(bucket)
                     .with_epoch_manager(epoch_manager.clone_for(address.clone(), shard))
-                    .with_leader_strategy(leader_strategy)
+                    .with_leader_strategy(*leader_strategy)
                     .spawn(shutdown_signal.clone());
                 (channels, (address, validator))
             })

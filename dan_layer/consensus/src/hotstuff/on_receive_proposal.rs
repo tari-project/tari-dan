@@ -365,9 +365,9 @@ where TConsensusSpec: ConsensusSpec
             // If all shards are complete and we've already received our LocalPrepared, we can set out LocalPrepared
             // transaction as ready to propose ACCEPT. If we have not received the local LocalPrepared, the transition
             // will happen when we receive the local block.
-            // if tx_rec.current_stage().is_local_prepared() && tx_rec.transaction().evidence.all_shards_complete() {
-            //     tx_rec.pending_transition(tx, TransactionPoolStage::LocalPrepared, true)?;
-            // }
+            if tx_rec.current_stage().is_local_prepared() && tx_rec.transaction().evidence.all_shards_complete() {
+                tx_rec.pending_transition(tx, TransactionPoolStage::LocalPrepared, true)?;
+            }
         }
 
         Ok(())
@@ -431,6 +431,11 @@ where TConsensusSpec: ConsensusSpec
                 decision.dont_vote();
                 continue;
             };
+            // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
+            //       part of the proposal DanMessage so that there is no race condition between receiving the
+            //       proposed block and receiving the foreign proposals. Because this is only added on locked block,
+            //       this should be less common.
+            tx_rec.update_evidence(tx, local_committee_shard, *block.justify().id())?;
 
             debug!(
                 target: LOG_TARGET,
@@ -509,7 +514,7 @@ where TConsensusSpec: ConsensusSpec
                             }
                         }
 
-                        tx_rec.pending_transition(tx, TransactionPoolStage::Prepared, false)?;
+                        tx_rec.pending_transition(tx, TransactionPoolStage::Prepared, true)?;
                     } else {
                         // If we disagree with any local decision we abstain from voting
                         warn!(
@@ -570,7 +575,7 @@ where TConsensusSpec: ConsensusSpec
                     tx_rec.pending_transition(
                         tx,
                         TransactionPoolStage::LocalPrepared,
-                        false, // tx_rec.transaction().evidence.all_shards_complete(),
+                        tx_rec.transaction().evidence.all_shards_complete(),
                     )?;
                 },
                 Command::Accept(t) => {
@@ -881,7 +886,7 @@ where TConsensusSpec: ConsensusSpec
     fn on_lock_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        local_committee_shard: &CommitteeShard,
+        _local_committee_shard: &CommitteeShard,
         block: &Block<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         info!(
@@ -892,7 +897,7 @@ where TConsensusSpec: ConsensusSpec
         );
         block.as_locked().set(tx)?;
 
-        self.process_commands(tx, local_committee_shard, block)?;
+        // self.process_commands(tx, local_committee_shard, block)?;
 
         // This moves the stage update from pending to current for all transactions on on the locked block
         self.transaction_pool
@@ -900,48 +905,45 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    fn process_commands(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        local_committee_shard: &CommitteeShard,
-        block: &Block<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
-        for cmd in block.commands() {
-            let mut tx_rec = self.transaction_pool.get(tx, cmd.transaction_id())?;
-            // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
-            //       part of the proposal DanMessage so that there is no race condition between receiving the
-            //       proposed block and receiving the foreign proposals. Because this is only added on locked block,
-            //       this should be less common.
-            tx_rec.update_evidence(tx, local_committee_shard, *block.justify().id())?;
-
-            match cmd {
-                Command::Prepare(_) => {
-                    tx_rec.pending_transition(tx, TransactionPoolStage::Prepared, true)?;
-                },
-                Command::LocalPrepared(t) => {
-                    tx_rec.pending_transition(
-                        tx,
-                        TransactionPoolStage::LocalPrepared,
-                        tx_rec.transaction().evidence.all_shards_complete(),
-                    )?;
-                    tx_rec.update_local_decision(tx, t.decision)?;
-                },
-                Command::Accept(t) => {
-                    // If the decision was changed to Abort, which can only happen when a foreign shard decides ABORT
-                    // and we decide COMMIT, we set SomePrepared, otherwise AllPrepared. There are no further stages
-                    // after these, so these MUST never be ready to propose.
-                    if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
-                        tx_rec.pending_transition(tx, TransactionPoolStage::SomePrepared, false)?;
-                    } else {
-                        tx_rec.pending_transition(tx, TransactionPoolStage::AllPrepared, false)?;
-                    }
-                    tx_rec.update_remote_decision(tx, t.decision)?;
-                },
-            }
-        }
-
-        Ok(())
-    }
+    // fn process_commands(
+    //     &self,
+    //     tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+    //     local_committee_shard: &CommitteeShard,
+    //     block: &Block<TConsensusSpec::Addr>,
+    // ) -> Result<(), HotStuffError> { for cmd in block.commands() { let mut tx_rec = self.transaction_pool.get(tx,
+    //   cmd.transaction_id())?; // TODO: we probably need to provide the all/some of the QCs referenced in local
+    //   transactions as //       part of the proposal DanMessage so that there is no race condition between receiving
+    //   the //       proposed block and receiving the foreign proposals. Because this is only added on locked block, //
+    //   this should be less common. tx_rec.update_evidence(tx, local_committee_shard, *block.justify().id())?;
+    //
+    //         match cmd {
+    //             Command::Prepare(_) => {
+    //                 tx_rec.pending_transition(tx, TransactionPoolStage::Prepared, true)?;
+    //             },
+    //             Command::LocalPrepared(t) => {
+    //                 tx_rec.pending_transition(
+    //                     tx,
+    //                     TransactionPoolStage::LocalPrepared,
+    //                     tx_rec.transaction().evidence.all_shards_complete(),
+    //                 )?;
+    //                 tx_rec.update_local_decision(tx, t.decision)?;
+    //             },
+    //             Command::Accept(t) => {
+    //                 // If the decision was changed to Abort, which can only happen when a foreign shard decides ABORT
+    //                 // and we decide COMMIT, we set SomePrepared, otherwise AllPrepared. There are no further stages
+    //                 // after these, so these MUST never be ready to propose.
+    //                 if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
+    //                     tx_rec.pending_transition(tx, TransactionPoolStage::SomePrepared, false)?;
+    //                 } else {
+    //                     tx_rec.pending_transition(tx, TransactionPoolStage::AllPrepared, false)?;
+    //                 }
+    //                 tx_rec.update_remote_decision(tx, t.decision)?;
+    //             },
+    //         }
+    //     }
+    //
+    //     Ok(())
+    // }
 
     fn publish_event(&self, event: HotstuffEvent) {
         let _ignore = self.tx_events.send(event);
@@ -1134,7 +1136,7 @@ where TConsensusSpec: ConsensusSpec
 
             let justify_block_height = justify_block.height();
 
-            self.undo_other_chains(tx, &justify_block)?;
+            // self.undo_other_chains(tx, &justify_block)?;
 
             let mut last_dummy_block = justify_block;
 
@@ -1169,38 +1171,35 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    fn undo_other_chains(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        base_block: &Block<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
-        let child_blocks = base_block.get_child_blocks(tx.deref_mut())?;
-        if child_blocks.is_empty() {
-            return Ok(());
-        }
-
-        for child_block in child_blocks {
-            if child_block.is_genesis() {
-                return Ok(());
-            }
-            info!(
-                target: LOG_TARGET,
-                "🔙 Undoing block {} from chain {}", child_block, base_block);
-
-            if child_block.is_processed() {
-                self.transaction_pool.rollback_pending_stages(tx, &child_block)?;
-            }
-            if *child_block.proposed_by() == self.validator_addr {
-                child_block.as_last_proposed().unset(tx)?;
-            }
-            child_block.as_last_voted().unset(tx)?;
-            child_block.as_leaf_block().unset(tx)?;
-            child_block.unset_as_processed(tx)?;
-
-            self.undo_other_chains(tx, &child_block)?;
-        }
-        Ok(())
-    }
+    // fn undo_other_chains(
+    //     &self,
+    //     tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+    //     base_block: &Block<TConsensusSpec::Addr>,
+    // ) -> Result<(), HotStuffError> { let child_blocks = base_block.get_child_blocks(tx.deref_mut())?; if
+    //   child_blocks.is_empty() { return Ok(()); }
+    //
+    //     for child_block in child_blocks {
+    //         if child_block.is_genesis() {
+    //             return Ok(());
+    //         }
+    //         info!(
+    //             target: LOG_TARGET,
+    //             "🔙 Undoing block {} from chain {}", child_block, base_block);
+    //
+    //         if child_block.is_processed() {
+    //             self.transaction_pool.rollback_pending_stages(tx, &child_block)?;
+    //         }
+    //         if *child_block.proposed_by() == self.validator_addr {
+    //             child_block.as_last_proposed().unset(tx)?;
+    //         }
+    //         child_block.as_last_voted().unset(tx)?;
+    //         child_block.as_leaf_block().unset(tx)?;
+    //         child_block.unset_as_processed(tx)?;
+    //
+    //         self.undo_other_chains(tx, &child_block)?;
+    //     }
+    //     Ok(())
+    // }
 
     fn validate_proposed_block(
         &self,

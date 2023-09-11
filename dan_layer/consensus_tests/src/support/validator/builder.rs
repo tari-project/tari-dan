@@ -91,7 +91,7 @@ impl ValidatorBuilder {
             store.clone(),
             rx_epoch_events,
             self.epoch_manager.clone_for(self.address.clone(), self.shard),
-            self.leader_strategy.clone(),
+            self.leader_strategy,
             signing_service,
             noop_state_manager.clone(),
             transaction_pool,
@@ -123,7 +123,7 @@ impl ValidatorBuilder {
             epoch_manager: self.epoch_manager.clone_for(self.address.clone(), self.shard),
             tx_epoch_events,
             state_manager: noop_state_manager,
-            leader_strategy: self.leader_strategy.clone(),
+            leader_strategy: self.leader_strategy,
             events: tx_events.subscribe(),
             handle,
         };
