@@ -40,7 +40,7 @@ jobs:
             patchelf \
             librsvg2-dev
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
