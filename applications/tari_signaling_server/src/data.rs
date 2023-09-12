@@ -9,6 +9,7 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, TokenData, 
 use serde::{Deserialize, Serialize};
 use tari_dan_wallet_sdk::apis::jwt::JrpcPermissions;
 use webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
+use tari_dan_common_types::crypto::create_secret;
 
 pub struct Data {
     pub offers: HashMap<u64, String>,
@@ -38,7 +39,7 @@ impl Data {
             offer_ice_candidates: HashMap::new(),
             answer_ice_candidates: HashMap::new(),
             expiration: Duration::minutes(5),
-            secret_key: "jwt-secret_key".into(),
+            secret_key: create_secret(),
             low_id: 0,
             id: 0,
         }
