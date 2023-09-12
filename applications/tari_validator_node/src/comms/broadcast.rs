@@ -34,8 +34,7 @@ use tari_comms::{
     types::CommsPublicKey,
     Bytes,
 };
-use tari_comms_logging::SqliteMessageLog;
-use tari_crypto::tari_utilities::ByteArray;
+use tari_consensus::messages::HotstuffMessage;
 use tari_dan_p2p::DanMessage;
 use tari_validator_node_rpc::proto;
 use tonic::codegen::futures_core::future::BoxFuture;
@@ -48,12 +47,11 @@ const LOG_TARGET: &str = "tari::validator_node::comms::messaging";
 #[derive(Debug, Clone)]
 pub struct DanBroadcast {
     connectivity: ConnectivityRequester,
-    logger: SqliteMessageLog,
 }
 
 impl DanBroadcast {
-    pub fn new(connectivity: ConnectivityRequester, logger: SqliteMessageLog) -> Self {
-        Self { connectivity, logger }
+    pub fn new(connectivity: ConnectivityRequester) -> Self {
+        Self { connectivity }
     }
 }
 
@@ -68,7 +66,6 @@ where
         BroadcastService {
             next_service,
             connectivity: self.connectivity.clone(),
-            logger: self.logger.clone(),
         }
     }
 }
@@ -76,7 +73,6 @@ where
 #[derive(Debug, Clone)]
 pub struct BroadcastService<S> {
     connectivity: ConnectivityRequester,
-    logger: SqliteMessageLog,
     next_service: S,
 }
 
@@ -94,74 +90,107 @@ where
     }
 
     fn call(&mut self, (dest, msg): (Destination<CommsPublicKey>, DanMessage<CommsPublicKey>)) -> Self::Future {
-        let mut next_service = self.next_service.clone();
-        let mut connectivity = self.connectivity.clone();
-        let logger = self.logger.clone();
-
-        Box::pin(async move {
-            let message_tag = msg.get_message_tag();
-            let type_str = msg.as_type_str();
-            let bytes = encode_message(&proto::network::DanMessage::from(msg.clone()));
-
-            log::debug!(
-                target: LOG_TARGET,
-                "📨 Tx: {} ({} bytes) to {}",
-                type_str,
-                bytes.len(),
-                dest
-            );
-            let svc = next_service.ready().await?;
-            match dest {
-                Destination::Peer(pk) => {
-                    logger.log_outbound_message("Peer", pk.to_vec(), type_str, message_tag, &msg);
-                    svc.call(OutboundMessage::new(NodeId::from_public_key(&pk), bytes))
-                        .await?;
-                },
-                Destination::Selected(pks) => {
-                    let iter = pks.iter().map(NodeId::from_public_key).map(|n| {
-                        logger.log_outbound_message("Selected", n.to_vec(), type_str, message_tag.clone(), &msg);
-                        OutboundMessage::new(n, bytes.clone())
-                    });
-                    svc.call_all(stream::iter(iter))
-                        .unordered()
-                        .filter_map(|result| future::ready(result.err()))
-                        .for_each(|err| {
-                            // TODO: this should return the error back to the service
-                            log::warn!("Error when sending broadcast messages: {}", err);
-                            future::ready(())
-                        })
-                        .await;
-                },
-                Destination::Flood => {
-                    let conns = connectivity.get_active_connections().await?;
-                    if conns.is_empty() {
-                        warn!(target: LOG_TARGET, "No active connections to flood to");
-                    }
-                    let iter = conns.into_iter().map(|c| c.peer_node_id().clone()).map(|n| {
-                        logger.log_outbound_message(
-                            "Flood",
-                            n.as_bytes().to_vec(),
-                            type_str,
-                            message_tag.clone(),
-                            &msg,
-                        );
-                        OutboundMessage::new(n, bytes.clone())
-                    });
-                    svc.call_all(stream::iter(iter))
-                        .unordered()
-                        .filter_map(|result| future::ready(result.err()))
-                        .for_each(|err| {
-                            // TODO: this should return the error back to the service
-                            log::warn!("Error when sending broadcast messages: {}", err);
-                            future::ready(())
-                        })
-                        .await;
-                },
-            }
-
-            Ok(())
-        })
+        let bytes = encode_message(&proto::network::DanMessage::from(&msg));
+        log::debug!(
+            target: LOG_TARGET,
+            "📨 Tx: {} ({} bytes) to {}",
+            msg,
+            bytes.len(),
+            dest
+        );
+        Box::pin(send_to_dest(
+            self.connectivity.clone(),
+            dest,
+            bytes,
+            self.next_service.clone(),
+        ))
     }
+}
+
+impl<S> Service<(Destination<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)> for BroadcastService<S>
+where
+    S: Service<OutboundMessage, Response = (), Error = anyhow::Error> + Sync + Send + Clone + 'static,
+    S::Future: Send + 'static,
+{
+    type Error = anyhow::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Response = ();
+
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, (dest, msg): (Destination<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)) -> Self::Future {
+        let bytes = encode_message(&proto::consensus::HotStuffMessage::from(&msg));
+        log::debug!(
+            target: LOG_TARGET,
+            "📨 Tx: {} ({} bytes) to {}",
+            msg,
+            bytes.len(),
+            dest
+        );
+        Box::pin(send_to_dest(
+            self.connectivity.clone(),
+            dest,
+            bytes,
+            self.next_service.clone(),
+        ))
+    }
+}
+
+async fn send_to_dest<S>(
+    mut connectivity: ConnectivityRequester,
+    dest: Destination<CommsPublicKey>,
+    bytes: Bytes,
+    next_service: S,
+) -> Result<(), anyhow::Error>
+where
+    S: Service<OutboundMessage, Error = anyhow::Error>,
+{
+    let mut svc = next_service.ready_oneshot().await?;
+    match dest {
+        Destination::Peer(pk) => {
+            svc.call(OutboundMessage::new(NodeId::from_public_key(&pk), bytes))
+                .await?;
+        },
+        Destination::Selected(pks) => {
+            let iter = pks
+                .iter()
+                .map(NodeId::from_public_key)
+                .map(|n| OutboundMessage::new(n, bytes.clone()));
+            svc.call_all(stream::iter(iter))
+                .unordered()
+                .filter_map(|result| future::ready(result.err()))
+                .for_each(|err| {
+                    // TODO: this should return the error back to the service
+                    warn!("Error when sending broadcast messages: {}", err);
+                    future::ready(())
+                })
+                .await;
+        },
+        Destination::Flood => {
+            let conns = connectivity.get_active_connections().await?;
+            if conns.is_empty() {
+                warn!(target: LOG_TARGET, "No active connections to flood to");
+            }
+            let iter = conns
+                .into_iter()
+                .map(|c| c.peer_node_id().clone())
+                .map(|n| OutboundMessage::new(n, bytes.clone()));
+
+            svc.call_all(stream::iter(iter))
+                .unordered()
+                .filter_map(|result| future::ready(result.err()))
+                .for_each(|err| {
+                    // TODO: this should return the error back to the service
+                    log::warn!("Error when sending broadcast messages: {}", err);
+                    future::ready(())
+                })
+                .await;
+        },
+    }
+
+    Ok(())
 }
 
 fn encode_message<T: prost::Message>(msg: &T) -> Bytes {

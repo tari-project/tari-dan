@@ -44,6 +44,23 @@ async fn stress_test(args: StressTestArgs) -> anyhow::Result<()> {
     }
 
     let num_transactions = read_number_of_transactions(&mut File::open(&args.transaction_file)?)?;
+
+    println!(
+        "{} contains {} transactions",
+        args.transaction_file.display(),
+        num_transactions
+    );
+    if args
+        .num_transactions
+        .map(|n| n + args.skip_transactions.unwrap_or(0) > num_transactions)
+        .unwrap_or(false)
+    {
+        bail!(
+            "The transaction file only contains {} transactions, but you requested {}",
+            num_transactions,
+            args.num_transactions.unwrap_or(num_transactions) + args.skip_transactions.unwrap_or(0)
+        );
+    }
     let num_transactions = cmp::min(num_transactions, args.num_transactions.unwrap_or(num_transactions));
     if !args.no_confirm {
         print!("{} transactions will be submitted. Continue? [y/N]: ", num_transactions);

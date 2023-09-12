@@ -10,7 +10,7 @@ use tari_consensus::{
     messages::HotstuffMessage,
 };
 use tari_dan_common_types::committee::Committee;
-use tari_dan_p2p::{DanMessage, OutboundService};
+use tari_dan_p2p::{Message, OutboundService};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
@@ -106,13 +106,13 @@ impl ConsensusWorker {
                 tokio::select! {
                     Some((committee, msg)) = self.rx_broadcast.recv() => {
                         self.outbound_messaging
-                            .broadcast(committee.members(), DanMessage::HotStuffMessage(Box::new(msg)))
+                            .broadcast(committee.members(), Message::Consensus(msg))
                             .await
                             .ok();
                     },
                     Some((dest, msg)) = self.rx_leader.recv() => {
                         self.outbound_messaging
-                            .send(dest, DanMessage::HotStuffMessage(Box::new(msg)))
+                            .send(dest, Message::Consensus(msg))
                             .await
                             .ok();
                     },

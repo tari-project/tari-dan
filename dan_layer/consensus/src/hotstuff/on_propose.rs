@@ -79,7 +79,7 @@ where TConsensusSpec: ConsensusSpec
         let last_proposed = self.store.with_read_tx(|tx| LastProposed::get(tx).optional())?;
         let last_proposed_height = last_proposed.as_ref().map(|lp| lp.height).unwrap_or(NodeHeight(0));
         if last_proposed_height >= leaf_block.height + NodeHeight(1) {
-            info!(
+            debug!(
                 target: LOG_TARGET,
                 "⤵️ Skipping on_propose for next block because we have already proposed a block at height {}",
                 last_proposed_height
