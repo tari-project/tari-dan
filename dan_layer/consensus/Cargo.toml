@@ -11,9 +11,9 @@ tari_transaction = { path = "../transaction" }
 tari_epoch_manager = { path = "../epoch_manager" }
 
 # Used for PublicKey and Signature
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
 anyhow = "1.0"
 async-trait = "0.1.68"

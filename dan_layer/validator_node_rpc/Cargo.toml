@@ -8,9 +8,9 @@ version = "0.50.0-pre.0"
 edition = "2021"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_crypto = "0.18"
 
 tari_consensus = { path = "../consensus" }
@@ -32,7 +32,7 @@ thiserror = "1.0"
 tokio-stream = "0.1"
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common", features = ["build"] }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common", features = ["build"] }
 
 [package.metadata.cargo-machete]
 ignored = [

@@ -75,23 +75,3 @@ liblmdb-sys = { git = "https://github.com/tari-project/lmdb-rs", tag = "0.7.6-ta
 #tari_service_framework = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_comms_dht = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 
-[patch."https://github.com/tari-project/tari.git"]
-minotari_app_grpc = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_app_utilities = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_wallet_grpc_client = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_node_grpc_client = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common_types = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_rpc_macros = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_core = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_key_manager = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_mmr = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_p2p = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_shutdown = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_storage = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_script = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_wallet = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_console_wallet = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_service_framework = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_dht = { git = "https://www.github.com/tari-project/tari.git", branch = "feature-dan2" }

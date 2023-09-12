@@ -12,7 +12,7 @@ tari_dan_storage = { path = "../storage" }
 tari_dan_common_types = { path = "../common_types" }
 tari_transaction = { path = "../transaction" }
 # TODO: needed for FixedHash
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
 anyhow = "1.0"
 bigdecimal = "0.3.1"

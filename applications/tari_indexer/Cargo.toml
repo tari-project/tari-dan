@@ -8,15 +8,15 @@ version = "0.50.0-pre.0"
 edition = "2021"
 
 [dependencies]
-minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
 tari_crypto = "0.18"
-tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
 tari_bor = { path = "../../dan_layer/tari_bor" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }

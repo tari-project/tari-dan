@@ -8,11 +8,11 @@ version = "0.50.0-pre.0"
 edition = "2021"
 
 [dependencies]
-minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_crypto = "0.18"
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
 tari_transaction = { path = "../../dan_layer/transaction" }

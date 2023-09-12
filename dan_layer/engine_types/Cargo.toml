@@ -9,7 +9,7 @@ license = "BSD-3-Clause"
 
 [dependencies]
 tari_bor = { path = "../tari_bor" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_crypto = { version = "0.18", features = ["borsh"] }
 tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib" }

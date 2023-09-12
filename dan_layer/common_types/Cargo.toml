@@ -7,11 +7,11 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_crypto = { version = "0.18", features = ["borsh"] }
 tari_engine_types = { path = "../engine_types" }
 tari_bor = { path = "../tari_bor" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "development" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
 blake2 = "0.10.6"
 newtype-ops = "0.1.4"
@@ -22,7 +22,7 @@ serde = "1.0.126"
 ruint = "1.8.0"
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "development", package = "tari_common", features = ["build"] }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common", features = ["build"] }
 
 [package.metadata.cargo-machete]
 ignored = ["prost", "prost-types"] # false positive, used in OUT_DIR structs
