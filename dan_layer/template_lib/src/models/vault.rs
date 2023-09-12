@@ -44,7 +44,7 @@ use crate::{
 
 const TAG: u64 = BinaryTag::VaultId as u64;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VaultId(BorTag<Hash, TAG>);
 
 impl VaultId {

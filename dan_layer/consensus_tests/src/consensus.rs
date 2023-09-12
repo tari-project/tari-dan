@@ -5,13 +5,10 @@
 //!
 //! How to debug the database:
 //!
-//! Use `Test::builder().with_sql_url("sqlite:///tmp/test{}.db")...` to create a file database
-//! where {} is replaced with the node address. Remember to delete your database files before running the tests
-//! or add `std::fs::remove_file("/tmp/test1.db").ok();`.
-//!
-//! Logs:
-//! The easiest is to use env_logger. Add `env_logger::init();` to the start of the test and set the env var
-//! RUST_LOG=debug.
+//! Use `Test::builder().debug_sql("/tmp/test{}.db")...` to create a database file for each validator
+//! where {} is replaced with the node address.
+
+use std::time::Duration;
 
 use tari_consensus::hotstuff::HotStuffError;
 use tari_dan_common_types::NodeHeight;
@@ -20,13 +17,23 @@ use tari_dan_storage::{
     StateStore,
     StateStoreReadTransaction,
 };
+use tari_transaction::Transaction;
 
-use crate::support::{build_transaction, change_decision, Test, TestAddress, TestNetworkDestination};
+use crate::support::{
+    build_transaction,
+    build_transaction_from,
+    change_decision,
+    logging::setup_logger,
+    Test,
+    TestAddress,
+    TestNetworkDestination,
+};
 
 // Although these tests will pass with a single thread, we enable multi threaded mode so that any unhandled race
 // conditions can be picked up, plus tests run a little quicker.
 #[tokio::test(flavor = "multi_thread")]
 async fn single_transaction() {
+    setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     // First get transaction in the mempool
     test.send_transaction_to_all(Decision::Commit, 1, 1).await;
@@ -52,6 +59,7 @@ async fn single_transaction() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
+    setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     // First get all transactions in the mempool
     for _ in 0..10 {
@@ -78,7 +86,12 @@ async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn node_requests_missing_transaction_from_local_leader() {
-    let mut test = Test::builder().add_committee(0, vec!["1", "2"]).start().await;
+    setup_logger();
+    let mut test = Test::builder()
+        .with_test_timeout(Duration::MAX)
+        .add_committee(0, vec!["1", "2"])
+        .start()
+        .await;
     // First get all transactions in the mempool of node "1"
     for _ in 0..10 {
         test.send_transaction_to(&TestAddress::new("1"), Decision::Commit, 1, 5)
@@ -104,7 +117,8 @@ async fn node_requests_missing_transaction_from_local_leader() {
         .with_read_tx(|tx| {
             let mut block_id = BlockId::genesis();
             while let Ok(block) = tx.blocks_get_by_parent(&block_id) {
-                assert!(tx.blocks_get_missing_transactions(block.id()).is_err());
+                let missing = tx.blocks_get_pending_transactions(block.id()).unwrap();
+                assert!(missing.is_empty());
                 block_id = *block.id();
             }
             Ok::<_, HotStuffError>(())
@@ -118,6 +132,7 @@ async fn node_requests_missing_transaction_from_local_leader() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn propose_blocks_with_new_transactions_until_all_committed() {
+    setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     let mut remaining_txs = 10;
     test.network().start();
@@ -143,6 +158,7 @@ async fn propose_blocks_with_new_transactions_until_all_committed() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn multi_validator_propose_blocks_with_new_transactions_until_all_committed() {
+    setup_logger();
     let mut test = Test::builder()
         .add_committee(0, vec!["1", "2", "3", "4", "5"])
         .start()
@@ -174,6 +190,7 @@ async fn multi_validator_propose_blocks_with_new_transactions_until_all_committe
 
 #[tokio::test(flavor = "multi_thread")]
 async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() {
+    setup_logger();
     let mut test = Test::builder()
         .add_committee(0, vec!["1", "2", "3"])
         .add_committee(1, vec!["4", "5", "6"])
@@ -214,20 +231,23 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
 
 #[tokio::test(flavor = "multi_thread")]
 async fn foreign_shard_decides_to_abort() {
+    setup_logger();
     let mut test = Test::builder()
-        .add_committee(0, vec!["1"])
-        .add_committee(1, vec!["2"])
+        .with_test_timeout(Duration::from_secs(20))
+        .add_committee(0, vec!["1", "3", "4"])
+        .add_committee(1, vec!["2", "5", "6"])
         .start()
         .await;
 
-    let tx = build_transaction(Decision::Commit, 1, 5, 2);
+    let tx1 = build_transaction(Decision::Commit, 1, 5, 2);
     test.network()
-        .send_transaction(TestNetworkDestination::Bucket(0), tx.clone())
+        .send_transaction(TestNetworkDestination::Bucket(0), tx1.clone())
         .await;
-    let tx = change_decision(tx, Decision::Abort);
+    let tx2 = change_decision(tx1.clone(), Decision::Abort);
     test.network()
-        .send_transaction(TestNetworkDestination::Bucket(1), tx)
+        .send_transaction(TestNetworkDestination::Bucket(1), tx2.clone())
         .await;
+    assert_eq!(tx1.id(), tx2.id());
 
     test.wait_all_have_at_least_n_new_transactions_in_pool(1).await;
     test.network().start();
@@ -241,7 +261,7 @@ async fn foreign_shard_decides_to_abort() {
 
         let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
         let leaf2 = test.get_validator(&TestAddress::new("2")).get_leaf_block();
-        if leaf1.height > NodeHeight(6) || leaf2.height > NodeHeight(6) {
+        if leaf1.height > NodeHeight(10) || leaf2.height > NodeHeight(10) {
             panic!(
                 "Not all transaction committed after {}/{} blocks",
                 leaf1.height, leaf2.height,
@@ -250,8 +270,68 @@ async fn foreign_shard_decides_to_abort() {
     }
 
     test.assert_all_validators_at_same_height().await;
-    test.assert_all_validators_have_decision(Decision::Abort).await;
+    test.assert_all_validators_have_decision(tx1.id(), Decision::Abort)
+        .await;
     test.assert_all_validators_did_not_commit();
+
+    log::info!("total messages sent: {}", test.network().total_messages_sent());
+    test.assert_clean_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn leader_failure_output_conflict() {
+    setup_logger();
+    let mut test = Test::builder()
+        .with_test_timeout(Duration::from_secs(60))
+        .add_committee(0, vec!["1", "2"])
+        .add_committee(1, vec!["3", "4"])
+        .start()
+        .await;
+
+    let tx1 = build_transaction(Decision::Commit, 1, 5, 2);
+    let resulting_outputs = tx1.resulting_outputs().to_vec();
+    test.network()
+        .send_transaction(TestNetworkDestination::All, tx1.clone())
+        .await;
+
+    let tx = Transaction::builder().sign(&Default::default()).build();
+    let tx2 = build_transaction_from(tx, Decision::Commit, 1, resulting_outputs);
+    assert_ne!(tx1.id(), tx2.id());
+    // Transactions are sorted in the blocks, because we have a "first come first serve" policy for locking objects
+    // the "first" will be Committed and the "last" Aborted
+    let mut sorted_tx_ids = [tx1.id(), tx2.id()];
+    sorted_tx_ids.sort();
+
+    test.network()
+        .send_transaction(TestNetworkDestination::All, tx2.clone())
+        .await;
+
+    test.wait_all_have_at_least_n_new_transactions_in_pool(2).await;
+    test.network().start();
+
+    loop {
+        test.on_block_committed().await;
+
+        if test.is_transaction_pool_empty() {
+            break;
+        }
+
+        let leaf1 = test.get_validator(&TestAddress::new("1")).get_leaf_block();
+        let leaf2 = test.get_validator(&TestAddress::new("2")).get_leaf_block();
+        if leaf1.height > NodeHeight(10) || leaf2.height > NodeHeight(10) {
+            panic!(
+                "Not all transaction committed after {}/{} blocks",
+                leaf1.height, leaf2.height,
+            );
+        }
+    }
+
+    test.assert_all_validators_at_same_height().await;
+    test.assert_all_validators_have_decision(sorted_tx_ids[0], Decision::Commit)
+        .await;
+    test.assert_all_validators_have_decision(sorted_tx_ids[1], Decision::Abort)
+        .await;
+    test.assert_all_validators_committed();
 
     log::info!("total messages sent: {}", test.network().total_messages_sent());
     test.assert_clean_shutdown().await;

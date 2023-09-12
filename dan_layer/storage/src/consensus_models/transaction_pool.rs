@@ -4,6 +4,7 @@
 use std::{
     fmt::{Display, Formatter},
     marker::PhantomData,
+    num::NonZeroU64,
     str::FromStr,
 };
 
@@ -55,6 +56,25 @@ impl TransactionPoolStage {
 
     pub fn is_all_prepared(&self) -> bool {
         matches!(self, Self::AllPrepared)
+    }
+
+    pub fn next_stage(&self) -> Option<Self> {
+        match self {
+            TransactionPoolStage::New => Some(TransactionPoolStage::Prepared),
+            TransactionPoolStage::Prepared => Some(TransactionPoolStage::LocalPrepared),
+            TransactionPoolStage::LocalPrepared => Some(TransactionPoolStage::AllPrepared),
+            TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => None,
+        }
+    }
+
+    pub fn prev_stage(&self) -> Option<Self> {
+        match self {
+            TransactionPoolStage::New => None,
+            TransactionPoolStage::Prepared => Some(TransactionPoolStage::New),
+            TransactionPoolStage::LocalPrepared => Some(TransactionPoolStage::Prepared),
+            TransactionPoolStage::AllPrepared => Some(TransactionPoolStage::LocalPrepared),
+            TransactionPoolStage::SomePrepared => Some(TransactionPoolStage::LocalPrepared),
+        }
     }
 }
 
@@ -122,7 +142,10 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx: &mut TStateStore::ReadTransaction<'_>,
         max: usize,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
-        let recs = tx.transaction_pool_get_many_ready(max)?;
+        let mut recs = tx.transaction_pool_get_many_ready(max)?;
+        // We require the records to be canonically sorted by transaction ID
+        // TODO(perf): might be able to delegate this to the storage layer
+        recs.sort_by(|a, b| a.transaction.id.cmp(&b.transaction.id));
         Ok(recs)
     }
 
@@ -149,58 +172,131 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         let count = tx.transaction_pool_count(None, None)?;
         Ok(count)
     }
+
+    pub fn confirm_all_transitions<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+        &self,
+        tx: &mut TTx,
+        tx_ids: I,
+    ) -> Result<(), TransactionPoolError> {
+        tx.transaction_pool_set_all_transitions(tx_ids)?;
+        Ok(())
+    }
+
+    pub fn clear_pending_stages<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+        &self,
+        tx: &mut TTx,
+        tx_ids: I,
+    ) -> Result<(), TransactionPoolError> {
+        for tx_id in tx_ids {
+            tx.transaction_pool_update(tx_id, None, Some(None), None, None, None)?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct TransactionPoolRecord {
-    pub transaction: TransactionAtom,
-    pub stage: TransactionPoolStage,
-    pub pending_decision: Option<Decision>,
-    pub is_ready: bool,
+    transaction: TransactionAtom,
+    stage: TransactionPoolStage,
+    pending_stage: Option<TransactionPoolStage>,
+    local_decision: Option<Decision>,
+    remote_decision: Option<Decision>,
+    is_ready: bool,
 }
 
 impl TransactionPoolRecord {
-    pub fn final_decision(&self) -> Decision {
-        self.pending_decision().unwrap_or(self.original_decision())
+    pub fn load(
+        transaction: TransactionAtom,
+        stage: TransactionPoolStage,
+        pending_stage: Option<TransactionPoolStage>,
+        local_decision: Option<Decision>,
+        remote_decision: Option<Decision>,
+        is_ready: bool,
+    ) -> Self {
+        Self {
+            transaction,
+            stage,
+            pending_stage,
+            local_decision,
+            remote_decision,
+            is_ready,
+        }
+    }
+
+    pub fn current_decision(&self) -> Decision {
+        self.local_decision()
+            .or_else(|| self.remote_decision())
+            .unwrap_or(self.original_decision())
+    }
+
+    pub fn current_local_decision(&self) -> Decision {
+        self.local_decision().unwrap_or(self.original_decision())
     }
 
     pub fn original_decision(&self) -> Decision {
         self.transaction.decision
     }
 
-    pub fn pending_decision(&self) -> Option<Decision> {
-        self.pending_decision
+    pub fn local_decision(&self) -> Option<Decision> {
+        self.local_decision
+    }
+
+    pub fn remote_decision(&self) -> Option<Decision> {
+        self.remote_decision
     }
 
     pub fn transaction_id(&self) -> &TransactionId {
         &self.transaction.id
     }
 
+    pub fn transaction(&self) -> &TransactionAtom {
+        &self.transaction
+    }
+
     pub fn stage(&self) -> TransactionPoolStage {
         self.stage
     }
 
+    pub fn pending_stage(&self) -> Option<TransactionPoolStage> {
+        self.pending_stage
+    }
+
+    pub fn current_stage(&self) -> TransactionPoolStage {
+        self.pending_stage.unwrap_or(self.stage)
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.is_ready
+    }
+
     pub fn get_final_transaction_atom(&self, leader_fee: u64) -> TransactionAtom {
         TransactionAtom {
-            decision: self.final_decision(),
+            decision: self.current_decision(),
             leader_fee,
             ..self.transaction.clone()
         }
     }
 
-    pub fn calculate_leader_fee(&self, involved: u64, exhaust_divisor: u64) -> u64 {
+    pub fn get_local_transaction_atom(&self) -> TransactionAtom {
+        TransactionAtom {
+            decision: self.current_local_decision(),
+            ..self.transaction.clone()
+        }
+    }
+
+    pub fn calculate_leader_fee(&self, involved: NonZeroU64, exhaust_divisor: u64) -> u64 {
         // TODO: We essentially burn a random amount depending on the shards involved in the transaction. This means it
         //       is hard to tell how much is actually in circulation unless we track this in the Resource. Right
         //       now we'll set exhaust to 0, which is just transaction_fee / involved.
         let transaction_fee = self.transaction.transaction_fee;
-        let due_fee = transaction_fee / involved;
+        let due_fee = transaction_fee / involved.get();
         // The extra amount that is burnt
-        let due_rem = transaction_fee % involved;
+        let due_rem = transaction_fee % involved.get();
 
         // How much we want to burn due to exhaust per involved shard
         let target_exhaust_burn = if exhaust_divisor > 0 {
             let base_fee = transaction_fee.checked_div(exhaust_divisor).unwrap_or(transaction_fee);
-            base_fee / involved
+            base_fee / involved.get()
         } else {
             0
         };
@@ -210,17 +306,27 @@ impl TransactionPoolRecord {
 
         due_fee - adjusted_burn
     }
+
+    pub fn set_remote_decision(&mut self, decision: Decision) -> &mut Self {
+        self.remote_decision = Some(decision);
+        self
+    }
+
+    pub fn set_local_decision(&mut self, decision: Decision) -> &mut Self {
+        self.local_decision = Some(decision);
+        self
+    }
 }
 
 impl TransactionPoolRecord {
-    pub fn transition<TTx: StateStoreWriteTransaction>(
+    pub fn pending_transition<TTx: StateStoreWriteTransaction>(
         &mut self,
         tx: &mut TTx,
-        next_stage: TransactionPoolStage,
+        pending_stage: TransactionPoolStage,
         is_ready: bool,
     ) -> Result<(), TransactionPoolError> {
         // Check that only permitted stage transactions are performed
-        match ((self.stage, next_stage), is_ready) {
+        match ((self.current_stage(), pending_stage), is_ready) {
             ((TransactionPoolStage::New, TransactionPoolStage::Prepared), true) |
             ((TransactionPoolStage::Prepared, TransactionPoolStage::LocalPrepared), _) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
@@ -230,29 +336,52 @@ impl TransactionPoolRecord {
             _ => {
                 return Err(TransactionPoolError::InvalidTransactionTransition {
                     from: self.stage,
-                    to: next_stage,
+                    to: pending_stage,
                     is_ready,
                 })
             },
         }
 
-        tx.transaction_pool_update(&self.transaction.id, None, Some(next_stage), None, Some(is_ready))?;
-        self.stage = next_stage;
+        tx.transaction_pool_update(
+            &self.transaction.id,
+            None,
+            Some(Some(pending_stage)),
+            None,
+            None,
+            Some(is_ready),
+        )?;
+        self.pending_stage = Some(pending_stage);
 
         Ok(())
     }
 
-    pub fn set_pending_decision<TTx: StateStoreWriteTransaction>(
+    pub fn set_pending_stage<TTx: StateStoreWriteTransaction>(
+        &mut self,
+        tx: &mut TTx,
+        pending_stage: TransactionPoolStage,
+    ) -> Result<(), TransactionPoolError> {
+        self.pending_stage = Some(pending_stage);
+        tx.transaction_pool_update(&self.transaction.id, None, Some(Some(pending_stage)), None, None, None)?;
+        Ok(())
+    }
+
+    pub fn update_remote_decision<TTx: StateStoreWriteTransaction>(
         &mut self,
         tx: &mut TTx,
         decision: Decision,
     ) -> Result<(), TransactionPoolError> {
-        if self.original_decision() == decision {
-            return Ok(());
-        }
+        self.set_remote_decision(decision);
+        tx.transaction_pool_update(&self.transaction.id, None, None, None, Some(decision), None)?;
+        Ok(())
+    }
 
-        self.pending_decision = Some(decision);
-        tx.transaction_pool_update(&self.transaction.id, None, None, Some(decision), None)?;
+    pub fn update_local_decision<TTx: StateStoreWriteTransaction>(
+        &mut self,
+        tx: &mut TTx,
+        decision: Decision,
+    ) -> Result<(), TransactionPoolError> {
+        self.set_local_decision(decision);
+        tx.transaction_pool_update(&self.transaction.id, None, None, Some(decision), None, None)?;
         Ok(())
     }
 
@@ -268,7 +397,7 @@ impl TransactionPoolRecord {
                 qcs_mut.push(qc_id);
             }
         }
-        tx.transaction_pool_update(&self.transaction.id, Some(evidence), None, None, None)?;
+        tx.transaction_pool_update(&self.transaction.id, Some(evidence), None, None, None, None)?;
 
         Ok(())
     }
@@ -317,7 +446,9 @@ mod tests {
                     leader_fee: 0,
                 },
                 stage: TransactionPoolStage::New,
-                pending_decision: None,
+                pending_stage: None,
+                local_decision: None,
+                remote_decision: None,
                 is_ready: false,
             }
         }
@@ -326,30 +457,30 @@ mod tests {
         fn it_calculates_the_correct_fee_due() {
             let record = create_record_with_fee(100);
 
-            let fee = record.calculate_leader_fee(1, 0);
+            let fee = record.calculate_leader_fee(1.try_into().unwrap(), 0);
             assert_eq!(fee, 100);
 
-            let fee = record.calculate_leader_fee(1, 10);
+            let fee = record.calculate_leader_fee(1.try_into().unwrap(), 10);
             assert_eq!(fee, 90);
 
-            let fee = record.calculate_leader_fee(2, 0);
+            let fee = record.calculate_leader_fee(2.try_into().unwrap(), 0);
             assert_eq!(fee, 50);
 
-            let fee = record.calculate_leader_fee(2, 10);
+            let fee = record.calculate_leader_fee(2.try_into().unwrap(), 10);
             assert_eq!(fee, 45);
 
-            let fee = record.calculate_leader_fee(3, 0);
+            let fee = record.calculate_leader_fee(3.try_into().unwrap(), 0);
             assert_eq!(fee, 33);
 
-            let fee = record.calculate_leader_fee(3, 10);
+            let fee = record.calculate_leader_fee(3.try_into().unwrap(), 10);
             assert_eq!(fee, 31);
 
             let record = create_record_with_fee(98);
 
-            let fee = record.calculate_leader_fee(3, 10);
+            let fee = record.calculate_leader_fee(3.try_into().unwrap(), 10);
             assert_eq!(fee, 31);
 
-            let fee = record.calculate_leader_fee(10, 10);
+            let fee = record.calculate_leader_fee(10.try_into().unwrap(), 10);
             assert_eq!(fee, 9);
         }
     }

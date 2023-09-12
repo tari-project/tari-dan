@@ -10,6 +10,10 @@ pub enum QuorumDecision {
 }
 
 impl QuorumDecision {
+    pub fn is_accept(&self) -> bool {
+        matches!(self, QuorumDecision::Accept)
+    }
+
     pub fn is_reject(&self) -> bool {
         matches!(self, QuorumDecision::Reject)
     }

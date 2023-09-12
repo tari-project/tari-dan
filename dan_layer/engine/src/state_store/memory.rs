@@ -145,7 +145,7 @@ impl<'a> StateWriter for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
     }
 
     fn commit(mut self) -> Result<(), StateStoreError> {
-        self.guard.extend(self.pending.into_iter());
+        self.guard.extend(self.pending);
         Ok(())
     }
 }

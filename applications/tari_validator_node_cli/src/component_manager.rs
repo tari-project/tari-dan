@@ -82,7 +82,7 @@ impl ComponentManager {
             match addr {
                 addr @ SubstateAddress::Component(_) => {
                     if let Some((addr, version)) = component.take() {
-                        self.add_root_substate(addr.clone(), version, children.drain(..).collect())?;
+                        self.add_root_substate(addr.clone(), version, std::mem::take(&mut children))?;
                     }
 
                     component = Some((addr, substate.version()));

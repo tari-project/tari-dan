@@ -44,10 +44,8 @@ impl From<DanMessage<CommsPublicKey>> for proto::network::DanMessage {
                 message: Some(proto::network::dan_message::Message::HotStuff((*hot_stuff_msg).into())),
                 message_tag,
             },
-            DanMessage::NewTransaction(transaction) => Self {
-                message: Some(proto::network::dan_message::Message::NewTransaction(
-                    (*transaction).into(),
-                )),
+            DanMessage::NewTransaction(msg) => Self {
+                message: Some(proto::network::dan_message::Message::NewTransaction((*msg).into())),
                 message_tag,
             },
             DanMessage::NetworkAnnounce(announce) => Self {

@@ -23,6 +23,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_wallet_sdk::{
@@ -102,6 +103,7 @@ pub struct TransactionSubmitResponse {
     pub transaction_id: TransactionId,
     pub inputs: Vec<SubstateRequirement>,
     pub result: Option<ExecuteResult>,
+    pub json_result: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -140,8 +142,9 @@ pub struct TransactionGetResultRequest {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetResultResponse {
     pub transaction_id: TransactionId,
-    pub result: Option<FinalizeResult>,
     pub status: TransactionStatus,
+    pub result: Option<FinalizeResult>,
+    pub json_result: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -154,6 +157,7 @@ pub struct TransactionWaitResultRequest {
 pub struct TransactionWaitResultResponse {
     pub transaction_id: TransactionId,
     pub result: Option<FinalizeResult>,
+    pub json_result: Option<Vec<Value>>,
     pub status: TransactionStatus,
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Amount,

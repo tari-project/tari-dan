@@ -25,6 +25,7 @@ pub struct TransactionRecord {
     pub transaction: Transaction,
     pub result: Option<ExecuteResult>,
     pub execution_time: Option<Duration>,
+    pub resulting_outputs: Vec<ShardId>,
     pub final_decision: Option<Decision>,
     pub abort_details: Option<String>,
 }
@@ -36,15 +37,17 @@ impl TransactionRecord {
             result: None,
             execution_time: None,
             final_decision: None,
+            resulting_outputs: Vec::new(),
             abort_details: None,
         }
     }
 
-    pub fn new_with_details(
+    pub fn load(
         transaction: Transaction,
         result: Option<ExecuteResult>,
         execution_time: Option<Duration>,
         final_decision: Option<Decision>,
+        resulting_outputs: Vec<ShardId>,
         abort_details: Option<String>,
     ) -> Self {
         Self {
@@ -52,6 +55,7 @@ impl TransactionRecord {
             result,
             execution_time,
             final_decision,
+            resulting_outputs,
             abort_details,
         }
     }
@@ -70,6 +74,14 @@ impl TransactionRecord {
 
     pub fn result(&self) -> Option<&ExecuteResult> {
         self.result.as_ref()
+    }
+
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+        self.transaction.involved_shards_iter().chain(&self.resulting_outputs)
+    }
+
+    pub fn resulting_outputs(&self) -> &[ShardId] {
+        &self.resulting_outputs
     }
 
     pub fn final_decision(&self) -> Option<Decision> {
@@ -147,8 +159,13 @@ impl TransactionRecord {
     pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         tx_ids: I,
-    ) -> Result<Vec<Self>, StorageError> {
-        tx.transactions_get_any(tx_ids)
+    ) -> Result<(Vec<Self>, HashSet<TransactionId>), StorageError> {
+        let mut tx_ids = tx_ids.into_iter().copied().collect::<HashSet<_>>();
+        let recs = tx.transactions_get_any(tx_ids.iter())?;
+        for rec in &recs {
+            tx_ids.remove(rec.transaction.id());
+        }
+        Ok((recs, tx_ids))
     }
 
     pub fn get_paginated<TTx: StateStoreReadTransaction>(
@@ -164,15 +181,20 @@ impl TransactionRecord {
         tx: &mut TTx,
         transactions: I,
     ) -> Result<HashMap<TransactionId, HashSet<ShardId>>, StorageError> {
-        let transactions = Self::get_any(tx, transactions)?;
+        let (transactions, missing) = Self::get_any(tx, transactions)?;
+        if !missing.is_empty() {
+            return Err(StorageError::NotFound {
+                item: "ExecutedTransactions".to_string(),
+                key: missing
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            });
+        }
         Ok(transactions
             .into_iter()
-            .map(|t| {
-                (
-                    *t.transaction.id(),
-                    t.transaction.involved_shards_iter().copied().collect(),
-                )
-            })
+            .map(|t| (*t.transaction.id(), t.involved_shards_iter().copied().collect()))
             .collect())
     }
 }
@@ -182,12 +204,14 @@ impl From<ExecutedTransaction> for TransactionRecord {
         let execution_time = tx.execution_time();
         let final_decision = tx.final_decision();
         let abort_details = tx.abort_details().cloned();
+        let resulting_outputs = tx.resulting_outputs().to_vec();
         let (transaction, result) = tx.dissolve();
         Self {
             transaction,
             result: Some(result),
             execution_time: Some(execution_time),
             final_decision,
+            resulting_outputs,
             abort_details,
         }
     }

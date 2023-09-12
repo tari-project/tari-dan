@@ -32,8 +32,6 @@ pub struct Transaction {
     outputs: Vec<ShardId>,
     /// Inputs filled by some authority. These are not part of the transaction hash. (TODO: Secure this somehow)
     filled_inputs: Vec<ShardId>,
-    /// Outputs filled by each validator node. These are not part of the transaction hash.
-    filled_outputs: Vec<ShardId>,
 }
 
 impl Transaction {
@@ -49,7 +47,6 @@ impl Transaction {
         input_refs: Vec<ShardId>,
         outputs: Vec<ShardId>,
         filled_inputs: Vec<ShardId>,
-        filled_outputs: Vec<ShardId>,
     ) -> Self {
         let mut tx = Self {
             id: TransactionId::default(),
@@ -60,7 +57,6 @@ impl Transaction {
             input_refs,
             outputs,
             filled_inputs,
-            filled_outputs,
         };
         tx.id = TransactionId::new(tx.calculate_hash().into_array());
         tx
@@ -107,19 +103,10 @@ impl Transaction {
             .chain(self.input_refs())
             .chain(self.outputs())
             .chain(self.filled_inputs())
-            .chain(self.filled_outputs())
     }
 
     pub fn num_involved_shards(&self) -> usize {
-        self.inputs().len() +
-            self.input_refs().len() +
-            self.outputs().len() +
-            self.filled_outputs().len() +
-            self.filled_inputs().len()
-    }
-
-    pub fn outputs(&self) -> &[ShardId] {
-        &self.outputs
+        self.inputs().len() + self.input_refs().len() + self.outputs().len() + self.filled_inputs().len()
     }
 
     pub fn input_refs(&self) -> &[ShardId] {
@@ -150,12 +137,8 @@ impl Transaction {
         &mut self.filled_inputs
     }
 
-    pub fn filled_outputs_mut(&mut self) -> &mut Vec<ShardId> {
-        &mut self.filled_outputs
-    }
-
-    pub fn filled_outputs(&self) -> &[ShardId] {
-        &self.filled_outputs
+    pub fn outputs(&self) -> &[ShardId] {
+        &self.outputs
     }
 }
 

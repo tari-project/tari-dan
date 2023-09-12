@@ -2,22 +2,21 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    cmp::Ordering,
     fmt::{Display, Formatter},
-    ops::{Add, Sub},
+    ops::{Add, AddAssign, Sub},
 };
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Deserialize, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize)]
 pub struct NodeHeight(pub u64);
 
 impl NodeHeight {
-    pub fn as_u64(self) -> u64 {
+    pub const fn as_u64(self) -> u64 {
         self.0
     }
 
-    pub fn is_zero(self) -> bool {
+    pub const fn is_zero(self) -> bool {
         self.0 == 0
     }
 
@@ -25,12 +24,20 @@ impl NodeHeight {
         Self(0)
     }
 
-    pub fn to_le_bytes(self) -> [u8; 8] {
+    pub const fn to_le_bytes(self) -> [u8; 8] {
         self.0.to_le_bytes()
     }
 
-    pub fn saturating_sub(self, other: Self) -> Self {
+    pub const fn saturating_sub(self, other: Self) -> Self {
         Self(self.0.saturating_sub(other.0))
+    }
+
+    pub const fn checked_sub(self, other: Self) -> Option<Self> {
+        // Option::map as a const fn is not yet stablized, so we re-implement it here
+        match self.0.checked_sub(other.0) {
+            Some(v) => Some(Self(v)),
+            None => None,
+        }
     }
 }
 
@@ -41,18 +48,17 @@ impl Add for NodeHeight {
         NodeHeight(self.0 + rhs.0)
     }
 }
+impl AddAssign for NodeHeight {
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 += rhs.0;
+    }
+}
 
 impl Sub for NodeHeight {
     type Output = NodeHeight;
 
     fn sub(self, rhs: Self) -> Self::Output {
         NodeHeight(self.0 - rhs.0)
-    }
-}
-
-impl PartialOrd for NodeHeight {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.0.partial_cmp(&other.0)
     }
 }
 

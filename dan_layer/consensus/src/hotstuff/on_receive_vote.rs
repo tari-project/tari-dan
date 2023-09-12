@@ -89,7 +89,36 @@ where TConsensusSpec: ConsensusSpec
 
         self.validate_vote_message(&message, &sender_leaf_hash)?;
 
-        let (block, count) = self.store.with_write_tx(|tx| {
+        let count = self.store.with_write_tx(|tx| {
+            Vote {
+                epoch: message.epoch,
+                block_id: message.block_id,
+                decision: message.decision,
+                sender_leaf_hash,
+                signature: message.signature,
+                merkle_proof: message.merkle_proof,
+            }
+            .save(tx)?;
+
+            let count = Vote::<TConsensusSpec::Addr>::count_for_block(tx.deref_mut(), &message.block_id)?;
+            Ok::<_, HotStuffError>(count)
+        })?;
+
+        // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
+        // in the QC.
+        info!(
+            target: LOG_TARGET,
+            "🔥 Received vote for block {} from {} ({} of {})",
+            message.block_id,
+            from,
+            count,
+            local_committee_shard.quorum_threshold()
+        );
+        if count < local_committee_shard.quorum_threshold() as usize {
+            return Ok(());
+        }
+        {
+            let mut tx = self.store.create_write_tx()?;
             let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
                 return Err(HotStuffError::ReceivedVoteForUnknownBlock {
                     block_id: message.block_id,
@@ -107,35 +136,6 @@ where TConsensusSpec: ConsensusSpec
                     ),
                 });
             }
-            Vote {
-                epoch: message.epoch,
-                block_id: message.block_id,
-                decision: message.decision,
-                sender_leaf_hash,
-                signature: message.signature,
-                merkle_proof: message.merkle_proof,
-            }
-            .save(tx)?;
-
-            let count = Vote::<TConsensusSpec::Addr>::count_for_block(tx.deref_mut(), &message.block_id)?;
-            Ok::<_, HotStuffError>((block, count))
-        })?;
-
-        // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
-        // in the QC.
-        if count < local_committee_shard.quorum_threshold() as usize {
-            info!(
-                target: LOG_TARGET,
-                "🔥 Received vote for block {} from {} ({} of {})",
-                message.block_id,
-                from,
-                count,
-                local_committee_shard.quorum_threshold()
-            );
-            return Ok(());
-        }
-        {
-            let mut tx = self.store.create_write_tx()?;
             let high_qc = HighQc::get(tx.deref_mut())?;
             if high_qc.block_id == *block.id() {
                 debug!(
@@ -188,6 +188,8 @@ where TConsensusSpec: ConsensusSpec
                 leaf_hashes,
                 quorum_decision,
             );
+
+            info!(target: LOG_TARGET, "🔥 New QC {}", qc);
 
             update_high_qc(&mut tx, &qc)?;
             tx.commit()?;

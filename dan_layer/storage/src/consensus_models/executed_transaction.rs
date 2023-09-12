@@ -3,6 +3,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    hash::Hash,
     ops::DerefMut,
     time::Duration,
 };
@@ -13,7 +14,7 @@ use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReas
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
-    consensus_models::{Decision, Evidence, TransactionRecord},
+    consensus_models::{Decision, Evidence, TransactionAtom, TransactionRecord},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -23,43 +24,42 @@ use crate::{
 pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
+    resulting_outputs: Vec<ShardId>,
     execution_time: Duration,
     final_decision: Option<Decision>,
     abort_details: Option<String>,
 }
 
 impl ExecutedTransaction {
-    pub fn new(transaction: Transaction, result: ExecuteResult, execution_time: Duration) -> Self {
-        Self {
-            transaction,
-            result,
-            execution_time,
-            final_decision: None,
-            abort_details: None,
-        }
-    }
-
-    pub fn new_with_final_decision(
+    pub fn new(
         transaction: Transaction,
         result: ExecuteResult,
+        resulting_outputs: Vec<ShardId>,
         execution_time: Duration,
-        final_decision: Option<Decision>,
-        abort_details: Option<String>,
     ) -> Self {
         Self {
             transaction,
             result,
             execution_time,
-            final_decision,
-            abort_details,
+            resulting_outputs,
+            final_decision: None,
+            abort_details: None,
         }
     }
 
-    pub fn as_decision(&self) -> Decision {
+    pub fn id(&self) -> &TransactionId {
+        self.transaction.id()
+    }
+
+    pub fn decision(&self) -> Decision {
         if let Some(decision) = self.final_decision {
             return decision;
         }
 
+        self.original_decision()
+    }
+
+    pub fn original_decision(&self) -> Decision {
         if self.result.finalize.is_accept() {
             Decision::Commit
         } else {
@@ -81,6 +81,10 @@ impl ExecutedTransaction {
 
     pub fn result(&self) -> &ExecuteResult {
         &self.result
+    }
+
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+        self.transaction.involved_shards_iter().chain(&self.resulting_outputs)
     }
 
     pub fn into_final_result(self) -> Option<ExecuteResult> {
@@ -114,6 +118,11 @@ impl ExecutedTransaction {
         self.execution_time
     }
 
+    /// Returns the outputs that resulted from execution.
+    pub fn resulting_outputs(&self) -> &[ShardId] {
+        &self.resulting_outputs
+    }
+
     pub fn dissolve(self) -> (Transaction, ExecuteResult) {
         (self.transaction, self.result)
     }
@@ -121,6 +130,7 @@ impl ExecutedTransaction {
     pub fn to_initial_evidence(&self) -> Evidence {
         self.transaction
             .involved_shards_iter()
+            .chain(self.resulting_outputs())
             .map(|shard| (*shard, vec![]))
             .collect()
     }
@@ -156,6 +166,22 @@ impl ExecutedTransaction {
         self.final_decision = Some(Decision::Abort);
         self.abort_details = Some(details.into());
         self
+    }
+
+    pub fn to_atom(&self) -> TransactionAtom {
+        TransactionAtom {
+            id: *self.id(),
+            decision: self.decision(),
+            evidence: self.to_initial_evidence(),
+            transaction_fee: self
+                .result()
+                .fee_receipt
+                .as_ref()
+                .and_then(|f| f.total_fees_paid().as_u64_checked())
+                .unwrap_or(0),
+            // We calculate the leader fee later depending on the epoch of the block
+            leader_fee: 0,
+        }
     }
 }
 
@@ -207,24 +233,43 @@ impl ExecutedTransaction {
     pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         tx_ids: I,
+    ) -> Result<(Vec<Self>, HashSet<&'a TransactionId>), StorageError> {
+        let mut tx_ids = tx_ids.into_iter().collect::<HashSet<_>>();
+        let recs = tx.transactions_get_any(tx_ids.iter().copied())?;
+        for found in &recs {
+            tx_ids.remove(found.transaction.id());
+        }
+
+        let recs = recs.into_iter().map(|rec| rec.try_into()).collect::<Result<_, _>>()?;
+        Ok((recs, tx_ids))
+    }
+
+    pub fn get_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+        tx: &mut TTx,
+        tx_ids: I,
     ) -> Result<Vec<Self>, StorageError> {
-        let recs = tx.transactions_get_any(tx_ids)?;
-        recs.into_iter().map(|rec| rec.try_into()).collect()
+        let (recs, missing) = Self::get_any(tx, tx_ids)?;
+        if !missing.is_empty() {
+            return Err(StorageError::NotFound {
+                item: "ExecutedTransaction".to_string(),
+                key: missing
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            });
+        }
+        Ok(recs)
     }
 
     pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         transactions: I,
     ) -> Result<HashMap<TransactionId, HashSet<ShardId>>, StorageError> {
-        let transactions = Self::get_any(tx, transactions)?;
+        let transactions = Self::get_all(tx, transactions)?;
         Ok(transactions
             .into_iter()
-            .map(|t| {
-                (
-                    *t.transaction.id(),
-                    t.transaction.involved_shards_iter().copied().collect(),
-                )
-            })
+            .map(|t| (*t.transaction.id(), t.involved_shards_iter().copied().collect()))
             .collect())
     }
 }
@@ -244,7 +289,22 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
             result: value.result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
             final_decision: value.final_decision,
+            resulting_outputs: value.resulting_outputs,
             abort_details: value.abort_details,
         })
+    }
+}
+
+impl PartialEq for ExecutedTransaction {
+    fn eq(&self, other: &Self) -> bool {
+        self.transaction.id() == other.transaction.id()
+    }
+}
+
+impl Eq for ExecutedTransaction {}
+
+impl Hash for ExecutedTransaction {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.transaction.id().hash(state);
     }
 }

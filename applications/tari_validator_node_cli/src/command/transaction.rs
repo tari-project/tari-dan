@@ -96,6 +96,8 @@ pub struct CommonSubmitArgs {
     pub wait_for_result_timeout: Option<u64>,
     #[clap(long, short = 'i')]
     pub inputs: Vec<VersionedSubstateAddress>,
+    #[clap(long, alias = "ref")]
+    pub input_refs: Vec<VersionedSubstateAddress>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -239,7 +241,13 @@ pub async fn submit_transaction(
     // Convert to shard id
     let inputs = inputs
         .into_iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version))
+        .map(|versioned_addr| versioned_addr.to_shard_id())
+        .collect::<Vec<_>>();
+
+    let input_refs = common
+        .input_refs
+        .into_iter()
+        .map(|versioned_addr| versioned_addr.to_shard_id())
         .collect::<Vec<_>>();
 
     summarize_request(&instructions, &inputs, 1, common.dry_run);
@@ -248,6 +256,7 @@ pub async fn submit_transaction(
     let transaction = Transaction::builder()
         .with_instructions(instructions)
         .with_inputs(inputs)
+        .with_input_refs(input_refs)
         .sign(&key.secret_key)
         .build();
 
@@ -309,9 +318,10 @@ async fn wait_for_transaction_result(
 
         if let Some(resp) = resp {
             if resp.is_finalized {
-                if let Some(result) = resp.result {
-                    return Ok(result);
-                }
+                let result = resp
+                    .result
+                    .ok_or_else(|| anyhow!("Transaction finalized but no result returned"))?;
+                return Ok(result);
             }
         }
         if let Some(t) = timeout {

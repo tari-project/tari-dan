@@ -11,11 +11,11 @@ use tari_consensus::{
 };
 use tari_dan_common_types::committee::Committee;
 use tari_dan_p2p::{DanMessage, OutboundService};
-use tari_dan_storage::consensus_models::{ExecutedTransaction, TransactionPool};
+use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -29,7 +29,7 @@ use crate::{
         state_manager::TariStateManager,
     },
     event_subscription::EventSubscription,
-    p2p::services::messaging::OutboundMessaging,
+    p2p::services::{mempool::MempoolHandle, messaging::OutboundMessaging},
 };
 
 mod leader_selection;
@@ -41,14 +41,15 @@ pub async fn spawn(
     store: SqliteStateStore<PublicKey>,
     node_identity: Arc<NodeIdentity>,
     epoch_manager: EpochManagerHandle,
-    rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
+    rx_new_transactions: mpsc::Receiver<TransactionId>,
     rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
     outbound_messaging: OutboundMessaging,
+    mempool: MempoolHandle,
     shutdown_signal: ShutdownSignal,
 ) -> (JoinHandle<Result<(), anyhow::Error>>, EventSubscription<HotstuffEvent>) {
     let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
     let (tx_leader, rx_leader) = mpsc::channel(10);
-    let (tx_mempool, rx_mempool) = mpsc::channel(10);
+    let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
     let validator_addr = node_identity.public_key().clone();
     let signing_service = TariSignatureService::new(node_identity);
@@ -83,6 +84,7 @@ pub async fn spawn(
         rx_leader,
         rx_mempool,
         outbound_messaging,
+        mempool,
     }
     .spawn();
 
@@ -92,8 +94,9 @@ pub async fn spawn(
 struct ConsensusWorker {
     rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
     rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
-    rx_mempool: mpsc::Receiver<Transaction>,
+    rx_mempool: mpsc::UnboundedReceiver<Transaction>,
     outbound_messaging: OutboundMessaging,
+    mempool: MempoolHandle,
 }
 
 impl ConsensusWorker {
@@ -114,7 +117,7 @@ impl ConsensusWorker {
                             .ok();
                     },
                     Some(tx) = self.rx_mempool.recv() => {
-                        self.outbound_messaging.send_self(DanMessage::NewTransaction(Box::new(tx))).await.ok();
+                        self.mempool.submit_transaction_without_propagating(tx).await.ok();
                     },
                     else => break,
                 }

@@ -3,28 +3,30 @@
 
 use std::sync::Arc;
 
+use tari_dan_storage::consensus_models::LeafBlock;
 use tokio::sync::watch;
 
 #[derive(Debug, Clone)]
 pub struct OnForceBeat {
-    receiver: watch::Receiver<()>,
-    sender: Arc<watch::Sender<()>>,
+    receiver: watch::Receiver<Option<LeafBlock>>,
+    sender: Arc<watch::Sender<Option<LeafBlock>>>,
 }
 
 impl OnForceBeat {
     pub fn new() -> Self {
-        let (sender, receiver) = watch::channel(());
+        let (sender, receiver) = watch::channel(None);
         Self {
             receiver,
             sender: Arc::new(sender),
         }
     }
 
-    pub async fn wait(&mut self) {
-        self.receiver.changed().await.expect("sender can never be dropped")
+    pub async fn wait(&mut self) -> Option<LeafBlock> {
+        self.receiver.changed().await.expect("sender can never be dropped");
+        self.receiver.borrow().clone()
     }
 
-    pub fn beat(&self) {
-        self.sender.send(()).expect("receiver can never be dropped")
+    pub fn beat(&self, parent_block: Option<LeafBlock>) {
+        self.sender.send(parent_block).expect("receiver can never be dropped")
     }
 }

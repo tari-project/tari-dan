@@ -28,6 +28,7 @@ lazy_static = "1.4.0"
 log = "0.4.14"
 rand = "0.7.3"
 serde = "1.0.126"
+serde_json = "1.0"
 thiserror = "1.0.38"
 zeroize = "1"
 

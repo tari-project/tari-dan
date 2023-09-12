@@ -1,0 +1,18 @@
+[package]
+name = "transaction_generator"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tari_template_lib = { path = "../../dan_layer/template_lib" }
+tari_transaction = { path = "../../dan_layer/transaction" }
+tari_engine_types = { path = "../../dan_layer/engine_types" }
+tari_template_builtin = { path = "../../dan_layer/template_builtin" }
+tari_crypto = "0.17"
+
+anyhow = "1.0.72"
+bincode = { version = "2.0.0-rc.3", features = ["serde"] }
+bytes = "0.4"
+clap = { version = "4.3.21", features = ["derive"] }
+rayon = "1.7.0"
+rand = "0.7"

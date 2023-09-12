@@ -23,6 +23,7 @@ use crate::{
         LastVoted,
         LeafBlock,
         LockedBlock,
+        LockedOutput,
         QcId,
         QuorumCertificate,
         SubstateLockFlag,
@@ -98,11 +99,11 @@ pub trait StateStoreReadTransaction {
         asc_desc_created_at: Option<Ordering>,
     ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
-    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block<Self::Addr>, StorageError>;
+    fn blocks_get_tip(&mut self) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
-    fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
+    fn blocks_get_pending_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
     fn blocks_get_total_leader_fee_for_epoch(
         &mut self,
         epoch: Epoch,
@@ -115,6 +116,10 @@ pub trait StateStoreReadTransaction {
     ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
+    fn quorum_certificates_get_by_block_id(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
     fn transaction_pool_get(&mut self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError>;
@@ -141,10 +146,11 @@ pub trait StateStoreReadTransaction {
     //---------------------------------- Substates --------------------------------------------//
     fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError>;
     fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError>;
-    fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
-        &mut self,
-        substates: I,
-    ) -> Result<bool, StorageError>;
+    fn substates_any_exist<I, S>(&mut self, substates: I) -> Result<bool, StorageError>
+    where
+        I: IntoIterator<Item = S>,
+        S: Borrow<ShardId>;
+
     fn substates_get_many_within_range(
         &mut self,
         start: &ShardId,
@@ -170,6 +176,7 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Block -------------------------------- //
     fn blocks_insert(&mut self, block: &Block<Self::Addr>) -> Result<(), StorageError>;
+    fn blocks_commit(&mut self, block_id: &BlockId) -> Result<(), StorageError>;
 
     // -------------------------------- QuorumCertificate -------------------------------- //
     fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError>;
@@ -196,16 +203,26 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
-        stage: Option<TransactionPoolStage>,
-        decision: Option<Decision>,
+        pending_stage: Option<Option<TransactionPoolStage>>,
+        local_decision: Option<Decision>,
+        remote_decision: Option<Decision>,
         is_ready: Option<bool>,
     ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;
+    fn transaction_pool_set_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        tx_ids: I,
+    ) -> Result<(), StorageError>;
 
-    fn insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    fn insert_missing_transactions<
+        'a,
+        IMissing: IntoIterator<Item = &'a TransactionId>,
+        IAwaiting: IntoIterator<Item = &'a TransactionId>,
+    >(
         &mut self,
         block_id: &BlockId,
-        transaction_ids: I,
+        missing_transaction_ids: IMissing,
+        awaiting_transaction_ids: IAwaiting,
     ) -> Result<(), StorageError>;
 
     fn remove_missing_transaction(&mut self, transaction_id: TransactionId) -> Result<Option<BlockId>, StorageError>;
@@ -236,6 +253,21 @@ pub trait StateStoreWriteTransaction {
         destroyed_transaction_id: &TransactionId,
     ) -> Result<(), StorageError>;
     fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
+    // -------------------------------- Locked Outputs -------------------------------- //
+    fn locked_outputs_acquire_all<I, B>(
+        &mut self,
+        block_id: &BlockId,
+        transaction_id: &TransactionId,
+        output_shards: I,
+    ) -> Result<SubstateLockState, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>;
+
+    fn locked_outputs_release_all<I, B>(&mut self, output_shards: I) -> Result<Vec<LockedOutput>, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>;
 }
 
 #[derive(Debug, Clone, Copy)]
