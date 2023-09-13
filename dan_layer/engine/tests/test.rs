@@ -122,10 +122,8 @@ fn test_composed() {
     assert_eq!(value, new_value);
 }
 
-// TODO: after the borsh-to-ciborium refactor, the "buggy" template does not compile
-#[ignore]
 #[test]
-fn test_dodgy_template() {
+fn test_buggy_template() {
     let err = compile_template("tests/templates/buggy", &["call_engine_in_abi"])
         .unwrap()
         .load_template()
