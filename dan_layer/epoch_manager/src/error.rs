@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ShardId};
 
 #[derive(thiserror::Error, Debug)]
 pub enum EpochManagerError {
@@ -45,5 +45,11 @@ pub enum EpochManagerError {
 impl EpochManagerError {
     pub fn is_not_registered_error(&self) -> bool {
         matches!(self, Self::ValidatorNodeNotRegistered { .. })
+    }
+}
+
+impl IsNotFoundError for EpochManagerError {
+    fn is_not_found_error(&self) -> bool {
+        self.is_not_registered_error()
     }
 }

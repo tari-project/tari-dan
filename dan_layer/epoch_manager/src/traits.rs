@@ -130,11 +130,6 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError>;
 
-    async fn get_committees_by_shards(
-        &self,
-        epoch: Epoch,
-        shards: &HashSet<ShardId>,
-    ) -> Result<HashMap<ShardId, Committee<Self::Addr>>, EpochManagerError>;
     async fn get_committees_by_buckets(
         &self,
         epoch: Epoch,

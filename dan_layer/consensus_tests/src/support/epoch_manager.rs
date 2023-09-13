@@ -161,17 +161,25 @@ impl EpochManagerReader for TestEpochManager {
         Ok(CommitteeShard::new(num_committees, committee.len() as u32, bucket))
     }
 
-    async fn get_committees_by_shards(
-        &self,
-        epoch: Epoch,
-        shards: &HashSet<ShardId>,
-    ) -> Result<HashMap<ShardId, Committee<Self::Addr>>, EpochManagerError> {
-        let mut committees = HashMap::new();
-        for shard in shards {
-            committees.insert(*shard, self.get_committee(epoch, *shard).await?);
-        }
-        Ok(committees)
-    }
+    // async fn get_committees_by_shards(
+    //     &self,
+    //     epoch: Epoch,
+    //     shards: &HashSet<ShardId>,
+    // ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, EpochManagerError> { let num_committees =
+    //   self.get_num_committees(epoch).await?;
+    //
+    //     let mut committees = HashMap::new();
+    //     let buckets = shards.iter().map(|shard| shard.to_committee_bucket(num_committees));
+    //     let state = self.state_lock().await;
+    //     for bucket in buckets {
+    //         if committees.contains_key(&bucket) {
+    //             continue;
+    //         }
+    //
+    //         committees.insert(bucket, state.committees.get(&bucket).unwrap().clone());
+    //     }
+    //     Ok(committees)
+    // }
 
     async fn get_committee_within_shard_range(
         &self,

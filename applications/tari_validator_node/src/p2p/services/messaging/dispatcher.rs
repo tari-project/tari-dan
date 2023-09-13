@@ -52,7 +52,12 @@ impl MessageDispatcher {
                 DanMessage::HotStuffMessage(msg) => {
                     self.message_senders.tx_consensus_message.send((from, *msg)).await?
                 },
-                DanMessage::NewTransaction(msg) => self.message_senders.tx_new_transaction_message.send(*msg).await?,
+                DanMessage::NewTransaction(msg) => {
+                    self.message_senders
+                        .tx_new_transaction_message
+                        .send((from, *msg))
+                        .await?
+                },
                 DanMessage::NetworkAnnounce(announce) => {
                     self.message_senders.tx_network_announce.send((from, *announce)).await?
                 },

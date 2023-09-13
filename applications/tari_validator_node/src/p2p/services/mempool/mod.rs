@@ -28,6 +28,7 @@ pub use initializer::spawn;
 
 mod error;
 mod executor;
+mod gossip;
 mod service;
 mod traits;
 mod validators;

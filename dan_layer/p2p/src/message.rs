@@ -35,6 +35,12 @@ impl<TAddr: NodeAddressable> DanMessage<TAddr> {
     }
 }
 
+impl<TAddr> From<NewTransactionMessage> for DanMessage<TAddr> {
+    fn from(value: NewTransactionMessage) -> Self {
+        Self::NewTransaction(Box::new(value))
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct NetworkAnnounce<TAddr> {
     pub identity: TAddr,

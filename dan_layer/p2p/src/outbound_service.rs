@@ -28,14 +28,17 @@ use crate::DanMessage;
 #[async_trait]
 pub trait OutboundService {
     type Error;
-    type Addr: NodeAddressable + Send;
+    type Addr: NodeAddressable + Send + 'static;
 
     async fn send_self(&mut self, message: DanMessage<Self::Addr>) -> Result<(), Self::Error>;
 
     async fn send(&mut self, to: Self::Addr, message: DanMessage<Self::Addr>) -> Result<(), Self::Error>;
 
-    async fn broadcast(&mut self, committee: &[Self::Addr], message: DanMessage<Self::Addr>)
-        -> Result<(), Self::Error>;
+    async fn broadcast<'a, I: IntoIterator<Item = &'a Self::Addr> + Send>(
+        &mut self,
+        committee: I,
+        message: DanMessage<Self::Addr>,
+    ) -> Result<(), Self::Error>;
 
     async fn flood(&mut self, message: DanMessage<Self::Addr>) -> Result<(), Self::Error>;
 }

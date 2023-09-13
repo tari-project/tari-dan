@@ -56,14 +56,14 @@ pub fn spawn(
 #[derive(Debug, Clone)]
 pub struct DanMessageSenders {
     pub tx_consensus_message: mpsc::Sender<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
-    pub tx_new_transaction_message: mpsc::Sender<NewTransactionMessage>,
+    pub tx_new_transaction_message: mpsc::Sender<(CommsPublicKey, NewTransactionMessage)>,
     pub tx_network_announce: mpsc::Sender<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
 }
 
 #[derive(Debug)]
 pub struct DanMessageReceivers {
     pub rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
-    pub rx_new_transaction_message: mpsc::Receiver<NewTransactionMessage>,
+    pub rx_new_transaction_message: mpsc::Receiver<(CommsPublicKey, NewTransactionMessage)>,
     pub rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
 }
 

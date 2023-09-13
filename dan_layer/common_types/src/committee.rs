@@ -1,12 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::borrow::Borrow;
+use std::{borrow::Borrow, cmp};
 
 use rand::{rngs::OsRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 
-use crate::{shard_bucket::ShardBucket, NodeAddressable, ShardId};
+use crate::{shard_bucket::ShardBucket, ShardId};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 pub struct Committee<TAddr> {
@@ -14,7 +14,7 @@ pub struct Committee<TAddr> {
     pub members: Vec<TAddr>,
 }
 
-impl<TAddr: NodeAddressable> Committee<TAddr> {
+impl<TAddr: PartialEq> Committee<TAddr> {
     pub fn empty() -> Self {
         Self::new(vec![])
     }
@@ -65,6 +65,21 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
         self.members.shuffle(&mut OsRng);
     }
 
+    pub fn select_n_random(&self, n: usize) -> impl Iterator<Item = &TAddr> + '_ {
+        self.members.choose_multiple(&mut OsRng, n)
+    }
+
+    /// Returns the n next members from start_index_exclusive + 1, wrapping around if necessary.
+    pub fn select_n_starting_from(&self, n: usize, start_index_inclusive: usize) -> impl Iterator<Item = &TAddr> + '_ {
+        let n = cmp::min(n, self.members.len());
+        let start_index_inclusive = if self.is_empty() {
+            0
+        } else {
+            start_index_inclusive % self.len()
+        };
+        self.members.iter().cycle().skip(start_index_inclusive).take(n)
+    }
+
     pub fn calculate_steps_between(&self, member_a: &TAddr, member_b: &TAddr) -> Option<usize> {
         let index_a = self.members.iter().position(|x| x == member_a)? as isize;
         let index_b = self.members.iter().position(|x| x == member_b)? as isize;
@@ -81,7 +96,7 @@ impl<TAddr: NodeAddressable> Committee<TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable> IntoIterator for Committee<TAddr> {
+impl<TAddr> IntoIterator for Committee<TAddr> {
     type IntoIter = std::vec::IntoIter<Self::Item>;
     type Item = TAddr;
 
@@ -90,7 +105,7 @@ impl<TAddr: NodeAddressable> IntoIterator for Committee<TAddr> {
     }
 }
 
-impl<'a, TAddr: NodeAddressable> IntoIterator for &'a Committee<TAddr> {
+impl<'a, TAddr> IntoIterator for &'a Committee<TAddr> {
     type IntoIter = std::slice::Iter<'a, TAddr>;
     type Item = &'a TAddr;
 
@@ -99,13 +114,13 @@ impl<'a, TAddr: NodeAddressable> IntoIterator for &'a Committee<TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable> FromIterator<TAddr> for Committee<TAddr> {
+impl<TAddr: PartialEq> FromIterator<TAddr> for Committee<TAddr> {
     fn from_iter<T: IntoIterator<Item = TAddr>>(iter: T) -> Self {
         Self::new(iter.into_iter().collect())
     }
 }
 
-impl<TAddr: NodeAddressable> FromIterator<Committee<TAddr>> for Committee<TAddr> {
+impl<TAddr: PartialEq> FromIterator<Committee<TAddr>> for Committee<TAddr> {
     fn from_iter<T: IntoIterator<Item = Committee<TAddr>>>(iter: T) -> Self {
         let into_iter = iter.into_iter();
         let members = into_iter.fold(Vec::new(), |mut acc, committee| {
@@ -187,5 +202,60 @@ impl CommitteeShard {
             .map(|shard| shard.to_committee_bucket(self.num_committees))
             .collect::<std::collections::HashSet<_>>()
             .len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_committee(size: usize) -> Committee<u32> {
+        Committee::new((0..size as u32).collect())
+    }
+
+    mod select_n_starting_from {
+        use super::*;
+
+        #[test]
+        fn it_selects_members_wrapping_around() {
+            let selected = create_committee(6)
+                .select_n_starting_from(6, 4)
+                .copied()
+                .collect::<Vec<_>>();
+            assert_eq!(selected, vec![4, 5, 0, 1, 2, 3]);
+
+            let selected = create_committee(6)
+                .select_n_starting_from(3, 6)
+                .copied()
+                .collect::<Vec<_>>();
+            assert_eq!(selected, vec![0, 1, 2]);
+        }
+
+        #[test]
+        fn it_wraps_the_start_index_around() {
+            let selected = create_committee(5)
+                .select_n_starting_from(6, 101)
+                .copied()
+                .collect::<Vec<_>>();
+            assert_eq!(selected, vec![1, 2, 3, 4, 0]);
+        }
+
+        #[test]
+        fn it_wraps_around_once() {
+            let selected = create_committee(6)
+                .select_n_starting_from(100, 4)
+                .copied()
+                .collect::<Vec<_>>();
+            assert_eq!(selected, vec![4, 5, 0, 1, 2, 3]);
+        }
+
+        #[test]
+        fn it_does_not_panic_empty_committee() {
+            let selected = create_committee(0)
+                .select_n_starting_from(6, 4)
+                .copied()
+                .collect::<Vec<_>>();
+            assert!(selected.is_empty());
+        }
     }
 }

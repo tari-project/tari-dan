@@ -77,15 +77,18 @@ impl OutboundService for OutboundMessaging {
         Ok(())
     }
 
-    async fn broadcast(
+    async fn broadcast<'a, I: IntoIterator<Item = &'a Self::Addr> + Send>(
         &mut self,
-        committee: &[Self::Addr],
+        committee: I,
         message: DanMessage<Self::Addr>,
     ) -> Result<(), MessagingError> {
         let (ours, theirs) = committee
-            .iter()
-            .cloned()
-            .partition::<Vec<_>, _>(|x| *x == self.our_node_addr);
+            .into_iter()
+            .partition::<Vec<_>, _>(|x| **x == self.our_node_addr);
+
+        if ours.is_empty() && theirs.is_empty() {
+            return Ok(());
+        }
 
         // send it more than once to ourselves??
         for _ in ours {
@@ -97,7 +100,7 @@ impl OutboundService for OutboundMessaging {
         }
 
         self.sender
-            .send((Destination::Selected(theirs), message))
+            .send((Destination::Selected(theirs.into_iter().cloned().collect()), message))
             .await
             .map_err(|_| MessagingError::MessageSendFailed)?;
         Ok(())
