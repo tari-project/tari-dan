@@ -25,6 +25,7 @@ use std::{net::SocketAddr, time::Duration};
 use config::Config;
 use serde::{Deserialize, Serialize};
 use tari_common::{configuration::CommonConfig, ConfigurationError, DefaultConfigLoader, SubConfigPath};
+use tari_dan_common_types::crypto::create_secret;
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -75,9 +76,7 @@ impl Default for WalletDaemonConfig {
             indexer_node_json_rpc_url: "http://127.0.0.1:18300/json_rpc".to_string(),
             // TODO: Come up with a reasonable default value
             jwt_expiry: Some(Duration::from_secs(500 * 60)),
-            // TODO: Generate a random secret key at start if not set by hand. Otherwise anyone can generate a JWT token
-            // when they know the secret_key.
-            jwt_secret_key: Some("secret_key".to_string()),
+            jwt_secret_key: Some(create_secret()),
             http_ui_address: Some("127.0.0.1:5100".parse().unwrap()),
         }
     }
