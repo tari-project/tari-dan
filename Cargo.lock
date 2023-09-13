@@ -8152,6 +8152,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tari_common",
+ "tari_dan_common_types",
  "tari_dan_wallet_sdk",
  "tari_shutdown",
  "tokio",
