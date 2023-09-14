@@ -7,13 +7,13 @@ use tari_common_types::types::{Commitment, PrivateKey, PublicKey, Signature};
 use tari_crypto::{
     commitment::HomomorphicCommitmentFactory,
     keys::{PublicKey as _, SecretKey},
+    tari_utilities::ByteArray,
 };
 use tari_engine_types::confidential::{challenges, ConfidentialOutput};
 use tari_template_lib::{
     crypto::BalanceProofSignature,
     models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedData},
 };
-use tari_utilities::ByteArray;
 
 use crate::{
     byte_utils::copy_fixed,

@@ -176,6 +176,7 @@ pub struct KeysListRequest {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeysListResponse {
+    /// (index, public key, is_active)
     pub keys: Vec<(u64, PublicKey, bool)>,
 }
 
@@ -190,7 +191,9 @@ pub struct KeysSetActiveResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct KeysCreateRequest {}
+pub struct KeysCreateRequest {
+    pub specific_index: Option<u64>,
+}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct KeysCreateResponse {
@@ -204,6 +207,7 @@ pub struct AccountsCreateRequest {
     pub custom_access_rules: Option<AccessRules>,
     pub fee: Option<Amount>,
     pub is_default: bool,
+    pub key_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -438,6 +442,7 @@ pub struct AccountsCreateFreeTestCoinsRequest {
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
     pub fee: Option<Amount>,
+    pub key_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

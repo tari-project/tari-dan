@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_core::transactions::{tari_amount::MicroTari, transaction_components::TransactionOutput};
+use tari_core::transactions::{tari_amount::MicroMinotari, transaction_components::TransactionOutput};
 use tari_dan_common_types::{Epoch, ShardId};
 
 #[derive(Debug, Clone)]
@@ -35,7 +35,7 @@ pub struct ValidatorNode {
 pub struct BaseLayerConsensusConstants {
     pub validator_node_registration_expiry: u64,
     pub epoch_length: u64,
-    pub validator_node_registration_min_deposit_amount: MicroTari,
+    pub validator_node_registration_min_deposit_amount: MicroMinotari,
 }
 
 impl BaseLayerConsensusConstants {
@@ -51,7 +51,7 @@ impl BaseLayerConsensusConstants {
         Epoch(self.validator_node_registration_expiry)
     }
 
-    pub fn validator_node_registration_min_deposit_amount(&self) -> MicroTari {
+    pub fn validator_node_registration_min_deposit_amount(&self) -> MicroMinotari {
         self.validator_node_registration_min_deposit_amount
     }
 

@@ -22,7 +22,7 @@
 
 use std::{convert::TryFrom, fmt::Display, str::FromStr};
 
-use tari_utilities::hex::from_hex;
+use tari_crypto::tari_utilities::hex::from_hex;
 
 #[derive(Debug, Clone, Copy)]
 pub struct FromHex<T>(pub T);
@@ -49,7 +49,7 @@ where
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let a = from_hex(s)?;
+        let a = from_hex(s).map_err(anyhow::Error::msg)?;
         let item = T::try_from(&a)?;
         Ok(Self(item))
     }

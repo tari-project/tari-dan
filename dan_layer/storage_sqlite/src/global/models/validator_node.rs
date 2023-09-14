@@ -35,6 +35,7 @@ pub struct DbValidatorNode {
     pub shard_key: Vec<u8>,
     pub epoch: i64,
     pub committee_bucket: Option<i64>,
+    pub fee_claim_public_key: Vec<u8>,
 }
 impl TryFrom<DbValidatorNode> for ValidatorNode<PublicKey> {
     type Error = SqliteStorageError;
@@ -49,6 +50,13 @@ impl TryFrom<DbValidatorNode> for ValidatorNode<PublicKey> {
             })?,
             epoch: Epoch(vn.epoch as u64),
             committee_bucket: vn.committee_bucket.map(|v| v as u32).map(ShardBucket::from),
+
+            fee_claim_public_key: PublicKey::from_bytes(&vn.fee_claim_public_key).map_err(|_| {
+                SqliteStorageError::MalformedDbData(format!(
+                    "Invalid fee claim public key in validator node record id={}",
+                    vn.id
+                ))
+            })?,
         })
     }
 }
@@ -59,14 +67,5 @@ pub struct NewValidatorNode {
     pub public_key: Vec<u8>,
     pub shard_key: Vec<u8>,
     pub epoch: i64,
+    pub fee_claim_public_key: Vec<u8>,
 }
-
-// impl From<ValidatorNode> for NewValidatorNode {
-//     fn from(vn: ValidatorNode) -> Self {
-//         Self {
-//             shard_key: vn.shard_key.as_bytes().to_vec(),
-//             public_key: vn.public_key.to_vec(),
-//             epoch: vn.epoch.as_u64() as i64,
-//         }
-//     }
-// }

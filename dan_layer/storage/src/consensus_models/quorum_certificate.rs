@@ -10,7 +10,7 @@ use tari_dan_common_types::{
         quorum_certificate_hasher,
         MergedValidatorNodeMerkleProof,
         ValidatorNodeBalancedMerkleTree,
-        ValidatorNodeBmtHasherBlake256,
+        ValidatorNodeBmtHasherBlake2b,
         ValidatorNodeMerkleProof,
     },
     optional::Optional,
@@ -46,7 +46,7 @@ impl<TAddr: Serialize> QuorumCertificate<TAddr> {
         block_height: NodeHeight,
         epoch: Epoch,
         signatures: Vec<ValidatorSignature<TAddr>>,
-        merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>,
+        merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b>,
         mut leaf_hashes: Vec<FixedHash>,
         decision: QuorumDecision,
     ) -> Self {
@@ -108,7 +108,7 @@ impl<TAddr> QuorumCertificate<TAddr> {
         self.epoch
     }
 
-    pub fn merged_proof(&self) -> &MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256> {
+    pub fn merged_proof(&self) -> &MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b> {
         &self.merged_proof
     }
 
@@ -154,19 +154,13 @@ impl<TAddr> QuorumCertificate<TAddr> {
         }
     }
 }
+
 impl<TAddr> QuorumCertificate<TAddr> {
     pub fn get<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
         tx: &mut TTx,
         qc_id: &QcId,
     ) -> Result<Self, StorageError> {
         tx.quorum_certificates_get(qc_id)
-    }
-
-    pub fn get_by_block_id<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
-        tx: &mut TTx,
-        block_id: &BlockId,
-    ) -> Result<Self, StorageError> {
-        tx.quorum_certificates_get_by_block_id(block_id)
     }
 
     pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(

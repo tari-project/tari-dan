@@ -7,9 +7,9 @@ use tari_common_types::types::{Commitment, PublicKey};
 use tari_crypto::{
     extended_range_proof::{ExtendedRangeProofService, Statement},
     ristretto::bulletproofs_plus::RistrettoAggregatedPublicStatement,
+    tari_utilities::ByteArray,
 };
 use tari_template_lib::models::ConfidentialOutputProof;
-use tari_utilities::ByteArray;
 
 use super::get_range_proof_service;
 use crate::{confidential::ConfidentialOutput, resource_container::ResourceError};

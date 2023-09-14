@@ -68,6 +68,8 @@ pub struct TariWorld {
     pub addresses: IndexMap<String, String>,
     pub num_databases_saved: usize,
     pub account_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
+    /// Key name -> key index
+    pub wallet_keys: IndexMap<String, u64>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
     pub fees_enabled: bool,
@@ -88,6 +90,19 @@ impl TariWorld {
         self.wallets
             .get(name)
             .unwrap_or_else(|| panic!("Wallet {} not found", name))
+    }
+
+    pub fn get_wallet_daemon(&self, name: &str) -> &DanWalletDaemonProcess {
+        self.wallet_daemons
+            .get(name)
+            .unwrap_or_else(|| panic!("Wallet daemon {} not found", name))
+    }
+
+    pub fn get_validator_node(&self, name: &str) -> &ValidatorNodeProcess {
+        self.validator_nodes
+            .get(name)
+            .or_else(|| self.vn_seeds.get(name))
+            .unwrap_or_else(|| panic!("Validator node {} not found", name))
     }
 
     pub fn get_base_node(&self, name: &str) -> &BaseNodeProcess {
