@@ -8,7 +8,7 @@ use tari_engine_types::{hashing::template_hasher, TemplateAddress};
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{TemplateRegistrationRequest, TemplateRegistrationResponse};
 
-use crate::{validator_node::get_vn_client, TariWorld};
+use crate::TariWorld;
 
 #[derive(Debug)]
 pub struct RegisteredTemplate {
@@ -43,8 +43,8 @@ pub async fn send_template_registration(
     };
 
     // send the template registration request
-    let jrpc_port = world.validator_nodes.get(&vn_name).unwrap().json_rpc_port;
-    let mut client = get_vn_client(jrpc_port);
+    let vn = world.get_validator_node(&vn_name);
+    let mut client = vn.get_client();
 
     // store the template address for future reference
     let resp = client.register_template(request).await?;

@@ -328,6 +328,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         public_key: PublicKey,
         shard_key: ShardId,
         epoch: Epoch,
+        fee_claim_public_key: PublicKey,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 
@@ -336,7 +337,19 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
                 validator_nodes::public_key.eq(public_key.as_bytes()),
                 validator_nodes::shard_key.eq(shard_key.as_bytes()),
                 validator_nodes::epoch.eq(epoch.as_u64() as i64),
+                validator_nodes::fee_claim_public_key.eq(fee_claim_public_key.as_bytes()),
             ))
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "insert::validator_nodes".to_string(),
+            })?;
+
+        // TODO: We update records for this validator node with the latest fee claim public key. This is hacky and this
+        //       behaviour is not clear to the caller/trait implementor.
+        diesel::update(validator_nodes::table)
+            .filter(validator_nodes::public_key.eq(public_key.as_bytes()))
+            .set(validator_nodes::fee_claim_public_key.eq(fee_claim_public_key.as_bytes()))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,

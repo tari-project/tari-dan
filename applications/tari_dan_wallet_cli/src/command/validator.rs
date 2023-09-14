@@ -58,7 +58,8 @@ pub async fn handle_get_fees(args: GetFeesArgs, client: &mut WalletDaemonClient)
     // TODO: complete this handler once this request is implemented
     let resp = client
         .get_validator_fee_summary(GetValidatorFeesRequest {
-            validator_public_key: PublicKey::from_bytes(args.validator_public_key.into_inner().as_bytes())?,
+            validator_public_key: PublicKey::from_bytes(args.validator_public_key.into_inner().as_bytes())
+                .map_err(anyhow::Error::msg)?,
             epoch: Epoch(0),
         })
         .await?;
@@ -86,7 +87,8 @@ pub async fn handle_claim_validator_fees(
                 .map(|name| ComponentAddressOrName::from_str(&name))
                 .transpose()?,
             fee: fee.map(Amount::from),
-            validator_public_key: PublicKey::from_bytes(validator_public_key.into_inner().as_bytes())?,
+            validator_public_key: PublicKey::from_bytes(validator_public_key.into_inner().as_bytes())
+                .map_err(anyhow::Error::msg)?,
             epoch: Epoch(epoch),
         })
         .await?;

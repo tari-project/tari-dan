@@ -152,7 +152,6 @@ impl Networking {
                             addresses: self.node_identity.public_addresses(),
                             features: self.node_identity.features(),
                             signature,
-                            unverified_data: None,
                         },
                     })))
                     .await;

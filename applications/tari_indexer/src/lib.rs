@@ -46,8 +46,8 @@ use std::{
 
 use http_ui::server::run_http_ui_server;
 use log::*;
+use minotari_app_utilities::identity_management::setup_node_identity;
 use substate_manager::SubstateManager;
-use tari_app_utilities::identity_management::setup_node_identity;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},

@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use rand::rngs::OsRng;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::NodeIdentity;
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
@@ -21,7 +22,7 @@ impl TariSignatureService {
 
 impl ValidatorSignatureService<PublicKey> for TariSignatureService {
     fn sign<M: AsRef<[u8]>>(&self, message: M) -> ValidatorSchnorrSignature {
-        ValidatorSchnorrSignature::sign_message(self.node_identity.secret_key(), message).unwrap()
+        ValidatorSchnorrSignature::sign_message(self.node_identity.secret_key(), message, &mut OsRng).unwrap()
     }
 
     fn public_key(&self) -> &PublicKey {

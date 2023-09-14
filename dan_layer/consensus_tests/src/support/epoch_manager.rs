@@ -46,6 +46,7 @@ impl TestEpochManager {
             shard_key,
             epoch: Epoch(0),
             committee_bucket: None,
+            fee_claim_public_key: TestAddress::new("invalid"),
         });
         copy
     }
@@ -106,6 +107,7 @@ impl EpochManagerReader for TestEpochManager {
             shard_key,
             epoch,
             committee_bucket: Some(bucket),
+            fee_claim_public_key: TestAddress::new("invalid"),
         })
     }
 
