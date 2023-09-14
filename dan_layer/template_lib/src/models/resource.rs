@@ -20,7 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::rust::{
     fmt,
@@ -29,11 +28,11 @@ use tari_template_abi::rust::{
 };
 
 use super::BinaryTag;
-use crate::{hash::HashParseError, Hash};
+use crate::{hash::HashParseError, newtype_struct_serde_impl, Hash};
 
 const TAG: u64 = BinaryTag::ResourceAddress.as_u64();
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ResourceAddress(BorTag<Hash, TAG>);
 
 impl ResourceAddress {
@@ -89,5 +88,39 @@ impl TryFrom<Vec<u8>> for ResourceAddress {
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         let hash = Hash::try_from(value)?;
         Ok(Self::new(hash))
+    }
+}
+
+newtype_struct_serde_impl!(ResourceAddress, BorTag<Hash, TAG>);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod hex_deser {
+        use super::*;
+
+        #[test]
+        fn string_serialization_and_deserialization() {
+            let resx_str = "resource_0000000000000000000000000000000000000000000000000000000000000000";
+            let resource = ResourceAddress::from_str(resx_str).unwrap();
+            let json = serde_json::to_string_pretty(&resource).unwrap();
+            assert_eq!(json.trim_matches('"'), resx_str);
+
+            // Deserialize from JSON
+            let r = serde_json::from_str::<ResourceAddress>(&json).unwrap();
+            assert_eq!(r, resource);
+
+            // Check that CBOR does not include the string
+            let cbor = tari_bor::encode(&resource).unwrap();
+            assert!(
+                !cbor.windows(resx_str.len()).any(|window| window == resx_str.as_bytes()),
+                "CBOR is serializing a string"
+            );
+
+            // Deserialize from CBOR
+            let r = tari_bor::decode::<ResourceAddress>(&cbor).unwrap();
+            assert_eq!(r, resource);
+        }
     }
 }

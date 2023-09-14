@@ -133,7 +133,7 @@ impl TemplateTest {
         let id_provider = IdProvider::new(Hash::default(), 10);
         let vault_id = id_provider.new_vault_id().unwrap();
         let vault = Vault::new(vault_id, ResourceContainer::Confidential {
-            address: *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             commitments: Default::default(),
             revealed_amount: initial_supply,
         });

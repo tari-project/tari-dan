@@ -896,7 +896,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         // 4. Create the confidential resource
         let mut resource = ResourceContainer::confidential(
-            *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             Some((
                 unclaimed_output.commitment.as_public_key().clone(),
                 ConfidentialOutput {
@@ -935,7 +935,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         output: Option<ConfidentialOutput>,
     ) -> Result<BucketId, RuntimeError> {
         let resource = ResourceContainer::confidential(
-            *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+            CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
             output.map(|o| (o.commitment.as_public_key().clone(), o)),
             revealed_amount,
         );
