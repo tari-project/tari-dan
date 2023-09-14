@@ -38,16 +38,22 @@ use tari_consensus::messages::HotstuffMessage;
 use tari_dan_p2p::{NetworkAnnounce, NewTransactionMessage};
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::comms::MessageChannel;
+use crate::comms::MessageChannels;
 
 pub fn spawn(
     our_node_address: CommsPublicKey,
-    (outbound_tx, inbound_rx): MessageChannel,
+    channels: MessageChannels,
     message_senders: DanMessageSenders,
 ) -> (OutboundMessaging, JoinHandle<anyhow::Result<()>>) {
+    let (outbound_msg_tx, inbound_msg_rx, outbound_hs_tx, inbound_hs_rx) = channels;
     let (loopback_sender, loopback_receiver) = mpsc::channel(100);
-    let inbound = InboundMessaging::new(our_node_address.clone(), inbound_rx, loopback_receiver);
-    let outbound = OutboundMessaging::new(our_node_address, outbound_tx, loopback_sender);
+    let inbound = InboundMessaging::new(
+        our_node_address.clone(),
+        inbound_msg_rx,
+        inbound_hs_rx,
+        loopback_receiver,
+    );
+    let outbound = OutboundMessaging::new(our_node_address, outbound_msg_tx, outbound_hs_tx, loopback_sender);
     let dispatcher = MessageDispatcher::new(inbound, message_senders);
     let handle = dispatcher.spawn();
     (outbound, handle)

@@ -1,16 +1,34 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
+use std::fmt::{Display, Formatter};
+
 use serde::Serialize;
 use tari_comms::peer_manager::PeerIdentityClaim;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_transaction::Transaction;
 
+#[derive(Debug, Clone)]
+pub enum Message<TAddr> {
+    Consensus(HotstuffMessage<TAddr>),
+    Dan(DanMessage<TAddr>),
+}
+
+impl<TAddr> From<HotstuffMessage<TAddr>> for Message<TAddr> {
+    fn from(msg: HotstuffMessage<TAddr>) -> Self {
+        Self::Consensus(msg)
+    }
+}
+
+impl<TAddr> From<DanMessage<TAddr>> for Message<TAddr> {
+    fn from(msg: DanMessage<TAddr>) -> Self {
+        Self::Dan(msg)
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub enum DanMessage<TAddr> {
-    // Consensus
-    HotStuffMessage(Box<HotstuffMessage<TAddr>>),
     // Mempool
     NewTransaction(Box<NewTransactionMessage>),
     // Network
@@ -20,7 +38,6 @@ pub enum DanMessage<TAddr> {
 impl<TAddr: NodeAddressable> DanMessage<TAddr> {
     pub fn as_type_str(&self) -> &'static str {
         match self {
-            Self::HotStuffMessage(_) => "HotStuffMessage",
             Self::NewTransaction(_) => "NewTransaction",
             Self::NetworkAnnounce(_) => "NetworkAnnounce",
         }
@@ -28,7 +45,6 @@ impl<TAddr: NodeAddressable> DanMessage<TAddr> {
 
     pub fn get_message_tag(&self) -> String {
         match self {
-            Self::HotStuffMessage(msg) => format!("hotstuff_{}", msg.block_id()),
             Self::NewTransaction(msg) => format!("tx_{}", msg.transaction.id()),
             Self::NetworkAnnounce(msg) => format!("pk_{}", msg.identity),
         }
@@ -38,6 +54,15 @@ impl<TAddr: NodeAddressable> DanMessage<TAddr> {
 impl<TAddr> From<NewTransactionMessage> for DanMessage<TAddr> {
     fn from(value: NewTransactionMessage) -> Self {
         Self::NewTransaction(Box::new(value))
+    }
+}
+
+impl<TAddr: Display> Display for DanMessage<TAddr> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NewTransaction(msg) => write!(f, "NewTransaction({})", msg.transaction.id()),
+            Self::NetworkAnnounce(_) => write!(f, "NetworkAnnounce"),
+        }
     }
 }
 

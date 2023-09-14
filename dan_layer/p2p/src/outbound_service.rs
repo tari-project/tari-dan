@@ -23,22 +23,26 @@
 use async_trait::async_trait;
 use tari_dan_common_types::NodeAddressable;
 
-use crate::DanMessage;
+use crate::Message;
 
 #[async_trait]
 pub trait OutboundService {
     type Error;
     type Addr: NodeAddressable + Send + 'static;
 
-    async fn send_self(&mut self, message: DanMessage<Self::Addr>) -> Result<(), Self::Error>;
+    async fn send_self<T: Into<Message<Self::Addr>> + Send>(&mut self, message: T) -> Result<(), Self::Error>;
 
-    async fn send(&mut self, to: Self::Addr, message: DanMessage<Self::Addr>) -> Result<(), Self::Error>;
-
-    async fn broadcast<'a, I: IntoIterator<Item = &'a Self::Addr> + Send>(
+    async fn send<T: Into<Message<Self::Addr>> + Send>(
         &mut self,
-        committee: I,
-        message: DanMessage<Self::Addr>,
+        to: Self::Addr,
+        message: T,
     ) -> Result<(), Self::Error>;
 
-    async fn flood(&mut self, message: DanMessage<Self::Addr>) -> Result<(), Self::Error>;
+    async fn broadcast<'a, I: IntoIterator<Item = &'a Self::Addr> + Send, T: Into<Message<Self::Addr>> + Send>(
+        &mut self,
+        committee: I,
+        message: T,
+    ) -> Result<(), Self::Error>;
+
+    async fn flood<T: Into<Message<Self::Addr>> + Send>(&mut self, message: T) -> Result<(), Self::Error>;
 }

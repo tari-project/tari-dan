@@ -24,7 +24,8 @@ create table blocks
     command_count    bigint    not NULL,
     commands         text      not NULL,
     total_leader_fee bigint    not NULL,
-    is_committed     boolean   not NULL,
+    is_committed     boolean   not NULL default '0',
+    is_processed     boolean   not NULL,
     is_dummy         boolean   not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
@@ -87,8 +88,7 @@ create table last_voted
     id         integer   not null primary key autoincrement,
     block_id   text      not null,
     height     bigint    not null,
-    created_at timestamp NOT NULL default current_timestamp,
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+    created_at timestamp NOT NULL default current_timestamp
 );
 
 create table last_executed
@@ -158,6 +158,20 @@ create table transaction_pool
 );
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
 create index transaction_pool_idx_is_ready on transaction_pool (is_ready);
+
+create table transaction_pool_status
+(
+    id             integer   not null primary key AUTOINCREMENT,
+    block_id       text      not null,
+    block_height   bigint    not null,
+    transaction_id text      not null,
+    stage          text      not null,
+    is_ready       boolean   not null,
+    created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id),
+    FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
+);
+create index transaction_pool_idx_block_id_transaction_id on transaction_pool_status (block_id, transaction_id);
 
 create table locked_outputs
 (

@@ -94,7 +94,7 @@ impl PaceMaker {
                             self.current_high_qc_height = high_qc_height;
 
                             leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
-                            // set a timer for when we must send an empty block...
+                            // set a timer for when we must send a block...
                             block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                        },
                         PacemakerRequest::TriggerBeat {  parent_block} => {
@@ -135,14 +135,9 @@ impl PaceMaker {
                 () = &mut leader_timeout => {
                     block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                     leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
-                    // Dont leader fail on genesis
-                    if self.current_height == NodeHeight::zero() {
-                        continue;
-                    }
                     info!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}", self.current_height);
-                    // The leader of the next block proposes, so increment height after sending the leader timeout
-                    on_leader_timeout.leader_timed_out(self.current_height);
                     self.current_height += NodeHeight(1);
+                    on_leader_timeout.leader_timed_out(self.current_height);
                 },
 
                 _ = self.shutdown.wait() => {
@@ -159,6 +154,10 @@ impl PaceMaker {
     /// high QC height. This is always greater than the block time.
     /// Ensure that current_height and current_high_qc_height are set before calling this function.
     fn delta_time(&self) -> Duration {
+        if self.current_height.is_zero() {
+            // Allow extra time for the first block
+            return self.block_time * 2;
+        }
         let exp = u32::try_from(cmp::min(
             u64::from(u32::MAX),
             cmp::max(

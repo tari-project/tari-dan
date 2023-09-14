@@ -102,8 +102,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::commands.eq(serialize_json(block.commands())?),
             blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
-            blocks::is_committed.eq(false),
             blocks::is_dummy.eq(block.is_dummy()),
+            blocks::is_processed.eq(block.is_processed()),
         );
 
         diesel::insert_into(blocks::table)
@@ -117,12 +117,28 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn blocks_commit(&mut self, block_id: &BlockId) -> Result<(), StorageError> {
+    fn blocks_set_flags(
+        &mut self,
+        block_id: &BlockId,
+        is_committed: Option<bool>,
+        is_processed: Option<bool>,
+    ) -> Result<(), StorageError> {
         use crate::schema::blocks;
+
+        #[derive(AsChangeset)]
+        #[diesel(table_name = blocks)]
+        struct Changes {
+            is_committed: Option<bool>,
+            is_processed: Option<bool>,
+        }
+        let changes = Changes {
+            is_committed,
+            is_processed,
+        };
 
         diesel::update(blocks::table)
             .filter(blocks::block_id.eq(serialize_hex(block_id)))
-            .set(blocks::is_committed.eq(true))
+            .set(changes)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_commit",
@@ -342,6 +358,21 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
+    fn last_votes_unset(&mut self, last_voted: &LastVoted) -> Result<(), StorageError> {
+        use crate::schema::last_voted;
+
+        diesel::delete(last_voted::table)
+            .filter(last_voted::block_id.eq(serialize_hex(last_voted.block_id)))
+            .filter(last_voted::height.eq(last_voted.height.as_u64() as i64))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "last_votes_unset",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
     fn last_executed_set(&mut self, last_exec: &LastExecuted) -> Result<(), StorageError> {
         use crate::schema::last_executed;
 
@@ -380,6 +411,21 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
+    fn last_proposed_unset(&mut self, last_proposed: &LastProposed) -> Result<(), StorageError> {
+        use crate::schema::last_proposed;
+
+        diesel::delete(last_proposed::table)
+            .filter(last_proposed::block_id.eq(serialize_hex(last_proposed.block_id)))
+            .filter(last_proposed::height.eq(last_proposed.height.as_u64() as i64))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "last_proposed_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
     fn leaf_block_set(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError> {
         use crate::schema::leaf_blocks;
 
@@ -392,7 +438,22 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .values(insert)
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
-                operation: "leaf_node_set",
+                operation: "leaf_block_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn leaf_block_unset(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError> {
+        use crate::schema::leaf_blocks;
+
+        diesel::delete(leaf_blocks::table)
+            .filter(leaf_blocks::block_id.eq(serialize_hex(leaf_node.block_id)))
+            .filter(leaf_blocks::block_height.eq(leaf_node.height.as_u64() as i64))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "leaf_block_unset",
                 source: e,
             })?;
 

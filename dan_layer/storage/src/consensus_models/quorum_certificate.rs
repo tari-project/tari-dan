@@ -21,7 +21,7 @@ use tari_dan_common_types::{
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 
 use crate::{
-    consensus_models::{Block, BlockId, HighQc, LeafBlock, QuorumDecision, ValidatorSignature},
+    consensus_models::{Block, BlockId, HighQc, LastVoted, LeafBlock, QuorumDecision, ValidatorSignature},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -142,6 +142,13 @@ impl<TAddr> QuorumCertificate<TAddr> {
 
     pub fn as_leaf_block(&self) -> LeafBlock {
         LeafBlock {
+            block_id: self.block_id,
+            height: self.block_height,
+        }
+    }
+
+    pub fn as_last_voted(&self) -> LastVoted {
+        LastVoted {
             block_id: self.block_id,
             height: self.block_height,
         }

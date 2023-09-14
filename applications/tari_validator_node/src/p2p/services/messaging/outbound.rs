@@ -21,33 +21,59 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use async_trait::async_trait;
-use log::*;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_p2p::{DanMessage, OutboundService};
+use tari_consensus::messages::HotstuffMessage;
+use tari_dan_p2p::{DanMessage, Message, OutboundService};
 use tokio::sync::mpsc;
 
 use crate::{comms::Destination, p2p::services::messaging::MessagingError};
 
-const LOG_TARGET: &str = "tari::validator_node::messages::outbound::validator_node";
+const _LOG_TARGET: &str = "tari::dan::messages::outbound::validator_node";
 
 #[derive(Debug, Clone)]
 pub struct OutboundMessaging {
     our_node_addr: CommsPublicKey,
-    sender: mpsc::Sender<(Destination<CommsPublicKey>, DanMessage<CommsPublicKey>)>,
-    loopback_sender: mpsc::Sender<DanMessage<CommsPublicKey>>,
+    msg_sender: mpsc::Sender<(Destination<CommsPublicKey>, DanMessage<CommsPublicKey>)>,
+    consensus_sender: mpsc::Sender<(Destination<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
+    loopback_sender: mpsc::Sender<Message<CommsPublicKey>>,
 }
 
 impl OutboundMessaging {
     pub fn new(
         our_node_addr: CommsPublicKey,
-        sender: mpsc::Sender<(Destination<CommsPublicKey>, DanMessage<CommsPublicKey>)>,
-        loopback_sender: mpsc::Sender<DanMessage<CommsPublicKey>>,
+        msg_sender: mpsc::Sender<(Destination<CommsPublicKey>, DanMessage<CommsPublicKey>)>,
+        consensus_sender: mpsc::Sender<(Destination<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
+        loopback_sender: mpsc::Sender<Message<CommsPublicKey>>,
     ) -> Self {
         Self {
             our_node_addr,
-            sender,
+            msg_sender,
+            consensus_sender,
             loopback_sender,
         }
+    }
+
+    async fn send_message(
+        &self,
+        dest: Destination<CommsPublicKey>,
+        message: Message<CommsPublicKey>,
+    ) -> Result<(), MessagingError> {
+        match message {
+            Message::Consensus(msg) => {
+                self.consensus_sender
+                    .send((dest, msg))
+                    .await
+                    .map_err(|_| MessagingError::MessageSendFailed)?;
+            },
+            Message::Dan(msg) => {
+                self.msg_sender
+                    .send((dest, msg))
+                    .await
+                    .map_err(|_| MessagingError::MessageSendFailed)?;
+            },
+        }
+
+        Ok(())
     }
 }
 
@@ -56,32 +82,34 @@ impl OutboundService for OutboundMessaging {
     type Addr = CommsPublicKey;
     type Error = MessagingError;
 
-    async fn send_self(&mut self, message: DanMessage<Self::Addr>) -> Result<(), MessagingError> {
-        trace!(target: LOG_TARGET, "Sending {:?} to self", message);
+    async fn send_self<T: Into<Message<Self::Addr>> + Send>(&mut self, message: T) -> Result<(), MessagingError> {
         self.loopback_sender
-            .send(message)
+            .send(message.into())
             .await
             .map_err(|_| MessagingError::LoopbackSendFailed)?;
         return Ok(());
     }
 
-    async fn send(&mut self, to: Self::Addr, message: DanMessage<Self::Addr>) -> Result<(), MessagingError> {
+    async fn send<T: Into<Message<Self::Addr>> + Send>(
+        &mut self,
+        to: Self::Addr,
+        message: T,
+    ) -> Result<(), MessagingError> {
         if to == self.our_node_addr {
             return self.send_self(message).await;
         }
 
-        self.sender
-            .send((Destination::Peer(to), message))
-            .await
-            .map_err(|_| MessagingError::MessageSendFailed)?;
+        self.send_message(Destination::Peer(to), message.into()).await?;
+
         Ok(())
     }
 
-    async fn broadcast<'a, I: IntoIterator<Item = &'a Self::Addr> + Send>(
+    async fn broadcast<'a, I: IntoIterator<Item = &'a Self::Addr> + Send, T: Into<Message<Self::Addr>> + Send>(
         &mut self,
         committee: I,
-        message: DanMessage<Self::Addr>,
+        message: T,
     ) -> Result<(), MessagingError> {
+        let message = message.into();
         let (ours, theirs) = committee
             .into_iter()
             .partition::<Vec<_>, _>(|x| **x == self.our_node_addr);
@@ -92,25 +120,18 @@ impl OutboundService for OutboundMessaging {
 
         // send it more than once to ourselves??
         for _ in ours {
-            trace!(target: LOG_TARGET, "Sending {:?} to self", message);
             self.loopback_sender
                 .send(message.clone())
                 .await
                 .map_err(|_| MessagingError::LoopbackSendFailed)?;
         }
 
-        self.sender
-            .send((Destination::Selected(theirs.into_iter().cloned().collect()), message))
-            .await
-            .map_err(|_| MessagingError::MessageSendFailed)?;
+        self.send_message(Destination::Selected(theirs.into_iter().cloned().collect()), message)
+            .await?;
         Ok(())
     }
 
-    async fn flood(&mut self, message: DanMessage<Self::Addr>) -> Result<(), MessagingError> {
-        self.sender
-            .send((Destination::Flood, message))
-            .await
-            .map_err(|_| MessagingError::MessageSendFailed)?;
-        Ok(())
+    async fn flood<T: Into<Message<Self::Addr>> + Send>(&mut self, message: T) -> Result<(), MessagingError> {
+        self.send_message(Destination::Flood, message.into()).await
     }
 }

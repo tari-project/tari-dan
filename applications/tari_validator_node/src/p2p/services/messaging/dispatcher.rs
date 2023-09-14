@@ -22,7 +22,7 @@
 
 use log::*;
 use tari_comms::types::CommsPublicKey;
-use tari_dan_p2p::DanMessage;
+use tari_dan_p2p::{DanMessage, Message};
 use tokio::task;
 
 use crate::p2p::services::messaging::{DanMessageSenders, InboundMessaging};
@@ -49,16 +49,14 @@ impl MessageDispatcher {
     pub async fn run(mut self) -> anyhow::Result<()> {
         while let Some((from, msg)) = self.inbound.next_message().await {
             match msg {
-                DanMessage::HotStuffMessage(msg) => {
-                    self.message_senders.tx_consensus_message.send((from, *msg)).await?
-                },
-                DanMessage::NewTransaction(msg) => {
+                Message::Consensus(msg) => self.message_senders.tx_consensus_message.send((from, msg)).await?,
+                Message::Dan(DanMessage::NewTransaction(msg)) => {
                     self.message_senders
                         .tx_new_transaction_message
                         .send((from, *msg))
                         .await?
                 },
-                DanMessage::NetworkAnnounce(announce) => {
+                Message::Dan(DanMessage::NetworkAnnounce(announce)) => {
                     self.message_senders.tx_network_announce.send((from, *announce)).await?
                 },
             }

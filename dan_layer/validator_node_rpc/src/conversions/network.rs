@@ -36,21 +36,19 @@ use tari_dan_p2p::{DanMessage, NetworkAnnounce};
 
 use crate::proto;
 
-impl From<DanMessage<CommsPublicKey>> for proto::network::DanMessage {
-    fn from(msg: DanMessage<CommsPublicKey>) -> Self {
+impl From<&DanMessage<CommsPublicKey>> for proto::network::DanMessage {
+    fn from(msg: &DanMessage<CommsPublicKey>) -> Self {
         let message_tag = msg.get_message_tag();
         match msg {
-            DanMessage::HotStuffMessage(hot_stuff_msg) => Self {
-                message: Some(proto::network::dan_message::Message::HotStuff((*hot_stuff_msg).into())),
-                message_tag,
-            },
             DanMessage::NewTransaction(msg) => Self {
-                message: Some(proto::network::dan_message::Message::NewTransaction((*msg).into())),
+                message: Some(proto::network::dan_message::Message::NewTransaction(
+                    (**msg).clone().into(),
+                )),
                 message_tag,
             },
             DanMessage::NetworkAnnounce(announce) => Self {
                 message: Some(proto::network::dan_message::Message::NetworkAnnounce(
-                    (*announce).into(),
+                    (**announce).clone().into(),
                 )),
                 message_tag,
             },
@@ -64,9 +62,6 @@ impl TryFrom<proto::network::DanMessage> for DanMessage<CommsPublicKey> {
     fn try_from(value: proto::network::DanMessage) -> Result<Self, Self::Error> {
         let msg_type = value.message.ok_or_else(|| anyhow!("Message type not provided"))?;
         match msg_type {
-            proto::network::dan_message::Message::HotStuff(msg) => {
-                Ok(DanMessage::HotStuffMessage(Box::new(msg.try_into()?)))
-            },
             proto::network::dan_message::Message::NewTransaction(msg) => {
                 Ok(DanMessage::NewTransaction(Box::new(msg.try_into()?)))
             },
