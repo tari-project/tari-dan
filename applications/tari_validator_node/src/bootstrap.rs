@@ -179,7 +179,7 @@ pub async fn spawn_services(
     handles.push(join_handle);
 
     // Template manager
-    let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
+    let template_manager = TemplateManager::initialize(global_db.clone(), config.validator_node.templates.clone())?;
     let (template_manager_service, join_handle) =
         template_manager::implementation::spawn(template_manager.clone(), shutdown.clone());
     handles.push(join_handle);
