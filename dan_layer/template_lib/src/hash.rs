@@ -28,20 +28,19 @@ use std::{
     str::FromStr,
 };
 
-use generic_array::{typenum::U32, GenericArray};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Hash(GenericArray<u8, U32>);
+pub struct Hash([u8; 32]);
 
 impl Hash {
-    pub fn from_array(bytes: [u8; 32]) -> Self {
-        Self(GenericArray::<u8, U32>::clone_from_slice(&bytes))
+    pub const fn from_array(bytes: [u8; 32]) -> Self {
+        Self(bytes)
     }
 
     pub fn into_array(self) -> [u8; 32] {
-        self.0.into()
+        self.0
     }
 
     pub fn from_hex(s: &str) -> Result<Self, HashParseError> {
@@ -53,7 +52,7 @@ impl Hash {
         for (i, h) in hash.iter_mut().enumerate() {
             *h = u8::from_str_radix(&s[2 * i..2 * (i + 1)], 16).map_err(|_| HashParseError)?;
         }
-        Ok(Hash(GenericArray::<u8, U32>::from(hash)))
+        Ok(Hash(hash))
     }
 
     pub fn write_hex_fmt<W: fmt::Write>(&self, writer: &mut W) -> fmt::Result {

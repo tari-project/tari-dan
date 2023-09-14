@@ -18,4 +18,8 @@ impl LastProposed {
     pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.last_proposed_set(self)
     }
+
+    pub fn unset<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        tx.last_proposed_unset(self)
+    }
 }

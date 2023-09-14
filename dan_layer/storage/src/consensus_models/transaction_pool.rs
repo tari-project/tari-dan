@@ -5,9 +5,11 @@ use std::{
     fmt::{Display, Formatter},
     marker::PhantomData,
     num::NonZeroU64,
+    ops::DerefMut,
     str::FromStr,
 };
 
+use log::*;
 use tari_dan_common_types::{
     committee::CommitteeShard,
     optional::{IsNotFoundError, Optional},
@@ -15,12 +17,14 @@ use tari_dan_common_types::{
 use tari_transaction::TransactionId;
 
 use crate::{
-    consensus_models::{Decision, QcId, TransactionAtom},
+    consensus_models::{Block, Command, Decision, QcId, TransactionAtom},
     StateStore,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
+
+const LOG_TARGET: &str = "tari::dan::storage::transaction_pool";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TransactionPoolStage {
@@ -153,18 +157,26 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         &self,
         tx: &mut TStateStore::ReadTransaction<'_>,
     ) -> Result<bool, TransactionPoolError> {
-        let count = tx.transaction_pool_count(None, Some(true))?;
+        let count = tx.transaction_pool_count(None, None)?;
         if count > 0 {
             return Ok(true);
         }
-        let count = tx.transaction_pool_count(Some(TransactionPoolStage::AllPrepared), None)?;
-        if count > 0 {
-            return Ok(true);
-        }
-        let count = tx.transaction_pool_count(Some(TransactionPoolStage::SomePrepared), None)?;
-        if count > 0 {
-            return Ok(true);
-        }
+        // let count = tx.transaction_pool_count(Some(TransactionPoolStage::Prepared), None)?;
+        // if count > 0 {
+        //     return Ok(true);
+        // }
+        // let count = tx.transaction_pool_count(Some(TransactionPoolStage::LocalPrepared), None)?;
+        // if count > 0 {
+        //     return Ok(true);
+        // }
+        // let count = tx.transaction_pool_count(Some(TransactionPoolStage::AllPrepared), None)?;
+        // if count > 0 {
+        //     return Ok(true);
+        // }
+        // let count = tx.transaction_pool_count(Some(TransactionPoolStage::SomePrepared), None)?;
+        // if count > 0 {
+        //     return Ok(true);
+        // }
         Ok(count > 0)
     }
 
@@ -173,22 +185,55 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         Ok(count)
     }
 
-    pub fn confirm_all_transitions<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn confirm_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &self,
-        tx: &mut TTx,
+        tx: &mut TStateStore::WriteTransaction<'_>,
         tx_ids: I,
     ) -> Result<(), TransactionPoolError> {
         tx.transaction_pool_set_all_transitions(tx_ids)?;
         Ok(())
     }
 
-    pub fn clear_pending_stages<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a TransactionId>>(
+    pub fn rollback_pending_stages(
         &self,
-        tx: &mut TTx,
-        tx_ids: I,
+        tx: &mut TStateStore::WriteTransaction<'_>,
+        block: &Block<TStateStore::Addr>,
     ) -> Result<(), TransactionPoolError> {
-        for tx_id in tx_ids {
-            tx.transaction_pool_update(tx_id, None, Some(None), None, None, None)?;
+        for cmd in block.commands() {
+            let transaction = self.get(tx.deref_mut(), cmd.transaction_id())?;
+
+            debug!(
+                target: LOG_TARGET,
+                "↩️ Rolling back pending stage for transaction {} from {:?} ",
+                cmd.transaction_id(),
+                transaction.pending_stage,
+            );
+            match cmd {
+                Command::Prepare(t) => {
+                    tx.transaction_pool_update(t.id(), None, Some(None), None, None, Some(true))?;
+                },
+                Command::LocalPrepared(t) => {
+                    // TODO: We can never go back from <LocalPrepared, true> to Prepared
+                    tx.transaction_pool_update(
+                        t.id(),
+                        None,
+                        Some(Some(TransactionPoolStage::Prepared)),
+                        None,
+                        None,
+                        Some(true),
+                    )?;
+                },
+                Command::Accept(t) => {
+                    tx.transaction_pool_update(
+                        t.id(),
+                        None,
+                        Some(Some(TransactionPoolStage::LocalPrepared)),
+                        None,
+                        None,
+                        Some(true),
+                    )?;
+                },
+            }
         }
         Ok(())
     }
@@ -224,8 +269,8 @@ impl TransactionPoolRecord {
     }
 
     pub fn current_decision(&self) -> Decision {
-        self.local_decision()
-            .or_else(|| self.remote_decision())
+        self.remote_decision()
+            .or_else(|| self.local_decision())
             .unwrap_or(self.original_decision())
     }
 
@@ -355,23 +400,13 @@ impl TransactionPoolRecord {
         Ok(())
     }
 
-    pub fn set_pending_stage<TTx: StateStoreWriteTransaction>(
-        &mut self,
-        tx: &mut TTx,
-        pending_stage: TransactionPoolStage,
-    ) -> Result<(), TransactionPoolError> {
-        self.pending_stage = Some(pending_stage);
-        tx.transaction_pool_update(&self.transaction.id, None, Some(Some(pending_stage)), None, None, None)?;
-        Ok(())
-    }
-
     pub fn update_remote_decision<TTx: StateStoreWriteTransaction>(
         &mut self,
         tx: &mut TTx,
         decision: Decision,
     ) -> Result<(), TransactionPoolError> {
-        self.set_remote_decision(decision);
         tx.transaction_pool_update(&self.transaction.id, None, None, None, Some(decision), None)?;
+        self.set_remote_decision(decision);
         Ok(())
     }
 
@@ -380,8 +415,10 @@ impl TransactionPoolRecord {
         tx: &mut TTx,
         decision: Decision,
     ) -> Result<(), TransactionPoolError> {
-        self.set_local_decision(decision);
-        tx.transaction_pool_update(&self.transaction.id, None, None, Some(decision), None, None)?;
+        if self.local_decision.map(|d| d != decision).unwrap_or(true) {
+            self.set_local_decision(decision);
+            tx.transaction_pool_update(&self.transaction.id, None, None, Some(decision), None, None)?;
+        }
         Ok(())
     }
 

@@ -3,6 +3,7 @@
 
 use std::{sync::Arc, time::Instant};
 
+use log::*;
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, ShardId};
@@ -17,6 +18,8 @@ use tari_dan_storage::consensus_models::ExecutedTransaction;
 use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
 use tari_template_lib::{crypto::RistrettoPublicKeyBytes, prelude::NonFungibleAddress};
 use tari_transaction::Transaction;
+
+const _LOG_TARGET: &str = "tari::dan::transaction_executor";
 
 pub trait TransactionExecutor {
     type Error: Send + Sync + 'static;
@@ -90,7 +93,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             .map(|diff| {
                 diff.up_iter()
                     .map(|(addr, substate)| ShardId::from_address(addr, substate.version()))
-                    .collect()
+                    .collect::<Vec<_>>()
             })
             .unwrap_or_default();
 

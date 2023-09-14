@@ -9,7 +9,7 @@ use crate::support::{
     epoch_manager::TestEpochManager,
     signing_service::TestVoteSignatureService,
     NoopStateManager,
-    SelectedIndexLeaderStrategy,
+    RoundRobinLeaderStrategy,
 };
 
 pub struct TestConsensusSpec;
@@ -17,7 +17,7 @@ pub struct TestConsensusSpec;
 impl ConsensusSpec for TestConsensusSpec {
     type Addr = TestAddress;
     type EpochManager = TestEpochManager;
-    type LeaderStrategy = SelectedIndexLeaderStrategy;
+    type LeaderStrategy = RoundRobinLeaderStrategy;
     type StateManager = NoopStateManager;
     type StateStore = SqliteStateStore<Self::Addr>;
     type VoteSignatureService = TestVoteSignatureService<Self::Addr>;

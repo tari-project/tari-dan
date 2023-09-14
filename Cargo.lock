@@ -1317,8 +1317,7 @@ dependencies = [
 [[package]]
 name = "ciborium"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "effd91f6c78e5a4ace8a5d3c0b6bfaec9e2baaef55f3efc00e45fb2e477ee926"
+source = "git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef#114614d2a61102eb2321c68e53799d1e6f087aef"
 dependencies = [
  "ciborium-io",
  "ciborium-ll",
@@ -1328,14 +1327,12 @@ dependencies = [
 [[package]]
 name = "ciborium-io"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdf919175532b369853f5d5e20b26b43112613fd6fe7aee757e35f7a44642656"
+source = "git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef#114614d2a61102eb2321c68e53799d1e6f087aef"
 
 [[package]]
 name = "ciborium-ll"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "defaa24ecc093c77630e6c15e17c51f5e187bf35ee514f4e2d67baaa96dae22b"
+source = "git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef#114614d2a61102eb2321c68e53799d1e6f087aef"
 dependencies = [
  "ciborium-io",
  "half",
@@ -2231,12 +2228,12 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "5.4.0"
+version = "5.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "907076dfda823b0b36d2a1bb5f90c96660a5bbcd7729e10727f07858f22c4edc"
+checksum = "edd72493923899c6f10c641bdbdeddc7183d6396641d99c1a0d1597f37f92e28"
 dependencies = [
  "cfg-if 1.0.0",
- "hashbrown 0.12.3",
+ "hashbrown 0.14.0",
  "lock_api",
  "once_cell",
  "parking_lot_core 0.9.8",
@@ -3067,7 +3064,6 @@ version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
- "serde",
  "typenum",
  "version_check 0.9.4",
 ]
@@ -6970,6 +6966,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "std-semaphore"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33ae9eec00137a8eed469fb4148acd9fc6ac8c3f9b110f52cd34698c8b5bfa0e"
+
+[[package]]
 name = "str-buf"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7559,6 +7561,7 @@ dependencies = [
  "anyhow",
  "bytes 1.4.0",
  "chrono",
+ "dashmap",
  "futures 0.3.28",
  "lazy_static",
  "log",
@@ -7567,6 +7570,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "std-semaphore",
  "tari_base_node_client",
  "tari_common_types",
  "tari_core",
@@ -8116,6 +8120,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tari_common",
+ "tari_dan_common_types",
  "tari_dan_wallet_sdk",
  "tari_shutdown",
  "tokio",
@@ -8176,8 +8181,6 @@ dependencies = [
 name = "tari_template_lib"
 version = "0.50.0-pre.0"
 dependencies = [
- "generic-array",
- "lazy_static",
  "newtype-ops",
  "serde",
  "serde-big-array",

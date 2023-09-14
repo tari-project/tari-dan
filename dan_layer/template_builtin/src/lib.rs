@@ -29,10 +29,10 @@ lazy_static! {
     ]);
 }
 
-pub fn get_template_builtin(address: TemplateAddress) -> &'static [u8] {
-    if address == *ACCOUNT_TEMPLATE_ADDRESS {
+pub fn get_template_builtin(address: &TemplateAddress) -> &'static [u8] {
+    if *address == *ACCOUNT_TEMPLATE_ADDRESS {
         include_bytes!("../templates/account/account.wasm")
-    } else if address == *ACCOUNT_NFT_TEMPLATE_ADDRESS {
+    } else if *address == *ACCOUNT_NFT_TEMPLATE_ADDRESS {
         include_bytes!("../templates/account_nfts/account_nfts.wasm")
     } else {
         panic!("Unknown builtin template address")

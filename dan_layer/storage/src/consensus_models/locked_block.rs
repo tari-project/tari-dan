@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::fmt::Display;
+
 use tari_dan_common_types::NodeHeight;
 
 use crate::{
@@ -37,5 +39,11 @@ impl LockedBlock {
 
     pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.locked_block_set(self)
+    }
+}
+
+impl Display for LockedBlock {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "LockedBlock({}, {})", self.height, self.block_id)
     }
 }

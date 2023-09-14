@@ -6,13 +6,17 @@ use std::collections::{HashMap, HashSet};
 use log::*;
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, LeafBlock, LockedBlock, QuorumCertificate},
+    consensus_models::{BlockId, LockedBlock, QuorumCertificate},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
+    hotstuff::{
+        common::{calculate_dummy_blocks, update_high_qc},
+        error::HotStuffError,
+        pacemaker_handle::PaceMakerHandle,
+    },
     messages::NewViewMessage,
     traits::{ConsensusSpec, LeaderStrategy},
 };
@@ -135,38 +139,20 @@ where TConsensusSpec: ConsensusSpec
         // Once we have received enough (quorum) NEWVIEWS, we can create the dummy block(s) and propose the next block.
         // Any subsequent NEWVIEWs for this height/view are ignored.
         if entry.len() == threshold {
-            info!(target: LOG_TARGET, "🌟 NEWVIEW for block {} (high_qc: {}) has reached quorum", new_height, high_qc.as_high_qc());
+            info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum", new_height, high_qc.as_high_qc());
 
             // Determine how many missing blocks we must fill without actually creating them.
             // This node, as well as all other replicas, will create the blocks in on_receive_proposal.
-            let mut parent_block_id = *high_qc.block_id();
-            let mut current_height = high_qc.block_height() + NodeHeight(1);
-            debug!(
-                target: LOG_TARGET,
-                "🐵 dummy blocks from {} to {}",
-                current_height,
-                new_height + NodeHeight(1),
-            );
-            loop {
-                let leader = self.leader_strategy.get_leader(&local_committee, current_height);
-                // TODO: replace with actual leader's propose
-                let dummy_block =
-                    Block::dummy_block(parent_block_id, leader.clone(), current_height, high_qc.clone(), epoch);
+            let dummy_blocks =
+                calculate_dummy_blocks(epoch, &high_qc, new_height, &self.leader_strategy, &local_committee);
+            let parent_block = dummy_blocks
+                .last()
+                .map(|b| b.as_leaf_block())
+                .unwrap_or_else(|| high_qc.as_leaf_block());
 
-                parent_block_id = *dummy_block.id();
-
-                if current_height == new_height + NodeHeight(1) {
-                    break;
-                }
-                current_height += NodeHeight(1);
-            }
-            let dummy_leaf_block = LeafBlock {
-                block_id: parent_block_id,
-                height: new_height,
-            };
-            debug!(target: LOG_TARGET, "🐵 dummy leaf block {}", dummy_leaf_block);
+            debug!(target: LOG_TARGET, "🍼 dummy leaf block {}", parent_block);
             // Force beat so that a block is proposed even if there are no transactions
-            self.pacemaker.force_beat(dummy_leaf_block).await?;
+            self.pacemaker.force_beat(parent_block).await?;
         }
 
         Ok(())

@@ -38,6 +38,8 @@ pub struct Block<TAddr> {
     /// If the block is a dummy block. This is metadata and not sent over
     /// the wire or part of the block hash.
     is_dummy: bool,
+    /// Flag that indicates that the block locked objects and made transaction stage transitions.
+    is_processed: bool,
 }
 
 impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
@@ -62,6 +64,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             commands,
             total_leader_fee,
             is_dummy: false,
+            is_processed: false,
         };
         block.id = block.calculate_hash().into();
         block
@@ -77,6 +80,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
         is_dummy: bool,
+        is_processed: bool,
     ) -> Self {
         Self {
             id,
@@ -90,6 +94,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             commands,
             total_leader_fee,
             is_dummy,
+            is_processed,
         }
     }
 
@@ -118,6 +123,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             commands: Default::default(),
             total_leader_fee: 0,
             is_dummy: false,
+            is_processed: false,
         }
     }
 
@@ -130,6 +136,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
     ) -> Self {
         let mut block = Self::new(parent, high_qc, node_height, epoch, proposed_by, Default::default(), 0);
         block.is_dummy = true;
+        block.is_processed = false;
         block
     }
 
@@ -148,7 +155,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
 
 impl<TAddr> Block<TAddr> {
     pub fn is_genesis(&self) -> bool {
-        self.parent == BlockId::genesis()
+        self.id == BlockId::genesis()
     }
 
     pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
@@ -237,6 +244,10 @@ impl<TAddr> Block<TAddr> {
     pub fn is_dummy(&self) -> bool {
         self.is_dummy
     }
+
+    pub fn is_processed(&self) -> bool {
+        self.is_processed
+    }
 }
 
 impl<TAddr: NodeAddressable> Block<TAddr> {
@@ -288,7 +299,21 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
     }
 
     pub fn commit<TTx: StateStoreWriteTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        tx.blocks_commit(self.id())
+        tx.blocks_set_flags(self.id(), Some(true), None)
+    }
+
+    pub fn set_as_processed<TTx: StateStoreWriteTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
+        tx.blocks_set_flags(self.id(), None, Some(true))
+    }
+
+    pub fn unset_as_processed<TTx: StateStoreWriteTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
+        tx.blocks_set_flags(self.id(), None, Some(false))
     }
 
     pub fn find_involved_shards<TTx: StateStoreReadTransaction<Addr = TAddr>>(
@@ -324,8 +349,11 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         Vote::get_for_block(tx, &self.id)
     }
 
-    pub fn get_child<TTx: StateStoreReadTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<Self, StorageError> {
-        tx.blocks_get_by_parent(self.id())
+    pub fn get_child_blocks<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.blocks_get_all_by_parent(self.id())
     }
 
     pub fn get_total_due_for_epoch<TTx: StateStoreReadTransaction<Addr = TAddr>>(
