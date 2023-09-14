@@ -23,5 +23,5 @@ crate-type = ["cdylib", "lib"]
 tari_dan_engine = { path = "../../../../dan_layer/engine" }
 tari_dan_common_types = { path = "../../../../dan_layer/common_types" }
 
-tari_crypto = { version = "0.17" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4", package = "tari_common_types" }
+tari_crypto = "0.18"
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common_types" }

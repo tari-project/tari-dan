@@ -11,7 +11,7 @@ use crate::{hash::HashParseError, Hash};
 pub struct UnclaimedConfidentialOutputAddress(Hash);
 
 impl UnclaimedConfidentialOutputAddress {
-    pub fn new(hash: Hash) -> Self {
+    pub const fn new(hash: Hash) -> Self {
         Self(hash)
     }
 

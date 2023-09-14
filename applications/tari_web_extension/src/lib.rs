@@ -38,13 +38,11 @@ extern "C" {
     fn warn(s: &str);
 }
 
-// When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
-// allocator.
-//
-// If you don't want to use `wee_alloc`, you can safely delete this.
-#[cfg(feature = "wee_alloc")]
+// Setup `lol_alloc` as the global allocator for wasm32 targets with the "lol_alloc" feature is enabled.
+#[cfg(all(feature = "lol_alloc", target_arch = "wasm32"))]
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: lol_alloc::LockedAllocator<lol_alloc::FreeListAllocator> =
+    lol_alloc::LockedAllocator::new(lol_alloc::FreeListAllocator::new());
 
 lazy_static! {
     static ref ICE_CNT: Arc<Mutex<u64>> = Arc::new(Mutex::new(0));

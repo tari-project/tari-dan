@@ -2,11 +2,14 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 use std::{io, io::Write};
 
-use digest::Digest;
+use blake2::{
+    digest::{consts::U32, Digest},
+    Blake2b,
+};
 use serde::Serialize;
 use tari_bor::encode_into;
 use tari_common_types::types::FixedHash;
-use tari_crypto::{hash::blake2::Blake256, hashing::DomainSeparation};
+use tari_crypto::hashing::DomainSeparation;
 
 pub fn tari_hasher<D: DomainSeparation>(label: &'static str) -> TariHasher {
     TariHasher::new_with_label::<D>(label)
@@ -14,12 +17,12 @@ pub fn tari_hasher<D: DomainSeparation>(label: &'static str) -> TariHasher {
 
 #[derive(Debug, Clone)]
 pub struct TariHasher {
-    hasher: Blake256,
+    hasher: Blake2b<U32>,
 }
 
 impl TariHasher {
     pub fn new_with_label<D: DomainSeparation>(label: &'static str) -> Self {
-        let mut hasher = Blake256::new();
+        let mut hasher = Blake2b::<U32>::new();
         D::add_domain_separation_tag(&mut hasher, label);
         Self { hasher }
     }
@@ -47,7 +50,7 @@ impl TariHasher {
     }
 
     fn hash_writer(&mut self) -> impl Write + '_ {
-        struct HashWriter<'a>(&'a mut Blake256);
+        struct HashWriter<'a>(&'a mut Blake2b<U32>);
         impl Write for HashWriter<'_> {
             fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
                 self.0.update(buf);

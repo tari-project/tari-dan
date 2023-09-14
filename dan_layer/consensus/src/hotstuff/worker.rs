@@ -330,7 +330,8 @@ where
                 .is_leader_for_next_block(&self.validator_addr, &local_committee, leaf_block.height);
         info!(
             target: LOG_TARGET,
-            "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}, must_propose: {}",
+            "🔥 [on_beat] {} Is leader: {:?}, leaf_block: {}, local_committee: {}, must_propose: {}",
+            self.validator_addr,
             is_leader,
             leaf_block,
             local_committee

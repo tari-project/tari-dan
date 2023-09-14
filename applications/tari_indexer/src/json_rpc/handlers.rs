@@ -150,13 +150,8 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let response = GetIdentityResponse {
             node_id: self.node_identity.node_id().to_hex(),
-            public_key: self.node_identity.public_key().to_hex(),
-            public_address: self
-                .node_identity
-                .public_addresses()
-                .first()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "No public address".to_string()),
+            public_key: self.node_identity.public_key().clone(),
+            public_addresses: self.node_identity.public_addresses(),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))

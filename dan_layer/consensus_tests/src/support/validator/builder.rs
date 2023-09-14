@@ -2,9 +2,8 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::hotstuff::HotstuffWorker;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, ShardId};
 use tari_dan_storage::consensus_models::TransactionPool;
-use tari_epoch_manager::EpochManagerEvent;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tokio::sync::{broadcast, mpsc};
@@ -14,7 +13,7 @@ use crate::support::{
     epoch_manager::TestEpochManager,
     signing_service::TestVoteSignatureService,
     NoopStateManager,
-    SelectedIndexLeaderStrategy,
+    RoundRobinLeaderStrategy,
     TestConsensusSpec,
     Validator,
     ValidatorChannels,
@@ -25,7 +24,7 @@ pub struct ValidatorBuilder {
     pub shard: ShardId,
     pub bucket: ShardBucket,
     pub sql_url: String,
-    pub leader_strategy: SelectedIndexLeaderStrategy,
+    pub leader_strategy: RoundRobinLeaderStrategy,
     pub epoch_manager: TestEpochManager,
 }
 
@@ -36,7 +35,7 @@ impl ValidatorBuilder {
             shard: ShardId::zero(),
             bucket: ShardBucket::from(0),
             sql_url: ":memory".to_string(),
-            leader_strategy: SelectedIndexLeaderStrategy::new(0),
+            leader_strategy: RoundRobinLeaderStrategy::new(),
             epoch_manager: TestEpochManager::new(),
         }
     }
@@ -66,7 +65,7 @@ impl ValidatorBuilder {
         self
     }
 
-    pub fn with_leader_strategy(&mut self, leader_strategy: SelectedIndexLeaderStrategy) -> &mut Self {
+    pub fn with_leader_strategy(&mut self, leader_strategy: RoundRobinLeaderStrategy) -> &mut Self {
         self.leader_strategy = leader_strategy;
         self
     }
@@ -92,7 +91,7 @@ impl ValidatorBuilder {
             store.clone(),
             rx_epoch_events,
             self.epoch_manager.clone_for(self.address.clone(), self.shard),
-            self.leader_strategy.clone(),
+            self.leader_strategy,
             signing_service,
             noop_state_manager.clone(),
             transaction_pool,
@@ -117,9 +116,6 @@ impl ValidatorBuilder {
             rx_mempool,
         };
 
-        // Fire off initial epoch change event so that the pacemaker starts
-        tx_epoch_events.send(EpochManagerEvent::EpochChanged(Epoch(0))).unwrap();
-
         let validator = Validator {
             address: self.address.clone(),
             shard: self.shard,
@@ -127,7 +123,7 @@ impl ValidatorBuilder {
             epoch_manager: self.epoch_manager.clone_for(self.address.clone(), self.shard),
             tx_epoch_events,
             state_manager: noop_state_manager,
-            leader_strategy: self.leader_strategy.clone(),
+            leader_strategy: self.leader_strategy,
             events: tx_events.subscribe(),
             handle,
         };

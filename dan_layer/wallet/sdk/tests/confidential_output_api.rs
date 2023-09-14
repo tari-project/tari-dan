@@ -155,7 +155,7 @@ impl Test {
             .add_vault(
                 Test::test_account_address(),
                 Test::test_vault_address(),
-                *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                 ResourceType::Confidential,
                 Some("TEST".to_string()),
             )

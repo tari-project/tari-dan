@@ -3,13 +3,16 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(not(feature = "std"))]
+use alloc::{format, string::String, string::ToString, vec::Vec};
+
+#[cfg(not(feature = "std"))]
 extern crate alloc;
 
 mod tag;
 pub use tag::*;
 
 mod walker;
-use alloc::collections::BTreeMap;
 
 pub use ciborium::value::Value;
 use ciborium::{de::from_reader, ser::into_writer};
@@ -59,8 +62,9 @@ pub fn encode_with_len<T: Serialize>(val: &T) -> Vec<u8> {
 }
 
 #[cfg(not(feature = "std"))]
-pub fn encode_into<T: Serialize + ?Sized, W: ciborium_io::Write>(val: &T, writer: &mut W) -> Result<(), BorError> {
-    into_writer(&val, writer).map_err(|_| BorError(String::new()))
+pub fn encode_into<T: Serialize + ?Sized, W: ciborium_io::Write>(val: &T, writer: &mut W) -> Result<(), BorError>
+where W::Error: core::fmt::Debug {
+    into_writer(&val, writer).map_err(to_bor_error)
 }
 
 #[cfg(feature = "std")]
@@ -104,7 +108,7 @@ pub fn decode_exact<T: DeserializeOwned>(mut input: &[u8]) -> Result<T, BorError
 
 pub fn decode_len(input: &[u8]) -> Result<usize, BorError> {
     if input.len() < 4 {
-        return Err(BorError("Not enough bytes to decode length".to_owned()));
+        return Err(BorError("Not enough bytes to decode length".to_string()));
     }
 
     let mut buf = [0u8; 4];
@@ -116,15 +120,4 @@ pub fn decode_len(input: &[u8]) -> Result<usize, BorError> {
 fn to_bor_error<E>(e: E) -> BorError
 where E: core::fmt::Display {
     BorError(e.to_string())
-}
-
-#[cfg(feature = "std")]
-pub fn serde_ordered_map<S, K, V>(value: &std::collections::HashMap<K, V>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-    K: Serialize + Ord,
-    V: Serialize,
-{
-    let ordered: BTreeMap<_, _> = value.iter().collect();
-    ordered.serialize(serializer)
 }

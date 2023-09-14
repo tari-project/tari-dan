@@ -1,10 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use blake2::Blake2b;
+use digest::consts::U32;
 use tari_common_types::types::PublicKey;
 use tari_crypto::keys::PublicKey as PublicKeyTrait;
 //
-use tari_crypto::{hash::blake2::Blake256, ristretto::RistrettoPublicKey};
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::optional::Optional;
 use tari_key_manager::{
     cipher_seed::CipherSeed,
@@ -13,7 +15,7 @@ use tari_key_manager::{
 
 use crate::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
 
-pub type WalletKeyManager = KeyManager<RistrettoPublicKey, Blake256>;
+pub type WalletKeyManager = KeyManager<RistrettoPublicKey, Blake2b<U32>>;
 
 pub const TRANSACTION_BRANCH: &str = "transactions";
 
@@ -46,7 +48,7 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
             let km = self.get_key_manager(branch, index);
             let key = km
                 .derive_key(index)
-                .map_err(tari_key_manager::error::KeyManagerError::ByteArrayError)?;
+                .map_err(tari_key_manager::error::KeyManagerError::from)?;
             let pk = PublicKey::from_secret_key(&key.key);
             keys.push((index, pk, active));
         }
@@ -58,7 +60,7 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
         let key = km
                 .derive_key(index)
                 // TODO: Key manager shouldn't return other errors
-                .map_err(tari_key_manager::error::KeyManagerError::ByteArrayError)?;
+                .map_err(tari_key_manager::error::KeyManagerError::from)?;
         Ok(key)
     }
 
@@ -69,7 +71,7 @@ impl<'a, TStore: WalletStore> KeyManagerApi<'a, TStore> {
         let key = key_manager
             .next_key()
             // TODO: Key manager shouldn't return other errors
-            .map_err(tari_key_manager::error::KeyManagerError::ByteArrayError)?;
+            .map_err(tari_key_manager::error::KeyManagerError::from)?;
         tx.key_manager_insert(&key_manager.branch_seed, key_manager.key_index())?;
         tx.commit()?;
         Ok(key)

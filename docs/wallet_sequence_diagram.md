@@ -41,3 +41,4 @@ TariConnector->>WalletDaemon: WebRTC messaging with the user request
 WalletDaemon->>WalletDaemon: Calling the requested wallet JSON RPC method and getting the response
 WalletDaemon->>TariConnector: WebRTC messaging with the response
 TariConnector->>User: response
+```

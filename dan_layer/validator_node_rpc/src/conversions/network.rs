@@ -93,7 +93,7 @@ impl<T: ByteArray> TryFrom<proto::network::NetworkAnnounce> for NetworkAnnounce<
 
     fn try_from(value: proto::network::NetworkAnnounce) -> Result<Self, Self::Error> {
         Ok(NetworkAnnounce {
-            identity: T::from_bytes(&value.identity)?,
+            identity: T::from_bytes(&value.identity).map_err(anyhow::Error::msg)?,
             claim: value
                 .claim
                 .ok_or_else(|| anyhow!("claim not provided in NetworkAnnounce"))?
@@ -153,7 +153,6 @@ impl TryFrom<proto::network::PeerIdentityClaim> for PeerIdentityClaim {
             signature,
             features: PeerFeatures::COMMUNICATION_NODE,
             addresses,
-            unverified_data: None,
         })
     }
 }

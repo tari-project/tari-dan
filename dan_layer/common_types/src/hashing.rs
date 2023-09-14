@@ -23,7 +23,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparatedHasher};
+use blake2::{digest::consts::U32, Blake2b};
+use tari_crypto::{hash_domain, hashing::DomainSeparatedHasher};
 use tari_mmr::{BalancedBinaryMerkleProof, BalancedBinaryMerkleTree, MergedBalancedBinaryMerkleProof};
 
 use crate::hasher::{tari_hasher, TariHasher};
@@ -60,7 +61,7 @@ hash_domain!(
     "com.tari.base_layer.core.validator_node_mmr",
     1
 );
-pub type ValidatorNodeBmtHasherBlake256 = DomainSeparatedHasher<Blake256, ValidatorNodeBmtHashDomain>;
-pub type ValidatorNodeBalancedMerkleTree = BalancedBinaryMerkleTree<ValidatorNodeBmtHasherBlake256>;
-pub type ValidatorNodeMerkleProof = BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>;
-pub type MergedValidatorNodeMerkleProof = MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>;
+pub type ValidatorNodeBmtHasherBlake2b = DomainSeparatedHasher<Blake2b<U32>, ValidatorNodeBmtHashDomain>;
+pub type ValidatorNodeBalancedMerkleTree = BalancedBinaryMerkleTree<ValidatorNodeBmtHasherBlake2b>;
+pub type ValidatorNodeMerkleProof = BalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b>;
+pub type MergedValidatorNodeMerkleProof = MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b>;
