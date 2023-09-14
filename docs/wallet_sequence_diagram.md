@@ -36,3 +36,4 @@ WalletDaemon->>WalletDaemon: The wallet JWT is auto-injected (via callback) to t
 WalletDaemon->>WalletDaemon: Calling the requested wallet JSON RPC method and getting the response
 WalletDaemon->>TariConnector: WebRTC messaging with the response
 TariConnector->>User: response
+```
