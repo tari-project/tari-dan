@@ -76,6 +76,10 @@ pub struct TransactionAtom {
 }
 
 impl TransactionAtom {
+    pub fn id(&self) -> &TransactionId {
+        &self.id
+    }
+
     pub fn get_transaction<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,

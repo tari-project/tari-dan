@@ -2,13 +2,17 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 pub fn setup_logger() {
+    if option_env!("CI").is_some() {
+        return;
+    }
+
     let _ignore = fern::Dispatch::new()
         // Perform allocation-free log formatting
         .format(|out, message, record| {
             out.finish(format_args!(
                 "{} [{}] {} {}",
                 humantime::format_rfc3339(std::time::SystemTime::now()),
-                record.target().strip_prefix("tari::dan::consensus::hotstuff").unwrap_or(record.target()),
+                record.target().strip_prefix("tari::dan::consensus::hotstuff::").unwrap_or(record.target()),
                 record.level(),
                 message
             ))

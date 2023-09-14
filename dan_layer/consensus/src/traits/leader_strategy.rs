@@ -25,13 +25,7 @@ use tari_dan_common_types::{committee::Committee, NodeAddressable, NodeHeight};
 pub trait LeaderStrategy<TAddr: NodeAddressable> {
     fn calculate_leader(&self, committee: &Committee<TAddr>, height: NodeHeight) -> u32;
 
-    fn is_leader(
-        &self,
-        validator_addr: &TAddr,
-        committee: &Committee<TAddr>,
-        // block: &BlockId,
-        height: NodeHeight,
-    ) -> bool {
+    fn is_leader(&self, validator_addr: &TAddr, committee: &Committee<TAddr>, height: NodeHeight) -> bool {
         let position = self.calculate_leader(committee, height);
         if let Some(vn) = committee.members.get(position as usize) {
             vn == validator_addr
