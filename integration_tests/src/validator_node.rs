@@ -34,7 +34,6 @@ use tari_common::{
 use tari_common_types::types::PublicKey;
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_crypto::tari_utilities::hex::Hex;
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tari_validator_node::{run_validator_node, ApplicationConfig, ValidatorNodeConfig};
@@ -73,12 +72,11 @@ impl ValidatorNodeProcess {
 }
 
 pub async fn spawn_validator_node(
-    world: &mut TariWorld,
+    world: &TariWorld,
     validator_node_name: String,
     base_node_name: String,
     wallet_name: String,
-    is_seed_vn: bool,
-) {
+) -> ValidatorNodeProcess {
     // each spawned VN will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
     let http_ui_port = get_os_assigned_port();
@@ -155,7 +153,7 @@ pub async fn spawn_validator_node(
     let public_key = get_vn_identity(json_rpc_port).await;
 
     // make the new vn able to be referenced by other processes
-    let validator_node_process = ValidatorNodeProcess {
+    ValidatorNodeProcess {
         name: name.clone(),
         public_key,
         port,
@@ -165,15 +163,10 @@ pub async fn spawn_validator_node(
         json_rpc_port,
         temp_dir_path,
         shutdown,
-    };
-    if is_seed_vn {
-        world.vn_seeds.insert(name, validator_node_process);
-    } else {
-        world.validator_nodes.insert(name, validator_node_process);
     }
 }
 
-pub fn get_vn_client(port: u16) -> ValidatorNodeClient {
+fn get_vn_client(port: u16) -> ValidatorNodeClient {
     let endpoint: Url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
     ValidatorNodeClient::connect(endpoint).unwrap()
 }
@@ -182,13 +175,16 @@ async fn get_vn_identity(jrpc_port: u16) -> PublicKey {
     // send the JSON RPC "get_identity" request to the VN
     let mut client = get_vn_client(jrpc_port);
     let resp = client.get_identity().await.unwrap();
-
-    assert!(!resp.public_key.is_empty());
-    PublicKey::from_hex(&resp.public_key).unwrap()
+    resp.public_key
 }
 
 impl ValidatorNodeProcess {
     pub fn stop(&mut self) {
         self.shutdown.trigger();
+    }
+
+    pub fn get_client(&self) -> ValidatorNodeClient {
+        let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.json_rpc_port)).unwrap();
+        ValidatorNodeClient::connect(endpoint).unwrap()
     }
 }

@@ -78,7 +78,7 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<(), HotStuffError> {
         let last_proposed = self.store.with_read_tx(|tx| LastProposed::get(tx).optional())?;
         let last_proposed_height = last_proposed.as_ref().map(|lp| lp.height).unwrap_or(NodeHeight(0));
-        if last_proposed_height >= leaf_block.height + NodeHeight(1) {
+        if last_proposed_height > leaf_block.height {
             info!(
                 target: LOG_TARGET,
                 "⤵️ Skipping on_propose for next block because we have already proposed a block at height {}",
@@ -141,6 +141,8 @@ where TConsensusSpec: ConsensusSpec
             // Get involved shards for all LocalPrepared commands in the block.
             // This allows us to broadcast the proposal only to the relevant committees that would be interested in the
             // LocalPrepared.
+            // TODO: we should never broadcast to foreign shards here. The soonest we can broadcast is once we have
+            //       locked the block
             non_local_buckets = get_non_local_buckets(tx.deref_mut(), &next_block, num_committees, local_bucket)?;
             tx.commit()?;
         }
@@ -219,10 +221,10 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
-        let ready = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
+        let batch = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
 
         let mut total_leader_fee = 0;
-        let commands = ready
+        let commands = batch
             .into_iter()
             .map(|t| match t.current_stage() {
                 // If the transaction is New, propose to Prepare it

@@ -7,6 +7,7 @@ use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::{
     sql_query,
     sql_types::Text,
+    BoolExpressionMethods,
     ExpressionMethods,
     JoinOnDsl,
     NullableExpressionMethods,
@@ -299,29 +300,34 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         block.try_convert(qc)
     }
 
-    fn blocks_get_by_parent(&mut self, parent_id: &BlockId) -> Result<Block<TAddr>, StorageError> {
+    fn blocks_get_all_by_parent(&mut self, parent_id: &BlockId) -> Result<Vec<Block<TAddr>>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
-        let (block, qc) = blocks::table
+        let results = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
             .filter(blocks::parent_block_id.eq(serialize_hex(parent_id)))
             .filter(blocks::block_id.ne(blocks::parent_block_id)) // Exclude the genesis block
-            .first::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "blocks_get_by_parent",
                 source: e,
             })?;
 
-        let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
-            operation: "blocks_get_by_parent",
-            details: format!(
-                "block {} references non-existent quorum certificate {}",
-                parent_id, block.qc_id
-            ),
-        })?;
+        results
+            .into_iter()
+            .map(|(block, qc)| {
+                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "blocks_get_by_parent",
+                    details: format!(
+                        "block {} references non-existent quorum certificate {}",
+                        parent_id, block.qc_id
+                    ),
+                })?;
 
-        block.try_convert(qc)
+                block.try_convert(qc)
+            })
+            .collect()
     }
 
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError> {
@@ -612,7 +618,13 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
 
         let mut query = transaction_pool::table.into_boxed();
         if let Some(stage) = stage {
-            query = query.filter(transaction_pool::stage.eq(stage.to_string()));
+            query = query.filter(
+                transaction_pool::pending_stage
+                    .eq(stage.to_string())
+                    .or(transaction_pool::pending_stage
+                        .is_null()
+                        .and(transaction_pool::stage.eq(stage.to_string()))),
+            );
         }
         if let Some(is_ready) = is_ready {
             query = query.filter(transaction_pool::is_ready.eq(is_ready));

@@ -3,7 +3,7 @@
 
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{BlockId, LeafBlock, TransactionPoolError},
+    consensus_models::{BlockId, LeafBlock, LockedBlock, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
@@ -42,8 +42,6 @@ pub enum HotStuffError {
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]
     TransactionDoesNotExist { transaction_id: TransactionId },
-    #[error("Received vote for unknown block {block_id} from {sent_by}")]
-    ReceivedVoteForUnknownBlock { block_id: BlockId, sent_by: String },
     #[error("Pacemaker channel dropped: {details}")]
     PacemakerChannelDropped { details: String },
     #[error(
@@ -118,6 +116,15 @@ pub enum ProposalValidationError {
     CandidateBlockNotHigherThanLeafBlock {
         proposed_by: String,
         leaf_block: LeafBlock,
+        candidate_block: LeafBlock,
+    },
+    #[error(
+        "Block {candidate_block} justify proposed by {proposed_by} is less than or equal to the current locked \
+         {locked_block}"
+    )]
+    CandidateBlockNotHigherThanLockedBlock {
+        proposed_by: String,
+        locked_block: LockedBlock,
         candidate_block: LeafBlock,
     },
 }

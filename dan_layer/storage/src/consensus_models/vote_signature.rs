@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_core::transactions::transaction_components::ValidatorNodeHashDomain;
@@ -27,8 +28,8 @@ impl<TAddr: NodeAddressable> ValidatorSignature<TAddr> {
 
 impl ValidatorSignature<PublicKey> {
     pub fn sign<M: AsRef<[u8]>>(secret_key: &PrivateKey, message: M) -> Self {
-        let signature =
-            ValidatorSchnorrSignature::sign_message(secret_key, message).expect("sign_message is infallible");
+        let signature = ValidatorSchnorrSignature::sign_message(secret_key, message, &mut OsRng)
+            .expect("sign_message is infallible");
         let public_key = PublicKey::from_secret_key(secret_key);
         Self::new(public_key, signature)
     }

@@ -22,8 +22,8 @@
 
 use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
 
+use minotari_node::{run_base_node, BaseNodeConfig, MetricsConfig};
 use rand::rngs::OsRng;
-use tari_base_node::{run_base_node, BaseNodeConfig, MetricsConfig};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{configuration::CommonConfig, exit_codes::ExitError};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
@@ -75,7 +75,7 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     let handle = task::spawn({
         let shutdown = shutdown.clone();
         async move {
-            let mut base_node_config = tari_base_node::ApplicationConfig {
+            let mut base_node_config = minotari_node::ApplicationConfig {
                 common: CommonConfig::default(),
                 auto_update: AutoUpdateConfig::default(),
                 base_node: BaseNodeConfig::default(),

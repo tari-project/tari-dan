@@ -3,9 +3,11 @@
 
 use std::mem::size_of;
 
+use blake2::Blake2b;
 use chacha20poly1305::{
     aead,
     aead::{generic_array::GenericArray, OsRng},
+    consts::U32,
     AeadCore,
     AeadInPlace,
     KeyInit,
@@ -20,7 +22,6 @@ use tari_crypto::{
     commitment::{ExtensionDegree, HomomorphicCommitmentFactory},
     errors::RangeProofError,
     extended_range_proof::ExtendedRangeProofService,
-    hash::blake2::Blake256,
     hash_domain,
     hashing::DomainSeparatedHasher,
     keys::SecretKey,
@@ -124,7 +125,7 @@ fn inner_encrypted_data_kdf_aead(encryption_key: &PrivateKey, commitment: &Commi
         "com.tari.base_layer.core.transactions.secure_nonce_kdf",
         0
     );
-    DomainSeparatedHasher::<Blake256, TransactionSecureNonceKdfDomain>::new_with_label("encrypted_value_and_mask")
+    DomainSeparatedHasher::<Blake2b<U32>, TransactionSecureNonceKdfDomain>::new_with_label("encrypted_value_and_mask")
         .chain(encryption_key.as_bytes())
         .chain(commitment.as_bytes())
         .finalize_into(GenericArray::from_mut_slice(aead_key.reveal_mut()));

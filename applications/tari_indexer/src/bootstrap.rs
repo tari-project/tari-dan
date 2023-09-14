@@ -27,7 +27,7 @@ use std::{
     sync::Arc,
 };
 
-use tari_app_utilities::{identity_management, identity_management::load_from_json};
+use minotari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
@@ -98,7 +98,7 @@ pub async fn spawn_services(
     );
 
     // Template manager
-    let template_manager = TemplateManager::new(global_db.clone(), config.indexer.templates.clone());
+    let template_manager = TemplateManager::initialize(global_db.clone(), config.indexer.templates.clone())?;
     let (template_manager_service, _) =
         template_manager::implementation::spawn(template_manager.clone(), shutdown.clone());
 

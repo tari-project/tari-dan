@@ -37,7 +37,7 @@ fn insert_vn_with_public_key(
     epoch: Epoch,
 ) {
     validator_nodes
-        .insert_validator_node(public_key.clone(), derived_shard_id(&public_key), epoch)
+        .insert_validator_node(public_key.clone(), derived_shard_id(&public_key), epoch, public_key)
         .unwrap()
 }
 

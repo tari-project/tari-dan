@@ -11,12 +11,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_crypto::tari_utilities::hex::{from_hex, Hex};
 use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
     serde_with,
     substate::SubstateAddress,
 };
-use tari_utilities::hex::{from_hex, Hex};
 
 use crate::{shard_bucket::ShardBucket, uint::U256};
 

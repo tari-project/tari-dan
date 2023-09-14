@@ -364,7 +364,8 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
         common,
     } = args;
 
-    let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
+    let destination_public_key =
+        PublicKey::from_bytes(&destination_public_key.into_inner()).map_err(anyhow::Error::msg)?;
 
     let fee = common.fee.map(|f| f.try_into()).transpose()?;
     let resp = client
@@ -398,12 +399,13 @@ pub async fn handle_confidential_transfer(
     } = args;
 
     // let AccountByNameResponse { account, .. } = client.accounts_get_by_name(&source_account_name).await?;
-    let destination_public_key = PublicKey::from_bytes(&destination_public_key.into_inner())?;
+    let destination_public_key =
+        PublicKey::from_bytes(&destination_public_key.into_inner()).map_err(anyhow::Error::msg)?;
     let resp = client
         .accounts_confidential_transfer(ConfidentialTransferRequest {
             account: source_account,
             amount: Amount::try_from(amount)?,
-            resource_address: resource_address.unwrap_or(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
+            resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
             validator_public_key: destination_public_key,
             fee: common.fee.map(|f| f.try_into()).transpose()?,
         })

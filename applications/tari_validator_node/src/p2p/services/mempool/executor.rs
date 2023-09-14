@@ -34,9 +34,18 @@ where
     let id = *transaction.id();
 
     let state_db = new_state_db();
-    let virtual_substates = substate_resolver
+    let virtual_substates = match substate_resolver
         .resolve_virtual_substates(&transaction, current_epoch)
-        .await?;
+        .await
+    {
+        Ok(virtual_substates) => virtual_substates,
+        Err(err @ SubstateResolverError::UnauthorizedFeeClaim { .. }) => {
+            warn!(target: LOG_TARGET, "One or more invalid fee claims for transaction {}: {}", transaction.id(), err);
+            return Ok((*transaction.id(), Err(err.into())));
+        },
+        Err(err) => return Err(err.into()),
+    };
+
     info!(target: LOG_TARGET, "Transaction {} executing. virtual_substates = [{}]", transaction.id(), virtual_substates.keys().map(|addr| addr.to_string()).collect::<Vec<_>>().join(", "));
 
     match substate_resolver.resolve(&transaction, &state_db).await {

@@ -424,7 +424,7 @@ impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
 
     fn try_from(value: proto::consensus::ValidatorMetadata) -> Result<Self, Self::Error> {
         Ok(ValidatorMetadata {
-            public_key: ByteArray::from_bytes(&value.public_key)?,
+            public_key: ByteArray::from_bytes(&value.public_key).map_err(anyhow::Error::msg)?,
             vn_shard_key: value.vn_shard_key.try_into()?,
             signature: value
                 .signature

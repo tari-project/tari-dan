@@ -27,7 +27,7 @@ use std::{
 };
 
 use log::{error, info, warn};
-use tari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
+use minotari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
 use tari_base_node_client::BaseNodeClientError;
 use tari_common::configuration::bootstrap::{grpc_default_port, ApplicationType};
 use tari_comms::NodeIdentity;
@@ -58,6 +58,8 @@ pub enum AutoRegistrationError {
     BaseNodeError(#[from] BaseNodeClientError),
     #[error("Wallet GRPC error: {0}")]
     WalletGrpcError(#[from] WalletGrpcError),
+    #[error("Fee claim public key not set")]
+    FeeClaimPublicKeyNotSet,
 }
 
 pub async fn register(
@@ -77,9 +79,16 @@ pub async fn register(
     }
 
     let mut attempts = 1;
+    let fee_claim_public_key = epoch_manager
+        .get_fee_claim_public_key()
+        .await?
+        .ok_or(AutoRegistrationError::FeeClaimPublicKeyNotSet)?;
 
     loop {
-        match wallet_client.register_validator_node(node_identity).await {
+        match wallet_client
+            .register_validator_node(node_identity, &fee_claim_public_key)
+            .await
+        {
             Ok(resp) => {
                 let tx_id = resp.transaction_id;
                 info!(

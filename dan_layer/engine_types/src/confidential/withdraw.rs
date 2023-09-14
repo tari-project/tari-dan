@@ -3,12 +3,11 @@
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{BulletRangeProof, Commitment, PrivateKey, PublicKey, Signature};
-use tari_crypto::commitment::HomomorphicCommitmentFactory;
+use tari_crypto::{commitment::HomomorphicCommitmentFactory, tari_utilities::ByteArray};
 use tari_template_lib::{
     crypto::BalanceProofSignature,
     models::{Amount, ConfidentialWithdrawProof, EncryptedData},
 };
-use tari_utilities::ByteArray;
 
 use super::{challenges, get_commitment_factory, validate_confidential_proof};
 use crate::resource_container::ResourceError;

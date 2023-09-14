@@ -9,16 +9,17 @@ license = "BSD-3-Clause"
 
 [dependencies]
 tari_bor = { path = "../tari_bor" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
-tari_crypto = { version = "0.17", features = ["borsh"] }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_crypto = { version = "0.18", features = ["borsh"] }
 tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib" }
-tari_utilities = "0.4.10"
+tari_utilities = "0.5.1"
 
-borsh = "0.9.3"
+borsh = "0.10"
 base64 = "0.21.0"
-rand = "0.7"
-digest = "0.9.0"
+blake2 = "0.10.6"
+rand = "0.8"
+digest = "0.10"
 hex = { version = "0.4", features = ["serde"] }
 lazy_static = "1.4.0"
 serde = "1.0.126"
