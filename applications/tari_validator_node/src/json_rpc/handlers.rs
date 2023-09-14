@@ -79,6 +79,8 @@ use tari_validator_node_client::types::{
     GetTransactionResultResponse,
     GetValidatorFeesRequest,
     GetValidatorFeesResponse,
+    RegisterValidatorNodeRequest,
+    RegisterValidatorNodeResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     SubstateStatus,
@@ -147,8 +149,8 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let response = GetIdentityResponse {
             node_id: self.node_identity.node_id().to_hex(),
-            public_key: self.node_identity.public_key().to_hex(),
-            public_address: self.node_identity.public_addresses().first().unwrap().to_string(),
+            public_key: self.node_identity.public_key().clone(),
+            public_addresses: self.node_identity.public_addresses(),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
@@ -363,6 +365,13 @@ impl JsonRpcHandlers {
 
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
+        let req: RegisterValidatorNodeRequest = value.parse_params()?;
+
+        // Ensure that the fee claim pk is set before registering
+        self.epoch_manager
+            .set_fee_claim_public_key(req.fee_claim_public_key)
+            .await
+            .map_err(internal_error(answer_id))?;
 
         let resp = registration::register(self.wallet_client(), &self.node_identity, &self.epoch_manager)
             .await
@@ -379,10 +388,9 @@ impl JsonRpcHandlers {
             ));
         }
 
-        Ok(JsonRpcResponse::success(
-            answer_id,
-            json!({ "transaction_id": resp.transaction_id }),
-        ))
+        Ok(JsonRpcResponse::success(answer_id, RegisterValidatorNodeResponse {
+            transaction_id: resp.transaction_id.into(),
+        }))
     }
 
     pub async fn register_template(&self, value: JsonRpcExtractor) -> JrpcResult {

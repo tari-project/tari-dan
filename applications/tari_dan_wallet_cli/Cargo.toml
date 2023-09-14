@@ -8,11 +8,11 @@ version = "0.50.0-pre.0"
 edition = "2021"
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_utilities = "0.4.10"
+tari_utilities = "0.5.1"
 tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
 tari_template_lib = { path = "../../dan_layer/template_lib", features = ["std"] }
 tari_transaction = { path = "../../dan_layer/transaction" }

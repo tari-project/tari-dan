@@ -30,19 +30,19 @@ use std::{
 };
 
 use log::Level;
-use tari_app_grpc::{
+use minotari_app_grpc::{
     authentication::ClientAuthenticationInterceptor,
     tari_rpc::{wallet_client::WalletClient, ConnectivityStatus, Empty, GetIdentityRequest, SetBaseNodeRequest},
 };
-use tari_app_utilities::common_cli_args::CommonCliArgs;
+use minotari_app_utilities::common_cli_args::CommonCliArgs;
+use minotari_console_wallet::{run_wallet_with_cli, ApplicationConfig};
+use minotari_wallet::WalletConfig;
 use tari_common::{configuration::CommonConfig, exit_codes::ExitError};
 use tari_common_types::grpc_authentication::GrpcAuthentication;
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_console_wallet::{run_wallet_with_cli, ApplicationConfig};
 use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
-use tari_wallet::WalletConfig;
 use tokio::{runtime, runtime::Runtime};
 use tonic::{
     codegen::InterceptedService,
@@ -127,7 +127,7 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
     let handle = thread::spawn({
         let mut shutdown = shutdown.clone();
         move || {
-            let mut wallet_config = tari_console_wallet::ApplicationConfig {
+            let mut wallet_config = minotari_console_wallet::ApplicationConfig {
                 common: CommonConfig::default(),
                 auto_update: AutoUpdateConfig::default(),
                 wallet: WalletConfig::default(),
@@ -224,7 +224,7 @@ pub fn run_wallet(runtime: Runtime, config: &mut ApplicationConfig, shutdown: &m
 
     let log_config = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/log4rs/wallet.yml");
 
-    let cli = tari_console_wallet::Cli {
+    let cli = minotari_console_wallet::Cli {
         common: CommonCliArgs {
             base_path: data_dir_str,
             config: config_path.into_os_string().into_string().unwrap(),

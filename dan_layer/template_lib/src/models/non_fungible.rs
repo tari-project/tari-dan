@@ -177,7 +177,7 @@ pub struct NonFungibleAddressContents {
 }
 
 impl NonFungibleAddress {
-    pub fn new(resource_address: ResourceAddress, id: NonFungibleId) -> Self {
+    pub const fn new(resource_address: ResourceAddress, id: NonFungibleId) -> Self {
         let inner = NonFungibleAddressContents { resource_address, id };
         Self(BorTag::new(inner))
     }
@@ -192,13 +192,13 @@ impl NonFungibleAddress {
 
     pub fn from_public_key(public_key: RistrettoPublicKeyBytes) -> Self {
         Self::new(
-            *PUBLIC_IDENTITY_RESOURCE_ADDRESS,
+            PUBLIC_IDENTITY_RESOURCE_ADDRESS,
             NonFungibleId::U256(public_key.into_array()),
         )
     }
 
     pub fn to_public_key(&self) -> Option<RistrettoPublicKeyBytes> {
-        if self.0.resource_address != *PUBLIC_IDENTITY_RESOURCE_ADDRESS {
+        if self.0.resource_address != PUBLIC_IDENTITY_RESOURCE_ADDRESS {
             return None;
         }
         match self.id() {
@@ -274,6 +274,8 @@ pub enum ParseNonFungibleIdError {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
 
     mod try_from_string {
@@ -372,6 +374,37 @@ mod tests {
                     .to_canonical_string(),
                 "str:hello_world"
             );
+        }
+    }
+
+    mod serde_deser {
+        use super::*;
+
+        #[test]
+        fn string_serialization_and_deserialization() {
+            let resx_str = "resource_0000000000000000000000000000000000000000000000000000000000000000";
+            let resource = ResourceAddress::from_str(resx_str).unwrap();
+            let v = NonFungibleAddressContents {
+                resource_address: resource,
+                id: NonFungibleId::Uint32(123),
+            };
+            let json = serde_json::to_string_pretty(&v).unwrap();
+            assert!(json.contains(resx_str));
+
+            // Deserialize from JSON
+            let r = serde_json::from_str::<NonFungibleAddressContents>(&json).unwrap();
+            assert_eq!(r, v);
+
+            // Check that CBOR does not include the string
+            let cbor = tari_bor::encode(&v).unwrap();
+            assert!(
+                !cbor.windows(resx_str.len()).any(|window| window == resx_str.as_bytes()),
+                "CBOR is serializing a string"
+            );
+
+            // Deserialize from CBOR
+            let r = tari_bor::decode::<NonFungibleAddressContents>(&cbor).unwrap();
+            assert_eq!(r, v);
         }
     }
 }

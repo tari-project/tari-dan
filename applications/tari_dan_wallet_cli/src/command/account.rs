@@ -86,6 +86,8 @@ pub struct CreateArgs {
     pub is_dry_run: bool,
     pub is_default: bool,
     pub fee: Option<u32>,
+    #[clap(long, short, alias = "key")]
+    pub key_id: Option<u64>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -138,6 +140,8 @@ pub struct CreateFreeTestCoinsArgs {
     pub amount: Option<u64>,
     #[clap(long, short, alias = "fee")]
     pub fee: Option<u64>,
+    #[clap(long, short, alias = "key")]
+    pub key_id: Option<u64>,
 }
 
 impl AccountsSubcommand {
@@ -176,6 +180,7 @@ async fn handle_create(args: CreateArgs, client: &mut WalletDaemonClient) -> Res
             custom_access_rules: None,
             is_default: args.is_default,
             fee: args.fee.map(|u| Amount::new(u.into())),
+            key_id: args.key_id,
         })
         .await?;
 
@@ -305,6 +310,7 @@ async fn handle_create_free_test_coins(
             account: args.account,
             amount: Amount::new(args.amount.unwrap_or(100000) as i64),
             fee: args.fee.map(|u| u.try_into()).transpose()?,
+            key_id: args.key_id,
         })
         .await?;
 

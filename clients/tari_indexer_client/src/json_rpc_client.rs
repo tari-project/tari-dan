@@ -30,6 +30,8 @@ use crate::{
     error::IndexerClientError,
     types::{
         AddAddressRequest,
+        AddPeerRequest,
+        AddPeerResponse,
         DeleteAddressRequest,
         GetNonFungiblesRequest,
         GetNonFungiblesResponse,
@@ -69,6 +71,10 @@ impl IndexerJsonRpcClient {
     fn next_request_id(&mut self) -> i64 {
         self.request_id += 1;
         self.request_id
+    }
+
+    pub async fn add_peer(&mut self, request: AddPeerRequest) -> Result<AddPeerResponse, IndexerClientError> {
+        self.send_request("add_peer", request).await
     }
 
     pub async fn add_address(&mut self, address: SubstateAddress) -> Result<(), IndexerClientError> {

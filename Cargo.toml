@@ -52,25 +52,26 @@ overflow-checks = true
 # Temporarily lock pgp to commit (master branch at time of writing) because the currently release crate locks zeroize to =1.3
 liblmdb-sys = { git = "https://github.com/tari-project/lmdb-rs", tag = "0.7.6-tari.1" }
 
-# Uncomment and replace stringhandler and st-public-address-panic with the name of your fork and the branch you want to temporarily use
+# Make a copy of this code, uncomment and replace account and my-branch with the name of your fork and the branch you want to temporarily use
 #[patch."https://github.com/tari-project/tari.git"]
-#tari_app_grpc = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_app_utilities = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_base_node= { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_base_node_grpc_client = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_common = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_common_types = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_comms = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_comms_rpc_macros = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_core = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_key_manager = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_mmr = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_p2p = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_shutdown = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_storage = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_wallet_grpc_client = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_script = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_wallet = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_console_wallet = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_service_framework = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
-#tari_comms_dht = { git = "https://github.com/stringhandler/tari.git", branch = "st-public-address-panic" }
+#minotari_app_grpc = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_app_grpc = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_wallet_grpc_client= { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_node_grpc_client = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_common = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_common_types = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_comms = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_comms_rpc_macros = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_core = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_key_manager = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_mmr = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_p2p = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_shutdown = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_storage = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_wallet_grpc_client = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_script = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_wallet = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#minotari_console_wallet = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_service_framework = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+#tari_comms_dht = { git = "https://github.com/account/tari.git", branch = "my-branch" }
+

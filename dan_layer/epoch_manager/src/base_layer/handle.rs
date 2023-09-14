@@ -8,7 +8,7 @@ use std::{
 
 use async_trait::async_trait;
 use tari_base_node_client::types::BaseLayerConsensusConstants;
-use tari_common_types::types::FixedHash;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
@@ -129,6 +129,26 @@ impl EpochManagerHandle {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::NotifyScanningComplete { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    pub async fn get_fee_claim_public_key(&self) -> Result<Option<PublicKey>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetFeeClaimPublicKey { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    pub async fn set_fee_claim_public_key(&self, public_key: PublicKey) -> Result<(), EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 

@@ -49,7 +49,7 @@ where
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let a = from_hex(s)?;
+        let a = from_hex(s).map_err(anyhow::Error::msg)?;
         let item = T::try_from(&a)?;
         Ok(Self(item))
     }

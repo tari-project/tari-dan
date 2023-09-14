@@ -28,7 +28,7 @@ use std::{
 
 use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
-use tari_common_types::types::FixedHash;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_crypto::tari_utilities::ByteArray;
@@ -199,6 +199,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             registration.public_key().clone(),
             shard_key,
             next_epoch,
+            registration.claim_public_key().clone(),
         )?;
 
         if *registration.public_key() == self.node_public_key {
@@ -294,7 +295,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
     ) -> Result<HashMap<(Epoch, CommsPublicKey), ValidatorNode<CommsPublicKey>>, EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         #[allow(clippy::mutable_key_type)]
-        let mut validators = HashMap::new();
+        let mut validators = HashMap::with_capacity(epoch_validators.len());
 
         for (epoch, public_key) in epoch_validators {
             let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
@@ -610,6 +611,21 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         let committees = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
         Ok(committees)
+    }
+
+    pub fn get_fee_claim_public_key(&self) -> Result<Option<PublicKey>, EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let mut metadata = self.global_db.metadata(&mut tx);
+        let fee_claim_public_key = metadata.get_metadata(MetadataKey::EpochManagerFeeClaimPublicKey)?;
+        Ok(fee_claim_public_key)
+    }
+
+    pub fn set_fee_claim_public_key(&mut self, public_key: CommsPublicKey) -> Result<(), EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let mut metadata = self.global_db.metadata(&mut tx);
+        metadata.set_metadata(MetadataKey::EpochManagerFeeClaimPublicKey, &public_key)?;
+        tx.commit()?;
+        Ok(())
     }
 
     fn publish_event(&mut self, event: EpochManagerEvent) {
