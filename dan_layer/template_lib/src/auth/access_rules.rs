@@ -2,8 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
-use tari_bor::serde_ordered_map;
-use tari_template_abi::rust::collections::HashMap;
+use tari_template_abi::rust::collections::BTreeMap;
 
 use crate::{auth::NativeFunctionCall, models::NonFungibleAddress};
 
@@ -41,18 +40,16 @@ impl RestrictedAccessRule {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AccessRules {
-    #[serde(serialize_with = "serde_ordered_map")]
-    method_access: HashMap<String, AccessRule>,
-    #[serde(serialize_with = "serde_ordered_map")]
-    native_method_access: HashMap<NativeFunctionCall, AccessRule>,
+    method_access: BTreeMap<String, AccessRule>,
+    native_method_access: BTreeMap<NativeFunctionCall, AccessRule>,
     default: AccessRule,
 }
 
 impl AccessRules {
     pub fn new() -> Self {
         Self {
-            method_access: HashMap::new(),
-            native_method_access: HashMap::new(),
+            method_access: BTreeMap::new(),
+            native_method_access: BTreeMap::new(),
             default: AccessRule::DenyAll,
         }
     }
@@ -63,8 +60,8 @@ impl AccessRules {
     //       default for this case.
     pub fn with_default_allow() -> Self {
         Self {
-            method_access: HashMap::new(),
-            native_method_access: HashMap::new(),
+            method_access: BTreeMap::new(),
+            native_method_access: BTreeMap::new(),
             default: AccessRule::AllowAll,
         }
     }
