@@ -152,7 +152,7 @@ where TConsensusSpec: ConsensusSpec
 
             debug!(target: LOG_TARGET, "🍼 dummy leaf block {}", parent_block);
             // Force beat so that a block is proposed even if there are no transactions
-            self.pacemaker.force_beat(parent_block).await?;
+            self.pacemaker.force_beat(parent_block);
         }
 
         Ok(())
