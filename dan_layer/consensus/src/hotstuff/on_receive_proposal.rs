@@ -34,7 +34,6 @@ use tari_dan_storage::{
         TransactionRecord,
     },
     StateStore,
-    StateStoreReadTransaction,
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -43,7 +42,7 @@ use tokio::sync::{broadcast, mpsc};
 
 use crate::{
     hotstuff::{
-        common::{update_high_qc, BlockDecision, EXHAUST_DIVISOR},
+        common::{BlockDecision, EXHAUST_DIVISOR},
         error::HotStuffError,
         event::HotstuffEvent,
         pacemaker_handle::PaceMakerHandle,
@@ -143,7 +142,7 @@ where TConsensusSpec: ConsensusSpec
             self.validate_local_proposed_block_and_fill_dummy_blocks(&mut *tx, &from, &block, &local_committee)?;
             // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
             // Specifically, it should extend the locked block via the dummy blocks.
-            if !is_safe_block(tx.deref_mut(), &block)? {
+            if !block.is_safe(tx.deref_mut())? {
                 return Err(ProposalValidationError::NotSafeBlock {
                     proposed_by: from.to_string(),
                     hash: *block.id(),
@@ -155,7 +154,11 @@ where TConsensusSpec: ConsensusSpec
             block.justify().save(tx)?;
             block.save(tx)?;
 
-            self.update_nodes(tx, &block, &local_committee_shard)?;
+            block.update_nodes(
+                tx,
+                |tx, block| self.on_lock_block(tx, block),
+                |tx, last_exec, commit_block| self.on_commit(tx, last_exec, commit_block, &local_committee_shard),
+            )?;
 
             self.block_get_missing_transaction(tx, &block)
         })?;
@@ -800,63 +803,6 @@ where TConsensusSpec: ConsensusSpec
         })
     }
 
-    fn update_nodes(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block<TConsensusSpec::Addr>,
-        local_committee_shard: &CommitteeShard,
-    ) -> Result<(), HotStuffError> {
-        update_high_qc(tx, block.justify())?;
-
-        // b'' <- b*.justify.node
-        let Some(commit_node) = block.justify().get_block(tx.deref_mut()).optional()? else {
-            return Ok(());
-        };
-
-        // b' <- b''.justify.node
-        let Some(precommit_node) = commit_node.justify().get_block(tx.deref_mut()).optional()? else {
-            return Ok(());
-        };
-
-        let locked_block = LockedBlock::get(tx.deref_mut())?;
-        if precommit_node.height() > locked_block.height {
-            self.on_lock_block(tx, local_committee_shard, &precommit_node)?;
-        }
-
-        // b <- b'.justify.node
-        let prepare_node = precommit_node.justify().block_id();
-        if commit_node.parent() == precommit_node.id() && precommit_node.parent() == prepare_node {
-            debug!(
-                target: LOG_TARGET,
-                "✅ Node {} {} forms a 3-chain b'' = {}, b' = {}, b = {}",
-                block.height(),
-                block.id(),
-                commit_node.id(),
-                precommit_node.id(),
-                prepare_node,
-            );
-
-            // Commit prepare_node (b)
-            let prepare_node = Block::get(tx.deref_mut(), prepare_node)?;
-            let last_executed = LastExecuted::get(tx.deref_mut())?;
-            self.on_commit(tx, &last_executed, &prepare_node, local_committee_shard)?;
-            prepare_node.as_last_executed().set(tx)?;
-        } else {
-            debug!(
-                target: LOG_TARGET,
-                "Node {} {} DOES NOT form a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
-                block.height(),
-                block.id(),
-                commit_node.id(),
-                precommit_node.id(),
-                prepare_node,
-                block.id()
-            );
-        }
-
-        Ok(())
-    }
-
     fn on_commit(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
@@ -886,7 +832,6 @@ where TConsensusSpec: ConsensusSpec
     fn on_lock_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        _local_committee_shard: &CommitteeShard,
         block: &Block<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         info!(
@@ -895,7 +840,6 @@ where TConsensusSpec: ConsensusSpec
             block.height(),
             block.id()
         );
-        block.as_locked().set(tx)?;
 
         // self.process_commands(tx, local_committee_shard, block)?;
 
@@ -1051,7 +995,7 @@ where TConsensusSpec: ConsensusSpec
             // TODO: I think we should maintain our current block height (view number) and check if high_qc > tip_block.
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
+                block_id: *candidate_block.id(),
                 justify_block: *candidate_block.justify().block_id(),
             }
             .into());
@@ -1096,7 +1040,7 @@ where TConsensusSpec: ConsensusSpec
             .into());
         }
 
-        update_high_qc(tx, candidate_block.justify())?;
+        // candidate_block.justify().update_high_qc(tx)?;
 
         // if candidate_block.height().saturating_sub(justify_block.height()).0 > local_committee.max_failures() as u64
         // { TODO: We should maybe relax this constraint during GST, before the first block, many leaders might
@@ -1228,54 +1172,4 @@ where TConsensusSpec: ConsensusSpec
 
         Ok(())
     }
-}
-
-/// safeNode predicate (https://arxiv.org/pdf/1803.05069v6.pdf)
-///
-/// The safeNode predicate is a core ingredient of the protocol. It examines a proposal message
-/// m carrying a QC justification m.justify, and determines whether m.node is safe to accept. The safety rule to accept
-/// a proposal is the branch of m.node extends from the currently locked node lockedQC.node. On the other hand, the
-/// liveness rule is the replica will accept m if m.justify has a higher view than the current lockedQC. The predicate
-/// is true as long as either one of two rules holds.
-fn is_safe_block<TTx: StateStoreReadTransaction>(
-    tx: &mut TTx,
-    block: &Block<TTx::Addr>,
-) -> Result<bool, ProposalValidationError> {
-    let locked = LockedBlock::get(tx)?;
-    let locked_block = locked.get_block(tx)?;
-
-    // Liveness
-    if !locked_block.id().is_genesis() && block.justify().block_height() <= locked_block.height() {
-        info!(
-            target: LOG_TARGET,
-            "❌ justify block height {} less than or equal to locked block height {}. Block does not satisfy safeNode predicate",
-            block.justify().block_height(),
-            locked_block.height(),
-        );
-        return Ok(false);
-    }
-
-    // Check the parent here. This is mainly to prevent a calling block.extends with a block that does not exist which
-    // is a QueryError
-    if !Block::record_exists(tx, block.parent())? {
-        info!(
-            target: LOG_TARGET,
-            "❌ Parent block {} does not exist. Block {} does not satisfy safeNode predicate",
-            block.parent(),
-            block,
-        );
-        return Ok(false);
-    }
-
-    // Safety
-    let extends = block.extends(tx, locked_block.id())?;
-    if !extends {
-        info!(
-            target: LOG_TARGET,
-            "❌ Block {} does not extend locked block {}. Block does not satisfy safeNode predicate",
-            block.id(),
-            locked_block.id(),
-        );
-    }
-    Ok(extends)
 }

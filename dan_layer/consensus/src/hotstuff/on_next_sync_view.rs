@@ -54,11 +54,9 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
                 &local_committee,
             );
             // Set the last voted block so that we do not vote on other conflicting blocks
-            let new_last_voted = dummy_blocks
-                .last()
-                .map(|b| b.as_last_voted())
-                .unwrap_or_else(|| high_qc.as_last_voted());
-            new_last_voted.set(tx)?;
+            if let Some(new_last_voted) = dummy_blocks.last().map(|b| b.as_last_voted()) {
+                new_last_voted.set(tx)?;
+            }
 
             Ok::<_, HotStuffError>(high_qc)
         })?;

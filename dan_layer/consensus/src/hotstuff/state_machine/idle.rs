@@ -6,6 +6,7 @@ use std::marker::PhantomData;
 use log::*;
 use tari_dan_common_types::Epoch;
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
+use tokio::sync::broadcast;
 
 use crate::{
     hotstuff::{
@@ -34,9 +35,25 @@ impl<TSpec: ConsensusSpec> IdleState<TSpec> {
             return Ok(ConsensusStateEvent::RegisteredForEpoch { epoch: current_epoch });
         }
 
-        while let Ok(event) = context.epoch_events.recv().await {
-            if let Some(event) = self.on_epoch_event(context, event).await? {
-                return Ok(event);
+        loop {
+            tokio::select! {
+                event = context.epoch_events.recv() => {
+                    match event {
+                        Ok(event) => {
+                            if let Some(event) = self.on_epoch_event(context, event).await? {
+                                return Ok(event);
+                            }
+                        },
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            debug!(target: LOG_TARGET, "Idle state lagged behind epoch manager event stream");
+                        },
+                        Err(broadcast::error::RecvError::Closed) => {
+                            break;
+                        },
+                    }
+                },
+                // Ignore hotstuff messages while idle
+                _ = context.hotstuff.discard_messages() => { }
             }
         }
 

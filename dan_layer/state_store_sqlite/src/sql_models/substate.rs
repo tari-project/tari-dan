@@ -3,7 +3,7 @@
 
 use diesel::Queryable;
 use tari_dan_common_types::{Epoch, NodeHeight};
-use tari_dan_storage::{consensus_models, StorageError};
+use tari_dan_storage::{consensus_models, consensus_models::SubstateDestroyed, StorageError};
 use time::PrimitiveDateTime;
 
 use crate::serialization::{deserialize_hex_try_from, deserialize_json, parse_from_string};
@@ -36,6 +36,30 @@ impl TryFrom<SubstateRecord> for consensus_models::SubstateRecord {
     type Error = StorageError;
 
     fn try_from(value: SubstateRecord) -> Result<Self, Self::Error> {
+        let destroyed = value
+            .destroyed_by_transaction
+            .map(|tx_id| {
+                Ok::<_, StorageError>(SubstateDestroyed {
+                    by_transaction: deserialize_hex_try_from(&tx_id)?,
+                    justify: deserialize_hex_try_from(value.destroyed_justify.as_deref().ok_or_else(|| {
+                        StorageError::DataInconsistency {
+                            details: "destroyed_justify not provided".to_string(),
+                        }
+                    })?)?,
+                    by_block: deserialize_hex_try_from(value.destroyed_by_block.as_deref().ok_or_else(|| {
+                        StorageError::DataInconsistency {
+                            details: "destroyed_by_block not provided".to_string(),
+                        }
+                    })?)?,
+                    at_epoch: value.destroyed_at_epoch.map(|x| Epoch(x as u64)).ok_or_else(|| {
+                        StorageError::DataInconsistency {
+                            details: "destroyed_at_epoch not provided".to_string(),
+                        }
+                    })?,
+                })
+            })
+            .transpose()?;
+
         Ok(Self {
             address: parse_from_string(&value.address)?,
             version: value.version as u32,
@@ -45,22 +69,8 @@ impl TryFrom<SubstateRecord> for consensus_models::SubstateRecord {
             created_justify: deserialize_hex_try_from(&value.created_justify)?,
             created_block: deserialize_hex_try_from(&value.created_block)?,
             created_height: NodeHeight(value.created_height as u64),
-            destroyed_by_transaction: value
-                .destroyed_by_transaction
-                .map(|x| deserialize_hex_try_from(&x))
-                .transpose()?,
-            destroyed_justify: value
-                .destroyed_justify
-                .as_deref()
-                .map(deserialize_hex_try_from)
-                .transpose()?,
-            destroyed_by_block: value
-                .destroyed_by_block
-                .as_deref()
-                .map(deserialize_hex_try_from)
-                .transpose()?,
+            destroyed,
             created_at_epoch: Epoch(value.created_at_epoch as u64),
-            destroyed_at_epoch: value.destroyed_at_epoch.map(|x| Epoch(x as u64)),
         })
     }
 }

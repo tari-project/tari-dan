@@ -443,6 +443,18 @@ impl TransactionPoolRecord {
         tx.transaction_pool_remove(&self.transaction.id)?;
         Ok(())
     }
+
+    pub fn remove_any<TTx, I>(tx: &mut TTx, transaction_ids: I) -> Result<(), TransactionPoolError>
+    where
+        TTx: StateStoreWriteTransaction,
+        I: IntoIterator<Item = TransactionId>,
+    {
+        // TODO(perf): n queries
+        for id in transaction_ids {
+            let _ = tx.transaction_pool_remove(&id).optional()?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

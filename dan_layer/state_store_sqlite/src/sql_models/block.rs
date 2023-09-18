@@ -1,18 +1,19 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use diesel::Queryable;
+use diesel::{Queryable, QueryableByName};
 use serde::Serialize;
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{consensus_models, StorageError};
 use time::PrimitiveDateTime;
 
 use crate::{
+    schema::blocks,
     serialization::{deserialize_hex, deserialize_hex_try_from, deserialize_json},
     sql_models,
 };
 
-#[derive(Debug, Clone, Queryable)]
+#[derive(Debug, Clone, Queryable, QueryableByName)]
 pub struct Block {
     pub id: i32,
     pub block_id: String,
@@ -23,7 +24,7 @@ pub struct Block {
     pub qc_id: String,
     pub command_count: i64,
     pub commands: String,
-    pub total_leader_fees: i64,
+    pub total_leader_fee: i64,
     pub is_committed: bool,
     pub is_processed: bool,
     pub is_dummy: bool,
@@ -47,9 +48,10 @@ impl Block {
                 details: format!("Block #{} proposed_by is malformed", self.id),
             })?,
             deserialize_json(&self.commands)?,
-            self.total_leader_fees as u64,
+            self.total_leader_fee as u64,
             self.is_dummy,
             self.is_processed,
+            self.is_committed,
         ))
     }
 }

@@ -28,7 +28,7 @@ use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
 use tari_dan_p2p::PeerProvider;
 use tari_dan_storage::{
-    consensus_models::{SubstateRecord, TransactionRecord},
+    consensus_models::{Block, BlockId, HighQc, QuorumCertificate, SubstateRecord, TransactionRecord},
     StateStore,
 };
 use tari_engine_types::virtual_substate::VirtualSubstateAddress;
@@ -39,20 +39,25 @@ use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::{
     proto,
     proto::rpc::{
+        GetHighQcRequest,
+        GetHighQcResponse,
         GetSubstateRequest,
         GetSubstateResponse,
         GetTransactionResultRequest,
         GetTransactionResultResponse,
         PayloadResultStatus,
         SubstateStatus,
-        VnStateSyncRequest,
-        VnStateSyncResponse,
+        SyncBlocksRequest,
+        SyncBlocksResponse,
     },
     rpc_service::ValidatorNodeRpcService,
 };
 use tokio::{sync::mpsc, task};
 
-use crate::{p2p::services::mempool::MempoolHandle, virtual_substate::VirtualSubstateManager};
+use crate::{
+    p2p::{rpc::sync_task::BlockSyncTask, services::mempool::MempoolHandle},
+    virtual_substate::VirtualSubstateManager,
+};
 
 const LOG_TARGET: &str = "tari::dan::p2p::rpc";
 
@@ -138,71 +143,6 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         Ok(Streaming::new(rx))
     }
 
-    async fn vn_state_sync(
-        &self,
-        request: Request<VnStateSyncRequest>,
-    ) -> Result<Streaming<VnStateSyncResponse>, RpcStatus> {
-        let (tx, rx) = mpsc::channel(100);
-        let msg = request.into_message();
-
-        let start_shard_id = msg
-            .start_shard_id
-            .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("start_shard_id malformed or not provided"))?;
-        let end_shard_id = msg
-            .end_shard_id
-            .and_then(|s| ShardId::try_from(s).ok())
-            .ok_or_else(|| RpcStatus::bad_request("end_shard_id malformed or not provided"))?;
-
-        let excluded_shards = msg
-            .inventory
-            .iter()
-            .map(|s| ShardId::try_from(s.bytes.as_slice()).map_err(|_| RpcStatus::bad_request("invalid shard_id")))
-            .collect::<Result<Vec<_>, RpcStatus>>()?;
-
-        let shard_db = self.shard_state_store.clone();
-
-        task::spawn(async move {
-            let shards_substates_data = shard_db.with_read_tx(|tx| {
-                SubstateRecord::get_many_within_range(tx, start_shard_id..=end_shard_id, excluded_shards.as_slice())
-            });
-
-            let substates = match shards_substates_data {
-                Ok(s) => s,
-                Err(err) => {
-                    error!(target: LOG_TARGET, "{}", err);
-                    let _ignore = tx.send(Err(RpcStatus::general(&err))).await;
-                    return;
-                },
-            };
-
-            if substates.is_empty() {
-                return;
-            }
-
-            // select data from db where shard_id <= end_shard_id and shard_id >= start_shard_id
-            for substate in substates {
-                match proto::rpc::VnStateSyncResponse::try_from(substate) {
-                    Ok(r) => {
-                        if tx.send(Ok(r)).await.is_err() {
-                            debug!(
-                                target: LOG_TARGET,
-                                "Peer stream closed by client before completing. Aborting"
-                            );
-                            break;
-                        }
-                    },
-                    Err(e) => {
-                        error!(target: LOG_TARGET, "{}", e);
-                        let _ignore = tx.send(Err(RpcStatus::general(&e))).await;
-                        return;
-                    },
-                }
-            }
-        });
-        Ok(Streaming::new(rx))
-    }
-
     async fn get_substate(&self, req: Request<GetSubstateRequest>) -> Result<Response<GetSubstateResponse>, RpcStatus> {
         let req = req.into_message();
 
@@ -239,13 +179,13 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 version: substate.version(),
                 created_transaction_hash: substate.created_by_transaction().into_array().to_vec(),
                 destroyed_transaction_hash: substate
-                    .destroyed_by_transaction()
-                    .map(|id| id.into_array().to_vec())
+                    .destroyed()
+                    .map(|destroyed| destroyed.by_transaction.as_bytes().to_vec())
                     .unwrap_or_default(),
                 quorum_certificates: Some(created_qc)
                     .into_iter()
                     .chain(destroyed_qc)
-                    .map(Into::into)
+                    .map(|qc| (&qc).into())
                     .collect(),
                 ..Default::default()
             }
@@ -257,7 +197,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 substate: substate.substate_value().to_bytes(),
                 created_transaction_hash: substate.created_by_transaction().into_array().to_vec(),
                 destroyed_transaction_hash: vec![],
-                quorum_certificates: vec![created_qc.into()],
+                quorum_certificates: vec![(&created_qc).into()],
             }
         };
 
@@ -326,6 +266,45 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
                 .unwrap_or_default(),
             final_decision: proto::consensus::Decision::from(final_decision) as i32,
             abort_details,
+        }))
+    }
+
+    async fn sync_blocks(
+        &self,
+        request: Request<SyncBlocksRequest>,
+    ) -> Result<Streaming<SyncBlocksResponse>, RpcStatus> {
+        let req = request.into_message();
+        let store = self.shard_state_store.clone();
+
+        let (sender, receiver) = mpsc::channel(10);
+
+        let start_block_id = BlockId::try_from(req.start_block_id)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded block id: {}", e)))?;
+        // Check if we have the blocks
+        let start_block = store
+            .with_read_tx(|tx| Block::get(tx, &start_block_id).optional())
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+            .ok_or_else(|| RpcStatus::not_found("start_block_id not found"))?;
+
+        task::spawn(BlockSyncTask::new(self.shard_state_store.clone(), start_block, sender).run());
+
+        Ok(Streaming::new(receiver))
+    }
+
+    async fn get_high_qc(&self, _request: Request<GetHighQcRequest>) -> Result<Response<GetHighQcResponse>, RpcStatus> {
+        let high_qc = self
+            .shard_state_store
+            .with_read_tx(|tx| {
+                HighQc::get(tx)
+                    .optional()?
+                    .map(|hqc| hqc.get_quorum_certificate(tx))
+                    .transpose()
+            })
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+            .unwrap_or_else(QuorumCertificate::genesis);
+
+        Ok(Response::new(GetHighQcResponse {
+            high_qc: Some((&high_qc).into()),
         }))
     }
 }

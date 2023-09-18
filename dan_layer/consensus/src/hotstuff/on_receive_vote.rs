@@ -12,10 +12,9 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use thiserror::__private::DisplayAsDisplay;
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
+    hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::VoteMessage,
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
@@ -194,7 +193,7 @@ where TConsensusSpec: ConsensusSpec
 
             info!(target: LOG_TARGET, "🔥 New QC {}", qc);
 
-            update_high_qc(&mut tx, &qc)?;
+            qc.update_high_qc(&mut tx)?;
             tx.commit()?;
         }
         self.on_beat.beat();
@@ -236,7 +235,7 @@ where TConsensusSpec: ConsensusSpec
                 .create_challenge(sender_leaf_hash, &message.block_id, &message.decision);
         if !self.vote_signature_service.verify(&message.signature, &challenge) {
             return Err(HotStuffError::InvalidVoteSignature {
-                signer_public_key: message.signature.public_key().as_display().to_string(),
+                signer_public_key: message.signature.public_key().to_string(),
             });
         }
         Ok(())

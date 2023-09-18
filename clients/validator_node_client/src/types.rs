@@ -181,6 +181,19 @@ pub struct GetRecentTransactionsResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListBlocksRequest {
+    /// If provided, `limit` blocks from the specified block back will be returned. Otherwise `limit` blocks from the
+    /// leaf block will be provided.
+    pub from_id: Option<BlockId>,
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListBlocksResponse {
+    pub blocks: Vec<Block<PublicKey>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     pub timestamp: u64,
     pub message: String,

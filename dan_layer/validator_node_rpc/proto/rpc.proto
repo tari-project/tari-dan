@@ -152,3 +152,55 @@ message GetVirtualSubstateResponse {
   bytes substate = 1;
   repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 2;
 }
+
+message SyncStateRequest {
+  bytes start_block_id = 1;
+  uint64 end_epoch = 2;
+}
+
+message SyncStateResponse {
+  SubstateUpdate update = 1;
+}
+
+message SubstateCreatedProof {
+  SubstateData substate = 1;
+  tari.dan.consensus.QuorumCertificate created_justify = 2;
+}
+
+// Minimal substate data
+message SubstateData {
+  bytes address = 1;
+  uint32 version = 2;
+  bytes substate_value = 3;
+  bytes created_transaction = 7;
+}
+
+message SubstateDestroyedProof {
+  bytes shard_id = 1;
+  tari.dan.consensus.QuorumCertificate destroyed_justify = 2;
+  bytes destroyed_by_transaction = 3;
+}
+
+message SubstateUpdate {
+  oneof update {
+    SubstateCreatedProof create = 1;
+    SubstateDestroyedProof destroy = 2;
+  }
+}
+
+message SyncBlocksRequest {
+  bytes start_block_id = 1;
+}
+
+message SyncBlocksResponse {
+  tari.dan.consensus.Block block = 1;
+  repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 2;
+  repeated SubstateUpdate substate_updates = 3;
+}
+
+message GetHighQcRequest { }
+
+message GetHighQcResponse {
+  tari.dan.consensus.QuorumCertificate high_qc = 1;
+}
+

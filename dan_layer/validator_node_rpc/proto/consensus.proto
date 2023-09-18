@@ -147,13 +147,34 @@ message DownState {
 }
 
 message RequestMissingTransactionsMessage {
-    uint64 epoch = 1;
-    bytes block_id = 2;
-    repeated bytes transaction_ids = 3;
+  uint64 epoch = 1;
+  bytes block_id = 2;
+  repeated bytes transaction_ids = 3;
 }
 
 message RequestedTransactionMessage {
-    uint64 epoch = 1;
-    bytes block_id = 2;
-    repeated tari.dan.transaction.Transaction transactions = 3;
+  uint64 epoch = 1;
+  bytes block_id = 2;
+  repeated tari.dan.transaction.Transaction transactions = 3;
+}
+
+message Substate {
+  bytes address = 1;
+  uint32 version = 2;
+  bytes substate = 3;
+
+  uint64 created_epoch = 4;
+  uint64 created_height = 5;
+  bytes created_block = 6;
+  bytes created_transaction = 7;
+  bytes created_justify = 8;
+
+  SubstateDestroyed destroyed = 10;
+}
+
+message SubstateDestroyed {
+  tari.dan.common.Epoch epoch = 9;
+  bytes block = 10;
+  bytes transaction = 11;
+  bytes justify = 12;
 }

@@ -31,6 +31,7 @@ use tari_dan_storage::{
         LeafBlock,
         LockedBlock,
         LockedOutput,
+        QcId,
         QuorumCertificate,
         SubstateLockFlag,
         SubstateLockState,
@@ -662,13 +663,20 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError> {
         use crate::schema::transaction_pool;
 
-        diesel::delete(transaction_pool::table)
+        let num_affected = diesel::delete(transaction_pool::table)
             .filter(transaction_pool::transaction_id.eq(serialize_hex(transaction_id)))
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pool_remove",
                 source: e,
             })?;
+
+        if num_affected == 0 {
+            return Err(StorageError::NotFound {
+                item: "transaction".to_string(),
+                key: transaction_id.to_string(),
+            });
+        }
 
         Ok(())
     }
@@ -919,6 +927,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         epoch: Epoch,
         destroyed_block_id: &BlockId,
         destroyed_transaction_id: &TransactionId,
+        destroyed_qc_id: &QcId,
+        require_locks: bool,
     ) -> Result<(), StorageError> {
         use crate::schema::substates;
 
@@ -943,12 +953,14 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             }
             .into());
         }
-        if let Some((addr, _)) = is_writable.iter().find(|(_, w)| !*w) {
-            return Err(SqliteStorageError::SubstatesUnlock {
-                operation: "substate_down",
-                details: format!("Substate {} is not write locked", addr),
+        if require_locks {
+            if let Some((addr, _)) = is_writable.iter().find(|(_, w)| !*w) {
+                return Err(SqliteStorageError::SubstatesUnlock {
+                    operation: "substate_down",
+                    details: format!("Substate {} is not write locked", addr),
+                }
+                .into());
             }
-            .into());
         }
 
         let changes = (
@@ -956,6 +968,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             substates::destroyed_by_transaction.eq(Some(serialize_hex(destroyed_transaction_id))),
             substates::destroyed_by_block.eq(Some(serialize_hex(destroyed_block_id))),
             substates::destroyed_at_epoch.eq(Some(epoch.as_u64() as i64)),
+            substates::destroyed_justify.eq(Some(serialize_hex(destroyed_qc_id))),
         );
 
         diesel::update(substates::table)
@@ -983,11 +996,11 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             substates::created_justify.eq(serialize_hex(substate.created_justify)),
             substates::created_block.eq(serialize_hex(substate.created_block)),
             substates::created_height.eq(substate.created_height.as_u64() as i64),
-            substates::destroyed_by_transaction.eq(substate.destroyed_by_transaction.as_ref().map(serialize_hex)),
-            substates::destroyed_justify.eq(substate.destroyed_justify.as_ref().map(serialize_hex)),
-            substates::destroyed_by_block.eq(substate.destroyed_by_block.as_ref().map(serialize_hex)),
             substates::created_at_epoch.eq(substate.created_at_epoch.as_u64() as i64),
-            substates::destroyed_at_epoch.eq(substate.destroyed_at_epoch.map(|e| e.as_u64() as i64)),
+            substates::destroyed_by_transaction.eq(substate.destroyed().map(|d| serialize_hex(d.by_transaction))),
+            substates::destroyed_justify.eq(substate.destroyed().map(|d| serialize_hex(d.justify))),
+            substates::destroyed_by_block.eq(substate.destroyed().map(|d| serialize_hex(d.by_block))),
+            substates::destroyed_at_epoch.eq(substate.destroyed().map(|d| d.at_epoch.as_u64() as i64)),
         );
 
         diesel::insert_into(substates::table)

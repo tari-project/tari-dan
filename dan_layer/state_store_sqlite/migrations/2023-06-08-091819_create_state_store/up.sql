@@ -16,7 +16,7 @@ create table blocks
 (
     id               integer   not null primary key AUTOINCREMENT,
     block_id         text      not NULL,
-    parent_block_id  text      not NULL,
+    parent_block_id  text      NULL,
     height           bigint    not NULL,
     epoch            bigint    not NULL,
     proposed_by      text      not NULL,

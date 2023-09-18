@@ -1,21 +1,25 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::DerefMut,
+};
 
 use log::*;
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{BlockId, LockedBlock, QuorumCertificate},
+    consensus_models::{Block, BlockId, LockedBlock, QuorumCertificate},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
     hotstuff::{
-        common::{calculate_dummy_blocks, update_high_qc},
+        common::calculate_dummy_blocks,
         error::HotStuffError,
         pacemaker_handle::PaceMakerHandle,
+        ProposalValidationError,
     },
     messages::NewViewMessage,
     traits::{ConsensusSpec, LeaderStrategy},
@@ -27,7 +31,7 @@ pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
-    newview_message_counts: HashMap<BlockId, HashMap<NodeHeight, HashSet<TConsensusSpec::Addr>>>,
+    newview_message_counts: HashMap<(NodeHeight, BlockId), HashSet<TConsensusSpec::Addr>>,
     pacemaker: PaceMakerHandle,
 }
 
@@ -93,7 +97,26 @@ where TConsensusSpec: ConsensusSpec
 
         self.validate_qc(&high_qc)?;
 
-        self.store.with_write_tx(|tx| update_high_qc(tx, &high_qc))?;
+        self.store.with_write_tx(|tx| {
+            // Sync if we do not have the block for this valid QC
+            if !Block::record_exists(tx.deref_mut(), high_qc.block_id())? {
+                return Err(HotStuffError::ProposalValidationError(
+                    ProposalValidationError::JustifyBlockNotFound {
+                        proposed_by: from.to_string(),
+                        block_id: *high_qc.block_id(),
+                        justify_block: *high_qc.block_id(),
+                    },
+                ));
+            }
+            let checked_high_qc = high_qc.update_high_qc(tx)?;
+            self.newview_message_counts = self
+                .newview_message_counts
+                .drain()
+                .filter(|((h, _), _)| *h >= checked_high_qc.block_height())
+                .collect();
+
+            Ok(())
+        })?;
 
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let leader = self
@@ -121,24 +144,22 @@ where TConsensusSpec: ConsensusSpec
         }
 
         // Take note of unique NEWVIEWs so that we can count them
-        let entry = self
+        let collected_new_views = self
             .newview_message_counts
-            .entry(*high_qc.block_id())
-            .or_default()
-            .entry(new_height)
+            .entry((new_height, *high_qc.block_id()))
             .or_default();
-        entry.insert(from.clone());
+        collected_new_views.insert(from.clone());
         let threshold = self.epoch_manager.get_local_threshold_for_epoch(epoch).await?;
         info!(
             target: LOG_TARGET,
             "🌟 Received NEWVIEW for block {} has {} votes out of {}",
             new_height,
-            entry.len(),
+            collected_new_views.len(),
             threshold
         );
         // Once we have received enough (quorum) NEWVIEWS, we can create the dummy block(s) and propose the next block.
         // Any subsequent NEWVIEWs for this height/view are ignored.
-        if entry.len() == threshold {
+        if collected_new_views.len() == threshold {
             info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum", new_height, high_qc.as_high_qc());
 
             // Determine how many missing blocks we must fill without actually creating them.

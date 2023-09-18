@@ -56,6 +56,10 @@ impl Evidence {
     pub fn shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
         self.evidence.keys()
     }
+
+    pub fn qc_ids_iter(&self) -> impl Iterator<Item = &QcId> + '_ {
+        self.evidence.values().flatten()
+    }
 }
 
 impl FromIterator<(ShardId, Vec<QcId>)> for Evidence {
@@ -139,6 +143,14 @@ impl Command {
             Command::Prepare(tx) => tx.evidence.shards_iter(),
             Command::LocalPrepared(tx) => tx.evidence.shards_iter(),
             Command::Accept(tx) => tx.evidence.shards_iter(),
+        }
+    }
+
+    pub fn evidence(&self) -> &Evidence {
+        match self {
+            Command::Prepare(tx) => &tx.evidence,
+            Command::LocalPrepared(tx) => &tx.evidence,
+            Command::Accept(tx) => &tx.evidence,
         }
     }
 }

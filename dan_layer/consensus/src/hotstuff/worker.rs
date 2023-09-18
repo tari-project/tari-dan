@@ -7,7 +7,7 @@ use std::{
 };
 
 use log::*;
-use tari_dan_common_types::{Epoch, NodeHeight};
+use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
     consensus_models::{Block, HighQc, LeafBlock, TransactionPool},
     StateStore,
@@ -150,7 +150,7 @@ impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub async fn start(&mut self) -> Result<(), HotStuffError> {
-        self.create_genesis_block_if_required(Epoch(0))?;
+        self.create_genesis_block_if_required()?;
         let (leaf_block, high_qc) = self
             .state_store
             .with_read_tx(|tx| Ok::<_, HotStuffError>((LeafBlock::get(tx)?, HighQc::get(tx)?)))?;
@@ -227,6 +227,21 @@ where TConsensusSpec: ConsensusSpec
         self.pacemaker_handle.stop().await?;
 
         Ok(())
+    }
+
+    /// Read and discard messages. This should be used only when consensus is inactive.
+    pub async fn discard_messages(&mut self) {
+        loop {
+            tokio::select! {
+                _ = self.rx_hs_message.recv() => { },
+                _ = self.rx_new_transactions.recv() => { },
+
+                _ = self.shutdown.wait() => {
+                    info!(target: LOG_TARGET, "💤 Shutting down");
+                    break;
+                }
+            }
+        }
     }
 
     async fn on_new_executed_transaction(&mut self, transaction_id: TransactionId) -> Result<(), HotStuffError> {
@@ -318,10 +333,11 @@ where TConsensusSpec: ConsensusSpec
             .is_local_validator_registered_for_epoch(msg.epoch())
             .await?
         {
-            return Err(HotStuffError::EpochNotActive {
-                epoch: msg.epoch(),
-                details: "Received message for inactive epoch".to_string(),
-            });
+            warn!(
+                target: LOG_TARGET,
+                "Received message for inactive epoch: {}", msg.epoch()
+            );
+            return Ok(());
         }
 
         match msg {
@@ -341,13 +357,12 @@ where TConsensusSpec: ConsensusSpec
                 self.on_receive_requested_txs.handle(from, msg).await,
             ),
         }
-        Ok(())
     }
 
-    fn create_genesis_block_if_required(&mut self, epoch: Epoch) -> Result<(), HotStuffError> {
+    fn create_genesis_block_if_required(&self) -> Result<(), HotStuffError> {
         let mut tx = self.state_store.create_write_tx()?;
 
-        // The parent for all genesis blocks refer to this zero block
+        // The parent for genesis blocks refer to this zero block
         let zero_block = Block::zero_block();
         if !zero_block.exists(tx.deref_mut())? {
             debug!(target: LOG_TARGET, "Creating zero block");
@@ -373,12 +388,6 @@ where TConsensusSpec: ConsensusSpec
 
         tx.commit()?;
 
-        info!(
-            target: LOG_TARGET,
-            "🚀 Epoch changed to {}",
-            epoch
-        );
-
         Ok(())
     }
 
@@ -399,8 +408,9 @@ impl<TConsensusSpec: ConsensusSpec> Debug for HotstuffWorker<TConsensusSpec> {
     }
 }
 
-fn log_err(context: &'static str, result: Result<(), HotStuffError>) {
-    if let Err(e) = result {
+fn log_err(context: &'static str, result: Result<(), HotStuffError>) -> Result<(), HotStuffError> {
+    if let Err(ref e) = result {
         error!(target: LOG_TARGET, "Error while processing new hotstuff message ({context}): {e}");
     }
+    result
 }

@@ -9,19 +9,22 @@ use crate::{
         ConsensusWorkerContext,
         HotStuffError,
     },
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, SyncManager},
 };
 
 #[derive(Debug)]
 pub struct Syncing<TSpec>(PhantomData<TSpec>);
 
-impl<TSpec: ConsensusSpec> Syncing<TSpec> {
+impl<TSpec> Syncing<TSpec>
+where
+    TSpec: ConsensusSpec,
+    HotStuffError: From<<TSpec::SyncManager as SyncManager>::Error>,
+{
     pub(super) async fn on_enter(
         &self,
-        _context: &mut ConsensusWorkerContext<TSpec>,
+        context: &mut ConsensusWorkerContext<TSpec>,
     ) -> Result<ConsensusStateEvent, HotStuffError> {
-        // let mut sync = SyncWorker::new(context);
-        // sync.start().await?;
+        context.state_sync.sync().await?;
         Ok(ConsensusStateEvent::SyncComplete)
     }
 }
