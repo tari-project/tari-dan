@@ -66,8 +66,7 @@ async fn start_multiple_validator_nodes(world: &mut TariWorld, num_nodes: u64, b
 #[given(expr = "validator {word} nodes connect to all other validators")]
 async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: String) {
     let details = world
-        .validator_nodes
-        .values()
+        .all_validators_iter()
         .filter(|vn| vn.name != name)
         .map(|vn| {
             (
@@ -134,7 +133,7 @@ async fn send_vn_registration_with_claim_wallet(
 
 #[when(expr = "all validator nodes send registration transactions")]
 async fn all_vns_send_registration(world: &mut TariWorld) {
-    for vn_ps in world.validator_nodes.values() {
+    for vn_ps in world.all_validators_iter() {
         let mut client = vn_ps.get_client();
         let _resp = client.register_validator_node(Default::default()).await.unwrap();
     }
@@ -170,7 +169,7 @@ async fn register_template(world: &mut TariWorld, vn_name: String, template_name
 
 #[then(expr = "all validator nodes are listed as registered")]
 async fn assert_all_vns_are_registered(world: &mut TariWorld) {
-    for vn_ps in world.validator_nodes.values() {
+    for vn_ps in world.all_validators_iter() {
         // create a base node client
         let base_node_grpc_port = vn_ps.base_node_grpc_port;
         let mut base_node_client: GrpcBaseNodeClient = get_base_node_client(base_node_grpc_port);
@@ -250,7 +249,7 @@ async fn assert_template_is_registered_by_all(world: &mut TariWorld, template_na
     // try to get the template for each VN
     let timer = Instant::now();
     'outer: loop {
-        for vn_ps in world.validator_nodes.values() {
+        for vn_ps in world.all_validators_iter() {
             let mut client = vn_ps.get_client();
             let req = GetTemplateRequest { template_address };
             let resp = client.get_template(req).await.ok();

@@ -72,16 +72,16 @@ Feature: Committee scenarios
     Given validator VAL_4 nodes connect to all other validators
 
     # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 8 new blocks
-    When wallet WALLET has at least 20000 T
+    When miner MINER mines 9 new blocks
+    When wallet WALLET has at least 25000 T
 
     # VN registration
     When all validator nodes send registration transactions
 
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
-    When miner MINER mines 13 new blocks
-    Then VAL_1 has scanned to height 18 within 10 seconds
+    When miner MINER mines 23 new blocks
+    Then VAL_1 has scanned to height 29 within 10 seconds
     Then all validator nodes are listed as registered
     Then the template "counter" is listed as registered by all validator nodes
 
