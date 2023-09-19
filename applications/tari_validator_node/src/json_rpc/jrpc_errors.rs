@@ -36,7 +36,7 @@ use axum_jrpc::{
 //             answer_id,
 //             JsonRpcError::new(
 //                 JsonRpcErrorReason::InvalidParams,
-//                 "Invalid argument".to_string(),
+//                 format!("Invalid argument: {}", err),
 //                 serde_json::Value::Null,
 //             ),
 //         )
@@ -45,14 +45,15 @@ use axum_jrpc::{
 
 pub fn internal_error<T: Display>(answer_id: i64) -> impl Fn(T) -> JsonRpcResponse {
     move |err| {
-        log::error!(target: LOG_TARGET, "🚨 Internal error: {}", err);
+        let msg = if cfg!(debug_assertions) || option_env!("CI").is_some() {
+            err.to_string()
+        } else {
+            log::error!(target: LOG_TARGET, "🚨 Internal error: {}", err);
+            "Something went wrong".to_string()
+        };
         JsonRpcResponse::error(
             answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::InternalError,
-                "Internal error".to_string(),
-                serde_json::Value::Null,
-            ),
+            JsonRpcError::new(JsonRpcErrorReason::InternalError, msg, serde_json::Value::Null),
         )
     }
 }

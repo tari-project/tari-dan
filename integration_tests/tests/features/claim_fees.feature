@@ -25,7 +25,10 @@ Feature: Claim Fees
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds
+    And indexer IDX has scanned to height 17 within 10 seconds
     Then the validator node VN is listed as registered
+
+    When indexer IDX connects to all other validators
 
     # Run some transactions to generate fees
     When I create an account ACC1 via the wallet daemon WALLET_D with 10000 free coins
@@ -63,7 +66,10 @@ Feature: Claim Fees
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds
+    And indexer IDX has scanned to height 17 within 10 seconds
     Then the validator node VN is listed as registered
+
+    When indexer IDX connects to all other validators
 
     # Run some transactions to generate fees
     When I create an account ACC1 via the wallet daemon WALLET_D with 10000 free coins
@@ -102,10 +108,14 @@ Feature: Claim Fees
     # Initialize a VN
     Given a seed validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    Then VN has scanned to height 1 within 10 seconds
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET1 using key K1
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds
+    And indexer IDX has scanned to height 17 within 10 seconds
     Then the validator node VN is listed as registered
+
+    When indexer IDX connects to all other validators
 
     # Run some transactions to generate fees
     When I create an account ACC1 via the wallet daemon WALLET1 with 10000 free coins using key K1

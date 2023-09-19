@@ -4,7 +4,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 #[cfg(not(feature = "std"))]
-use alloc::{format, string::String, string::ToString, vec::Vec};
+use alloc::{format, string::ToString, vec::Vec};
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
@@ -12,42 +12,14 @@ extern crate alloc;
 mod tag;
 pub use tag::*;
 
+mod error;
 mod walker;
-
 pub use ciborium::value::Value;
 use ciborium::{de::from_reader, ser::into_writer};
+pub use error::BorError;
 pub use serde;
 use serde::{de::DeserializeOwned, Serialize};
 pub use walker::*;
-
-#[derive(Debug, Clone)]
-pub struct BorError(String);
-
-impl BorError {
-    pub fn new(str: String) -> Self {
-        Self(str)
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::fmt::Display for BorError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-#[cfg(feature = "std")]
-impl std::error::Error for BorError {
-    fn description(&self) -> &str {
-        &self.0
-    }
-}
-
-impl From<ciborium::value::Error> for BorError {
-    fn from(value: ciborium::value::Error) -> Self {
-        BorError(format!("{}", value))
-    }
-}
 
 pub fn encode_with_len<T: Serialize>(val: &T) -> Vec<u8> {
     let mut buf = Vec::with_capacity(512);
@@ -62,8 +34,12 @@ pub fn encode_with_len<T: Serialize>(val: &T) -> Vec<u8> {
 }
 
 #[cfg(not(feature = "std"))]
-pub fn encode_into<T: Serialize + ?Sized, W: ciborium_io::Write>(val: &T, writer: &mut W) -> Result<(), BorError>
-where W::Error: core::fmt::Debug {
+pub fn encode_into<T, W>(val: &T, writer: &mut W) -> Result<(), BorError>
+where
+    W::Error: core::fmt::Debug,
+    T: Serialize + ?Sized,
+    W: ciborium_io::Write,
+{
     into_writer(&val, writer).map_err(to_bor_error)
 }
 
@@ -72,17 +48,9 @@ pub fn encode_into<T: Serialize + ?Sized, W: std::io::Write>(val: &T, writer: &m
     into_writer(&val, writer).map_err(to_bor_error)
 }
 
-#[cfg(not(feature = "std"))]
 pub fn encode<T: Serialize + ?Sized>(val: &T) -> Result<Vec<u8>, BorError> {
     let mut buf = Vec::with_capacity(512);
-    encode_into(val, &mut buf).map_err(|_| BorError(String::new()))?;
-    Ok(buf)
-}
-
-#[cfg(feature = "std")]
-pub fn encode<T: Serialize + ?Sized>(val: &T) -> Result<Vec<u8>, BorError> {
-    let mut buf = Vec::with_capacity(512);
-    encode_into(val, &mut buf).map_err(|e| BorError(format!("{:?}", e)))?;
+    encode_into(val, &mut buf).map_err(|e| BorError::new(format!("{:?}", e)))?;
     Ok(buf)
 }
 
@@ -98,7 +66,7 @@ fn decode_inner<T: DeserializeOwned>(input: &mut &[u8]) -> Result<T, BorError> {
 pub fn decode_exact<T: DeserializeOwned>(mut input: &[u8]) -> Result<T, BorError> {
     let val = decode_inner(&mut input)?;
     if !input.is_empty() {
-        return Err(BorError(format!(
+        return Err(BorError::new(format!(
             "decode_exact: {} bytes remaining on input",
             input.len()
         )));
@@ -108,7 +76,7 @@ pub fn decode_exact<T: DeserializeOwned>(mut input: &[u8]) -> Result<T, BorError
 
 pub fn decode_len(input: &[u8]) -> Result<usize, BorError> {
     if input.len() < 4 {
-        return Err(BorError("Not enough bytes to decode length".to_string()));
+        return Err(BorError::new("Not enough bytes to decode length".to_string()));
     }
 
     let mut buf = [0u8; 4];
@@ -119,5 +87,5 @@ pub fn decode_len(input: &[u8]) -> Result<usize, BorError> {
 
 fn to_bor_error<E>(e: E) -> BorError
 where E: core::fmt::Display {
-    BorError(e.to_string())
+    BorError::new(e.to_string())
 }
