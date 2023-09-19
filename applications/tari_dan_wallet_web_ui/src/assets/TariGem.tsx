@@ -20,40 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import App from './App';
-import './theme/theme.css';
-import Accounts from './routes/Accounts/Accounts';
-import TransactionDetails from './routes/Transactions/TransactionDetails';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import queryClient from './api/queryClient';
+interface LogoProps {
+  width?: string;
+  height?: string;
+  fill?: string;
+}
 
-const router = createBrowserRouter([
-  {
-    path: '*',
-    element: <App />,
-    errorElement: <div />,
-    children: [
-      {
-        path: 'accounts',
-        element: <Accounts />,
-      },
-      {
-        path: 'transactions/:id',
-        element: <TransactionDetails />,
-      },
-    ],
-  },
-]);
-
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
-    </QueryClientProvider>
-  </React.StrictMode>
+const TariGem: React.FC<LogoProps> = ({ fill = '#000' }) => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      d="M21.5952 7.90787L21.5924 10.792L4.34884 6.43517L10.1722 2.70731L21.5952 7.90787ZM11.1355 20.0418L11.131 10.5994L20.328 12.9259L11.1355 20.0418ZM8.72871 19.137L2.4062 12.1756L2.40245 8.37583L8.71868 9.98919L8.72871 19.137ZM0 6.4023L0.000926212 13.0862L9.92828 24L23.9803 13.115L24 6.39219L9.96044 0L0 6.4023Z"
+      fill={fill}
+    />
+  </svg>
 );
+
+export default TariGem;

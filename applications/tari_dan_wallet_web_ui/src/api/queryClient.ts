@@ -20,15 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from "react";
+import { QueryClient } from '@tanstack/react-query';
 
-function Error({ component, message }: { component: String; message: String }) {
-  return (
-    <div className="container">
-      <span className="component error">{component}</span>
-      <span className="message error">{message}</span>
-    </div>
-  );
-}
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 3,
+    },
+  },
+});
 
-export default Error;
+export default queryClient;

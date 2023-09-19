@@ -214,7 +214,7 @@ export const dark: ThemeOptions = {
     },
     error: {
       main: red[500],
-      dark: red[400],
+      dark: red[600],
       light: red[500],
       contrastText: '#ffffff',
     },

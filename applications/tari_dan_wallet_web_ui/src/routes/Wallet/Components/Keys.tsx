@@ -20,22 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import Error from './Error';
+import { useState } from 'react';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import { keysCreate, keysList, keysSetActive } from '../../../utils/json_rpc';
+import {
+  useKeysCreate,
+  useKeysList,
+  useKeysSetActive,
+} from '../../../api/hooks/useKeys';
 import { BoxHeading2 } from '../../../Components/StyledComponents';
 import AddIcon from '@mui/icons-material/Add';
 import Fade from '@mui/material/Fade';
 import { Form } from 'react-router-dom';
 import Button from '@mui/material/Button/Button';
 import { DataTableCell } from '../../../Components/StyledComponents';
-import { Alert } from '@mui/material';
+import FetchStatusCheck from '../../../Components/FetchStatusCheck';
 
 function Key(key: any, setActive: any) {
   return (
@@ -54,97 +57,79 @@ function Key(key: any, setActive: any) {
 }
 
 function Keys() {
-  const [state, setState] = useState<any>();
-  const [error, setError] = useState<String>();
   const [showKeyDialog, setShowAddKeyDialog] = useState(false);
-  const [formState, setFormState] = useState({ publicKey: '', address: '' });
+  const { data, isLoading, isError, error } = useKeysList();
+  const { mutate: mutateSetActive } = useKeysSetActive();
+  const { mutate: mutateCreateKey } = useKeysCreate();
 
   const showAddKeyDialog = (setElseToggle: boolean = !showKeyDialog) => {
     setShowAddKeyDialog(setElseToggle);
   };
-  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormState({ ...formState, [e.target.name]: e.target.value });
-  };
-  const loadKeys = () => {
-    keysList()
-      .then((response) => {
-        console.log(response);
-        setState(response);
-        setError(undefined);
-      })
-      .catch((err) => {
-        setError(
-          err && err.message
-            ? err.message
-            : `Unknown error: ${JSON.stringify(err)}`
-        );
-      });
-  };
+
   const setActive = (index: number) => {
-    keysSetActive(index).then((response) => {
-      loadKeys();
-    });
-    console.log('click');
+    mutateSetActive(index);
   };
+
   const onSubmitAddKey = () => {
-    keysCreate().then((response) => {
-      loadKeys();
-    });
-    setFormState({ publicKey: '', address: '' });
+    mutateCreateKey();
     setShowAddKeyDialog(false);
   };
-  useEffect(() => {
-    loadKeys();
-  }, []);
-  if (error) {
-    return <Alert severity="error">{error}</Alert>;
-  }
+
   return (
     <>
-      <BoxHeading2>
-        {showKeyDialog && (
-          <Fade in={showKeyDialog}>
-            <Form onSubmit={onSubmitAddKey} className="flex-container">
-              <Button variant="contained" type="submit">
-                Add Key
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={() => showAddKeyDialog(false)}
-              >
-                Cancel
-              </Button>
-            </Form>
-          </Fade>
-        )}
-        {!showKeyDialog && (
-          <Fade in={!showKeyDialog}>
-            <div className="flex-container">
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => showAddKeyDialog()}
-              >
-                Add Key
-              </Button>
-            </div>
-          </Fade>
-        )}
-      </BoxHeading2>{' '}
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Index</TableCell>
-              <TableCell>Public key</TableCell>
-              <TableCell>Active</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {state && state.keys.map((key: any) => Key(key, setActive))}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      <FetchStatusCheck
+        isLoading={isLoading}
+        isError={isError}
+        errorMessage={error?.message || 'Error fetching data'}
+      />
+      <Fade in={!isLoading && !isError}>
+        <div>
+          <BoxHeading2>
+            {showKeyDialog && (
+              <Fade in={showKeyDialog}>
+                <Form onSubmit={onSubmitAddKey} className="flex-container">
+                  <Button variant="contained" type="submit">
+                    Add Key
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => showAddKeyDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                </Form>
+              </Fade>
+            )}
+            {!showKeyDialog && (
+              <Fade in={!showKeyDialog}>
+                <div className="flex-container">
+                  <Button
+                    variant="outlined"
+                    startIcon={<AddIcon />}
+                    onClick={() => showAddKeyDialog()}
+                  >
+                    Add Key
+                  </Button>
+                </div>
+              </Fade>
+            )}
+          </BoxHeading2>{' '}
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Index</TableCell>
+                  <TableCell>Public key</TableCell>
+                  <TableCell>Active</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data && data.keys.map((key: any) => Key(key, setActive))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </div>
+      </Fade>
     </>
   );
 }

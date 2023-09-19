@@ -42,6 +42,15 @@ export const StyledPaper = styled(Paper)(({ theme }) => ({
   border: '1px solid rgba(255,255,255,0.04)',
 }));
 
+export const InnerHeading = styled(Typography)(({ theme }) => ({
+  fontSize: theme.typography.h6.fontSize,
+  textTransform: 'uppercase',
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  padding: theme.spacing(2),
+  marginBottom: theme.spacing(2),
+  letterSpacing: '1.5px',
+}));
+
 export const DataTableCell = styled(TableCell)(({ theme }) => ({
   fontFamily: "'Courier New', Courier, monospace",
 }));
