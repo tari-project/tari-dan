@@ -105,6 +105,16 @@ impl TariWorld {
             .unwrap_or_else(|| panic!("Validator node {} not found", name))
     }
 
+    pub fn all_validators_iter(&self) -> impl Iterator<Item = &ValidatorNodeProcess> {
+        self.validator_nodes.values().chain(self.vn_seeds.values())
+    }
+
+    pub fn get_indexer(&self, name: &str) -> &IndexerProcess {
+        self.indexers
+            .get(name)
+            .unwrap_or_else(|| panic!("Indexer {} not found", name))
+    }
+
     pub fn get_base_node(&self, name: &str) -> &BaseNodeProcess {
         self.base_nodes
             .get(name)
