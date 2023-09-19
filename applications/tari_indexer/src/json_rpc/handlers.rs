@@ -45,7 +45,11 @@ use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_client::types::{
     AddAddressRequest,
+    AddPeerRequest,
+    AddPeerResponse,
     DeleteAddressRequest,
+    GetEpochManagerStatsResponse,
+    GetIdentityResponse,
     GetNonFungibleCountRequest,
     GetNonFungiblesRequest,
     GetNonFungiblesResponse,
@@ -59,12 +63,6 @@ use tari_indexer_client::types::{
     NonFungibleSubstate,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
-};
-use tari_validator_node_client::types::{
-    AddPeerRequest,
-    AddPeerResponse,
-    GetEpochManagerStatsResponse,
-    GetIdentityResponse,
 };
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory, TransactionResultStatus};
 
@@ -570,22 +568,9 @@ impl JsonRpcHandlers {
             )
         })?;
 
-        let is_valid = self.epoch_manager.is_epoch_active(current_epoch).await.map_err(|err| {
-            JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InternalError,
-                    format!("Epoch is not valid:{}", err),
-                    json::Value::Null,
-                ),
-            )
-        })?;
-
         let response = GetEpochManagerStatsResponse {
             current_epoch,
             current_block_height,
-            is_valid,
-            committee_shard: None,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }
@@ -640,7 +625,7 @@ impl JsonRpcHandlers {
             error.to_string()
         } else {
             error!(target: LOG_TARGET, "Internal error: {}", error);
-            format!("Something went wrong: {}", error)
+            "Something went wrong".to_string()
         };
         Self::error_response(answer_id, JsonRpcErrorReason::InternalError, msg)
     }
