@@ -57,25 +57,9 @@ impl WasmModule {
         Self { code }
     }
 
-    pub fn code(&self) -> &[u8] {
-        &self.code
-    }
-
-    fn create_store(&self) -> Store {
-        let mut cranelift = Cranelift::new();
-        cranelift.opt_level(CraneliftOptLevel::Speed).canonicalize_nans(true);
-        // TODO: Configure metering limit
-        cranelift.push_middleware(Arc::new(metering::middleware(100_000_000)));
-        let engine = Universal::new(cranelift).engine();
-        let tunables = BaseTunables::for_target(engine.target());
-        Store::new_with_tunables(&engine, tunables)
-    }
-}
-
-impl TemplateModuleLoader for WasmModule {
-    fn load_template(&self) -> Result<LoadedTemplate, PackageError> {
-        let store = self.create_store();
-        let module = Module::new(&store, &self.code)?;
+    pub fn load_template_from_code(code: &[u8]) -> Result<LoadedTemplate, PackageError> {
+        let store = Self::create_store();
+        let module = Module::new(&store, code)?;
         let violation_flag = Arc::new(AtomicBool::new(false));
         let mut env = WasmEnv::new(violation_flag.clone());
 
@@ -95,7 +79,27 @@ impl TemplateModuleLoader for WasmModule {
         if violation_flag.load(Ordering::Relaxed) {
             return Err(PackageError::TemplateCalledEngineDuringInitialization);
         }
-        Ok(LoadedWasmTemplate::new(template, module, self.code.len()).into())
+        Ok(LoadedWasmTemplate::new(template, module, code.len()).into())
+    }
+
+    pub fn code(&self) -> &[u8] {
+        &self.code
+    }
+
+    fn create_store() -> Store {
+        let mut cranelift = Cranelift::new();
+        cranelift.opt_level(CraneliftOptLevel::Speed).canonicalize_nans(true);
+        // TODO: Configure metering limit
+        cranelift.push_middleware(Arc::new(metering::middleware(100_000_000)));
+        let engine = Universal::new(cranelift).engine();
+        let tunables = BaseTunables::for_target(engine.target());
+        Store::new_with_tunables(&engine, tunables)
+    }
+}
+
+impl TemplateModuleLoader for WasmModule {
+    fn load_template(&self) -> Result<LoadedTemplate, PackageError> {
+        Self::load_template_from_code(&self.code)
     }
 }
 

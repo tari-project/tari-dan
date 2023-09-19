@@ -81,6 +81,7 @@ pub async fn handle_create(
         wait_for_result: true,
         wait_for_result_timeout: Some(60),
         inputs: vec![],
+        input_refs: vec![],
         version: None,
         dump_outputs_into: None,
         account_template_address: None,

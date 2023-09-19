@@ -23,7 +23,7 @@
 mod handlers;
 pub use handlers::JsonRpcHandlers;
 
+mod json_encoding;
 mod server;
-mod special_substate_encoding;
 
 pub use server::run_json_rpc;

@@ -7,7 +7,7 @@ use tari_crypto::errors::RangeProofError;
 #[derive(Debug, thiserror::Error)]
 pub enum ConfidentialProofError {
     #[error("Range proof error: {0}")]
-    RangeProof(#[from] RangeProofError),
+    RangeProof(RangeProofError),
     #[error("Aead error")]
     AeadError,
 }
@@ -15,5 +15,11 @@ pub enum ConfidentialProofError {
 impl From<aead::Error> for ConfidentialProofError {
     fn from(_value: aead::Error) -> Self {
         Self::AeadError
+    }
+}
+
+impl From<RangeProofError> for ConfidentialProofError {
+    fn from(value: RangeProofError) -> Self {
+        Self::RangeProof(value)
     }
 }

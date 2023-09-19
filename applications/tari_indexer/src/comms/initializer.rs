@@ -43,7 +43,7 @@ use tari_comms::{
     UnspawnedCommsNode,
 };
 use tari_comms_logging::SqliteMessageLog;
-use tari_dan_p2p::DanMessage;
+use tari_dan_p2p::{DanMessage, TARI_DAN_MSG_PROTOCOL_ID};
 use tari_p2p::{
     initialization::CommsInitializationError,
     peer_seeds::SeedPeer,
@@ -88,10 +88,10 @@ pub async fn initialize(
             user_agent: config.user_agent.clone(),
         });
 
-    if config.allow_test_addresses || config.dht.allow_test_addresses {
+    if config.allow_test_addresses || config.dht.peer_validator_config.allow_test_addresses {
         // The default is false, so ensure that both settings are true in this case
         config.allow_test_addresses = true;
-        config.dht.allow_test_addresses = true;
+        config.dht.peer_validator_config.allow_test_addresses = true;
         comms_builder = comms_builder.allow_test_addresses();
     }
 
@@ -179,6 +179,7 @@ fn configure_comms(
     // TODO: messaging events should be optional
     let (messaging_events_sender, _) = broadcast::channel(1);
     comms = comms.add_protocol_extension(MessagingProtocolExtension::new(
+        TARI_DAN_MSG_PROTOCOL_ID.clone(),
         messaging_events_sender,
         messaging_pipeline,
     ));

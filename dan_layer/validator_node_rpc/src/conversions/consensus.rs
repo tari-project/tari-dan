@@ -49,17 +49,19 @@ use tari_transaction::TransactionId;
 use crate::proto;
 // -------------------------------- HotstuffMessage -------------------------------- //
 
-impl<TAddr: NodeAddressable> From<HotstuffMessage<TAddr>> for proto::consensus::HotStuffMessage {
-    fn from(source: HotstuffMessage<TAddr>) -> Self {
+impl<TAddr: NodeAddressable> From<&HotstuffMessage<TAddr>> for proto::consensus::HotStuffMessage {
+    fn from(source: &HotstuffMessage<TAddr>) -> Self {
         let message = match source {
-            HotstuffMessage::NewView(msg) => proto::consensus::hot_stuff_message::Message::NewView(msg.into()),
-            HotstuffMessage::Proposal(msg) => proto::consensus::hot_stuff_message::Message::Proposal(msg.into()),
-            HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.into()),
+            HotstuffMessage::NewView(msg) => proto::consensus::hot_stuff_message::Message::NewView(msg.clone().into()),
+            HotstuffMessage::Proposal(msg) => {
+                proto::consensus::hot_stuff_message::Message::Proposal(msg.clone().into())
+            },
+            HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.clone().into()),
             HotstuffMessage::RequestMissingTransactions(msg) => {
-                proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.into())
+                proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.clone().into())
             },
             HotstuffMessage::RequestedTransaction(msg) => {
-                proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.into())
+                proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.clone().into())
             },
         };
         Self { message: Some(message) }
@@ -92,6 +94,7 @@ impl<TAddr: NodeAddressable> From<NewViewMessage<TAddr>> for proto::consensus::N
         Self {
             high_qc: Some(value.high_qc.into()),
             new_height: value.new_height.0,
+            epoch: value.epoch.as_u64(),
         }
     }
 }
@@ -103,6 +106,7 @@ impl<TAddr: NodeAddressable> TryFrom<proto::consensus::NewViewMessage> for NewVi
         Ok(NewViewMessage {
             high_qc: value.high_qc.ok_or_else(|| anyhow!("High QC is missing"))?.try_into()?,
             new_height: value.new_height.into(),
+            epoch: Epoch(value.epoch),
         })
     }
 }
@@ -185,7 +189,7 @@ impl TryFrom<proto::consensus::RequestMissingTransactionsMessage> for RequestMis
                 .transaction_ids
                 .into_iter()
                 .map(|tx_id| tx_id.try_into())
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect::<Result<_, _>>()?,
         })
     }
 }
@@ -422,7 +426,7 @@ impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
 
     fn try_from(value: proto::consensus::ValidatorMetadata) -> Result<Self, Self::Error> {
         Ok(ValidatorMetadata {
-            public_key: ByteArray::from_bytes(&value.public_key)?,
+            public_key: ByteArray::from_bytes(&value.public_key).map_err(anyhow::Error::msg)?,
             vn_shard_key: value.vn_shard_key.try_into()?,
             signature: value
                 .signature

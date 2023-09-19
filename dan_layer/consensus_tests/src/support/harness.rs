@@ -1,20 +1,23 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
+use std::{
+    collections::{hash_map, HashMap},
+    time::Duration,
+};
 
 use futures::{stream::FuturesUnordered, StreamExt};
 use tari_consensus::hotstuff::HotstuffEvent;
-use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch};
+use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, Decision, TransactionPoolStage},
     StateStore,
     StateStoreReadTransaction,
 };
-use tari_epoch_manager::EpochManagerReader;
+use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_transaction::TransactionId;
-use tokio::task;
+use tokio::{task, time::timeout};
 
 use crate::support::{
     address::TestAddress,
@@ -22,16 +25,17 @@ use crate::support::{
     network::{spawn_network, TestNetwork, TestNetworkDestination},
     transaction::build_transaction,
     validator::Validator,
-    SelectedIndexLeaderStrategy,
+    RoundRobinLeaderStrategy,
     ValidatorChannels,
 };
 
 pub struct Test {
     validators: HashMap<TestAddress, Validator>,
     network: TestNetwork,
-    _leader_strategy: SelectedIndexLeaderStrategy,
+    _leader_strategy: RoundRobinLeaderStrategy,
     epoch_manager: TestEpochManager,
     shutdown: Shutdown,
+    timeout: Duration,
 }
 
 impl Test {
@@ -53,6 +57,10 @@ impl Test {
         self.network.send_transaction(TestNetworkDestination::All, tx).await;
     }
 
+    pub fn validators(&self) -> hash_map::Values<'_, TestAddress, Validator> {
+        self.validators.values()
+    }
+
     pub async fn on_hotstuff_event(&mut self) -> HotstuffEvent {
         self.validators
             .values_mut()
@@ -64,18 +72,35 @@ impl Test {
             .unwrap()
     }
 
-    pub async fn on_block_committed(&mut self) -> BlockId {
+    pub async fn on_block_committed(&mut self) -> (BlockId, NodeHeight) {
         loop {
-            let event = self.on_hotstuff_event().await;
+            let event = timeout(self.timeout, self.on_hotstuff_event())
+                .await
+                .unwrap_or_else(|_| panic!("Timeout waiting for Hotstuff event"));
             match event {
-                HotstuffEvent::BlockCommitted { block_id } => return block_id,
+                HotstuffEvent::BlockCommitted { block_id, height } => return (block_id, height),
                 HotstuffEvent::Failure { message } => panic!("Consensus failure: {}", message),
+                HotstuffEvent::LeaderTimeout { new_height } => {
+                    log::info!("Leader timeout. New height {new_height}");
+                    continue;
+                },
             }
         }
     }
 
     pub fn network(&mut self) -> &mut TestNetwork {
         &mut self.network
+    }
+
+    pub fn start_epoch(&mut self, epoch: Epoch) {
+        for validator in self.validators.values() {
+            // Fire off initial epoch change event so that the pacemaker starts
+            validator
+                .tx_epoch_events
+                .send(EpochManagerEvent::EpochChanged(epoch))
+                .unwrap();
+        }
+        self.network.start();
     }
 
     #[allow(dead_code)]
@@ -161,7 +186,10 @@ impl Test {
     }
 
     pub async fn assert_all_validators_at_same_height(&self) {
-        let epoch = self.epoch_manager.current_epoch().await.unwrap();
+        self.assert_all_validators_at_same_height_except(&[]).await;
+    }
+
+    pub async fn assert_all_validators_at_same_height_except(&self, except: &[TestAddress]) {
         let committees = self.epoch_manager.all_committees().await;
         let mut attempts = 0usize;
         'outer: loop {
@@ -170,12 +198,9 @@ impl Test {
                     .validators
                     .values()
                     .filter(|vn| committee.members.contains(&vn.address))
+                    .filter(|vn| !except.contains(&vn.address))
                     .map(|v| {
-                        let height = v
-                            .state_store
-                            .with_read_tx(|tx| Block::get_tip(tx, epoch))
-                            .unwrap()
-                            .height();
+                        let height = v.state_store.with_read_tx(|tx| Block::get_tip(tx)).unwrap().height();
                         (v.address.clone(), height)
                     });
                 let (first_addr, first) = heights.next().unwrap();
@@ -203,13 +228,12 @@ impl Test {
         transaction_id: &TransactionId,
         expected_decision: Decision,
     ) {
-        let epoch = self.epoch_manager.current_epoch().await.unwrap();
         let mut attempts = 0usize;
         'outer: loop {
             let decisions = self.validators.values().map(|v| {
                 let decisions = v
                     .state_store
-                    .with_read_tx(|tx| Block::get_tip(tx, epoch))
+                    .with_read_tx(|tx| Block::get_tip(tx))
                     .unwrap()
                     .commands()
                     .iter()
@@ -229,8 +253,8 @@ impl Test {
                 }
                 assert!(
                     all_match,
-                    "Expected {} but validator {} has decision(s) {:?}",
-                    expected_decision, addr, decisions
+                    "Expected {} but validator {} has decision(s) {:?} for transaction {}",
+                    expected_decision, addr, decisions, transaction_id
                 );
             }
             break;
@@ -256,6 +280,8 @@ impl Test {
 pub struct TestBuilder {
     committees: HashMap<ShardBucket, Committee<TestAddress>>,
     sql_address: String,
+    timeout: Duration,
+    debug_sql_file: Option<String>,
 }
 
 impl TestBuilder {
@@ -263,12 +289,25 @@ impl TestBuilder {
         Self {
             committees: HashMap::new(),
             sql_address: ":memory:".to_string(),
+            timeout: Duration::from_secs(10),
+            debug_sql_file: None,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn debug_sql<P: Into<String>>(&mut self, path: P) -> &mut Self {
+        self.debug_sql_file = Some(path.into());
+        self
     }
 
     #[allow(dead_code)]
     pub fn with_sql_url<T: Into<String>>(&mut self, sql_address: T) -> &mut Self {
         self.sql_address = sql_address.into();
+        self
+    }
+
+    pub fn with_test_timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.timeout = timeout;
         self
     }
 
@@ -280,7 +319,7 @@ impl TestBuilder {
 
     async fn build_validators(
         &self,
-        leader_strategy: &SelectedIndexLeaderStrategy,
+        leader_strategy: &RoundRobinLeaderStrategy,
         epoch_manager: &TestEpochManager,
         shutdown_signal: ShutdownSignal,
     ) -> (Vec<ValidatorChannels>, HashMap<TestAddress, Validator>) {
@@ -289,7 +328,6 @@ impl TestBuilder {
             .await
             .into_iter()
             .map(|(address, bucket, shard)| {
-                let leader_strategy = leader_strategy.clone();
                 let sql_address = self.sql_address.replace("{}", &address.0);
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
@@ -297,15 +335,28 @@ impl TestBuilder {
                     .with_shard(shard)
                     .with_bucket(bucket)
                     .with_epoch_manager(epoch_manager.clone_for(address.clone(), shard))
-                    .with_leader_strategy(leader_strategy)
+                    .with_leader_strategy(*leader_strategy)
                     .spawn(shutdown_signal.clone());
                 (channels, (address, validator))
             })
             .unzip()
     }
 
-    pub async fn start(&self) -> Test {
-        let leader_strategy = SelectedIndexLeaderStrategy::new(0);
+    pub async fn start(&mut self) -> Test {
+        if let Some(ref sql_file) = self.debug_sql_file {
+            // Delete any previous database files
+            for path in self
+                .committees
+                .values()
+                .flat_map(|committee| committee.iter().map(|addr| sql_file.replace("{}", &addr.0)))
+            {
+                let _ignore = std::fs::remove_file(&path);
+            }
+
+            self.sql_address = format!("sqlite://{sql_file}");
+        }
+
+        let leader_strategy = RoundRobinLeaderStrategy::new();
         let epoch_manager = TestEpochManager::new();
         epoch_manager.add_committees(self.committees.clone()).await;
         let shutdown = Shutdown::new();
@@ -320,6 +371,7 @@ impl TestBuilder {
             _leader_strategy: leader_strategy,
             epoch_manager,
             shutdown,
+            timeout: self.timeout,
         }
     }
 }

@@ -1,10 +1,12 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use digest::Digest;
+use blake2::{
+    digest::{consts::U32, Digest},
+    Blake2b,
+};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
-use tari_crypto::hash::blake2::Blake256;
 
 use crate::{NodeAddressable, ShardId};
 
@@ -26,9 +28,9 @@ impl ValidatorMetadata {
 }
 
 pub fn vn_node_hash<TAddr: NodeAddressable>(public_key: &TAddr, shard_id: &ShardId) -> FixedHash {
-    Blake256::new()
-        .chain(public_key.as_bytes())
-        .chain(shard_id.as_bytes())
+    Blake2b::<U32>::new()
+        .chain_update(public_key.as_bytes())
+        .chain_update(shard_id.as_bytes())
         .finalize()
         .into()
 }

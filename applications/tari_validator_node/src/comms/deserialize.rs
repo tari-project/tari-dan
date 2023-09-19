@@ -21,6 +21,7 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use std::{
+    marker::PhantomData,
     sync::Arc,
     task::{Context, Poll},
 };
@@ -29,6 +30,7 @@ use futures::future::BoxFuture;
 use prost::Message;
 use tari_comms::{message::InboundMessage, types::CommsPublicKey, PeerManager};
 use tari_comms_logging::SqliteMessageLog;
+use tari_consensus::messages::HotstuffMessage;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_p2p::DanMessage;
 use tari_validator_node_rpc::proto;
@@ -37,44 +39,48 @@ use tower::{Service, ServiceExt};
 const LOG_TARGET: &str = "tari::validator_node::comms::messaging";
 
 #[derive(Debug, Clone)]
-pub struct DanDeserialize {
+pub struct DanDeserialize<TMsg> {
     peer_manager: Arc<PeerManager>,
     logger: SqliteMessageLog,
+    _msg: PhantomData<TMsg>,
 }
 
-impl DanDeserialize {
+impl<TMsg> DanDeserialize<TMsg> {
     pub fn new(peer_manager: Arc<PeerManager>, logger: SqliteMessageLog) -> Self {
-        Self { peer_manager, logger }
+        Self {
+            peer_manager,
+            logger,
+            _msg: PhantomData,
+        }
     }
 }
 
-impl<S> tower_layer::Layer<S> for DanDeserialize
+impl<S, TMsg> tower_layer::Layer<S> for DanDeserialize<TMsg>
 where
-    S: Service<(CommsPublicKey, DanMessage<CommsPublicKey>), Response = (), Error = anyhow::Error>
-        + Send
-        + Clone
-        + 'static,
+    S: Service<(CommsPublicKey, TMsg), Response = (), Error = anyhow::Error> + Send + Clone + 'static,
     S::Future: Send + 'static,
 {
-    type Service = DanDeserializeService<S>;
+    type Service = DanDeserializeService<S, TMsg>;
 
     fn layer(&self, next_service: S) -> Self::Service {
         DanDeserializeService {
             next_service,
             logger: self.logger.clone(),
             peer_manager: self.peer_manager.clone(),
+            _msg: PhantomData,
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct DanDeserializeService<S> {
+pub struct DanDeserializeService<S, TMsg> {
     next_service: S,
     logger: SqliteMessageLog,
     peer_manager: Arc<PeerManager>,
+    _msg: PhantomData<TMsg>,
 }
 
-impl<S> Service<InboundMessage> for DanDeserializeService<S>
+impl<S> Service<InboundMessage> for DanDeserializeService<S, DanMessage<CommsPublicKey>>
 where
     S: Service<(CommsPublicKey, DanMessage<CommsPublicKey>), Response = (), Error = anyhow::Error>
         + Send
@@ -113,12 +119,53 @@ where
                 .find_by_node_id(&source_peer)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Could not find peer with node id {}", source_peer))?;
-            logger.log_inbound_message(
-                peer.public_key.as_bytes().to_vec(),
+            logger.log_inbound_message(peer.public_key.as_bytes(), msg.as_type_str(), &message_tag, &msg);
+            let mut svc = next_service.ready_oneshot().await?;
+            svc.call((peer.public_key, msg)).await?;
+            Ok(())
+        })
+    }
+}
+
+impl<S> Service<InboundMessage> for DanDeserializeService<S, HotstuffMessage<CommsPublicKey>>
+where
+    S: Service<(CommsPublicKey, HotstuffMessage<CommsPublicKey>), Response = (), Error = anyhow::Error>
+        + Send
+        + Clone
+        + 'static,
+    S::Future: Send + 'static,
+{
+    type Error = anyhow::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Response = ();
+
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, msg: InboundMessage) -> Self::Future {
+        let InboundMessage {
+            source_peer, mut body, ..
+        } = msg;
+        let next_service = self.next_service.clone();
+        let peer_manager = self.peer_manager.clone();
+        let logger = self.logger.clone();
+        Box::pin(async move {
+            let body_len = body.len();
+            let decoded_msg = proto::consensus::HotStuffMessage::decode(&mut body)?;
+            let msg = HotstuffMessage::try_from(decoded_msg)?;
+            log::info!(
+                target: LOG_TARGET,
+                "📨 Rx: {} ({} bytes) from {}",
                 msg.as_type_str(),
-                message_tag,
-                &msg,
+                body_len,
+                source_peer
             );
+            let peer = peer_manager
+                .find_by_node_id(&source_peer)
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Could not find peer with node id {}", source_peer))?;
+            logger.log_inbound_message(peer.public_key.as_bytes(), msg.as_type_str(), "", &msg);
             let mut svc = next_service.ready_oneshot().await?;
             svc.call((peer.public_key, msg)).await?;
             Ok(())

@@ -3,7 +3,7 @@
 
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{BlockId, TransactionPoolError},
+    consensus_models::{BlockId, LeafBlock, LockedBlock, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
@@ -42,14 +42,15 @@ pub enum HotStuffError {
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]
     TransactionDoesNotExist { transaction_id: TransactionId },
-    #[error("Received vote for unknown block {block_id} from {sent_by}")]
-    ReceivedVoteForUnknownBlock { block_id: BlockId, sent_by: String },
     #[error("Pacemaker channel dropped: {details}")]
     PacemakerChannelDropped { details: String },
-    #[error("Bad new view message: expected height {expected_height}, received new height {received_new_height}")]
+    #[error(
+        "Bad new view message: HighQC height {high_qc_height}, received new height {received_new_height}: {details}"
+    )]
     BadNewViewMessage {
-        expected_height: NodeHeight,
+        high_qc_height: NodeHeight,
         received_new_height: NodeHeight,
+        details: String,
     },
     #[error("BUG Invariant error occurred: {0}")]
     InvariantError(String),
@@ -73,7 +74,7 @@ pub enum ProposalValidationError {
     },
     #[error("Node proposed by {proposed_by} with hash {hash} did not satisfy the safeNode predicate")]
     NotSafeBlock { proposed_by: String, hash: BlockId },
-    #[error("Node proposed by {proposed_by} with hash {hash} did not satisfy the validNode predicate")]
+    #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
     #[error("Justification block {justify_block} for proposed block {hash} by {proposed_by} not found")]
     JustifyBlockNotFound {
@@ -109,4 +110,21 @@ pub enum ProposalValidationError {
     },
     #[error("Block {block_id} proposed by {proposed_by} is not the leader")]
     NotLeader { proposed_by: String, block_id: BlockId },
+    #[error(
+        "Block {candidate_block} proposed by {proposed_by} is less than or equal to the current leaf {leaf_block}"
+    )]
+    CandidateBlockNotHigherThanLeafBlock {
+        proposed_by: String,
+        leaf_block: LeafBlock,
+        candidate_block: LeafBlock,
+    },
+    #[error(
+        "Block {candidate_block} justify proposed by {proposed_by} is less than or equal to the current locked \
+         {locked_block}"
+    )]
+    CandidateBlockNotHigherThanLockedBlock {
+        proposed_by: String,
+        locked_block: LockedBlock,
+        candidate_block: LeafBlock,
+    },
 }

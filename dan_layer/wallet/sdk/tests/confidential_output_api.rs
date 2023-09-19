@@ -155,7 +155,7 @@ impl Test {
             .add_vault(
                 Test::test_account_address(),
                 Test::test_vault_address(),
-                *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                 ResourceType::Confidential,
                 Some("TEST".to_string()),
             )
@@ -231,35 +231,39 @@ struct PanicIndexer;
 impl WalletNetworkInterface for PanicIndexer {
     type Error = Infallible;
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn query_substate(
         &self,
         _address: &SubstateAddress,
         _version: Option<u32>,
         _local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn submit_transaction(
         &self,
         _transaction: Transaction,
         _required_substates: Vec<SubstateRequirement>,
     ) -> Result<TransactionId, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn submit_dry_run_transaction(
         &self,
         _transaction: Transaction,
         _required_substates: Vec<SubstateRequirement>,
     ) -> Result<TransactionQueryResult, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 
+    #[allow(clippy::diverging_sub_expression)]
     async fn query_transaction_result(
         &self,
         _transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error> {
-        unimplemented!()
+        panic!("PanicIndexer called")
     }
 }

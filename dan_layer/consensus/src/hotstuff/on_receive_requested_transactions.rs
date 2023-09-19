@@ -10,14 +10,14 @@ use crate::{hotstuff::error::HotStuffError, messages::RequestedTransactionMessag
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_requested_transactions";
 
 pub struct OnReceiveRequestedTransactions<TConsensusSpec: ConsensusSpec> {
-    tx_mempool: mpsc::Sender<Transaction>,
+    tx_mempool: mpsc::UnboundedSender<Transaction>,
     _phantom: std::marker::PhantomData<TConsensusSpec>,
 }
 
 impl<TConsensusSpec> OnReceiveRequestedTransactions<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
-    pub fn new(tx_mempool: mpsc::Sender<Transaction>) -> Self {
+    pub fn new(tx_mempool: mpsc::UnboundedSender<Transaction>) -> Self {
         Self {
             tx_mempool,
             _phantom: Default::default(),
@@ -29,11 +29,10 @@ where TConsensusSpec: ConsensusSpec
         from: TConsensusSpec::Addr,
         msg: RequestedTransactionMessage,
     ) -> Result<(), HotStuffError> {
-        info!(target: LOG_TARGET, "{:?} sent the requested transactions for block {}", from,msg.block_id);
+        info!(target: LOG_TARGET, "{:?} receiving {} requested transactions for block {}", from, msg.transactions.len(), msg.block_id);
         for tx in msg.transactions {
             self.tx_mempool
                 .send(tx)
-                .await
                 .map_err(|_| HotStuffError::InternalChannelClosed {
                     context: "tx_new_transaction in OnReceiveRequestedTransactions::handle",
                 })?;

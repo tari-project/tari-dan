@@ -366,9 +366,9 @@ impl TryFrom<proto::transaction::CommitmentSignature> for RistrettoComSig {
     type Error = anyhow::Error;
 
     fn try_from(val: proto::transaction::CommitmentSignature) -> Result<Self, Self::Error> {
-        let u = PrivateKey::from_bytes(&val.signature_u)?;
-        let v = PrivateKey::from_bytes(&val.signature_v)?;
-        let public_nonce = PublicKey::from_bytes(&val.public_nonce_commitment)?;
+        let u = PrivateKey::from_bytes(&val.signature_u).map_err(anyhow::Error::msg)?;
+        let v = PrivateKey::from_bytes(&val.signature_v).map_err(anyhow::Error::msg)?;
+        let public_nonce = PublicKey::from_bytes(&val.public_nonce_commitment).map_err(anyhow::Error::msg)?;
 
         Ok(RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v))
     }

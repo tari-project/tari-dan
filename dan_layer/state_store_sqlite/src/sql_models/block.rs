@@ -24,6 +24,9 @@ pub struct Block {
     pub command_count: i64,
     pub commands: String,
     pub total_leader_fees: i64,
+    pub is_committed: bool,
+    pub is_processed: bool,
+    pub is_dummy: bool,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -45,6 +48,8 @@ impl Block {
             })?,
             deserialize_json(&self.commands)?,
             self.total_leader_fees as u64,
+            self.is_dummy,
+            self.is_processed,
         ))
     }
 }

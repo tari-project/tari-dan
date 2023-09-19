@@ -8,27 +8,16 @@ use tari_engine_types::{
     substate::{SubstateAddress, SubstateDiff},
 };
 use tari_template_builtin::ACCOUNT_TEMPLATE_ADDRESS;
-use tari_template_lib::{args, prelude::NonFungibleId};
+use tari_template_lib::args;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 use tari_validator_node_cli::{
-    command::transaction::{
-        handle_submit,
-        submit_transaction,
-        CliArg,
-        CliInstruction,
-        CommonSubmitArgs,
-        NewNonFungibleIndexOutput,
-        NewNonFungibleMintOutput,
-        SpecificNonFungibleMintOutput,
-        SubmitArgs,
-    },
+    command::transaction::{handle_submit, submit_transaction, CliArg, CliInstruction, CommonSubmitArgs, SubmitArgs},
     from_hex::FromHex,
     key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,
 };
-use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
+use tari_validator_node_client::types::SubmitTransactionResponse;
 
-use super::validator_node::get_vn_client;
 use crate::{logging::get_base_dir_for_scenario, TariWorld};
 
 fn get_key_manager(world: &mut TariWorld) -> KeyManager {
@@ -73,6 +62,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         wait_for_result: true,
         wait_for_result_timeout: Some(120),
         inputs: vec![],
+        input_refs: vec![],
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
@@ -82,7 +72,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         new_non_fungible_outputs: vec![],
         new_non_fungible_index_outputs: vec![],
     };
-    let mut client = get_validator_node_client(world, validator_node_name).await;
+    let mut client = world.get_validator_node(&validator_node_name).get_client();
     let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
         .await
         .unwrap();
@@ -128,6 +118,7 @@ pub async fn create_component(
             wait_for_result: true,
             wait_for_result_timeout: Some(300),
             inputs: vec![],
+            input_refs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
@@ -141,7 +132,7 @@ pub async fn create_component(
             new_non_fungible_index_outputs: vec![],
         },
     };
-    let mut client = get_validator_node_client(world, vn_name).await;
+    let mut client = world.get_validator_node(&vn_name).get_client();
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
     if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
@@ -267,6 +258,7 @@ pub async fn call_method(
             wait_for_result: true,
             wait_for_result_timeout: Some(60),
             inputs: vec![component],
+            input_refs: vec![],
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
@@ -277,7 +269,7 @@ pub async fn call_method(
             new_non_fungible_index_outputs: vec![],
         },
     };
-    let mut client = get_validator_node_client(world, vn_name).await;
+    let mut client = world.get_validator_node(&vn_name).get_client();
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
     if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
@@ -297,7 +289,7 @@ pub async fn submit_manifest(
     vn_name: String,
     outputs_name: String,
     manifest_content: String,
-    inputs: String,
+    input_str: String,
     signing_key_name: String,
 ) {
     // HACKY: Sets the active key so that submit_transaction will use it.
@@ -305,7 +297,7 @@ pub async fn submit_manifest(
     let key_str = key.to_string();
     get_key_manager(world).set_active_key(&key_str).unwrap();
 
-    let input_groups = inputs.split(',').map(|s| s.trim()).collect::<Vec<_>>();
+    let input_groups = input_str.split(',').map(|s| s.trim()).collect::<Vec<_>>();
     // generate globals for components addresses
     let globals: HashMap<String, ManifestValue> = world
         .outputs
@@ -318,85 +310,63 @@ pub async fn submit_manifest(
         })
         .collect();
 
-    // dbg!(globals.clone());
-
-    // parse the minting outputs (if any) specified in the manifest as comments
-    let new_non_fungible_outputs: Vec<NewNonFungibleMintOutput> = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $mint "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let count = l[1].parse().unwrap();
-            NewNonFungibleMintOutput {
-                resource_address,
-                count,
-            }
-        })
-        .collect();
-
-    // parse the minting specific outputs (if any) specified in the manifest as comments
-    let non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput> = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $mint_specific "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let non_fungible_id = NonFungibleId::try_from_canonical_string(l[1]).unwrap();
-            SpecificNonFungibleMintOutput {
-                resource_address,
-                non_fungible_id,
-            }
-        })
-        .collect();
-
-    // parse the nft indexes (if any) specified in the manifest as comments
-    let new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput> = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $nft_index "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let parent_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let index = u64::from_str(l[1]).unwrap();
-            NewNonFungibleIndexOutput { parent_address, index }
-        })
-        .collect();
-
     // parse the manifest
     let instructions = parse_manifest(&manifest_content, globals).unwrap();
 
     // submit the instructions to the vn
-    let mut client = get_validator_node_client(world, vn_name).await;
+    let mut client = world.get_validator_node(&vn_name).get_client();
     let data_dir = get_cli_data_dir(world);
 
     // Supply the inputs explicitly. If this is empty, the internal component manager will attempt to supply the correct
     // inputs
-    let inputs = inputs
+    let inputs = input_str
         .split(',')
+        .map(|s| s.trim())
+        .filter(|s| !s.starts_with("ref:"))
         .flat_map(|s| {
             world
                 .outputs
-                .get(s.trim())
+                .get(s)
                 .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
         })
+        .filter(|(_, addr)| !addr.address.is_transaction_receipt())
         .map(|(_, addr)| addr.clone())
         .collect::<Vec<_>>();
+
+    // Remove inputs that have been downed
+    let inputs = select_latest_version(inputs);
+
+    let input_refs = input_str
+        .split(',')
+        .map(|s| s.trim())
+        .filter(|s| s.starts_with("ref:"))
+        .flat_map(|s| {
+            world
+                .outputs
+                .get(s)
+                .unwrap_or_else(|| panic!("No outputs named {}", s.trim()))
+        })
+        .filter(|(_, addr)| !addr.address.is_transaction_receipt())
+        .map(|(_, addr)| addr.clone())
+        .collect::<Vec<_>>();
+
+    // Remove inputs that have been downed
+    let inputs = select_latest_version(inputs);
 
     let args = CommonSubmitArgs {
         wait_for_result: true,
         wait_for_result_timeout: Some(60),
         inputs,
+        input_refs,
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
+        // TODO: remove
         new_resources: vec![],
-        non_fungible_mint_outputs,
-        new_non_fungible_outputs,
-        new_non_fungible_index_outputs,
+        non_fungible_mint_outputs: vec![],
+        new_non_fungible_outputs: vec![],
+        new_non_fungible_index_outputs: vec![],
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await
@@ -413,11 +383,13 @@ pub async fn submit_manifest(
     );
 }
 
-async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {
-    let port = world.validator_nodes.get(&validator_node_name).unwrap().json_rpc_port;
-    get_vn_client(port)
-}
-
 pub(crate) fn get_cli_data_dir(world: &mut TariWorld) -> PathBuf {
     get_base_dir_for_scenario("vn_cli", world.current_scenario_name.as_ref().unwrap(), "SHARED")
+}
+
+// Remove inputs that have been downed
+fn select_latest_version(mut inputs: Vec<VersionedSubstateAddress>) -> Vec<VersionedSubstateAddress> {
+    inputs.sort_by(|a, b| b.address.cmp(&a.address).then(b.version.cmp(&a.version)));
+    inputs.dedup_by(|a, b| a.address == b.address);
+    inputs
 }

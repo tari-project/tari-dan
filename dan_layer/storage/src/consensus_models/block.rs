@@ -3,7 +3,7 @@
 
 use std::{
     collections::{BTreeSet, HashSet},
-    fmt::{Debug, Display},
+    fmt::{Debug, Display, Formatter},
     ops::{DerefMut, RangeInclusive},
 };
 
@@ -35,6 +35,11 @@ pub struct Block<TAddr> {
     merkle_root: FixedHash,
     // BTreeSet is used for the deterministic block hash, that is, transactions are always ordered by TransactionId.
     commands: BTreeSet<Command>,
+    /// If the block is a dummy block. This is metadata and not sent over
+    /// the wire or part of the block hash.
+    is_dummy: bool,
+    /// Flag that indicates that the block locked objects and made transaction stage transitions.
+    is_processed: bool,
 }
 
 impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
@@ -58,6 +63,8 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             merkle_root: FixedHash::zero(),
             commands,
             total_leader_fee,
+            is_dummy: false,
+            is_processed: false,
         };
         block.id = block.calculate_hash().into();
         block
@@ -72,6 +79,8 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         proposed_by: TAddr,
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
+        is_dummy: bool,
+        is_processed: bool,
     ) -> Self {
         Self {
             id,
@@ -84,6 +93,8 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             merkle_root: FixedHash::zero(),
             commands,
             total_leader_fee,
+            is_dummy,
+            is_processed,
         }
     }
 
@@ -111,19 +122,22 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
             total_leader_fee: 0,
+            is_dummy: false,
+            is_processed: false,
         }
     }
 
-    pub fn dummy_block(parent: BlockId, proposed_by: TAddr, node_height: NodeHeight, epoch: Epoch) -> Self {
-        Self::new(
-            parent,
-            QuorumCertificate::genesis(),
-            node_height,
-            epoch,
-            proposed_by,
-            Default::default(),
-            0,
-        )
+    pub fn dummy_block(
+        parent: BlockId,
+        proposed_by: TAddr,
+        node_height: NodeHeight,
+        high_qc: QuorumCertificate<TAddr>,
+        epoch: Epoch,
+    ) -> Self {
+        let mut block = Self::new(parent, high_qc, node_height, epoch, proposed_by, Default::default(), 0);
+        block.is_dummy = true;
+        block.is_processed = false;
+        block
     }
 
     pub fn calculate_hash(&self) -> FixedHash {
@@ -141,7 +155,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
 
 impl<TAddr> Block<TAddr> {
     pub fn is_genesis(&self) -> bool {
-        self.parent == BlockId::genesis()
+        self.id == BlockId::genesis()
     }
 
     pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
@@ -226,6 +240,14 @@ impl<TAddr> Block<TAddr> {
     pub fn into_commands(self) -> BTreeSet<Command> {
         self.commands
     }
+
+    pub fn is_dummy(&self) -> bool {
+        self.is_dummy
+    }
+
+    pub fn is_processed(&self) -> bool {
+        self.is_processed
+    }
 }
 
 impl<TAddr: NodeAddressable> Block<TAddr> {
@@ -236,18 +258,22 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_get(id)
     }
 
-    pub fn get_tip<TTx: StateStoreReadTransaction<Addr = TAddr>>(
-        tx: &mut TTx,
-        epoch: Epoch,
-    ) -> Result<Self, StorageError> {
-        tx.blocks_get_tip(epoch)
+    pub fn get_tip<TTx: StateStoreReadTransaction<Addr = TAddr>>(tx: &mut TTx) -> Result<Self, StorageError> {
+        tx.blocks_get_tip()
     }
 
     pub fn exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
         &self,
         tx: &mut TTx,
     ) -> Result<bool, StorageError> {
-        tx.blocks_exists(self.id())
+        Self::record_exists(tx, self.id())
+    }
+
+    pub fn record_exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<bool, StorageError> {
+        tx.blocks_exists(block_id)
     }
 
     pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr> + ?Sized>(
@@ -257,7 +283,8 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_insert(self)
     }
 
-    /// Inserts the block if it doesnt exist. Returns true if the block exists, otherwise false.
+    /// Inserts the block if it doesnt exist. Returns true if the block was saved and did not exist previously,
+    /// otherwise false.
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
         TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
@@ -265,10 +292,28 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
     {
         let exists = self.exists(tx.deref_mut())?;
         if exists {
-            return Ok(true);
+            return Ok(false);
         }
         self.insert(tx)?;
-        Ok(false)
+        Ok(true)
+    }
+
+    pub fn commit<TTx: StateStoreWriteTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+        tx.blocks_set_flags(self.id(), Some(true), None)
+    }
+
+    pub fn set_as_processed<TTx: StateStoreWriteTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
+        tx.blocks_set_flags(self.id(), None, Some(true))
+    }
+
+    pub fn unset_as_processed<TTx: StateStoreWriteTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
+        tx.blocks_set_flags(self.id(), None, Some(false))
     }
 
     pub fn find_involved_shards<TTx: StateStoreReadTransaction<Addr = TAddr>>(
@@ -286,6 +331,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         if self.parent == *ancestor {
             return Ok(true);
         }
+
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 
@@ -303,8 +349,11 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         Vote::get_for_block(tx, &self.id)
     }
 
-    pub fn get_child<TTx: StateStoreReadTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<Self, StorageError> {
-        tx.blocks_get_by_parent(self.id())
+    pub fn get_child_blocks<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.blocks_get_all_by_parent(self.id())
     }
 
     pub fn get_total_due_for_epoch<TTx: StateStoreReadTransaction<Addr = TAddr>>(
@@ -321,6 +370,18 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         validator_public_key: Option<&TAddr>,
     ) -> Result<Vec<Self>, StorageError> {
         tx.blocks_get_any_with_epoch_range(range, validator_public_key)
+    }
+}
+
+impl<TAddr> Display for Block<TAddr> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "[{}, {}, {} command(s)]",
+            self.height(),
+            self.id(),
+            self.commands().len()
+        )
     }
 }
 

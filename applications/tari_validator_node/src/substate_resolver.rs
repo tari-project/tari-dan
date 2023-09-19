@@ -207,6 +207,14 @@ where
             .get_many_validator_nodes(claim_instructions.clone())
             .await?;
 
+        let signer = transaction.signer_public_key();
+        if let Some(vn) = validators.values().find(|vn| vn.fee_claim_public_key != *signer) {
+            return Err(SubstateResolverError::UnauthorizedFeeClaim {
+                validator_address: vn.address.clone(),
+                signer: signer.clone(),
+            });
+        }
+
         // Partition the claim instructions into local and remote claims
         let mut local_claim_vns = Vec::new();
         let mut remote_claim_vns = Vec::new();
@@ -244,4 +252,9 @@ pub enum SubstateResolverError {
     VirtualSubstateError(#[from] VirtualSubstateError),
     #[error("Epoch manager error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
+    #[error("Unauthorized fee claim: validator node {validator_address} (transaction signed by: {signer})")]
+    UnauthorizedFeeClaim {
+        validator_address: CommsPublicKey,
+        signer: CommsPublicKey,
+    },
 }

@@ -10,12 +10,12 @@ use tari_consensus::{
     messages::HotstuffMessage,
 };
 use tari_dan_common_types::committee::Committee;
-use tari_dan_p2p::{DanMessage, OutboundService};
-use tari_dan_storage::consensus_models::{ExecutedTransaction, TransactionPool};
+use tari_dan_p2p::{Message, OutboundService};
+use tari_dan_storage::consensus_models::TransactionPool;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -41,7 +41,7 @@ pub async fn spawn(
     store: SqliteStateStore<PublicKey>,
     node_identity: Arc<NodeIdentity>,
     epoch_manager: EpochManagerHandle,
-    rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
+    rx_new_transactions: mpsc::Receiver<TransactionId>,
     rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
     outbound_messaging: OutboundMessaging,
     mempool: MempoolHandle,
@@ -49,7 +49,7 @@ pub async fn spawn(
 ) -> (JoinHandle<Result<(), anyhow::Error>>, EventSubscription<HotstuffEvent>) {
     let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
     let (tx_leader, rx_leader) = mpsc::channel(10);
-    let (tx_mempool, rx_mempool) = mpsc::channel(10);
+    let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
     let validator_addr = node_identity.public_key().clone();
     let signing_service = TariSignatureService::new(node_identity);
@@ -94,7 +94,7 @@ pub async fn spawn(
 struct ConsensusWorker {
     rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
     rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
-    rx_mempool: mpsc::Receiver<Transaction>,
+    rx_mempool: mpsc::UnboundedReceiver<Transaction>,
     outbound_messaging: OutboundMessaging,
     mempool: MempoolHandle,
 }
@@ -106,13 +106,13 @@ impl ConsensusWorker {
                 tokio::select! {
                     Some((committee, msg)) = self.rx_broadcast.recv() => {
                         self.outbound_messaging
-                            .broadcast(committee.members(), DanMessage::HotStuffMessage(Box::new(msg)))
+                            .broadcast(committee.members(), Message::Consensus(msg))
                             .await
                             .ok();
                     },
                     Some((dest, msg)) = self.rx_leader.recv() => {
                         self.outbound_messaging
-                            .send(dest, DanMessage::HotStuffMessage(Box::new(msg)))
+                            .send(dest, Message::Consensus(msg))
                             .await
                             .ok();
                     },

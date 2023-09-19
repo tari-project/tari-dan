@@ -10,8 +10,12 @@ use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
 use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket};
-use tari_dan_storage::consensus_models::ExecutedTransaction;
+use tari_dan_storage::{
+    consensus_models::{ExecutedTransaction, TransactionPool},
+    StateStore,
+};
 use tari_shutdown::ShutdownSignal;
+use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{
     mpsc::{self},
@@ -24,7 +28,12 @@ use crate::support::{address::TestAddress, ValidatorChannels};
 pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: ShutdownSignal) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
-        .map(|c| (c.address.clone(), (c.bucket, c.tx_new_transactions.clone())))
+        .map(|c| {
+            (
+                c.address.clone(),
+                (c.bucket, c.tx_new_transactions.clone(), c.state_store.clone()),
+            )
+        })
         .collect();
     let tx_hs_message = channels
         .iter()
@@ -45,6 +54,8 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: Shutdown
     let (tx_on_message, rx_on_message) = watch::channel(None);
     let num_sent_messages = Arc::new(AtomicUsize::new(0));
 
+    let offline_destinations = Arc::new(RwLock::new(Vec::new()));
+
     TestNetworkWorker {
         network_status,
         rx_new_transaction: Some(rx_new_transaction),
@@ -56,6 +67,7 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: Shutdown
         on_message: tx_on_message,
         num_sent_messages: num_sent_messages.clone(),
         transaction_store: Arc::new(Default::default()),
+        offline_destinations: offline_destinations.clone(),
         shutdown_signal,
     }
     .spawn();
@@ -63,6 +75,7 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: Shutdown
     TestNetwork {
         tx_new_transaction,
         network_status: tx_network_status,
+        offline_destinations,
         num_sent_messages,
         _on_message: rx_on_message,
     }
@@ -83,6 +96,7 @@ impl NetworkStatus {
 pub struct TestNetwork {
     tx_new_transaction: mpsc::Sender<(TestNetworkDestination, ExecutedTransaction)>,
     network_status: watch::Sender<NetworkStatus>,
+    offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     num_sent_messages: Arc<AtomicUsize>,
     _on_message: watch::Receiver<Option<HotstuffMessage<TestAddress>>>,
 }
@@ -90,6 +104,14 @@ pub struct TestNetwork {
 impl TestNetwork {
     pub fn start(&self) {
         self.network_status.send(NetworkStatus::Started).unwrap();
+    }
+
+    pub async fn go_offline(&self, destination: TestNetworkDestination) -> &Self {
+        if destination.is_bucket() {
+            unimplemented!("Sorry :/ taking a bucket offline is not yet supported in the test harness");
+        }
+        self.offline_destinations.write().await.push(destination);
+        self
     }
 
     #[allow(dead_code)]
@@ -127,21 +149,28 @@ impl TestNetworkDestination {
             TestNetworkDestination::Bucket(b) => *b == bucket,
         }
     }
+
+    pub fn is_bucket(&self) -> bool {
+        matches!(self, TestNetworkDestination::Bucket(_))
+    }
 }
 
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
-    tx_new_transactions: HashMap<TestAddress, (ShardBucket, mpsc::Sender<ExecutedTransaction>)>,
+    tx_new_transactions:
+        HashMap<TestAddress, (ShardBucket, mpsc::Sender<TransactionId>, SqliteStateStore<TestAddress>)>,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage<TestAddress>)>>,
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>>>,
     #[allow(clippy::type_complexity)]
     rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage<TestAddress>)>>>,
-    rx_mempool: Option<HashMap<TestAddress, mpsc::Receiver<Transaction>>>,
+    rx_mempool: Option<HashMap<TestAddress, mpsc::UnboundedReceiver<Transaction>>>,
     network_status: watch::Receiver<NetworkStatus>,
     on_message: watch::Sender<Option<HotstuffMessage<TestAddress>>>,
     num_sent_messages: Arc<AtomicUsize>,
     transaction_store: Arc<RwLock<HashMap<TransactionId, ExecutedTransaction>>>,
+
+    offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     shutdown_signal: ShutdownSignal,
 }
 
@@ -159,15 +188,27 @@ impl TestNetworkWorker {
         let tx_new_transactions = self.tx_new_transactions.clone();
         let transaction_store = self.transaction_store.clone();
 
+        // Handle transactions that come in from the test
         tokio::spawn(async move {
-            while let Some((dest, tx)) = rx_new_transaction.recv().await {
+            while let Some((dest, executed)) = rx_new_transaction.recv().await {
                 transaction_store
                     .write()
                     .await
-                    .insert(*tx.transaction().id(), tx.clone());
-                for (addr, (bucket, tx_new_transaction)) in &tx_new_transactions {
+                    .insert(*executed.transaction().id(), executed.clone());
+                for (addr, (bucket, tx_new_transaction, state_store)) in &tx_new_transactions {
                     if dest.is_for(addr, *bucket) {
-                        tx_new_transaction.send(tx.clone()).await.unwrap();
+                        state_store
+                            .with_write_tx(|tx| {
+                                executed.upsert(tx)?;
+                                let atom = executed.to_atom();
+                                let pool = TransactionPool::<SqliteStateStore<TestAddress>>::new();
+                                if !pool.exists(tx, &atom.id)? {
+                                    pool.insert(tx, atom)?;
+                                }
+                                Ok::<_, anyhow::Error>(())
+                            })
+                            .unwrap();
+                        tx_new_transaction.send(*executed.id()).await.unwrap();
                     }
                 }
             }
@@ -198,9 +239,11 @@ impl TestNetworkWorker {
                 .collect::<FuturesUnordered<_>>();
 
             tokio::select! {
-                Some((from, Some((to, msg)))) = rx_broadcast.next() => self.handle_broadcast(from, to, msg).await,
-                Some((from, Some((to, msg)))) = rx_leader.next() => self.handle_leader(from, to, msg).await,
-                Some((from, Some(msg))) = rx_mempool.next() => self.handle_mempool(from, msg).await,
+                biased;
+
+                  _ = self.shutdown_signal.wait() => {
+                    break;
+                }
 
                 Ok(_) = self.network_status.changed() => {
                     if let NetworkStatus::Started = *self.network_status.borrow() {
@@ -213,9 +256,10 @@ impl TestNetworkWorker {
                         }
                     }
                 }
-                _ = self.shutdown_signal.wait() => {
-                    break;
-                }
+
+                Some((from, Some((to, msg)))) = rx_broadcast.next() => self.handle_broadcast(from, to, msg).await,
+                Some((from, Some((to, msg)))) = rx_leader.next() => self.handle_leader(from, to, msg).await,
+                Some((from, Some(msg))) = rx_mempool.next() => self.handle_mempool(from, msg).await,
             }
         }
     }
@@ -229,6 +273,11 @@ impl TestNetworkWorker {
         self.num_sent_messages
             .fetch_add(to.len(), std::sync::atomic::Ordering::Relaxed);
         for vn in to {
+            // TODO: support for taking a whole committee bucket offline
+            if vn != from && self.is_offline_destination(&vn, u32::MAX.into()).await {
+                continue;
+            }
+
             self.tx_hs_message
                 .get(&vn)
                 .unwrap()
@@ -239,15 +288,24 @@ impl TestNetworkWorker {
         self.on_message.send(Some(msg.clone())).unwrap();
     }
 
-    pub async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage<TestAddress>) {
+    async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage<TestAddress>) {
+        if from != to && self.is_offline_destination(&from, u32::MAX.into()).await {
+            return;
+        }
         self.on_message.send(Some(msg.clone())).unwrap();
         self.num_sent_messages
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
     }
 
-    pub async fn handle_mempool(&mut self, from: TestAddress, msg: Transaction) {
-        let (_, sender) = self
+    async fn is_offline_destination(&self, addr: &TestAddress, bucket: ShardBucket) -> bool {
+        let lock = self.offline_destinations.read().await;
+        lock.iter().any(|d| d.is_for(addr, bucket))
+    }
+
+    /// Handles transactions that come in from missing transactions
+    async fn handle_mempool(&mut self, from: TestAddress, msg: Transaction) {
+        let (_, sender, state_store) = self
             .tx_new_transactions
             .get(&from)
             .unwrap_or_else(|| panic!("No new transaction channel for {}", from));
@@ -255,7 +313,18 @@ impl TestNetworkWorker {
         // In the normal case, we need to provide the same execution results to consensus. In future we could add code
         // here to make a local decision to ABORT.
         let existing_executed_tx = self.transaction_store.read().await.get(msg.id()).unwrap().clone();
+        state_store
+            .with_write_tx(|tx| {
+                existing_executed_tx.upsert(tx)?;
+                let atom = existing_executed_tx.to_atom();
+                let pool = TransactionPool::<SqliteStateStore<TestAddress>>::new();
+                if !pool.exists(tx, &atom.id)? {
+                    pool.insert(tx, atom)?;
+                }
+                Ok::<_, anyhow::Error>(())
+            })
+            .unwrap();
 
-        sender.send(existing_executed_tx).await.unwrap();
+        sender.send(*existing_executed_tx.id()).await.unwrap();
     }
 }

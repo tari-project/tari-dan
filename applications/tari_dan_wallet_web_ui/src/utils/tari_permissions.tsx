@@ -291,6 +291,17 @@ export class TariPermissionAccountList {
     }
   }
 }
+
+export class TariPermissionKeyList {
+  constructor() {}
+  toString() {
+    return `KeyList`;
+  }
+  toJSON() {
+    return "KeyList"
+  }
+}
+
 export class TariPermissionTransactionGet {
   constructor() {}
   toString() {
@@ -373,6 +384,7 @@ export type TariPermission =
   | TariPermissionAccountBalance
   | TariPermissionAccountInfo
   | TariPermissionAccountList
+  | TariPermissionKeyList
   | TariPermissionTransactionGet
   | TariPermissionTransactionSend
   | TariPermissionGetNft;
@@ -400,6 +412,8 @@ export function parse(permission: any) {
     return new TariPermissionAccountInfo();
   } else if (permission.hasOwnProperty("AccountList")) {
     return new TariPermissionAccountList(permission.AccountList);
+  } else if (permission == "KeyList") {
+    return new TariPermissionKeyList();
   } else if (permission.hasOwnProperty("TransactionSend")) {
     return new TariPermissionTransactionSend(permission.TransactionSend);
   } else if (permission === "TransactionGet") {

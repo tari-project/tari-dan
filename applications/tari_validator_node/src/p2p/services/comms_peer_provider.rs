@@ -57,7 +57,7 @@ impl PeerProvider for CommsPeerProvider {
                     .addresses
                     .addresses()
                     .iter()
-                    .filter_map(|a| a.source.peer_identity_claim().cloned())
+                    .filter_map(|a| a.source().peer_identity_claim().cloned())
                     .collect(),
             }),
             None => Err(CommsPeerProviderError::PeerNotFound),
@@ -75,7 +75,7 @@ impl PeerProvider for CommsPeerProvider {
                     .addresses
                     .addresses()
                     .iter()
-                    .filter_map(|a| a.source.peer_identity_claim().cloned())
+                    .filter_map(|a| a.source().peer_identity_claim().cloned())
                     .collect(),
             })
         }))
@@ -155,7 +155,7 @@ impl PeerProvider for CommsPeerProvider {
                     .addresses
                     .addresses()
                     .iter()
-                    .filter_map(|a| a.source.peer_identity_claim().cloned())
+                    .filter_map(|a| a.source().peer_identity_claim().cloned())
                     .collect(),
             }),
             None => Err(CommsPeerProviderError::PeerNotFound),

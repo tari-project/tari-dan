@@ -182,6 +182,10 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             EpochManagerRequest::GetCommitteesByBuckets { epoch, buckets, reply } => {
                 handle(reply, self.inner.get_committees_by_buckets(epoch, buckets))
             },
+            EpochManagerRequest::GetFeeClaimPublicKey { reply } => handle(reply, self.inner.get_fee_claim_public_key()),
+            EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply } => {
+                handle(reply, self.inner.set_fee_claim_public_key(public_key))
+            },
         }
     }
 }

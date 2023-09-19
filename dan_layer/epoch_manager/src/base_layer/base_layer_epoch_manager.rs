@@ -28,7 +28,7 @@ use std::{
 
 use log::*;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, types::BaseLayerConsensusConstants, BaseNodeClient};
-use tari_common_types::types::FixedHash;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::ValidatorNodeRegistration};
 use tari_crypto::tari_utilities::ByteArray;
@@ -126,7 +126,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         Ok(())
     }
 
-    fn assign_validators_for_epoch(&self) -> Result<(), EpochManagerError> {
+    fn assign_validators_for_epoch(&mut self) -> Result<(), EpochManagerError> {
         let (start_epoch, end_epoch) = self.get_epoch_range(self.current_epoch)?;
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
@@ -135,10 +135,17 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
 
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
 
-        for vn in vns {
+        for vn in &vns {
             validator_nodes.set_committee_bucket(vn.shard_key, vn.shard_key.to_committee_bucket(num_committees))?;
         }
         tx.commit()?;
+
+        if let Some(vn) = vns.iter().find(|vn| vn.address == self.node_public_key) {
+            self.publish_event(EpochManagerEvent::ThisValidatorIsRegistered {
+                epoch: self.current_epoch,
+                shard_key: vn.shard_key,
+            });
+        }
 
         Ok(())
     }
@@ -192,6 +199,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             registration.public_key().clone(),
             shard_key,
             next_epoch,
+            registration.claim_public_key().clone(),
         )?;
 
         if *registration.public_key() == self.node_public_key {
@@ -287,7 +295,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
     ) -> Result<HashMap<(Epoch, CommsPublicKey), ValidatorNode<CommsPublicKey>>, EpochManagerError> {
         let mut tx = self.global_db.create_transaction()?;
         #[allow(clippy::mutable_key_type)]
-        let mut validators = HashMap::new();
+        let mut validators = HashMap::with_capacity(epoch_validators.len());
 
         for (epoch, public_key) in epoch_validators {
             let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
@@ -596,6 +604,21 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         let committees = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
         Ok(committees)
+    }
+
+    pub fn get_fee_claim_public_key(&self) -> Result<Option<PublicKey>, EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let mut metadata = self.global_db.metadata(&mut tx);
+        let fee_claim_public_key = metadata.get_metadata(MetadataKey::EpochManagerFeeClaimPublicKey)?;
+        Ok(fee_claim_public_key)
+    }
+
+    pub fn set_fee_claim_public_key(&mut self, public_key: CommsPublicKey) -> Result<(), EpochManagerError> {
+        let mut tx = self.global_db.create_transaction()?;
+        let mut metadata = self.global_db.metadata(&mut tx);
+        metadata.set_metadata(MetadataKey::EpochManagerFeeClaimPublicKey, &public_key)?;
+        tx.commit()?;
+        Ok(())
     }
 
     fn publish_event(&mut self, event: EpochManagerEvent) {

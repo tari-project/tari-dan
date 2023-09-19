@@ -85,20 +85,20 @@ mod account_template {
         // #[access_rule(requires(owner_badge))]
         pub fn withdraw(&mut self, resource: ResourceAddress, amount: Amount) -> Bucket {
             // TODO: clean up hashmap api in emit_event
-            emit_event(
-                "withdraw",
-                [("amount", amount.to_string()), ("resource", resource.to_string())],
-            );
+            emit_event("withdraw", [
+                ("amount", amount.to_string()),
+                ("resource", resource.to_string()),
+            ]);
             let v = self.get_vault_mut(resource);
             v.withdraw(amount)
         }
 
         // #[access_rules(requires(owner_badge))]
         pub fn withdraw_non_fungible(&mut self, resource: ResourceAddress, nf_id: NonFungibleId) -> Bucket {
-            emit_event(
-                "withdraw_non_fungible",
-                [("id", nf_id.to_string()), ("resource", resource.to_string())],
-            );
+            emit_event("withdraw_non_fungible", [
+                ("id", nf_id.to_string()),
+                ("resource", resource.to_string()),
+            ]);
             let v = self.get_vault_mut(resource);
             v.withdraw_non_fungibles([nf_id])
         }
@@ -109,13 +109,10 @@ mod account_template {
             resource: ResourceAddress,
             withdraw_proof: ConfidentialWithdrawProof,
         ) -> Bucket {
-            emit_event(
-                "withdraw_confidential",
-                [
-                    ("num_inputs", withdraw_proof.inputs.len().to_string()),
-                    ("resource", resource.to_string()),
-                ],
-            );
+            emit_event("withdraw_confidential", [
+                ("num_inputs", withdraw_proof.inputs.len().to_string()),
+                ("resource", resource.to_string()),
+            ]);
 
             let v = self.get_vault_mut(resource);
             v.withdraw_confidential(withdraw_proof)
@@ -123,13 +120,10 @@ mod account_template {
 
         // #[access_rules(allow_all)]
         pub fn deposit(&mut self, bucket: Bucket) {
-            emit_event(
-                "deposit",
-                [
-                    ("amount", bucket.amount().to_string()),
-                    ("resource", bucket.resource_address().to_string()),
-                ],
-            );
+            emit_event("deposit", [
+                ("amount", bucket.amount().to_string()),
+                ("resource", bucket.resource_address().to_string()),
+            ]);
             let resource_address = bucket.resource_address();
             let vault_mut = self
                 .vaults
@@ -167,25 +161,19 @@ mod account_template {
         }
 
         pub fn reveal_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) -> Bucket {
-            emit_event(
-                "reveal_confidential",
-                [
-                    ("num_inputs", proof.inputs.len().to_string()),
-                    ("resource", resource.to_string()),
-                ],
-            );
+            emit_event("reveal_confidential", [
+                ("num_inputs", proof.inputs.len().to_string()),
+                ("resource", resource.to_string()),
+            ]);
             let v = self.get_vault_mut(resource);
             v.reveal_confidential(proof)
         }
 
         pub fn join_confidential(&mut self, resource: ResourceAddress, proof: ConfidentialWithdrawProof) {
-            emit_event(
-                "join_confidential",
-                [
-                    ("num_inputs", proof.inputs.len().to_string()),
-                    ("resource", resource.to_string()),
-                ],
-            );
+            emit_event("join_confidential", [
+                ("num_inputs", proof.inputs.len().to_string()),
+                ("resource", resource.to_string()),
+            ]);
             self.get_vault_mut(resource).join_confidential(proof);
         }
 
@@ -194,13 +182,13 @@ mod account_template {
         /// Pay fees from previously revealed confidential resource.
         pub fn pay_fee(&mut self, amount: Amount) {
             emit_event("pay_fee", [("amount", amount.to_string())]);
-            self.get_vault_mut(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS).pay_fee(amount);
+            self.get_vault_mut(CONFIDENTIAL_TARI_RESOURCE_ADDRESS).pay_fee(amount);
         }
 
         /// Reveal confidential tokens and return the revealed bucket to pay fees.
         pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
             emit_event("pay_fee_confidential", [("num_inputs", proof.inputs.len().to_string())]);
-            self.get_vault_mut(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS)
+            self.get_vault_mut(CONFIDENTIAL_TARI_RESOURCE_ADDRESS)
                 .pay_fee_confidential(proof);
         }
     }

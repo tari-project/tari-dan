@@ -10,7 +10,7 @@ use tari_dan_common_types::{
         quorum_certificate_hasher,
         MergedValidatorNodeMerkleProof,
         ValidatorNodeBalancedMerkleTree,
-        ValidatorNodeBmtHasherBlake256,
+        ValidatorNodeBmtHasherBlake2b,
         ValidatorNodeMerkleProof,
     },
     optional::Optional,
@@ -21,7 +21,7 @@ use tari_dan_common_types::{
 use tari_mmr::MergedBalancedBinaryMerkleProof;
 
 use crate::{
-    consensus_models::{Block, BlockId, HighQc, LeafBlock, QuorumDecision, ValidatorSignature},
+    consensus_models::{Block, BlockId, HighQc, LastVoted, LeafBlock, QuorumDecision, ValidatorSignature},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -46,7 +46,7 @@ impl<TAddr: Serialize> QuorumCertificate<TAddr> {
         block_height: NodeHeight,
         epoch: Epoch,
         signatures: Vec<ValidatorSignature<TAddr>>,
-        merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256>,
+        merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b>,
         mut leaf_hashes: Vec<FixedHash>,
         decision: QuorumDecision,
     ) -> Self {
@@ -108,7 +108,7 @@ impl<TAddr> QuorumCertificate<TAddr> {
         self.epoch
     }
 
-    pub fn merged_proof(&self) -> &MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake256> {
+    pub fn merged_proof(&self) -> &MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b> {
         &self.merged_proof
     }
 
@@ -135,12 +135,20 @@ impl<TAddr> QuorumCertificate<TAddr> {
     pub fn as_high_qc(&self) -> HighQc {
         HighQc {
             block_id: self.block_id,
+            block_height: self.block_height,
             qc_id: self.qc_id,
         }
     }
 
     pub fn as_leaf_block(&self) -> LeafBlock {
         LeafBlock {
+            block_id: self.block_id,
+            height: self.block_height,
+        }
+    }
+
+    pub fn as_last_voted(&self) -> LastVoted {
+        LastVoted {
             block_id: self.block_id,
             height: self.block_height,
         }
@@ -180,6 +188,20 @@ impl<TAddr> QuorumCertificate<TAddr> {
         }
         self.insert(tx)?;
         Ok(false)
+    }
+}
+
+impl<TAddr: Display> Display for QuorumCertificate<TAddr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Qc(block: {} {}, qc_id: {}, epoch: {}, {} signatures)",
+            self.block_id,
+            self.block_height,
+            self.qc_id,
+            self.epoch,
+            self.signatures.len()
+        )
     }
 }
 

@@ -11,6 +11,7 @@ pub struct ValidatorNode<TAddr> {
     pub shard_key: ShardId,
     pub epoch: Epoch,
     pub committee_bucket: Option<ShardBucket>,
+    pub fee_claim_public_key: TAddr,
 }
 
 impl<TAddr: NodeAddressable> ValidatorNode<TAddr> {

@@ -151,6 +151,7 @@ where
                                 transaction_failure: transaction.transaction_failure,
                                 final_fee: transaction.final_fee.unwrap_or_default(),
                                 status: transaction.status,
+                                json_result: transaction.json_result,
                             });
                         },
                         None => notify.notify(TransactionInvalidEvent {

@@ -38,13 +38,11 @@ extern "C" {
     fn warn(s: &str);
 }
 
-// When the `wee_alloc` feature is enabled, this uses `wee_alloc` as the global
-// allocator.
-//
-// If you don't want to use `wee_alloc`, you can safely delete this.
-#[cfg(feature = "wee_alloc")]
+// Setup `lol_alloc` as the global allocator for wasm32 targets with the "lol_alloc" feature is enabled.
+#[cfg(all(feature = "lol_alloc", target_arch = "wasm32"))]
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: lol_alloc::LockedAllocator<lol_alloc::FreeListAllocator> =
+    lol_alloc::LockedAllocator::new(lol_alloc::FreeListAllocator::new());
 
 lazy_static! {
     static ref ICE_CNT: Arc<Mutex<u64>> = Arc::new(Mutex::new(0));
@@ -187,7 +185,7 @@ pub async fn set_answer(pc: RtcPeerConnection) -> Result<(), JsValue> {
             serde_json::from_str(&JSON::stringify(&json).unwrap().as_string().unwrap()).unwrap();
         let ices = json.as_array().unwrap();
 
-        for ice in ices.iter() {
+        for ice in ices {
             let ic = RtcIceCandidate::from(serde_wasm_bindgen::to_value(ice).unwrap());
             JsFuture::from(pc.add_ice_candidate_with_opt_rtc_ice_candidate(Some(&ic)))
                 .await

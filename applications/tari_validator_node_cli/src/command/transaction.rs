@@ -29,6 +29,7 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use tari_crypto::tari_utilities::hex::to_hex;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
@@ -47,7 +48,6 @@ use tari_template_lib::{
 };
 use tari_transaction::{Transaction, TransactionId};
 use tari_transaction_manifest::parse_manifest;
-use tari_utilities::{hex::to_hex, ByteArray};
 use tari_validator_node_client::{
     types::{
         DryRunTransactionFinalizeResult,
@@ -96,6 +96,8 @@ pub struct CommonSubmitArgs {
     pub wait_for_result_timeout: Option<u64>,
     #[clap(long, short = 'i')]
     pub inputs: Vec<VersionedSubstateAddress>,
+    #[clap(long, alias = "ref")]
+    pub input_refs: Vec<VersionedSubstateAddress>,
     #[clap(long, short = 'v')]
     pub version: Option<u8>,
     #[clap(long, short = 'd')]
@@ -239,7 +241,13 @@ pub async fn submit_transaction(
     // Convert to shard id
     let inputs = inputs
         .into_iter()
-        .map(|versioned_addr| ShardId::from_address(&versioned_addr.address, versioned_addr.version))
+        .map(|versioned_addr| versioned_addr.to_shard_id())
+        .collect::<Vec<_>>();
+
+    let input_refs = common
+        .input_refs
+        .into_iter()
+        .map(|versioned_addr| versioned_addr.to_shard_id())
         .collect::<Vec<_>>();
 
     summarize_request(&instructions, &inputs, 1, common.dry_run);
@@ -248,6 +256,7 @@ pub async fn submit_transaction(
     let transaction = Transaction::builder()
         .with_instructions(instructions)
         .with_inputs(inputs)
+        .with_input_refs(input_refs)
         .sign(&key.secret_key)
         .build();
 
@@ -400,10 +409,7 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     SubstateValue::FeeClaim(fee_claim) => {
                         println!("      ▶ fee_claim: {}", address);
                         println!("        ▶ amount: {}", fee_claim.amount);
-                        println!(
-                            "        ▶ recipient: {}",
-                            to_hex(fee_claim.validator_public_key.as_bytes())
-                        );
+                        println!("        ▶ recipient: {}", fee_claim.validator_public_key);
                     },
                 }
                 println!();

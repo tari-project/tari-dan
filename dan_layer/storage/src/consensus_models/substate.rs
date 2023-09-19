@@ -229,14 +229,19 @@ pub enum SubstateLockFlag {
     Write = 0x02,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum SubstateLockState {
     /// The lock was successfully acquired
     LockAcquired,
+    /// The lock was not acquired because some substates are DOWN
+    SomeDestroyed,
     /// Some substates are locked for write
     SomeAlreadyWriteLocked,
     /// Some outputs substates exist. This indicates that that we attempted to lock an output but the output is already
     /// a substate (Up or DOWN)
     SomeOutputSubstatesExist,
+    /// Some inputs substates do not exist
+    InputsConfict,
 }
 
 impl SubstateLockState {

@@ -99,11 +99,11 @@ pub trait StateStoreReadTransaction {
         asc_desc_created_at: Option<Ordering>,
     ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
-    fn blocks_get_tip(&mut self, epoch: Epoch) -> Result<Block<Self::Addr>, StorageError>;
+    fn blocks_get_tip(&mut self) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
-    fn blocks_get_by_parent(&mut self, parent: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
-    fn blocks_get_missing_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
+    fn blocks_get_all_by_parent(&mut self, parent: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError>;
+    fn blocks_get_pending_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
     fn blocks_get_total_leader_fee_for_epoch(
         &mut self,
         epoch: Epoch,
@@ -116,6 +116,10 @@ pub trait StateStoreReadTransaction {
     ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
+    fn quorum_certificates_get_by_block_id(
+        &mut self,
+        block_id: &BlockId,
+    ) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
     fn transaction_pool_get(&mut self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError>;
@@ -172,15 +176,24 @@ pub trait StateStoreWriteTransaction {
 
     // -------------------------------- Block -------------------------------- //
     fn blocks_insert(&mut self, block: &Block<Self::Addr>) -> Result<(), StorageError>;
+    fn blocks_set_flags(
+        &mut self,
+        block_id: &BlockId,
+        is_committed: Option<bool>,
+        is_processed: Option<bool>,
+    ) -> Result<(), StorageError>;
 
     // -------------------------------- QuorumCertificate -------------------------------- //
     fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError>;
 
     // -------------------------------- Bookkeeping -------------------------------- //
     fn last_voted_set(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
+    fn last_votes_unset(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
     fn last_executed_set(&mut self, last_exec: &LastExecuted) -> Result<(), StorageError>;
     fn last_proposed_set(&mut self, last_proposed: &LastProposed) -> Result<(), StorageError>;
+    fn last_proposed_unset(&mut self, last_proposed: &LastProposed) -> Result<(), StorageError>;
     fn leaf_block_set(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError>;
+    fn leaf_block_unset(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError>;
     fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError>;
     fn high_qc_set(&mut self, high_qc: &HighQc) -> Result<(), StorageError>;
 
@@ -198,16 +211,26 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         transaction_id: &TransactionId,
         evidence: Option<&Evidence>,
-        stage: Option<TransactionPoolStage>,
-        decision: Option<Decision>,
+        pending_stage: Option<Option<TransactionPoolStage>>,
+        local_decision: Option<Decision>,
+        remote_decision: Option<Decision>,
         is_ready: Option<bool>,
     ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;
+    fn transaction_pool_set_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+        &mut self,
+        tx_ids: I,
+    ) -> Result<(), StorageError>;
 
-    fn insert_missing_transactions<'a, I: IntoIterator<Item = &'a TransactionId>>(
+    fn insert_missing_transactions<
+        'a,
+        IMissing: IntoIterator<Item = &'a TransactionId>,
+        IAwaiting: IntoIterator<Item = &'a TransactionId>,
+    >(
         &mut self,
         block_id: &BlockId,
-        transaction_ids: I,
+        missing_transaction_ids: IMissing,
+        awaiting_transaction_ids: IAwaiting,
     ) -> Result<(), StorageError>;
 
     fn remove_missing_transaction(&mut self, transaction_id: TransactionId) -> Result<Option<BlockId>, StorageError>;

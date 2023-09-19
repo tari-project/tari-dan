@@ -4,7 +4,7 @@
 use std::time::Duration;
 
 use cucumber::{given, when};
-use tari_app_grpc::tari_rpc::GetBalanceRequest;
+use minotari_app_grpc::tari_rpc::GetBalanceRequest;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tokio::time::sleep;
@@ -42,7 +42,7 @@ async fn when_i_burn_on_wallet(
 
     let mut client = wallet.create_client().await;
     let resp = client
-        .create_burn_transaction(tari_app_grpc::tari_rpc::CreateBurnTransactionRequest {
+        .create_burn_transaction(minotari_app_grpc::tari_rpc::CreateBurnTransactionRequest {
             amount: amount * 1_000_000,
             fee_per_gram: 1,
             message: "Burn".to_string(),

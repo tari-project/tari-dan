@@ -54,7 +54,7 @@ pub struct Bucket {
 }
 
 impl Bucket {
-    pub fn from_id(id: BucketId) -> Self {
+    pub const fn from_id(id: BucketId) -> Self {
         Self { id }
     }
 

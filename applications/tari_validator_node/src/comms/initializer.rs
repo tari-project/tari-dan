@@ -43,7 +43,8 @@ use tari_comms::{
     UnspawnedCommsNode,
 };
 use tari_comms_logging::SqliteMessageLog;
-use tari_dan_p2p::DanMessage;
+use tari_consensus::messages::HotstuffMessage;
+use tari_dan_p2p::{DanMessage, TARI_DAN_CONSENSUS_MSG_ID, TARI_DAN_MSG_PROTOCOL_ID};
 use tari_p2p::{
     initialization::CommsInitializationError,
     peer_seeds::SeedPeer,
@@ -66,7 +67,7 @@ use tower::ServiceBuilder;
 const LOG_TARGET: &str = "tari::dan::comms::initializer";
 
 use crate::{
-    comms::{broadcast::DanBroadcast, deserialize::DanDeserialize, destination::Destination},
+    comms::{broadcast::DanBroadcast, deserialize::DanDeserialize, destination::Destination, logger::LoggerService},
     ApplicationConfig,
 };
 
@@ -74,7 +75,7 @@ pub async fn initialize(
     node_identity: Arc<NodeIdentity>,
     config: &ApplicationConfig,
     shutdown_signal: ShutdownSignal,
-) -> Result<(UnspawnedCommsNode, MessageChannel), anyhow::Error> {
+) -> Result<(UnspawnedCommsNode, MessageChannels), anyhow::Error> {
     debug!(target: LOG_TARGET, "Initializing DAN comms");
     let seed_peers = &config.peer_seeds;
     let mut config = config.validator_node.p2p.clone();
@@ -89,10 +90,10 @@ pub async fn initialize(
             user_agent: config.user_agent.clone(),
         });
 
-    if config.allow_test_addresses || config.dht.allow_test_addresses {
+    if config.allow_test_addresses || config.dht.peer_validator_config.allow_test_addresses {
         // The default is false, so ensure that both settings are true in this case
         config.allow_test_addresses = true;
-        config.dht.allow_test_addresses = true;
+        config.dht.peer_validator_config.allow_test_addresses = true;
         comms_builder = comms_builder.allow_test_addresses();
     }
 
@@ -118,19 +119,17 @@ pub async fn initialize(
     Ok((comms, message_channel))
 }
 
-pub type MessageChannel = (
+pub type MessageChannels = (
     mpsc::Sender<(Destination<CommsPublicKey>, DanMessage<CommsPublicKey>)>,
     mpsc::Receiver<(CommsPublicKey, DanMessage<CommsPublicKey>)>,
+    mpsc::Sender<(Destination<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
+    mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
 );
 
 fn configure_comms(
     config: &P2pConfig,
     builder: CommsBuilder,
-) -> Result<(UnspawnedCommsNode, MessageChannel), anyhow::Error> {
-    let (inbound_tx, inbound_rx) = mpsc::channel(10);
-    let (outbound_tx, outbound_rx) = mpsc::channel(10);
-    // let file_lock = acquire_exclusive_file_lock(&config.datastore_path)?;
-
+) -> Result<(UnspawnedCommsNode, MessageChannels), anyhow::Error> {
     let datastore = LMDBBuilder::new()
         .set_path(&config.datastore_path)
         .set_env_flags(open::NOLOCK)
@@ -159,33 +158,67 @@ fn configure_comms(
     };
 
     // Hook up messaging middlewares (currently none)
+    let (inbound_msg_tx, inbound_msg_rx) = mpsc::channel(10);
+    let (outbound_msg_tx, outbound_msg_rx) = mpsc::channel(10);
     let connectivity = comms.connectivity();
-    let logger1 = SqliteMessageLog::new(&config.datastore_path);
-    let logger2 = logger1.clone();
-    let messaging_pipeline = pipeline::Builder::new()
-        .with_outbound_pipeline(outbound_rx, move |sink| {
-            ServiceBuilder::new()
-                .layer(DanBroadcast::new(connectivity, logger1))
-                .service(sink)
+    let logger = SqliteMessageLog::new(&config.datastore_path);
+    let dan_messaging_pipeline = pipeline::Builder::new()
+        .with_outbound_pipeline(outbound_msg_rx, {
+            let logger = logger.clone();
+            move |sink| {
+                ServiceBuilder::new()
+                    .layer(LoggerService::<DanMessage<CommsPublicKey>>::new(logger.clone()))
+                    .layer(DanBroadcast::new(connectivity))
+                    .service(sink)
+            }
         })
-        // In order to guarantee message ordering, we limit the number of concurrent pipeline tasks to 1
-        .max_concurrent_inbound_tasks(1)
-        .max_concurrent_outbound_tasks(1)
+        .max_concurrent_inbound_tasks(3)
+        .max_concurrent_outbound_tasks(3)
         .with_inbound_pipeline(
             ServiceBuilder::new()
-                .layer(DanDeserialize::new(comms.peer_manager(), logger2))
-                .service(SinkService::new(inbound_tx)),
+                .layer(DanDeserialize::new(comms.peer_manager(), logger.clone()))
+                .service(SinkService::new(inbound_msg_tx)),
         )
         .build();
 
     // TODO: messaging events should be optional
     let (messaging_events_sender, _) = broadcast::channel(1);
     comms = comms.add_protocol_extension(MessagingProtocolExtension::new(
+        TARI_DAN_MSG_PROTOCOL_ID.clone(),
         messaging_events_sender,
-        messaging_pipeline,
+        dan_messaging_pipeline,
     ));
 
-    Ok((comms, (outbound_tx, inbound_rx)))
+    let connectivity = comms.connectivity();
+    let (inbound_hs_tx, inbound_hs_rx) = mpsc::channel(10);
+    let (outbound_hs_tx, outbound_hs_rx) = mpsc::channel(10);
+    let consensus_messaging_pipeline = pipeline::Builder::new()
+        .with_outbound_pipeline(outbound_hs_rx, {
+            let logger = logger.clone();
+            move |sink| {
+                ServiceBuilder::new()
+                    .layer(LoggerService::<HotstuffMessage<CommsPublicKey>>::new(logger))
+                    .layer(DanBroadcast::new(connectivity))
+                    .service(sink)
+            }
+        })
+        .max_concurrent_inbound_tasks(1)
+        .max_concurrent_outbound_tasks(1)
+        .with_inbound_pipeline(
+            ServiceBuilder::new()
+                .layer(DanDeserialize::new(comms.peer_manager(), logger))
+                .service(SinkService::new(inbound_hs_tx)),
+        )
+        .build();
+
+    let (messaging_events_sender, _) = broadcast::channel(1);
+    comms = comms.add_protocol_extension(MessagingProtocolExtension::new(
+        TARI_DAN_CONSENSUS_MSG_ID.clone(),
+        messaging_events_sender,
+        consensus_messaging_pipeline,
+    ));
+
+    Ok((comms, (outbound_msg_tx, inbound_msg_rx, outbound_hs_tx, inbound_hs_rx)))
 }
 
 async fn add_seed_peers(

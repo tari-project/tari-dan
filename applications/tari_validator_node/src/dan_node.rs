@@ -115,7 +115,7 @@ impl DanNode {
     }
 
     async fn handle_hotstuff_event(&self, event: HotstuffEvent) -> Result<(), anyhow::Error> {
-        let HotstuffEvent::BlockCommitted { block_id } = event else {
+        let HotstuffEvent::BlockCommitted { block_id, .. } = event else {
             return Ok(());
         };
 
@@ -132,8 +132,8 @@ impl DanNode {
             )
         })?;
 
+        info!(target: LOG_TARGET, "🏁 Removing {} finalized transaction(s) from mempool", committed_transactions.len());
         for tx_id in committed_transactions {
-            info!(target: LOG_TARGET, "🏁 Removing finalized transaction {} from mempool", tx_id);
             if let Err(err) = self.services.mempool.remove_transaction(tx_id).await {
                 error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
             }
@@ -165,6 +165,7 @@ impl DanNode {
                     }
                 });
             },
+            EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
         }
         Ok(())
     }

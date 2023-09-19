@@ -21,7 +21,7 @@ use transaction_service::TransactionService;
 
 use crate::{notify::Notify, services::account_monitor::AccountMonitor};
 
-pub(self) type Reply<T> = oneshot::Sender<T>;
+type Reply<T> = oneshot::Sender<T>;
 
 pub fn spawn_services<TStore, TNetworkInterface>(
     shutdown_signal: ShutdownSignal,
