@@ -33,6 +33,7 @@ use crate::{
         AddPeerRequest,
         AddPeerResponse,
         DeleteAddressRequest,
+        GetEpochManagerStatsResponse,
         GetNonFungiblesRequest,
         GetNonFungiblesResponse,
         GetSubstateRequest,
@@ -108,6 +109,10 @@ impl IndexerJsonRpcClient {
         req: GetNonFungiblesRequest,
     ) -> Result<GetNonFungiblesResponse, IndexerClientError> {
         self.send_request("get_non_fungibles", req).await
+    }
+
+    pub async fn get_epoch_manager_stats(&mut self) -> Result<GetEpochManagerStatsResponse, IndexerClientError> {
+        self.send_request("get_epoch_manager_stats", ()).await
     }
 
     async fn send_request<T: Serialize, R: DeserializeOwned>(

@@ -45,7 +45,11 @@ use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_client::types::{
     AddAddressRequest,
+    AddPeerRequest,
+    AddPeerResponse,
     DeleteAddressRequest,
+    GetEpochManagerStatsResponse,
+    GetIdentityResponse,
     GetNonFungibleCountRequest,
     GetNonFungiblesRequest,
     GetNonFungiblesResponse,
@@ -59,12 +63,6 @@ use tari_indexer_client::types::{
     NonFungibleSubstate,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
-};
-use tari_validator_node_client::types::{
-    AddPeerRequest,
-    AddPeerResponse,
-    GetEpochManagerStatsResponse,
-    GetIdentityResponse,
 };
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory, TransactionResultStatus};
 
@@ -166,10 +164,7 @@ impl JsonRpcHandlers {
                 let response = json!({ "vns": vns });
                 Ok(JsonRpcResponse::success(answer_id, response))
             },
-            Err(e) => Err(Self::generic_error_response(
-                answer_id,
-                format!("Failed to get all vns: {}", e),
-            )),
+            Err(e) => Err(Self::internal_error(answer_id, format!("Failed to get all vns: {}", e))),
         }
     }
 
@@ -195,18 +190,18 @@ impl JsonRpcHandlers {
                 &tari_comms::net_address::PeerAddressSource::Config,
             )
             .await
-            .map_err(|e| Self::generic_error_response(answer_id, format!("Could not update peer: {}", e)))?;
+            .map_err(|e| Self::internal_error(answer_id, format!("Could not update peer: {}", e)))?;
         if wait_for_dial {
             let _conn = connectivity
                 .dial_peer(node_id)
                 .await
-                .map_err(|e| Self::generic_error_response(answer_id, e.to_string()))?;
+                .map_err(|e| Self::internal_error(answer_id, e.to_string()))?;
         } else {
             // Dial without waiting
             connectivity
                 .request_many_dials(Some(node_id))
                 .await
-                .map_err(|e| Self::generic_error_response(answer_id, e.to_string()))?;
+                .map_err(|e| Self::internal_error(answer_id, e.to_string()))?;
         }
 
         Ok(JsonRpcResponse::success(answer_id, AddPeerResponse {}))
@@ -221,7 +216,7 @@ impl JsonRpcHandlers {
             },
             Err(e) => {
                 warn!(target: LOG_TARGET, "Failed to get comms stats: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Failed to get comms stats: {}", e),
                 ))
@@ -275,7 +270,7 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting substate: {}", e);
-                Self::generic_error_response(answer_id, format!("Error getting substate: {}", e))
+                Self::internal_error(answer_id, format!("Error getting substate: {}", e))
             })? {
             Some(substate_resp) => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
                 address: substate_resp.address,
@@ -367,7 +362,7 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting substate: {}", e);
-                Self::generic_error_response(answer_id, format!("Error getting substate: {}", e))
+                Self::internal_error(answer_id, format!("Error getting substate: {}", e))
             })?
             .ok_or_else(|| {
                 JsonRpcResponse::error(
@@ -402,7 +397,7 @@ impl JsonRpcHandlers {
             Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, addresses)),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error getting addresses: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Error getting addresses: {}", e),
                 ))
@@ -422,10 +417,7 @@ impl JsonRpcHandlers {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error adding address: {}", e);
-                Err(Self::generic_error_response(
-                    answer_id,
-                    format!("Error adding address: {}", e),
-                ))
+                Err(Self::internal_error(answer_id, format!("Error adding address: {}", e)))
             },
         }
     }
@@ -438,7 +430,7 @@ impl JsonRpcHandlers {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error deleting address: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Error deleting address: {}", e),
                 ))
@@ -453,7 +445,7 @@ impl JsonRpcHandlers {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error clearing addresses: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Error clearing addresses: {}", e),
                 ))
@@ -470,7 +462,7 @@ impl JsonRpcHandlers {
             Ok(collections) => Ok(JsonRpcResponse::success(answer_id, collections)),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error getting non fungible collections: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Error getting non fungible collections: {}", e),
                 ))
@@ -487,7 +479,7 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting non fungible count: {}", e);
-                Self::generic_error_response(answer_id, format!("Error getting non fungible count: {}", e))
+                Self::internal_error(answer_id, format!("Error getting non fungible count: {}", e))
             })?;
 
         Ok(JsonRpcResponse::success(answer_id, count))
@@ -576,22 +568,9 @@ impl JsonRpcHandlers {
             )
         })?;
 
-        let is_valid = self.epoch_manager.is_epoch_active(current_epoch).await.map_err(|err| {
-            JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InternalError,
-                    format!("Epoch is not valid:{}", err),
-                    json::Value::Null,
-                ),
-            )
-        })?;
-
         let response = GetEpochManagerStatsResponse {
             current_epoch,
             current_block_height,
-            is_valid,
-            committee_shard: None,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }
@@ -641,17 +620,13 @@ impl JsonRpcHandlers {
         Self::error_response(answer_id, JsonRpcErrorReason::ApplicationError(404), details)
     }
 
-    fn internal_error<T: Display>(answer_id: i64, details: T) -> JsonRpcResponse {
-        error!(target: LOG_TARGET, "Internal error: {}", details);
-        Self::error_response(answer_id, JsonRpcErrorReason::InternalError, "Something went wrong")
-    }
-
-    // TODO: pass the error in here and log it instead of "squashing" it (switch to using Self::internal_error)
-    fn generic_error_response(answer_id: i64, error: String) -> JsonRpcResponse {
-        Self::error_response(
-            answer_id,
-            JsonRpcErrorReason::InternalError,
-            format!("Something went wrong: {}", error),
-        )
+    fn internal_error<T: Display>(answer_id: i64, error: T) -> JsonRpcResponse {
+        let msg = if cfg!(debug_assertions) || option_env!("CI").is_some() {
+            error.to_string()
+        } else {
+            error!(target: LOG_TARGET, "Internal error: {}", error);
+            "Something went wrong".to_string()
+        };
+        Self::error_response(answer_id, JsonRpcErrorReason::InternalError, msg)
     }
 }
