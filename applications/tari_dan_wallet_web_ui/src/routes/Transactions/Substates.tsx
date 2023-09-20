@@ -45,7 +45,6 @@ function RowData({ info, state }: any, index: number) {
       <TableRow key={`${index}-1`}>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
           <AccordionIconButton
-            open={open}
             aria-label="expand row"
             size="small"
             onClick={() => {
