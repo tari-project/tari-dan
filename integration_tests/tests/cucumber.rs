@@ -561,18 +561,14 @@ async fn indexer_scans_network_events(
     let component_address = accounts_component_addresses
         .into_iter()
         .find(|(k, _)| k.contains("components/Account"))
-        .map(|(_, v)| {
-            v.address
-                .as_component_address()
-                .expect("Failed to parse `ComponentAddress`")
-        })
+        .map(|(_, v)| v)
         .expect("Did not find component address");
 
     let mut graphql_client = indexer.get_graphql_indexer_client().await;
     let query = format!(
-        "{{ getEventsForComponent(componentAddress: {:?}, version: 0) {{ componentAddress, templateAddress, txHash, \
+        "{{ getEventsForComponent(componentAddress: {}, version: {}) {{ componentAddress, templateAddress, txHash, \
          topic, payload }} }}",
-        component_address.to_string()
+        component_address.address, component_address.version
     );
     let res = graphql_client
         .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
