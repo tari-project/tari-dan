@@ -26,7 +26,7 @@ import { persist } from 'zustand/middleware';
 interface Store {
   showBalance: boolean;
   setShowBalance: (show: boolean) => void;
-  accountName: string;
+  accountName: string | null;
   setAccountName: (name: string) => void;
 }
 
@@ -35,7 +35,7 @@ const useAccountStore = create<Store>()(
     (set) => ({
       showBalance: true,
       setShowBalance: (show) => set({ showBalance: show }),
-      accountName: '',
+      accountName: null,
       setAccountName: (name) => set({ accountName: name }),
     }),
     {

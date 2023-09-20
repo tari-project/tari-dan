@@ -102,7 +102,7 @@ export default function TransactionDetails() {
       );
     }
 
-    if (data.transaction_failure !== null) {
+    if (data.status === "Rejected" || data.status === "InvalidTransaction") {
       return (
         <>
           <TableContainer>
@@ -207,7 +207,6 @@ export default function TransactionDetails() {
               </div>
             </div>
           </>
-          {data.transaction?.fee_instructions && (
             <Accordion
               expanded={expandedPanels.includes('panel1')}
               onChange={handleChange('panel1')}
@@ -219,11 +218,11 @@ export default function TransactionDetails() {
                 <Typography>Fee Instructions</Typography>
               </AccordionSummary>
               <AccordionDetails>
+                {data.transaction?.fee_instructions.length > 0 ? (
                 <FeeInstructions data={data.transaction.fee_instructions} />
+                ):<span>Empty</span>}
               </AccordionDetails>
             </Accordion>
-          )}
-          {data.transaction?.instructions && (
             <Accordion
               expanded={expandedPanels.includes('panel2')}
               onChange={handleChange('panel2')}
@@ -235,10 +234,11 @@ export default function TransactionDetails() {
                 <Typography>Instructions</Typography>
               </AccordionSummary>
               <AccordionDetails>
+                {data.transaction?.instructions?.length > 0 ? (
                 <Instructions data={data.transaction.instructions} />
+                ) : <span>Empty</span>}
               </AccordionDetails>
             </Accordion>
-          )}
           {data.result && (
             <Accordion
               expanded={expandedPanels.includes('panel3')}
@@ -271,7 +271,7 @@ export default function TransactionDetails() {
               </AccordionDetails>
             </Accordion>
           )}
-          {data.transaction_failure === null && (
+          {data.result && (
             <Accordion
               expanded={expandedPanels.includes('panel5')}
               onChange={handleChange('panel5')}

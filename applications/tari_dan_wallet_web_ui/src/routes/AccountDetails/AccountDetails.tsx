@@ -91,7 +91,7 @@ function AccountDetailsLayout() {
     isLoading: accountsIsLoading,
     isError: accountsIsError,
     error: accountsError,
-  } = useAccountsGet(name || '');
+  } = useAccountsGet(name|| '');
 
   return (
     <>

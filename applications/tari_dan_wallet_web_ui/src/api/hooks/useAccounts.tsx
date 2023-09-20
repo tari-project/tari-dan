@@ -52,20 +52,20 @@ export const useAccountsClaimBurn = (
 
 export const useAccountsCreate = (
   accountName: string | undefined,
-  signingKeyIndex: any | undefined,
+  signingKeyIndex: number | undefined,
   customAccessRules: any | undefined,
   fee: number | undefined,
   is_default: boolean | false
 ) => {
   return useMutation(
     () => {
-      return jsonRpc('accounts.create', [
-        accountName,
-        signingKeyIndex,
-        customAccessRules,
+      return jsonRpc('accounts.create', {
+        account_name: accountName,
+        custom_access_rules: customAccessRules,
         fee,
         is_default,
-      ]);
+        key_id: signingKeyIndex,
+      });
     },
     {
       onError: (error: apiError) => {
@@ -88,11 +88,12 @@ export const useAccountsCreateFreeTestCoins = () => {
     amount: number | undefined;
     fee: number | undefined;
   }) => {
-    const result = await jsonRpc('accounts.create_free_test_coins', [
-      { Name: accountName },
-      amount,
-      fee,
-    ]);
+    const result = await jsonRpc('accounts.create_free_test_coins', {
+        account: {Name: accountName},
+        amount,
+        fee,
+        key_id : null,
+    });
     return result;
   };
 
@@ -111,7 +112,7 @@ export const useAccountsList = (offset: number, limit: number) => {
   return useQuery({
     queryKey: ['accounts'],
     queryFn: () => {
-      return jsonRpc('accounts.list', [offset, limit]);
+      return jsonRpc('accounts.list', {offset, limit});
     },
     onError: (error: apiError) => {
       error;
@@ -139,7 +140,7 @@ export const useAccountsGetBalances = (accountName: string) => {
   return useQuery({
     queryKey: ['accounts_balances'],
     queryFn: () => {
-      return jsonRpc('accounts.get_balances', [accountName]);
+      return jsonRpc('accounts.get_balances', {account: {"Name": accountName}});
     },
     onError: (error: apiError) => {
       error;
@@ -147,11 +148,11 @@ export const useAccountsGetBalances = (accountName: string) => {
   });
 };
 
-export const useAccountsGet = (nameOrAddress: string) => {
+export const useAccountsGet = (name: string) => {
   return useQuery({
     queryKey: ['accounts_get'],
     queryFn: () => {
-      return jsonRpc('accounts.get', [nameOrAddress]);
+      return jsonRpc('accounts.get', {name_or_address: {"Name": name}});
     },
     onError: (error: apiError) => {
       error;
@@ -163,7 +164,7 @@ export const useAccountNFTsList = (offset: number, limit: number) => {
   return useQuery({
     queryKey: ['nfts_list'],
     queryFn: () => {
-      return jsonRpc('nfts.list', [offset, limit]);
+      return jsonRpc('nfts.list', {offset, limit});
     },
     onError: (error: apiError) => {
       error;

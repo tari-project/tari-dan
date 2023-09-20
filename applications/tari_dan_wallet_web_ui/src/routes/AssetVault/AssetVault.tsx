@@ -116,13 +116,20 @@ function tabProps(index: number) {
 function AssetVault() {
   const { showBalance, setShowBalance, accountName, setAccountName } =
     useAccountStore();
+
+    const { data: dataAccountsList } = useAccountsList(0, 10);
+    // Set to the first account if we haven't selected an account
+    if (!accountName && dataAccountsList?.accounts?.length > 0) {
+        setAccountName(dataAccountsList.accounts[0].account.name);
+    }
+
   const {
     data: balancesData,
     isError: balancesIsError,
     error: balancesError,
     refetch: balancesRefetch,
     isFetching: balancesIsFetching,
-  } = useAccountsGetBalances(accountName || '');
+  } = useAccountsGetBalances(accountName);
 
   const {
     data: nftsListData,
@@ -138,9 +145,8 @@ function AssetVault() {
     error: accountsError,
     refetch: accountsRefetch,
     isFetching: accountsIsFetching,
-  } = useAccountsGet(accountName || '');
+  } = useAccountsGet(accountName);
 
-  const { data: dataAccountsList } = useAccountsList(0, 10);
 
   const { mutate } = useAccountsCreateFreeTestCoins();
 
