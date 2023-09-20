@@ -20,40 +20,46 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import App from './App';
-import './theme/theme.css';
-import Accounts from './routes/Accounts/Accounts';
-import TransactionDetails from './routes/Transactions/TransactionDetails';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
-import queryClient from './api/queryClient';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { jsonRpc } from '../../utils/json_rpc';
+import { apiError } from '../helpers/types';
+import queryClient from '../queryClient';
 
-const router = createBrowserRouter([
-  {
-    path: '*',
-    element: <App />,
-    errorElement: <div />,
-    children: [
-      {
-        path: 'accounts',
-        element: <Accounts />,
-      },
-      {
-        path: 'transactions/:id',
-        element: <TransactionDetails />,
-      },
-    ],
-  },
-]);
+export const useKeysList = () => {
+  return useQuery({
+    queryKey: ['keys_list'],
+    queryFn: () => {
+      return jsonRpc('keys.list', []);
+    },
+    onError: (error: apiError) => {
+      error;
+    },
+  });
+};
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-      <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
-    </QueryClientProvider>
-  </React.StrictMode>
-);
+export const useKeysCreate = () => {
+  return useMutation(() => jsonRpc('keys.create', []), {
+    onError: (error: apiError) => {
+      error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['keys_list']);
+    },
+  });
+};
+
+export const useKeysSetActive = () => {
+  const setActive = async (index: number) => {
+    const result = await jsonRpc('keys.set_active', [index]);
+    return result;
+  };
+
+  return useMutation(setActive, {
+    onError: (error: apiError) => {
+      error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(['keys_list']);
+    },
+  });
+};

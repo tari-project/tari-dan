@@ -20,34 +20,73 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import * as React from 'react';
 import { useTheme } from '@mui/material/styles';
+import MobileStepper from '@mui/material/MobileStepper';
+import Button from '@mui/material/Button';
+import KeyboardArrowLeft from '@mui/icons-material/KeyboardArrowLeft';
+import KeyboardArrowRight from '@mui/icons-material/KeyboardArrowRight';
 
-interface Props {
-  children: string;
+interface ProgressMobileStepperProps {
+  steps: number;
+  activeStep: number;
+  setActiveStep: React.Dispatch<React.SetStateAction<number>>;
 }
 
-function SecondaryHeading({ children }: Props) {
+export default function ProgressMobileStepper({
+  steps,
+  activeStep,
+  setActiveStep,
+}: ProgressMobileStepperProps) {
   const theme = useTheme();
+
+  const handleNext = () => {
+    setActiveStep((prevActiveStep: number) => prevActiveStep + 1);
+  };
+
+  const handleBack = () => {
+    setActiveStep((prevActiveStep: number) => prevActiveStep - 1);
+  };
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        width: '100%',
-        color: theme.palette.text.primary,
-      }}
-    >
-      <h1>{children}</h1>
-      <div
+    <>
+      <MobileStepper
+        variant="dots"
+        steps={steps}
+        position="static"
+        activeStep={activeStep}
         style={{
-          background: theme.palette.primary.main,
-          width: '100px',
-          height: '3px',
+          backgroundColor: 'transparent',
         }}
-      ></div>
-    </div>
+        nextButton={
+          <Button
+            onClick={handleNext}
+            disabled={activeStep === steps - 1}
+            variant="contained"
+          >
+            Next
+            {theme.direction === 'rtl' ? (
+              <KeyboardArrowLeft />
+            ) : (
+              <KeyboardArrowRight />
+            )}
+          </Button>
+        }
+        backButton={
+          <Button
+            onClick={handleBack}
+            disabled={activeStep === 0}
+            variant="outlined"
+          >
+            {theme.direction === 'rtl' ? (
+              <KeyboardArrowRight />
+            ) : (
+              <KeyboardArrowLeft />
+            )}
+            Back
+          </Button>
+        }
+      />
+    </>
   );
 }
-
-export default SecondaryHeading;

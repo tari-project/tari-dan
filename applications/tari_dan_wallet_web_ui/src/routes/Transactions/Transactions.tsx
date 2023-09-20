@@ -20,75 +20,46 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect } from 'react';
+import { ChevronRight } from '@mui/icons-material';
+import {
+  Fade,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TablePagination,
+  TableRow,
+} from '@mui/material';
+import { useTheme } from '@mui/material/styles';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getAllTransactionByStatus } from '../../utils/json_rpc';
+import FetchStatusCheck from '../../Components/FetchStatusCheck';
+import StatusChip from '../../Components/StatusChip';
+import { DataTableCell } from '../../Components/StyledComponents';
+import { useGetAllTransactionsByStatus } from '../../api/hooks/useTransactions';
 import {
   emptyRows,
   handleChangePage,
   handleChangeRowsPerPage,
 } from '../../utils/helpers';
-import {
-  TableContainer,
-  TablePagination,
-  Table,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-  Fade,
-  Alert,
-} from '@mui/material';
-import { DataTableCell } from '../../Components/StyledComponents';
-import Loading from '../../Components/Loading';
-import StatusChip from '../../Components/StatusChip';
 
 export default function Transactions() {
-  const [transactions, setTransactions] = useState<any>([]);
-  const [error, setError] = useState<String>();
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-
-  const loadTransactions = () => {
-    setLoading(true);
-    getAllTransactionByStatus(null)
-      .then((response) => {
-        setTransactions(
-          response.transactions.map((t: any) => {
-            return {
-              sender_public_key: t[0].sender_public_key,
-              total_fees_charged:
-                t[1]?.cost_breakdown === null
-                  ? 0
-                  : t[1]?.cost_breakdown.total_fees_charged,
-              status: t[2],
-              transaction_hash: t[0].id,
-            };
-          })
-        );
-        setError(undefined);
-      })
-      .catch((err) => {
-        setError(
-          err && err.message
-            ? err.message
-            : `Unknown error: ${JSON.stringify(err)}`
-        );
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    loadTransactions();
-  }, []);
+  const { data, isLoading, error, isError } =
+    useGetAllTransactionsByStatus(null);
+  const theme = useTheme();
 
   return (
     <>
-      {loading && <Loading />}
-      <Fade in={!loading}>
+      <FetchStatusCheck
+        isLoading={isLoading}
+        isError={isError}
+        errorMessage={error?.message || 'Error fetching data'}
+      />
+      <Fade in={!isLoading && !isError}>
         <TableContainer>
           <Table>
             <TableHead>
@@ -96,63 +67,78 @@ export default function Transactions() {
                 <TableCell>Transaction Hash</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Total Fees</TableCell>
+                <TableCell>Details</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {transactions &&
-                transactions
-                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                  .map(
-                    ({ transaction_hash, status, total_fees_charged }: any) => {
-                      return (
-                        <TableRow key={transaction_hash}>
-                          <DataTableCell>
-                            <Link
-                              to={`/transactions/${transaction_hash}`}
-                              style={{ textDecoration: 'none' }}
-                            >
-                              {transaction_hash}
-                            </Link>
-                          </DataTableCell>
-                          <DataTableCell>
-                            <StatusChip status={status} showTitle />
-                          </DataTableCell>
-                          <DataTableCell>{total_fees_charged}</DataTableCell>
-                        </TableRow>
-                      );
-                    }
-                  )}
-              {emptyRows(page, rowsPerPage, transactions) > 0 && (
+              {data?.transactions
+                ?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map((t: any) => {
+                  if (t[0].id !== undefined) {
+                    const hash = t[0].id;
+                    return (
+                      <TableRow key={hash}>
+                        <DataTableCell>
+                          <Link
+                            to={`/transactions/${hash}`}
+                            style={{
+                              textDecoration: 'none',
+                              color: theme.palette.text.secondary,
+                            }}
+                          >
+                            {hash}
+                          </Link>
+                        </DataTableCell>
+                        <DataTableCell>
+                          <StatusChip status={t[2]} showTitle />
+                        </DataTableCell>
+                        <DataTableCell>
+                          {t[1] !== null
+                            ? t[1].cost_breakdown.total_fees_charged
+                            : 0}
+                        </DataTableCell>
+                        <DataTableCell>
+                          <IconButton
+                            component={Link}
+                            to={`/transactions/${hash}`}
+                            style={{
+                              color: theme.palette.text.secondary,
+                            }}
+                          >
+                            <ChevronRight />
+                          </IconButton>
+                        </DataTableCell>
+                      </TableRow>
+                    );
+                  }
+                })}
+              {emptyRows(page, rowsPerPage, data?.transactions) > 0 && (
                 <TableRow
                   style={{
-                    height: 57 * emptyRows(page, rowsPerPage, transactions),
+                    height:
+                      57 * emptyRows(page, rowsPerPage, data?.transactions),
                   }}
                 >
                   <TableCell colSpan={3} />
                 </TableRow>
               )}
-              {error ? (
-                <TableRow>
-                  <TableCell colSpan={3}>
-                    <Alert severity="error">{error}</Alert>
-                  </TableCell>
-                </TableRow>
-              ) : null}
             </TableBody>
           </Table>
-          <TablePagination
-            rowsPerPageOptions={[10, 25, 50]}
-            component="div"
-            count={transactions.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={(event, newPage) =>
-              handleChangePage(event, newPage, setPage)
-            }
-            onRowsPerPageChange={(event) =>
-              handleChangeRowsPerPage(event, setRowsPerPage, setPage)
-            }
-          />
+          {data?.transactions && (
+            <TablePagination
+              rowsPerPageOptions={[10, 25, 50]}
+              component="div"
+              count={data.transactions.length}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={(event, newPage) =>
+                handleChangePage(event, newPage, setPage)
+              }
+              onRowsPerPageChange={(event) =>
+                handleChangeRowsPerPage(event, setRowsPerPage, setPage)
+              }
+            />
+          )}
         </TableContainer>
       </Fade>
     </>

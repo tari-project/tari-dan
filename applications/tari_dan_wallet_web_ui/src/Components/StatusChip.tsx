@@ -28,6 +28,7 @@ import {
   IoHourglassOutline,
   IoCloseOutline,
 } from 'react-icons/io5';
+import { useTheme } from '@mui/material/styles';
 
 interface StatusChipProps {
   status:
@@ -49,25 +50,51 @@ const colorList: Record<string, string> = {
   InvalidTransaction: '#DB7E7E',
 };
 
-const iconList: Record<string, JSX.Element> = {
-  Accepted: (
-    <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
-  ),
-  Pending: (
-    <IoHourglassOutline style={{ height: 14, width: 14 }} color="#FFF" />
-  ),
-  DryRun: <IoReload style={{ height: 14, width: 14 }} color="#FFF" />,
-  New: <IoDiamondOutline style={{ height: 14, width: 14 }} color="#FFF" />,
-  Rejected: <IoCloseOutline style={{ height: 14, width: 14 }} color="#FFF" />,
-  InvalidTransaction: (
-    <IoCloseOutline style={{ height: 14, width: 14 }} color="#FFF" />
-  ),
-};
-
 export default function StatusChip({
   status,
   showTitle = true,
 }: StatusChipProps) {
+  const theme = useTheme();
+
+  const iconList: Record<string, JSX.Element> = {
+    Accepted: (
+      <IoCheckmarkOutline
+        style={{ height: 14, width: 14 }}
+        color={theme.palette.background.paper}
+      />
+    ),
+    Pending: (
+      <IoHourglassOutline
+        style={{ height: 14, width: 14 }}
+        color={theme.palette.background.paper}
+      />
+    ),
+    DryRun: (
+      <IoReload
+        style={{ height: 14, width: 14 }}
+        color={theme.palette.background.paper}
+      />
+    ),
+    New: (
+      <IoDiamondOutline
+        style={{ height: 14, width: 14 }}
+        color={theme.palette.background.paper}
+      />
+    ),
+    Rejected: (
+      <IoCloseOutline
+        style={{ height: 14, width: 14 }}
+        color={theme.palette.background.paper}
+      />
+    ),
+    InvalidTransaction: (
+      <IoCloseOutline
+        style={{ height: 14, width: 14 }}
+        color={theme.palette.background.paper}
+      />
+    ),
+  };
+
   if (!showTitle) {
     return (
       <Avatar sx={{ bgcolor: colorList[status], height: 22, width: 22 }}>
