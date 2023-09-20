@@ -51,7 +51,7 @@ export const useAccountsClaimBurn = (
 };
 
 export const useAccountsCreate = (
-  accountName: string | undefined,
+  accountName: string,
   signingKeyIndex: number | undefined,
   customAccessRules: any | undefined,
   fee: number | undefined,

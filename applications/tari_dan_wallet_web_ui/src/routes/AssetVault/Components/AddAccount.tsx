@@ -43,7 +43,8 @@ function AddAccount({
     signingKeyIndex: '',
     fee: '',
   });
-  const { mutate: mutateAddAccount } = useAccountsCreate(
+  let [isLoading, setIsLoading] = useState(false);
+  const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
     accountFormState.signingKeyIndex
       ? +accountFormState.signingKeyIndex
@@ -59,9 +60,12 @@ function AddAccount({
   };
 
   const onSubmitAddAccount = () => {
-    mutateAddAccount();
-    setAccountFormState({ accountName: '', signingKeyIndex: '', fee: '' });
-    setOpen(false);
+    setIsLoading(true);
+    return mutateAddAccount().then(() => {
+      setIsLoading(false);
+      setAccountFormState({accountName: '', signingKeyIndex: '', fee: ''});
+      setOpen(false);
+    });
   };
 
   const onAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -110,8 +114,8 @@ function AddAccount({
             <Button variant="outlined" onClick={handleClose}>
               Cancel
             </Button>
-            <Button variant="contained" type="submit">
-              Add Account
+            <Button variant="contained" type="submit" disabled={isLoading || !accountFormState.accountName}>
+              {isLoading ? "Please wait..." : "Add Account"}
             </Button>
           </Box>
         </Form>
