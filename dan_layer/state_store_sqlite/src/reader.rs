@@ -300,6 +300,45 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         block.try_convert(qc)
     }
 
+    fn blocks_all_after(&mut self, block_id: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let query_height = blocks::table
+            .select(blocks::height)
+            .filter(blocks::block_id.eq(serialize_hex(block_id)))
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_all_after",
+                source: e,
+            })?;
+
+        let results = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .filter(blocks::height.gt(query_height))
+            .order_by(blocks::height.asc())
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_all_after_height",
+                source: e,
+            })?;
+
+        results
+            .into_iter()
+            .map(|(block, qc)| {
+                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "blocks_all_after_height",
+                    details: format!(
+                        "block {} references non-existent quorum certificate {}",
+                        block.block_id, block.qc_id
+                    ),
+                })?;
+
+                block.try_convert(qc)
+            })
+            .collect()
+    }
+
     fn blocks_get_all_by_parent(&mut self, parent_id: &BlockId) -> Result<Vec<Block<TAddr>>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 

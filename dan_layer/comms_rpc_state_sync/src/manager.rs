@@ -10,7 +10,15 @@ use tari_comms::{protocol::rpc::RpcError, types::CommsPublicKey};
 use tari_consensus::traits::{SyncManager, SyncStatus};
 use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, LastExecuted, QuorumCertificate, SubstateUpdate, TransactionPoolRecord},
+    consensus_models::{
+        Block,
+        HighQc,
+        LastExecuted,
+        LockedBlock,
+        QuorumCertificate,
+        SubstateUpdate,
+        TransactionPoolRecord,
+    },
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -59,13 +67,17 @@ where
         Ok(committee)
     }
 
-    async fn sync_with_peer(&self, addr: &CommsPublicKey, high_qc: &HighQc) -> Result<(), CommsRpcConsensusSyncError> {
+    async fn sync_with_peer(
+        &self,
+        addr: &CommsPublicKey,
+        locked_block: &LockedBlock,
+    ) -> Result<(), CommsRpcConsensusSyncError> {
         self.create_zero_block_if_required()?;
         let mut rpc_client = self.client_factory.create_client(addr);
         let mut client = rpc_client.client_connection().await?;
 
-        info!(target: LOG_TARGET, "🌐 Syncing blocks from {} from high QC {}", addr, high_qc);
-        self.sync_blocks(&mut client, high_qc).await?;
+        info!(target: LOG_TARGET, "🌐 Syncing blocks from peer '{}' from Locked block {}", addr, locked_block);
+        self.sync_blocks(&mut client, locked_block).await?;
 
         Ok(())
     }
@@ -78,7 +90,7 @@ where
             debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;
             zero_block.insert(&mut tx)?;
-            zero_block.as_locked().set(&mut tx)?;
+            zero_block.as_locked_block().set(&mut tx)?;
             zero_block.as_leaf_block().set(&mut tx)?;
             zero_block.as_last_executed().set(&mut tx)?;
             zero_block.justify().as_high_qc().set(&mut tx)?;
@@ -93,17 +105,17 @@ where
     async fn sync_blocks(
         &self,
         client: &mut ValidatorNodeRpcClient,
-        high_qc: &HighQc,
+        locked_block: &LockedBlock,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         let mut stream = client
             .sync_blocks(SyncBlocksRequest {
-                start_block_id: high_qc.block_id.as_bytes().to_vec(),
+                start_block_id: locked_block.block_id.as_bytes().to_vec(),
             })
             .await?;
 
         let mut counter = 0usize;
 
-        let mut expected_height = high_qc.block_height() + NodeHeight(1);
+        let mut expected_height = locked_block.height + NodeHeight(1);
 
         while let Some(resp) = stream.next().await {
             let msg = resp.map_err(RpcError::from)?;
@@ -308,12 +320,12 @@ where
         let mut sync_error = None;
         for member in committee {
             // Refresh the HighQC each time because a partial sync could have been achieved from a peer
-            let high_qc = self
+            let locked_block = self
                 .state_store
-                .with_read_tx(|tx| HighQc::get(tx).optional())?
-                .unwrap_or_else(|| QuorumCertificate::<CommsPublicKey>::genesis().as_high_qc());
+                .with_read_tx(|tx| LockedBlock::get(tx).optional())?
+                .unwrap_or_else(|| Block::<CommsPublicKey>::genesis().as_locked_block());
 
-            match self.sync_with_peer(&member, &high_qc).await {
+            match self.sync_with_peer(&member, &locked_block).await {
                 Ok(()) => {
                     sync_error = None;
                     break;
