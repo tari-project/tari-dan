@@ -50,9 +50,11 @@ impl<TAddr: Clone> InboundMessaging<TAddr> {
 
     pub async fn next_message(&mut self) -> Option<(TAddr, Message<TAddr>)> {
         tokio::select! {
+           // BIASED: messaging priority is loopback, consensus, then other
+           biased;
            maybe_msg = self.loopback_receiver.recv() => maybe_msg.map(|msg| (self.our_node_addr.clone(), msg)),
-           maybe_msg = self.inbound_messages.recv() => maybe_msg.map(|(from, msg)| (from, Message::Dan(msg))),
            maybe_msg = self.inbound_consensus_messages.recv() => maybe_msg.map(|(from, msg)| (from, Message::Consensus(msg))),
+           maybe_msg = self.inbound_messages.recv() => maybe_msg.map(|(from, msg)| (from, Message::Dan(msg))),
         }
     }
 }
