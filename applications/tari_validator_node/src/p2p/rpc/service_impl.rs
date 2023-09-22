@@ -28,7 +28,7 @@ use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
 use tari_dan_p2p::PeerProvider;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, HighQc, QuorumCertificate, SubstateRecord, TransactionRecord},
+    consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
     StateStore,
 };
 use tari_engine_types::virtual_substate::VirtualSubstateAddress;
@@ -285,6 +285,18 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             .with_read_tx(|tx| Block::get(tx, &start_block_id).optional())
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .ok_or_else(|| RpcStatus::not_found("start_block_id not found"))?;
+
+        // Check that the start block
+        let locked_block = store
+            .with_read_tx(|tx| LockedBlock::get(tx).optional())
+            .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
+            .ok_or_else(|| RpcStatus::not_found("No locked block"))?;
+        if start_block.height() > locked_block.height() {
+            return Err(RpcStatus::not_found(&format!(
+                "start_block_id {} is after locked block {}",
+                start_block_id, locked_block
+            )));
+        }
 
         task::spawn(BlockSyncTask::new(self.shard_state_store.clone(), start_block, sender).run());
 

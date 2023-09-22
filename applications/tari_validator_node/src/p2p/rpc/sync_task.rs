@@ -16,7 +16,7 @@ use tokio::sync::mpsc;
 
 const LOG_TARGET: &str = "tari::dan::rpc::sync_task";
 
-const BLOCK_BUFFER_SIZE: usize = 10;
+const BLOCK_BUFFER_SIZE: usize = 15;
 
 type BlockBuffer<TAddr> = Vec<(Block<TAddr>, Vec<QuorumCertificate<TAddr>>, Vec<SubstateUpdate<TAddr>>)>;
 
@@ -42,6 +42,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
     pub async fn run(mut self) -> Result<(), ()> {
         let mut buffer = Vec::with_capacity(BLOCK_BUFFER_SIZE);
         let mut current_block_id = *self.current_block.id();
+        let mut counter = 0;
         loop {
             match self.fetch_next_batch(&mut buffer, &current_block_id) {
                 Ok(last_block) => {
@@ -54,7 +55,14 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             }
 
             let num_items = buffer.len();
+            debug!(
+                target: LOG_TARGET,
+                "Sending {} blocks to peer. Current block id: {}",
+                num_items,
+                current_block_id,
+            );
 
+            counter += buffer.len();
             for (block, quorum_certificates, updates) in buffer.drain(..) {
                 self.send(Ok(SyncBlocksResponse {
                     block: Some(block.into()),
@@ -65,59 +73,37 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             }
 
             // If we didnt fill up the buffer, send the final blocks
-            // TODO: It may be better to ask each leader to resend each proposal
             if num_items < buffer.capacity() {
-                match self.fetch_last_blocks(&mut buffer, &current_block_id) {
-                    Ok(_) => (),
-                    Err(err) => {
-                        self.send(Err(RpcStatus::log_internal_error(LOG_TARGET)(err))).await?;
-                        return Err(());
-                    },
-                }
-
-                for (block, quorum_certificates, updates) in buffer.drain(..) {
-                    self.send(Ok(SyncBlocksResponse {
-                        block: Some(block.into()),
-                        quorum_certificates: quorum_certificates.iter().map(Into::into).collect(),
-                        substate_updates: updates.into_iter().map(Into::into).collect(),
-                    }))
-                    .await?;
-                }
-
+                debug!( target: LOG_TARGET, "Sync to last commit complete. Streamed {} item(s)", counter);
                 break;
             }
         }
 
+        // TODO: It may be better to ask each leader to resend each proposal
+        match self.fetch_last_blocks(&mut buffer, &current_block_id) {
+            Ok(_) => (),
+            Err(err) => {
+                self.send(Err(RpcStatus::log_internal_error(LOG_TARGET)(err))).await?;
+                return Err(());
+            },
+        }
+
+        debug!(
+            target: LOG_TARGET,
+            "Sending {} last blocks to peer.",
+            buffer.len(),
+        );
+
+        for (block, quorum_certificates, updates) in buffer.drain(..) {
+            self.send(Ok(SyncBlocksResponse {
+                block: Some(block.into()),
+                quorum_certificates: quorum_certificates.iter().map(Into::into).collect(),
+                substate_updates: updates.into_iter().map(Into::into).collect(),
+            }))
+            .await?;
+        }
+
         Ok(())
-    }
-
-    fn fetch_last_blocks(
-        &self,
-        buffer: &mut BlockBuffer<TStateStore::Addr>,
-        current_block_id: &BlockId,
-    ) -> Result<(), StorageError> {
-        self.store.with_read_tx(|tx| {
-            let mut current = Block::get_tip(tx)?;
-            loop {
-                let all_qcs = current
-                    .commands()
-                    .iter()
-                    .flat_map(|cmd| cmd.evidence().qc_ids_iter())
-                    .collect::<HashSet<_>>();
-                let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
-                let updates = current.get_substate_updates(tx)?;
-
-                let parent = current.get_parent(tx)?;
-                buffer.push((current, certificates, updates));
-                if parent.id() == current_block_id {
-                    break;
-                }
-                current = parent;
-            }
-
-            buffer.reverse();
-            Ok::<_, StorageError>(())
-        })
     }
 
     fn fetch_next_batch(
@@ -147,6 +133,35 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                 }
             }
             Ok::<_, StorageError>(current_block_id)
+        })
+    }
+
+    fn fetch_last_blocks(
+        &self,
+        buffer: &mut BlockBuffer<TStateStore::Addr>,
+        current_block_id: &BlockId,
+    ) -> Result<(), StorageError> {
+        self.store.with_read_tx(|tx| {
+            let blocks = Block::get_all_blocks_after(tx, current_block_id)?;
+            for block in blocks {
+                debug!(
+                    target: LOG_TARGET,
+                    "Fetching last blocks. Current block: {} to target {}",
+                    block,
+                    current_block_id
+                );
+                let all_qcs = block
+                    .commands()
+                    .iter()
+                    .flat_map(|cmd| cmd.evidence().qc_ids_iter())
+                    .collect::<HashSet<_>>();
+                let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
+                let updates = block.get_substate_updates(tx)?;
+
+                buffer.push((block, certificates, updates));
+            }
+
+            Ok::<_, StorageError>(())
         })
     }
 
