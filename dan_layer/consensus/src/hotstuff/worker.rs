@@ -190,6 +190,7 @@ where TConsensusSpec: ConsensusSpec
                         if let Err(e) = self.pacemaker_handle.stop().await {
                             error!(target: LOG_TARGET, "Error while stopping pacemaker: {}", e);
                         }
+                        self.on_receive_new_view.clear_new_views();
                         // Failures here will be handled in the state machine
                         return Err(e);
                     }
@@ -224,6 +225,7 @@ where TConsensusSpec: ConsensusSpec
             }
         }
 
+        self.on_receive_new_view.clear_new_views();
         self.pacemaker_handle.stop().await?;
 
         Ok(())
@@ -299,7 +301,7 @@ where TConsensusSpec: ConsensusSpec
             None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?,
         };
         let current_epoch = self.epoch_manager.current_epoch().await?;
-        debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", current_epoch);
+        debug!(target: LOG_TARGET, "[on_beat] Epoch: {}, Leaf: {}", current_epoch, leaf_block);
         let local_committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         // TODO: If there were leader failures, the leaf block would be empty and we need to create empty blocks.
         let is_leader =
@@ -317,7 +319,7 @@ where TConsensusSpec: ConsensusSpec
         );
         if is_leader {
             self.on_propose
-                .handle(current_epoch, local_committee, leaf_block)
+                .handle(current_epoch, local_committee, leaf_block, must_propose)
                 .await?;
         }
         Ok(())
@@ -368,7 +370,7 @@ where TConsensusSpec: ConsensusSpec
             debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;
             zero_block.insert(&mut tx)?;
-            zero_block.as_locked().set(&mut tx)?;
+            zero_block.as_locked_block().set(&mut tx)?;
             zero_block.as_leaf_block().set(&mut tx)?;
             zero_block.as_last_executed().set(&mut tx)?;
             zero_block.justify().as_high_qc().set(&mut tx)?;

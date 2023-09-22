@@ -1048,7 +1048,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                     Ok(SubstateLockState::SomeAlreadyWriteLocked)
                 } else {
                     Err(SqliteStorageError::DieselError {
-                        operation: "locked_outputs_acquire",
+                        operation: "locked_outputs_acquire_all",
                         source: e,
                     })
                 }

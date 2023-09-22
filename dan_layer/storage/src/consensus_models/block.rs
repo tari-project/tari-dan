@@ -185,7 +185,7 @@ impl<TAddr> Block<TAddr> {
         self.commands.len()
     }
 
-    pub fn as_locked(&self) -> LockedBlock {
+    pub fn as_locked_block(&self) -> LockedBlock {
         LockedBlock {
             height: self.height,
             block_id: self.id,
@@ -285,6 +285,13 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_get_tip()
     }
 
+    pub fn get_all_blocks_after<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.blocks_all_after(block_id)
+    }
+
     pub fn exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
         &self,
         tx: &mut TTx,
@@ -351,6 +358,9 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
         ancestor: &BlockId,
     ) -> Result<bool, StorageError> {
+        if self.id == *ancestor {
+            return Ok(false);
+        }
         if self.parent == *ancestor {
             return Ok(true);
         }
@@ -366,6 +376,12 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         &self,
         tx: &mut TTx,
     ) -> Result<Block<TAddr>, StorageError> {
+        if self.id.is_genesis() {
+            return Err(StorageError::NotFound {
+                item: "Block".to_string(),
+                key: self.id.to_string(),
+            });
+        }
         Block::get(tx, &self.parent)
     }
 
@@ -479,7 +495,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
 
         let locked_block = LockedBlock::get(tx.deref_mut())?;
         if precommit_node.height() > locked_block.height {
-            precommit_node.as_locked().set(tx)?;
+            precommit_node.as_locked_block().set(tx)?;
             on_lock_block(tx, &precommit_node)?;
         }
 

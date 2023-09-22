@@ -1,15 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{HashMap, HashSet},
-    ops::DerefMut,
-};
+use std::collections::{HashMap, HashSet};
 
 use log::*;
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, LockedBlock, QuorumCertificate},
+    consensus_models::{Block, BlockId, LastVoted, LockedBlock, QuorumCertificate},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -53,6 +50,11 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
+    pub(super) fn clear_new_views(&mut self) {
+        self.newview_message_counts.clear();
+    }
+
+    #[allow(clippy::too_many_lines)]
     pub async fn handle(
         &mut self,
         from: TConsensusSpec::Addr,
@@ -80,13 +82,6 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        // We can never accept NEWVIEWS for heights that are lower than the locked block height
-        let locked = self.store.with_read_tx(|tx| LockedBlock::get(tx))?;
-        if new_height <= locked.height() {
-            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for height less than equal to locked block, locked block: {} new height: {}", locked.height(), new_height);
-            return Ok(());
-        }
-
         if !self.epoch_manager.is_validator_in_local_committee(&from, epoch).await? {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch,
@@ -95,28 +90,49 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
+        // We can never accept NEWVIEWS for heights that are lower than the locked block height
+        let locked = self.store.with_read_tx(|tx| LockedBlock::get(tx))?;
+        if new_height <= locked.height() {
+            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for height less than equal to locked block, locked block: {} new height: {}", locked, new_height);
+            return Ok(());
+        }
+
+        // Do not accept a NEWVIEW if we've voted on (our own) block at this height
+        let last_voted = self.store.with_read_tx(|tx| LastVoted::get(tx))?;
+        if new_height <= last_voted.height() {
+            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for height less than equal to last voted height, last voted: {} new height: {}", last_voted, new_height);
+            return Ok(());
+        }
+
         self.validate_qc(&high_qc)?;
 
-        self.store.with_write_tx(|tx| {
-            // Sync if we do not have the block for this valid QC
-            if !Block::record_exists(tx.deref_mut(), high_qc.block_id())? {
-                return Err(HotStuffError::ProposalValidationError(
-                    ProposalValidationError::JustifyBlockNotFound {
-                        proposed_by: from.to_string(),
-                        block_id: *high_qc.block_id(),
-                        justify_block: *high_qc.block_id(),
-                    },
-                ));
-            }
-            let checked_high_qc = high_qc.update_high_qc(tx)?;
-            self.newview_message_counts = self
-                .newview_message_counts
-                .drain()
-                .filter(|((h, _), _)| *h >= checked_high_qc.block_height())
-                .collect();
+        let checked_high_qc = self.store.with_write_tx(|tx| high_qc.update_high_qc(tx))?;
 
-            Ok(())
-        })?;
+        if checked_high_qc.block_height() > high_qc.block_height() {
+            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for because high QC is not higher than previous high QC, previous high QC: {} new high QC: {}", high_qc.as_high_qc(), checked_high_qc);
+            return Ok(());
+        }
+
+        // Sync if we do not have the block for this valid QC
+        let exists = self
+            .store
+            .with_read_tx(|tx| Block::record_exists(tx, checked_high_qc.block_id()))?;
+        if !exists {
+            return Err(HotStuffError::ProposalValidationError(
+                ProposalValidationError::JustifyBlockNotFound {
+                    proposed_by: from.to_string(),
+                    block_id: *high_qc.block_id(),
+                    justify_block: *high_qc.block_id(),
+                },
+            ));
+        }
+
+        // Clear our NEWVIEWs for previous views
+        self.newview_message_counts = self
+            .newview_message_counts
+            .drain()
+            .filter(|((h, _), _)| *h >= checked_high_qc.block_height())
+            .collect();
 
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let leader = self
@@ -166,6 +182,11 @@ where TConsensusSpec: ConsensusSpec
             // This node, as well as all other replicas, will create the blocks in on_receive_proposal.
             let dummy_blocks =
                 calculate_dummy_blocks(epoch, &high_qc, new_height, &self.leader_strategy, &local_committee);
+            // Set the last voted block so that we do not vote on other conflicting blocks
+            if let Some(new_last_voted) = dummy_blocks.last().map(|b| b.as_last_voted()) {
+                self.store.with_write_tx(|tx| new_last_voted.set(tx))?;
+            }
+
             let parent_block = dummy_blocks
                 .last()
                 .map(|b| b.as_leaf_block())

@@ -35,6 +35,9 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
         );
         return Vec::new();
     }
+    if current_height == new_height {
+        return Vec::new();
+    }
     debug!(
         target: LOG_TARGET,
         "🍼 calculating dummy blocks from {} to {}",
@@ -51,6 +54,11 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
             current_height,
             high_qc.clone(),
             epoch,
+        );
+        debug!(
+            target: LOG_TARGET,
+            "🍼 new dummy block: {}",
+            dummy_block,
         );
         parent_block = dummy_block.as_leaf_block();
         blocks.push(dummy_block);

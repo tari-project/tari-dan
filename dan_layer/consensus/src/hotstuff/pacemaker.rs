@@ -93,19 +93,22 @@ impl PaceMaker {
                             self.current_height = cmp::max(self.current_height, last_seen_height);
                             assert!(self.current_high_qc_height <= high_qc_height, "high_qc_height must be monotonically increasing");
                             self.current_high_qc_height = high_qc_height;
-
-                            leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
+                            let delta = self.delta_time();
+                            info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
+                            leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
                             // set a timer for when we must send a block...
                             block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                        },
                         PacemakerRequest::Start { current_height, high_qc_height } => {
-                            info!(target: LOG_TARGET, "🚀 Starting pacemaker");
+                            info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", current_height, high_qc_height);
                             if started {
                                 continue;
                             }
                             self.current_height = current_height;
                             self.current_high_qc_height = high_qc_height;
-                            leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
+                            let delta = self.delta_time();
+                            info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
+                            leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
                             block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                             on_beat.beat();
                             started = true;
@@ -125,8 +128,10 @@ impl PaceMaker {
                 }
                 () = &mut leader_timeout => {
                     block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
-                    leader_timeout.as_mut().reset(tokio::time::Instant::now() + self.delta_time());
-                    info!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}", self.current_height);
+
+                    let delta = self.delta_time();
+                    leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
+                    info!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}, Delta: {:.2?}", self.current_height, delta);
                     self.current_height += NodeHeight(1);
                     on_leader_timeout.leader_timed_out(self.current_height);
                 },
