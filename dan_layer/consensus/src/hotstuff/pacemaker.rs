@@ -7,7 +7,6 @@ use std::{
 
 use log::*;
 use tari_dan_common_types::NodeHeight;
-use tari_shutdown::ShutdownSignal;
 use tokio::sync::mpsc;
 
 use crate::hotstuff::{
@@ -24,14 +23,13 @@ const MAX_DELTA: Duration = Duration::from_secs(300);
 pub struct PaceMaker {
     pace_maker_handle: PaceMakerHandle,
     handle_receiver: mpsc::Receiver<PacemakerRequest>,
-    shutdown: ShutdownSignal,
     block_time: Duration,
     current_height: NodeHeight,
     current_high_qc_height: NodeHeight,
 }
 
 impl PaceMaker {
-    pub fn new(shutdown: ShutdownSignal) -> Self {
+    pub fn new() -> Self {
         let (sender, receiver) = mpsc::channel(100);
 
         let on_beat = OnBeat::new();
@@ -43,7 +41,6 @@ impl PaceMaker {
             pace_maker_handle: PaceMakerHandle::new(sender, on_beat, on_force_beat, on_leader_timeout),
             // TODO: make network constant. We're starting slow with 10s but should be 1s in the future
             block_time: Duration::from_secs(10),
-            shutdown,
             current_height: NodeHeight(0),
             current_high_qc_height: NodeHeight(0),
         }
@@ -83,43 +80,48 @@ impl PaceMaker {
         loop {
             tokio::select! {
                 // biased;
-                Some(event) = self.handle_receiver.recv() => {
-                    match event {
-                       PacemakerRequest::ResetLeaderTimeout { last_seen_height, high_qc_height } => {
-                            if !started {
-                                continue;
-                            }
+                maybe_req = self.handle_receiver.recv() => {
+                    if let Some(req) = maybe_req {
+                        match req {
+                           PacemakerRequest::ResetLeaderTimeout { last_seen_height, high_qc_height } => {
+                                if !started {
+                                    continue;
+                                }
 
-                            self.current_height = cmp::max(self.current_height, last_seen_height);
-                            assert!(self.current_high_qc_height <= high_qc_height, "high_qc_height must be monotonically increasing");
-                            self.current_high_qc_height = high_qc_height;
-                            let delta = self.delta_time();
-                            info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
-                            leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
-                            // set a timer for when we must send a block...
-                            block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
-                       },
-                        PacemakerRequest::Start { current_height, high_qc_height } => {
-                            info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", current_height, high_qc_height);
-                            if started {
-                                continue;
+                                self.current_height = cmp::max(self.current_height, last_seen_height);
+                                assert!(self.current_high_qc_height <= high_qc_height, "high_qc_height must be monotonically increasing");
+                                self.current_high_qc_height = high_qc_height;
+                                let delta = self.delta_time();
+                                info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
+                                leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
+                                // set a timer for when we must send a block...
+                                block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                           },
+                            PacemakerRequest::Start { current_height, high_qc_height } => {
+                                info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", current_height, high_qc_height);
+                                if started {
+                                    continue;
+                                }
+                                self.current_height = current_height;
+                                self.current_high_qc_height = high_qc_height;
+                                let delta = self.delta_time();
+                                info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
+                                leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
+                                block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
+                                on_beat.beat();
+                                started = true;
                             }
-                            self.current_height = current_height;
-                            self.current_high_qc_height = high_qc_height;
-                            let delta = self.delta_time();
-                            info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
-                            leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
-                            block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
-                            on_beat.beat();
-                            started = true;
+                            PacemakerRequest::Stop => {
+                                info!(target: LOG_TARGET, "💤 Stopping pacemaker");
+                                started = false;
+                                // TODO: we could use futures-rs Either
+                                leader_timeout.as_mut().reset(far_future());
+                                block_timer.as_mut().reset(far_future());
+                            }
                         }
-                        PacemakerRequest::Stop => {
-                            info!(target: LOG_TARGET, "💤 Stopping pacemaker");
-                            started = false;
-                            // TODO: we could use futures-rs Either
-                            leader_timeout.as_mut().reset(far_future());
-                            block_timer.as_mut().reset(far_future());
-                        }
+                    } else{
+                        info!(target: LOG_TARGET, "💤 All pacemaker handles dropped");
+                        break;
                     }
                 },
                 () = &mut block_timer => {
@@ -132,14 +134,10 @@ impl PaceMaker {
                     let delta = self.delta_time();
                     leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
                     info!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}, Delta: {:.2?}", self.current_height, delta);
-                    self.current_height += NodeHeight(1);
                     on_leader_timeout.leader_timed_out(self.current_height);
+                    self.current_height += NodeHeight(1);
                 },
 
-                _ = self.shutdown.wait() => {
-                    info!(target: LOG_TARGET, "💤 Shutting down");
-                    break;
-                }
             }
         }
 

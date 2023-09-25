@@ -368,7 +368,11 @@ async fn when_i_wait_for_validator_leaf_block_at_least(world: &mut TariWorld, na
         })
         .await
         .unwrap();
-    if resp.blocks.last().unwrap().height().as_u64() < height {
-        panic!("Validator {} leaf block height is less than {}", name, height);
+    let actual_height = resp.blocks.last().unwrap().height().as_u64();
+    if actual_height < height {
+        panic!(
+            "Validator {} leaf block height {} is less than {}",
+            name, actual_height, height
+        );
     }
 }

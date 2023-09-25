@@ -75,6 +75,10 @@ async fn stress_test(args: StressTestArgs) -> anyhow::Result<()> {
 
     println!("⚠️ Submitting {} transactions", num_transactions);
 
+    if num_transactions == 0 {
+        return Ok(());
+    }
+
     let transactions = read_transactions(File::open(args.transaction_file)?, args.skip_transactions.unwrap_or(0))?;
 
     let mut count = 0usize;
@@ -105,7 +109,7 @@ async fn stress_test(args: StressTestArgs) -> anyhow::Result<()> {
             .await;
 
         count += 1;
-        if args.num_transactions.map(|n| n == count as u64).unwrap_or(false) {
+        if num_transactions <= count as u64 {
             break;
         }
     }

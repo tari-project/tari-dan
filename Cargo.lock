@@ -8147,6 +8147,7 @@ dependencies = [
  "diesel_migrations",
  "hex",
  "log",
+ "rand 0.8.5",
  "serde",
  "serde_json",
  "tari_common_types",

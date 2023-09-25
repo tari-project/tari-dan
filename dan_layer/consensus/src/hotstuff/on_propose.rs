@@ -77,44 +77,37 @@ where TConsensusSpec: ConsensusSpec
         leaf_block: LeafBlock,
         is_newview_propose: bool,
     ) -> Result<(), HotStuffError> {
-        if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx).optional())? {
+        if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx)).optional()? {
             if last_proposed.height > leaf_block.height {
-                // must_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
-                if !is_newview_propose {
-                    debug!(
-                        target: LOG_TARGET,
-                        "⤵️ Skipping on_propose for next block because we have already proposed a block at height {}",
-                        last_proposed.height
-                    );
+                // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
+                // Re-broadcast the previous proposal
+                if is_newview_propose {
+                    let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
+                    let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
+                    let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
 
-                    return Ok(());
+                    if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
+                        let non_local_buckets = self
+                            .store
+                            .with_read_tx(|tx| get_non_local_buckets(tx, &next_block, num_committees, local_bucket))?;
+                        info!(
+                            target: LOG_TARGET,
+                            "🌿 RE-BROADCASTING block {}({}) to {} validators. {} command(s), {} foreign shards, justify: {} ({}), parent: {}",
+                            next_block.id(),
+                            next_block.height(),
+                            local_committee.len(),
+                            next_block.commands().len(),
+                            non_local_buckets.len(),
+                            next_block.justify().block_id(),
+                            next_block.justify().block_height(),
+                            next_block.parent(),
+                        );
+                        self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
+                            .await?;
+                    }
                 }
 
-                // let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
-                // let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
-                // let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
-                //
-                // if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
-                //     let non_local_buckets = self
-                //         .store
-                //         .with_read_tx(|tx| get_non_local_buckets(tx, &next_block, num_committees, local_bucket))?;
-                //     info!(
-                //         target: LOG_TARGET,
-                //         "🌿 RE-BROADCASTING block {}({}) to {} validators. {} command(s), {} foreign shards, justify:
-                // {} ({}), parent: {}",         next_block.id(),
-                //         next_block.height(),
-                //         local_committee.len(),
-                //         next_block.commands().len(),
-                //         non_local_buckets.len(),
-                //         next_block.justify().block_id(),
-                //         next_block.justify().block_height(),
-                //         next_block.parent()
-                //     );
-                //     self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
-                //         .await?;
-                //
-                //     return Ok(());
-                // }
+                return Ok(());
             }
         }
 

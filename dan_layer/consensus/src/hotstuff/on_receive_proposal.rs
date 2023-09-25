@@ -279,7 +279,7 @@ where TConsensusSpec: ConsensusSpec
             if maybe_decision.is_some() {
                 block.update_nodes(
                     &mut tx,
-                    |tx, block| self.on_lock_block(tx, block),
+                    |tx, _, block| self.on_lock_block(tx, block),
                     |tx, last_exec, commit_block| self.on_commit(tx, last_exec, commit_block, local_committee_shard),
                 )?;
 

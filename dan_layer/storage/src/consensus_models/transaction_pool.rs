@@ -62,6 +62,10 @@ impl TransactionPoolStage {
         matches!(self, Self::AllPrepared)
     }
 
+    pub fn is_accepted(&self) -> bool {
+        self.is_all_prepared() || self.is_some_prepared()
+    }
+
     pub fn next_stage(&self) -> Option<Self> {
         match self {
             TransactionPoolStage::New => Some(TransactionPoolStage::Prepared),

@@ -90,7 +90,7 @@ where
         tx_mempool: mpsc::UnboundedSender<Transaction>,
         shutdown: ShutdownSignal,
     ) -> Self {
-        let pacemaker = PaceMaker::new(shutdown.clone());
+        let pacemaker = PaceMaker::new();
         Self {
             validator_addr: validator_addr.clone(),
             rx_new_transactions,
@@ -226,7 +226,10 @@ where TConsensusSpec: ConsensusSpec
         }
 
         self.on_receive_new_view.clear_new_views();
-        self.pacemaker_handle.stop().await?;
+        // This only happens if we're shutting down.
+        if let Err(err) = self.pacemaker_handle.stop().await {
+            debug!(target: LOG_TARGET, "Pacemaker channel dropped: {}", err);
+        }
 
         Ok(())
     }

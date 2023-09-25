@@ -115,7 +115,7 @@ where
 
         let mut counter = 0usize;
 
-        let mut expected_height = locked_block.height + NodeHeight(1);
+        // let mut expected_height = locked_block.height + NodeHeight(1);
 
         while let Some(resp) = stream.next().await {
             let msg = resp.map_err(RpcError::from)?;
@@ -129,13 +129,13 @@ where
                         "Peer returned an empty block response"
                     ))
                 })?;
-            if block.height() != expected_height {
-                return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
-                    "Peer returned block at height {} but expected {}",
-                    block.height(),
-                    expected_height,
-                )));
-            }
+            // if block.height() != expected_height {
+            //     return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
+            //         "Peer returned block at height {} but expected {}",
+            //         block.height(),
+            //         expected_height,
+            //     )));
+            // }
             let qcs = msg
                 .quorum_certificates
                 .into_iter()
@@ -161,7 +161,7 @@ where
             if counter % 100 == 0 {
                 info!(target: LOG_TARGET, "🌐 Syncing block {block}");
             }
-            expected_height += NodeHeight(1);
+            // expected_height += NodeHeight(1);
             self.commit_block(block, qcs, updates)?;
         }
 
@@ -188,9 +188,11 @@ where
             }
             block.update_nodes(
                 tx,
-                |_, _| Ok(()),
+                |_, _, _| Ok(()),
                 |tx, last_executed, block| {
-                    Self::mark_block_executed(tx, last_executed, block)?;
+                    let new_last_exec = block.as_last_executed();
+                    Self::mark_block_committed(tx, last_executed, block)?;
+                    new_last_exec.set(tx)?;
                     TransactionPoolRecord::remove_any(
                         tx,
                         block.commands().iter().filter_map(|cmd| cmd.accept()).map(|t| t.id),
@@ -210,7 +212,7 @@ where
         })
     }
 
-    fn mark_block_executed(
+    fn mark_block_committed(
         tx: &mut <TStateStore as StateStore>::WriteTransaction<'_>,
         last_executed: &LastExecuted,
         block: &Block<TStateStore::Addr>,
@@ -219,7 +221,7 @@ where
             let parent = block.get_parent(tx.deref_mut())?;
             // Recurse to "catch up" any parent parent blocks we may not have executed
             block.commit(tx)?;
-            Self::mark_block_executed(tx, last_executed, &parent)?;
+            Self::mark_block_committed(tx, last_executed, &parent)?;
             debug!(
                 target: LOG_TARGET,
                 "✅ COMMIT block {}, last executed height = {}",

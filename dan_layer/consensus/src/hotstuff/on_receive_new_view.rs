@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use log::*;
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, LastVoted, LockedBlock, QuorumCertificate},
+    consensus_models::{Block, BlockId, LockedBlock, QuorumCertificate},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -97,19 +97,12 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         }
 
-        // Do not accept a NEWVIEW if we've voted on (our own) block at this height
-        let last_voted = self.store.with_read_tx(|tx| LastVoted::get(tx))?;
-        if new_height <= last_voted.height() {
-            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for height less than equal to last voted height, last voted: {} new height: {}", last_voted, new_height);
-            return Ok(());
-        }
-
         self.validate_qc(&high_qc)?;
 
         let checked_high_qc = self.store.with_write_tx(|tx| high_qc.update_high_qc(tx))?;
 
         if checked_high_qc.block_height() > high_qc.block_height() {
-            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for because high QC is not higher than previous high QC, previous high QC: {} new high QC: {}", high_qc.as_high_qc(), checked_high_qc);
+            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for because high QC is not higher than previous high QC, given high QC: {} current high QC: {}", high_qc.as_high_qc(), checked_high_qc);
             return Ok(());
         }
 

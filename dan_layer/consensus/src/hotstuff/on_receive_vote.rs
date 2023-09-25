@@ -105,6 +105,7 @@ where TConsensusSpec: ConsensusSpec
 
         // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
         // in the QC.
+
         info!(
             target: LOG_TARGET,
             "🔥 Received vote for block {} from {} ({} of {})",
@@ -121,11 +122,12 @@ where TConsensusSpec: ConsensusSpec
             let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
                 warn!(
                     target: LOG_TARGET,
-                    "❌ Received vote for unknown block {} from {}",message.block_id,from
+                    "❌ Received vote for unknown block {} from {}", message.block_id, from
                 );
                 tx.rollback()?;
                 return Ok(());
             };
+
             if !self
                 .leader_strategy
                 .is_leader_for_next_block(&vn.address, &committee, block.height())
@@ -138,6 +140,7 @@ where TConsensusSpec: ConsensusSpec
                     ),
                 });
             }
+
             let high_qc = HighQc::get(tx.deref_mut())?;
             if high_qc.block_id == *block.id() {
                 debug!(

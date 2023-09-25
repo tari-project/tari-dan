@@ -22,26 +22,26 @@ type BlockBuffer<TAddr> = Vec<(Block<TAddr>, Vec<QuorumCertificate<TAddr>>, Vec<
 
 pub struct BlockSyncTask<TStateStore: StateStore> {
     store: TStateStore,
-    current_block: Block<TStateStore::Addr>,
+    start_block: Block<TStateStore::Addr>,
     sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
 }
 
 impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
     pub fn new(
         store: TStateStore,
-        current_block: Block<TStateStore::Addr>,
+        start_block: Block<TStateStore::Addr>,
         sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
     ) -> Self {
         Self {
             store,
-            current_block,
+            start_block,
             sender,
         }
     }
 
     pub async fn run(mut self) -> Result<(), ()> {
         let mut buffer = Vec::with_capacity(BLOCK_BUFFER_SIZE);
-        let mut current_block_id = *self.current_block.id();
+        let mut current_block_id = *self.start_block.id();
         let mut counter = 0;
         loop {
             match self.fetch_next_batch(&mut buffer, &current_block_id) {
@@ -156,9 +156,9 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                     .flat_map(|cmd| cmd.evidence().qc_ids_iter())
                     .collect::<HashSet<_>>();
                 let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
-                let updates = block.get_substate_updates(tx)?;
 
-                buffer.push((block, certificates, updates));
+                // No substate updates can occur for blocks after the last commit
+                buffer.push((block, certificates, vec![]));
             }
 
             Ok::<_, StorageError>(())

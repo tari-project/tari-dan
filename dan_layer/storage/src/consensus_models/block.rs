@@ -299,6 +299,18 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         Self::record_exists(tx, self.id())
     }
 
+    pub fn has_been_processed<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<bool, StorageError> {
+        // TODO: consider optimising
+        let is_processed = Self::get(tx, block_id)
+            .optional()?
+            .map(|b| b.is_processed())
+            .unwrap_or(false);
+        Ok(is_processed)
+    }
+
     pub fn record_exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
         tx: &mut TTx,
         block_id: &BlockId,
@@ -477,7 +489,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
     where
         TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
         TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
-        TFnOnLock: FnOnce(&mut TTx, &Block<TAddr>) -> Result<(), E>,
+        TFnOnLock: FnOnce(&mut TTx, &LockedBlock, &Block<TAddr>) -> Result<(), E>,
         TFnOnCommit: FnOnce(&mut TTx, &LastExecuted, &Block<TAddr>) -> Result<(), E>,
         E: From<StorageError>,
     {
@@ -495,8 +507,8 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
 
         let locked_block = LockedBlock::get(tx.deref_mut())?;
         if precommit_node.height() > locked_block.height {
+            on_lock_block(tx, &locked_block, &precommit_node)?;
             precommit_node.as_locked_block().set(tx)?;
-            on_lock_block(tx, &precommit_node)?;
         }
 
         // b <- b'.justify.node
