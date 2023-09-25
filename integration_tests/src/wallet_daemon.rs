@@ -31,8 +31,12 @@ use tari_dan_wallet_daemon::{
     config::{ApplicationConfig, WalletDaemonConfig},
     run_tari_dan_wallet_daemon,
 };
+use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_shutdown::Shutdown;
-use tari_wallet_daemon_client::WalletDaemonClient;
+use tari_wallet_daemon_client::{
+    types::{AuthLoginAcceptRequest, AuthLoginRequest, AuthLoginResponse},
+    WalletDaemonClient,
+};
 use tokio::task;
 
 use crate::{
@@ -94,13 +98,34 @@ pub async fn spawn_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: Stri
     world.wallet_daemons.insert(wallet_daemon_name, wallet_daemon_process);
 }
 
-pub async fn get_walletd_client(port: u16) -> WalletDaemonClient {
-    let endpoint: Url = Url::parse(&format!("http://127.0.0.1:{}", port)).unwrap();
-    WalletDaemonClient::connect(endpoint, None).unwrap()
-}
-
 impl DanWalletDaemonProcess {
     pub fn stop(&mut self) {
         self.shutdown.trigger();
+    }
+
+    pub fn get_client(&self) -> WalletDaemonClient {
+        let endpoint = Url::parse(&format!("http://127.0.0.1:{}", self.json_rpc_port)).unwrap();
+        WalletDaemonClient::connect(endpoint, None).unwrap()
+    }
+
+    pub async fn get_authed_client(&self) -> WalletDaemonClient {
+        let mut client = self.get_client();
+        // authentication
+        let AuthLoginResponse { auth_token } = client
+            .auth_request(AuthLoginRequest {
+                permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+                duration: None,
+            })
+            .await
+            .unwrap();
+        let auth_response = client
+            .auth_accept(AuthLoginAcceptRequest {
+                auth_token,
+                name: "Testing Token".to_string(),
+            })
+            .await
+            .unwrap();
+        client.set_auth_token(auth_response.permissions_token);
+        client
     }
 }

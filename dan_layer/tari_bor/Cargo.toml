@@ -8,8 +8,10 @@ repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 
 [dependencies]
-ciborium = { version = "0.2.1", default-features = false }
-serde = { version = "1.0.143", default-features = false, features = ["alloc", "derive"] }
+# git rev: include fix from https://github.com/enarx/ciborium/pull/80
+ciborium = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
+ciborium-io = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 
 [dev-dependencies]
 serde_json = "1.0.96"
@@ -17,4 +19,5 @@ serde_json = "1.0.96"
 [features]
 default = ["std"]
 std = ["ciborium/std", "serde/std"]
+alloc = ["serde/alloc", "ciborium-io/alloc"]
 

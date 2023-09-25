@@ -60,7 +60,6 @@ function RowData(
       <TableRow key={index}>
         <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
           <AccordionIconButton
-            open={open}
             aria-label="expand row"
             size="small"
             onClick={() => {

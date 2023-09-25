@@ -20,79 +20,37 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { createTheme } from '@mui/material/styles';
+import { Button } from '@mui/material';
+import { IoMoonOutline, IoSunny } from 'react-icons/io5';
+import useThemeStore from '../store/themeStore';
+import { useTheme } from '@mui/material/styles';
 
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#9330FF',
-    },
-    secondary: {
-      main: '#40388A',
-    },
-  },
-  shape: {
-    borderRadius: 10,
-  },
-  typography: {
-    fontFamily: '"AvenirMedium", sans-serif',
-    body1: {
-      color: '#000000',
-    },
-    body2: {
-      color: '#000000',
-      lineHeight: '1.5rem',
-    },
-    h1: {
-      fontSize: '2.2rem',
-      lineHeight: '3.2rem',
-    },
-    h2: {
-      fontSize: '1.9rem',
-      lineHeight: '2.9rem',
-    },
-    h3: {
-      fontSize: '1.6rem',
-      lineHeight: '2.6rem',
-    },
-    h4: {
-      fontSize: '1.3rem',
-      lineHeight: '2.3rem',
-    },
-    h5: {
-      fontSize: '1rem',
-      lineHeight: '2em',
-    },
-    h6: {
-      fontSize: '0.875rem',
-      lineHeight: '1.8rem',
-    },
-  },
-  transitions: {
-    duration: {
-      enteringScreen: 500,
-      leavingScreen: 500,
-    },
-  },
-  components: {
-    MuiButton: {
-      defaultProps: {
-        disableRipple: true,
-        sx: {
-          // borderRadius: '5px',
-          minHeight: '55px',
-          boxShadow: 'none',
-        },
-      },
-    },
-    MuiTableCell: {
-      defaultProps: {
-        sx: {
-          borderBottom: '1px solid #f5f5f5',
-        },
-      },
-    },
-  },
-});
+const ThemeSwitcher = () => {
+  const { themeMode, setThemeMode } = useThemeStore();
+  const theme = useTheme();
 
-export default theme;
+  return (
+    <Button
+      onClick={() => setThemeMode(themeMode === 'light' ? 'dark' : 'light')}
+      style={{
+        borderRadius: 0,
+        color: theme.palette.text.secondary,
+        padding: '0.8rem 28px',
+        width: '100%',
+        justifyContent: 'flex-start',
+      }}
+      startIcon={themeMode === 'light' ? <IoMoonOutline /> : <IoSunny />}
+    >
+      <span
+        style={{
+          marginLeft: '1rem',
+          fontSize: '14px',
+        }}
+      >
+        {themeMode === 'light' ? 'Dark Mode' : 'Light Mode'}
+      </span>
+    </Button>
+  );
+};
+
+export default ThemeSwitcher;

@@ -8,3 +8,7 @@ mod peer_service;
 pub use message::*;
 pub use outbound_service::*;
 pub use peer_service::*;
+use tari_comms::protocol::ProtocolId;
+
+pub static TARI_DAN_MSG_PROTOCOL_ID: ProtocolId = ProtocolId::from_static(b"t/msg/1");
+pub static TARI_DAN_CONSENSUS_MSG_ID: ProtocolId = ProtocolId::from_static(b"t/msg-hs/1");

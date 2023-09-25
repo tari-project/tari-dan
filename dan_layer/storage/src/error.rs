@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{io, sync::PoisonError};
+use std::io;
 
 use tari_common_types::types::FixedHashSizeError;
 use tari_dan_common_types::optional::IsNotFoundError;
@@ -70,16 +70,8 @@ pub enum StorageError {
 
     #[error("General storage error: {details}")]
     General { details: String },
-    #[error("Lock error")]
-    LockError,
     #[error("Error converting substate type: {substate_type}")]
     InvalidSubStateType { substate_type: String },
-}
-
-impl<T> From<PoisonError<T>> for StorageError {
-    fn from(_err: PoisonError<T>) -> Self {
-        Self::LockError
-    }
 }
 
 impl IsNotFoundError for StorageError {

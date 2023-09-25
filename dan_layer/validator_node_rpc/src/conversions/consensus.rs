@@ -49,17 +49,19 @@ use tari_transaction::TransactionId;
 use crate::proto;
 // -------------------------------- HotstuffMessage -------------------------------- //
 
-impl<TAddr: NodeAddressable> From<HotstuffMessage<TAddr>> for proto::consensus::HotStuffMessage {
-    fn from(source: HotstuffMessage<TAddr>) -> Self {
+impl<TAddr: NodeAddressable> From<&HotstuffMessage<TAddr>> for proto::consensus::HotStuffMessage {
+    fn from(source: &HotstuffMessage<TAddr>) -> Self {
         let message = match source {
-            HotstuffMessage::NewView(msg) => proto::consensus::hot_stuff_message::Message::NewView(msg.into()),
-            HotstuffMessage::Proposal(msg) => proto::consensus::hot_stuff_message::Message::Proposal(msg.into()),
-            HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.into()),
+            HotstuffMessage::NewView(msg) => proto::consensus::hot_stuff_message::Message::NewView(msg.clone().into()),
+            HotstuffMessage::Proposal(msg) => {
+                proto::consensus::hot_stuff_message::Message::Proposal(msg.clone().into())
+            },
+            HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.clone().into()),
             HotstuffMessage::RequestMissingTransactions(msg) => {
-                proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.into())
+                proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.clone().into())
             },
             HotstuffMessage::RequestedTransaction(msg) => {
-                proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.into())
+                proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.clone().into())
             },
         };
         Self { message: Some(message) }
@@ -424,7 +426,7 @@ impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
 
     fn try_from(value: proto::consensus::ValidatorMetadata) -> Result<Self, Self::Error> {
         Ok(ValidatorMetadata {
-            public_key: ByteArray::from_bytes(&value.public_key)?,
+            public_key: ByteArray::from_bytes(&value.public_key).map_err(anyhow::Error::msg)?,
             vn_shard_key: value.vn_shard_key.try_into()?,
             signature: value
                 .signature

@@ -22,6 +22,7 @@ diesel::table! {
         commands -> Text,
         total_leader_fee -> BigInt,
         is_committed -> Bool,
+        is_processed -> Bool,
         is_dummy -> Bool,
         created_at -> Timestamp,
     }
@@ -157,6 +158,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    transaction_pool_status (id) {
+        id -> Integer,
+        block_id -> Text,
+        block_height -> BigInt,
+        transaction_id -> Text,
+        stage -> Text,
+        is_ready -> Bool,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     transactions (id) {
         id -> Integer,
         transaction_id -> Text,
@@ -204,6 +217,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     quorum_certificates,
     substates,
     transaction_pool,
+    transaction_pool_status,
     transactions,
     votes,
 );

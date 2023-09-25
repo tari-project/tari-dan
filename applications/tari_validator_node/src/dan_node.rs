@@ -115,7 +115,7 @@ impl DanNode {
     }
 
     async fn handle_hotstuff_event(&self, event: HotstuffEvent) -> Result<(), anyhow::Error> {
-        let HotstuffEvent::BlockCommitted { block_id } = event else {
+        let HotstuffEvent::BlockCommitted { block_id, .. } = event else {
             return Ok(());
         };
 

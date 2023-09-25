@@ -6,7 +6,10 @@ use anyhow::anyhow;
 use futures::{future, future::Either};
 use log::*;
 use tari_dan_common_types::optional::Optional;
-use tari_dan_wallet_sdk::apis::{jwt::JrpcPermission, key_manager};
+use tari_dan_wallet_sdk::{
+    apis::{jwt::JrpcPermission, key_manager},
+    network::{TransactionFinalizedResult, TransactionQueryResult},
+};
 use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
 use tari_template_lib::{args, models::Amount};
 use tari_transaction::Transaction;
@@ -133,14 +136,20 @@ pub async fn handle_submit(
         transaction.hash()
     );
     if req.is_dry_run {
-        let response = sdk
+        let response: TransactionQueryResult = sdk
             .transaction_api()
             .submit_dry_run_transaction(transaction, inputs.clone())
             .await?;
 
+        let json_result = match &response.result {
+            TransactionFinalizedResult::Pending => None,
+            TransactionFinalizedResult::Finalized { json_results, .. } => Some(json_results.clone()),
+        };
+
         Ok(TransactionSubmitResponse {
             transaction_id: response.transaction_id,
             result: response.result.into_execute_result(),
+            json_result,
             inputs,
         })
     } else {
@@ -158,6 +167,7 @@ pub async fn handle_submit(
             transaction_id,
             inputs,
             result: None,
+            json_result: None,
         })
     }
 }
@@ -227,6 +237,7 @@ pub async fn handle_get_result(
         transaction_id: req.transaction_id,
         result: transaction.finalize,
         status: transaction.status,
+        json_result: transaction.json_result,
     })
 }
 
@@ -255,6 +266,7 @@ pub async fn handle_wait_result(
             final_fee: transaction.final_fee.unwrap_or_default(),
             timed_out: false,
             transaction_failure: transaction.transaction_failure,
+            json_result: transaction.json_result,
         });
     }
 
@@ -284,6 +296,7 @@ pub async fn handle_wait_result(
                     transaction_failure: event.transaction_failure,
                     final_fee: event.final_fee,
                     timed_out: false,
+                    json_result: event.json_result,
                 });
             },
             Some(WalletEvent::TransactionInvalid(event)) if event.transaction_id == req.transaction_id => {
@@ -294,6 +307,7 @@ pub async fn handle_wait_result(
                     transaction_failure: event.transaction_failure,
                     final_fee: event.final_fee.unwrap_or_default(),
                     timed_out: false,
+                    json_result: None,
                 });
             },
             Some(_) => continue,
@@ -305,6 +319,7 @@ pub async fn handle_wait_result(
                     transaction_failure: transaction.transaction_failure,
                     final_fee: Amount::zero(),
                     timed_out: true,
+                    json_result: None,
                 });
             },
         };

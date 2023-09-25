@@ -20,7 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_p2p::DanMessage;
+use tari_consensus::messages::HotstuffMessage;
+use tari_dan_p2p::{DanMessage, Message};
 use tokio::sync::mpsc;
 
 const _LOG_TARGET: &str = "tari::validator_node::p2p::services::messaging::inbound";
@@ -28,27 +29,30 @@ const _LOG_TARGET: &str = "tari::validator_node::p2p::services::messaging::inbou
 pub struct InboundMessaging<TAddr> {
     our_node_addr: TAddr,
     inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TAddr>)>,
-    loopback_receiver: mpsc::Receiver<DanMessage<TAddr>>,
+    inbound_consensus_messages: mpsc::Receiver<(TAddr, HotstuffMessage<TAddr>)>,
+    loopback_receiver: mpsc::Receiver<Message<TAddr>>,
 }
 
 impl<TAddr: Clone> InboundMessaging<TAddr> {
     pub fn new(
         our_node_addr: TAddr,
         inbound_messages: mpsc::Receiver<(TAddr, DanMessage<TAddr>)>,
-        loopback_receiver: mpsc::Receiver<DanMessage<TAddr>>,
+        inbound_consensus_messages: mpsc::Receiver<(TAddr, HotstuffMessage<TAddr>)>,
+        loopback_receiver: mpsc::Receiver<Message<TAddr>>,
     ) -> Self {
         Self {
             our_node_addr,
             inbound_messages,
+            inbound_consensus_messages,
             loopback_receiver,
         }
     }
 
-    pub async fn next_message(&mut self) -> Option<(TAddr, DanMessage<TAddr>)> {
+    pub async fn next_message(&mut self) -> Option<(TAddr, Message<TAddr>)> {
         tokio::select! {
-           Some(msg) = self.loopback_receiver.recv() => Some((self.our_node_addr.clone(), msg)),
-           Some(msg) = self.inbound_messages.recv() => Some(msg),
-           else =>  None
+           maybe_msg = self.loopback_receiver.recv() => maybe_msg.map(|msg| (self.our_node_addr.clone(), msg)),
+           maybe_msg = self.inbound_messages.recv() => maybe_msg.map(|(from, msg)| (from, Message::Dan(msg))),
+           maybe_msg = self.inbound_consensus_messages.recv() => maybe_msg.map(|(from, msg)| (from, Message::Consensus(msg))),
         }
     }
 }

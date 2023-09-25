@@ -45,8 +45,8 @@ use std::{
 };
 
 use log::*;
+use minotari_app_utilities::identity_management::setup_node_identity;
 use serde::{Deserialize, Serialize};
-use tari_app_utilities::identity_management::setup_node_identity;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClientError};
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},

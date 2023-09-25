@@ -322,7 +322,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             let new_state = match resource_type {
                 ResourceType::Fungible => ResourceContainer::fungible(resource_address, Amount::zero()),
                 ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
-                ResourceType::Confidential => todo!("new_empty_bucket"),
+                ResourceType::Confidential => ResourceContainer::confidential(resource_address, None, Amount::zero()),
             };
             let bucket = Bucket::new(new_state);
             state.buckets.insert(bucket_id, bucket);
@@ -416,7 +416,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                 });
             }
             Ok(ResourceContainer::confidential(
-                *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                 None,
                 amount,
             ))
@@ -673,7 +673,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             .sum::<Amount>();
 
         let mut fee_resource =
-            ResourceContainer::confidential(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount::zero());
+            ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, None, Amount::zero());
 
         // Collect the fee
         let mut remaining_fees = total_fees;

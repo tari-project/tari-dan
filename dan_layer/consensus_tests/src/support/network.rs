@@ -54,6 +54,8 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: Shutdown
     let (tx_on_message, rx_on_message) = watch::channel(None);
     let num_sent_messages = Arc::new(AtomicUsize::new(0));
 
+    let offline_destinations = Arc::new(RwLock::new(Vec::new()));
+
     TestNetworkWorker {
         network_status,
         rx_new_transaction: Some(rx_new_transaction),
@@ -65,6 +67,7 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: Shutdown
         on_message: tx_on_message,
         num_sent_messages: num_sent_messages.clone(),
         transaction_store: Arc::new(Default::default()),
+        offline_destinations: offline_destinations.clone(),
         shutdown_signal,
     }
     .spawn();
@@ -72,6 +75,7 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: Shutdown
     TestNetwork {
         tx_new_transaction,
         network_status: tx_network_status,
+        offline_destinations,
         num_sent_messages,
         _on_message: rx_on_message,
     }
@@ -92,6 +96,7 @@ impl NetworkStatus {
 pub struct TestNetwork {
     tx_new_transaction: mpsc::Sender<(TestNetworkDestination, ExecutedTransaction)>,
     network_status: watch::Sender<NetworkStatus>,
+    offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     num_sent_messages: Arc<AtomicUsize>,
     _on_message: watch::Receiver<Option<HotstuffMessage<TestAddress>>>,
 }
@@ -99,6 +104,14 @@ pub struct TestNetwork {
 impl TestNetwork {
     pub fn start(&self) {
         self.network_status.send(NetworkStatus::Started).unwrap();
+    }
+
+    pub async fn go_offline(&self, destination: TestNetworkDestination) -> &Self {
+        if destination.is_bucket() {
+            unimplemented!("Sorry :/ taking a bucket offline is not yet supported in the test harness");
+        }
+        self.offline_destinations.write().await.push(destination);
+        self
     }
 
     #[allow(dead_code)]
@@ -136,6 +149,10 @@ impl TestNetworkDestination {
             TestNetworkDestination::Bucket(b) => *b == bucket,
         }
     }
+
+    pub fn is_bucket(&self) -> bool {
+        matches!(self, TestNetworkDestination::Bucket(_))
+    }
 }
 
 pub struct TestNetworkWorker {
@@ -152,6 +169,8 @@ pub struct TestNetworkWorker {
     on_message: watch::Sender<Option<HotstuffMessage<TestAddress>>>,
     num_sent_messages: Arc<AtomicUsize>,
     transaction_store: Arc<RwLock<HashMap<TransactionId, ExecutedTransaction>>>,
+
+    offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     shutdown_signal: ShutdownSignal,
 }
 
@@ -254,6 +273,11 @@ impl TestNetworkWorker {
         self.num_sent_messages
             .fetch_add(to.len(), std::sync::atomic::Ordering::Relaxed);
         for vn in to {
+            // TODO: support for taking a whole committee bucket offline
+            if vn != from && self.is_offline_destination(&vn, u32::MAX.into()).await {
+                continue;
+            }
+
             self.tx_hs_message
                 .get(&vn)
                 .unwrap()
@@ -264,15 +288,23 @@ impl TestNetworkWorker {
         self.on_message.send(Some(msg.clone())).unwrap();
     }
 
-    pub async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage<TestAddress>) {
+    async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage<TestAddress>) {
+        if from != to && self.is_offline_destination(&from, u32::MAX.into()).await {
+            return;
+        }
         self.on_message.send(Some(msg.clone())).unwrap();
         self.num_sent_messages
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
     }
 
+    async fn is_offline_destination(&self, addr: &TestAddress, bucket: ShardBucket) -> bool {
+        let lock = self.offline_destinations.read().await;
+        lock.iter().any(|d| d.is_for(addr, bucket))
+    }
+
     /// Handles transactions that come in from missing transactions
-    pub async fn handle_mempool(&mut self, from: TestAddress, msg: Transaction) {
+    async fn handle_mempool(&mut self, from: TestAddress, msg: Transaction) {
         let (_, sender, state_store) = self
             .tx_new_transactions
             .get(&from)

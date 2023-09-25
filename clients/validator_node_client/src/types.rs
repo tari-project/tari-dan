@@ -24,7 +24,7 @@ use std::ops::RangeInclusive;
 
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::PublicKey;
+use tari_common_types::{transaction::TxId, types::PublicKey};
 use tari_dan_common_types::{committee::CommitteeShard, shard_bucket::ShardBucket, Epoch, ShardId};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord},
@@ -42,8 +42,8 @@ use tari_transaction::{Transaction, TransactionId};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetIdentityResponse {
     pub node_id: String,
-    pub public_key: String,
-    pub public_address: String,
+    pub public_key: PublicKey,
+    pub public_addresses: Vec<Multiaddr>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -265,6 +265,16 @@ pub struct GetEpochManagerStatsResponse {
     pub current_block_height: u64,
     pub is_valid: bool,
     pub committee_shard: Option<CommitteeShard>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterValidatorNodeRequest {
+    pub fee_claim_public_key: PublicKey,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisterValidatorNodeResponse {
+    pub transaction_id: TxId,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

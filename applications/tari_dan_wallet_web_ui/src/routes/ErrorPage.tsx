@@ -20,39 +20,26 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useRouteError } from 'react-router-dom';
+import { useRouteError, isRouteErrorResponse } from 'react-router-dom';
 import { StyledPaper } from '../Components/StyledComponents';
 import Typography from '@mui/material/Typography';
 import Grid from '@mui/material/Grid';
 import Container from '@mui/material/Container';
 
 export default function ErrorPage() {
-  const error: any = useRouteError();
-  // remove any declaration
-  console.error(error);
+  let error: any = useRouteError();
+  console.log('Error', error);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        height: '100vh',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}
-    >
-      <Container>
-        <Grid container spacing={5}>
-          <Grid item xs={12} md={12} lg={12}>
-            <StyledPaper sx={{ textAlign: 'center' }}>
-              <Typography variant="h3">Oops!</Typography>
-              <Typography>Sorry, an unexpected error has occurred.</Typography>
-              <Typography>
-                <i>{error.statusText || error.message}</i>
-              </Typography>{' '}
-            </StyledPaper>
-          </Grid>
-        </Grid>
-      </Container>
-    </div>
+    <Grid item xs={12} md={12} lg={12}>
+      <StyledPaper sx={{ textAlign: 'center' }}>
+        <Typography variant="h3">Oops!</Typography>
+        {/* <Typography>Sorry, an unexpected error has occurred.</Typography> */}
+        <Typography>
+          {!isRouteErrorResponse(error) ? 'Invalid page' : 'Unexpected Error'}
+          <i>{error?.statusText || error?.message}</i>
+        </Typography>
+      </StyledPaper>
+    </Grid>
   );
 }

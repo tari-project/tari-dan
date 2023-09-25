@@ -166,6 +166,15 @@ where
 
         loop {
             tokio::select! {
+                biased;
+                Some((from, msg)) = self.rx_hs_message.recv() => {
+                    if let Err(e) = self.on_new_hs_message(from, msg.clone()).await {
+                        self.publish_event(HotstuffEvent::Failure { message: e.to_string() });
+                        debug!(target: LOG_TARGET, "on_new_hs_message error: {} {:?}", e, msg);
+                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
+                    }
+                },
+
                 Ok(event) = self.epoch_events.recv() => {
                     if let Err(e) = self.on_epoch_event(event).await {
                         error!(target: LOG_TARGET, "Error while processing epoch change (on_epoch_event): {}", e);
@@ -174,13 +183,6 @@ where
                 Some(msg) = self.rx_new_transactions.recv() => {
                     if let Err(e) = self.on_new_executed_transaction(msg).await {
                        error!(target: LOG_TARGET, "Error while processing new payload (on_new_executed_transaction): {}", e);
-                    }
-                },
-                Some((from, msg)) = self.rx_hs_message.recv() => {
-                    if let Err(e) = self.on_new_hs_message(from, msg.clone()).await {
-                        self.publish_event(HotstuffEvent::Failure { message: e.to_string() });
-                        debug!(target: LOG_TARGET, "on_new_hs_message error: {} {:?}", e, msg);
-                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
                     }
                 },
 
@@ -249,7 +251,7 @@ where
     }
 
     async fn on_new_executed_transaction(&mut self, transaction_id: TransactionId) -> Result<(), HotStuffError> {
-        info!(
+        debug!(
             target: LOG_TARGET,
             "🚀 Consensus READY for new transaction with id: {}",
             transaction_id
@@ -328,9 +330,10 @@ where
         let is_leader =
             self.leader_strategy
                 .is_leader_for_next_block(&self.validator_addr, &local_committee, leaf_block.height);
-        info!(
+        debug!(
             target: LOG_TARGET,
-            "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}, must_propose: {}",
+            "🔥 [on_beat] {} Is leader: {:?}, leaf_block: {}, local_committee: {}, must_propose: {}",
+            self.validator_addr,
             is_leader,
             leaf_block,
             local_committee

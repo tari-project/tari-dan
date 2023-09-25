@@ -113,12 +113,7 @@ where
                 .find_by_node_id(&source_peer)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Could not find peer with node id {}", source_peer))?;
-            logger.log_inbound_message(
-                peer.public_key.as_bytes().to_vec(),
-                msg.as_type_str(),
-                message_tag,
-                &msg,
-            );
+            logger.log_inbound_message(peer.public_key.as_bytes(), msg.as_type_str(), &message_tag, &msg);
             let mut svc = next_service.ready_oneshot().await?;
             svc.call((peer.public_key, msg)).await?;
             Ok(())

@@ -39,14 +39,13 @@ impl FromStr for CliRange<u64> {
 }
 
 fn parse_range(s: &str) -> Result<ParsedRange<'_>, anyhow::Error> {
-    let Some((start, end)) = s
-        .split_once("..") else {
+    let Some((start, end)) = s.split_once("..") else {
         // If the user enters just a value, we treat it as a V..=V range
-        return Ok(ParsedRange{
+        return Ok(ParsedRange {
             start: Some(s),
             end: Some(s),
             inclusive: true,
-        })
+        });
     };
 
     let inclusive = end.starts_with('=');

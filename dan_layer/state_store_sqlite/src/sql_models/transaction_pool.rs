@@ -45,3 +45,14 @@ impl TryFrom<TransactionPoolRecord> for consensus_models::TransactionPoolRecord 
         ))
     }
 }
+
+#[derive(Debug, Clone, Queryable)]
+pub struct TransactionPoolState {
+    pub id: i32,
+    pub block_id: String,
+    pub block_height: i64,
+    pub transaction_id: String,
+    pub stage: String,
+    pub is_ready: bool,
+    pub created_at: PrimitiveDateTime,
+}

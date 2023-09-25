@@ -23,7 +23,7 @@
 use std::net::SocketAddr;
 
 use clap::Parser;
-use tari_app_utilities::common_cli_args::CommonCliArgs;
+use minotari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::{ConfigOverrideProvider, Network};
 
 #[derive(Parser, Debug)]

@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::fmt::Display;
+
 use serde::Serialize;
 use tari_dan_common_types::Epoch;
 use tari_dan_storage::consensus_models::BlockId;
@@ -18,6 +20,20 @@ pub enum HotstuffMessage<TAddr> {
 }
 
 impl<TAddr> HotstuffMessage<TAddr> {
+    pub fn as_type_str(&self) -> &'static str {
+        match self {
+            HotstuffMessage::NewView(_) => "NewView",
+            HotstuffMessage::Proposal(_) => "Proposal",
+            HotstuffMessage::Vote(_) => "Vote",
+            HotstuffMessage::RequestMissingTransactions(_) => "RequestMissingTransactions",
+            HotstuffMessage::RequestedTransaction(_) => "RequestedTransaction",
+        }
+    }
+
+    pub fn get_message_tag(&self) -> String {
+        format!("hotstuff_{}", self.block_id())
+    }
+
     pub fn epoch(&self) -> Epoch {
         match self {
             Self::NewView(msg) => msg.high_qc.epoch(),
@@ -35,6 +51,20 @@ impl<TAddr> HotstuffMessage<TAddr> {
             Self::Vote(msg) => &msg.block_id,
             Self::RequestMissingTransactions(msg) => &msg.block_id,
             Self::RequestedTransaction(msg) => &msg.block_id,
+        }
+    }
+}
+
+impl<TAddr> Display for HotstuffMessage<TAddr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HotstuffMessage::NewView(msg) => write!(f, "NewView({})", msg.new_height),
+            HotstuffMessage::Proposal(msg) => write!(f, "Proposal({})", msg.block.height()),
+            HotstuffMessage::Vote(msg) => write!(f, "Vote({})", msg.block_id),
+            HotstuffMessage::RequestMissingTransactions(msg) => {
+                write!(f, "RequestMissingTransactions({})", msg.transactions.len())
+            },
+            HotstuffMessage::RequestedTransaction(msg) => write!(f, "RequestedTransaction({})", msg.transactions.len()),
         }
     }
 }

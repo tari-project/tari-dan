@@ -26,7 +26,8 @@ use core::ptr;
 pub use tari_template_abi::{tari_alloc, tari_free};
 
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: lol_alloc::AssumeSingleThreaded<lol_alloc::FreeListAllocator> =
+    unsafe { lol_alloc::AssumeSingleThreaded::new(lol_alloc::FreeListAllocator::new()) };
 
 #[cfg(any(feature = "call_engine_in_abi", feature = "unexpected_export_function"))]
 #[no_mangle]

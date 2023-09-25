@@ -6,7 +6,7 @@ use std::{collections::BTreeMap, str::FromStr};
 use anyhow::anyhow;
 use log::info;
 use tari_common_types::types::PublicKey;
-use tari_crypto::{keys::PublicKey as PK, ristretto::RistrettoSecretKey};
+use tari_crypto::{keys::PublicKey as PK, ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
@@ -24,7 +24,6 @@ use tari_template_lib::{
     prelude::{Amount, ComponentAddress, Metadata, NonFungibleAddress, NonFungibleId, ResourceAddress},
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
-use tari_utilities::ByteArray;
 use tari_wallet_daemon_client::types::{
     AccountNftInfo,
     GetAccountNftRequest,

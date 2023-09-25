@@ -121,53 +121,57 @@ impl SqliteMessageLog {
         }
     }
 
-    pub fn log_outbound_message<T: Serialize, V: Into<Vec<u8>>>(
+    pub fn disabled() -> Self {
+        Self { connection: None }
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        self.connection.is_some()
+    }
+
+    pub fn log_outbound_message<T: Serialize>(
         &self,
         destination_type: &str,
-        destination: V,
+        destination: &[u8],
         message_type: &str,
-        message_tag: String,
+        message_tag: &str,
         message: &T,
     ) {
         if let Some(mut conn) = self.connect() {
             let _ = diesel::insert_into(outbound_messages::table)
                 .values(NewOutboundMessage {
                     destination_type: destination_type.to_string(),
-                    destination_pubkey: destination.into(),
+                    destination_pubkey: destination.to_vec(),
                     message_type: message_type.to_string(),
                     message_json: serde_json::to_string_pretty(message).unwrap(),
-                    message_tag,
+                    message_tag: message_tag.to_string(),
                 })
                 .execute(&mut *conn)
                 .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to log outbound message: {}", e);
                 });
-        } else {
-            error!(target: LOG_TARGET, "Could not connect to database to log message");
         }
     }
 
-    pub fn log_inbound_message<T: Serialize, V: Into<Vec<u8>>>(
+    pub fn log_inbound_message<T: Serialize>(
         &self,
-        from_peer: V,
+        public_key: &[u8],
         message_type: &str,
-        message_tag: String,
+        message_tag: &str,
         message: &T,
     ) {
         if let Some(mut conn) = self.connect() {
             let _ = diesel::insert_into(inbound_messages::table)
                 .values(NewInboundMessage {
-                    from_pubkey: from_peer.into(),
+                    from_pubkey: public_key.to_vec(),
                     message_type: message_type.to_string(),
                     message_json: serde_json::to_string_pretty(message).unwrap(),
-                    message_tag,
+                    message_tag: message_tag.to_string(),
                 })
                 .execute(&mut *conn)
                 .map_err(|e| {
                     error!(target: LOG_TARGET, "Failed to log inbound message: {}", e);
                 });
-        } else {
-            error!(target: LOG_TARGET, "Could not connect to database to log message");
         }
     }
 
@@ -206,7 +210,6 @@ impl SqliteMessageLog {
                 Vec::new()
             })
         } else {
-            error!(target: LOG_TARGET, "Could not connect to database to log message");
             vec![]
         }
     }

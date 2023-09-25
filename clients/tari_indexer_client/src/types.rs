@@ -1,8 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use serde_with::{serde_as, DisplayFromStr};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
@@ -77,7 +81,15 @@ pub enum IndexerTransactionFinalizedResult {
         final_decision: Decision,
         execution_result: Option<ExecuteResult>,
         abort_details: Option<String>,
+        json_results: Vec<JsonValue>,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetIdentityResponse {
+    pub node_id: String,
+    pub public_key: PublicKey,
+    pub public_addresses: Vec<Multiaddr>,
 }
 
 #[serde_as]
@@ -122,4 +134,20 @@ pub struct NonFungibleSubstate {
     #[serde_as(as = "DisplayFromStr")]
     pub address: SubstateAddress,
     pub substate: Substate,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddPeerRequest {
+    pub public_key: PublicKey,
+    pub addresses: Vec<Multiaddr>,
+    pub wait_for_dial: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddPeerResponse {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetEpochManagerStatsResponse {
+    pub current_epoch: Epoch,
+    pub current_block_height: u64,
 }

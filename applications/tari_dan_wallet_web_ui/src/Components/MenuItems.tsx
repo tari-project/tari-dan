@@ -38,77 +38,101 @@ import {
 } from 'react-icons/io5';
 import Tooltip from '@mui/material/Tooltip';
 import Fade from '@mui/material/Fade';
-import theme from '../theme/theme';
+import ThemeSwitcher from './ThemeSwitcher';
+import Box from '@mui/material/Box';
+import { useTheme } from '@mui/material/styles';
 
-const iconStyle = {
-  height: 22,
-  width: 22,
-};
+function MainListItems() {
+  const theme = useTheme();
 
-const activeIconStyle = {
-  height: 22,
-  width: 22,
-  color: theme.palette.primary.main,
-};
+  const iconStyle = {
+    height: 22,
+    width: 22,
+  };
 
-const mainItems = [
-  {
-    title: 'Home',
-    icon: <IoHomeOutline style={iconStyle} />,
-    activeIcon: <IoHome style={activeIconStyle} />,
-    link: '/',
-  },
-  {
-    title: 'Accounts',
-    icon: <IoBarChartOutline style={iconStyle} />,
-    activeIcon: <IoBarChart style={activeIconStyle} />,
-    link: '/accounts',
-  },
-  {
-    title: 'Keys',
-    icon: <IoKeyOutline style={iconStyle} />,
-    activeIcon: <IoKey style={activeIconStyle} />,
-    link: 'keys',
-  },
-  {
-    title: 'Transactions',
-    icon: <IoWalletOutline style={iconStyle} />,
-    activeIcon: <IoWallet style={activeIconStyle} />,
-    link: 'transactions',
-  },
-  {
-    title: 'Access Tokens',
-    icon: <IoTicketOutline style={iconStyle} />,
-    activeIcon: <IoTicket style={activeIconStyle} />,
-    link: 'access-tokens',
-  },
-];
+  const activeIconStyle = {
+    height: 22,
+    width: 22,
+    color: theme.palette.primary.main,
+  };
 
-const MainMenu = mainItems.map(({ title, icon, activeIcon, link }) => {
+  const mainItems = [
+    {
+      title: 'Home',
+      icon: <IoHomeOutline style={iconStyle} />,
+      activeIcon: <IoHome style={activeIconStyle} />,
+      link: '/',
+    },
+    {
+      title: 'Accounts',
+      icon: <IoBarChartOutline style={iconStyle} />,
+      activeIcon: <IoBarChart style={activeIconStyle} />,
+      link: '/accounts',
+    },
+    {
+      title: 'Keys',
+      icon: <IoKeyOutline style={iconStyle} />,
+      activeIcon: <IoKey style={activeIconStyle} />,
+      link: 'keys',
+    },
+    {
+      title: 'Transactions',
+      icon: <IoWalletOutline style={iconStyle} />,
+      activeIcon: <IoWallet style={activeIconStyle} />,
+      link: 'transactions',
+    },
+    {
+      title: 'Access Tokens',
+      icon: <IoTicketOutline style={iconStyle} />,
+      activeIcon: <IoTicket style={activeIconStyle} />,
+      link: 'access-tokens',
+    },
+  ];
+
   return (
-    <NavLink to={link} key={title} style={{ textDecoration: 'none' }}>
-      {({ isActive }) => (
-        <ListItemButton
-          sx={{
-            paddingLeft: '22px',
-            paddingRight: '22px',
-          }}
-          disableRipple
-        >
-          <Tooltip
-            TransitionComponent={Fade}
-            TransitionProps={{ timeout: 300 }}
-            title={title}
-            followCursor={true}
-            placement="right"
+    <Box
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        height: 'calc(100vh - 84px)',
+      }}
+    >
+      <Box>
+        {mainItems.map(({ title, icon, activeIcon, link }) => (
+          <NavLink
+            to={link}
+            key={title}
+            style={{
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
           >
-            <ListItemIcon>{isActive ? activeIcon : icon}</ListItemIcon>
-          </Tooltip>
-          <ListItemText primary={title} />
-        </ListItemButton>
-      )}
-    </NavLink>
+            {({ isActive }) => (
+              <ListItemButton
+                sx={{
+                  paddingLeft: '22px',
+                  paddingRight: '22px',
+                }}
+              >
+                <Tooltip
+                  TransitionComponent={Fade}
+                  TransitionProps={{ timeout: 300 }}
+                  title={title}
+                  followCursor={true}
+                  placement="right"
+                >
+                  <ListItemIcon>{isActive ? activeIcon : icon}</ListItemIcon>
+                </Tooltip>
+                <ListItemText secondary={title} />
+              </ListItemButton>
+            )}
+          </NavLink>
+        ))}
+      </Box>
+      <ThemeSwitcher />
+    </Box>
   );
-});
+}
 
-export const mainListItems = <>{MainMenu}</>;
+export default MainListItems;

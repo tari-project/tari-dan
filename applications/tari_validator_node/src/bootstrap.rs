@@ -31,8 +31,8 @@ use std::{
 use anyhow::anyhow;
 use futures::{future, FutureExt};
 use log::info;
+use minotari_app_utilities::{identity_management, identity_management::load_from_json};
 use serde::Serialize;
-use tari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
@@ -130,13 +130,13 @@ pub async fn spawn_services(
     }));
 
     // Initialize comms
-    let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
+    let (comms, message_channels) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
 
     // Spawn messaging
     let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
     let (outbound_messaging, join_handle) = messaging::spawn(
         node_identity.public_key().clone(),
-        message_channel,
+        message_channels,
         message_senders.clone(),
     );
     handles.push(join_handle);
@@ -179,7 +179,7 @@ pub async fn spawn_services(
     handles.push(join_handle);
 
     // Template manager
-    let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
+    let template_manager = TemplateManager::initialize(global_db.clone(), config.validator_node.templates.clone())?;
     let (template_manager_service, join_handle) =
         template_manager::implementation::spawn(template_manager.clone(), shutdown.clone());
     handles.push(join_handle);
@@ -370,7 +370,7 @@ where
     TTx::Addr: NodeAddressable + Serialize,
 {
     let genesis_block = Block::<TTx::Addr>::genesis();
-    let address = SubstateAddress::Resource(*PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         // Create the resource for public identity
@@ -392,7 +392,7 @@ where
         .create(tx)?;
     }
 
-    let address = SubstateAddress::Resource(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         SubstateRecord {

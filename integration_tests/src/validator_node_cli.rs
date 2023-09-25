@@ -16,9 +16,8 @@ use tari_validator_node_cli::{
     key_manager::KeyManager,
     versioned_substate_address::VersionedSubstateAddress,
 };
-use tari_validator_node_client::{types::SubmitTransactionResponse, ValidatorNodeClient};
+use tari_validator_node_client::types::SubmitTransactionResponse;
 
-use super::validator_node::get_vn_client;
 use crate::{logging::get_base_dir_for_scenario, TariWorld};
 
 fn get_key_manager(world: &mut TariWorld) -> KeyManager {
@@ -73,7 +72,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         new_non_fungible_outputs: vec![],
         new_non_fungible_index_outputs: vec![],
     };
-    let mut client = get_validator_node_client(world, validator_node_name).await;
+    let mut client = world.get_validator_node(&validator_node_name).get_client();
     let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
         .await
         .unwrap();
@@ -133,7 +132,7 @@ pub async fn create_component(
             new_non_fungible_index_outputs: vec![],
         },
     };
-    let mut client = get_validator_node_client(world, vn_name).await;
+    let mut client = world.get_validator_node(&vn_name).get_client();
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
     if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
@@ -270,7 +269,7 @@ pub async fn call_method(
             new_non_fungible_index_outputs: vec![],
         },
     };
-    let mut client = get_validator_node_client(world, vn_name).await;
+    let mut client = world.get_validator_node(&vn_name).get_client();
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
     if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
@@ -315,7 +314,7 @@ pub async fn submit_manifest(
     let instructions = parse_manifest(&manifest_content, globals).unwrap();
 
     // submit the instructions to the vn
-    let mut client = get_validator_node_client(world, vn_name).await;
+    let mut client = world.get_validator_node(&vn_name).get_client();
     let data_dir = get_cli_data_dir(world);
 
     // Supply the inputs explicitly. If this is empty, the internal component manager will attempt to supply the correct
@@ -382,11 +381,6 @@ pub async fn submit_manifest(
         outputs_name,
         resp.dry_run_result.unwrap().finalize.result.accept().unwrap(),
     );
-}
-
-async fn get_validator_node_client(world: &TariWorld, validator_node_name: String) -> ValidatorNodeClient {
-    let port = world.validator_nodes.get(&validator_node_name).unwrap().json_rpc_port;
-    get_vn_client(port)
 }
 
 pub(crate) fn get_cli_data_dir(world: &mut TariWorld) -> PathBuf {

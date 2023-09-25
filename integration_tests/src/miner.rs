@@ -22,7 +22,7 @@
 
 use std::time::Duration;
 
-use tari_app_grpc::{
+use minotari_app_grpc::{
     authentication::ClientAuthenticationInterceptor,
     tari_rpc::{
         pow_algo::PowAlgos,
@@ -37,7 +37,7 @@ use tari_app_grpc::{
         TransactionOutput,
     },
 };
-use tari_base_node_grpc_client::BaseNodeGrpcClient;
+use minotari_node_grpc_client::BaseNodeGrpcClient;
 use tonic::codegen::InterceptedService;
 
 use crate::TariWorld;
