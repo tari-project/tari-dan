@@ -205,6 +205,20 @@ async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
 
     // check that the vn's public key is in the list of registered vns
     assert!(vns.iter().any(|vn| vn.public_key == identity.public_key));
+
+    let mut count = 0;
+    loop {
+        // wait for the validator to pick up the registration
+        let stats = client.get_epoch_manager_stats().await.unwrap();
+        if stats.current_block_height >= height || stats.is_valid {
+            break;
+        }
+        if count > 10 {
+            panic!("Timed out waiting for validator node to pick up registration");
+        }
+        count += 1;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 }
 
 #[then(expr = "the template \"{word}\" is listed as registered by the validator node {word}")]

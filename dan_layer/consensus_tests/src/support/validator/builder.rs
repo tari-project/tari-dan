@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_consensus::hotstuff::HotstuffWorker;
+use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
 use tari_dan_common_types::{shard_bucket::ShardBucket, ShardId};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_shutdown::ShutdownSignal;
@@ -84,13 +84,13 @@ impl ValidatorBuilder {
         let (tx_events, _) = broadcast::channel(100);
         let (tx_epoch_events, rx_epoch_events) = broadcast::channel(1);
 
+        let epoch_manager = self.epoch_manager.clone_for(self.address.clone(), self.shard);
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address.clone(),
             rx_new_transactions,
             rx_hs_message,
             store.clone(),
-            rx_epoch_events,
-            self.epoch_manager.clone_for(self.address.clone(), self.shard),
+            epoch_manager.clone(),
             self.leader_strategy,
             signing_service,
             noop_state_manager.clone(),
@@ -99,11 +99,17 @@ impl ValidatorBuilder {
             tx_leader,
             tx_events.clone(),
             tx_mempool,
-            shutdown_signal,
+            shutdown_signal.clone(),
         );
-        let handle = tokio::spawn(async move {
-            worker.run().await.unwrap();
-        });
+
+        let context = ConsensusWorkerContext {
+            epoch_manager,
+            epoch_events: rx_epoch_events,
+            hotstuff: worker,
+        };
+
+        let mut worker = ConsensusWorker::new(shutdown_signal);
+        let handle = tokio::spawn(async move { worker.run(context).await });
 
         let channels = ValidatorChannels {
             address: self.address.clone(),
