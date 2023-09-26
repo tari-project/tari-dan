@@ -31,9 +31,8 @@ import List from '@mui/material/List';
 import IconButton from '@mui/material/IconButton';
 import MenuOpenOutlinedIcon from '@mui/icons-material/MenuOpenOutlined';
 import MenuOutlinedIcon from '@mui/icons-material/MenuOutlined';
-import { mainListItems } from '../Components/MenuItems';
+import MenuItems from '../Components/MenuItems';
 import { ThemeProvider } from '@mui/material';
-import theme from './theme';
 import { Outlet, Link } from 'react-router-dom';
 import Logo from '../assets/Logo';
 import Container from '@mui/material/Container';
@@ -41,6 +40,10 @@ import ConnectorLink from '../Components/ConnectorLink';
 import Breadcrumbs from '../Components/Breadcrumbs';
 import { breadcrumbRoutes } from '../App';
 import Grid from '@mui/material/Grid';
+import useThemeStore from '../store/themeStore';
+import { createTheme } from '@mui/material/styles';
+import { light, dark, componentSettings } from './tokens';
+import { lightAlpha } from './colors';
 
 const drawerWidth = 300;
 
@@ -72,7 +75,7 @@ const Drawer = styled(MuiDrawer, {
   '& .MuiDrawer-paper': {
     position: 'relative',
     whiteSpace: 'nowrap',
-    borderRight: '1px solid #F5F5F5',
+    borderRight: `1px solid ${lightAlpha[5]}`,
     boxShadow: '10px 14px 28px rgb(35 11 73 / 5%)',
     width: drawerWidth,
     transition: theme.transitions.create('width', {
@@ -96,9 +99,20 @@ const Drawer = styled(MuiDrawer, {
 
 export default function Layout() {
   const [open, setOpen] = useState(false);
+  const { themeMode } = useThemeStore();
   const toggleDrawer = () => {
     setOpen(!open);
   };
+
+  const themeOptions = (mode: string) => {
+    return mode === 'light' ? light : dark;
+  };
+
+  const theme = createTheme({
+    ...themeOptions(themeMode),
+    ...componentSettings,
+  });
+
   return (
     <ThemeProvider theme={theme}>
       <Box sx={{ display: 'flex' }}>
@@ -106,16 +120,15 @@ export default function Layout() {
         <AppBar
           position="absolute"
           open={open}
-          color="secondary"
           elevation={0}
           sx={{
-            backgroundColor: '#FFF',
+            backgroundColor: theme.palette.background.paper,
             boxShadow: '10px 14px 28px rgb(35 11 73 / 5%)',
           }}
         >
           <Toolbar
             sx={{
-              pr: '24px', // keep right padding when drawer closed
+              pr: '24px',
             }}
           >
             <IconButton
@@ -131,25 +144,24 @@ export default function Layout() {
             >
               <MenuOutlinedIcon />
             </IconButton>
-            <div
+            <Box
               style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 width: '100%',
-                alignContent: 'center',
+                alignItems: 'center',
               }}
             >
-              <Link to="/">
-                <Logo />
-              </Link>
-              <div
+              <Link
+                to="/"
                 style={{
-                  marginTop: '2px',
+                  paddingTop: theme.spacing(1),
                 }}
               >
-                <ConnectorLink />
-              </div>
-            </div>
+                <Logo fill={theme.palette.text.primary} />
+              </Link>
+              <ConnectorLink />
+            </Box>
           </Toolbar>
         </AppBar>
         <Drawer variant="permanent" open={open}>
@@ -165,15 +177,13 @@ export default function Layout() {
               <MenuOpenOutlinedIcon />
             </IconButton>
           </Toolbar>
-          <List component="nav">{mainListItems}</List>
+          <List component="nav">
+            <MenuItems />
+          </List>
         </Drawer>
         <Box
           component="main"
           sx={{
-            backgroundColor: (theme) =>
-              theme.palette.mode === 'light'
-                ? theme.palette.grey[100]
-                : theme.palette.grey[900],
             flexGrow: 1,
             height: '100vh',
             overflow: 'auto',
@@ -194,7 +204,7 @@ export default function Layout() {
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
-                    borderBottom: `1px solid #EAEAEA`,
+                    borderBottom: `1px solid ${theme.palette.divider}`,
                   }}
                 >
                   <Breadcrumbs items={breadcrumbRoutes} />

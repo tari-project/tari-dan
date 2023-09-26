@@ -11,7 +11,7 @@
 .dialog-actions {
   display: flex;
   flex-direction: row;
-  gap: 1rem;
+  gap: 0.5rem;
   align-self: flex-end;
 }
 

@@ -31,7 +31,7 @@ import MuiAccordionDetails from '@mui/material/AccordionDetails';
 export const Accordion = styled((props: AccordionProps) => (
   <MuiAccordion disableGutters elevation={0} square {...props} />
 ))(({ theme }) => ({
-  border: `2px solid #ffffff`,
+  border: `2px solid ${theme.palette.background.paper}`,
   '&:not(:last-child)': {
     borderBottom: 0,
   },
@@ -46,10 +46,7 @@ export const AccordionSummary = styled((props: AccordionSummaryProps) => (
     {...props}
   />
 ))(({ theme }) => ({
-  backgroundColor:
-    theme.palette.mode === 'dark'
-      ? 'rgba(255, 255, 255, .05)'
-      : 'rgba(0, 0, 0, .03)',
+  backgroundColor: theme.palette.divider,
   flexDirection: 'row-reverse',
   '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': {
     transform: 'rotate(90deg)',
