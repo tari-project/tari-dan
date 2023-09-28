@@ -320,7 +320,7 @@ where TConsensusSpec: ConsensusSpec
             .with_write_tx(|tx| self.on_receive_foreign_block(tx, &block, &committee_shard))?;
 
         // We could have ready transactions at this point, so if we're the leader for the next block we can propose
-        self.pacemaker.beat().await?;
+        self.pacemaker.beat();
 
         Ok(())
     }
@@ -1047,7 +1047,8 @@ where TConsensusSpec: ConsensusSpec
 
         // Check that details included in the justify match previously added blocks
         let Some(justify_block) = candidate_block.justify().get_block(tx.deref_mut()).optional()? else {
-            // TODO: This may mean that we have to catch up
+            // This will trigger a sync
+            // TODO: I think we should maintain our current block height (view number) and check if high_qc > tip_block.
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: from.to_string(),
                 hash: *candidate_block.id(),

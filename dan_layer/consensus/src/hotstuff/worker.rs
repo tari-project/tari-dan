@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::DerefMut;
+use std::{
+    fmt::{Debug, Formatter},
+    ops::DerefMut,
+};
 
 use log::*;
 use tari_dan_common_types::{Epoch, NodeHeight};
@@ -10,13 +13,10 @@ use tari_dan_storage::{
     StateStore,
     StateStoreWriteTransaction,
 };
-use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
+use tari_epoch_manager::EpochManagerReader;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::{Transaction, TransactionId};
-use tokio::{
-    sync::{broadcast, mpsc},
-    task::JoinHandle,
-};
+use tokio::sync::{broadcast, mpsc};
 
 use super::on_receive_requested_transactions::OnReceiveRequestedTransactions;
 use crate::{
@@ -60,9 +60,6 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
 
     epoch_manager: TConsensusSpec::EpochManager,
-    epoch_events: broadcast::Receiver<EpochManagerEvent>,
-    latest_epoch: Option<Epoch>,
-    is_epoch_synced: bool,
 
     pacemaker: Option<PaceMaker>,
     pacemaker_handle: PaceMakerHandle,
@@ -82,7 +79,6 @@ where
         rx_new_transactions: mpsc::Receiver<TransactionId>,
         rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         state_store: TConsensusSpec::StateStore,
-        epoch_events: broadcast::Receiver<EpochManagerEvent>,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         signing_service: TConsensusSpec::VoteSignatureService,
@@ -139,30 +135,49 @@ where
                 transaction_pool.clone(),
                 tx_broadcast,
             ),
-            // on_leader_timeout: OnLeaderTimeout::qnew(shutdown.clone()),
+
             state_store,
             leader_strategy,
             epoch_manager,
-            epoch_events,
-            latest_epoch: None,
-            is_epoch_synced: false,
             transaction_pool,
             pacemaker_handle: pacemaker.clone_handle(),
             pacemaker: Some(pacemaker),
             shutdown,
         }
     }
+}
+impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
+where TConsensusSpec: ConsensusSpec
+{
+    pub async fn start(&mut self) -> Result<(), HotStuffError> {
+        self.create_genesis_block_if_required(Epoch(0))?;
+        let (leaf_block, high_qc) = self
+            .state_store
+            .with_read_tx(|tx| Ok::<_, HotStuffError>((LeafBlock::get(tx)?, HighQc::get(tx)?)))?;
+        info!(
+            target: LOG_TARGET,
+            "⏰ Pacemaker starting leaf_block: {}, high_qc: {}",
+            leaf_block,
+            high_qc
+        );
 
-    pub fn spawn(self) -> JoinHandle<Result<(), anyhow::Error>> {
-        tokio::spawn(async move {
-            self.run().await?;
-            Ok(())
-        })
+        self.pacemaker_handle
+            .start(leaf_block.height(), high_qc.block_height())
+            .await?;
+
+        self.run().await?;
+        Ok(())
     }
 
-    pub async fn run(mut self) -> Result<(), HotStuffError> {
-        self.create_genesis_block_if_required(Epoch(0))?;
-        let (mut on_beat, mut on_force_beat, mut on_leader_timeout) = self.pacemaker.take().map(|p| p.spawn()).unwrap();
+    async fn run(&mut self) -> Result<(), HotStuffError> {
+        // Spawn pacemaker if not spawned already
+        if let Some(pm) = self.pacemaker.take() {
+            pm.spawn();
+        }
+
+        let mut on_beat = self.pacemaker_handle.get_on_beat();
+        let mut on_force_beat = self.pacemaker_handle.get_on_force_beat();
+        let mut on_leader_timeout = self.pacemaker_handle.get_on_leader_timeout();
 
         loop {
             tokio::select! {
@@ -172,14 +187,14 @@ where
                         self.publish_event(HotstuffEvent::Failure { message: e.to_string() });
                         debug!(target: LOG_TARGET, "on_new_hs_message error: {} {:?}", e, msg);
                         error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
+                        if let Err(e) = self.pacemaker_handle.stop().await {
+                            error!(target: LOG_TARGET, "Error while stopping pacemaker: {}", e);
+                        }
+                        // Failures here will be handled in the state machine
+                        return Err(e);
                     }
                 },
 
-                Ok(event) = self.epoch_events.recv() => {
-                    if let Err(e) = self.on_epoch_event(event).await {
-                        error!(target: LOG_TARGET, "Error while processing epoch change (on_epoch_event): {}", e);
-                    }
-                },
                 Some(msg) = self.rx_new_transactions.recv() => {
                     if let Err(e) = self.on_new_executed_transaction(msg).await {
                        error!(target: LOG_TARGET, "Error while processing new payload (on_new_executed_transaction): {}", e);
@@ -201,11 +216,7 @@ where
                         error!(target: LOG_TARGET, "Error (on_leader_timeout): {}", e);
                     }
                 },
-                // _ = self.on_leader_timeout.o() => {
-                //     if let Err(e) = self.on_leader_timeout().await {
-                //         error!(target: LOG_TARGET, "Error (on_leader_timeout): {}", e);
-                //     }
-                // }
+
                 _ = self.shutdown.wait() => {
                     info!(target: LOG_TARGET, "💤 Shutting down");
                     break;
@@ -213,39 +224,7 @@ where
             }
         }
 
-        Ok(())
-    }
-
-    async fn on_epoch_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
-        match event {
-            EpochManagerEvent::EpochChanged(epoch) => {
-                self.is_epoch_synced = true;
-                // TODO: merge chain(s) from previous epoch?
-
-                if self
-                    .epoch_manager
-                    .is_local_validator_registered_for_epoch(epoch)
-                    .await?
-                {
-                    let (leaf_block, high_qc) = self
-                        .state_store
-                        .with_read_tx(|tx| Ok::<_, HotStuffError>((LeafBlock::get(tx)?, HighQc::get(tx)?)))?;
-                    info!(
-                        target: LOG_TARGET,
-                        "⏰ Pacemaker starting for epoch {}, leaf_block: {}, high_qc: {}",
-                        epoch,
-                        leaf_block,
-                        high_qc
-                    );
-                    self.pacemaker_handle
-                        .start(leaf_block.height(), high_qc.block_height())
-                        .await?;
-                } else {
-                    self.pacemaker_handle.stop().await?;
-                }
-            },
-            EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
-        }
+        self.pacemaker_handle.stop().await?;
 
         Ok(())
     }
@@ -262,17 +241,11 @@ where
         if let Some(block_id) = maybe_block_id {
             self.on_receive_proposal.reprocess_block(&block_id).await?;
         }
-        self.pacemaker_handle.beat().await?;
+        self.pacemaker_handle.beat();
         Ok(())
     }
 
     async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
-        // TODO: perhaps the leader should not be increasing the timeout
-        if !self.is_epoch_synced {
-            warn!(target: LOG_TARGET, "Waiting for epoch change before worrying about leader timeout");
-            return Ok(());
-        }
-
         let epoch = self.epoch_manager.current_epoch().await?;
         // Is the VN registered?
         if !self.epoch_manager.is_epoch_active(epoch).await? {
@@ -291,13 +264,6 @@ where
     }
 
     async fn on_beat(&mut self) -> Result<(), HotStuffError> {
-        // TODO: This is a temporary hack to ensure that the VN has synced the blockchain before proposing
-        if !self.is_epoch_synced {
-            warn!(target: LOG_TARGET, "Waiting for epoch change before proposing");
-            return Ok(());
-        }
-
-        // Are there any transactions in the pools?
         if !self
             .state_store
             .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
@@ -312,12 +278,6 @@ where
     }
 
     async fn propose_if_leader(&mut self, leaf_block: Option<LeafBlock>) -> Result<(), HotStuffError> {
-        // TODO: This is a temporary hack to ensure that the VN has synced the blockchain before proposing
-        if !self.is_epoch_synced {
-            warn!(target: LOG_TARGET, "Waiting for epoch change before proposing");
-            return Ok(());
-        }
-
         let must_propose = leaf_block.is_some();
         let leaf_block = match leaf_block {
             Some(leaf_block) => leaf_block,
@@ -385,11 +345,6 @@ where
     }
 
     fn create_genesis_block_if_required(&mut self, epoch: Epoch) -> Result<(), HotStuffError> {
-        // If we've already created the genesis block for this epoch then we can return early
-        if self.latest_epoch.map(|e| e >= epoch).unwrap_or(false) {
-            return Ok(());
-        }
-
         let mut tx = self.state_store.create_write_tx()?;
 
         // The parent for all genesis blocks refer to this zero block
@@ -424,13 +379,23 @@ where
             epoch
         );
 
-        self.latest_epoch = Some(epoch);
-
         Ok(())
     }
 
     fn publish_event(&self, event: HotstuffEvent) {
         let _ignore = self.tx_events.send(event);
+    }
+}
+
+impl<TConsensusSpec: ConsensusSpec> Debug for HotstuffWorker<TConsensusSpec> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HotstuffWorker")
+            .field("validator_addr", &self.validator_addr)
+            .field("epoch_manager", &"EpochManager")
+            .field("pacemaker_handle", &self.pacemaker_handle)
+            .field("pacemaker", &"Pacemaker")
+            .field("shutdown", &self.shutdown)
+            .finish()
     }
 }
 

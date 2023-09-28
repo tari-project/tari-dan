@@ -197,7 +197,7 @@ where TConsensusSpec: ConsensusSpec
             update_high_qc(&mut tx, &qc)?;
             tx.commit()?;
         }
-        self.on_beat.beat().await?;
+        self.on_beat.beat();
 
         Ok(())
     }

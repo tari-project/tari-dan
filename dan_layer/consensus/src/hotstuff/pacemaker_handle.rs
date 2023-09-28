@@ -5,15 +5,12 @@ use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::consensus_models::LeafBlock;
 use tokio::sync::mpsc;
 
-use crate::hotstuff::HotStuffError;
+use crate::hotstuff::{on_beat::OnBeat, on_force_beat::OnForceBeat, on_leader_timeout::OnLeaderTimeout, HotStuffError};
 
 pub enum PacemakerRequest {
     ResetLeaderTimeout {
         last_seen_height: NodeHeight,
         high_qc_height: NodeHeight,
-    },
-    TriggerBeat {
-        parent_block: Option<LeafBlock>,
     },
     Start {
         current_height: NodeHeight,
@@ -25,11 +22,24 @@ pub enum PacemakerRequest {
 #[derive(Debug, Clone)]
 pub struct PaceMakerHandle {
     sender: mpsc::Sender<PacemakerRequest>,
+    on_beat: OnBeat,
+    on_force_beat: OnForceBeat,
+    on_leader_timeout: OnLeaderTimeout,
 }
 
 impl PaceMakerHandle {
-    pub fn new(sender: mpsc::Sender<PacemakerRequest>) -> Self {
-        Self { sender }
+    pub fn new(
+        sender: mpsc::Sender<PacemakerRequest>,
+        on_beat: OnBeat,
+        on_force_beat: OnForceBeat,
+        on_leader_timeout: OnLeaderTimeout,
+    ) -> Self {
+        Self {
+            sender,
+            on_beat,
+            on_force_beat,
+            on_leader_timeout,
+        }
     }
 
     /// Start the pacemaker if it hasn't already been started. If it has, this is a no-op
@@ -52,21 +62,25 @@ impl PaceMakerHandle {
     }
 
     /// Signal the pacemaker trigger a beat. If the pacemaker has not been started, this is a no-op
-    pub async fn beat(&self) -> Result<(), HotStuffError> {
-        self.sender
-            .send(PacemakerRequest::TriggerBeat { parent_block: None })
-            .await
-            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    pub fn beat(&self) {
+        self.on_beat.beat();
     }
 
     /// Signal the pacemaker trigger a forced beat. If the pacemaker has not been started, this is a no-op
-    pub async fn force_beat(&self, parent_block: LeafBlock) -> Result<(), HotStuffError> {
-        self.sender
-            .send(PacemakerRequest::TriggerBeat {
-                parent_block: Some(parent_block),
-            })
-            .await
-            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    pub fn force_beat(&self, parent_block: LeafBlock) {
+        self.on_force_beat.beat(Some(parent_block));
+    }
+
+    pub fn get_on_beat(&self) -> OnBeat {
+        self.on_beat.clone()
+    }
+
+    pub fn get_on_force_beat(&self) -> OnForceBeat {
+        self.on_force_beat.clone()
+    }
+
+    pub fn get_on_leader_timeout(&self) -> OnLeaderTimeout {
+        self.on_leader_timeout.clone()
     }
 
     /// Reset the leader timeout. This should be called when a valid leader proposal is received.
