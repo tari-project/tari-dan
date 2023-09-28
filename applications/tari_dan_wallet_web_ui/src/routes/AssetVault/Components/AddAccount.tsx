@@ -45,9 +45,6 @@ function AddAccount({
   });
   const { mutate: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
-    accountFormState.signingKeyIndex
-      ? +accountFormState.signingKeyIndex
-      : undefined,
     undefined,
     accountFormState.fee ? +accountFormState.fee : undefined,
     false

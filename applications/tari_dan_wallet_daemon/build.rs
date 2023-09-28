@@ -34,13 +34,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     {
         println!("cargo:warning='npm ci' error : {:?}", error);
     }
-    if let Err(error) = Command::new(npm)
+    match Command::new(npm)
         .args(["run", "build"])
         .current_dir("../tari_dan_wallet_web_ui")
         .status()
     {
-        println!("cargo:warning='npm run build' error : {:?}", error);
-        println!("cargo:warning=The web ui will not be included!");
+        Ok(s) => {
+            if !s.success() || s.code().unwrap_or(0) != 0 {
+                println!("cargo:warning='npm run build' failed!");
+                println!("cargo:warning=The web ui will not be included!");
+                panic!("npm run build failed");
+            }
+        },
+        Err(error) => {
+            println!("cargo:warning='npm run build' error : {:?}", error);
+            println!("cargo:warning=The web ui will not be included!");
+        },
     }
     Ok(())
 }

@@ -121,11 +121,8 @@ function Accounts() {
 
   const { mutate: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
-    accountFormState.signingKeyIndex
-      ? +accountFormState.signingKeyIndex
-      : undefined,
+      undefined,
     undefined,
-    accountFormState.fee ? +accountFormState.fee : undefined,
     false
   );
 
@@ -213,20 +210,6 @@ function Accounts() {
                 name="accountName"
                 label="Account Name"
                 value={accountFormState.accountName}
-                onChange={onAccountChange}
-                style={{ flexGrow: 1 }}
-              />
-              <TextField
-                name="signingKeyIndex"
-                label="Signing Key Index"
-                value={accountFormState.signingKeyIndex}
-                onChange={onAccountChange}
-                style={{ flexGrow: 1 }}
-              />
-              <TextField
-                name="fee"
-                label="Fee"
-                value={accountFormState.fee}
                 onChange={onAccountChange}
                 style={{ flexGrow: 1 }}
               />
