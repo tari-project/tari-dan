@@ -15,16 +15,10 @@ name = "ciborium"
 version = "0.2.1"
 source = "git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef#114614d2a61102eb2321c68e53799d1e6f087aef"
 dependencies = [
- "ciborium-io 0.2.1 (git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef)",
+ "ciborium-io",
  "ciborium-ll",
  "serde",
 ]
-
-[[package]]
-name = "ciborium-io"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdf919175532b369853f5d5e20b26b43112613fd6fe7aee757e35f7a44642656"
 
 [[package]]
 name = "ciborium-io"
@@ -36,7 +30,7 @@ name = "ciborium-ll"
 version = "0.2.1"
 source = "git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef#114614d2a61102eb2321c68e53799d1e6f087aef"
 dependencies = [
- "ciborium-io 0.2.1 (git+https://github.com/enarx/ciborium.git?rev=114614d2a61102eb2321c68e53799d1e6f087aef)",
+ "ciborium-io",
  "half",
 ]
 
@@ -115,7 +109,7 @@ name = "tari_bor"
 version = "0.50.0-pre.0"
 dependencies = [
  "ciborium",
- "ciborium-io 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciborium-io",
  "serde",
 ]
 

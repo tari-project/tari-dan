@@ -21,6 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod service_impl;
+mod sync_task;
 
 pub use service_impl::ValidatorNodeRpcServiceImpl;
 use tari_common_types::types::PublicKey;

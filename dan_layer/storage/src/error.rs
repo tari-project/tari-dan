@@ -20,24 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::io;
-
 use tari_common_types::types::FixedHashSizeError;
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_utilities::ByteArrayError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
     #[error("Could not connect to storage:{reason}")]
     ConnectionError { reason: String },
-    #[error("IO Error: {0}")]
-    Io(#[from] io::Error),
     #[error("Query error:{reason}")]
     QueryError { reason: String },
     #[error("Migration error: {reason}")]
     MigrationError { reason: String },
-    #[error("Invalid unit of work tracker type")]
-    InvalidUnitOfWorkTrackerType,
     #[error("Not found: item: {item}, key: {key}")]
     NotFound { item: String, key: String },
     #[error("Not found in operation {operation}: {source}")]
@@ -63,15 +56,10 @@ pub enum StorageError {
     FixedHashSizeError(#[from] FixedHashSizeError),
     #[error("Invalid integer cast")]
     InvalidIntegerCast,
-    #[error("Invalid ByteArray conversion: `{0}`")]
-    InvalidByteArrayConversion(#[from] ByteArrayError),
-    #[error("Invalid type cast: {reason}")]
-    InvalidTypeCasting { reason: String },
-
+    #[error("Data inconsistency: {details}")]
+    DataInconsistency { details: String },
     #[error("General storage error: {details}")]
     General { details: String },
-    #[error("Error converting substate type: {substate_type}")]
-    InvalidSubStateType { substate_type: String },
 }
 
 impl IsNotFoundError for StorageError {

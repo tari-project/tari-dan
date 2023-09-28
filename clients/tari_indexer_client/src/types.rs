@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use serde_with::{serde_as, DisplayFromStr};
 use tari_common_types::types::PublicKey;
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
@@ -84,6 +85,13 @@ pub enum IndexerTransactionFinalizedResult {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetIdentityResponse {
+    pub node_id: String,
+    pub public_key: PublicKey,
+    pub public_addresses: Vec<Multiaddr>,
+}
+
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddAddressRequest {
@@ -137,3 +145,9 @@ pub struct AddPeerRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddPeerResponse {}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetEpochManagerStatsResponse {
+    pub current_epoch: Epoch,
+    pub current_block_height: u64,
+}

@@ -20,50 +20,42 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect } from 'react';
-import { getAllTokens, authRevokeToken } from '../../../utils/json_rpc';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogTitle from '@mui/material/DialogTitle';
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import {
+  Fade,
+  List,
+  ListItem,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
-  TableRow,
   TablePagination,
-  CircularProgress,
-  List,
-  ListItem,
-  Fade,
-  Alert,
+  TableRow,
 } from '@mui/material';
-import theme from '../../../theme';
-import { shortenString } from '../../../utils/helpers';
-import CopyToClipboard from '../../../Components/CopyToClipboard';
-import { IoCloseCircleOutline } from 'react-icons/io5';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import Button from '@mui/material/Button';
 import Collapse from '@mui/material/Collapse';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
+import IconButton from '@mui/material/IconButton';
+import { useState } from 'react';
+import { IoCloseCircleOutline } from 'react-icons/io5';
+import CopyToClipboard from '../../../Components/CopyToClipboard';
+import FetchStatusCheck from '../../../Components/FetchStatusCheck';
 import {
-  DataTableCell,
-  CodeBlock,
   AccordionIconButton,
+  CodeBlock,
+  DataTableCell,
 } from '../../../Components/StyledComponents';
-import Loading from '../../../Components/Loading';
-
-interface IToken {
-  id: number;
-  name: string;
-  deleted: boolean;
-  expiryDate: Date;
-  permissions: string[];
-}
+import {
+  useAuthRevokeToken,
+  useGetAllTokens,
+} from '../../../api/hooks/useTokens';
+import { shortenString } from '../../../utils/helpers';
 
 function AlertDialog({ fn, row }: any) {
   const [open, setOpen] = useState(false);
@@ -112,66 +104,17 @@ function AlertDialog({ fn, row }: any) {
 }
 
 export default function AccessTokens() {
-  const [tokens, setTokens] = useState<IToken[]>([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [error, setError] = useState<String>();
-  const [loading, setLoading] = useState(true);
+  const { data, isLoading, error, isError } = useGetAllTokens();
+  const { mutate } = useAuthRevokeToken();
 
-  console.log('tokens', tokens);
-
-  const loadTokens = () => {
-    getAllTokens()
-      .then((response) => {
-        console.log('response', response);
-        setTokens(
-          response.jwt.map((item: any) => ({
-            id: item.id,
-            name: item.name,
-            expiryDate: new Date(item.exp * 1000),
-            permissions: item.permissions,
-            deleted: false,
-          }))
-        );
-        setError(undefined);
-      })
-      .catch((err) => {
-        setError(
-          err && err.message
-            ? err.message
-            : `Unknown error: ${JSON.stringify(err)}`
-        );
-      })
-      .finally(() => {
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    loadTokens();
-  }, []);
-
-  const handleRevoke = (id: any) => {
-    setTokens((prevTokens) =>
-      prevTokens.map((item) =>
-        item.id === id ? { ...item, deleted: true } : item
-      )
-    );
-
-    const tokenToRevoke = tokens.find((item) => item.id === id);
-
-    if (tokenToRevoke && !tokenToRevoke.deleted) {
-      authRevokeToken(id);
-      setTimeout(() => {
-        setTokens((prevTokens) => prevTokens.filter((item) => item.id !== id));
-      }, 500);
-    } else {
-      console.log('Token has already been revoked:', tokenToRevoke);
-    }
+  const handleRevoke = async (id: string) => {
+    mutate(id);
   };
 
   const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - tokens.length) : 0;
+    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - data?.jwt) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -184,7 +127,7 @@ export default function AccessTokens() {
     setPage(0);
   };
 
-  function RowData({ id, name, expiryDate, permissions, formattedDate }: any) {
+  function RowData({ id, name, permissions, formattedDate }: any) {
     const [open, setOpen] = useState(false);
 
     return (
@@ -214,7 +157,6 @@ export default function AccessTokens() {
           </DataTableCell>
           <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
             <AccordionIconButton
-              open={open}
               aria-label="expand row"
               size="small"
               onClick={() => {
@@ -254,8 +196,12 @@ export default function AccessTokens() {
 
   return (
     <>
-      {loading && <Loading />}
-      <Fade in={!loading}>
+      <FetchStatusCheck
+        isLoading={isLoading}
+        isError={isError}
+        errorMessage={error?.message || 'Error fetching data'}
+      />
+      <Fade in={!isLoading && !isError}>
         <TableContainer>
           <Table>
             <TableHead>
@@ -270,88 +216,43 @@ export default function AccessTokens() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {tokens &&
-                tokens
-                  .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                  .map(
-                    ({
-                      id,
-                      name,
-                      deleted,
-                      expiryDate,
-                      permissions,
-                    }: IToken) => {
-                      const formattedDate = `${expiryDate
-                        .toISOString()
-                        .slice(0, 10)} ${expiryDate
-                        .toISOString()
-                        .slice(11, 16)}`;
-                      if (!deleted) {
-                        return (
-                          <RowData
-                            key={id}
-                            id={id}
-                            name={name}
-                            expiryDate={formattedDate}
-                            permissions={permissions}
-                            formattedDate={formattedDate}
-                          />
-                        );
-                      } else {
-                        return (
-                          <TableRow key={id}>
-                            <DataTableCell
-                              colSpan={5}
-                              height={73}
-                              className="purple-flash"
-                            >
-                              <div
-                                style={{
-                                  display: 'flex',
-                                  justifyContent: 'center',
-                                  alignItems: 'center',
-                                  width: '100%',
-                                  gap: '1rem',
-                                }}
-                              >
-                                <CircularProgress
-                                  style={{
-                                    color: theme.palette.primary.main,
-                                    height: '1.5rem',
-                                    width: '1.5rem',
-                                  }}
-                                />
-                              </div>
-                            </DataTableCell>
-                          </TableRow>
-                        );
-                      }
-                    }
-                  )}
+              {data?.jwt
+                ?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map(({ id, name, permissions, exp }: any) => {
+                  const date = new Date(exp * 1000);
+                  const formattedDate = `${date
+                    .toISOString()
+                    .slice(0, 10)} ${date.toISOString().slice(11, 16)}`;
+                  return (
+                    <RowData
+                      key={id}
+                      id={id}
+                      name={name}
+                      expiryDate={formattedDate}
+                      permissions={permissions}
+                      formattedDate={formattedDate}
+                    />
+                  );
+                })}
 
               {emptyRows > 0 && (
                 <TableRow style={{ height: 57 * emptyRows }}>
                   <TableCell colSpan={4} />
                 </TableRow>
               )}
-              {error ? (
-                <TableRow>
-                  <TableCell colSpan={5}>
-                    <Alert severity="error">{error}</Alert>
-                  </TableCell>
-                </TableRow>
-              ) : null}
             </TableBody>
           </Table>
-          <TablePagination
-            rowsPerPageOptions={[10, 25, 50]}
-            component="div"
-            count={tokens.length}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-          />
+          {data?.jwt && (
+            <TablePagination
+              rowsPerPageOptions={[10, 25, 50]}
+              component="div"
+              count={data.jwt.length}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+            />
+          )}
         </TableContainer>
       </Fade>
     </>

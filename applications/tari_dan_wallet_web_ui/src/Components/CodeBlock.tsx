@@ -33,8 +33,9 @@ import { useTheme } from '@mui/material/styles';
 
 export default function CodeBlockExpand({ title, children }: any) {
   const [open, setOpen] = useState(false);
+  const media = useTheme();
+  const matches = useMediaQuery(media.breakpoints.down('md'));
   const theme = useTheme();
-  const matches = useMediaQuery(theme.breakpoints.down('md'));
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -75,10 +76,11 @@ export default function CodeBlockExpand({ title, children }: any) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: '#FFFFFF',
+            background: theme.palette.background.paper,
             padding: '1rem 1.5rem',
             position: 'sticky',
             top: 0,
+            borderBottom: `1px solid ${theme.palette.divider}`,
           }}
         >
           <Typography variant="h5" component="div">
@@ -96,7 +98,7 @@ export default function CodeBlockExpand({ title, children }: any) {
         <Box
           sx={{
             padding: '2rem',
-            background: '#f5f5f7',
+            background: theme.palette.background.paper,
           }}
         >
           {children}

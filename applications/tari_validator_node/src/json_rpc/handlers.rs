@@ -46,7 +46,7 @@ use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_app_utilities::template_manager::interface::TemplateManagerHandle;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_storage::{
-    consensus_models::{Block, ExecutedTransaction, QuorumDecision, SubstateRecord, TransactionRecord},
+    consensus_models::{Block, ExecutedTransaction, LeafBlock, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
     StateStore,
 };
@@ -79,6 +79,8 @@ use tari_validator_node_client::types::{
     GetTransactionResultResponse,
     GetValidatorFeesRequest,
     GetValidatorFeesResponse,
+    ListBlocksRequest,
+    ListBlocksResponse,
     RegisterValidatorNodeRequest,
     RegisterValidatorNodeResponse,
     SubmitTransactionRequest,
@@ -92,7 +94,7 @@ use tari_validator_node_client::types::{
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
     grpc::base_layer_wallet::GrpcWalletClient,
-    json_rpc::jrpc_errors::internal_error,
+    json_rpc::jrpc_errors::{internal_error, not_found},
     p2p::services::mempool::MempoolHandle,
     registration,
     Services,
@@ -264,6 +266,30 @@ impl JsonRpcHandlers {
                 ),
             )),
         }
+    }
+
+    pub async fn list_blocks(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let req = value.parse_params::<ListBlocksRequest>()?;
+        let mut tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
+        let start_block = match req.from_id {
+            Some(id) => Block::get(&mut tx, &id)
+                .optional()
+                .map_err(internal_error(answer_id))?
+                .ok_or_else(|| not_found(answer_id, format!("Block {} not found", id)))?,
+            None => LeafBlock::get(&mut tx)
+                .optional()
+                .map_err(internal_error(answer_id))?
+                .ok_or_else(|| not_found(answer_id, "No leaf block"))?
+                .get_block(&mut tx)
+                .map_err(internal_error(answer_id))?,
+        };
+        let blocks = start_block
+            .get_parent_chain(&mut tx, req.limit)
+            .map_err(internal_error(answer_id))?;
+
+        let res = ListBlocksResponse { blocks };
+        Ok(JsonRpcResponse::success(answer_id, res))
     }
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {

@@ -133,7 +133,7 @@ pub async fn spawn_services(
     let (comms, message_channels) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
 
     // Spawn messaging
-    let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
+    let (message_senders, message_receivers) = messaging::new_messaging_channel(30);
     let (outbound_messaging, join_handle) = messaging::spawn(
         node_identity.public_key().clone(),
         message_channels,
@@ -245,6 +245,7 @@ pub async fn spawn_services(
         rx_consensus_message,
         outbound_messaging,
         mempool.clone(),
+        validator_node_client_factory.clone(),
         shutdown.clone(),
     )
     .await;
@@ -383,11 +384,8 @@ where
             created_justify: *genesis_block.justify().id(),
             created_block: *genesis_block.id(),
             created_height: NodeHeight(0),
-            destroyed_by_transaction: None,
-            destroyed_justify: None,
-            destroyed_by_block: None,
             created_at_epoch: Epoch(0),
-            destroyed_at_epoch: None,
+            destroyed: None,
         }
         .create(tx)?;
     }
@@ -404,11 +402,8 @@ where
             created_justify: *genesis_block.justify().id(),
             created_block: *genesis_block.id(),
             created_height: NodeHeight(0),
-            destroyed_by_transaction: None,
-            destroyed_justify: None,
-            destroyed_by_block: None,
             created_at_epoch: Epoch(0),
-            destroyed_at_epoch: None,
+            destroyed: None,
         }
         .create(tx)?;
     }

@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use tari_common_types::types::PublicKey;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use tari_comms_rpc_state_sync::CommsRpcStateSyncManager;
 use tari_consensus::{
-    hotstuff::{HotstuffEvent, HotstuffWorker},
+    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffEvent, HotstuffWorker},
     messages::HotstuffMessage,
 };
 use tari_dan_common_types::committee::Committee;
@@ -16,6 +17,7 @@ use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
+use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 use tokio::{
     sync::{broadcast, mpsc},
     task::JoinHandle,
@@ -45,6 +47,7 @@ pub async fn spawn(
     rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
     outbound_messaging: OutboundMessaging,
     mempool: MempoolHandle,
+    client_factory: TariCommsValidatorNodeClientFactory,
     shutdown_signal: ShutdownSignal,
 ) -> (JoinHandle<Result<(), anyhow::Error>>, EventSubscription<HotstuffEvent>) {
     let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
@@ -60,13 +63,12 @@ pub async fn spawn(
 
     let epoch_events = epoch_manager.subscribe().await.unwrap();
 
-    let handle = HotstuffWorker::<TariConsensusSpec>::new(
+    let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
         validator_addr,
         rx_new_transactions,
         rx_hs_message,
-        store,
-        epoch_events,
-        epoch_manager,
+        store.clone(),
+        epoch_manager.clone(),
         leader_strategy,
         signing_service,
         state_manager,
@@ -75,11 +77,19 @@ pub async fn spawn(
         tx_leader,
         tx_events.clone(),
         tx_mempool,
-        shutdown_signal,
-    )
-    .spawn();
+        shutdown_signal.clone(),
+    );
 
-    ConsensusWorker {
+    let context = ConsensusWorkerContext {
+        epoch_manager: epoch_manager.clone(),
+        epoch_events,
+        hotstuff: hotstuff_worker,
+        state_sync: CommsRpcStateSyncManager::new(epoch_manager, store, client_factory),
+    };
+
+    let handle = ConsensusWorker::new(shutdown_signal).spawn(context);
+
+    ConsensusMessageWorker {
         rx_broadcast,
         rx_leader,
         rx_mempool,
@@ -91,7 +101,7 @@ pub async fn spawn(
     (handle, EventSubscription::new(tx_events))
 }
 
-struct ConsensusWorker {
+struct ConsensusMessageWorker {
     rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
     rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
     rx_mempool: mpsc::UnboundedReceiver<Transaction>,
@@ -99,7 +109,7 @@ struct ConsensusWorker {
     mempool: MempoolHandle,
 }
 
-impl ConsensusWorker {
+impl ConsensusMessageWorker {
     fn spawn(mut self) {
         tokio::spawn(async move {
             loop {

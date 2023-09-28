@@ -62,6 +62,10 @@ impl TransactionPoolStage {
         matches!(self, Self::AllPrepared)
     }
 
+    pub fn is_accepted(&self) -> bool {
+        self.is_all_prepared() || self.is_some_prepared()
+    }
+
     pub fn next_stage(&self) -> Option<Self> {
         match self {
             TransactionPoolStage::New => Some(TransactionPoolStage::Prepared),
@@ -441,6 +445,18 @@ impl TransactionPoolRecord {
 
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), TransactionPoolError> {
         tx.transaction_pool_remove(&self.transaction.id)?;
+        Ok(())
+    }
+
+    pub fn remove_any<TTx, I>(tx: &mut TTx, transaction_ids: I) -> Result<(), TransactionPoolError>
+    where
+        TTx: StateStoreWriteTransaction,
+        I: IntoIterator<Item = TransactionId>,
+    {
+        // TODO(perf): n queries
+        for id in transaction_ids {
+            let _ = tx.transaction_pool_remove(&id).optional()?;
+        }
         Ok(())
     }
 }

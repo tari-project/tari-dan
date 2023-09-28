@@ -75,44 +75,40 @@ where TConsensusSpec: ConsensusSpec
         epoch: Epoch,
         local_committee: Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
+        is_newview_propose: bool,
     ) -> Result<(), HotStuffError> {
-        let last_proposed = self.store.with_read_tx(|tx| LastProposed::get(tx).optional())?;
-        let last_proposed_height = last_proposed.as_ref().map(|lp| lp.height).unwrap_or(NodeHeight(0));
-        if last_proposed_height > leaf_block.height {
-            debug!(
-                target: LOG_TARGET,
-                "⤵️ Skipping on_propose for next block because we have already proposed a block at height {}",
-                last_proposed_height
-            );
+        if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx)).optional()? {
+            if last_proposed.height > leaf_block.height {
+                // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
+                // Re-broadcast the previous proposal
+                if is_newview_propose {
+                    let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
+                    let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
+                    let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
 
-            // if must_proposed {
-            //     if let Some(last_proposed) = last_proposed {
-            //         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
-            //         let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
-            //         let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
-            //
-            //         let (next_block, non_local_buckets) = self.store.with_read_tx(|tx| {
-            //             let block = Block::get(tx, &last_proposed.block_id)?;
-            //             let non_local_buckets = get_non_local_buckets(tx, &block, num_committees, local_bucket)?;
-            //             Ok::<_, HotStuffError>((block, non_local_buckets))
-            //         })?;
-            //         info!(
-            //             target: LOG_TARGET,
-            //             "🌿 RE-BROADCASTING block {}({}) to {} validators. {} command(s), {} foreign shards, justify:
-            // {} ({}), parent: {}",             next_block.id(),
-            //             next_block.height(),
-            //             local_committee.len(),
-            //             next_block.commands().len(),
-            //             non_local_buckets.len(),
-            //             next_block.justify().block_id(),
-            //             next_block.justify().block_height(),
-            //             next_block.parent());
-            //         self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
-            //             .await?;
-            //     }
-            // }
+                    if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
+                        let non_local_buckets = self
+                            .store
+                            .with_read_tx(|tx| get_non_local_buckets(tx, &next_block, num_committees, local_bucket))?;
+                        info!(
+                            target: LOG_TARGET,
+                            "🌿 RE-BROADCASTING block {}({}) to {} validators. {} command(s), {} foreign shards, justify: {} ({}), parent: {}",
+                            next_block.id(),
+                            next_block.height(),
+                            local_committee.len(),
+                            next_block.commands().len(),
+                            non_local_buckets.len(),
+                            next_block.justify().block_id(),
+                            next_block.justify().block_height(),
+                            next_block.parent(),
+                        );
+                        self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
+                            .await?;
+                    }
+                }
 
-            return Ok(());
+                return Ok(());
+            }
         }
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
@@ -135,7 +131,11 @@ where TConsensusSpec: ConsensusSpec
                 high_qc,
                 validator.address,
                 &local_committee_shard,
+                // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
+                //       is a good idea.
+                is_newview_propose,
             )?;
+            next_block.save(&mut tx)?;
             next_block.as_last_proposed().set(&mut tx)?;
 
             // Get involved shards for all LocalPrepared commands in the block.
@@ -218,10 +218,15 @@ where TConsensusSpec: ConsensusSpec
         high_qc: QuorumCertificate<TConsensusSpec::Addr>,
         proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
         local_committee_shard: &CommitteeShard,
+        empty_block: bool,
     ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
-        let batch = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
+        let batch = if empty_block {
+            vec![]
+        } else {
+            self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?
+        };
 
         let mut total_leader_fee = 0;
         let commands = batch
