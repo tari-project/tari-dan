@@ -8,6 +8,7 @@ use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
     signing_service::TestVoteSignatureService,
+    sync::AlwaysSyncedSyncManager,
     NoopStateManager,
     RoundRobinLeaderStrategy,
 };
@@ -20,5 +21,6 @@ impl ConsensusSpec for TestConsensusSpec {
     type LeaderStrategy = RoundRobinLeaderStrategy;
     type StateManager = NoopStateManager;
     type StateStore = SqliteStateStore<Self::Addr>;
+    type SyncManager = AlwaysSyncedSyncManager;
     type VoteSignatureService = TestVoteSignatureService<Self::Addr>;
 }

@@ -31,16 +31,6 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         &self.members
     }
 
-    /// Returns n - f where n is the number of committee members and f is the tolerated failure nodes.
-    pub fn consensus_threshold(&self) -> usize {
-        let len = self.members.len();
-        if len == 0 {
-            return 0;
-        }
-        let max_failures = (len - 1) / 3;
-        len - max_failures
-    }
-
     pub fn max_failures(&self) -> usize {
         let len = self.members.len();
         if len == 0 {

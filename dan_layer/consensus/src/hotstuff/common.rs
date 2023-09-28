@@ -1,16 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::DerefMut;
-
 use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, NodeHeight};
-use tari_dan_storage::{
-    consensus_models::{Block, HighQc, QuorumCertificate, QuorumDecision},
-    StateStoreReadTransaction,
-    StateStoreWriteTransaction,
-    StorageError,
-};
+use tari_dan_storage::consensus_models::{Block, QuorumCertificate, QuorumDecision};
 
 use crate::{messages::HotstuffMessage, traits::LeaderStrategy};
 
@@ -24,36 +17,6 @@ pub const EXHAUST_DIVISOR: u64 = 0;
 // To avoid clippy::type_complexity
 pub(super) type CommitteeAndMessage<TAddr> = (Committee<TAddr>, HotstuffMessage<TAddr>);
 
-pub fn update_high_qc<TTx, TAddr: NodeAddressable>(
-    tx: &mut TTx,
-    qc: &QuorumCertificate<TAddr>,
-) -> Result<(), StorageError>
-where
-    TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
-    TTx::Target: StateStoreReadTransaction,
-{
-    let high_qc = HighQc::get(tx.deref_mut())?;
-    let high_qc = high_qc.get_quorum_certificate(tx.deref_mut())?;
-
-    if high_qc.block_height() < qc.block_height() {
-        debug!(
-            target: LOG_TARGET,
-            "🔥 UPDATE_HIGH_QC (node: {} {}, previous high QC: {} {})",
-            qc.id(),
-            qc.block_height(),
-            high_qc.block_id(),
-            high_qc.block_height(),
-        );
-
-        qc.save(tx)?;
-        // This will fail if the block doesnt exist
-        qc.as_leaf_block().set(tx)?;
-        qc.as_high_qc().set(tx)?;
-    }
-
-    Ok(())
-}
-
 pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
     epoch: Epoch,
     high_qc: &QuorumCertificate<TAddr>,
@@ -63,6 +26,18 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
 ) -> Vec<Block<TAddr>> {
     let mut parent_block = high_qc.as_leaf_block();
     let mut current_height = high_qc.block_height() + NodeHeight(1);
+    if current_height > new_height {
+        warn!(
+            target: LOG_TARGET,
+            "BUG: 🍼 no dummy blocks to calculate. current height {} is greater than new height {}",
+            current_height,
+            new_height,
+        );
+        return Vec::new();
+    }
+    if current_height == new_height {
+        return Vec::new();
+    }
     debug!(
         target: LOG_TARGET,
         "🍼 calculating dummy blocks from {} to {}",
@@ -79,6 +54,11 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
             current_height,
             high_qc.clone(),
             epoch,
+        );
+        debug!(
+            target: LOG_TARGET,
+            "🍼 new dummy block: {}",
+            dummy_block,
         );
         parent_block = dummy_block.as_leaf_block();
         blocks.push(dummy_block);

@@ -64,7 +64,7 @@ impl HighQc {
         QuorumCertificate::get(tx, &self.qc_id)
     }
 
-    pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn set<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.high_qc_set(self)
     }
 }

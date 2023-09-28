@@ -20,15 +20,24 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from "react";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-function Error({ component, message }: { component: String; message: String }) {
-  return (
-    <div className="container">
-      <span className="component error">{component}</span>
-      <span className="message error">{message}</span>
-    </div>
-  );
+interface Store {
+  themeMode: 'light' | 'dark';
+  setThemeMode: (mode: 'light' | 'dark') => void;
 }
 
-export default Error;
+const useThemeStore = create<Store>()(
+  persist<Store>(
+    (set) => ({
+      themeMode: 'light',
+      setThemeMode: (mode) => set({ themeMode: mode }),
+    }),
+    {
+      name: 'tari-theme',
+    }
+  )
+);
+
+export default useThemeStore;

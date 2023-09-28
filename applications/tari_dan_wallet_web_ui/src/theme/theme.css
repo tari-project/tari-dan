@@ -30,7 +30,7 @@ code {
   display: flex;
   flex-direction: column;
   align-content: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .flex-container {
@@ -39,7 +39,14 @@ code {
   align-items: center;
   justify-content: stretch;
   width: 100%;
-  gap: 10px;
+  gap: 8px;
+}
+
+.flex-container-vertical {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
 }
 
 .heading-menu {
@@ -47,6 +54,10 @@ code {
   justify-content: flex-start;
   align-items: center;
   gap: 5px;
+}
+
+.dialog-content {
+  width: 600px;
 }
 
 @media screen and (max-width: 767px) {
@@ -61,6 +72,7 @@ code {
   }
   .flex-container {
     flex-direction: row;
+    align-items: stretch;
   }
 }
 
@@ -70,16 +82,16 @@ code {
 
 @keyframes purple-flash {
   0% {
-    background-color: #ffffff;
+    background-color: rgb(159, 66, 255, 0);
   }
   25% {
-    background-color: #f9f4ff;
+    background-color: rgb(159, 66, 255, 0.1);
   }
   75% {
-    background-color: #f9f4ff;
+    background-color: rgb(159, 66, 255, 0.1);
   }
   100% {
-    background-color: #ffffff;
+    background-color: rgb(159, 66, 255, 0);
   }
 }
 

@@ -279,6 +279,10 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         public_key: &CommsPublicKey,
     ) -> Result<Option<ValidatorNode<CommsPublicKey>>, EpochManagerError> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        debug!(
+            target: LOG_TARGET,
+            "get_validator_node: epoch {}-{} with public key {}", start_epoch, end_epoch, public_key,
+        );
         let mut tx = self.global_db.create_transaction()?;
         let vn = self
             .global_db

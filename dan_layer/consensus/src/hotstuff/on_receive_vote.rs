@@ -12,10 +12,9 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use thiserror::__private::DisplayAsDisplay;
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
+    hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::VoteMessage,
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
@@ -106,6 +105,7 @@ where TConsensusSpec: ConsensusSpec
 
         // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
         // in the QC.
+
         info!(
             target: LOG_TARGET,
             "🔥 Received vote for block {} from {} ({} of {})",
@@ -122,11 +122,12 @@ where TConsensusSpec: ConsensusSpec
             let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
                 warn!(
                     target: LOG_TARGET,
-                    "❌ Received vote for unknown block {} from {}",message.block_id,from
+                    "❌ Received vote for unknown block {} from {}", message.block_id, from
                 );
                 tx.rollback()?;
                 return Ok(());
             };
+
             if !self
                 .leader_strategy
                 .is_leader_for_next_block(&vn.address, &committee, block.height())
@@ -139,6 +140,7 @@ where TConsensusSpec: ConsensusSpec
                     ),
                 });
             }
+
             let high_qc = HighQc::get(tx.deref_mut())?;
             if high_qc.block_id == *block.id() {
                 debug!(
@@ -194,10 +196,10 @@ where TConsensusSpec: ConsensusSpec
 
             info!(target: LOG_TARGET, "🔥 New QC {}", qc);
 
-            update_high_qc(&mut tx, &qc)?;
+            qc.update_high_qc(&mut tx)?;
             tx.commit()?;
         }
-        self.on_beat.beat().await?;
+        self.on_beat.beat();
 
         Ok(())
     }
@@ -236,7 +238,7 @@ where TConsensusSpec: ConsensusSpec
                 .create_challenge(sender_leaf_hash, &message.block_id, &message.decision);
         if !self.vote_signature_service.verify(&message.signature, &challenge) {
             return Err(HotStuffError::InvalidVoteSignature {
-                signer_public_key: message.signature.public_key().as_display().to_string(),
+                signer_public_key: message.signature.public_key().to_string(),
             });
         }
         Ok(())

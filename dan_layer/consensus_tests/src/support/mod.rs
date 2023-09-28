@@ -14,6 +14,7 @@ mod network;
 mod signing_service;
 mod spec;
 mod state_manager;
+mod sync;
 mod transaction;
 mod validator;
 

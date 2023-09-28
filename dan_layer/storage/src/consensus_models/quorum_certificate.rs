@@ -3,6 +3,7 @@
 
 use std::{fmt::Display, ops::DerefMut};
 
+use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_dan_common_types::{
@@ -26,6 +27,8 @@ use crate::{
     StateStoreWriteTransaction,
     StorageError,
 };
+
+const LOG_TARGET: &str = "tari::dan::storage::quorum_certificate";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct QuorumCertificate<TAddr> {
@@ -163,6 +166,13 @@ impl<TAddr> QuorumCertificate<TAddr> {
         tx.quorum_certificates_get(qc_id)
     }
 
+    pub fn get_all<'a, TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized, I: IntoIterator<Item = &'a QcId>>(
+        tx: &mut TTx,
+        qc_ids: I,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.quorum_certificates_get_all(qc_ids)
+    }
+
     pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(
         &self,
         tx: &mut TTx,
@@ -170,7 +180,10 @@ impl<TAddr> QuorumCertificate<TAddr> {
         Block::get(tx, &self.block_id)
     }
 
-    pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr> + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<(), StorageError> {
         tx.quorum_certificates_insert(self)
     }
 
@@ -178,9 +191,36 @@ impl<TAddr> QuorumCertificate<TAddr> {
         Ok(tx.quorum_certificates_get(&self.qc_id).optional()?.is_some())
     }
 
+    pub fn update_high_qc<TTx>(&self, tx: &mut TTx) -> Result<HighQc, StorageError>
+    where
+        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
+        TTx::Target: StateStoreReadTransaction,
+    {
+        let mut high_qc = HighQc::get(tx.deref_mut())?;
+
+        if high_qc.block_height() < self.block_height() {
+            debug!(
+                target: LOG_TARGET,
+                "🔥 UPDATE_HIGH_QC (node: {} {}, previous high QC: {} {})",
+                self.id(),
+                self.block_height(),
+                high_qc.block_id(),
+                high_qc.block_height(),
+            );
+
+            self.save(tx)?;
+            // This will fail if the block doesnt exist
+            self.as_leaf_block().set(tx)?;
+            high_qc = self.as_high_qc();
+            high_qc.set(tx)?;
+        }
+
+        Ok(high_qc)
+    }
+
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
+        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
         TTx::Target: StateStoreReadTransaction,
     {
         if self.exists(tx.deref_mut())? {

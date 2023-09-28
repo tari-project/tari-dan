@@ -15,8 +15,10 @@ mod on_receive_requested_transactions;
 mod on_receive_vote;
 mod pacemaker;
 mod pacemaker_handle;
+mod state_machine;
 mod worker;
 
 pub use error::*;
 pub use event::*;
+pub use state_machine::*;
 pub use worker::*;
