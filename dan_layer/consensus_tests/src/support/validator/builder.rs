@@ -12,6 +12,7 @@ use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
     signing_service::TestVoteSignatureService,
+    sync::AlwaysSyncedSyncManager,
     NoopStateManager,
     RoundRobinLeaderStrategy,
     TestConsensusSpec,
@@ -106,6 +107,7 @@ impl ValidatorBuilder {
             epoch_manager,
             epoch_events: rx_epoch_events,
             hotstuff: worker,
+            state_sync: AlwaysSyncedSyncManager,
         };
 
         let mut worker = ConsensusWorker::new(shutdown_signal);

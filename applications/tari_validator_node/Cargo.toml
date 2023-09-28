@@ -34,6 +34,7 @@ minotari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git"
 tari_base_node_client = { path = "../../clients/base_node_client" }
 tari_epoch_manager = { path = "../../dan_layer/epoch_manager", features = ["base_layer"] }
 tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
+tari_comms_rpc_state_sync = { path = "../../dan_layer/comms_rpc_state_sync" }
 
 tari_consensus = { path = "../../dan_layer/consensus" }
 tari_state_store_sqlite = { path = "../../dan_layer/state_store_sqlite" }

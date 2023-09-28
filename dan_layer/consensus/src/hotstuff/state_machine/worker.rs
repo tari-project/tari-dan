@@ -14,7 +14,7 @@ use crate::{
         HotStuffError,
         HotstuffWorker,
     },
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, SyncManager},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::sm::worker";
@@ -30,9 +30,14 @@ pub struct ConsensusWorkerContext<TSpec: ConsensusSpec> {
     pub epoch_manager: TSpec::EpochManager,
     pub epoch_events: broadcast::Receiver<EpochManagerEvent>,
     pub hotstuff: HotstuffWorker<TSpec>,
+    pub state_sync: TSpec::SyncManager,
 }
 
-impl<TSpec: ConsensusSpec> ConsensusWorker<TSpec> {
+impl<TSpec> ConsensusWorker<TSpec>
+where
+    TSpec: ConsensusSpec,
+    HotStuffError: From<<TSpec::SyncManager as SyncManager>::Error>,
+{
     pub fn new(shutdown_signal: ShutdownSignal) -> Self {
         Self {
             shutdown_signal,
@@ -50,7 +55,7 @@ impl<TSpec: ConsensusSpec> ConsensusWorker<TSpec> {
             ConsensusState::CheckSync(state) => self.result_or_shutdown(state.on_enter(context)).await,
             ConsensusState::Syncing(state) => self.result_or_shutdown(state.on_enter(context)).await,
             ConsensusState::Sleeping => {
-                time::sleep(Duration::from_secs(1)).await;
+                time::sleep(Duration::from_secs(5)).await;
                 ConsensusStateEvent::Resume
             },
             ConsensusState::Running(state) => state

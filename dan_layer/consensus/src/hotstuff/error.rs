@@ -54,6 +54,8 @@ pub enum HotStuffError {
     },
     #[error("BUG Invariant error occurred: {0}")]
     InvariantError(String),
+    #[error("Sync error: {0}")]
+    SyncError(anyhow::Error),
 }
 
 impl From<EpochManagerError> for HotStuffError {
@@ -76,10 +78,10 @@ pub enum ProposalValidationError {
     NotSafeBlock { proposed_by: String, hash: BlockId },
     #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
-    #[error("Justification block {justify_block} for proposed block {hash} by {proposed_by} not found")]
+    #[error("Justification block {justify_block} for proposed block {block_id} by {proposed_by} not found")]
     JustifyBlockNotFound {
         proposed_by: String,
-        hash: BlockId,
+        block_id: BlockId,
         justify_block: BlockId,
     },
     #[error("QC in block {block_id} that was proposed by {proposed_by} is invalid: {details}")]
@@ -127,4 +129,6 @@ pub enum ProposalValidationError {
         locked_block: LockedBlock,
         candidate_block: LeafBlock,
     },
+    #[error("Proposed block {block_id} {height} already has been processed")]
+    BlockAlreadyProcessed { block_id: BlockId, height: NodeHeight },
 }

@@ -1,8 +1,6 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::DerefMut;
-
 use log::*;
 use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{consensus_models::HighQc, StateStore};
@@ -10,7 +8,7 @@ use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
 use crate::{
-    hotstuff::{common::calculate_dummy_blocks, HotStuffError},
+    hotstuff::HotStuffError,
     messages::{HotstuffMessage, NewViewMessage},
     traits::{ConsensusSpec, LeaderStrategy},
 };
@@ -44,24 +42,9 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let current_epoch = self.epoch_manager.current_epoch().await?;
 
-        let high_qc = self.store.with_write_tx(|tx| {
-            let high_qc = HighQc::get(tx.deref_mut())?.get_quorum_certificate(tx.deref_mut())?;
-            let dummy_blocks = calculate_dummy_blocks(
-                current_epoch,
-                &high_qc,
-                new_height,
-                &self.leader_strategy,
-                &local_committee,
-            );
-            // Set the last voted block so that we do not vote on other conflicting blocks
-            let new_last_voted = dummy_blocks
-                .last()
-                .map(|b| b.as_last_voted())
-                .unwrap_or_else(|| high_qc.as_last_voted());
-            new_last_voted.set(tx)?;
-
-            Ok::<_, HotStuffError>(high_qc)
-        })?;
+        let high_qc = self
+            .store
+            .with_read_tx(|tx| HighQc::get(tx)?.get_quorum_certificate(tx))?;
 
         let next_leader = self
             .leader_strategy

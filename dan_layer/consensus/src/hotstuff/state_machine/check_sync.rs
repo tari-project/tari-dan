@@ -3,8 +3,6 @@
 
 use std::marker::PhantomData;
 
-use log::*;
-
 use crate::{
     hotstuff::{
         state_machine::{
@@ -15,21 +13,27 @@ use crate::{
         },
         HotStuffError,
     },
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, SyncManager, SyncStatus},
 };
 
-const LOG_TARGET: &str = "tari::dan::consensus::sm::check_sync";
+const _LOG_TARGET: &str = "tari::dan::consensus::sm::check_sync";
 
 #[derive(Debug, Clone)]
 pub struct CheckSync<TSpec>(PhantomData<TSpec>);
 
-impl<TSpec: ConsensusSpec> CheckSync<TSpec> {
+impl<TSpec> CheckSync<TSpec>
+where
+    TSpec: ConsensusSpec,
+    HotStuffError: From<<TSpec::SyncManager as SyncManager>::Error>,
+{
     pub(super) async fn on_enter(
         &self,
-        _context: &mut ConsensusWorkerContext<TSpec>,
+        context: &mut ConsensusWorkerContext<TSpec>,
     ) -> Result<ConsensusStateEvent, HotStuffError> {
-        warn!(target: LOG_TARGET, "CheckSync not implemented");
-        Ok(ConsensusStateEvent::Ready)
+        match context.state_sync.check_sync().await? {
+            SyncStatus::UpToDate => Ok(ConsensusStateEvent::Ready),
+            SyncStatus::Behind => Ok(ConsensusStateEvent::NeedSync),
+        }
     }
 }
 
