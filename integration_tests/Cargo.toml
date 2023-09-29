@@ -45,7 +45,7 @@ anyhow = "1.0.53"
 base64 = "0.21.0"
 config = "0.13.0"
 cucumber = { version = "0.18.0", features = ["default", "libtest", "output-junit"] }
-httpmock = { git = "https://github.com/sdbondi/httpmock.git", branch = "remove-signal-handling" }
+httpmock = "0.6.8"
 indexmap = "1.9.1"
 log = { version = "0.4.8", features = ["std"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }

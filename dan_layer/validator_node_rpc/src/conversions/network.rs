@@ -110,7 +110,7 @@ impl TryFrom<proto::network::IdentitySignature> for IdentitySignature {
             .ok_or_else(|| anyhow!("Signature not provided"))??;
         let updated_at = NaiveDateTime::from_timestamp_opt(value.updated_at, 0)
             .ok_or_else(|| anyhow!("Invalid updated_at timestamp"))?;
-        let updated_at = DateTime::<Utc>::from_utc(updated_at, Utc);
+        let updated_at = DateTime::from_naive_utc_and_offset(updated_at, Utc);
 
         Ok(IdentitySignature::new(version, signature, updated_at))
     }

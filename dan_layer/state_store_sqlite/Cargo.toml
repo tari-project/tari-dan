@@ -15,7 +15,7 @@ tari_transaction = { path = "../transaction" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
 anyhow = "1.0"
-bigdecimal = "0.3.1"
+bigdecimal = "0.4.1"
 diesel = { version = "2", default-features = false, features = ["sqlite", "time", "numeric"] }
 diesel_migrations = "2"
 log = "0.4"
