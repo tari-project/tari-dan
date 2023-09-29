@@ -271,7 +271,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
             .ok_or_else(|| RpcStatus::not_found("Transaction not found"))?;
 
-        let Some(result) = transaction.into_final_result() else{
+        let Some(result) = transaction.into_final_result() else {
             return Ok(Response::new(GetTransactionResultResponse {
                 status: PayloadResultStatus::Pending.into(),
                 ..Default::default()

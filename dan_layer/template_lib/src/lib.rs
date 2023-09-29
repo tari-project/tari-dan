@@ -20,7 +20,6 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-
 //! This crate contains an interface for WASM templates to interact with the state of the Tari Network, as well as
 //! some utilities for executing functions that may be slow in the WASM environment.
 //!
@@ -28,7 +27,6 @@
 //! ```
 //! use tari_template_lib::prelude::*;
 //! ```
-
 
 pub mod auth;
 
