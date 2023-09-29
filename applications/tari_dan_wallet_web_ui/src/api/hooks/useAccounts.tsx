@@ -52,7 +52,6 @@ export const useAccountsClaimBurn = (
 
 export const useAccountsCreate = (
   accountName: string | undefined,
-  signingKeyIndex: number | undefined,
   customAccessRules: any | undefined,
   fee: number | undefined,
   is_default: boolean | false
@@ -64,7 +63,6 @@ export const useAccountsCreate = (
         custom_access_rules: customAccessRules,
         fee,
         is_default,
-        key_id: signingKeyIndex,
       });
     },
     {
@@ -136,7 +134,7 @@ export const useAccountsInvoke = (
   });
 };
 
-export const useAccountsGetBalances = (accountName: string) => {
+export const useAccountsGetBalances = (accountName: string | null) => {
   return useQuery({
     queryKey: ['accounts_balances'],
     queryFn: () => {
@@ -148,7 +146,7 @@ export const useAccountsGetBalances = (accountName: string) => {
   });
 };
 
-export const useAccountsGet = (name: string) => {
+export const useAccountsGet = (name: string | null) => {
   return useQuery({
     queryKey: ['accounts_get'],
     queryFn: () => {
