@@ -7554,7 +7554,7 @@ dependencies = [
 
 [[package]]
 name = "tari_bor"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "ciborium",
  "ciborium-io",
@@ -7730,7 +7730,7 @@ dependencies = [
 
 [[package]]
 name = "tari_comms_logging"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "chrono",
  "diesel",
@@ -7904,7 +7904,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_app_utilities"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "bytes 1.5.0",
@@ -7942,7 +7942,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_common_types"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "blake2",
  "newtype-ops",
@@ -7961,7 +7961,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_engine"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "blake2",
@@ -8003,7 +8003,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_storage"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8024,7 +8024,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_storage_lmdb"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "hex",
  "lmdb-zero",
@@ -8038,7 +8038,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_storage_sqlite"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "chrono",
  "diesel",
@@ -8057,7 +8057,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_wallet_cli"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "base64 0.20.0",
@@ -8084,7 +8084,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_wallet_daemon"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "axum",
@@ -8126,7 +8126,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_wallet_sdk"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8156,7 +8156,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_wallet_storage_sqlite"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "bigdecimal",
  "chrono",
@@ -8178,7 +8178,7 @@ dependencies = [
 
 [[package]]
 name = "tari_engine_types"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "base64 0.21.4",
  "blake2",
@@ -8226,7 +8226,7 @@ source = "git+https://github.com/tari-project/tari.git?branch=feature-dan2#edfcb
 
 [[package]]
 name = "tari_indexer"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -8284,7 +8284,7 @@ dependencies = [
 
 [[package]]
 name = "tari_indexer_client"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "multiaddr",
@@ -8512,7 +8512,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_abi"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "hashbrown 0.13.2",
  "serde",
@@ -8521,7 +8521,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_builtin"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "lazy_static",
  "tari_engine_types",
@@ -8529,7 +8529,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_lib"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "newtype-ops",
  "serde",
@@ -8542,7 +8542,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_macros"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "indoc",
  "proc-macro2",
@@ -8552,7 +8552,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_test_tooling"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "serde",
@@ -8582,7 +8582,7 @@ dependencies = [
 
 [[package]]
 name = "tari_transaction"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "rand 0.8.5",
  "serde",
@@ -8596,7 +8596,7 @@ dependencies = [
 
 [[package]]
 name = "tari_transaction_manifest"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "proc-macro2",
  "syn 1.0.109",
@@ -8645,7 +8645,7 @@ dependencies = [
 
 [[package]]
 name = "tari_validator_node"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8707,7 +8707,7 @@ dependencies = [
 
 [[package]]
 name = "tari_validator_node_cli"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "anyhow",
  "cargo_metadata 0.15.4",
@@ -8737,7 +8737,7 @@ dependencies = [
 
 [[package]]
 name = "tari_validator_node_client"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "multiaddr",
  "reqwest",
@@ -8781,7 +8781,7 @@ dependencies = [
 
 [[package]]
 name = "tari_wallet_daemon_client"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 dependencies = [
  "reqwest",
  "serde",

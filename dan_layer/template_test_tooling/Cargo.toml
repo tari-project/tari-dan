@@ -1,6 +1,6 @@
 [package]
 name = "tari_template_test_tooling"
-version = "0.50.0-pre.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Test tooling for Tari template development"
