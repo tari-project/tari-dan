@@ -24,9 +24,12 @@ use tari_template_abi::{call_engine, EngineOp};
 
 use crate::args::{ConsensusAction, ConsensusInvokeArg, InvokeResult};
 
+/// The Consensus module provides access to data about the current state of the
+/// chain. Currently, it only exposes the epoch via `current_epoch`.
 pub struct Consensus {}
 
 impl Consensus {
+    /// Returns the current epoch of the chain, according to the validator node that is running this engine.
     pub fn current_epoch() -> u64 {
         let resp: InvokeResult = call_engine(EngineOp::ConsensusInvoke, &ConsensusInvokeArg {
             action: ConsensusAction::GetCurrentEpoch,

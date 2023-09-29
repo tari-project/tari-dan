@@ -20,6 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+//! This crate contains an interface for WASM templates to interact with the state of the Tari Network, as well as
+//! some utilities for executing functions that may be slow in the WASM environment.
+//!
+//! In most cases, you will only require the `prelude` which can be included with:
+//! ```
+//! use tari_template_lib::prelude::*;
+//! ```
+
 pub mod auth;
 
 mod hash;
@@ -30,7 +38,8 @@ pub mod args;
 pub mod models;
 
 pub mod component;
-pub mod consensus;
+mod consensus;
+pub use consensus::Consensus;
 
 pub mod caller_context;
 mod context;
