@@ -520,12 +520,10 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
             .order_by(validator_nodes::id.asc())
             .load::<DbValidatorNode>(tx.connection())
-            .optional()
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: format!("get::get_validator_nodes_within_epochs({}, {})", start_epoch, end_epoch),
             })?;
-        let sqlite_vns = sqlite_vns.unwrap_or_default();
 
         // TODO: Perhaps we should overwrite duplicate validator node entries for the epoch
         distinct_validators_sorted(sqlite_vns)

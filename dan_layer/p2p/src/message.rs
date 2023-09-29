@@ -51,6 +51,12 @@ impl<TAddr: NodeAddressable> DanMessage<TAddr> {
     }
 }
 
+impl<TAddr> From<NewTransactionMessage> for DanMessage<TAddr> {
+    fn from(value: NewTransactionMessage) -> Self {
+        Self::NewTransaction(Box::new(value))
+    }
+}
+
 impl<TAddr: Display> Display for DanMessage<TAddr> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

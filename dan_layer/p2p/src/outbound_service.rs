@@ -28,7 +28,7 @@ use crate::Message;
 #[async_trait]
 pub trait OutboundService {
     type Error;
-    type Addr: NodeAddressable + Send;
+    type Addr: NodeAddressable + Send + 'static;
 
     async fn send_self<T: Into<Message<Self::Addr>> + Send>(&mut self, message: T) -> Result<(), Self::Error>;
 
@@ -38,9 +38,9 @@ pub trait OutboundService {
         message: T,
     ) -> Result<(), Self::Error>;
 
-    async fn broadcast<T: Into<Message<Self::Addr>> + Send>(
+    async fn broadcast<'a, I: IntoIterator<Item = &'a Self::Addr> + Send, T: Into<Message<Self::Addr>> + Send>(
         &mut self,
-        committee: &[Self::Addr],
+        committee: I,
         message: T,
     ) -> Result<(), Self::Error>;
 

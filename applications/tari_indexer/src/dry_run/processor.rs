@@ -188,7 +188,7 @@ where
             epoch,
             nexist_count,
             err_count,
-            committee_size: committee.members.len(),
+            committee_size: committee.members().len(),
         })
     }
 

@@ -123,6 +123,9 @@ impl DanNode {
             )
         })?;
 
+        if committed_transactions.is_empty() {
+            return Ok(());
+        }
         info!(target: LOG_TARGET, "🏁 Removing {} finalized transaction(s) from mempool", committed_transactions.len());
         for tx_id in committed_transactions {
             if let Err(err) = self.services.mempool.remove_transaction(tx_id).await {

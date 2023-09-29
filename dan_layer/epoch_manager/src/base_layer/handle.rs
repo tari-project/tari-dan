@@ -167,6 +167,24 @@ impl EpochManagerHandle {
 
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
+
+    pub async fn get_committees_by_shards(
+        &self,
+        epoch: Epoch,
+        shards: HashSet<ShardId>,
+    ) -> Result<HashMap<ShardBucket, Committee<CommsPublicKey>>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetCommittees {
+                epoch,
+                shards,
+                reply: tx,
+            })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
 }
 
 #[async_trait]
@@ -307,24 +325,6 @@ impl EpochManagerReader for EpochManagerHandle {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetNumCommittees { epoch, reply: tx })
-            .await
-            .map_err(|_| EpochManagerError::SendError)?;
-
-        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
-    }
-
-    async fn get_committees_by_shards(
-        &self,
-        epoch: Epoch,
-        shards: &HashSet<ShardId>,
-    ) -> Result<HashMap<ShardId, Committee<Self::Addr>>, EpochManagerError> {
-        let (tx, rx) = oneshot::channel();
-        self.tx_request
-            .send(EpochManagerRequest::GetCommittees {
-                epoch,
-                shards: shards.clone(),
-                reply: tx,
-            })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 

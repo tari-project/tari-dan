@@ -344,12 +344,16 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         &self,
         epoch: Epoch,
         shards: &HashSet<ShardId>,
-    ) -> Result<HashMap<ShardId, Committee<CommsPublicKey>>, EpochManagerError> {
-        let mut result = HashMap::with_capacity(shards.len());
-        for shard in shards {
-            let committee = self.get_committee(epoch, *shard)?;
-            result.insert(*shard, committee);
-        }
+    ) -> Result<HashMap<ShardBucket, Committee<CommsPublicKey>>, EpochManagerError> {
+        let num_committees = self.get_number_of_committees(epoch)?;
+        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+        let mut tx = self.global_db.create_transaction()?;
+        let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
+        let buckets = shards
+            .iter()
+            .map(|shard| shard.to_committee_bucket(num_committees))
+            .collect();
+        let result = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
         Ok(result)
     }
 
@@ -372,10 +376,13 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         // A shard bucket is a equal slice of the shard space that a validator fits into
         let shard_bucket = shard.to_committee_bucket(num_committees);
 
-        // TODO(perf): calculate each VNS shard bucket once per epoch
         let selected_vns = vns
             .into_iter()
-            .filter(|vn| vn.shard_key.to_committee_bucket(num_committees) == shard_bucket)
+            .filter(|vn| {
+                vn.committee_bucket
+                    .unwrap_or_else(|| vn.shard_key.to_committee_bucket(num_committees)) ==
+                    shard_bucket
+            })
             .collect();
 
         Ok(selected_vns)

@@ -65,7 +65,7 @@ pub enum EpochManagerRequest {
     GetCommittees {
         epoch: Epoch,
         shards: HashSet<ShardId>,
-        reply: Reply<HashMap<ShardId, Committee<CommsPublicKey>>>,
+        reply: Reply<HashMap<ShardBucket, Committee<CommsPublicKey>>>,
     },
     GetCommittee {
         epoch: Epoch,
