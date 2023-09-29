@@ -7,6 +7,7 @@ use std::{
     ops::{Deref, DerefMut, RangeInclusive},
 };
 
+use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_transaction::{Transaction, TransactionId};
@@ -120,6 +121,13 @@ pub trait StateStoreReadTransaction {
         epoch_range: RangeInclusive<Epoch>,
         validator_public_key: Option<&Self::Addr>,
     ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
+    fn blocks_get_paginated(
+        &mut self,
+        limit: u64,
+        offset: u64,
+        asc_desc_created_at: Option<Ordering>,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
+    fn blocks_get_count(&mut self) -> Result<i64, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
     fn quorum_certificates_get_all<'a, I: IntoIterator<Item = &'a QcId>>(
@@ -295,7 +303,7 @@ pub trait StateStoreWriteTransaction {
         B: Borrow<ShardId>;
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub enum Ordering {
     Ascending,
     Descending,

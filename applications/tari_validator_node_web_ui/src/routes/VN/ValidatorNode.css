@@ -167,3 +167,8 @@ ul {
 .other {
   color: red;
 }
+
+.my_money {
+  color:green;
+  font-weight: bolder;
+}

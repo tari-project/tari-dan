@@ -26,7 +26,7 @@ import Committees from "./routes/Committees/CommitteesLayout";
 import ValidatorNode from "./routes/VN/ValidatorNode";
 import Connections from "./routes/Connections/Connections";
 import Fees from "./routes/Fees/Fees";
-import RecentTransactions from "./routes/RecentTransactions/RecentTransactions";
+import Blocks from "./routes/Blocks/Blocks";
 import Templates from "./routes/Templates/Templates";
 import ValidatorNodes from "./routes/ValidatorNodes/ValidatorNodes";
 import ErrorPage from "./routes/ErrorPage";
@@ -42,6 +42,7 @@ import {
   getShardKey,
 } from "./utils/json_rpc";
 import TransactionDetails from "./routes/Transactions/TransactionDetails";
+import BlockDetails from "./routes/Blocks/BlockDetails";
 
 interface IContext {
   epoch: IEpoch | undefined;
@@ -82,6 +83,16 @@ export const breadcrumbRoutes = [
     label: "Transactions",
     path: "/transactions",
     dynamic: false,
+  },
+  {
+    label: "Blocks",
+    path: "/blocks",
+    dynamic: false,
+  },
+  {
+    label: "Blocks",
+    path: "/blocks/:blockId",
+    dynamic: true,
   },
   {
     label: "Templates",
@@ -168,9 +179,6 @@ export default function App() {
       );
     }
   }, [epoch, identity]);
-  useEffect(() => {
-    getRecentTransactions();
-  }, []);
 
   return (
     <>
@@ -181,7 +189,7 @@ export default function App() {
             <Route path="committees" element={<Committees />} />
             <Route path="connections" element={<Connections />} />
             <Route path="fees" element={<Fees />} />
-            <Route path="transactions" element={<RecentTransactions />} />
+            <Route path="blocks" element={<Blocks/>} />
             <Route path="templates" element={<Templates />} />
             <Route path="vns" element={<ValidatorNodes />} />
             <Route path="mempool" element={<Mempool />} />
@@ -189,6 +197,7 @@ export default function App() {
               path="transactions/:transactionHash"
               element={<TransactionDetails />}
             />
+            <Route path="blocks/:blockId" element={<BlockDetails />} />
             <Route path="templates/:address" element={<TemplateFunctions />} />
             <Route path="committees/:address" element={<CommitteeMembers />} />
             <Route path="*" element={<ErrorPage />} />

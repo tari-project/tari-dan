@@ -27,7 +27,7 @@ import Connections from "./Components/Connections";
 import Fees from "./Components/Fees";
 import Info from "./Components/Info";
 import Mempool from "./Components/Mempool";
-import RecentTransactions from "./Components/RecentTransactions";
+import Blocks from "./Components/Blocks";
 import Templates from "./Components/Templates";
 import "./ValidatorNode.css";
 import { StyledPaper } from "../../Components/StyledComponents";
@@ -38,8 +38,7 @@ import { GetNetworkCommitteesResponse } from "../../utils/interfaces";
 import { getNetworkCommittees } from "../../utils/json_rpc";
 
 function ValidatorNode() {
-  const [committees, setCommittees] =
-    useState<GetNetworkCommitteesResponse | null>(null);
+  const [committees, setCommittees] = useState<GetNetworkCommitteesResponse | null>(null);
 
   const { epoch, identity, shardKey, error } = useContext(VNContext);
 
@@ -69,10 +68,7 @@ function ValidatorNode() {
         <StyledPaper>
           {committees ? (
             <>
-              <Committees
-                publicKey={identity.public_key}
-                committees={committees.committees}
-              />
+              <Committees publicKey={identity.public_key} committees={committees.committees} />
             </>
           ) : null}
         </StyledPaper>
@@ -102,11 +98,11 @@ function ValidatorNode() {
         </StyledPaper>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Recent Transactions</SecondaryHeading>
+        <SecondaryHeading>Blocks</SecondaryHeading>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
-          <RecentTransactions />
+          <Blocks />
         </StyledPaper>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>

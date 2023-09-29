@@ -29,6 +29,7 @@ use tari_dan_common_types::{committee::CommitteeShard, shard_bucket::ShardBucket
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord},
     global::models::ValidatorNode,
+    Ordering,
 };
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
@@ -194,6 +195,21 @@ pub struct ListBlocksResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetBlockResponse {
+    pub block: Block<PublicKey>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetBlocksResponse {
+    pub blocks: Vec<Block<PublicKey>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetBlocksCountResponse {
+    pub count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
     pub timestamp: u64,
     pub message: String,
@@ -325,4 +341,16 @@ impl<TAddr: Clone> From<Block<TAddr>> for ValidatorFee<TAddr> {
                 .sum(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetBlockRequest {
+    pub block_id: BlockId,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetBlocksRequest {
+    pub limit: u64,
+    pub offset: u64,
+    pub ordering: Option<Ordering>,
 }

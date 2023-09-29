@@ -57,6 +57,9 @@ use tari_validator_node_client::types::{
     AddPeerResponse,
     CommitteeShardInfo,
     DryRunTransactionFinalizeResult,
+    GetBlockRequest,
+    GetBlockResponse,
+    GetBlocksCountResponse,
     GetCommitteeRequest,
     GetEpochManagerStatsResponse,
     GetIdentityResponse,
@@ -168,8 +171,7 @@ impl JsonRpcHandlers {
             target: LOG_TARGET,
             "Transaction {} has {} involved shards",
             transaction.hash(),
-            transaction
-                .num_involved_shards()
+            transaction.num_involved_shards()
         );
 
         let tx_id = *transaction.id();
@@ -387,6 +389,45 @@ impl JsonRpcHandlers {
         Ok(JsonRpcResponse::success(answer_id, GetSubstatesByTransactionResponse {
             substates,
         }))
+    }
+
+    pub async fn get_block(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let data: GetBlockRequest = value.parse_params()?;
+        let mut tx = self.state_store.create_read_tx().unwrap();
+        match Block::get(&mut tx, &data.block_id) {
+            Ok(block) => {
+                let res = GetBlockResponse { block };
+                Ok(JsonRpcResponse::success(answer_id, res))
+            },
+            Err(e) => Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    format!("Something went wrong: {}", e),
+                    json::Value::Null,
+                ),
+            )),
+        }
+    }
+
+    pub async fn get_blocks_count(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let mut tx = self.state_store.create_read_tx().unwrap();
+        match Block::get_count(&mut tx) {
+            Ok(count) => {
+                let res = GetBlocksCountResponse { count };
+                Ok(JsonRpcResponse::success(answer_id, res))
+            },
+            Err(e) => Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InternalError,
+                    format!("Something went wrong: {}", e),
+                    json::Value::Null,
+                ),
+            )),
+        }
     }
 
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {

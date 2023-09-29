@@ -52,6 +52,7 @@ impl Block {
             self.is_dummy,
             self.is_processed,
             self.is_committed,
+            self.created_at,
         ))
     }
 }

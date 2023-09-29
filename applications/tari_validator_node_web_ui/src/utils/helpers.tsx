@@ -20,8 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { ChangeEvent } from 'react';
-import { toHexString } from '../routes/VN/Components/helpers';
+import { ChangeEvent } from "react";
+import { toHexString } from "../routes/VN/Components/helpers";
 
 const renderJson = (json: any) => {
   if (!json) {
@@ -43,10 +43,10 @@ const renderJson = (json: any) => {
         ],
       </>
     );
-  } else if (typeof json === 'object') {
+  } else if (typeof json === "object") {
     return (
       <>
-        {'{'}
+        {"{"}
         <ul>
           {Object.keys(json).map((key) => (
             <li key={key}>
@@ -54,22 +54,21 @@ const renderJson = (json: any) => {
             </li>
           ))}
         </ul>
-        {'}'}
+        {"}"}
       </>
     );
   } else {
-    if (typeof json === 'string')
-      return <span className="string">"{json}"</span>;
+    if (typeof json === "string") return <span className="string">"{json}"</span>;
     return <span className="other">{json}</span>;
   }
 };
 
 function removeTagged(obj: any) {
   if (obj === undefined) {
-    return 'undefined';
+    return "undefined";
   }
-  if (obj['@@TAGGED@@'] !== undefined) {
-    return obj['@@TAGGED@@'][1];
+  if (obj["@@TAGGED@@"] !== undefined) {
+    return obj["@@TAGGED@@"][1];
   }
   return obj;
 }
@@ -77,24 +76,20 @@ function removeTagged(obj: any) {
 function fromHexString(hexString: string) {
   let res = [];
   for (let i = 0; i < hexString.length; i += 2) {
-    res.push(Number('0x' + hexString.substring(i, i + 2)));
+    res.push(Number("0x" + hexString.substring(i, i + 2)));
   }
   return res;
 }
 
 function shortenString(string: string, start: number = 8, end: number = 8) {
-  return string.substring(0, start) + '...' + string.slice(-end);
+  return string.substring(0, start) + "..." + string.slice(-end);
 }
 
 function emptyRows(page: number, rowsPerPage: number, array: any[]) {
   return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
 }
 
-function handleChangePage(
-  event: unknown,
-  newPage: number,
-  setPage: React.Dispatch<React.SetStateAction<number>>
-) {
+function handleChangePage(event: unknown, newPage: number, setPage: React.Dispatch<React.SetStateAction<number>>) {
   setPage(newPage);
 }
 
@@ -107,12 +102,23 @@ function handleChangeRowsPerPage(
   setPage(0);
 }
 
+function primitiveDateTimeToDate([year, dayOfTheYear, hour, minute, second, nanos]: number[]): Date {
+  return new Date(year, 0, dayOfTheYear, hour, minute, second, nanos / 1000000);
+}
+
+function primitiveDateTimeToSecs([year, dayOfTheYear, hour, minute, second, nanos]: number[]): number {
+  // The datetime is in format [year, day of the year, hour, minute, second, nanos]
+  return new Date(year, 0, dayOfTheYear, hour, minute, second, nanos / 1000000).valueOf() / 1000;
+}
+
 export {
-  renderJson,
-  fromHexString,
-  shortenString,
-  removeTagged,
   emptyRows,
+  fromHexString,
   handleChangePage,
   handleChangeRowsPerPage,
+  primitiveDateTimeToDate,
+  primitiveDateTimeToSecs,
+  removeTagged,
+  renderJson,
+  shortenString,
 };
