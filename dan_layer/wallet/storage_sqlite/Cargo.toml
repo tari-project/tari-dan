@@ -24,7 +24,7 @@ diesel = { version = "2", features = ["sqlite", "chrono"] }
 diesel_migrations = "2"
 log = "0.4.17"
 chrono = "*"
-bigdecimal = "0.3"
+bigdecimal = "0.4"
 
 # Bundle libsqlite3
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }
