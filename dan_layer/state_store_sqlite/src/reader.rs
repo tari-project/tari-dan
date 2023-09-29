@@ -6,7 +6,7 @@ use std::{borrow::Borrow, collections::HashSet, marker::PhantomData, ops::RangeI
 use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::{
     sql_query,
-    sql_types::Text,
+    sql_types::{BigInt, Text},
     BoolExpressionMethods,
     ExpressionMethods,
     JoinOnDsl,
@@ -300,6 +300,45 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         block.try_convert(qc)
     }
 
+    fn blocks_all_after(&mut self, block_id: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let query_height = blocks::table
+            .select(blocks::height)
+            .filter(blocks::block_id.eq(serialize_hex(block_id)))
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_all_after",
+                source: e,
+            })?;
+
+        let results = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .filter(blocks::height.gt(query_height))
+            .order_by(blocks::height.asc())
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_all_after_height",
+                source: e,
+            })?;
+
+        results
+            .into_iter()
+            .map(|(block, qc)| {
+                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "blocks_all_after_height",
+                    details: format!(
+                        "block {} references non-existent quorum certificate {}",
+                        block.block_id, block.qc_id
+                    ),
+                })?;
+
+                block.try_convert(qc)
+            })
+            .collect()
+    }
+
     fn blocks_get_all_by_parent(&mut self, parent_id: &BlockId) -> Result<Vec<Block<TAddr>>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
@@ -326,6 +365,55 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                 })?;
 
                 block.try_convert(qc)
+            })
+            .collect()
+    }
+
+    fn blocks_get_parent_chain(
+        &mut self,
+        block_id: &BlockId,
+        limit: usize,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+        if !self.blocks_exists(block_id)? {
+            return Err(StorageError::QueryError {
+                reason: format!("blocks_get_parent_chain: descendant block {} does not exist", block_id),
+            });
+        }
+        let blocks = sql_query(
+            r#"
+            WITH RECURSIVE tree(bid, parent) AS (
+                  SELECT block_id, parent_block_id FROM blocks where block_id = ?
+                UNION ALL
+                  SELECT block_id, parent_block_id
+                    FROM blocks JOIN tree ON block_id = tree.parent AND tree.bid != tree.parent
+                    LIMIT ?
+            )
+            SELECT blocks.*, quorum_certificates.* FROM tree 
+                INNER JOIN blocks ON blocks.block_id = tree.bid
+                LEFT JOIN quorum_certificates ON blocks.qc_id = quorum_certificates.qc_id
+                ORDER BY height desc
+        "#,
+        )
+        .bind::<Text, _>(serialize_hex(block_id))
+        .bind::<BigInt, _>(limit as i64)
+        .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+        .map_err(|e| SqliteStorageError::DieselError {
+            operation: "blocks_get_parent_chain",
+            source: e,
+        })?;
+
+        blocks
+            .into_iter()
+            .map(|(b, qc)| {
+                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "blocks_get_by_parent",
+                    details: format!(
+                        "block {} references non-existent quorum certificate {}",
+                        block_id, b.qc_id
+                    ),
+                })?;
+
+                b.try_convert(qc)
             })
             .collect()
     }
@@ -473,6 +561,39 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             })?;
 
         deserialize_json(&qc_json)
+    }
+
+    fn quorum_certificates_get_all<'a, I: IntoIterator<Item = &'a QcId>>(
+        &mut self,
+        qc_ids: I,
+    ) -> Result<Vec<QuorumCertificate<Self::Addr>>, StorageError> {
+        use crate::schema::quorum_certificates;
+
+        let qc_ids: Vec<String> = qc_ids.into_iter().map(serialize_hex).collect();
+
+        let qc_json = quorum_certificates::table
+            .select(quorum_certificates::json)
+            .filter(quorum_certificates::qc_id.eq_any(&qc_ids))
+            .get_results::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "quorum_certificates_get_all",
+                source: e,
+            })?;
+
+        if qc_json.len() != qc_ids.len() {
+            return Err(SqliteStorageError::NotAllItemsFound {
+                items: "QCs",
+                operation: "quorum_certificates_get_all",
+                details: format!(
+                    "quorum_certificates_get_all: expected {} quorum certificates, got {}",
+                    qc_ids.len(),
+                    qc_json.len()
+                ),
+            }
+            .into());
+        }
+
+        qc_json.iter().map(|j| deserialize_json(j)).collect()
     }
 
     fn quorum_certificates_get_by_block_id(
@@ -741,6 +862,59 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             })?;
 
         substates.into_iter().map(TryInto::try_into).collect()
+    }
+
+    fn substates_get_all_for_block(&mut self, block_id: &BlockId) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+
+        let block_id_hex = serialize_hex(block_id);
+
+        let substates = substates::table
+            .filter(
+                substates::created_block
+                    .eq(&block_id_hex)
+                    .or(substates::destroyed_by_block.eq(Some(&block_id_hex))),
+            )
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_all_for_block",
+                source: e,
+            })?;
+
+        let substates = substates
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(substates)
+    }
+
+    fn substates_get_all_for_transaction(
+        &mut self,
+        transaction_id: &TransactionId,
+    ) -> Result<Vec<SubstateRecord>, StorageError> {
+        use crate::schema::substates;
+
+        let transaction_id_hex = serialize_hex(transaction_id);
+
+        let substates = substates::table
+            .filter(
+                substates::created_by_transaction
+                    .eq(&transaction_id_hex)
+                    .or(substates::destroyed_by_transaction.eq(Some(&transaction_id_hex))),
+            )
+            .get_results::<sql_models::SubstateRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_get_all_for_transaction",
+                source: e,
+            })?;
+
+        let substates = substates
+            .into_iter()
+            .map(TryInto::try_into)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(substates)
     }
 }
 

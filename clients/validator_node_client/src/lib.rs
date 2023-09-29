@@ -51,6 +51,8 @@ use crate::types::{
     GetTransactionResultResponse,
     GetValidatorFeesRequest,
     GetValidatorFeesResponse,
+    ListBlocksRequest,
+    ListBlocksResponse,
     RegisterValidatorNodeRequest,
     RegisterValidatorNodeResponse,
     SubmitTransactionRequest,
@@ -161,6 +163,13 @@ impl ValidatorNodeClient {
         request: GetRecentTransactionsRequest,
     ) -> Result<GetRecentTransactionsResponse, ValidatorNodeClientError> {
         self.send_request("get_recent_transactions", request).await
+    }
+
+    pub async fn list_blocks(
+        &mut self,
+        request: ListBlocksRequest,
+    ) -> Result<ListBlocksResponse, ValidatorNodeClientError> {
+        self.send_request("list_blocks", request).await
     }
 
     pub async fn submit_transaction(

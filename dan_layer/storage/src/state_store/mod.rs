@@ -100,9 +100,15 @@ pub trait StateStoreReadTransaction {
     ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_get_tip(&mut self) -> Result<Block<Self::Addr>, StorageError>;
+    fn blocks_all_after(&mut self, block_id: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_all_by_parent(&mut self, parent: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError>;
+    fn blocks_get_parent_chain(
+        &mut self,
+        block_id: &BlockId,
+        limit: usize,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
     fn blocks_get_pending_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
     fn blocks_get_total_leader_fee_for_epoch(
         &mut self,
@@ -116,6 +122,10 @@ pub trait StateStoreReadTransaction {
     ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
 
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
+    fn quorum_certificates_get_all<'a, I: IntoIterator<Item = &'a QcId>>(
+        &mut self,
+        qc_ids: I,
+    ) -> Result<Vec<QuorumCertificate<Self::Addr>>, StorageError>;
     fn quorum_certificates_get_by_block_id(
         &mut self,
         block_id: &BlockId,
@@ -165,6 +175,11 @@ pub trait StateStoreReadTransaction {
     fn substates_get_many_by_destroyed_transaction(
         &mut self,
         tx_id: &TransactionId,
+    ) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_get_all_for_block(&mut self, block_id: &BlockId) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_get_all_for_transaction(
+        &mut self,
+        transaction_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
 }
 
@@ -259,6 +274,8 @@ pub trait StateStoreWriteTransaction {
         epoch: Epoch,
         destroyed_block_id: &BlockId,
         destroyed_transaction_id: &TransactionId,
+        destroyed_qc_id: &QcId,
+        require_locks: bool,
     ) -> Result<(), StorageError>;
     fn substates_create(&mut self, substate: SubstateRecord) -> Result<(), StorageError>;
     // -------------------------------- Locked Outputs -------------------------------- //

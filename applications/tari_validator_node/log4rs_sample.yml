@@ -29,7 +29,7 @@ appenders:
       kind: compound
       trigger:
         kind: size
-        limit: 10mb
+        limit: 100mb
       roller:
         kind: fixed_window
         base: 1
@@ -46,7 +46,7 @@ appenders:
       kind: compound
       trigger:
         kind: size
-        limit: 10mb
+        limit: 100mb
       roller:
         kind: fixed_window
         base: 1
@@ -63,7 +63,7 @@ appenders:
       kind: compound
       trigger:
         kind: size
-        limit: 10mb
+        limit: 100mb
       roller:
         kind: fixed_window
         base: 1
@@ -80,7 +80,7 @@ appenders:
       kind: compound
       trigger:
         kind: size
-        limit: 10mb
+        limit: 100mb
       roller:
         kind: fixed_window
         base: 1
@@ -98,7 +98,7 @@ appenders:
       kind: compound
       trigger:
         kind: size
-        limit: 10mb
+        limit: 100mb
       roller:
         kind: fixed_window
         base: 1

@@ -57,3 +57,14 @@ pub fn internal_error<T: Display>(answer_id: i64) -> impl Fn(T) -> JsonRpcRespon
         )
     }
 }
+
+pub fn not_found<T: Into<String>>(answer_id: i64, details: T) -> JsonRpcResponse {
+    JsonRpcResponse::error(
+        answer_id,
+        JsonRpcError::new(
+            JsonRpcErrorReason::ApplicationError(404),
+            details.into(),
+            serde_json::Value::Null,
+        ),
+    )
+}

@@ -13,6 +13,7 @@ members = [
     "clients/base_node_client",
     "clients/validator_node_client",
     "clients/wallet_daemon_client",
+    "dan_layer/comms_rpc_state_sync",
     "dan_layer/consensus",
     "dan_layer/consensus_tests",
     "dan_layer/epoch_manager",

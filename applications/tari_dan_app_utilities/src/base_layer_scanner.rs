@@ -386,11 +386,8 @@ impl BaseLayerScanner {
                     created_justify: *genesis.justify().id(),
                     created_block: *genesis.id(),
                     created_height: NodeHeight::zero(),
-                    destroyed_by_transaction: None,
-                    destroyed_justify: None,
-                    destroyed_by_block: None,
                     created_at_epoch: Epoch(0),
-                    destroyed_at_epoch: None,
+                    destroyed: None,
                 }
                 .create(tx)
             })

@@ -7,18 +7,31 @@ use std::{
     ops::{DerefMut, RangeInclusive},
 };
 
+use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_dan_common_types::{hashing, serde_with, Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{hashing, optional::Optional, serde_with, Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_transaction::TransactionId;
 
 use super::QuorumCertificate;
 use crate::{
-    consensus_models::{Command, LastExecuted, LastProposed, LastVoted, LeafBlock, LockedBlock, Vote},
+    consensus_models::{
+        Command,
+        LastExecuted,
+        LastProposed,
+        LastVoted,
+        LeafBlock,
+        LockedBlock,
+        SubstateCreatedProof,
+        SubstateUpdate,
+        Vote,
+    },
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
+
+const LOG_TARGET: &str = "tari::dan::storage::consensus_models::block";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block<TAddr> {
@@ -40,6 +53,8 @@ pub struct Block<TAddr> {
     is_dummy: bool,
     /// Flag that indicates that the block locked objects and made transaction stage transitions.
     is_processed: bool,
+    /// Flag that indicates that the block has been committed.
+    is_committed: bool,
 }
 
 impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
@@ -65,6 +80,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             total_leader_fee,
             is_dummy: false,
             is_processed: false,
+            is_committed: false,
         };
         block.id = block.calculate_hash().into();
         block
@@ -81,6 +97,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         total_leader_fee: u64,
         is_dummy: bool,
         is_processed: bool,
+        is_committed: bool,
     ) -> Self {
         Self {
             id,
@@ -95,6 +112,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             total_leader_fee,
             is_dummy,
             is_processed,
+            is_committed,
         }
     }
 
@@ -124,6 +142,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             total_leader_fee: 0,
             is_dummy: false,
             is_processed: false,
+            is_committed: true,
         }
     }
 
@@ -155,7 +174,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
 
 impl<TAddr> Block<TAddr> {
     pub fn is_genesis(&self) -> bool {
-        self.id == BlockId::genesis()
+        self.id.is_genesis()
     }
 
     pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
@@ -166,7 +185,7 @@ impl<TAddr> Block<TAddr> {
         self.commands.len()
     }
 
-    pub fn as_locked(&self) -> LockedBlock {
+    pub fn as_locked_block(&self) -> LockedBlock {
         LockedBlock {
             height: self.height,
             block_id: self.id,
@@ -248,6 +267,10 @@ impl<TAddr> Block<TAddr> {
     pub fn is_processed(&self) -> bool {
         self.is_processed
     }
+
+    pub fn is_committed(&self) -> bool {
+        self.is_committed
+    }
 }
 
 impl<TAddr: NodeAddressable> Block<TAddr> {
@@ -262,11 +285,30 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_get_tip()
     }
 
+    pub fn get_all_blocks_after<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.blocks_all_after(block_id)
+    }
+
     pub fn exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
         &self,
         tx: &mut TTx,
     ) -> Result<bool, StorageError> {
         Self::record_exists(tx, self.id())
+    }
+
+    pub fn has_been_processed<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<bool, StorageError> {
+        // TODO: consider optimising
+        let is_processed = Self::get(tx, block_id)
+            .optional()?
+            .map(|b| b.is_processed())
+            .unwrap_or(false);
+        Ok(is_processed)
     }
 
     pub fn record_exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
@@ -328,8 +370,15 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
         ancestor: &BlockId,
     ) -> Result<bool, StorageError> {
+        if self.id == *ancestor {
+            return Ok(false);
+        }
         if self.parent == *ancestor {
             return Ok(true);
+        }
+        // First check the parent here, if it does not exist, then this block cannot extend anything.
+        if !Block::record_exists(tx, self.parent())? {
+            return Ok(false);
         }
 
         tx.blocks_is_ancestor(self.parent(), ancestor)
@@ -339,7 +388,21 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         &self,
         tx: &mut TTx,
     ) -> Result<Block<TAddr>, StorageError> {
+        if self.id.is_genesis() {
+            return Err(StorageError::NotFound {
+                item: "Block".to_string(),
+                key: self.id.to_string(),
+            });
+        }
         Block::get(tx, &self.parent)
+    }
+
+    pub fn get_parent_chain<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+        limit: usize,
+    ) -> Result<Vec<Block<TAddr>>, StorageError> {
+        tx.blocks_get_parent_chain(self.id(), limit)
     }
 
     pub fn get_votes<TTx: StateStoreReadTransaction<Addr = TAddr>>(
@@ -370,6 +433,146 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         validator_public_key: Option<&TAddr>,
     ) -> Result<Vec<Self>, StorageError> {
         tx.blocks_get_any_with_epoch_range(range, validator_public_key)
+    }
+
+    pub fn get_substate_updates<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Vec<SubstateUpdate<TAddr>>, StorageError> {
+        let committed = self
+            .commands()
+            .iter()
+            .filter_map(|c| c.accept())
+            .filter(|t| t.decision.is_commit())
+            .collect::<Vec<_>>();
+
+        let mut updates = Vec::with_capacity(committed.len());
+        for transaction in committed {
+            let substates = tx.substates_get_all_for_transaction(&transaction.id)?;
+            for substate in substates {
+                if let Some(destroyed) = substate.destroyed() {
+                    // This substate is destroyed. One of the following are possible:
+                    // 1. The substate was destroyed by this transaction and created in an earlier transaction
+                    // 2. The substate was created by this transaction and destroyed in a later transaction
+                    // It isn't possible for a substate to be created and destroyed by the same transaction
+                    // because the engine can never emit such a substate diff.
+                    if substate.created_by_transaction == transaction.id {
+                        updates.push(SubstateUpdate::Create(SubstateCreatedProof {
+                            created_qc: substate.get_created_quorum_certificate(tx)?,
+                            substate: substate.into(),
+                        }));
+                    } else {
+                        updates.push(SubstateUpdate::Destroy {
+                            shard_id: substate.to_shard_id(),
+                            proof: QuorumCertificate::get(tx, &destroyed.justify)?,
+                            destroyed_by_transaction: destroyed.by_transaction,
+                        });
+                    }
+                } else {
+                    updates.push(SubstateUpdate::Create(SubstateCreatedProof {
+                        created_qc: substate.get_created_quorum_certificate(tx)?,
+                        substate: substate.into(),
+                    }));
+                };
+            }
+        }
+
+        Ok(updates)
+    }
+
+    pub fn update_nodes<TTx, TFnOnLock, TFnOnCommit, E>(
+        &self,
+        tx: &mut TTx,
+        on_lock_block: TFnOnLock,
+        on_commit: TFnOnCommit,
+    ) -> Result<(), E>
+    where
+        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
+        TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
+        TFnOnLock: FnOnce(&mut TTx, &LockedBlock, &Block<TAddr>) -> Result<(), E>,
+        TFnOnCommit: FnOnce(&mut TTx, &LastExecuted, &Block<TAddr>) -> Result<(), E>,
+        E: From<StorageError>,
+    {
+        self.justify().update_high_qc(tx)?;
+
+        // b'' <- b*.justify.node
+        let Some(commit_node) = self.justify().get_block(tx.deref_mut()).optional()? else {
+            return Ok(());
+        };
+
+        // b' <- b''.justify.node
+        let Some(precommit_node) = commit_node.justify().get_block(tx.deref_mut()).optional()? else {
+            return Ok(());
+        };
+
+        let locked_block = LockedBlock::get(tx.deref_mut())?;
+        if precommit_node.height() > locked_block.height {
+            on_lock_block(tx, &locked_block, &precommit_node)?;
+            precommit_node.as_locked_block().set(tx)?;
+        }
+
+        // b <- b'.justify.node
+        let prepare_node = precommit_node.justify().block_id();
+        if commit_node.parent() == precommit_node.id() && precommit_node.parent() == prepare_node {
+            debug!(
+                target: LOG_TARGET,
+                "✅ Node {} {} forms a 3-chain b'' = {}, b' = {}, b = {}",
+                self.height(),
+                self.id(),
+                commit_node.id(),
+                precommit_node.id(),
+                prepare_node,
+            );
+
+            // Commit prepare_node (b)
+            let prepare_node = Block::get(tx.deref_mut(), prepare_node)?;
+            let last_executed = LastExecuted::get(tx.deref_mut())?;
+            on_commit(tx, &last_executed, &prepare_node)?;
+            prepare_node.as_last_executed().set(tx)?;
+        } else {
+            debug!(
+                target: LOG_TARGET,
+                "Node {} {} DOES NOT form a 3-chain b'' = {}, b' = {}, b = {}, b* = {}",
+                self.height(),
+                self.id(),
+                commit_node.id(),
+                precommit_node.id(),
+                prepare_node,
+                self.id()
+            );
+        }
+
+        Ok(())
+    }
+
+    /// safeNode predicate (https://arxiv.org/pdf/1803.05069v6.pdf)
+    ///
+    /// The safeNode predicate is a core ingredient of the protocol. It examines a proposal message
+    /// m carrying a QC justification m.justify, and determines whether m.node is safe to accept. The safety rule to
+    /// accept a proposal is the branch of m.node extends from the currently locked node lockedQC.node. On the other
+    /// hand, the liveness rule is the replica will accept m if m.justify has a higher view than the current
+    /// lockedQC. The predicate is true as long as either one of two rules holds.
+    pub fn is_safe<TTx: StateStoreReadTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+        let locked = LockedBlock::get(tx)?;
+        let locked_block = locked.get_block(tx)?;
+
+        // Liveness rules
+        if self.justify().block_height() > locked_block.height() {
+            return Ok(true);
+        }
+
+        // Safety rule
+        if self.extends(tx, locked_block.id())? {
+            return Ok(true);
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "❌ Block {} does satisfy the liveness or safety rules of the safeNode predicate. Locked block {}",
+            self,
+            locked_block,
+        );
+        Ok(false)
     }
 }
 

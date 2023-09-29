@@ -17,10 +17,10 @@ use integration_tests::{
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_common_types::types::PublicKey;
 use tari_comms::multiaddr::Multiaddr;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{optional::Optional, Epoch, ShardId};
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::Hash;
-use tari_validator_node_client::types::{AddPeerRequest, GetStateRequest, GetTemplateRequest};
+use tari_validator_node_client::types::{AddPeerRequest, GetStateRequest, GetTemplateRequest, ListBlocksRequest};
 
 #[given(expr = "a seed validator node {word} connected to base node {word} and wallet {word}")]
 async fn start_seed_validator_node(world: &mut TariWorld, seed_vn_name: String, bn_name: String, wallet_name: String) {
@@ -205,6 +205,20 @@ async fn assert_vn_is_registered(world: &mut TariWorld, vn_name: String) {
 
     // check that the vn's public key is in the list of registered vns
     assert!(vns.iter().any(|vn| vn.public_key == identity.public_key));
+
+    let mut count = 0;
+    loop {
+        // wait for the validator to pick up the registration
+        let stats = client.get_epoch_manager_stats().await.unwrap();
+        if stats.current_block_height >= height || stats.is_valid {
+            break;
+        }
+        if count > 10 {
+            panic!("Timed out waiting for validator node to pick up registration");
+        }
+        count += 1;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 }
 
 #[then(expr = "the template \"{word}\" is listed as registered by the validator node {word}")]
@@ -324,4 +338,41 @@ async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_
 #[when(expr = "I create a new key pair {word}")]
 async fn when_i_create_new_key_pair(world: &mut TariWorld, key_name: String) {
     create_key(world, key_name);
+}
+
+#[when(expr = "I wait for validator {word} has leaf block height of at least {int}")]
+async fn when_i_wait_for_validator_leaf_block_at_least(world: &mut TariWorld, name: String, height: u64) {
+    let vn = world.get_validator_node(&name);
+    let mut client = vn.create_client();
+    for _ in 0..20 {
+        let resp = client
+            .list_blocks(ListBlocksRequest {
+                from_id: None,
+                limit: 1,
+            })
+            .await
+            .optional()
+            .unwrap();
+        if let Some(resp) = resp {
+            if resp.blocks.last().unwrap().height().as_u64() >= height {
+                return;
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    let resp = client
+        .list_blocks(ListBlocksRequest {
+            from_id: None,
+            limit: 1,
+        })
+        .await
+        .unwrap();
+    let actual_height = resp.blocks.last().unwrap().height().as_u64();
+    if actual_height < height {
+        panic!(
+            "Validator {} leaf block height {} is less than {}",
+            name, actual_height, height
+        );
+    }
 }

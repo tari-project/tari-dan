@@ -286,7 +286,6 @@ async fn foreign_shard_decides_to_abort() {
     test.assert_clean_shutdown().await;
 }
 
-#[ignore = "flaky should be fixed in https://github.com/tari-project/tari-dan/pull/677"]
 #[tokio::test(flavor = "multi_thread")]
 async fn leader_failure_output_conflict() {
     setup_logger();

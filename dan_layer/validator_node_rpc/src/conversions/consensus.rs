@@ -42,8 +42,11 @@ use tari_dan_storage::consensus_models::{
     Evidence,
     QuorumCertificate,
     QuorumDecision,
+    SubstateDestroyed,
+    SubstateRecord,
     TransactionAtom,
 };
+use tari_engine_types::substate::{SubstateAddress, SubstateValue};
 use tari_transaction::TransactionId;
 
 use crate::proto;
@@ -92,7 +95,7 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::HotStuffMessa
 impl<TAddr: NodeAddressable> From<NewViewMessage<TAddr>> for proto::consensus::NewViewMessage {
     fn from(value: NewViewMessage<TAddr>) -> Self {
         Self {
-            high_qc: Some(value.high_qc.into()),
+            high_qc: Some((&value.high_qc).into()),
             new_height: value.new_height.0,
             epoch: value.epoch.as_u64(),
         }
@@ -230,7 +233,7 @@ impl<TAddr: NodeAddressable> From<tari_dan_storage::consensus_models::Block<TAdd
             parent_id: value.parent().as_bytes().to_vec(),
             proposed_by: value.proposed_by().as_bytes().to_vec(),
             merkle_root: value.merkle_root().as_slice().to_vec(),
-            justify: Some(value.justify().clone().into()),
+            justify: Some(value.justify().into()),
             total_leader_fee: value.total_leader_fee(),
             commands: value.into_commands().into_iter().map(Into::into).collect(),
         }
@@ -366,9 +369,8 @@ impl TryFrom<proto::consensus::Evidence> for Evidence {
 
 // -------------------------------- QuorumCertificate -------------------------------- //
 
-impl<TAddr: NodeAddressable> From<QuorumCertificate<TAddr>> for proto::consensus::QuorumCertificate {
-    fn from(source: QuorumCertificate<TAddr>) -> Self {
-        // let source = value.borrow();
+impl<TAddr: NodeAddressable> From<&QuorumCertificate<TAddr>> for proto::consensus::QuorumCertificate {
+    fn from(source: &QuorumCertificate<TAddr>) -> Self {
         // TODO: unwrap
         let merged_merkle_proof = encode(&source.merged_proof()).unwrap();
         Self {
@@ -434,5 +436,74 @@ impl TryFrom<proto::consensus::ValidatorMetadata> for ValidatorMetadata {
                 .transpose()?
                 .ok_or_else(|| anyhow!("ValidatorMetadata missing signature"))?,
         })
+    }
+}
+
+// -------------------------------- Substate -------------------------------- //
+
+impl TryFrom<proto::consensus::Substate> for SubstateRecord {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::Substate) -> Result<Self, Self::Error> {
+        Ok(Self {
+            address: SubstateAddress::from_bytes(&value.address)?,
+            version: value.version,
+            substate_value: SubstateValue::from_bytes(&value.substate)?,
+            state_hash: Default::default(),
+
+            created_at_epoch: Epoch(value.created_epoch),
+            created_by_transaction: value.created_transaction.try_into()?,
+            created_justify: value.created_justify.try_into()?,
+            created_block: value.created_block.try_into()?,
+            created_height: NodeHeight(value.created_height),
+
+            destroyed: value.destroyed.map(TryInto::try_into).transpose()?,
+        })
+    }
+}
+
+impl From<SubstateRecord> for proto::consensus::Substate {
+    fn from(value: SubstateRecord) -> Self {
+        Self {
+            address: value.address.to_bytes(),
+            version: value.version,
+            substate: value.substate_value.to_bytes(),
+
+            created_transaction: value.created_by_transaction.as_bytes().to_vec(),
+            created_justify: value.created_justify.as_bytes().to_vec(),
+            created_block: value.created_block.as_bytes().to_vec(),
+            created_height: value.created_height.as_u64(),
+            created_epoch: value.created_at_epoch.as_u64(),
+
+            destroyed: value.destroyed.map(Into::into),
+        }
+    }
+}
+
+// -------------------------------- SubstateDestroyed -------------------------------- //
+impl TryFrom<proto::consensus::SubstateDestroyed> for SubstateDestroyed {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::SubstateDestroyed) -> Result<Self, Self::Error> {
+        Ok(Self {
+            by_transaction: value.transaction.try_into()?,
+            justify: value.justify.try_into()?,
+            by_block: value.block.try_into()?,
+            at_epoch: value
+                .epoch
+                .map(Into::into)
+                .ok_or_else(|| anyhow!("Epoch not provided"))?,
+        })
+    }
+}
+
+impl From<SubstateDestroyed> for proto::consensus::SubstateDestroyed {
+    fn from(value: SubstateDestroyed) -> Self {
+        Self {
+            transaction: value.by_transaction.as_bytes().to_vec(),
+            justify: value.justify.as_bytes().to_vec(),
+            block: value.by_block.as_bytes().to_vec(),
+            epoch: Some(value.at_epoch.into()),
+        }
     }
 }
