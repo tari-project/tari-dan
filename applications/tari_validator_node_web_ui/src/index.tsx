@@ -30,13 +30,14 @@ import Committees from './routes/Committees/CommitteesLayout';
 import Connections from './routes/Connections/Connections';
 import Fees from './routes/Fees/Fees';
 import Mempool from './routes/Mempool/Mempool';
-import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
+import Blocks from './routes/Blocks/Blocks';
 import Templates from './routes/Templates/Templates';
 import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
 import ErrorPage from './routes/ErrorPage';
 import TemplateFunctions from './routes/VN/Components/TemplateFunctions';
 import CommitteeMembers from './routes/Committees/CommitteeMembers';
 import TransactionDetails from './routes/Transactions/TransactionDetails';
+import BlockDetails from './routes/Blocks/BlockDetails';
 
 const router = createBrowserRouter([
   {
@@ -53,8 +54,12 @@ const router = createBrowserRouter([
         element: <Fees />,
       },
       {
-        path: 'transactions',
-        element: <RecentTransactions />,
+        path: 'blocks',
+        element: <Blocks />,
+      },
+      {
+        path: 'blocks/:blockId',
+        element: <BlockDetails />,
       },
       {
         path: 'templates',

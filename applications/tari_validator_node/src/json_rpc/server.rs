@@ -68,6 +68,9 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
         "get_substates_created_by_transaction" => handlers.get_substates_created_by_transaction(value).await,
         "get_substates_destroyed_by_transaction" => handlers.get_substates_destroyed_by_transaction(value).await,
         "list_blocks" => handlers.list_blocks(value).await,
+        // Blocks
+        "get_block" => handlers.get_block(value).await,
+        "get_blocks_count" => handlers.get_blocks_count(value).await,
         // Template
         "get_template" => handlers.get_template(value).await,
         "get_templates" => handlers.get_templates(value).await,
@@ -94,7 +97,11 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
     if let Err(ref e) = result {
         match &e.result {
             JsonRpcAnswer::Result(val) => {
-                error!(target: LOG_TARGET, "🚨 JSON-RPC request failed: {}", serde_json::to_string_pretty(val).unwrap_or_else(|e| e.to_string()));
+                error!(
+                    target: LOG_TARGET,
+                    "🚨 JSON-RPC request failed: {}",
+                    serde_json::to_string_pretty(val).unwrap_or_else(|e| e.to_string())
+                );
             },
             JsonRpcAnswer::Error(err) => {
                 error!(target: LOG_TARGET, "🚨 JSON-RPC request failed: {}", err);

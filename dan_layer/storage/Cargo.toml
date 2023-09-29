@@ -24,3 +24,4 @@ log = "0.4"
 rand = "0.8"
 thiserror = "1"
 serde = "1.0"
+time = { version = "0.3", features = ["serde"] }

@@ -20,24 +20,51 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import PageHeading from '../../Components/PageHeading';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import RecentTransactions from '../VN/Components/RecentTransactions';
+import React from "react";
+import {
+  Grid,
+  Table,
+  TableContainer,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from "@mui/material";
+import StatusChip from "../../Components/StatusChip";
 
-function RecentTransactionsLayout() {
+function Transaction({ transaction }: any) {
   return (
-    <>
-      <Grid item xs={12} md={12} lg={12}>
-        <PageHeading>Recent Transactions</PageHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <RecentTransactions />
-        </StyledPaper>
-      </Grid>
-    </>
+    <TableRow>
+      <TableCell>
+        <a href={`/transactions/${transaction.id}`}>{transaction.id}</a>
+      </TableCell>
+      <TableCell>
+        <StatusChip status={transaction.decision} />
+      </TableCell>
+      <TableCell>{transaction.leader_fee}</TableCell>
+      <TableCell>{transaction.transaction_fee}</TableCell>
+    </TableRow>
   );
 }
 
-export default RecentTransactionsLayout;
+export default function Transactions({ transactions }: any) {
+  return (
+    <TableContainer>
+      <Table>
+        <TableHead>
+          <TableRow>
+            <TableCell>Transaction ID</TableCell>
+            <TableCell>Decision</TableCell>
+            <TableCell>Leader fee</TableCell>
+            <TableCell>Transaction fee</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {transactions.map((tx: any) => (
+            <Transaction key={tx.id} transaction={tx} />
+          ))}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+}

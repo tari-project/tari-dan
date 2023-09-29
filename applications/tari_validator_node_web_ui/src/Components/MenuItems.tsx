@@ -41,6 +41,7 @@ import {
   IoLayers,
   IoCodeDownloadOutline,
   IoCodeDownload,
+  IoBarChartSharp,
 } from 'react-icons/io5';
 import Tooltip from '@mui/material/Tooltip';
 import Fade from '@mui/material/Fade';
@@ -65,10 +66,10 @@ const mainItems = [
     link: '/',
   },
   {
-    title: 'Recent Transactions',
-    icon: <IoBarChartOutline style={iconStyle} />,
+    title: 'Blocks',
+    icon: <IoBarChartSharp style={iconStyle} />,
     activeIcon: <IoBarChart style={activeIconStyle} />,
-    link: 'transactions',
+    link: 'blocks',
   },
   {
     title: 'Committees',

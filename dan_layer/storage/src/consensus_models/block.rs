@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_dan_common_types::{hashing, optional::Optional, serde_with, Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_transaction::TransactionId;
+use time::PrimitiveDateTime;
 
 use super::QuorumCertificate;
 use crate::{
@@ -26,6 +27,7 @@ use crate::{
         SubstateUpdate,
         Vote,
     },
+    Ordering,
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -55,6 +57,8 @@ pub struct Block<TAddr> {
     is_processed: bool,
     /// Flag that indicates that the block has been committed.
     is_committed: bool,
+    /// Timestamp when was this stored.
+    stored_at: Option<PrimitiveDateTime>,
 }
 
 impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
@@ -81,6 +85,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             is_dummy: false,
             is_processed: false,
             is_committed: false,
+            stored_at: None,
         };
         block.id = block.calculate_hash().into();
         block
@@ -98,6 +103,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         is_dummy: bool,
         is_processed: bool,
         is_committed: bool,
+        created_at: PrimitiveDateTime,
     ) -> Self {
         Self {
             id,
@@ -113,6 +119,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             is_dummy,
             is_processed,
             is_committed,
+            stored_at: Some(created_at),
         }
     }
 
@@ -143,6 +150,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             is_dummy: false,
             is_processed: false,
             is_committed: true,
+            stored_at: None,
         }
     }
 
@@ -323,6 +331,19 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
     ) -> Result<(), StorageError> {
         tx.blocks_insert(self)
+    }
+
+    pub fn get_paginated<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        tx: &mut TTx,
+        limit: u64,
+        offset: u64,
+        ordering: Option<Ordering>,
+    ) -> Result<Vec<Self>, StorageError> {
+        tx.blocks_get_paginated(limit, offset, ordering)
+    }
+
+    pub fn get_count<TTx: StateStoreReadTransaction<Addr = TAddr>>(tx: &mut TTx) -> Result<i64, StorageError> {
+        tx.blocks_get_count()
     }
 
     /// Inserts the block if it doesnt exist. Returns true if the block was saved and did not exist previously,

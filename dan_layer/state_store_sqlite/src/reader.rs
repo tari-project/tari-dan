@@ -548,6 +548,64 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .collect()
     }
 
+    fn blocks_get_paginated(
+        &mut self,
+        limit: u64,
+        offset: u64,
+        asc_desc_created_at: Option<Ordering>,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+
+        let mut query = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .into_boxed();
+
+        if let Some(ordering) = asc_desc_created_at {
+            match ordering {
+                Ordering::Ascending => query = query.order_by(blocks::created_at.asc()),
+                Ordering::Descending => query = query.order_by(blocks::created_at.desc()),
+            }
+        }
+
+        let blocks = query
+            .limit(limit as i64)
+            .offset(offset as i64)
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_get_paginated",
+                source: e,
+            })?;
+
+        blocks
+            .into_iter()
+            .map(|(block, qc)| {
+                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "blocks_get_by_parent",
+                    details: format!(
+                        "block {} references non-existent quorum certificate {}",
+                        block.id, block.qc_id
+                    ),
+                })?;
+
+                block.try_convert(qc)
+            })
+            .collect()
+    }
+
+    fn blocks_get_count(&mut self) -> Result<i64, StorageError> {
+        use crate::schema::{blocks, quorum_certificates};
+        let count = blocks::table
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .select(diesel::dsl::count(blocks::id))
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_get_count",
+                source: e,
+            })?;
+        Ok(count)
+    }
+
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
         use crate::schema::quorum_certificates;
 

@@ -7686,6 +7686,7 @@ dependencies = [
  "tari_transaction",
  "tari_utilities 0.4.10",
  "thiserror",
+ "time 0.3.22",
 ]
 
 [[package]]

@@ -94,7 +94,7 @@ const TransactionFilter: React.FC<ISearchProps> = ({
       // original array, and set its "show" property to true
       filteredRows.forEach((filteredRow: any) => {
         const index = updatedObject.findIndex(
-          (item : any) => item.transaction_hash === filteredRow.transaction_hash
+          (item : any) => item.id === filteredRow.id
         );
         if (index !== -1) {
           updatedObject[index].show = true;

@@ -20,66 +20,68 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { GetNetworkCommitteesResponse } from './interfaces';
+import { GetNetworkCommitteesResponse } from "./interfaces";
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = '127.0.0.1:18010';
+  let address = "127.0.0.1:18010";
   try {
-    let text = await (await fetch('/json_rpc_address')).text();
+    let text = await (await fetch("/json_rpc_address")).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
       console.log(`Setting JSON RPC address to ${text}`);
       address = text;
     }
   } catch {}
+  console.log(method, params);
   let response = await fetch(`http://${address}`, {
-    method: 'POST',
+    method: "POST",
     body: JSON.stringify({
       method: method,
-      jsonrpc: '2.0',
+      jsonrpc: "2.0",
       id: id,
       params: params,
     }),
     headers: {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     },
   });
   let json = await response.json();
+  console.log(method, json);
   if (json.error) {
     throw json.error;
   }
   return json.result;
 }
 async function getIdentity() {
-  return await jsonRpc('get_identity');
+  return await jsonRpc("get_identity");
 }
 async function getEpochManagerStats() {
-  return await jsonRpc('get_epoch_manager_stats');
+  return await jsonRpc("get_epoch_manager_stats");
 }
 async function getCommsStats() {
-  return await jsonRpc('get_comms_stats');
+  return await jsonRpc("get_comms_stats");
 }
 async function getMempoolStats() {
-  return await jsonRpc('get_mempool_stats');
+  return await jsonRpc("get_mempool_stats");
 }
 async function getShardKey(height: number, public_key: string) {
-  return await jsonRpc('get_shard_key', [height, public_key]);
+  return await jsonRpc("get_shard_key", [height, public_key]);
 }
 async function getCommittee(epoch: number, shard_id: string) {
-  return await jsonRpc('get_committee', {epoch, shard_id});
+  return await jsonRpc("get_committee", { epoch, shard_id });
 }
 async function getAllVns(epoch: number) {
-  return await jsonRpc('get_all_vns', epoch);
+  return await jsonRpc("get_all_vns", epoch);
 }
-async function getNetworkCommittees() : Promise<GetNetworkCommitteesResponse> {
-  return await jsonRpc('get_network_committees', {});
+async function getNetworkCommittees(): Promise<GetNetworkCommitteesResponse> {
+  return await jsonRpc("get_network_committees", {});
 }
 async function getConnections() {
-  return await jsonRpc('get_connections');
+  return await jsonRpc("get_connections");
 }
 async function addPeer(public_key: string, addresses: string[]) {
-  return await jsonRpc('add_peer', {
+  return await jsonRpc("add_peer", {
     public_key,
     addresses,
     wait_for_dial: false,
@@ -89,36 +91,44 @@ async function registerValidatorNode(feeClaimPublicKeyHex: string) {
   return await jsonRpc('register_validator_node', { fee_claim_public_key: feeClaimPublicKeyHex });
 }
 async function getRecentTransactions() {
-  return await jsonRpc('get_recent_transactions');
+  return await jsonRpc("get_recent_transactions");
 }
 async function getTransaction(payload_id: string) {
-  return await jsonRpc('get_transaction', [payload_id]);
+  return await jsonRpc("get_transaction", [payload_id]);
 }
-async function getFees(start_epoch: number, end_epoch:number, claim_leader_public_key: string) {
-  return await jsonRpc('get_fees', [
-    [start_epoch,end_epoch],
-    claim_leader_public_key,
-  ]);
+async function getFees(start_epoch: number, end_epoch: number, claim_leader_public_key: string) {
+  return await jsonRpc("get_fees", [[start_epoch, end_epoch], claim_leader_public_key]);
 }
 async function getUpSubstates(payload_id: string) {
-  return await jsonRpc('get_substates_created_by_transaction', [
-    payload_id,
-  ]);
+  return await jsonRpc("get_substates_created_by_transaction", [payload_id]);
 }
 async function getDownSubstates(payload_id: string) {
-  return await jsonRpc('get_substates_destroyed_by_transaction', [
-    payload_id,
-  ]);
+  return await jsonRpc("get_substates_destroyed_by_transaction", [payload_id]);
 }
 async function getTemplates(limit: number) {
-  return await jsonRpc('get_templates', [limit]);
+  return await jsonRpc("get_templates", [limit]);
 }
 async function getTemplate(address: string) {
-  return await jsonRpc('get_template', [address]);
+  return await jsonRpc("get_template", [address]);
+}
+
+async function listBlocks(block_id: string | null, limit: number) {
+  return await jsonRpc("list_blocks", [block_id, limit]);
+}
+
+async function getBlock(block_id: string) {
+  return await jsonRpc("get_block", [block_id]);
+}
+
+async function getBlocksCount() {
+  return await jsonRpc("get_blocks_count");
 }
 
 export {
   getAllVns,
+  getBlock,
+  listBlocks,
+  getBlocksCount,
   getCommittee,
   getCommsStats,
   getConnections,
