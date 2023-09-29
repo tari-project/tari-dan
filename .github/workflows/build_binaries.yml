@@ -28,7 +28,7 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: false
 
@@ -77,7 +77,7 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -190,7 +190,7 @@ jobs:
           echo "C:\Strawberry\perl\bin" >> $GITHUB_PATH
 
       - name: Cache cargo files and outputs
-        uses: Swatinem/rust-cache@v1
+        uses: Swatinem/rust-cache@v2
 
         # Fix me soon!
       - name: Build rust binaries - hardcoded (linux-arm64)
