@@ -25,9 +25,6 @@ import ReactDOM from 'react-dom/client';
 import './theme/theme.css';
 import reportWebVitals from './reportWebVitals';
 import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import Transaction, {
-  transactionLoader,
-} from './routes/Transaction/Transaction';
 import App from './App';
 import Committees from './routes/Committees/CommitteesLayout';
 import Connections from './routes/Connections/Connections';
@@ -39,6 +36,7 @@ import ValidatorNodes from './routes/ValidatorNodes/ValidatorNodes';
 import ErrorPage from './routes/ErrorPage';
 import TemplateFunctions from './routes/VN/Components/TemplateFunctions';
 import CommitteeMembers from './routes/Committees/CommitteeMembers';
+import TransactionDetails from './routes/Transactions/TransactionDetails';
 
 const router = createBrowserRouter([
   {
@@ -79,9 +77,8 @@ const router = createBrowserRouter([
         element: <Committees />,
       },
       {
-        path: 'transactions/:payloadId',
-        element: <Transaction />,
-        loader: transactionLoader,
+        path: 'transactions/:transactionHash',
+        element: <TransactionDetails />,
       },
       {
         path: 'templates/:address',

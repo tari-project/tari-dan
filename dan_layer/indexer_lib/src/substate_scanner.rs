@@ -26,6 +26,7 @@ use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_engine_types::{
     events::Event,
     substate::{SubstateAddress, SubstateValue},
+    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_template_lib::{
@@ -202,13 +203,51 @@ where
 
         error!(
             target: LOG_TARGET,
-            "Could not get substate {} from any of the validator nodes", shard,
+            "Could not get substate for shard {} from any of the validator nodes", shard,
         );
 
         if let Some(e) = last_error {
             return Err(e);
         }
         Ok(SubstateResult::DoesNotExist)
+    }
+
+    pub async fn get_virtual_substate_from_committee(
+        &self,
+        address: VirtualSubstateAddress,
+        shard_location: ShardId,
+    ) -> Result<VirtualSubstate, IndexerError> {
+        let epoch = self.committee_provider.current_epoch().await?;
+        let mut committee = self.committee_provider.get_committee(epoch, shard_location).await?;
+
+        committee.shuffle();
+
+        let mut last_error = None;
+        for vn_public_key in &committee.members {
+            // TODO: we cannot request data from ourselves via p2p rpc - so we should exclude ourselves from requests
+            // Gets a substate directly from querying a VN
+            let mut client = self.validator_node_client_factory.create_client(vn_public_key);
+            let result = client.get_virtual_substate(address.clone()).await;
+
+            match result {
+                Ok(substate) => return Ok(substate),
+                Err(e) => {
+                    last_error = Some(e);
+                },
+            }
+        }
+
+        error!(
+            target: LOG_TARGET,
+            "Could not get virtual substate {} from any of the validator nodes", address,
+        );
+
+        if let Some(e) = last_error {
+            return Err(IndexerError::ValidatorNodeClientError(e.to_string()));
+        }
+        Err(IndexerError::AllRequestsFailed {
+            num_requested: committee.members.len(),
+        })
     }
 
     /// Gets a substate directly from querying a VN

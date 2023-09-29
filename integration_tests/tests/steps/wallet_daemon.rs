@@ -8,6 +8,7 @@ use integration_tests::{wallet_daemon_cli, TariWorld};
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_template_lib::prelude::Amount;
+use tari_wallet_daemon_client::ComponentAddressOrName;
 
 #[when(
     expr = "I claim burn {word} with {word}, {word} and {word} and spend it into account {word} via the wallet daemon \
@@ -100,6 +101,43 @@ async fn when_i_claim_burn_via_wallet_daemon_it_fails(
     .unwrap_err();
 }
 
+#[when(expr = "I claim fees for validator {word} and epoch {int} into account {word} using the wallet daemon {word}")]
+async fn when_i_claim_fees_for_validator_and_epoch(
+    world: &mut TariWorld,
+    validator_node: String,
+    epoch: u64,
+    account_name: String,
+    wallet_daemon_name: String,
+) {
+    let resp = wallet_daemon_cli::claim_fees(world, wallet_daemon_name, account_name, validator_node, epoch)
+        .await
+        .unwrap();
+    resp.result.result.accept().unwrap_or_else(|| {
+        panic!(
+            "Expected fee claim to succeeded but failed with {}",
+            resp.result.result.reject().unwrap()
+        )
+    });
+}
+
+#[when(
+    expr = "I claim fees for validator {word} and epoch {int} into account {word} using the wallet daemon {word}, it \
+            fails"
+)]
+async fn when_i_claim_fees_for_validator_and_epoch_fails(
+    world: &mut TariWorld,
+    validator_node: String,
+    epoch: u64,
+    account_name: String,
+    wallet_daemon_name: String,
+) {
+    let err = wallet_daemon_cli::claim_fees(world, wallet_daemon_name, account_name, validator_node, epoch)
+        .await
+        .unwrap_err();
+
+    println!("Expected error: {}", err);
+}
+
 #[then(
     expr = "I make a confidential transfer with amount {int} from {word} to {word} creating output {word} via the \
             wallet_daemon {word}"
@@ -144,6 +182,32 @@ async fn when_i_create_account_via_wallet_daemon_with_free_coins(
         account_name,
         wallet_daemon_name,
         amount.try_into().unwrap(),
+        None,
+    )
+    .await;
+}
+
+#[when(expr = "I create a key named {word} for {word}")]
+async fn when_i_create_a_wallet_key(world: &mut TariWorld, key_name: String, wallet_daemon_name: String) {
+    let mut client = world.get_wallet_daemon(&wallet_daemon_name).get_authed_client().await;
+    let key = client.create_key().await.unwrap();
+    world.wallet_keys.insert(key_name, key.id);
+}
+
+#[when(expr = "I create an account {word} via the wallet daemon {word} with {int} free coins using key {word}")]
+async fn when_i_create_account_via_wallet_daemon_with_free_coins_using_key(
+    world: &mut TariWorld,
+    account_name: String,
+    wallet_daemon_name: String,
+    amount: i64,
+    key_name: String,
+) {
+    wallet_daemon_cli::create_account_with_free_coins(
+        world,
+        account_name,
+        wallet_daemon_name,
+        amount.try_into().unwrap(),
+        Some(key_name),
     )
     .await;
 }
@@ -178,7 +242,7 @@ async fn when_i_burn_funds_with_wallet_daemon(
 
     let mut client = wallet.create_client().await;
     let resp = client
-        .create_burn_transaction(tari_app_grpc::tari_rpc::CreateBurnTransactionRequest {
+        .create_burn_transaction(minotari_app_grpc::tari_rpc::CreateBurnTransactionRequest {
             amount: amount * 1_000_000,
             fee_per_gram: 1,
             message: "Burn".to_string(),
@@ -378,4 +442,17 @@ async fn when_confidential_transfer_via_wallet_daemon(
         outputs_name,
     )
     .await;
+}
+
+#[when(expr = "I set the default account for {word} to {word}")]
+async fn when_i_set_the_default_account(world: &mut TariWorld, wallet_name: String, account_name: String) {
+    let wallet = world
+        .wallet_daemons
+        .get(&wallet_name)
+        .unwrap_or_else(|| panic!("No wallet daemon named {}", wallet_name));
+    let mut client = wallet.get_authed_client().await;
+    client
+        .accounts_set_default(ComponentAddressOrName::Name(account_name))
+        .await
+        .unwrap();
 }

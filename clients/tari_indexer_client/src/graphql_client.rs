@@ -68,18 +68,25 @@ impl IndexerGraphQLClient {
         if let Some(headers) = headers {
             req = req.headers(headers);
         }
-        let resp = req.body(serde_json::to_string(&body)?).send().await?;
+        let resp = req.json(&body).send().await?;
         let val = resp.json::<Value>().await?;
-        let data: Value = graphql_data(val)?;
-        serde_json::from_value::<R>(data).map_err(|e| anyhow!("Failed to deserialize response: {}", e))
+        let data: Value = graphql_data(&body, &val)?;
+        serde_json::from_value::<R>(data).map_err(|e| anyhow!("Failed to deserialize response {}: {}", val, e))
     }
 }
 
-fn graphql_data(val: Value) -> Result<Value, anyhow::Error> {
-    if let Some(err) = val.get("error") {
-        let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(-1);
-        let message = err.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error");
-        return Err(anyhow!("GraphQL error {}: {}", code, message));
+fn graphql_data(req: &Value, val: &Value) -> Result<Value, anyhow::Error> {
+    if let Some(err) = val.get("errors") {
+        if let Some(errors) = err.as_array() {
+            let mut msgs = Vec::new();
+            for err in errors {
+                let message = err.get("message").and_then(|m| m.as_str()).unwrap_or("Unknown error");
+                msgs.push(message);
+            }
+            return Err(anyhow!("Request failed:\n{}\n\nGraphQL error {}", req, msgs.join("\n")));
+        }
+
+        return Err(anyhow!("Request failed:\n{}\n\nGraphQL error {}", req, err));
     }
 
     let result = val.get("data").ok_or_else(|| anyhow!("Missing result field"))?;

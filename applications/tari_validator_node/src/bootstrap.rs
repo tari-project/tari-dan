@@ -31,13 +31,15 @@ use std::{
 use anyhow::anyhow;
 use futures::{future, FutureExt};
 use log::info;
-use tari_app_utilities::{identity_management, identity_management::load_from_json};
+use minotari_app_utilities::{identity_management, identity_management::load_from_json};
+use serde::Serialize;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_comms::{protocol::rpc::RpcServer, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_common_types::types::PublicKey;
+use tari_comms::{protocol::rpc::RpcServer, types::CommsPublicKey, CommsNode, NodeIdentity, UnspawnedCommsNode};
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_app_utilities::{
     base_layer_scanner,
@@ -46,10 +48,10 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::{
-    consensus_models::{Block, SubstateRecord},
+    consensus_models::{Block, ExecutedTransaction, SubstateRecord},
     global::GlobalDb,
     StateStore,
     StateStoreReadTransaction,
@@ -67,6 +69,7 @@ use tari_template_lib::{
     models::Metadata,
     prelude::ResourceType,
 };
+use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
@@ -80,7 +83,16 @@ use crate::{
         services::{
             comms_peer_provider::CommsPeerProvider,
             mempool,
-            mempool::{FeeTransactionValidator, MempoolHandle, TemplateExistsValidator, Validator},
+            mempool::{
+                ClaimFeeTransactionValidator,
+                FeeTransactionValidator,
+                InputRefsValidator,
+                MempoolError,
+                MempoolHandle,
+                OutputsDontExistLocally,
+                TemplateExistsValidator,
+                Validator,
+            },
             messaging,
             messaging::DanMessageReceivers,
             networking,
@@ -89,7 +101,9 @@ use crate::{
     },
     registration,
     substate_resolver::TariSubstateResolver,
+    virtual_substate::VirtualSubstateManager,
     ApplicationConfig,
+    ValidatorNodeConfig,
 };
 
 const LOG_TARGET: &str = "tari::validator_node::bootstrap";
@@ -116,13 +130,13 @@ pub async fn spawn_services(
     }));
 
     // Initialize comms
-    let (comms, message_channel) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
+    let (comms, message_channels) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
 
     // Spawn messaging
-    let (message_senders, message_receivers) = messaging::new_messaging_channel(10);
+    let (message_senders, message_receivers) = messaging::new_messaging_channel(30);
     let (outbound_messaging, join_handle) = messaging::spawn(
         node_identity.public_key().clone(),
-        message_channel,
+        message_channels,
         message_senders.clone(),
     );
     handles.push(join_handle);
@@ -165,7 +179,7 @@ pub async fn spawn_services(
     handles.push(join_handle);
 
     // Template manager
-    let template_manager = TemplateManager::new(global_db.clone(), config.validator_node.templates.clone());
+    let template_manager = TemplateManager::initialize(global_db.clone(), config.validator_node.templates.clone())?;
     let (template_manager_service, join_handle) =
         template_manager::implementation::spawn(template_manager.clone(), shutdown.clone());
     handles.push(join_handle);
@@ -181,13 +195,15 @@ pub async fn spawn_services(
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
 
     // Mempool
-    let mut validator = TemplateExistsValidator::new(template_manager.clone()).boxed();
-    if !config.validator_node.no_fees {
-        validator = validator.and_then(FeeTransactionValidator).boxed();
-    }
+    let virtual_substate_manager = VirtualSubstateManager::new(state_store.clone(), epoch_manager.clone());
     let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
     let scanner = SubstateScanner::new(epoch_manager.clone(), validator_node_client_factory.clone());
-    let substate_resolver = TariSubstateResolver::new(state_store.clone(), scanner);
+    let substate_resolver = TariSubstateResolver::new(
+        state_store.clone(),
+        scanner,
+        epoch_manager.clone(),
+        virtual_substate_manager.clone(),
+    );
     let (mempool, join_handle) = mempool::spawn(
         rx_new_transaction_message,
         outbound_messaging.clone(),
@@ -196,7 +212,12 @@ pub async fn spawn_services(
         node_identity.clone(),
         payload_processor.clone(),
         substate_resolver.clone(),
-        validator,
+        create_mempool_before_execute_validator(
+            &config.validator_node,
+            template_manager.clone(),
+            epoch_manager.clone(),
+        ),
+        create_mempool_after_execute_validator(state_store.clone()),
         state_store.clone(),
     );
     handles.push(join_handle);
@@ -223,12 +244,21 @@ pub async fn spawn_services(
         rx_executed_transaction,
         rx_consensus_message,
         outbound_messaging,
+        mempool.clone(),
+        validator_node_client_factory.clone(),
         shutdown.clone(),
     )
     .await;
     handles.push(consensus_handle);
 
-    let comms = setup_p2p_rpc(config, comms, peer_provider, state_store.clone(), mempool.clone());
+    let comms = setup_p2p_rpc(
+        config,
+        comms,
+        peer_provider,
+        state_store.clone(),
+        mempool.clone(),
+        virtual_substate_manager,
+    );
     let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
         .await
         .map_err(|e| {
@@ -295,7 +325,7 @@ pub struct Services {
     pub global_db: GlobalDb<SqliteGlobalDbAdapter>,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
     pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-    pub state_store: SqliteStateStore,
+    pub state_store: SqliteStateStore<PublicKey>,
 
     pub handles: Vec<JoinHandle<Result<(), anyhow::Error>>>,
 }
@@ -316,8 +346,9 @@ fn setup_p2p_rpc(
     config: &ApplicationConfig,
     comms: UnspawnedCommsNode,
     peer_provider: CommsPeerProvider,
-    shard_store_store: SqliteStateStore,
+    shard_store_store: SqliteStateStore<CommsPublicKey>,
     mempool: MempoolHandle,
+    virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PublicKey>, EpochManagerHandle>,
 ) -> UnspawnedCommsNode {
     let rpc_server = RpcServer::builder()
         .with_maximum_simultaneous_sessions(config.validator_node.p2p.rpc_max_simultaneous_sessions)
@@ -326,6 +357,7 @@ fn setup_p2p_rpc(
             peer_provider,
             shard_store_store,
             mempool,
+            virtual_substate_manager,
         ));
 
     comms.add_protocol_extension(rpc_server)
@@ -336,9 +368,10 @@ fn bootstrap_state<TTx>(tx: &mut TTx) -> Result<(), StorageError>
 where
     TTx: StateStoreWriteTransaction + DerefMut,
     TTx::Target: StateStoreReadTransaction,
+    TTx::Addr: NodeAddressable + Serialize,
 {
-    let genesis_block = Block::genesis(Epoch(0));
-    let address = SubstateAddress::Resource(*PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let genesis_block = Block::<TTx::Addr>::genesis();
+    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         // Create the resource for public identity
@@ -351,16 +384,13 @@ where
             created_justify: *genesis_block.justify().id(),
             created_block: *genesis_block.id(),
             created_height: NodeHeight(0),
-            destroyed_by_transaction: None,
-            destroyed_justify: None,
-            destroyed_by_block: None,
             created_at_epoch: Epoch(0),
-            destroyed_at_epoch: None,
+            destroyed: None,
         }
         .create(tx)?;
     }
 
-    let address = SubstateAddress::Resource(*CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         SubstateRecord {
@@ -372,14 +402,31 @@ where
             created_justify: *genesis_block.justify().id(),
             created_block: *genesis_block.id(),
             created_height: NodeHeight(0),
-            destroyed_by_transaction: None,
-            destroyed_justify: None,
-            destroyed_by_block: None,
             created_at_epoch: Epoch(0),
-            destroyed_at_epoch: None,
+            destroyed: None,
         }
         .create(tx)?;
     }
 
     Ok(())
+}
+
+fn create_mempool_before_execute_validator(
+    config: &ValidatorNodeConfig,
+    template_manager: TemplateManager,
+    epoch_manager: EpochManagerHandle,
+) -> impl Validator<Transaction, Error = MempoolError> {
+    let mut validator = TemplateExistsValidator::new(template_manager)
+        .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
+        .boxed();
+    if !config.no_fees {
+        validator = validator.and_then(FeeTransactionValidator).boxed();
+    }
+    validator
+}
+
+fn create_mempool_after_execute_validator(
+    store: SqliteStateStore<CommsPublicKey>,
+) -> impl Validator<ExecutedTransaction, Error = MempoolError> {
+    InputRefsValidator::new().and_then(OutputsDontExistLocally::new(store))
 }

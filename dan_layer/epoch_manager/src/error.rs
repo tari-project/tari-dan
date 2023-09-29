@@ -24,14 +24,10 @@ pub enum EpochManagerError {
     SqlLiteStorageError(anyhow::Error),
     #[error("No validator nodes found for current shard key")]
     ValidatorNodesNotFound,
-    // #[error("Rpc error: {0}")]
-    // RpcError(#[from] RpcError),
-    // #[error("Rpc status error: {0}")]
-    // RpcStatus(#[from] RpcStatus),
     #[error("No committee VNs found for shard {shard_id} and epoch {epoch}")]
     NoCommitteeVns { shard_id: ShardId, epoch: Epoch },
-    #[error("Validator node is not registered")]
-    ValidatorNodeNotRegistered,
+    #[error("Validator node {address} is not registered")]
+    ValidatorNodeNotRegistered { address: String },
     #[error("Base layer consensus constants not set")]
     BaseLayerConsensusConstantsNotSet,
     #[error("Base layer could not return shard key for {public_key} at height {block_height}")]
@@ -42,4 +38,12 @@ pub enum EpochManagerError {
     BalancedBinaryMerkleProofError(anyhow::Error),
     #[error("Integer overflow: {func}")]
     IntegerOverflow { func: &'static str },
+    #[error("Invalid epoch: {epoch}")]
+    InvalidEpoch { epoch: Epoch },
+}
+
+impl EpochManagerError {
+    pub fn is_not_registered_error(&self) -> bool {
+        matches!(self, Self::ValidatorNodeNotRegistered { .. })
+    }
 }

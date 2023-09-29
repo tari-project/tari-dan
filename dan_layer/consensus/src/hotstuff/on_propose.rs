@@ -4,11 +4,18 @@
 use std::{
     collections::{BTreeSet, HashSet},
     iter,
+    num::NonZeroU64,
     ops::DerefMut,
 };
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeShard},
+    optional::Optional,
+    shard_bucket::ShardBucket,
+    Epoch,
+    NodeHeight,
+};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -22,13 +29,17 @@ use tari_dan_storage::{
         TransactionPoolStage,
     },
     StateStore,
+    StateStoreReadTransaction,
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
 use crate::{
-    hotstuff::error::HotStuffError,
+    hotstuff::{
+        common::{CommitteeAndMessage, EXHAUST_DIVISOR},
+        error::HotStuffError,
+    },
     messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
@@ -39,7 +50,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-    tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
+    tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
@@ -49,7 +60,7 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
+        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
     ) -> Self {
         Self {
             store,
@@ -64,19 +75,44 @@ where TConsensusSpec: ConsensusSpec
         epoch: Epoch,
         local_committee: Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
+        is_newview_propose: bool,
     ) -> Result<(), HotStuffError> {
-        let last_proposed = self.store.with_read_tx(|tx| LastProposed::get(tx, epoch).optional())?;
-        let last_proposed_height = last_proposed.map(|lp| lp.height).unwrap_or(NodeHeight(0));
-        if last_proposed_height >= leaf_block.height + NodeHeight(1) {
-            info!(
-                target: LOG_TARGET,
-                "Skipping on_propose for next block because we have already proposed a block at height {}",
-                last_proposed_height
-            );
-            return Ok(());
+        if let Some(last_proposed) = self.store.with_read_tx(|tx| LastProposed::get(tx)).optional()? {
+            if last_proposed.height > leaf_block.height {
+                // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
+                // Re-broadcast the previous proposal
+                if is_newview_propose {
+                    let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
+                    let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
+                    let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
+
+                    if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
+                        let non_local_buckets = self
+                            .store
+                            .with_read_tx(|tx| get_non_local_buckets(tx, &next_block, num_committees, local_bucket))?;
+                        info!(
+                            target: LOG_TARGET,
+                            "🌿 RE-BROADCASTING block {}({}) to {} validators. {} command(s), {} foreign shards, justify: {} ({}), parent: {}",
+                            next_block.id(),
+                            next_block.height(),
+                            local_committee.len(),
+                            next_block.commands().len(),
+                            non_local_buckets.len(),
+                            next_block.justify().block_id(),
+                            next_block.justify().block_height(),
+                            next_block.parent(),
+                        );
+                        self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
+                            .await?;
+                    }
+                }
+
+                return Ok(());
+            }
         }
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
         let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
         let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
@@ -85,41 +121,37 @@ where TConsensusSpec: ConsensusSpec
         let next_block;
         {
             let mut tx = self.store.create_write_tx()?;
-            let high_qc = HighQc::get(&mut *tx, epoch)?;
+            let high_qc = HighQc::get(&mut *tx)?;
             let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
 
-            let parent_block = leaf_block.get_block(&mut *tx)?;
-
-            next_block = self.build_next_block(&mut tx, epoch, &parent_block, high_qc, validator.shard_key)?;
-            next_block.insert(&mut tx)?;
+            next_block = self.build_next_block(
+                &mut tx,
+                epoch,
+                &leaf_block,
+                high_qc,
+                validator.address,
+                &local_committee_shard,
+                // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
+                //       is a good idea.
+                is_newview_propose,
+            )?;
+            next_block.save(&mut tx)?;
             next_block.as_last_proposed().set(&mut tx)?;
 
             // Get involved shards for all LocalPrepared commands in the block.
             // This allows us to broadcast the proposal only to the relevant committees that would be interested in the
             // LocalPrepared.
-            let prepared_iter = next_block
-                .commands()
-                .iter()
-                .filter_map(|cmd| cmd.local_prepared())
-                .map(|t| &t.id);
-            let prepared_txs = ExecutedTransaction::get_any(tx.deref_mut(), prepared_iter)?;
-            non_local_buckets = prepared_txs
-                .iter()
-                .flat_map(|tx| tx.transaction().involved_shards_iter().copied())
-                .map(|shard| shard.to_committee_bucket(num_committees))
-                .filter(|bucket| *bucket != local_bucket)
-                .collect::<HashSet<_>>();
-
+            // TODO: we should never broadcast to foreign shards here. The soonest we can broadcast is once we have
+            //       locked the block
+            non_local_buckets = get_non_local_buckets(tx.deref_mut(), &next_block, num_committees, local_bucket)?;
             tx.commit()?;
         }
 
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING new block {}({}) to {} validators. {} command(s), {} foreign shards, justify: {} ({}), parent: {}",
-            next_block.id(),
-            next_block.height(),
+            "🌿 PROPOSING new block {} to {} validators. {} foreign shards, justify: {} ({}), parent: {}",
+            next_block,
             local_committee.len(),
-            next_block.commands().len(),
             non_local_buckets.len(),
             next_block.justify().block_id(),
             next_block.justify().block_height(),
@@ -135,15 +167,16 @@ where TConsensusSpec: ConsensusSpec
     async fn broadcast_proposal(
         &self,
         epoch: Epoch,
-        next_block: Block,
-        non_local_buckets: HashSet<u32>,
+        next_block: Block<TConsensusSpec::Addr>,
+        non_local_buckets: HashSet<ShardBucket>,
         local_committee: Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         // Find non-local shard committees to include in the broadcast
         debug!(
             target: LOG_TARGET,
             "non_local_buckets : [{}]",
-            non_local_buckets.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","));
+            non_local_buckets.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","),
+        );
 
         let non_local_committees = self
             .epoch_manager
@@ -152,10 +185,11 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🔥 Broadcasting proposal {} to committees ({} local, {} foreign)",
-            next_block.id(),
+            "🌿 Broadcasting proposal {} to committees ({} local, {} foreign)",
+            next_block,
             local_committee.len(),
-            non_local_committees.len());
+            non_local_committees.len(),
+        );
 
         // Broadcast to local and foreign committees
         // TODO: only broadcast to f + 1 foreign committee members. They can gossip the proposal around from there.
@@ -178,39 +212,57 @@ where TConsensusSpec: ConsensusSpec
 
     fn build_next_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         epoch: Epoch,
-        parent_block: &Block,
-        high_qc: QuorumCertificate,
-        proposed_by: ShardId,
-    ) -> Result<Block, HotStuffError> {
+        parent_block: &LeafBlock,
+        high_qc: QuorumCertificate<TConsensusSpec::Addr>,
+        proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
+        local_committee_shard: &CommitteeShard,
+        empty_block: bool,
+    ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
-        let ready = self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?;
+        let batch = if empty_block {
+            vec![]
+        } else {
+            self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?
+        };
 
-        let commands = ready
+        let mut total_leader_fee = 0;
+        let commands = batch
             .into_iter()
-            .map(|t| match t.stage {
+            .map(|t| match t.current_stage() {
                 // If the transaction is New, propose to Prepare it
-                TransactionPoolStage::New => Command::Prepare(t.transaction),
+                TransactionPoolStage::New => Ok(Command::Prepare(t.get_local_transaction_atom())),
                 // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
                 // accepted Prepared so we propose LocalPrepared
-                TransactionPoolStage::Prepared => Command::LocalPrepared(t.transaction),
+                TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.get_local_transaction_atom())),
                 // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
                 // prepared. We can now propose to Accept it. We also propose the decision change which everyone should
                 // agree with if they received the same foreign LocalPrepare.
-                TransactionPoolStage::LocalPrepared => Command::Accept(t.get_transaction_atom_with_decision_change()),
+                TransactionPoolStage::LocalPrepared => {
+                    let involved = local_committee_shard.count_distinct_buckets(t.transaction().evidence.shards_iter());
+                    let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
+                        HotStuffError::InvariantError(format!(
+                            "Number of involved shards is zero for transaction {}",
+                            t.transaction_id(),
+                        ))
+                    })?;
+                    let leader_fee = t.calculate_leader_fee(involved, EXHAUST_DIVISOR);
+                    total_leader_fee += leader_fee;
+                    Ok(Command::Accept(t.get_final_transaction_atom(leader_fee)))
+                },
                 // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes agreed
                 // with the Accept, more (possibly empty) blocks with QCs will be proposed and accepted,
                 // otherwise the Accept block will not be committed.
                 TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => {
                     unreachable!(
                         "It is invalid for TransactionPoolStage::{} to be ready to propose",
-                        t.stage
+                        t.current_stage()
                     )
                 },
             })
-            .collect::<BTreeSet<_>>();
+            .collect::<Result<BTreeSet<_>, HotStuffError>>()?;
 
         debug!(
             target: LOG_TARGET,
@@ -219,15 +271,36 @@ where TConsensusSpec: ConsensusSpec
         );
 
         let next_block = Block::new(
-            *parent_block.id(),
+            *parent_block.block_id(),
             high_qc,
             parent_block.height() + NodeHeight(1),
             epoch,
-            0,
             proposed_by,
             commands,
+            total_leader_fee,
         );
 
         Ok(next_block)
     }
+}
+
+fn get_non_local_buckets<TTx: StateStoreReadTransaction>(
+    tx: &mut TTx,
+    next_block: &Block<TTx::Addr>,
+    num_committees: u32,
+    local_bucket: ShardBucket,
+) -> Result<HashSet<ShardBucket>, HotStuffError> {
+    let prepared_iter = next_block
+        .commands()
+        .iter()
+        .filter_map(|cmd| cmd.local_prepared())
+        .map(|t| &t.id);
+    let prepared_txs = ExecutedTransaction::get_involved_shards(tx, prepared_iter)?;
+    let non_local_buckets = prepared_txs
+        .into_iter()
+        .flat_map(|(_, shards)| shards)
+        .map(|shard| shard.to_committee_bucket(num_committees))
+        .filter(|bucket| *bucket != local_bucket)
+        .collect();
+    Ok(non_local_buckets)
 }

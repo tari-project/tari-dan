@@ -29,7 +29,7 @@ use tari_base_node_client::{
     BaseNodeClient,
     BaseNodeClientError,
 };
-use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
+use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError, PublicKey};
 use tari_core::transactions::transaction_components::{
     CodeTemplateRegistration,
     SideChainFeature,
@@ -49,7 +49,7 @@ use tari_engine_types::{
     confidential::UnclaimedConfidentialOutput,
     substate::{SubstateAddress, SubstateValue},
 };
-use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerReader};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError};
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::models::{EncryptedData, TemplateAddress, UnclaimedConfidentialOutputAddress};
@@ -69,7 +69,7 @@ pub fn spawn(
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
     consensus_constants: ConsensusConstants,
-    shard_store: SqliteStateStore,
+    shard_store: SqliteStateStore<PublicKey>,
     scan_base_layer: bool,
     base_layer_scanning_interval: Duration,
 ) -> JoinHandle<anyhow::Result<()>> {
@@ -102,7 +102,7 @@ pub struct BaseLayerScanner {
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
     consensus_constants: ConsensusConstants,
-    state_store: SqliteStateStore,
+    state_store: SqliteStateStore<PublicKey>,
     scan_base_layer: bool,
     base_layer_scanning_interval: Duration,
     has_attempted_scan: bool,
@@ -116,7 +116,7 @@ impl BaseLayerScanner {
         template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
         consensus_constants: ConsensusConstants,
-        state_store: SqliteStateStore,
+        state_store: SqliteStateStore<PublicKey>,
         scan_base_layer: bool,
         base_layer_scanning_interval: Duration,
     ) -> Self {
@@ -372,11 +372,11 @@ impl BaseLayerScanner {
             commitment: output.commitment.clone(),
             encrypted_data: EncryptedData(output.encrypted_data.to_bytes()),
         });
-        let epoch = self.epoch_manager.current_epoch().await?;
         self.state_store
             .with_write_tx(|tx| {
-                let genesis = Block::genesis(epoch);
+                let genesis = Block::<PublicKey>::genesis();
 
+                // TODO: This should be proposed in a block...
                 SubstateRecord {
                     address,
                     version: 0,
@@ -386,11 +386,8 @@ impl BaseLayerScanner {
                     created_justify: *genesis.justify().id(),
                     created_block: *genesis.id(),
                     created_height: NodeHeight::zero(),
-                    destroyed_by_transaction: None,
-                    destroyed_justify: None,
-                    destroyed_by_block: None,
                     created_at_epoch: Epoch(0),
-                    destroyed_at_epoch: None,
+                    destroyed: None,
                 }
                 .create(tx)
             })

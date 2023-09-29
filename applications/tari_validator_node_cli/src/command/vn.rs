@@ -20,22 +20,93 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use clap::Subcommand;
-use tari_validator_node_client::ValidatorNodeClient;
+use anyhow::anyhow;
+use clap::{Args, Subcommand};
+use tari_common_types::types::PublicKey;
+use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_common_types::Epoch;
+use tari_template_lib::crypto::RistrettoPublicKeyBytes;
+use tari_validator_node_client::{types::GetValidatorFeesRequest, ValidatorNodeClient};
+
+use crate::{cli_range::CliRange, from_hex::FromHex, table::Table, table_row};
 
 #[derive(Debug, Subcommand, Clone)]
 pub enum VnSubcommand {
-    Register,
+    Register(RegisterArgs),
+    #[clap(alias = "get-fees")]
+    GetFeeInfo(GetFeesArgs),
 }
 
 impl VnSubcommand {
     pub async fn handle(self, mut client: ValidatorNodeClient) -> Result<(), anyhow::Error> {
         match self {
-            VnSubcommand::Register => {
-                let tx_id = client.register_validator_node().await?;
+            VnSubcommand::Register(args) => {
+                let claim_public_key = PublicKey::from_bytes(args.claim_public_key.into_inner().as_bytes())
+                    .map_err(|e| anyhow!("{}", e))?;
+                let tx_id = client.register_validator_node(claim_public_key).await?;
                 println!("✅ Validator node registration submitted (tx_id: {})", tx_id);
+            },
+            VnSubcommand::GetFeeInfo(args) => {
+                handle_get_fee_info(args, &mut client).await?;
             },
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct RegisterArgs {
+    claim_public_key: FromHex<RistrettoPublicKeyBytes>,
+}
+
+#[derive(Debug, Args, Clone)]
+pub struct GetFeesArgs {
+    #[clap(long, alias = "vn")]
+    validator_public_key: Option<FromHex<RistrettoPublicKeyBytes>>,
+    #[clap(long, short = 'e')]
+    epoch_range: Option<CliRange<Epoch>>,
+}
+
+async fn handle_get_fee_info(args: GetFeesArgs, client: &mut ValidatorNodeClient) -> anyhow::Result<()> {
+    let stats = client.get_epoch_manager_stats().await?;
+    let epoch_range = args
+        .epoch_range
+        .map(|r| r.into_inner())
+        .unwrap_or(Epoch(0)..=stats.current_epoch);
+
+    println!(
+        "Fetching fee data from epochs {} - {}",
+        epoch_range.start().as_u64(),
+        epoch_range.end().as_u64()
+    );
+    println!();
+
+    let resp = client
+        .get_fees(GetValidatorFeesRequest {
+            epoch_range,
+            validator_public_key: args
+                .validator_public_key
+                .map(|pk| PublicKey::from_bytes(pk.into_inner().as_bytes()))
+                .transpose()
+                .map_err(anyhow::Error::msg)?,
+        })
+        .await?;
+
+    let mut table = Table::new();
+    table
+        .enable_row_count()
+        .set_titles(vec!["Validator", "Epoch", "Block", "Total Due", "Total Tx fees"]);
+
+    for fee in resp.fees {
+        table.add_row(table_row!(
+            fee.validator_addr,
+            fee.epoch,
+            fee.block_id,
+            fee.total_fee_due,
+            fee.total_transaction_fee
+        ));
+    }
+
+    table.print_stdout();
+    Ok(())
 }

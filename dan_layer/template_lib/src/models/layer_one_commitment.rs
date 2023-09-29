@@ -6,12 +6,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{hash::HashParseError, Hash};
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct UnclaimedConfidentialOutputAddress(Hash);
 
 impl UnclaimedConfidentialOutputAddress {
-    pub fn new(hash: Hash) -> Self {
+    pub const fn new(hash: Hash) -> Self {
         Self(hash)
     }
 

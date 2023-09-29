@@ -72,3 +72,6 @@ pub use tari_bor::encode;
 pub mod constants;
 #[cfg(target_arch = "wasm32")]
 pub mod workspace;
+
+#[macro_use]
+mod newtype_serde_macros;

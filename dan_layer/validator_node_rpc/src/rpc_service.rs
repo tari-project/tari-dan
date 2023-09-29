@@ -20,11 +20,11 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
         request: Request<proto::GetPeersRequest>,
     ) -> Result<Streaming<proto::GetPeersResponse>, RpcStatus>;
 
-    #[rpc(method = 3)]
-    async fn vn_state_sync(
-        &self,
-        request: Request<proto::VnStateSyncRequest>,
-    ) -> Result<Streaming<proto::VnStateSyncResponse>, RpcStatus>;
+    // #[rpc(method = 3)]
+    // async fn vn_state_sync(
+    //     &self,
+    //     request: Request<proto::VnStateSyncRequest>,
+    // ) -> Result<Streaming<proto::VnStateSyncResponse>, RpcStatus>;
 
     #[rpc(method = 4)]
     async fn get_substate(
@@ -37,4 +37,21 @@ pub trait ValidatorNodeRpcService: Send + Sync + 'static {
         &self,
         req: Request<proto::GetTransactionResultRequest>,
     ) -> Result<Response<proto::GetTransactionResultResponse>, RpcStatus>;
+
+    #[rpc(method = 6)]
+    async fn get_virtual_substate(
+        &self,
+        req: Request<proto::GetVirtualSubstateRequest>,
+    ) -> Result<Response<proto::GetVirtualSubstateResponse>, RpcStatus>;
+
+    #[rpc(method = 7)]
+    async fn sync_blocks(
+        &self,
+        request: Request<proto::SyncBlocksRequest>,
+    ) -> Result<Streaming<proto::SyncBlocksResponse>, RpcStatus>;
+    #[rpc(method = 8)]
+    async fn get_high_qc(
+        &self,
+        request: Request<proto::GetHighQcRequest>,
+    ) -> Result<Response<proto::GetHighQcResponse>, RpcStatus>;
 }

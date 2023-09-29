@@ -37,7 +37,7 @@ use diesel::{
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, ShardId};
+use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::{
     global::{
         models::ValidatorNode,
@@ -328,6 +328,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         public_key: PublicKey,
         shard_key: ShardId,
         epoch: Epoch,
+        fee_claim_public_key: PublicKey,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 
@@ -336,7 +337,19 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
                 validator_nodes::public_key.eq(public_key.as_bytes()),
                 validator_nodes::shard_key.eq(shard_key.as_bytes()),
                 validator_nodes::epoch.eq(epoch.as_u64() as i64),
+                validator_nodes::fee_claim_public_key.eq(fee_claim_public_key.as_bytes()),
             ))
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "insert::validator_nodes".to_string(),
+            })?;
+
+        // TODO: We update records for this validator node with the latest fee claim public key. This is hacky and this
+        //       behaviour is not clear to the caller/trait implementor.
+        diesel::update(validator_nodes::table)
+            .filter(validator_nodes::public_key.eq(public_key.as_bytes()))
+            .set(validator_nodes::fee_claim_public_key.eq(fee_claim_public_key.as_bytes()))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -395,7 +408,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        bucket: u32,
+        bucket: ShardBucket,
     ) -> Result<u64, Self::Error> {
         let count = sql_query(
             "SELECT COUNT(distinct public_key) as cnt FROM validator_nodes WHERE epoch >= ? AND epoch <= ? AND \
@@ -403,7 +416,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         )
         .bind::<BigInt, _>(start_epoch.as_u64() as i64)
         .bind::<BigInt, _>(end_epoch.as_u64() as i64)
-        .bind::<Integer, _>(bucket as i32)
+        .bind::<Integer, _>(bucket.as_u32() as i32)
         .get_result::<Count>(tx.connection())
         .map_err(|source| SqliteStorageError::DieselError {
             source,
@@ -417,13 +430,13 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: ShardId,
-        bucket: u32,
+        bucket: ShardBucket,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 
         diesel::update(validator_nodes::table)
             .filter(validator_nodes::shard_key.eq(shard_key.as_bytes()))
-            .set(validator_nodes::committee_bucket.eq(i64::from(bucket)))
+            .set(validator_nodes::committee_bucket.eq(i64::from(bucket.as_u32())))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -464,14 +477,14 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        buckets: HashSet<u32>,
-    ) -> Result<HashMap<u32, Committee<PublicKey>>, Self::Error> {
+        buckets: HashSet<ShardBucket>,
+    ) -> Result<HashMap<ShardBucket, Committee<PublicKey>>, Self::Error> {
         use crate::global::schema::validator_nodes;
 
         let validators: Vec<DbValidatorNode> = validator_nodes::table
             .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
             .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
-            .filter(validator_nodes::committee_bucket.eq_any(buckets.iter().map(|b| i64::from(*b))))
+            .filter(validator_nodes::committee_bucket.eq_any(buckets.iter().map(|b| i64::from(b.as_u32()))))
             .order_by(validator_nodes::id.asc())
             .get_results(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {

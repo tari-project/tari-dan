@@ -31,6 +31,7 @@ use tari_common::{
     configuration::{CommonConfig, StringList},
     exit_codes::ExitError,
 };
+use tari_common_types::types::PublicKey;
 use tari_comms::multiaddr::Multiaddr;
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
 use tari_p2p::{Network, PeerSeedsConfig, TransportType};
@@ -48,7 +49,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ValidatorNodeProcess {
     pub name: String,
-    pub public_key: String,
+    pub public_key: PublicKey,
     pub port: u16,
     pub json_rpc_port: u16,
     pub http_ui_port: u16,
@@ -64,21 +65,18 @@ impl ValidatorNodeProcess {
     }
 
     pub async fn save_database(&self, database_name: String, to: &Path) {
-        dbg!(to);
         fs::create_dir_all(to).expect("Could not create directory");
         let from = &self.temp_dir_path.join(format!("{}.db", database_name));
-        dbg!(&from);
         fs::copy(from, to.join(format!("{}.sqlite", database_name))).expect("Could not copy file");
     }
 }
 
 pub async fn spawn_validator_node(
-    world: &mut TariWorld,
+    world: &TariWorld,
     validator_node_name: String,
     base_node_name: String,
     wallet_name: String,
-    is_seed_vn: bool,
-) {
+) -> ValidatorNodeProcess {
     // each spawned VN will use different ports
     let (port, json_rpc_port) = get_os_assigned_ports();
     let http_ui_port = get_os_assigned_port();
@@ -100,6 +98,7 @@ pub async fn spawn_validator_node(
         &validator_node_name,
     );
     let temp_dir_path = temp_dir.clone();
+    let enable_fees = world.fees_enabled;
     let handle = task::spawn(async move {
         let mut config = ApplicationConfig {
             common: CommonConfig::default(),
@@ -134,8 +133,7 @@ pub async fn spawn_validator_node(
         config.validator_node.json_rpc_address = Some(format!("127.0.0.1:{}", json_rpc_port).parse().unwrap());
         config.validator_node.http_ui_address = Some(format!("127.0.0.1:{}", http_ui_port).parse().unwrap());
 
-        // TODO: test fees in cucumber
-        config.validator_node.no_fees = true;
+        config.validator_node.no_fees = !enable_fees;
 
         // The VNS will try to auto register upon startup
         config.validator_node.auto_register = false;
@@ -155,7 +153,7 @@ pub async fn spawn_validator_node(
     let public_key = get_vn_identity(json_rpc_port).await;
 
     // make the new vn able to be referenced by other processes
-    let validator_node_process = ValidatorNodeProcess {
+    ValidatorNodeProcess {
         name: name.clone(),
         public_key,
         port,
@@ -165,30 +163,28 @@ pub async fn spawn_validator_node(
         json_rpc_port,
         temp_dir_path,
         shutdown,
-    };
-    if is_seed_vn {
-        world.vn_seeds.insert(name, validator_node_process);
-    } else {
-        world.validator_nodes.insert(name, validator_node_process);
     }
 }
 
-pub fn get_vn_client(port: u16) -> ValidatorNodeClient {
+fn get_vn_client(port: u16) -> ValidatorNodeClient {
     let endpoint: Url = Url::parse(&format!("http://localhost:{}", port)).unwrap();
     ValidatorNodeClient::connect(endpoint).unwrap()
 }
 
-async fn get_vn_identity(jrpc_port: u16) -> String {
+async fn get_vn_identity(jrpc_port: u16) -> PublicKey {
     // send the JSON RPC "get_identity" request to the VN
     let mut client = get_vn_client(jrpc_port);
     let resp = client.get_identity().await.unwrap();
-
-    assert!(!resp.public_key.is_empty());
     resp.public_key
 }
 
 impl ValidatorNodeProcess {
     pub fn stop(&mut self) {
         self.shutdown.trigger();
+    }
+
+    pub fn get_client(&self) -> ValidatorNodeClient {
+        let endpoint: Url = Url::parse(&format!("http://localhost:{}", self.json_rpc_port)).unwrap();
+        ValidatorNodeClient::connect(endpoint).unwrap()
     }
 }

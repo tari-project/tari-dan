@@ -23,90 +23,75 @@
 import PageHeading from '../../Components/PageHeading';
 import Grid from '@mui/material/Grid';
 import { StyledPaper } from '../../Components/StyledComponents';
-import Accounts from '../Wallet/Components/Accounts';
 import TableContainer from '@mui/material/TableContainer';
 import Table from '@mui/material/Table';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import TableBody from '@mui/material/TableBody';
-import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { accountsGetBalances, accountsGet, accountNFTsList } from '../../utils/json_rpc';
-import Alert from '@mui/material/Alert';
-import { removeTagged, toHexString } from '../../utils/helpers';
+import {
+  useAccountsGetBalances,
+  useAccountsGet,
+  useAccountNFTsList,
+} from '../../api/hooks/useAccounts';
+import { removeTagged, shortenString } from '../../utils/helpers';
+import { DataTableCell } from '../../Components/StyledComponents';
+import CopyToClipboard from '../../Components/CopyToClipboard';
+import FetchStatusCheck from '../../Components/FetchStatusCheck';
+
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
 
 function BalanceRow(props: any) {
   return (
-    <TableRow>
-      <TableCell>{props.token_symbol || props.resource_address}</TableCell>
-      <TableCell>{props.resource_type}</TableCell>
-      <TableCell>{removeTagged(props.balance)}</TableCell>
-      <TableCell>{removeTagged(props.confidential_balance)}</TableCell>
+    <TableRow key={props.index}>
+      <DataTableCell>
+        {shortenString(props.token_symbol || props.resource_address)}
+        <CopyToClipboard copy={props.token_symbol || props.resource_address} />
+      </DataTableCell>
+      <DataTableCell>{props.resource_type}</DataTableCell>
+      <DataTableCell>{removeTagged(props.balance)}</DataTableCell>
+      <DataTableCell>{removeTagged(props.confidential_balance)}</DataTableCell>
     </TableRow>
   );
 }
 
 function NftsList(props: any) {
   return (
-    <TableRow>
-      <TableCell>{props.token_symbol}</TableCell>
-      <TableCell>{props.metadata}</TableCell>
-      <TableCell>{props.is_burned}</TableCell>
+    <TableRow key={props.index}>
+      <DataTableCell>{props.token_symbol}</DataTableCell>
+      <DataTableCell>{props.metadata}</DataTableCell>
+      <DataTableCell>{props.is_burned}</DataTableCell>
     </TableRow>
-  )
+  );
 }
 
 function AccountDetailsLayout() {
-  const { name } = useParams<{ name: string }>();
-  let [state, setState] = useState<any>(null);
-  let [balances, setBalances] = useState<any>(null);
-  let [error, setError] = useState<any>(null);
-  let [nftsList, setNFTsList] = useState<any>(null);
+  const { name } = useParams();
+  const {
+    data: balancesData,
+    isLoading: balancesIsLoading,
+    isError: balancesIsError,
+    error: balancesError,
+  } = useAccountsGetBalances(name || '');
 
-  const loadAccount = () => {
-    if (name !== undefined) {
-      accountsGet(name)
-        .then((response: any) => {
-          setState(response);
-        })
-        .catch((error: any) => {
-          console.error(error);
-          setError(error.message);
-        });
-    }
-  };
+  const {
+    data: nftsListData,
+    isLoading: nftsListIsLoading,
+    isError: nftsListIsError,
+    error: nftsListError,
+  } = useAccountNFTsList(0, 10);
 
-  const loadBalances = () => {
-    if (name !== undefined) {
-      accountsGetBalances(name)
-        .then((response: any) => {
-          setBalances(response);
-        })
-        .catch((error: any) => {
-          console.error(error);
-          setError(error.message);
-        });
-    }
-  };
-
-  const listAccountsNfts = () => {
-    if (name !== undefined) {
-      accountNFTsList(0, 10)
-        .then((response: any) => {
-          console.log(response);
-          setNFTsList(response);
-        })
-        .catch((error: any) => {
-          console.error(error);
-          setError(error.message)
-        });
-    }
-  };
-
-  useEffect(() => loadAccount(), []);
-  useEffect(() => loadBalances(), []);
-  useEffect(() => listAccountsNfts(), []);
+  const {
+    data: accountsData,
+    isLoading: accountsIsLoading,
+    isError: accountsIsError,
+    error: accountsError,
+  } = useAccountsGet(name|| '');
 
   return (
     <>
@@ -114,8 +99,12 @@ function AccountDetailsLayout() {
         <PageHeading>Account Details</PageHeading>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
-        {error ? <Alert severity="error">{error}</Alert> : null}
         <StyledPaper>
+          <FetchStatusCheck
+            isError={accountsIsError}
+            errorMessage={accountsError?.message || 'Error fetching data'}
+            isLoading={accountsIsLoading}
+          />
           <TableContainer>
             <Table>
               <TableHead>
@@ -126,13 +115,21 @@ function AccountDetailsLayout() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                <TableRow>
-                  <TableCell>{state?.account.name}</TableCell>
-                  <TableCell>
-                    {state?.account.address.Component}
-                  </TableCell>
-                  <TableCell>{state?.public_key}</TableCell>
-                </TableRow>
+                {accountsData && (
+                  <TableRow>
+                    <DataTableCell>{accountsData.account.name}</DataTableCell>
+                    <DataTableCell>
+                      {shortenString(accountsData.account.address.Component)}
+                      <CopyToClipboard
+                        copy={accountsData.account.address.Component}
+                      />
+                    </DataTableCell>
+                    <DataTableCell>
+                      {shortenString(accountsData.public_key)}
+                      <CopyToClipboard copy={accountsData.public_key} />
+                    </DataTableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </TableContainer>
@@ -141,6 +138,11 @@ function AccountDetailsLayout() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           Balances
+          <FetchStatusCheck
+            isError={balancesIsError}
+            errorMessage={balancesError?.message || 'Error fetching data'}
+            isLoading={balancesIsLoading}
+          />
           <TableContainer>
             <Table>
               <TableHead>
@@ -152,7 +154,9 @@ function AccountDetailsLayout() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {balances?.balances.map((balance: any) => BalanceRow(balance))}
+                {balancesData?.balances.map((balance: number, index: number) =>
+                  BalanceRow(balance)
+                )}
               </TableBody>
             </Table>
           </TableContainer>
@@ -161,6 +165,11 @@ function AccountDetailsLayout() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           Account NFTs
+          <FetchStatusCheck
+            isError={nftsListIsError}
+            errorMessage={nftsListError?.message || 'Error fetching data'}
+            isLoading={nftsListIsLoading}
+          />
           <TableContainer>
             <Table>
               <TableHead>
@@ -171,7 +180,9 @@ function AccountDetailsLayout() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {nftsList?.nfts.map((nft: any) => NftsList(nft))}
+                {nftsListData?.nfts.map((nft: any, index: number) =>
+                  NftsList(nft)
+                )}
               </TableBody>
             </Table>
           </TableContainer>

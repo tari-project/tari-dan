@@ -1,34 +1,37 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::DerefMut;
+use std::{
+    fmt::{Debug, Formatter},
+    ops::DerefMut,
+};
 
 use log::*;
-use tari_dan_common_types::{committee::Committee, Epoch};
+use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{Block, Decision, ExecutedTransaction, LeafBlock, TransactionAtom, TransactionPool},
+    consensus_models::{Block, HighQc, LeafBlock, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
-use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
+use tari_epoch_manager::EpochManagerReader;
 use tari_shutdown::ShutdownSignal;
-use tari_transaction::Transaction;
-use tokio::{
-    sync::{broadcast, mpsc},
-    task::JoinHandle,
-};
+use tari_transaction::{Transaction, TransactionId};
+use tokio::sync::{broadcast, mpsc};
 
 use super::on_receive_requested_transactions::OnReceiveRequestedTransactions;
 use crate::{
     hotstuff::{
+        common::CommitteeAndMessage,
         error::HotStuffError,
         event::HotstuffEvent,
-        on_beat::OnBeat,
+        on_next_sync_view::OnNextSyncViewHandler,
         on_propose::OnPropose,
         on_receive_new_view::OnReceiveNewViewHandler,
         on_receive_proposal::OnReceiveProposalHandler,
         on_receive_request_missing_transactions::OnReceiveRequestMissingTransactions,
         on_receive_vote::OnReceiveVoteHandler,
+        pacemaker::PaceMaker,
+        pacemaker_handle::PaceMakerHandle,
     },
     messages::HotstuffMessage,
     traits::{ConsensusSpec, LeaderStrategy},
@@ -39,9 +42,12 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::worker";
 pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
 
-    rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-    rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+    rx_new_transactions: mpsc::Receiver<TransactionId>,
+    rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+    tx_events: broadcast::Sender<HotstuffEvent>,
 
+    // on_leader_timeout: OnLeaderTimeout,
+    on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
     on_receive_proposal: OnReceiveProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
@@ -54,11 +60,9 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
 
     epoch_manager: TConsensusSpec::EpochManager,
-    epoch_events: broadcast::Receiver<EpochManagerEvent>,
-    latest_epoch: Option<Epoch>,
-    is_epoch_synced: bool,
 
-    on_beat: OnBeat,
+    pacemaker: Option<PaceMaker>,
+    pacemaker_handle: PaceMakerHandle,
     shutdown: ShutdownSignal,
 }
 impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
@@ -72,26 +76,32 @@ where
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
-        rx_new_transactions: mpsc::Receiver<ExecutedTransaction>,
-        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+        rx_new_transactions: mpsc::Receiver<TransactionId>,
+        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         state_store: TConsensusSpec::StateStore,
-        epoch_events: broadcast::Receiver<EpochManagerEvent>,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         signing_service: TConsensusSpec::VoteSignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_broadcast: mpsc::Sender<(Committee<TConsensusSpec::Addr>, HotstuffMessage)>,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
-        tx_mempool: mpsc::Sender<Transaction>,
+        tx_mempool: mpsc::UnboundedSender<Transaction>,
         shutdown: ShutdownSignal,
     ) -> Self {
-        let on_beat = OnBeat::new();
+        let pacemaker = PaceMaker::new();
         Self {
             validator_addr: validator_addr.clone(),
             rx_new_transactions,
             rx_hs_message,
+            tx_events: tx_events.clone(),
+            on_next_sync_view: OnNextSyncViewHandler::new(
+                state_store.clone(),
+                tx_leader.clone(),
+                leader_strategy.clone(),
+                epoch_manager.clone(),
+            ),
             on_receive_proposal: OnReceiveProposalHandler::new(
                 validator_addr,
                 state_store.clone(),
@@ -102,20 +112,20 @@ where
                 transaction_pool.clone(),
                 tx_leader.clone(),
                 tx_events,
-                on_beat.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_vote: OnReceiveVoteHandler::new(
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
                 signing_service,
-                on_beat.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_new_view: OnReceiveNewViewHandler::new(
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
-                on_beat.clone(),
+                pacemaker.clone_handle(),
             ),
             on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(state_store.clone(), tx_leader),
             on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool),
@@ -125,33 +135,64 @@ where
                 transaction_pool.clone(),
                 tx_broadcast,
             ),
+
             state_store,
             leader_strategy,
             epoch_manager,
-            epoch_events,
-            latest_epoch: None,
-            is_epoch_synced: false,
             transaction_pool,
-            on_beat,
+            pacemaker_handle: pacemaker.clone_handle(),
+            pacemaker: Some(pacemaker),
             shutdown,
         }
     }
+}
+impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
+where TConsensusSpec: ConsensusSpec
+{
+    pub async fn start(&mut self) -> Result<(), HotStuffError> {
+        self.create_genesis_block_if_required()?;
+        let (leaf_block, high_qc) = self
+            .state_store
+            .with_read_tx(|tx| Ok::<_, HotStuffError>((LeafBlock::get(tx)?, HighQc::get(tx)?)))?;
+        info!(
+            target: LOG_TARGET,
+            "⏰ Pacemaker starting leaf_block: {}, high_qc: {}",
+            leaf_block,
+            high_qc
+        );
 
-    pub fn spawn(self) -> JoinHandle<Result<(), anyhow::Error>> {
-        tokio::spawn(async move {
-            self.run().await?;
-            Ok(())
-        })
+        self.pacemaker_handle
+            .start(leaf_block.height(), high_qc.block_height())
+            .await?;
+
+        self.run().await?;
+        Ok(())
     }
 
-    pub async fn run(mut self) -> Result<(), HotStuffError> {
+    async fn run(&mut self) -> Result<(), HotStuffError> {
+        // Spawn pacemaker if not spawned already
+        if let Some(pm) = self.pacemaker.take() {
+            pm.spawn();
+        }
+
+        let mut on_beat = self.pacemaker_handle.get_on_beat();
+        let mut on_force_beat = self.pacemaker_handle.get_on_force_beat();
+        let mut on_leader_timeout = self.pacemaker_handle.get_on_leader_timeout();
+
         loop {
             tokio::select! {
                 biased;
-
-                Ok(event) = self.epoch_events.recv() => {
-                    if let Err(e) = self.on_epoch_event(event).await {
-                        error!(target: LOG_TARGET, "Error while processing epoch change (on_epoch_event): {}", e);
+                Some((from, msg)) = self.rx_hs_message.recv() => {
+                    if let Err(e) = self.on_new_hs_message(from, msg.clone()).await {
+                        self.publish_event(HotstuffEvent::Failure { message: e.to_string() });
+                        debug!(target: LOG_TARGET, "on_new_hs_message error: {} {:?}", e, msg);
+                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {}", e);
+                        if let Err(e) = self.pacemaker_handle.stop().await {
+                            error!(target: LOG_TARGET, "Error while stopping pacemaker: {}", e);
+                        }
+                        self.on_receive_new_view.clear_new_views();
+                        // Failures here will be handled in the state machine
+                        return Err(e);
                     }
                 },
 
@@ -160,18 +201,22 @@ where
                        error!(target: LOG_TARGET, "Error while processing new payload (on_new_executed_transaction): {}", e);
                     }
                 },
-                Some((from, msg)) = self.rx_hs_message.recv() => {
-                    if let Err(e) = self.on_new_hs_message(from, msg.clone()).await {
-                        // self.publish_event(HotStuffEvent::Failed(e.to_string()));
-                        error!(target: LOG_TARGET, "Error while processing new hotstuff message (on_new_hs_message): {:?} {}", msg,e);
-                    }
-                },
 
-                _ = self.on_beat.wait() => {
+                _ = on_beat.wait() => {
                     if let Err(e) = self.on_beat().await {
                         error!(target: LOG_TARGET, "Error (on_beat): {}", e);
                     }
+                },
+                maybe_leaf_block = on_force_beat.wait() => {
+                    if let Err(e) = self.propose_if_leader(maybe_leaf_block).await {
+                        error!(target: LOG_TARGET, "Error (propose_if_leader): {}", e);
+                    }
                 }
+                new_height = on_leader_timeout.wait() => {
+                    if let Err(e) = self.on_leader_timeout(new_height).await {
+                        error!(target: LOG_TARGET, "Error (on_leader_timeout): {}", e);
+                    }
+                },
 
                 _ = self.shutdown.wait() => {
                     info!(target: LOG_TARGET, "💤 Shutting down");
@@ -180,186 +225,197 @@ where
             }
         }
 
-        Ok(())
-    }
-
-    async fn on_epoch_event(&mut self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
-        match event {
-            EpochManagerEvent::EpochChanged(epoch) => {
-                self.create_genesis_block_if_required(epoch)?;
-
-                self.is_epoch_synced = true;
-                // TODO: merge chain(s) from previous epoch?
-
-                self.on_beat.beat();
-            },
+        self.on_receive_new_view.clear_new_views();
+        // This only happens if we're shutting down.
+        if let Err(err) = self.pacemaker_handle.stop().await {
+            debug!(target: LOG_TARGET, "Pacemaker channel dropped: {}", err);
         }
 
         Ok(())
     }
 
-    async fn on_new_executed_transaction(&mut self, executed: ExecutedTransaction) -> Result<(), HotStuffError> {
-        info!(
+    /// Read and discard messages. This should be used only when consensus is inactive.
+    pub async fn discard_messages(&mut self) {
+        loop {
+            tokio::select! {
+                _ = self.rx_hs_message.recv() => { },
+                _ = self.rx_new_transactions.recv() => { },
+
+                _ = self.shutdown.wait() => {
+                    info!(target: LOG_TARGET, "💤 Shutting down");
+                    break;
+                }
+            }
+        }
+    }
+
+    async fn on_new_executed_transaction(&mut self, transaction_id: TransactionId) -> Result<(), HotStuffError> {
+        debug!(
             target: LOG_TARGET,
             "🚀 Consensus READY for new transaction with id: {}",
-            executed.transaction().id()
+            transaction_id
         );
-        self.state_store.with_write_tx(|tx| {
-            executed.insert(tx)?;
-
-            let decision = if executed.result().finalize.is_accept() {
-                Decision::Commit
-            } else {
-                Decision::Abort
-            };
-            self.transaction_pool.insert(tx, TransactionAtom {
-                id: *executed.transaction().id(),
-                decision,
-                evidence: executed.to_initial_evidence(),
-                fee: executed
-                    .result()
-                    .fee_receipt
-                    .as_ref()
-                    .and_then(|f| f.total_fee_payment.as_u64_checked())
-                    .unwrap_or(0),
-            })?;
-
-            Ok::<_, HotStuffError>(())
-        })?;
-        let block_id;
-        {
-            let mut tx = self.state_store.create_write_tx()?;
-            block_id = tx.remove_missing_transaction(*executed.into_transaction().id())?;
-            tx.commit()?;
-        }
-        if let Some(block_id) = block_id {
+        let maybe_block_id = self
+            .state_store
+            .with_write_tx(|tx| tx.remove_missing_transaction(transaction_id))?;
+        if let Some(block_id) = maybe_block_id {
             self.on_receive_proposal.reprocess_block(&block_id).await?;
         }
-        self.on_beat.beat();
+        self.pacemaker_handle.beat();
         Ok(())
     }
 
-    async fn on_beat(&mut self) -> Result<(), HotStuffError> {
-        // TODO: This is a temporary hack to ensure that the VN has synced the blockchain before proposing
-        if !self.is_epoch_synced {
-            warn!(target: LOG_TARGET, "Waiting for epoch change before proposing");
-            return Ok(());
-        }
-
+    async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
         let epoch = self.epoch_manager.current_epoch().await?;
-        debug!(target: LOG_TARGET, "[on_beat] Epoch: {}", epoch);
-
         // Is the VN registered?
         if !self.epoch_manager.is_epoch_active(epoch).await? {
             info!(
                 target: LOG_TARGET,
-                "[on_beat] Validator is not active within this epoch"
+                "[on_leader_timeout] Validator is not active within this epoch"
             );
             return Ok(());
         }
 
-        self.create_genesis_block_if_required(epoch)?;
+        self.on_next_sync_view.handle(epoch, new_height).await?;
 
-        // Are there any transactions in the pools? The block may still be empty if non are ready but we still need to
-        // propose a block to get to a 3-chain.
+        self.publish_event(HotstuffEvent::LeaderTimeout { new_height });
+
+        Ok(())
+    }
+
+    async fn on_beat(&mut self) -> Result<(), HotStuffError> {
         if !self
             .state_store
             .with_read_tx(|tx| self.transaction_pool.has_uncommitted_transactions(tx))?
         {
-            debug!(target: LOG_TARGET, "[on_beat] No transactions to propose");
+            debug!(target: LOG_TARGET, "[on_beat] No transactions to propose. Waiting for a timeout.");
             return Ok(());
         }
 
-        // Are we the leader?
-        let leaf_block = self.state_store.with_read_tx(|tx| LeafBlock::get(tx, epoch))?;
-        let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
+        self.propose_if_leader(None).await?;
+
+        Ok(())
+    }
+
+    async fn propose_if_leader(&mut self, leaf_block: Option<LeafBlock>) -> Result<(), HotStuffError> {
+        let must_propose = leaf_block.is_some();
+        let leaf_block = match leaf_block {
+            Some(leaf_block) => leaf_block,
+            None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?,
+        };
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        debug!(target: LOG_TARGET, "[on_beat] Epoch: {}, Leaf: {}", current_epoch, leaf_block);
+        let local_committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         // TODO: If there were leader failures, the leaf block would be empty and we need to create empty blocks.
-        let is_leader = self.leader_strategy.is_leader_for_next_block(
-            &self.validator_addr,
-            &local_committee,
-            &leaf_block.block_id,
-            leaf_block.height,
-        );
-        info!(
+        let is_leader =
+            self.leader_strategy
+                .is_leader_for_next_block(&self.validator_addr, &local_committee, leaf_block.height);
+        debug!(
             target: LOG_TARGET,
-            "🔥 [on_beat] Is leader: {:?}, leaf_block: {}, local_committee: {}",
+            "🔥 [on_beat] {} Is leader: {:?}, leaf_block: {}, local_committee: {}, must_propose: {}",
+            self.validator_addr,
             is_leader,
-            leaf_block.block_id,
+            leaf_block,
             local_committee
-                .len()
+                .len(),
+            must_propose
         );
         if is_leader {
-            self.on_propose.handle(epoch, local_committee, leaf_block).await?;
+            self.on_propose
+                .handle(current_epoch, local_committee, leaf_block, must_propose)
+                .await?;
         }
-
         Ok(())
     }
 
     async fn on_new_hs_message(
         &mut self,
         from: TConsensusSpec::Addr,
-        msg: HotstuffMessage,
+        msg: HotstuffMessage<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
-        if !self.epoch_manager.is_epoch_active(msg.epoch()).await? {
-            return Err(HotStuffError::EpochNotActive {
-                epoch: msg.epoch(),
-                details: "Received message for inactive epoch".to_string(),
-            });
-        }
-
-        self.create_genesis_block_if_required(msg.epoch())?;
-
-        match msg {
-            HotstuffMessage::NewView(msg) => self.on_receive_new_view.handle(from, msg).await?,
-            HotstuffMessage::Proposal(msg) => self.on_receive_proposal.handle(from, msg).await?,
-            HotstuffMessage::Vote(msg) => self.on_receive_vote.handle(from, msg).await?,
-            HotstuffMessage::RequestMissingTransactions(msg) => {
-                self.on_receive_request_missing_txs.handle(from, msg).await?
-            },
-            HotstuffMessage::RequestedTransaction(msg) => {
-                self.on_receive_requested_txs.handle(from, msg).await?;
-            },
-        }
-        Ok(())
-    }
-
-    fn create_genesis_block_if_required(&mut self, epoch: Epoch) -> Result<(), HotStuffError> {
-        // If we've already created the genesis block for this epoch then we can return early
-        if self.latest_epoch.map(|e| e >= epoch).unwrap_or(false) {
+        if !self
+            .epoch_manager
+            .is_local_validator_registered_for_epoch(msg.epoch())
+            .await?
+        {
+            warn!(
+                target: LOG_TARGET,
+                "Received message for inactive epoch: {}", msg.epoch()
+            );
             return Ok(());
         }
 
+        match msg {
+            HotstuffMessage::NewView(msg) => {
+                log_err("on_receive_new_view", self.on_receive_new_view.handle(from, msg).await)
+            },
+            HotstuffMessage::Proposal(msg) => {
+                log_err("on_receive_proposal", self.on_receive_proposal.handle(from, msg).await)
+            },
+            HotstuffMessage::Vote(msg) => log_err("on_receive_vote", self.on_receive_vote.handle(from, msg).await),
+            HotstuffMessage::RequestMissingTransactions(msg) => log_err(
+                "on_receive_request_missing_transactions",
+                self.on_receive_request_missing_txs.handle(from, msg).await,
+            ),
+            HotstuffMessage::RequestedTransaction(msg) => log_err(
+                "on_receive_requested_txs",
+                self.on_receive_requested_txs.handle(from, msg).await,
+            ),
+        }
+    }
+
+    fn create_genesis_block_if_required(&self) -> Result<(), HotStuffError> {
         let mut tx = self.state_store.create_write_tx()?;
 
-        // The parent for all genesis blocks refer to this zero block
+        // The parent for genesis blocks refer to this zero block
         let zero_block = Block::zero_block();
         if !zero_block.exists(tx.deref_mut())? {
             debug!(target: LOG_TARGET, "Creating zero block");
             zero_block.justify().insert(&mut tx)?;
             zero_block.insert(&mut tx)?;
+            zero_block.as_locked_block().set(&mut tx)?;
+            zero_block.as_leaf_block().set(&mut tx)?;
+            zero_block.as_last_executed().set(&mut tx)?;
+            zero_block.justify().as_high_qc().set(&mut tx)?;
+            zero_block.commit(&mut tx)?;
         }
 
-        let genesis = Block::genesis(epoch);
-        if !genesis.exists(tx.deref_mut())? {
-            debug!(target: LOG_TARGET, "Creating genesis block");
-            genesis.justify().save(&mut tx)?;
-            genesis.insert(&mut tx)?;
-            genesis.as_locked().set(&mut tx)?;
-            genesis.as_leaf_block().set(&mut tx)?;
-            genesis.as_last_executed().set(&mut tx)?;
-            genesis.justify().as_high_qc().set(&mut tx)?;
-        }
+        // let genesis = Block::genesis();
+        // if !genesis.exists(tx.deref_mut())? {
+        //     debug!(target: LOG_TARGET, "Creating genesis block");
+        //     genesis.justify().save(&mut tx)?;
+        //     genesis.insert(&mut tx)?;
+        //     genesis.as_locked().set(&mut tx)?;
+        //     genesis.as_leaf_block().set(&mut tx)?;
+        //     genesis.as_last_executed().set(&mut tx)?;
+        //     genesis.justify().as_high_qc().set(&mut tx)?;
+        // }
 
         tx.commit()?;
 
-        info!(
-            target: LOG_TARGET,
-            "🚀 Epoch changed to {}",
-            epoch
-        );
-
-        self.latest_epoch = Some(epoch);
-
         Ok(())
     }
+
+    fn publish_event(&self, event: HotstuffEvent) {
+        let _ignore = self.tx_events.send(event);
+    }
+}
+
+impl<TConsensusSpec: ConsensusSpec> Debug for HotstuffWorker<TConsensusSpec> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HotstuffWorker")
+            .field("validator_addr", &self.validator_addr)
+            .field("epoch_manager", &"EpochManager")
+            .field("pacemaker_handle", &self.pacemaker_handle)
+            .field("pacemaker", &"Pacemaker")
+            .field("shutdown", &self.shutdown)
+            .finish()
+    }
+}
+
+fn log_err(context: &'static str, result: Result<(), HotStuffError>) -> Result<(), HotStuffError> {
+    if let Err(ref e) = result {
+        error!(target: LOG_TARGET, "Error while processing new hotstuff message ({context}): {e}");
+    }
+    result
 }

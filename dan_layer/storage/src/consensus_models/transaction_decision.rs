@@ -25,21 +25,6 @@ impl Decision {
     pub fn is_abort(&self) -> bool {
         matches!(self, Decision::Abort)
     }
-
-    pub fn as_u8(&self) -> u8 {
-        match self {
-            Decision::Commit => 0,
-            Decision::Abort => 1,
-        }
-    }
-
-    pub fn from_u8(v: u8) -> Option<Self> {
-        match v {
-            0 => Some(Decision::Commit),
-            1 => Some(Decision::Abort),
-            _ => None,
-        }
-    }
 }
 
 impl Display for Decision {

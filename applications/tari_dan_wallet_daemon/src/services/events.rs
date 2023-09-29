@@ -3,6 +3,7 @@
 
 use std::time::SystemTime;
 
+use serde_json::Value;
 use tari_dan_wallet_sdk::models::TransactionStatus;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
@@ -71,6 +72,7 @@ pub struct TransactionFinalizedEvent {
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Amount,
     pub status: TransactionStatus,
+    pub json_result: Option<Vec<Value>>,
 }
 
 #[derive(Debug, Clone)]
@@ -82,7 +84,10 @@ pub struct AccountChangedEvent {
 pub struct TransactionInvalidEvent {
     pub transaction_id: TransactionId,
     pub status: TransactionStatus,
-    pub final_fee: Amount,
+    pub finalize: Option<FinalizeResult>,
+    pub transaction_failure: Option<RejectReason>,
+    pub final_fee: Option<Amount>,
+    pub is_dry_run: bool,
 }
 
 #[derive(Debug, Clone)]

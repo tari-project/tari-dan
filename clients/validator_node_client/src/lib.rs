@@ -27,8 +27,8 @@ use reqwest::{header, header::HeaderMap, IntoUrl, Url};
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json as json;
 use serde_json::json;
+use tari_common_types::{transaction::TxId, types::PublicKey};
 use tari_comms_logging::LoggedMessage;
-use types::{GetClaimableFeesRequest, GetClaimableFeesResponse};
 
 use crate::types::{
     AddPeerRequest,
@@ -49,6 +49,12 @@ use crate::types::{
     GetTransactionResponse,
     GetTransactionResultRequest,
     GetTransactionResultResponse,
+    GetValidatorFeesRequest,
+    GetValidatorFeesResponse,
+    ListBlocksRequest,
+    ListBlocksResponse,
+    RegisterValidatorNodeRequest,
+    RegisterValidatorNodeResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     TemplateRegistrationRequest,
@@ -87,14 +93,16 @@ impl ValidatorNodeClient {
         self.send_request("get_epoch_manager_stats", json!({})).await
     }
 
-    pub async fn register_validator_node(&mut self) -> Result<u64, ValidatorNodeClientError> {
-        let val: json::Value = self.send_request("register_validator_node", json!({})).await?;
-        let tx_id = val["transaction_id"]
-            .as_u64()
-            .ok_or_else(|| ValidatorNodeClientError::InvalidResponse {
-                message: format!("Wallet did not return tx_id {}", val["message"]),
-            })?;
-        Ok(tx_id)
+    pub async fn register_validator_node(
+        &mut self,
+        claim_public_key: PublicKey,
+    ) -> Result<TxId, ValidatorNodeClientError> {
+        let resp: RegisterValidatorNodeResponse = self
+            .send_request("register_validator_node", RegisterValidatorNodeRequest {
+                fee_claim_public_key: claim_public_key,
+            })
+            .await?;
+        Ok(resp.transaction_id)
     }
 
     pub async fn register_template(
@@ -124,8 +132,8 @@ impl ValidatorNodeClient {
 
     pub async fn get_fees(
         &mut self,
-        request: GetClaimableFeesRequest,
-    ) -> Result<GetClaimableFeesResponse, ValidatorNodeClientError> {
+        request: GetValidatorFeesRequest,
+    ) -> Result<GetValidatorFeesResponse, ValidatorNodeClientError> {
         self.send_request("get_fees", request).await
     }
 
@@ -155,6 +163,13 @@ impl ValidatorNodeClient {
         request: GetRecentTransactionsRequest,
     ) -> Result<GetRecentTransactionsResponse, ValidatorNodeClientError> {
         self.send_request("get_recent_transactions", request).await
+    }
+
+    pub async fn list_blocks(
+        &mut self,
+        request: ListBlocksRequest,
+    ) -> Result<ListBlocksResponse, ValidatorNodeClientError> {
+        self.send_request("list_blocks", request).await
     }
 
     pub async fn submit_transaction(

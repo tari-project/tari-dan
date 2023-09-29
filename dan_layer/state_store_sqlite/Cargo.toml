@@ -12,10 +12,11 @@ tari_dan_storage = { path = "../storage" }
 tari_dan_common_types = { path = "../common_types" }
 tari_transaction = { path = "../transaction" }
 # TODO: needed for FixedHash
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
 anyhow = "1.0"
-diesel = { version = "2", default-features = false, features = ["sqlite", "time"] }
+bigdecimal = "0.3.1"
+diesel = { version = "2", default-features = false, features = ["sqlite", "time", "numeric"] }
 diesel_migrations = "2"
 log = "0.4"
 hex = "0.4"
@@ -23,3 +24,6 @@ serde = "1.0"
 serde_json = "1.0"
 thiserror = "1.0"
 time = "0.3"
+
+[dev-dependencies]
+rand = "0.8"

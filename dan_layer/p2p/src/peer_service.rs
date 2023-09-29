@@ -24,8 +24,7 @@ use std::fmt::{Display, Formatter};
 
 use async_trait::async_trait;
 use tari_comms::{
-    multiaddr::Multiaddr,
-    peer_manager::{Peer, PeerFeatures, PeerIdentityClaim},
+    peer_manager::{Peer, PeerIdentityClaim},
     types::CommsPublicKey,
 };
 use tari_dan_common_types::NodeAddressable;
@@ -50,14 +49,15 @@ pub trait PeerProvider {
 
 pub struct DanPeer<TAddr> {
     pub identity: TAddr,
-    pub addresses: Vec<(Multiaddr, PeerIdentityClaim)>,
+    pub claims: Vec<PeerIdentityClaim>,
 }
 
 impl DanPeer<CommsPublicKey> {
     pub fn is_valid(&self) -> bool {
-        self.addresses.iter().all(|(addr, claim)| {
-            let identity_signature = &claim.signature;
-            identity_signature.is_valid(&self.identity, PeerFeatures::COMMUNICATION_NODE, &[addr.clone()])
+        self.claims.iter().all(|claim| {
+            claim
+                .signature
+                .is_valid(&self.identity, claim.features, &claim.addresses)
         })
     }
 }
@@ -66,14 +66,11 @@ impl From<Peer> for DanPeer<CommsPublicKey> {
     fn from(peer: Peer) -> Self {
         Self {
             identity: peer.public_key,
-            addresses: peer
+            claims: peer
                 .addresses
                 .addresses()
                 .iter()
-                .filter_map(|a| {
-                    let claim = a.source.peer_identity_claim().cloned();
-                    claim.map(|claim| (a.address().clone(), claim))
-                })
+                .filter_map(|a| a.source().peer_identity_claim().cloned())
                 .collect(),
         }
     }
@@ -85,9 +82,10 @@ impl<TAddr: Display> Display for DanPeer<TAddr> {
             f,
             "DanPeer({}, {})",
             self.identity,
-            self.addresses
+            self.claims
                 .iter()
-                .map(|a| ToString::to_string(&a.0))
+                .flat_map(|a| &a.addresses)
+                .map(|a| a.to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         )

@@ -30,14 +30,12 @@ syntax = "proto3";
 package tari.dan.network;
 
 import "common.proto";
-import "consensus.proto";
 import "transaction.proto";
 
 message DanMessage {
   oneof message {
-    tari.dan.consensus.HotStuffMessage hot_stuff = 1;
-    tari.dan.transaction.Transaction new_transaction = 2;
-    NetworkAnnounce network_announce = 3;
+    tari.dan.transaction.NewTransactionMessage new_transaction = 1;
+    NetworkAnnounce network_announce = 2;
   }
 
   // Message tag for debugging purposes. This is typically set to some
@@ -48,34 +46,13 @@ message DanMessage {
 
 message NetworkAnnounce {
   bytes identity = 1;
-  repeated bytes addresses = 2;
-  IdentitySignature identity_signature = 3;
+  PeerIdentityClaim claim = 2;
 }
 
 message IdentitySignature {
   uint32 version = 1;
   tari.dan.common.Signature signature = 2;
   int64 updated_at = 3;
-}
-
-message RecoveryMessage {
-  oneof message {
-    MissingProposal missing_proposal = 1;
-    ElectionInProgress election_in_progress = 2;
-  }
-}
-
-message MissingProposal {
-  uint64 epoch = 1;
-  bytes shard_id = 2;
-  bytes payload_id = 3;
-  uint64 last_known_height = 4;
-}
-
-message ElectionInProgress {
-  uint64 epoch = 1;
-  bytes shard_id = 2;
-  bytes payload_id = 3;
 }
 
 message PeerIdentityClaim {

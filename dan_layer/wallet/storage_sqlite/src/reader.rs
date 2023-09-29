@@ -7,7 +7,7 @@ use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::{dsl::sum, sql_query, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::error;
 use serde::de::DeserializeOwned;
-use tari_common_types::types::Commitment;
+use tari_common_types::types::{Commitment, PublicKey};
 use tari_dan_wallet_sdk::{
     models::{
         Account,
@@ -168,7 +168,10 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- Transactions -------------------------------- //
-    fn transaction_get(&mut self, transaction_id: TransactionId) -> Result<WalletTransaction, WalletStorageError> {
+    fn transaction_get(
+        &mut self,
+        transaction_id: TransactionId,
+    ) -> Result<WalletTransaction<PublicKey>, WalletStorageError> {
         use crate::schema::transactions;
         let row = transactions::table
             .filter(transactions::hash.eq(transaction_id.to_string()))
@@ -188,7 +191,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     fn transactions_fetch_all_by_status(
         &mut self,
         status: TransactionStatus,
-    ) -> Result<Vec<WalletTransaction>, WalletStorageError> {
+    ) -> Result<Vec<WalletTransaction<PublicKey>>, WalletStorageError> {
         use crate::schema::transactions;
 
         let rows = transactions::table
@@ -200,7 +203,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         rows.into_iter().map(|row| row.try_into_wallet_transaction()).collect()
     }
 
-    fn transactions_fetch_all(&mut self) -> Result<Vec<WalletTransaction>, WalletStorageError> {
+    fn transactions_fetch_all(&mut self) -> Result<Vec<WalletTransaction<PublicKey>>, WalletStorageError> {
         use crate::schema::transactions;
 
         let rows = transactions::table

@@ -1,0 +1,15 @@
+[package]
+name = "transaction_submitter"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+transaction_generator = { path = "../transaction_generator" }
+tari_validator_node_client = { path = "../../clients/validator_node_client" }
+
+anyhow = "1.0.72"
+clap = "4.3.21"
+tokio = "1.30.0"
+futures = "0.3.28"

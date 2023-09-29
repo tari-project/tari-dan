@@ -4,9 +4,9 @@
 use chacha20poly1305::{aead::generic_array::GenericArray, Key};
 use digest::FixedOutput;
 use tari_common_types::types::{PrivateKey, PublicKey};
-use tari_crypto::dhke::DiffieHellmanSharedSecret;
+use tari_crypto::{dhke::DiffieHellmanSharedSecret, tari_utilities::ByteArray};
 use tari_engine_types::base_layer_hashing::encrypted_data_hasher;
-use tari_utilities::{hidden_type, safe_array::SafeArray, ByteArray, Hidden};
+use tari_utilities::{hidden_type, safe_array::SafeArray, Hidden};
 use zeroize::Zeroize;
 
 pub(crate) const AEAD_KEY_LEN: usize = std::mem::size_of::<Key>();

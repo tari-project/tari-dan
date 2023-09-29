@@ -47,7 +47,6 @@ function RowData({ title, data }: any, index: number) {
           sx={{ borderBottom: 'none', textAlign: 'center' }}
         >
           <AccordionIconButton
-            open={open}
             aria-label="expand row"
             size="small"
             onClick={() => {

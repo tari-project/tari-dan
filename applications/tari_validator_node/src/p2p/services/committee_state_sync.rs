@@ -5,6 +5,7 @@ use std::{convert::TryInto, ops::RangeInclusive};
 
 use futures::StreamExt;
 use log::info;
+use tari_common_types::types::PublicKey;
 use tari_comms::{
     protocol::rpc::{RpcError, RpcStatus},
     types::CommsPublicKey,
@@ -29,7 +30,7 @@ const LOG_TARGET: &str = "tari::dan::committee_state_sync";
 pub struct CommitteeStateSync {
     epoch_manager: EpochManagerHandle,
     validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-    shard_store: SqliteStateStore,
+    shard_store: SqliteStateStore<PublicKey>,
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     node_public_key: CommsPublicKey,
 }
@@ -38,7 +39,7 @@ impl CommitteeStateSync {
     pub fn new(
         epoch_manager: EpochManagerHandle,
         validator_node_client_factory: TariCommsValidatorNodeClientFactory,
-        shard_store: SqliteStateStore,
+        shard_store: SqliteStateStore<PublicKey>,
         global_db: GlobalDb<SqliteGlobalDbAdapter>,
         node_public_key: CommsPublicKey,
     ) -> Self {
@@ -56,7 +57,6 @@ impl CommitteeStateSync {
             info!(target: LOG_TARGET, "🌍️ Already synced to epoch {}", epoch);
             return Ok(());
         }
-        info!(target: LOG_TARGET, "🌍️ Syncing epoch {}", epoch);
 
         // TODO: When switching epochs, we should sync from the previous committee. Then "at some point" it becomes
         //       better to sync from the current committee. Hmm...
@@ -65,13 +65,19 @@ impl CommitteeStateSync {
         //     info!(target: LOG_TARGET, "📋 Nothing to sync for epoch zero");
         //     return Ok(());
         // };
-        if !self.epoch_manager.is_epoch_active(epoch).await? {
+        if !self
+            .epoch_manager
+            .is_local_validator_registered_for_epoch(epoch)
+            .await?
+        {
             info!(
                 target: LOG_TARGET,
                 "🌍️ Validator is not registered for epoch {}, Skipping state sync", epoch
             );
             return Ok(());
         }
+
+        info!(target: LOG_TARGET, "🌍️ Syncing epoch {}", epoch);
 
         // Get the shard range for our local committee
         let our_vn = self.epoch_manager.get_our_validator_node(epoch).await?;

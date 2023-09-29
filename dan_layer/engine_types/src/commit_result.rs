@@ -22,9 +22,8 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use ciborium::tag::Required;
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{models::BinaryTag, Hash, HashParseError};
+use tari_template_lib::Hash;
 
 use crate::{
     events::Event,
@@ -34,46 +33,6 @@ use crate::{
     serde_with,
     substate::SubstateDiff,
 };
-
-const TAG: u64 = BinaryTag::TransactionReceipt.as_u64();
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-pub struct TransactionReceiptAddress(Required<Hash, TAG>);
-
-impl TransactionReceiptAddress {
-    pub const fn new(address: Hash) -> Self {
-        Self(Required(address))
-    }
-
-    pub fn hash(&self) -> &Hash {
-        &self.0 .0
-    }
-
-    pub fn from_hex(hex: &str) -> Result<Self, HashParseError> {
-        let hash = Hash::from_hex(hex)?;
-        Ok(Self::new(hash))
-    }
-}
-
-impl<T: Into<Hash>> From<T> for TransactionReceiptAddress {
-    fn from(address: T) -> Self {
-        Self::new(address.into())
-    }
-}
-
-impl Display for TransactionReceiptAddress {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "txreceipt_{}", self.0 .0)
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionReceipt {
-    pub transaction_hash: Hash,
-    pub events: Vec<Event>,
-    pub logs: Vec<LogEntry>,
-    pub fee_receipt: Option<FeeReceipt>,
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecuteResult {

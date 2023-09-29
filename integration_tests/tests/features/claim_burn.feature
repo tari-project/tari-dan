@@ -24,7 +24,7 @@ Feature: Claim Burn
     Given a wallet daemon WALLET_D connected to indexer IDX
 
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
-    When I create an account ACC via the wallet daemon WALLET_D with 1000 free coins
+    When I create an account ACC via the wallet daemon WALLET_D with 10000 free coins
 
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACC, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
 
@@ -40,7 +40,6 @@ Feature: Claim Burn
 # Then account ACC has one confidential bucket in it
 
   @serial
-    @doit
   Scenario: Double Claim base layer burn funds with wallet daemon. should fail
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
@@ -62,7 +61,7 @@ Feature: Claim Burn
     Given a wallet daemon WALLET_D connected to indexer IDX
 
     # When I create a component SECOND_LAYER_TARI of template "fees" on VN using "new"
-    When I create an account ACC via the wallet daemon WALLET_D with 1000 free coins
+    When I create an account ACC via the wallet daemon WALLET_D with 10000 free coins
 
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACC, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
 

@@ -11,14 +11,14 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_crypto::tari_utilities::hex::{from_hex, Hex};
 use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
     serde_with,
     substate::SubstateAddress,
 };
-use tari_utilities::hex::{from_hex, Hex};
 
-use crate::uint::U256;
+use crate::{shard_bucket::ShardBucket, uint::U256};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
@@ -73,28 +73,20 @@ impl ShardId {
 
     /// Calculates and returns the bucket number that this ShardId belongs.
     /// A bucket is an equal division of the 256-bit shard space.
-    pub fn to_committee_bucket(&self, num_committees: u32) -> u32 {
+    pub fn to_committee_bucket(&self, num_committees: u32) -> ShardBucket {
         if num_committees == 0 {
-            return 0;
+            return ShardBucket::from(0u32);
         }
         let bucket_size = U256::MAX / U256::from(num_committees);
         // 4,294,967,295 committees.
-        u32::try_from(self.to_u256() / bucket_size).expect("num_committees is a u32, so this cannot fail")
+        u32::try_from(self.to_u256() / bucket_size)
+            .expect("to_committee_bucket: num_committees is a u32, so this cannot fail")
+            .into()
     }
 
     pub fn to_committee_range(&self, num_committees: u32) -> RangeInclusive<ShardId> {
-        if num_committees == 0 {
-            return RangeInclusive::new(Self::zero(), Self::from_u256(U256::MAX));
-        }
-        let bucket_size = U256::MAX / U256::from(num_committees);
-        let bucket = self.to_u256() / bucket_size;
-        let start = bucket_size * U256::from(bucket);
-        let mut end = start + bucket_size;
-        // Edge case: The start of the next bucket is excluded except for the last bucket
-        if end < U256::MAX {
-            end -= U256::from(1u64);
-        }
-        RangeInclusive::new(Self::from_u256(start), Self::from_u256(end))
+        let bucket = self.to_committee_bucket(num_committees);
+        bucket.to_shard_range(num_committees)
     }
 }
 

@@ -28,10 +28,12 @@ use axum_jrpc::{
     JsonRpcExtractor,
     JsonRpcResponse,
 };
+use indexmap::IndexMap;
 use log::*;
 use serde::Serialize;
 use serde_json::{self as json, json};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
+use tari_common_types::types::PublicKey;
 use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
@@ -44,7 +46,7 @@ use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_app_utilities::template_manager::interface::TemplateManagerHandle;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, QuorumDecision, SubstateRecord},
+    consensus_models::{Block, ExecutedTransaction, LeafBlock, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
     StateStore,
 };
@@ -53,11 +55,12 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tari_validator_node_client::types::{
     AddPeerRequest,
     AddPeerResponse,
+    CommitteeShardInfo,
     DryRunTransactionFinalizeResult,
-    GetClaimableFeesRequest,
     GetCommitteeRequest,
     GetEpochManagerStatsResponse,
     GetIdentityResponse,
+    GetNetworkCommitteeResponse,
     GetRecentTransactionsResponse,
     GetShardKey,
     GetStateRequest,
@@ -74,6 +77,12 @@ use tari_validator_node_client::types::{
     GetTransactionResponse,
     GetTransactionResultRequest,
     GetTransactionResultResponse,
+    GetValidatorFeesRequest,
+    GetValidatorFeesResponse,
+    ListBlocksRequest,
+    ListBlocksResponse,
+    RegisterValidatorNodeRequest,
+    RegisterValidatorNodeResponse,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
     SubstateStatus,
@@ -85,7 +94,7 @@ use tari_validator_node_client::types::{
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
     grpc::base_layer_wallet::GrpcWalletClient,
-    json_rpc::jrpc_errors::internal_error,
+    json_rpc::jrpc_errors::{internal_error, not_found},
     p2p::services::mempool::MempoolHandle,
     registration,
     Services,
@@ -102,7 +111,7 @@ pub struct JsonRpcHandlers {
     epoch_manager: EpochManagerHandle,
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
-    state_store: SqliteStateStore,
+    state_store: SqliteStateStore<PublicKey>,
     dry_run_transaction_processor: DryRunTransactionProcessor,
     config: ValidatorNodeConfig,
 }
@@ -142,8 +151,8 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let response = GetIdentityResponse {
             node_id: self.node_identity.node_id().to_hex(),
-            public_key: self.node_identity.public_key().to_hex(),
-            public_address: self.node_identity.public_addresses().first().unwrap().to_string(),
+            public_key: self.node_identity.public_key().clone(),
+            public_addresses: self.node_identity.public_addresses(),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
@@ -241,10 +250,10 @@ impl JsonRpcHandlers {
     pub async fn get_recent_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let mut tx = self.state_store.create_read_tx().unwrap();
-        match ExecutedTransaction::get_paginated(&mut tx, 1000, 0, Some(Ordering::Descending)) {
+        match TransactionRecord::get_paginated(&mut tx, 1000, 0, Some(Ordering::Descending)) {
             Ok(recent_transactions) => {
                 let res = GetRecentTransactionsResponse {
-                    transactions: recent_transactions.into_iter().map(|t| t.into_transaction()).collect(),
+                    transactions: recent_transactions.into_iter().map(|t| t.transaction).collect(),
                 };
                 Ok(JsonRpcResponse::success(answer_id, res))
             },
@@ -257,6 +266,30 @@ impl JsonRpcHandlers {
                 ),
             )),
         }
+    }
+
+    pub async fn list_blocks(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let req = value.parse_params::<ListBlocksRequest>()?;
+        let mut tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
+        let start_block = match req.from_id {
+            Some(id) => Block::get(&mut tx, &id)
+                .optional()
+                .map_err(internal_error(answer_id))?
+                .ok_or_else(|| not_found(answer_id, format!("Block {} not found", id)))?,
+            None => LeafBlock::get(&mut tx)
+                .optional()
+                .map_err(internal_error(answer_id))?
+                .ok_or_else(|| not_found(answer_id, "No leaf block"))?
+                .get_block(&mut tx)
+                .map_err(internal_error(answer_id))?,
+        };
+        let blocks = start_block
+            .get_parent_chain(&mut tx, req.limit)
+            .map_err(internal_error(answer_id))?;
+
+        let res = ListBlocksResponse { blocks };
+        Ok(JsonRpcResponse::success(answer_id, res))
     }
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -343,21 +376,28 @@ impl JsonRpcHandlers {
         }))
     }
 
-    pub async fn get_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
+    pub async fn get_substates_destroyed_by_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
-        let _data: GetClaimableFeesRequest = value.parse_params()?;
-        Err(JsonRpcResponse::error(
-            answer_id,
-            JsonRpcError::new(
-                JsonRpcErrorReason::MethodNotFound,
-                "Not implemented".to_string(),
-                json::Value::Null,
-            ),
-        ))
+        let data: GetSubstatesByTransactionRequest = value.parse_params()?;
+        let substates = self
+            .state_store
+            .with_read_tx(|tx| SubstateRecord::get_many_by_destroyed_transaction(tx, &data.transaction_id))
+            .map_err(internal_error(answer_id))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetSubstatesByTransactionResponse {
+            substates,
+        }))
     }
 
     pub async fn register_validator_node(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
+        let req: RegisterValidatorNodeRequest = value.parse_params()?;
+
+        // Ensure that the fee claim pk is set before registering
+        self.epoch_manager
+            .set_fee_claim_public_key(req.fee_claim_public_key)
+            .await
+            .map_err(internal_error(answer_id))?;
 
         let resp = registration::register(self.wallet_client(), &self.node_identity, &self.epoch_manager)
             .await
@@ -374,10 +414,9 @@ impl JsonRpcHandlers {
             ));
         }
 
-        Ok(JsonRpcResponse::success(
-            answer_id,
-            json!({ "transaction_id": resp.transaction_id }),
-        ))
+        Ok(JsonRpcResponse::success(answer_id, RegisterValidatorNodeResponse {
+            transaction_id: resp.transaction_id.into(),
+        }))
     }
 
     pub async fn register_template(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -504,7 +543,7 @@ impl JsonRpcHandlers {
             JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
+                    JsonRpcErrorReason::InternalError,
                     format!("Could not get current epoch: {}", e),
                     json::Value::Null,
                 ),
@@ -514,27 +553,36 @@ impl JsonRpcHandlers {
             JsonRpcResponse::error(
                 answer_id,
                 JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
+                    JsonRpcErrorReason::InternalError,
                     format!("Could not get current block height: {}", e),
                     json::Value::Null,
                 ),
             )
         })?;
-
-        let is_valid = self.epoch_manager.is_epoch_active(current_epoch).await.map_err(|err| {
-            JsonRpcResponse::error(
-                answer_id,
-                JsonRpcError::new(
-                    JsonRpcErrorReason::InvalidParams,
-                    format!("Epoch is not valid:{}", err),
-                    json::Value::Null,
-                ),
-            )
-        })?;
+        let committee_shard = self
+            .epoch_manager
+            .get_local_committee_shard(current_epoch)
+            .await
+            .map(Some)
+            .or_else(|err| {
+                if err.is_not_registered_error() {
+                    Ok(None)
+                } else {
+                    Err(JsonRpcResponse::error(
+                        answer_id,
+                        JsonRpcError::new(
+                            JsonRpcErrorReason::InternalError,
+                            format!("Could not get committee shard:{}", err),
+                            json::Value::Null,
+                        ),
+                    ))
+                }
+            })?;
         let response = GetEpochManagerStatsResponse {
             current_epoch,
             current_block_height,
-            is_valid,
+            is_valid: committee_shard.is_some(),
+            committee_shard,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }
@@ -635,6 +683,54 @@ impl JsonRpcHandlers {
         }
     }
 
+    pub async fn get_network_committees(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let current_epoch = self
+            .epoch_manager
+            .current_epoch()
+            .await
+            .map_err(internal_error(answer_id))?;
+        let num_committees = self
+            .epoch_manager
+            .get_num_committees(current_epoch)
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        let mut validators = self
+            .epoch_manager
+            .get_all_validator_nodes(current_epoch)
+            .await
+            .map_err(internal_error(answer_id))?;
+
+        validators.sort_by(|vn_a, vn_b| vn_b.committee_bucket.cmp(&vn_a.committee_bucket));
+        // Group by bucket, IndexMap used to preserve ordering
+        let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
+        for validator in validators {
+            validators_per_bucket
+                .entry(
+                    validator
+                        .committee_bucket
+                        .expect("validator committee bucket must have been populated within valid epoch"),
+                )
+                .or_insert_with(Vec::new)
+                .push(validator);
+        }
+
+        let committees = validators_per_bucket
+            .into_iter()
+            .map(|(bucket, validators)| CommitteeShardInfo {
+                bucket,
+                shard_range: bucket.to_shard_range(num_committees),
+                validators,
+            })
+            .collect();
+
+        Ok(JsonRpcResponse::success(answer_id, GetNetworkCommitteeResponse {
+            current_epoch,
+            committees,
+        }))
+    }
+
     pub async fn get_all_vns(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let epoch: u64 = value.parse_params()?;
@@ -673,6 +769,30 @@ impl JsonRpcHandlers {
         let messages = logger.get_messages_by_tag(message_tag);
         let response = json!({ "messages": messages });
         Ok(JsonRpcResponse::success(answer_id, response))
+    }
+
+    pub async fn get_validator_fees(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request = value.parse_params::<GetValidatorFeesRequest>()?;
+
+        let blocks = self
+            .state_store
+            .with_read_tx(|tx| {
+                Block::get_any_with_epoch_range_for_validator(
+                    tx,
+                    request.epoch_range,
+                    request.validator_public_key.as_ref(),
+                )
+            })
+            .map_err(internal_error(answer_id))?;
+
+        Ok(JsonRpcResponse::success(answer_id, GetValidatorFeesResponse {
+            fees: blocks
+                .into_iter()
+                .filter(|b| b.total_leader_fee() > 0)
+                .map(Into::into)
+                .collect(),
+        }))
     }
 }
 

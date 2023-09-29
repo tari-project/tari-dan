@@ -41,10 +41,15 @@ use tari_comms::{
 };
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{optional::Optional, Epoch};
-use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_dan_storage::consensus_models::Decision;
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_client::types::{
     AddAddressRequest,
+    AddPeerRequest,
+    AddPeerResponse,
     DeleteAddressRequest,
+    GetEpochManagerStatsResponse,
+    GetIdentityResponse,
     GetNonFungibleCountRequest,
     GetNonFungiblesRequest,
     GetNonFungiblesResponse,
@@ -52,19 +57,20 @@ use tari_indexer_client::types::{
     GetSubstateResponse,
     GetTransactionResultRequest,
     GetTransactionResultResponse,
+    IndexerTransactionFinalizedResult,
     InspectSubstateRequest,
     InspectSubstateResponse,
     NonFungibleSubstate,
     SubmitTransactionRequest,
     SubmitTransactionResponse,
 };
-use tari_validator_node_client::types::{AddPeerRequest, AddPeerResponse, GetIdentityResponse};
-use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
+use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory, TransactionResultStatus};
 
+use super::json_encoding::{encode_execute_result_into_json, encode_finalized_result_into_json};
 use crate::{
     bootstrap::Services,
     dry_run::processor::DryRunTransactionProcessor,
-    json_rpc::special_substate_encoding::encode_substate_into_json,
+    json_rpc::json_encoding::encode_substate_into_json,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
 };
@@ -91,6 +97,7 @@ pub struct JsonRpcHandlers {
     comms: CommsNode,
     base_node_client: GrpcBaseNodeClient,
     substate_manager: Arc<SubstateManager>,
+    epoch_manager: EpochManagerHandle,
     transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
     dry_run_transaction_processor: DryRunTransactionProcessor<EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
 }
@@ -113,6 +120,7 @@ impl JsonRpcHandlers {
             comms: services.comms.clone(),
             base_node_client,
             substate_manager,
+            epoch_manager: services.epoch_manager.clone(),
             transaction_manager,
             dry_run_transaction_processor,
         }
@@ -140,13 +148,8 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let response = GetIdentityResponse {
             node_id: self.node_identity.node_id().to_hex(),
-            public_key: self.node_identity.public_key().to_hex(),
-            public_address: self
-                .node_identity
-                .public_addresses()
-                .first()
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "No public address".to_string()),
+            public_key: self.node_identity.public_key().clone(),
+            public_addresses: self.node_identity.public_addresses(),
         };
 
         Ok(JsonRpcResponse::success(answer_id, response))
@@ -161,10 +164,7 @@ impl JsonRpcHandlers {
                 let response = json!({ "vns": vns });
                 Ok(JsonRpcResponse::success(answer_id, response))
             },
-            Err(e) => Err(Self::generic_error_response(
-                answer_id,
-                format!("Failed to get all vns: {}", e),
-            )),
+            Err(e) => Err(Self::internal_error(answer_id, format!("Failed to get all vns: {}", e))),
         }
     }
 
@@ -190,18 +190,18 @@ impl JsonRpcHandlers {
                 &tari_comms::net_address::PeerAddressSource::Config,
             )
             .await
-            .map_err(|e| Self::generic_error_response(answer_id, format!("Could not update peer: {}", e)))?;
+            .map_err(|e| Self::internal_error(answer_id, format!("Could not update peer: {}", e)))?;
         if wait_for_dial {
             let _conn = connectivity
                 .dial_peer(node_id)
                 .await
-                .map_err(|e| Self::generic_error_response(answer_id, e.to_string()))?;
+                .map_err(|e| Self::internal_error(answer_id, e.to_string()))?;
         } else {
             // Dial without waiting
             connectivity
                 .request_many_dials(Some(node_id))
                 .await
-                .map_err(|e| Self::generic_error_response(answer_id, e.to_string()))?;
+                .map_err(|e| Self::internal_error(answer_id, e.to_string()))?;
         }
 
         Ok(JsonRpcResponse::success(answer_id, AddPeerResponse {}))
@@ -216,7 +216,7 @@ impl JsonRpcHandlers {
             },
             Err(e) => {
                 warn!(target: LOG_TARGET, "Failed to get comms stats: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Failed to get comms stats: {}", e),
                 ))
@@ -270,7 +270,7 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting substate: {}", e);
-                Self::generic_error_response(answer_id, format!("Error getting substate: {}", e))
+                Self::internal_error(answer_id, format!("Error getting substate: {}", e))
             })? {
             Some(substate_resp) => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
                 address: substate_resp.address,
@@ -362,7 +362,7 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting substate: {}", e);
-                Self::generic_error_response(answer_id, format!("Error getting substate: {}", e))
+                Self::internal_error(answer_id, format!("Error getting substate: {}", e))
             })?
             .ok_or_else(|| {
                 JsonRpcResponse::error(
@@ -397,7 +397,7 @@ impl JsonRpcHandlers {
             Ok(addresses) => Ok(JsonRpcResponse::success(answer_id, addresses)),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error getting addresses: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Error getting addresses: {}", e),
                 ))
@@ -417,10 +417,7 @@ impl JsonRpcHandlers {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error adding address: {}", e);
-                Err(Self::generic_error_response(
-                    answer_id,
-                    format!("Error adding address: {}", e),
-                ))
+                Err(Self::internal_error(answer_id, format!("Error adding address: {}", e)))
             },
         }
     }
@@ -433,7 +430,7 @@ impl JsonRpcHandlers {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error deleting address: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Error deleting address: {}", e),
                 ))
@@ -448,7 +445,7 @@ impl JsonRpcHandlers {
             Ok(_) => Ok(JsonRpcResponse::success(answer_id, ())),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error clearing addresses: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Error clearing addresses: {}", e),
                 ))
@@ -465,7 +462,7 @@ impl JsonRpcHandlers {
             Ok(collections) => Ok(JsonRpcResponse::success(answer_id, collections)),
             Err(e) => {
                 warn!(target: LOG_TARGET, "Error getting non fungible collections: {}", e);
-                Err(Self::generic_error_response(
+                Err(Self::internal_error(
                     answer_id,
                     format!("Error getting non fungible collections: {}", e),
                 ))
@@ -482,7 +479,7 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| {
                 warn!(target: LOG_TARGET, "Error getting non fungible count: {}", e);
-                Self::generic_error_response(answer_id, format!("Error getting non fungible count: {}", e))
+                Self::internal_error(answer_id, format!("Error getting non fungible count: {}", e))
             })?;
 
         Ok(JsonRpcResponse::success(answer_id, count))
@@ -522,8 +519,16 @@ impl JsonRpcHandlers {
                 .await
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
+            let json_results =
+                encode_execute_result_into_json(&exec_result).map_err(|e| Self::internal_error(answer_id, e))?;
+
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                execution_result: Some(exec_result),
+                result: IndexerTransactionFinalizedResult::Finalized {
+                    execution_result: Some(exec_result),
+                    final_decision: Decision::Commit,
+                    abort_details: None,
+                    json_results,
+                },
                 transaction_id,
             }))
         } else {
@@ -534,10 +539,40 @@ impl JsonRpcHandlers {
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
             Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
-                execution_result: None,
+                result: IndexerTransactionFinalizedResult::Pending,
                 transaction_id,
             }))
         }
+    }
+
+    pub async fn get_epoch_manager_stats(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let current_epoch = self.epoch_manager.current_epoch().await.map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InternalError,
+                    format!("Could not get current epoch: {}", e),
+                    json::Value::Null,
+                ),
+            )
+        })?;
+        let current_block_height = self.epoch_manager.current_block_height().await.map_err(|e| {
+            JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InternalError,
+                    format!("Could not get current block height: {}", e),
+                    json::Value::Null,
+                ),
+            )
+        })?;
+
+        let response = GetEpochManagerStatsResponse {
+            current_epoch,
+            current_block_height,
+        };
+        Ok(JsonRpcResponse::success(answer_id, response))
     }
 
     pub async fn get_transaction_result(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -553,9 +588,25 @@ impl JsonRpcHandlers {
 
         let result = maybe_result.ok_or_else(|| Self::not_found(answer_id, "Transaction not found"))?;
 
-        Ok(JsonRpcResponse::success(answer_id, GetTransactionResultResponse {
-            execution_result: result.into_finalized(),
-        }))
+        let resp = match result {
+            TransactionResultStatus::Pending => GetTransactionResultResponse {
+                result: IndexerTransactionFinalizedResult::Pending,
+            },
+            TransactionResultStatus::Finalized(finalized) => {
+                let json_results =
+                    encode_finalized_result_into_json(&finalized).map_err(|e| Self::internal_error(answer_id, e))?;
+                GetTransactionResultResponse {
+                    result: IndexerTransactionFinalizedResult::Finalized {
+                        final_decision: finalized.final_decision,
+                        execution_result: finalized.execute_result,
+                        abort_details: finalized.abort_details,
+                        json_results,
+                    },
+                }
+            },
+        };
+
+        Ok(JsonRpcResponse::success(answer_id, resp))
     }
 
     fn error_response<T: Display>(answer_id: i64, reason: JsonRpcErrorReason, message: T) -> JsonRpcResponse {
@@ -569,17 +620,13 @@ impl JsonRpcHandlers {
         Self::error_response(answer_id, JsonRpcErrorReason::ApplicationError(404), details)
     }
 
-    fn internal_error<T: Display>(answer_id: i64, details: T) -> JsonRpcResponse {
-        error!(target: LOG_TARGET, "Internal error: {}", details);
-        Self::error_response(answer_id, JsonRpcErrorReason::InternalError, "Something went wrong")
-    }
-
-    // TODO: pass the error in here and log it instead of "squashing" it (switch to using Self::internal_error)
-    fn generic_error_response(answer_id: i64, error: String) -> JsonRpcResponse {
-        Self::error_response(
-            answer_id,
-            JsonRpcErrorReason::InternalError,
-            format!("Something went wrong: {}", error),
-        )
+    fn internal_error<T: Display>(answer_id: i64, error: T) -> JsonRpcResponse {
+        let msg = if cfg!(debug_assertions) || option_env!("CI").is_some() {
+            error.to_string()
+        } else {
+            error!(target: LOG_TARGET, "Internal error: {}", error);
+            "Something went wrong".to_string()
+        };
+        Self::error_response(answer_id, JsonRpcErrorReason::InternalError, msg)
     }
 }

@@ -56,17 +56,11 @@ impl Evidence {
     pub fn shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
         self.evidence.keys()
     }
-}
 
-// impl Evidence {
-//     pub fn get_all_qcs<TTx: StateStoreReadTransaction>(
-//         &self,
-//         tx: &mut TTx,
-//     ) -> Result<Vec<QuorumCertificate>, StorageError> { let mut qcs = Vec::with_capacity(self.evidence.len()); //
-//       TODO(perf): O(n*m) queries for qc_ids in self.evidence.values() { for qc_id in qc_ids { let qc =
-//       QuorumCertificate::get(tx, qc_id)?; qcs.push(qc); } } Ok(qcs)
-//     }
-// }
+    pub fn qc_ids_iter(&self) -> impl Iterator<Item = &QcId> + '_ {
+        self.evidence.values().flatten()
+    }
+}
 
 impl FromIterator<(ShardId, Vec<QcId>)> for Evidence {
     fn from_iter<T: IntoIterator<Item = (ShardId, Vec<QcId>)>>(iter: T) -> Self {
@@ -81,10 +75,15 @@ pub struct TransactionAtom {
     pub id: TransactionId,
     pub decision: Decision,
     pub evidence: Evidence,
-    pub fee: u64,
+    pub transaction_fee: u64,
+    pub leader_fee: u64,
 }
 
 impl TransactionAtom {
+    pub fn id(&self) -> &TransactionId {
+        &self.id
+    }
+
     pub fn get_transaction<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
@@ -118,6 +117,13 @@ impl Command {
         }
     }
 
+    pub fn prepare(&self) -> Option<&TransactionAtom> {
+        match self {
+            Command::Prepare(tx) => Some(tx),
+            _ => None,
+        }
+    }
+
     pub fn local_prepared(&self) -> Option<&TransactionAtom> {
         match self {
             Command::LocalPrepared(tx) => Some(tx),
@@ -137,6 +143,14 @@ impl Command {
             Command::Prepare(tx) => tx.evidence.shards_iter(),
             Command::LocalPrepared(tx) => tx.evidence.shards_iter(),
             Command::Accept(tx) => tx.evidence.shards_iter(),
+        }
+    }
+
+    pub fn evidence(&self) -> &Evidence {
+        match self {
+            Command::Prepare(tx) => &tx.evidence,
+            Command::LocalPrepared(tx) => &tx.evidence,
+            Command::Accept(tx) => &tx.evidence,
         }
     }
 }

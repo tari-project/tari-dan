@@ -5,19 +5,21 @@ use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::commit_result::{FinalizeResult, RejectReason};
 use tari_template_lib::models::Amount;
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WalletTransaction {
+pub struct WalletTransaction<TAddr> {
     pub transaction: Transaction,
     pub status: TransactionStatus,
     pub finalize: Option<FinalizeResult>,
     pub transaction_failure: Option<RejectReason>,
     pub final_fee: Option<Amount>,
-    pub qcs: Vec<QuorumCertificate>,
+    pub qcs: Vec<QuorumCertificate<TAddr>>,
+    pub json_result: Option<Vec<Value>>,
     pub is_dry_run: bool,
 }
 

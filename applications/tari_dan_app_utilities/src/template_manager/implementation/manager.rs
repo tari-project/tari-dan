@@ -24,10 +24,10 @@ use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
     fs,
+    sync::Arc,
 };
 
 use chrono::Utc;
-use lazy_static::lazy_static;
 use log::*;
 use tari_core::transactions::transaction_components::TemplateType;
 use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider};
@@ -40,49 +40,52 @@ use tari_dan_engine::{
 use tari_dan_storage::global::{DbTemplate, DbTemplateType, DbTemplateUpdate, GlobalDb, TemplateStatus};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_engine_types::calculate_template_binary_hash;
-use tari_template_builtin::get_template_builtin;
+use tari_template_builtin::{get_template_builtin, ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::models::TemplateAddress;
 
 use super::TemplateConfig;
-use crate::template_manager::interface::{
-    Template,
-    TemplateExecutable,
-    TemplateManagerError,
-    TemplateMetadata,
-    TemplateRegistration,
+use crate::template_manager::{
+    implementation::cmap_semaphore,
+    interface::{Template, TemplateExecutable, TemplateManagerError, TemplateMetadata, TemplateRegistration},
 };
 
 const LOG_TARGET: &str = "tari::validator_node::template_manager";
 
-lazy_static! {
-    pub static ref ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
-    pub static ref ACCOUNT_NFT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
-    ]);
-}
+const CONCURRENT_ACCESS_LIMIT: isize = 100;
 
 #[derive(Debug, Clone)]
 pub struct TemplateManager {
     global_db: GlobalDb<SqliteGlobalDbAdapter>,
     config: TemplateConfig,
-    builtin_templates: HashMap<TemplateAddress, Template>,
+    builtin_templates: Arc<HashMap<TemplateAddress, Template>>,
     cache: mini_moka::sync::Cache<TemplateAddress, LoadedTemplate>,
+    cmap_semaphore: cmap_semaphore::ConcurrentMapSemaphore<TemplateAddress>,
 }
 
 impl TemplateManager {
-    pub fn new(global_db: GlobalDb<SqliteGlobalDbAdapter>, config: TemplateConfig) -> Self {
+    pub fn initialize(
+        global_db: GlobalDb<SqliteGlobalDbAdapter>,
+        config: TemplateConfig,
+    ) -> Result<Self, TemplateManagerError> {
         // load the builtin account templates
         let builtin_templates = Self::load_builtin_templates();
+        let cache = mini_moka::sync::Cache::builder()
+            .weigher(|_, t: &LoadedTemplate| u32::try_from(t.code_size()).unwrap_or(u32::MAX))
+            .max_capacity(config.max_cache_size_bytes())
+            .build();
 
-        Self {
-            global_db,
-            builtin_templates,
-            cache: mini_moka::sync::Cache::builder()
-                .weigher(|_, t: &LoadedTemplate| u32::try_from(t.code_size()).unwrap_or(u32::MAX))
-                .max_capacity(config.max_cache_size_bytes())
-                .build(),
-            config,
+        // Precache builtins
+        for addr in builtin_templates.keys() {
+            cache.insert(*addr, WasmModule::load_template_from_code(get_template_builtin(addr))?);
         }
+
+        Ok(Self {
+            global_db,
+            builtin_templates: Arc::new(builtin_templates),
+            cache,
+            config,
+            cmap_semaphore: cmap_semaphore::ConcurrentMapSemaphore::new(CONCURRENT_ACCESS_LIMIT),
+        })
     }
 
     fn load_builtin_templates() -> HashMap<TemplateAddress, Template> {
@@ -90,12 +93,12 @@ impl TemplateManager {
         let mut builtin_templates = HashMap::new();
 
         // get the builtin WASM code of the account template
-        let compiled_code = get_template_builtin(*ACCOUNT_TEMPLATE_ADDRESS);
+        let compiled_code = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
         let template = Self::load_builtin_template("account", *ACCOUNT_TEMPLATE_ADDRESS, compiled_code.to_vec());
         builtin_templates.insert(*ACCOUNT_TEMPLATE_ADDRESS, template);
 
         // get the builtin WASM code of the account nft template
-        let compiled_code = get_template_builtin(*ACCOUNT_NFT_TEMPLATE_ADDRESS);
+        let compiled_code = get_template_builtin(&ACCOUNT_NFT_TEMPLATE_ADDRESS);
         let template =
             Self::load_builtin_template("account_nft", *ACCOUNT_NFT_TEMPLATE_ADDRESS, compiled_code.to_vec());
         builtin_templates.insert(*ACCOUNT_NFT_TEMPLATE_ADDRESS, template);
@@ -239,6 +242,20 @@ impl TemplateProvider for TemplateManager {
     type Template = LoadedTemplate;
 
     fn get_template_module(&self, address: &TemplateAddress) -> Result<Option<Self::Template>, Self::Error> {
+        if let Some(template) = self.cache.get(address) {
+            debug!(target: LOG_TARGET, "CACHE HIT: Template {}", address);
+            return Ok(Some(template));
+        }
+
+        // This protects the following critical area by:
+        // 1. preventing more than CONCURRENT_ACCESS_LIMIT concurrent accesses
+        // 2. preventing more than one load of the same template
+        // The reasons are:
+        // 1. for efficiency, to only ever load the template once (until it is purged from the cache), and
+        // 2. to prevent stack overflow. This happens in stress testing, if around 200 templates are loaded concurrently
+        let guard = self.cmap_semaphore.acquire(*address);
+        let _access = guard.access();
+
         if let Some(template) = self.cache.get(address) {
             debug!(target: LOG_TARGET, "CACHE HIT: Template {}", address);
             return Ok(Some(template));

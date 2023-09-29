@@ -20,48 +20,123 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { ReactNode, useEffect, useState } from "react";
-import {accountsClaimBurn, accountsCreate, accountsCreateFreeTestCoins, accountsList} from "../../../utils/json_rpc";
-import Error from "./Error";
-import Table from "@mui/material/Table";
-import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
-import TableContainer from "@mui/material/TableContainer";
-import TableHead from "@mui/material/TableHead";
-import TableRow from "@mui/material/TableRow";
-import { fromHexString, toHexString } from "../../../utils/helpers";
-import { BoxHeading2 } from "../../../Components/StyledComponents";
-import Fade from "@mui/material/Fade";
-import { Form } from "react-router-dom";
-import TextField from "@mui/material/TextField/TextField";
-import Select, { SelectChangeEvent } from "@mui/material/Select/Select";
-import Button from "@mui/material/Button/Button";
-import AddIcon from "@mui/icons-material/Add";
-import { removeTagged } from "../../../utils/helpers";
-import MenuItem from "@mui/material/MenuItem";
-import Alert from "@mui/material/Alert";
-import Link from "@mui/material/Link";
+import { useState } from 'react';
+import { Form, Link, useLocation } from 'react-router-dom';
+import AddIcon from '@mui/icons-material/Add';
+import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button/Button';
+import Fade from '@mui/material/Fade';
+import MenuItem from '@mui/material/MenuItem';
+import Select, { SelectChangeEvent } from '@mui/material/Select/Select';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TextField from '@mui/material/TextField/TextField';
+import CopyToClipboard from '../../../Components/CopyToClipboard';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import { ChevronRight } from '@mui/icons-material';
+import IconButton from '@mui/material/IconButton';
+import {
+  BoxHeading2,
+  DataTableCell,
+} from '../../../Components/StyledComponents';
+import { shortenString, toHexString } from '../../../utils/helpers';
+import {
+  useAccountsCreate,
+  useAccountsCreateFreeTestCoins,
+  useAccountsClaimBurn,
+  useAccountsList,
+} from '../../../api/hooks/useAccounts';
+import FetchStatusCheck from '../../../Components/FetchStatusCheck';
 
 function Account(account: any) {
+  const { pathname } = useLocation();
   return (
     <TableRow key={toHexString(account.account.address.Component)}>
-      <TableCell><Link href={"accounts/" + account.account.name}>{account.account.name}</Link></TableCell>
-      <TableCell>{account.account.address.Component}</TableCell>
-      <TableCell>{account.account.key_index}</TableCell>
-      <TableCell>{account.public_key}</TableCell>
+      <DataTableCell>
+        <Link
+          to={
+            pathname.includes('/accounts')
+              ? account.account.name
+              : `accounts/${account.account.name}`
+          }
+          style={{
+            textDecoration: 'none',
+            color: 'inherit',
+          }}
+        >
+          {account.account.name}
+        </Link>
+      </DataTableCell>
+      <DataTableCell>
+        {shortenString(account.account.address.Component)}
+        <CopyToClipboard copy={account.account.address.Component} />
+      </DataTableCell>
+      <DataTableCell>{account.account.key_index}</DataTableCell>
+      <DataTableCell>
+        {shortenString(account.public_key)}
+        <CopyToClipboard copy={account.public_key} />
+      </DataTableCell>
+      <DataTableCell>
+        <IconButton
+          component={Link}
+          to={
+            pathname.includes('/accounts')
+              ? account.account.name
+              : `accounts/${account.account.name}`
+          }
+        >
+          <ChevronRight />
+        </IconButton>
+      </DataTableCell>
     </TableRow>
   );
 }
 
 function Accounts() {
-  const [state, setState] = useState<any>();
   const [error, setError] = useState<String>();
   const [showAccountDialog, setShowAddAccountDialog] = useState(false);
   const [showClaimDialog, setShowClaimBurnDialog] = useState(false);
-  const [accountFormState, setAccountFormState] = useState({ accountName: "", signingKeyIndex: "", fee: "" });
-  const [claimBurnFormState, setClaimBurnFormState] = useState({ account: "", claimProof: "", fee: "" });
+  const [accountFormState, setAccountFormState] = useState({
+    accountName: '',
+    signingKeyIndex: '',
+    fee: '',
+  });
+  const [claimBurnFormState, setClaimBurnFormState] = useState({
+    account: '',
+    claimProof: '',
+    fee: '',
+  });
+  const {
+    data: dataAccountsList,
+    isLoading: isLoadingAccountsList,
+    isError: isErrorAccountsList,
+    error: errorAccountsList,
+  } = useAccountsList(0, 10);
+  const { mutate } = useAccountsCreateFreeTestCoins();
 
-  const showAddAccountDialog = (setElseToggle: boolean = !showAccountDialog) => {
+  const { mutate: mutateAddAccount } = useAccountsCreate(
+    accountFormState.accountName,
+      undefined,
+    undefined,
+    false
+  );
+
+  const { mutate: mutateClaimBurn } = useAccountsClaimBurn(
+    claimBurnFormState.account,
+    claimBurnFormState.claimProof
+      ? JSON.parse(claimBurnFormState.claimProof)
+      : null,
+    +claimBurnFormState.fee
+  );
+
+  const showAddAccountDialog = (
+    setElseToggle: boolean = !showAccountDialog
+  ) => {
     setShowAddAccountDialog(setElseToggle);
   };
 
@@ -69,73 +144,62 @@ function Accounts() {
     setShowClaimBurnDialog(setElseToggle);
   };
 
-  const loadAccounts = () => {
-    accountsList(0, 10)
-      .then((response) => {
-        console.log(response);
-        setState(response);
-        setError(undefined);
-      })
-      .catch((err) => {
-        setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`);
-      });
-  };
-
   const onSubmitAddAccount = () => {
-    accountsCreate(
-      accountFormState.accountName,
-      accountFormState.signingKeyIndex ? +accountFormState.signingKeyIndex : undefined,
-      undefined,
-      accountFormState.fee ? +accountFormState.fee : undefined,
-      false
-    ).then((response) => {
-      loadAccounts();
-    });
-    setAccountFormState({ accountName: "", signingKeyIndex: "", fee: "" });
+    mutateAddAccount();
+    setAccountFormState({ accountName: '', signingKeyIndex: '', fee: '' });
     setShowAddAccountDialog(false);
   };
   const onAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAccountFormState({ ...accountFormState, [e.target.name]: e.target.value });
+    setAccountFormState({
+      ...accountFormState,
+      [e.target.name]: e.target.value,
+    });
   };
 
   const onClaimFreeCoins = () => {
-    accountsCreateFreeTestCoins("TestAccount", 100000, 1000).then((response) => { loadAccounts(); });
-  }
+    mutate({
+      accountName: 'TestAccount',
+      amount: 100000,
+      fee: 1000,
+    });
+  };
 
   const onClaimBurn = () => {
-    accountsClaimBurn(claimBurnFormState.account, JSON.parse(claimBurnFormState.claimProof), +claimBurnFormState.fee)
-      .then((response) => {
-        console.log(response);
-        loadAccounts();
-      })
-      .catch((err) => {
-        console.log(err);
-        setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`);
-      });
-    setClaimBurnFormState({ account: "", claimProof: "", fee: "" });
+    mutateClaimBurn();
+    setClaimBurnFormState({ account: '', claimProof: '', fee: '' });
     setShowClaimBurnDialog(false);
   };
 
   const onClaimBurnChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setClaimBurnFormState({ ...claimBurnFormState, [e.target.name]: e.target.value });
+    setClaimBurnFormState({
+      ...claimBurnFormState,
+      [e.target.name]: e.target.value,
+    });
   };
 
   const onClaimBurnAccountChange = (e: SelectChangeEvent<string>) => {
-    setClaimBurnFormState({ ...claimBurnFormState, [e.target.name]: e.target.value });
+    setClaimBurnFormState({
+      ...claimBurnFormState,
+      [e.target.name]: e.target.value,
+    });
   };
-
-  useEffect(() => {
-    loadAccounts();
-  }, []);
 
   return (
     <>
-      {error ? (
-        <Alert severity="error">{error}</Alert>
-      ) : null}
-      <BoxHeading2>
+      {error ? <Alert severity="error">{error}</Alert> : null}
+      <BoxHeading2
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.5rem',
+        }}
+      >
         <div className="flex-container">
-          <Button variant="outlined" startIcon={<AddIcon />} onClick={() => onClaimFreeCoins()}>
+          <Button
+            variant="outlined"
+            startIcon={<AddIcon />}
+            onClick={() => onClaimFreeCoins()}
+          >
             Claim free testnet coins
           </Button>
         </div>
@@ -149,24 +213,13 @@ function Accounts() {
                 onChange={onAccountChange}
                 style={{ flexGrow: 1 }}
               />
-              <TextField
-                name="signingKeyIndex"
-                label="Signing Key Index"
-                value={accountFormState.signingKeyIndex}
-                onChange={onAccountChange}
-                style={{ flexGrow: 1 }}
-              />
-              <TextField
-                name="fee"
-                label="Fee"
-                value={accountFormState.fee}
-                onChange={onAccountChange}
-                style={{ flexGrow: 1 }}
-              />
               <Button variant="contained" type="submit">
                 Add Account
               </Button>
-              <Button variant="outlined" onClick={() => showAddAccountDialog(false)}>
+              <Button
+                variant="outlined"
+                onClick={() => showAddAccountDialog(false)}
+              >
                 Cancel
               </Button>
             </Form>
@@ -175,7 +228,11 @@ function Accounts() {
         {!showAccountDialog && (
           <Fade in={!showAccountDialog}>
             <div className="flex-container">
-              <Button variant="outlined" startIcon={<AddIcon />} onClick={() => showAddAccountDialog()}>
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => showAddAccountDialog()}
+              >
                 Add Account
               </Button>
             </div>
@@ -184,16 +241,29 @@ function Accounts() {
         {showClaimDialog && (
           <Fade in={showClaimDialog}>
             <Form onSubmit={onClaimBurn} className="flex-container">
-              <Select name="account"
-                label="Account"
-                value={claimBurnFormState.account}
-                onChange={onClaimBurnAccountChange}
-                style={{ flexGrow: 1 }}  >
-                {state?.accounts.map((account: any) => (
-                  <MenuItem key={toHexString(account.account.address.Component)} value={"component_" + toHexString(account.account.address.Component)}>{account.account.name} </MenuItem>
-
-                ))}
-              </Select>
+              <FormControl>
+                <InputLabel id="account">Account</InputLabel>
+                <Select
+                  labelId="account"
+                  name="account"
+                  label="Account"
+                  value={claimBurnFormState.account}
+                  onChange={onClaimBurnAccountChange}
+                  style={{ flexGrow: 1, minWidth: '200px' }}
+                >
+                  {dataAccountsList?.accounts.map((account: any) => (
+                    <MenuItem
+                      key={toHexString(account.account.address.Component)}
+                      value={
+                        'component_' +
+                        toHexString(account.account.address.Component)
+                      }
+                    >
+                      {account.account.name}{' '}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <TextField
                 name="claimProof"
                 label="Claim Proof"
@@ -211,7 +281,10 @@ function Accounts() {
               <Button variant="contained" type="submit">
                 Claim Burn
               </Button>
-              <Button variant="outlined" onClick={() => showClaimBurnDialog(false)}>
+              <Button
+                variant="outlined"
+                onClick={() => showClaimBurnDialog(false)}
+              >
                 Cancel
               </Button>
             </Form>
@@ -220,26 +293,43 @@ function Accounts() {
         {!showClaimDialog && (
           <Fade in={!showClaimDialog}>
             <div className="flex-container">
-              <Button variant="outlined" startIcon={<AddIcon />} onClick={() => showClaimBurnDialog()}>
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={() => showClaimBurnDialog()}
+              >
                 Claim Burn
               </Button>
             </div>
           </Fade>
         )}
       </BoxHeading2>
-      <TableContainer>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell>Name</TableCell>
-              <TableCell>Address</TableCell>
-              <TableCell>Key index</TableCell>
-              <TableCell>Public key</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>{state && state.accounts.map((account: any) => Account(account))}</TableBody>
-        </Table>
-      </TableContainer>
+      <FetchStatusCheck
+        isLoading={isLoadingAccountsList}
+        isError={isErrorAccountsList}
+        errorMessage={errorAccountsList?.message || 'Error fetching data'}
+      />
+      <Fade in={!isLoadingAccountsList && !isErrorAccountsList}>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Name</TableCell>
+                <TableCell>Address</TableCell>
+                <TableCell>Key index</TableCell>
+                <TableCell>Public key</TableCell>
+                <TableCell>Details</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {dataAccountsList &&
+                dataAccountsList.accounts.map((account: any) =>
+                  Account(account)
+                )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Fade>
     </>
   );
 }

@@ -20,20 +20,21 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect } from 'react';
-import { fromHexString } from '../VN/Components/helpers';
-import EChartsReact from 'echarts-for-react';
+import { useState, useEffect } from "react";
+import { fromHexString } from "../VN/Components/helpers";
+import EChartsReact from "echarts-for-react";
 import {
   ICommittees,
   ICommitteeChart,
   ICommitteeMap,
-} from '../../utils/interfaces';
-import '../../theme/echarts.css';
+} from "../../utils/interfaces";
+import "../../theme/echarts.css";
+import { CommitteeShardInfo } from "../../utils/interfaces";
 
 export default function CommitteesWaterfall({
   committees,
 }: {
-  committees: ICommittees;
+  committees: CommitteeShardInfo[];
 }) {
   const [chartData, setChartData] = useState<ICommitteeChart>({
     activeleft: [],
@@ -46,25 +47,14 @@ export default function CommitteesWaterfall({
   const [divHeight, setDivHeight] = useState<number>(0);
 
   const TOTAL_WIDTH = 256;
-  const INACTIVE_COLOR = 'rgba(0, 0, 0, 0)';
+  const INACTIVE_COLOR = "rgba(0, 0, 0, 0)";
   const ACTIVE_COLOR = (params: any) => {
     let index = params.dataIndex;
-    var colorList = ['#ECA86A', '#DB7E7E', '#7AC1C2', '#318EFA', '#9D5CF9'];
+    var colorList = ["#ECA86A", "#DB7E7E", "#7AC1C2", "#318EFA", "#9D5CF9"];
     return colorList[index % colorList.length];
   };
 
   useEffect(() => {
-    const dataset = committees.map(
-      ([begin, end, committee]: ICommittees[number]) => {
-        const data: ICommitteeMap = [
-          fromHexString(begin)[0],
-          fromHexString(end)[0],
-          committee,
-        ];
-        return data;
-      }
-    );
-
     const info: ICommitteeChart = {
       activeleft: [],
       inactiveleft: [],
@@ -73,8 +63,9 @@ export default function CommitteesWaterfall({
       activeright: [],
     };
 
-    dataset.forEach((data: ICommitteeMap) => {
-      const [firstValue, secondValue] = data;
+    committees.forEach((data) => {
+      const firstValue = fromHexString(data.shard_range.start)[0];
+      const secondValue = fromHexString(data.shard_range.end)[0];
       switch (true) {
         case firstValue === secondValue:
           info.activeleft.push(0);
@@ -85,75 +76,78 @@ export default function CommitteesWaterfall({
           break;
         case firstValue < secondValue:
           info.activeleft.push(0);
-          info.inactiveleft.push(data[0]);
-          info.activemiddle.push(data[1] - data[0]);
-          info.inactiveright.push(TOTAL_WIDTH - data[1]);
+          info.inactiveleft.push(firstValue);
+          info.activemiddle.push(secondValue - firstValue);
+          info.inactiveright.push(TOTAL_WIDTH - secondValue);
           info.activeright.push(0);
           break;
         case firstValue > secondValue:
-          info.activeleft.push(data[1]);
+          info.activeleft.push(secondValue);
           info.inactiveleft.push(
-            TOTAL_WIDTH - (TOTAL_WIDTH - data[0]) - data[1]
+            TOTAL_WIDTH - (TOTAL_WIDTH - firstValue) - secondValue,
           );
           info.activemiddle.push(0);
           info.inactiveright.push(0);
-          info.activeright.push(TOTAL_WIDTH - data[0]);
+          info.activeright.push(TOTAL_WIDTH - firstValue);
           break;
         default:
           break;
       }
     });
     setChartData(info);
-    setDivHeight(dataset.length * 50);
-    const newTitles = dataset.map(
-      (data: ICommitteeMap, index: number) => `Committee ${index + 1}`
-    );
+    setDivHeight(committees.length * 50);
+    const newTitles = committees.map((data) => `Committee ${data.bucket}`);
     setTitles(newTitles);
   }, [committees]);
 
   function tooltipFormatter(params: any) {
     const dataIndex = params[0].dataIndex;
     const data = committees[dataIndex];
-    const members = data[2] as string[];
-    const begin = data[0] as string;
-    const end = data[1] as string;
+    const begin = fromHexString(data.shard_range.start)[0];
+    const end = fromHexString(data.shard_range.end)[0];
 
-    const memberList = members
-      .map((member: string) => `<li>${member}</li>`)
+    const memberList = data.validators
+      .map((member) => `<li>${member.address}</li>`)
       .slice(0, 5)
-      .join('');
+      .join("");
 
-    return `<b>Range:</b> <br />
-            ${begin},<br />
-            ${end}<br />
-            <b>${members.length} Members:</b> <br />
-            <ul>${memberList}</ul>
-            <a class="tooltip-btn" href="committees/${begin},${end}">View Committee</a>
-            `;
+    return (
+      <>
+        <b>Range:</b> <br />
+        {begin},<br />
+        {end}
+        <br />
+        <b>{data.validators.length} Members:</b> <br />
+        <ul>{memberList}</ul>
+        <a className="tooltip-btn" href={`committees/${begin},${end}`}>
+          View Committee
+        </a>
+      </>
+    );
   }
 
   const option = {
     grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '3%',
+      left: "3%",
+      right: "4%",
+      bottom: "3%",
       containLabel: true,
     },
     xAxis: {
-      type: 'value',
+      type: "value",
       max: 256,
     },
     yAxis: {
-      type: 'category',
+      type: "category",
       data: titles,
       z: 10,
       axisPointer: {
-        type: 'shadow',
+        type: "shadow",
         label: {
           show: true,
-          formatter: '{value}',
+          formatter: "{value}",
           textStyle: {
-            color: '#fff',
+            color: "#fff",
             fontSize: 12,
           },
         },
@@ -162,25 +156,25 @@ export default function CommitteesWaterfall({
     tooltip: {
       show: true,
       enterable: true,
-      trigger: 'axis',
+      trigger: "axis",
       formatter: tooltipFormatter,
       position: function (point: any) {
         const left = point[0] + 10;
         const top = point[1] - 10;
         return [left, top];
       },
-      backgroundColor: '#ffffffe6',
+      backgroundColor: "#ffffffe6",
     },
     series: [
       {
-        name: 'ActiveLeft',
-        type: 'bar',
-        stack: 'total',
+        name: "ActiveLeft",
+        type: "bar",
+        stack: "total",
         label: {
           show: false,
         },
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         data: chartData.activeleft,
         itemStyle: {
@@ -188,14 +182,14 @@ export default function CommitteesWaterfall({
         },
       },
       {
-        name: 'InactiveLeft',
-        type: 'bar',
-        stack: 'total',
+        name: "InactiveLeft",
+        type: "bar",
+        stack: "total",
         label: {
           show: false,
         },
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         data: chartData.inactiveleft,
         itemStyle: {
@@ -203,14 +197,14 @@ export default function CommitteesWaterfall({
         },
       },
       {
-        name: 'ActiveMiddle',
-        type: 'bar',
-        stack: 'total',
+        name: "ActiveMiddle",
+        type: "bar",
+        stack: "total",
         label: {
           show: false,
         },
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         data: chartData.activemiddle,
         itemStyle: {
@@ -218,14 +212,14 @@ export default function CommitteesWaterfall({
         },
       },
       {
-        name: 'InactiveRight',
-        type: 'bar',
-        stack: 'total',
+        name: "InactiveRight",
+        type: "bar",
+        stack: "total",
         label: {
           show: false,
         },
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         data: chartData.inactiveright,
         itemStyle: {
@@ -233,14 +227,14 @@ export default function CommitteesWaterfall({
         },
       },
       {
-        name: 'ActiveRight',
-        type: 'bar',
-        stack: 'total',
+        name: "ActiveRight",
+        type: "bar",
+        stack: "total",
         label: {
           show: false,
         },
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         data: chartData.activeright,
         itemStyle: {

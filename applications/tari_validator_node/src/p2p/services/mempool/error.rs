@@ -5,14 +5,17 @@ use tari_dan_app_utilities::{
     template_manager::interface::TemplateManagerError,
     transaction_executor::TransactionProcessorError,
 };
-use tari_dan_storage::StorageError;
+use tari_dan_common_types::Epoch;
+use tari_dan_storage::{consensus_models::TransactionPoolError, StorageError};
 use tari_epoch_manager::EpochManagerError;
+use tari_transaction::TransactionId;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessorError,
     p2p::services::{mempool::MempoolRequest, messaging::MessagingError},
     substate_resolver::SubstateResolverError,
+    virtual_substate::VirtualSubstateError,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -21,12 +24,8 @@ pub enum MempoolError {
     EpochManagerError(#[from] EpochManagerError),
     #[error("Broadcast failed: {0}")]
     BroadcastFailed(#[from] MessagingError),
-    #[error("Invalid template address: {0}")]
-    InvalidTemplateAddress(#[from] TemplateManagerError),
     #[error("Internal service request cancelled")]
     RequestCancelled,
-    #[error("No fee instructions")]
-    NoFeeInstructions,
     #[error("DryRunTransactionProcessor Error: {0}")]
     DryRunTransactionProcessorError(#[from] DryRunTransactionProcessorError),
     #[error("Execution thread failure: {0}")]
@@ -37,8 +36,25 @@ pub enum MempoolError {
     TransactionExecutionError(#[from] TransactionProcessorError),
     #[error("Storage Error: {0}")]
     StorageError(#[from] StorageError),
+    #[error("Virtual substate error: {0}")]
+    VirtualSubstateError(#[from] VirtualSubstateError),
+    #[error("Transaction pool error: {0}")]
+    TransactionPoolError(#[from] TransactionPoolError),
+
+    // TODO: move these to MempoolValidationError type
+    #[error("Invalid template address: {0}")]
+    InvalidTemplateAddress(#[from] TemplateManagerError),
+    #[error("No fee instructions")]
+    NoFeeInstructions,
     #[error("Input refs downed")]
     InputRefsDowned,
+    #[error("Output substate exists in transaction {transaction_id}")]
+    OutputSubstateExists { transaction_id: TransactionId },
+    #[error("Validator fee claim instruction in transaction {transaction_id} contained invalid epoch {given_epoch}")]
+    ValidatorFeeClaimEpochInvalid {
+        transaction_id: TransactionId,
+        given_epoch: Epoch,
+    },
 }
 
 impl From<mpsc::error::SendError<MempoolRequest>> for MempoolError {

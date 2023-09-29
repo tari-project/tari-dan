@@ -373,13 +373,13 @@ pub mod utilities {
         extended_range_proof::ExtendedRangeProofService,
         keys::{PublicKey as _, SecretKey},
         ristretto::bulletproofs_plus::{RistrettoExtendedMask, RistrettoExtendedWitness},
+        tari_utilities::ByteArray,
     };
     use tari_engine_types::confidential::{challenges, get_commitment_factory, get_range_proof_service};
     use tari_template_lib::{
         crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
         models::{Amount, ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData},
     };
-    use tari_utilities::ByteArray;
 
     pub struct ConfidentialProofStatement {
         pub amount: Amount,

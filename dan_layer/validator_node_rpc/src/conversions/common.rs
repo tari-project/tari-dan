@@ -22,9 +22,10 @@
 
 use std::convert::{TryFrom, TryInto};
 
+use anyhow::anyhow;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_crypto::{hashing::DomainSeparation, signatures::SchnorrSignature, tari_utilities::ByteArray};
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
 use tari_dan_storage::consensus_models::{ValidatorSchnorrSignature, ValidatorSignature};
 use tari_transaction::TransactionSignature;
 
@@ -35,8 +36,8 @@ impl<H: DomainSeparation> TryFrom<proto::common::Signature> for SchnorrSignature
     type Error = anyhow::Error;
 
     fn try_from(sig: proto::common::Signature) -> Result<Self, Self::Error> {
-        let public_nonce = PublicKey::from_bytes(&sig.public_nonce)?;
-        let signature = PrivateKey::from_bytes(&sig.signature)?;
+        let public_nonce = ByteArray::from_bytes(&sig.public_nonce).map_err(anyhow::Error::msg)?;
+        let signature = PrivateKey::from_bytes(&sig.signature).map_err(anyhow::Error::msg)?;
 
         Ok(Self::new(public_nonce, signature))
     }
@@ -51,13 +52,13 @@ impl<H: DomainSeparation> From<SchnorrSignature<PublicKey, PrivateKey, H>> for p
     }
 }
 
-impl TryFrom<proto::common::SignatureAndPublicKey> for ValidatorSignature {
+impl<TAddr: NodeAddressable> TryFrom<proto::common::SignatureAndPublicKey> for ValidatorSignature<TAddr> {
     type Error = anyhow::Error;
 
     fn try_from(sig: proto::common::SignatureAndPublicKey) -> Result<Self, Self::Error> {
-        let public_key = PublicKey::from_bytes(&sig.public_key)?;
-        let public_nonce = PublicKey::from_bytes(&sig.public_nonce)?;
-        let signature = PrivateKey::from_bytes(&sig.signature)?;
+        let public_key = TAddr::from_bytes(&sig.public_key).ok_or_else(|| anyhow!("Public key was not valid bytes"))?;
+        let public_nonce = ByteArray::from_bytes(&sig.public_nonce).map_err(anyhow::Error::msg)?;
+        let signature = PrivateKey::from_bytes(&sig.signature).map_err(anyhow::Error::msg)?;
 
         Ok(Self::new(
             public_key,
@@ -66,12 +67,12 @@ impl TryFrom<proto::common::SignatureAndPublicKey> for ValidatorSignature {
     }
 }
 
-impl From<ValidatorSignature> for proto::common::SignatureAndPublicKey {
-    fn from(value: ValidatorSignature) -> Self {
+impl<TAddr: NodeAddressable> From<ValidatorSignature<TAddr>> for proto::common::SignatureAndPublicKey {
+    fn from(value: ValidatorSignature<TAddr>) -> Self {
         Self {
             public_nonce: value.signature.get_public_nonce().to_vec(),
             signature: value.signature.get_signature().to_vec(),
-            public_key: value.public_key.to_vec(),
+            public_key: value.public_key.as_bytes().to_vec(),
         }
     }
 }
@@ -82,9 +83,9 @@ impl TryFrom<proto::common::SignatureAndPublicKey> for TransactionSignature {
     type Error = anyhow::Error;
 
     fn try_from(sig: proto::common::SignatureAndPublicKey) -> Result<Self, Self::Error> {
-        let public_key = PublicKey::from_bytes(&sig.public_key)?;
-        let public_nonce = PublicKey::from_bytes(&sig.public_nonce)?;
-        let signature = PrivateKey::from_bytes(&sig.signature)?;
+        let public_key = ByteArray::from_bytes(&sig.public_key).map_err(anyhow::Error::msg)?;
+        let public_nonce = ByteArray::from_bytes(&sig.public_nonce).map_err(anyhow::Error::msg)?;
+        let signature = PrivateKey::from_bytes(&sig.signature).map_err(anyhow::Error::msg)?;
 
         Ok(Self::new(public_key, Signature::new(public_nonce, signature)))
     }

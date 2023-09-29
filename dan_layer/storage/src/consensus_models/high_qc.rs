@@ -20,7 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::Epoch;
+use std::fmt::Display;
+
+use tari_dan_common_types::NodeHeight;
 
 use crate::{
     consensus_models::{BlockId, QcId, QuorumCertificate},
@@ -31,24 +33,48 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighQc {
-    pub epoch: Epoch,
     pub block_id: BlockId,
+    pub block_height: NodeHeight,
     pub qc_id: QcId,
 }
 
 impl HighQc {
-    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, epoch: Epoch) -> Result<Self, StorageError> {
-        tx.high_qc_get(epoch)
+    pub fn block_id(&self) -> &BlockId {
+        &self.block_id
+    }
+
+    pub fn block_height(&self) -> NodeHeight {
+        self.block_height
+    }
+
+    pub fn qc_id(&self) -> &QcId {
+        &self.qc_id
+    }
+}
+
+impl HighQc {
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx) -> Result<Self, StorageError> {
+        tx.high_qc_get()
     }
 
     pub fn get_quorum_certificate<TTx: StateStoreReadTransaction + ?Sized>(
         &self,
         tx: &mut TTx,
-    ) -> Result<QuorumCertificate, StorageError> {
+    ) -> Result<QuorumCertificate<TTx::Addr>, StorageError> {
         QuorumCertificate::get(tx, &self.qc_id)
     }
 
-    pub fn set<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn set<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.high_qc_set(self)
+    }
+}
+
+impl Display for HighQc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "(block_id: {}, height: {}, qc_id: {})",
+            self.block_id, self.block_height, self.qc_id
+        )
     }
 }

@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::{
     models::{TransactionStatus, WalletTransaction},
@@ -26,6 +27,7 @@ pub struct Transaction {
     pub fee_instructions: String,
     pub meta: String,
     pub result: Option<String>,
+    pub json_result: Option<String>,
     pub transaction_failure: Option<String>,
     pub qcs: Option<String>,
     pub final_fee: Option<i64>,
@@ -44,7 +46,7 @@ pub struct InputsAndOutputs {
 }
 
 impl Transaction {
-    pub fn try_into_wallet_transaction(self) -> Result<WalletTransaction, WalletStorageError> {
+    pub fn try_into_wallet_transaction(self) -> Result<WalletTransaction<PublicKey>, WalletStorageError> {
         let signature = deserialize_json(&self.signature)?;
         let sender_public_key =
             Hex::from_hex(&self.sender_public_key).map_err(|e| WalletStorageError::DecodingError {
@@ -68,7 +70,6 @@ impl Transaction {
                 input_refs,
                 outputs,
                 vec![],
-                vec![],
             ),
             status: TransactionStatus::from_str(&self.status).map_err(|e| WalletStorageError::DecodingError {
                 operation: "transaction_get",
@@ -80,6 +81,11 @@ impl Transaction {
             final_fee: self.final_fee.map(|f| f.into()),
             qcs: self.qcs.map(|q| deserialize_json(&q)).transpose()?.unwrap_or_default(),
             is_dry_run: self.is_dry_run,
+            json_result: self
+                .json_result
+                .map(|r| deserialize_json(&r))
+                .transpose()?
+                .unwrap_or_default(),
         })
     }
 }

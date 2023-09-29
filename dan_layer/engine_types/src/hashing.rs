@@ -22,10 +22,11 @@
 
 use std::{io, io::Write};
 
+use blake2::{digest::consts::U32, Blake2b};
 use digest::Digest;
 use serde::Serialize;
 use tari_bor::encode_into;
-use tari_crypto::{hash::blake2::Blake256, hash_domain, hashing::DomainSeparation};
+use tari_crypto::{hash_domain, hashing::DomainSeparation};
 use tari_template_lib::Hash;
 
 hash_domain!(TariEngineHashDomain, "com.tari.dan.engine", 0);
@@ -42,12 +43,12 @@ hash_domain!(ConfidentialOutputHashDomain, "com.tari.dan.confidential_output", 1
 
 #[derive(Debug, Clone)]
 pub struct TariHasher {
-    hasher: Blake256,
+    hasher: Blake2b<U32>,
 }
 
 impl TariHasher {
     pub fn new_with_label<TDomain: DomainSeparation>(label: &'static str) -> Self {
-        let mut hasher = Blake256::new();
+        let mut hasher = Blake2b::<U32>::new();
         TDomain::add_domain_separation_tag(&mut hasher, label);
         Self { hasher }
     }
@@ -74,12 +75,12 @@ impl TariHasher {
         hash.into()
     }
 
-    pub fn finalize_into(self, output: &mut digest::Output<Blake256>) {
+    pub fn finalize_into(self, output: &mut digest::Output<Blake2b<U32>>) {
         digest::FixedOutput::finalize_into(self.hasher, output)
     }
 
     fn hash_writer(&mut self) -> impl Write + '_ {
-        struct HashWriter<'a>(&'a mut Blake256);
+        struct HashWriter<'a>(&'a mut Blake2b<U32>);
         impl Write for HashWriter<'_> {
             fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
                 self.0.update(buf);
@@ -112,6 +113,7 @@ pub enum EngineHashDomainLabel {
     ComponentAddress,
     RandomBytes,
     TransactionReceipt,
+    FeeClaimAddress,
     QuorumCertificate,
 }
 
@@ -134,6 +136,7 @@ impl EngineHashDomainLabel {
             Self::ComponentAddress => "ComponentAddress",
             Self::RandomBytes => "RandomBytes",
             Self::TransactionReceipt => "TransactionReceipt",
+            Self::FeeClaimAddress => "FeeClaimAddress",
             Self::QuorumCertificate => "QuorumCertificate",
         }
     }

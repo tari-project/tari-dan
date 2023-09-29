@@ -6,9 +6,9 @@ use std::collections::HashMap;
 use log::*;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
-    commit_result::TransactionReceiptAddress,
     indexed_value::{IndexedValue, IndexedValueVisitorError},
     substate::{SubstateAddress, SubstateValue},
+    transaction_receipt::TransactionReceiptAddress,
 };
 use tari_transaction::TransactionId;
 
@@ -127,6 +127,7 @@ where
                             substate_addresses.insert(addr.address, addr.version);
                         },
                         SubstateValue::UnclaimedConfidentialOutput(_) => {},
+                        SubstateValue::FeeClaim(_) => {},
                     }
                 },
             }

@@ -73,7 +73,7 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
 
     pub async fn run(&mut self, mut shutdown: ShutdownSignal) -> Result<(), EpochManagerError> {
         // first, load initial state
-        self.inner.load_initial_state()?;
+        self.inner.load_initial_state().await?;
 
         loop {
             tokio::select! {
@@ -87,16 +87,22 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn handle_request(&mut self, req: EpochManagerRequest) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockHeight { reply } => handle(reply, Ok(self.inner.current_block_height())),
             EpochManagerRequest::GetValidatorNode { epoch, addr, reply } => handle(
                 reply,
-                self.inner
-                    .get_validator_node(epoch, &addr)
-                    .and_then(|x| x.ok_or(EpochManagerError::ValidatorNodeNotRegistered)),
+                self.inner.get_validator_node(epoch, &addr).and_then(|x| {
+                    x.ok_or(EpochManagerError::ValidatorNodeNotRegistered {
+                        address: addr.to_string(),
+                    })
+                }),
             ),
+            EpochManagerRequest::GetManyValidatorNodes { query, reply } => {
+                handle(reply, self.inner.get_many_validator_nodes(query));
+            },
             EpochManagerRequest::UpdateEpoch {
                 block_height,
                 block_hash,
@@ -124,17 +130,6 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             EpochManagerRequest::IsValidatorInCommitteeForCurrentEpoch { shard, identity, reply } => {
                 let epoch = self.inner.current_epoch();
                 handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity));
-            },
-            EpochManagerRequest::FilterToLocalShards {
-                epoch,
-                for_addr,
-                available_shards,
-                reply,
-            } => {
-                handle(
-                    reply,
-                    self.inner.filter_to_local_shards(epoch, &for_addr, available_shards),
-                );
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe())),
             EpochManagerRequest::GetValidatorNodeBalancedMerkleTree { epoch, reply } => {
@@ -186,6 +181,10 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             },
             EpochManagerRequest::GetCommitteesByBuckets { epoch, buckets, reply } => {
                 handle(reply, self.inner.get_committees_by_buckets(epoch, buckets))
+            },
+            EpochManagerRequest::GetFeeClaimPublicKey { reply } => handle(reply, self.inner.get_fee_claim_public_key()),
+            EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply } => {
+                handle(reply, self.inner.set_fee_claim_public_key(public_key))
             },
         }
     }

@@ -25,6 +25,7 @@ pub mod types;
 
 use std::{
     borrow::Borrow,
+    convert::Infallible,
     fmt::{Display, Formatter},
     str::FromStr,
 };
@@ -88,10 +89,14 @@ use crate::{
         AuthGetAllJwtResponse,
         AuthRevokeTokenRequest,
         AuthRevokeTokenResponse,
+        ClaimValidatorFeesRequest,
+        ClaimValidatorFeesResponse,
         ConfidentialCreateOutputProofRequest,
         ConfidentialCreateOutputProofResponse,
         ConfidentialTransferRequest,
         ConfidentialTransferResponse,
+        GetValidatorFeesRequest,
+        GetValidatorFeesResponse,
         KeysCreateRequest,
         KeysCreateResponse,
         KeysListRequest,
@@ -143,7 +148,7 @@ impl Display for ComponentAddressOrName {
 }
 
 impl FromStr for ComponentAddressOrName {
-    type Err = String;
+    type Err = Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Ok(address) = ComponentAddress::from_str(s) {
@@ -190,7 +195,15 @@ impl WalletDaemonClient {
     // }
 
     pub async fn create_key(&mut self) -> Result<KeysCreateResponse, WalletDaemonClientError> {
-        self.send_request("keys.create", &KeysCreateRequest {}).await
+        self.send_request("keys.create", &KeysCreateRequest { specific_index: None })
+            .await
+    }
+
+    pub async fn create_specific_key(&mut self, index: u64) -> Result<KeysCreateResponse, WalletDaemonClientError> {
+        self.send_request("keys.create", &KeysCreateRequest {
+            specific_index: Some(index),
+        })
+        .await
     }
 
     pub async fn set_active_key(&mut self, index: u64) -> Result<KeysSetActiveResponse, WalletDaemonClientError> {
@@ -249,6 +262,20 @@ impl WalletDaemonClient {
         request: T,
     ) -> Result<AccountsGetBalancesResponse, WalletDaemonClientError> {
         self.send_request("accounts.get_balances", request.borrow()).await
+    }
+
+    pub async fn get_validator_fee_summary<T: Borrow<GetValidatorFeesRequest>>(
+        &mut self,
+        request: T,
+    ) -> Result<GetValidatorFeesResponse, WalletDaemonClientError> {
+        self.send_request("validators.get_fee_summary", request.borrow()).await
+    }
+
+    pub async fn claim_validator_fees<T: Borrow<ClaimValidatorFeesRequest>>(
+        &mut self,
+        request: T,
+    ) -> Result<ClaimValidatorFeesResponse, WalletDaemonClientError> {
+        self.send_request("validators.claim_fees", request.borrow()).await
     }
 
     pub async fn list_accounts(
@@ -371,7 +398,6 @@ impl WalletDaemonClient {
         &mut self,
         req: T,
     ) -> Result<AuthLoginResponse, WalletDaemonClientError> {
-        dbg!();
         self.send_request("auth.request", req.borrow()).await
     }
 

@@ -2,6 +2,9 @@
 name = "tari_consensus"
 version = "0.50.0-pre.0"
 edition = "2021"
+authors = ["The Tari Development Community"]
+description = "Tari template runtime engine"
+repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 
 [dependencies]
@@ -11,9 +14,9 @@ tari_transaction = { path = "../transaction" }
 tari_epoch_manager = { path = "../epoch_manager" }
 
 # Used for PublicKey and Signature
-tari_common_types = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", tag = "v0.51.0-pre.4" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
 anyhow = "1.0"
 async-trait = "0.1.68"

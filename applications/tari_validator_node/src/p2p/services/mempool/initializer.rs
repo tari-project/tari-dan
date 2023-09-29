@@ -22,12 +22,14 @@
 
 use std::sync::Arc;
 
+use tari_common_types::types::PublicKey;
 use tari_comms::NodeIdentity;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
+use tari_dan_p2p::NewTransactionMessage;
 use tari_dan_storage::consensus_models::ExecutedTransaction;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_transaction::Transaction;
+use tari_transaction::{Transaction, TransactionId};
 use tokio::{sync::mpsc, task, task::JoinHandle};
 
 use crate::{
@@ -38,23 +40,25 @@ use crate::{
     substate_resolver::SubstateResolverError,
 };
 
-pub fn spawn<TExecutor, TValidator, TSubstateResolver>(
-    new_transactions: mpsc::Receiver<Transaction>,
+pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
+    new_transactions: mpsc::Receiver<NewTransactionMessage>,
     outbound: OutboundMessaging,
-    tx_executed_transactions: mpsc::Sender<ExecutedTransaction>,
+    tx_executed_transactions: mpsc::Sender<TransactionId>,
     epoch_manager: EpochManagerHandle,
     node_identity: Arc<NodeIdentity>,
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,
     validator: TValidator,
-    state_store: SqliteStateStore,
+    after_executed_validator: TExecutedValidator,
+    state_store: SqliteStateStore<PublicKey>,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
     TValidator: Validator<Transaction, Error = MempoolError> + Send + Sync + 'static,
+    TExecutedValidator: Validator<ExecutedTransaction, Error = MempoolError> + Send + Sync + 'static,
     TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
     TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
-    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
+    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(100000);
 
     let mempool = MempoolService::new(
         new_transactions,
@@ -66,6 +70,7 @@ where
         transaction_executor,
         substate_resolver,
         validator,
+        after_executed_validator,
         state_store,
     );
     let handle = MempoolHandle::new(tx_mempool_request);

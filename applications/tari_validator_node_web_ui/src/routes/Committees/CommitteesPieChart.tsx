@@ -20,57 +20,66 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect } from 'react';
-import EChartsReact from 'echarts-for-react';
-import '../../theme/echarts.css';
+import { useState, useEffect } from "react";
+import EChartsReact from "echarts-for-react";
+import "../../theme/echarts.css";
+import { GetNetworkCommitteesResponse } from "../../utils/interfaces";
 
-const MyChartComponent = ({ chartData }: any) => {
-  const [data, setData] = useState([]);
-  const [titles, setTitles] = useState([]);
+const MyChartComponent = ({ chartData }: MyChartComponentProps) => {
+  const [data, setData] = useState<any[]>([]);
+  const [titles, setTitles] = useState<string[]>([]);
 
   useEffect(() => {
-    const mappedContent = chartData.map(([begin, end, committee]: any) => {
+    const mappedTitles = chartData.committees.map((shardInfo) => {
+      return `${shardInfo.shard_range.start.slice(
+        0,
+        6,
+      )}... - ${shardInfo.shard_range.end.slice(0, 6)}...`;
+    });
+    setTitles(mappedTitles);
+
+    const mappedContent = chartData.committees.reverse().map((shardInfo) => {
       const data: any = {
-        value: committee.length,
-        name: `${begin.slice(0, 6)}... - ${end.slice(0, 6)}...`,
-        committee: committee,
-        link: `/committees/${begin},${end}`,
-        range: `${begin}<br />${end}`,
+        value: shardInfo.validators.length,
+        name: `${shardInfo.shard_range.start.slice(
+          0,
+          6,
+        )}... - ${shardInfo.shard_range.end.slice(0, 6)}...`,
+        committee: shardInfo.validators,
+        link: `/committees/${shardInfo.shard_range.start},${shardInfo.shard_range.end}`,
+        range: `${shardInfo.shard_range.start}<br />${shardInfo.shard_range.end}`,
       };
       return data;
     });
-    const mappedTitles = chartData.map(([begin, end, committee]: any) => {
-      return `${begin.slice(0, 6)}... - ${end.slice(0, 6)}...`;
-    });
-    setTitles(mappedTitles);
     setData(mappedContent);
   }, [chartData]);
 
   console.log(titles);
 
   const tooltipFomatter = (params: any) => {
-    const { value, committee, link, range } = params.data;
+    const { committee, link, range } = params.data;
     return `<b>Range:</b><br />${range}<br />
-    <b>${value} Members:</b><br /><ul>
+    <b>Bucket:</b> ${committee[0].committee_bucket} <br/>
+    <b>Members:</b> ${committee.length}<br /><ul>
     ${committee
-      .map((item: any) => `<li>${item}</li>`)
+      .map((item: any) => `<li>Address: ${item.address}</li>`)
       .slice(0, 5)
-      .join(' ')}</ul><br />
+      .join(" ")}</ul><br />
       <a class="tooltip-btn" href="${link}">View All Members</a><br />`;
   };
 
   const option = {
     tooltip: {
-      trigger: 'item',
-      position: 'right',
+      trigger: "item",
+      position: "right",
       confine: true,
       formatter: tooltipFomatter,
       enterable: true,
-      backgroundColor: '#ffffffe6',
+      backgroundColor: "#ffffffe6",
     },
     legend: {
-      type: 'scroll',
-      orient: 'vertical',
+      type: "scroll",
+      orient: "vertical",
       right: 10,
       top: 120,
       bottom: 20,
@@ -78,23 +87,27 @@ const MyChartComponent = ({ chartData }: any) => {
     },
     series: [
       {
-        type: 'pie',
-        radius: '55%',
-        center: ['40%', '50%'],
-        selectedMode: 'single',
+        type: "pie",
+        radius: "55%",
+        center: ["40%", "50%"],
+        selectedMode: "single",
         data: data,
         emphasis: {
           itemStyle: {
             shadowBlur: 10,
             shadowOffsetX: 0,
-            shadowColor: 'rgba(0, 0, 0, 0.5)',
+            shadowColor: "rgba(0, 0, 0, 0.5)",
           },
         },
       },
     ],
   };
 
-  return <EChartsReact option={option} style={{ height: '600px' }} />;
+  return <EChartsReact option={option} style={{ height: "600px" }} />;
 };
+
+interface MyChartComponentProps {
+  chartData: GetNetworkCommitteesResponse;
+}
 
 export default MyChartComponent;

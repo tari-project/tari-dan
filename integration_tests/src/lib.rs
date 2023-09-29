@@ -68,8 +68,11 @@ pub struct TariWorld {
     pub addresses: IndexMap<String, String>,
     pub num_databases_saved: usize,
     pub account_keys: IndexMap<String, (RistrettoSecretKey, PublicKey)>,
+    /// Key name -> key index
+    pub wallet_keys: IndexMap<String, u64>,
     pub claim_public_keys: IndexMap<String, PublicKey>,
     pub wallet_daemons: IndexMap<String, DanWalletDaemonProcess>,
+    pub fees_enabled: bool,
 }
 
 impl TariWorld {
@@ -87,6 +90,29 @@ impl TariWorld {
         self.wallets
             .get(name)
             .unwrap_or_else(|| panic!("Wallet {} not found", name))
+    }
+
+    pub fn get_wallet_daemon(&self, name: &str) -> &DanWalletDaemonProcess {
+        self.wallet_daemons
+            .get(name)
+            .unwrap_or_else(|| panic!("Wallet daemon {} not found", name))
+    }
+
+    pub fn get_validator_node(&self, name: &str) -> &ValidatorNodeProcess {
+        self.validator_nodes
+            .get(name)
+            .or_else(|| self.vn_seeds.get(name))
+            .unwrap_or_else(|| panic!("Validator node {} not found", name))
+    }
+
+    pub fn all_validators_iter(&self) -> impl Iterator<Item = &ValidatorNodeProcess> {
+        self.validator_nodes.values().chain(self.vn_seeds.values())
+    }
+
+    pub fn get_indexer(&self, name: &str) -> &IndexerProcess {
+        self.indexers
+            .get(name)
+            .unwrap_or_else(|| panic!("Indexer {} not found", name))
     }
 
     pub fn get_base_node(&self, name: &str) -> &BaseNodeProcess {
@@ -134,6 +160,7 @@ impl TariWorld {
         self.commitments.clear();
         self.commitment_ownership_proofs.clear();
         self.miners.clear();
+        self.fees_enabled = false;
     }
 
     pub async fn wait_until_base_nodes_have_transaction_in_mempool(&self, min_tx_count: usize, timeout: Duration) {
@@ -143,7 +170,6 @@ impl TariWorld {
                 let mut client = bn.create_client();
                 let tx_count = client.get_mempool_transaction_count().await.unwrap();
 
-                dbg!(tx_count);
                 if tx_count < min_tx_count {
                     // println!(
                     //     "Waiting for {} to have {} transaction(s) in mempool (currently has {})",

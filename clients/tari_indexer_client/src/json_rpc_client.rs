@@ -30,7 +30,10 @@ use crate::{
     error::IndexerClientError,
     types::{
         AddAddressRequest,
+        AddPeerRequest,
+        AddPeerResponse,
         DeleteAddressRequest,
+        GetEpochManagerStatsResponse,
         GetNonFungiblesRequest,
         GetNonFungiblesResponse,
         GetSubstateRequest,
@@ -71,6 +74,10 @@ impl IndexerJsonRpcClient {
         self.request_id
     }
 
+    pub async fn add_peer(&mut self, request: AddPeerRequest) -> Result<AddPeerResponse, IndexerClientError> {
+        self.send_request("add_peer", request).await
+    }
+
     pub async fn add_address(&mut self, address: SubstateAddress) -> Result<(), IndexerClientError> {
         self.send_request("add_address", AddAddressRequest { address }).await
     }
@@ -102,6 +109,10 @@ impl IndexerJsonRpcClient {
         req: GetNonFungiblesRequest,
     ) -> Result<GetNonFungiblesResponse, IndexerClientError> {
         self.send_request("get_non_fungibles", req).await
+    }
+
+    pub async fn get_epoch_manager_stats(&mut self) -> Result<GetEpochManagerStatsResponse, IndexerClientError> {
+        self.send_request("get_epoch_manager_stats", ()).await
     }
 
     async fn send_request<T: Serialize, R: DeserializeOwned>(

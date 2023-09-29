@@ -27,6 +27,9 @@ import App from './App';
 import './theme/theme.css';
 import Accounts from './routes/Accounts/Accounts';
 import TransactionDetails from './routes/Transactions/TransactionDetails';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import queryClient from './api/queryClient';
 
 const router = createBrowserRouter([
   {
@@ -41,7 +44,6 @@ const router = createBrowserRouter([
       {
         path: 'transactions/:id',
         element: <TransactionDetails />,
-        // loader: transactionLoader,
       },
     ],
   },
@@ -49,6 +51,9 @@ const router = createBrowserRouter([
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+      <ReactQueryDevtools initialIsOpen={false} position="bottom-right" />
+    </QueryClientProvider>
   </React.StrictMode>
 );

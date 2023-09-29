@@ -27,7 +27,7 @@ use std::{
 
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{committee::Committee, Epoch, ShardId};
+use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, ShardId};
 
 use super::DbEpoch;
 use crate::{
@@ -76,6 +76,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         public_key: PublicKey,
         shard_key: ShardId,
         epoch: Epoch,
+        fee_claim_public_key: PublicKey,
     ) -> Result<(), Self::Error>;
     fn get_validator_nodes_within_epochs(
         &self,
@@ -101,14 +102,14 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        bucket: u32,
+        bucket: ShardBucket,
     ) -> Result<u64, Self::Error>;
 
     fn validator_nodes_set_committee_bucket(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: ShardId,
-        bucket: u32,
+        bucket: ShardBucket,
     ) -> Result<(), Self::Error>;
 
     fn validator_nodes_get_by_shard_range(
@@ -124,8 +125,8 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        buckets: HashSet<u32>,
-    ) -> Result<HashMap<u32, Committee<PublicKey>>, Self::Error>;
+        buckets: HashSet<ShardBucket>,
+    ) -> Result<HashMap<ShardBucket, Committee<PublicKey>>, Self::Error>;
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;

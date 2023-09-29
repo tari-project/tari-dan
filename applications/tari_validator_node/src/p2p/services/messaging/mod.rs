@@ -35,20 +35,25 @@ pub use outbound::OutboundMessaging;
 // -----------------------
 use tari_comms::types::CommsPublicKey;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_p2p::NetworkAnnounce;
-use tari_transaction::Transaction;
+use tari_dan_p2p::{NetworkAnnounce, NewTransactionMessage};
 use tokio::{sync::mpsc, task::JoinHandle};
 
-use crate::comms::MessageChannel;
+use crate::comms::MessageChannels;
 
 pub fn spawn(
     our_node_address: CommsPublicKey,
-    (outbound_tx, inbound_rx): MessageChannel,
+    channels: MessageChannels,
     message_senders: DanMessageSenders,
 ) -> (OutboundMessaging, JoinHandle<anyhow::Result<()>>) {
+    let (outbound_msg_tx, inbound_msg_rx, outbound_hs_tx, inbound_hs_rx) = channels;
     let (loopback_sender, loopback_receiver) = mpsc::channel(100);
-    let inbound = InboundMessaging::new(our_node_address.clone(), inbound_rx, loopback_receiver);
-    let outbound = OutboundMessaging::new(our_node_address, outbound_tx, loopback_sender);
+    let inbound = InboundMessaging::new(
+        our_node_address.clone(),
+        inbound_msg_rx,
+        inbound_hs_rx,
+        loopback_receiver,
+    );
+    let outbound = OutboundMessaging::new(our_node_address, outbound_msg_tx, outbound_hs_tx, loopback_sender);
     let dispatcher = MessageDispatcher::new(inbound, message_senders);
     let handle = dispatcher.spawn();
     (outbound, handle)
@@ -56,15 +61,15 @@ pub fn spawn(
 
 #[derive(Debug, Clone)]
 pub struct DanMessageSenders {
-    pub tx_consensus_message: mpsc::Sender<(CommsPublicKey, HotstuffMessage)>,
-    pub tx_new_transaction_message: mpsc::Sender<Transaction>,
+    pub tx_consensus_message: mpsc::Sender<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
+    pub tx_new_transaction_message: mpsc::Sender<NewTransactionMessage>,
     pub tx_network_announce: mpsc::Sender<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
 }
 
 #[derive(Debug)]
 pub struct DanMessageReceivers {
-    pub rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage)>,
-    pub rx_new_transaction_message: mpsc::Receiver<Transaction>,
+    pub rx_consensus_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
+    pub rx_new_transaction_message: mpsc::Receiver<NewTransactionMessage>,
     pub rx_network_announce: mpsc::Receiver<(CommsPublicKey, NetworkAnnounce<CommsPublicKey>)>,
 }
 

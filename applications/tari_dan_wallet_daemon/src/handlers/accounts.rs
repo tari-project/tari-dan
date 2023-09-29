@@ -11,6 +11,7 @@ use tari_crypto::{
     commitment::{HomomorphicCommitment as Commitment, HomomorphicCommitmentFactory},
     keys::PublicKey as _,
     ristretto::RistrettoComSig,
+    tari_utilities::ByteArray,
 };
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_wallet_sdk::{
@@ -34,8 +35,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, ResourceType, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
-use tari_transaction::{Transaction, TransactionId};
-use tari_utilities::ByteArray;
+use tari_transaction::Transaction;
 use tari_wallet_daemon_client::{
     types::{
         AccountGetDefaultRequest,
@@ -66,13 +66,19 @@ use tari_wallet_daemon_client::{
     },
     ComponentAddressOrName,
 };
-use tokio::{sync::broadcast, task};
+use tokio::task;
 
 use super::context::HandlerContext;
 use crate::{
-    handlers::{get_account, get_account_or_default, invalid_params},
+    handlers::helpers::{
+        get_account,
+        get_account_or_default,
+        get_account_with_inputs,
+        invalid_params,
+        wait_for_result,
+    },
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
-    services::{NewAccountInfo, TransactionFinalizedEvent, TransactionSubmittedEvent, WalletEvent},
+    services::{NewAccountInfo, TransactionSubmittedEvent},
     DEFAULT_FEE,
 };
 
@@ -99,7 +105,7 @@ pub async fn handle_create(
         .locate_dependent_substates(&[&default_account.address])
         .await?;
 
-    let signing_key_index = default_account.key_index;
+    let signing_key_index = req.key_id.unwrap_or(default_account.key_index);
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
 
     let owner_key = key_manager_api.next_key(key_manager::TRANSACTION_BRANCH)?;
@@ -395,7 +401,7 @@ pub async fn handle_reveal_funds(
                 Instruction::CallMethod {
                     component_address: account_address,
                     method: "withdraw_confidential".to_string(),
-                    args: args![*CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
+                    args: args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
                 },
                 Instruction::PutLastInstructionOutputOnWorkspace {
                     key: b"revealed".to_vec(),
@@ -415,7 +421,7 @@ pub async fn handle_reveal_funds(
             builder = builder
                 .fee_transaction_pay_from_component(account_address, fee)
                 .call_method(account_address, "withdraw_confidential", args![
-                    *CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                     reveal_proof
                 ])
                 .put_last_instruction_output_on_workspace("revealed")
@@ -488,7 +494,8 @@ pub async fn handle_claim_burn(
                 .ok_or_else(|| invalid_params::<&str>("reciprocal_claim_public_key", None))?,
         )
         .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e)))?,
-    )?;
+    )
+    .map_err(|e| invalid_params("reciprocal_claim_public_key", Some(e)))?;
     let commitment = base64::decode(
         claim_proof["commitment"]
             .as_str()
@@ -510,7 +517,8 @@ pub async fn handle_claim_burn(
                 .ok_or_else(|| invalid_params::<&str>("ownership_proof.public_nonce", None))?,
         )
         .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?,
-    )?;
+    )
+    .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?;
     let u = PrivateKey::from_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["u"]
@@ -518,7 +526,8 @@ pub async fn handle_claim_burn(
                 .ok_or_else(|| invalid_params::<&str>("ownership_proof.u", None))?,
         )
         .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?,
-    )?;
+    )
+    .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?;
     let v = PrivateKey::from_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["v"]
@@ -526,7 +535,8 @@ pub async fn handle_claim_burn(
                 .ok_or_else(|| invalid_params::<&str>("ownership_proof.v", None))?,
         )
         .map_err(|e| invalid_params("ownership_proof.v", Some(e)))?,
-    )?;
+    )
+    .map_err(|e| invalid_params("ownership_proof.v", Some(e)))?;
 
     let sdk = context.wallet_sdk();
 
@@ -700,7 +710,6 @@ pub async fn handle_create_free_test_coins(
 
     let accounts_api = sdk.accounts_api();
     let mut inputs = vec![];
-    let mut outputs = vec![];
 
     // Get the account if one is specified and exists.
     let maybe_account = match req.account {
@@ -717,11 +726,13 @@ pub async fn handle_create_free_test_coins(
 
     let (account_address, account_secret_key, new_account_name) = match maybe_account {
         Some(account) => {
+            let key_index = req.key_id.unwrap_or(account.key_index);
             let account_secret_key = sdk
                 .key_manager_api()
-                .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
+                .derive_key(key_manager::TRANSACTION_BRANCH, key_index)?;
             let account_substate = sdk.substate_api().get_substate(&account.address)?;
             inputs.push((account_substate.address.address, account_substate.address.version));
+
             (account.address, account_secret_key, None)
         },
         None => {
@@ -731,14 +742,16 @@ pub async fn handle_create_free_test_coins(
                 .unwrap()
                 .name()
                 .ok_or_else(|| anyhow!("Account name must be provided when creating a new account"))?;
-            let account_secret_key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+            let account_secret_key = req
+                .key_id
+                .map(|idx| sdk.key_manager_api().derive_key(key_manager::TRANSACTION_BRANCH, idx))
+                .unwrap_or_else(|| sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH))?;
             let account_pk = PublicKey::from_secret_key(&account_secret_key.key);
 
             let component_id = Hash::try_from(account_pk.as_bytes())?;
             let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
 
             // We have no involved shards, so we need to add an output
-            outputs.push((SubstateAddress::from(account_address), 0));
             (account_address.into(), account_secret_key, Some(name.to_string()))
         },
     };
@@ -798,7 +811,6 @@ pub async fn handle_create_free_test_coins(
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_substate_inputs(inputs)
-        .with_substate_outputs(outputs)
         .sign(&account_secret_key.key)
         .build();
 
@@ -843,24 +855,14 @@ pub async fn handle_transfer(
 ) -> Result<TransferResponse, anyhow::Error> {
     let sdk = context.wallet_sdk().clone();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let account = get_account_or_default(req.account, &sdk.accounts_api())?;
 
-    let mut instructions = vec![];
-    let mut inputs = vec![];
+    let (account, mut inputs) = get_account_with_inputs(req.account, &sdk)?;
 
     // get the source account component address
     let source_account_address = account
         .address
         .as_component_address()
         .ok_or_else(|| anyhow!("Invalid account address"))?;
-
-    // add the input for the source account component substate
-    let account_substate = sdk.substate_api().get_substate(&account.address)?;
-    inputs.push(account_substate.address);
-
-    // Add all versioned account child addresses as inputs
-    let child_addresses = sdk.substate_api().load_dependent_substates(&[&account.address])?;
-    inputs.extend(child_addresses);
 
     // add the input for the source account vault substate
     let src_vault = sdk
@@ -874,7 +876,11 @@ pub async fn handle_transfer(
         .substate_api()
         .scan_for_substate(&SubstateAddress::Resource(req.resource_address), None)
         .await?;
+    let resource_shard_id =
+        ShardId::from_address(&resource_substate.address.address, resource_substate.address.version);
     inputs.push(resource_substate.address);
+
+    let mut instructions = vec![];
 
     // get destination account information
     let destination_account_address =
@@ -909,6 +915,7 @@ pub async fn handle_transfer(
 
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
+        .with_input_refs(vec![resource_shard_id])
         .sign(&account_secret_key.key)
         .build();
 
@@ -946,6 +953,7 @@ pub async fn handle_transfer(
     Ok(TransferResponse {
         transaction_id: tx_id,
         fee: finalized.final_fee,
+        fee_refunded: fee - finalized.final_fee,
         result: finalized.finalize,
     })
 }
@@ -1041,7 +1049,7 @@ pub async fn handle_confidential_transfer(
 
         // get destination account information
         let destination_account_address =
-            get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
+            get_or_create_account_address(&sdk, &req.validator_public_key, &mut inputs, &mut instructions).await?;
 
         // -------------------------------- Lock outputs for spending -------------------------------- //
         let total_amount = req.fee.unwrap_or(DEFAULT_FEE) + req.amount;
@@ -1055,7 +1063,7 @@ pub async fn handle_confidential_transfer(
         let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
             req.amount.as_u64_checked().unwrap(),
             &output_mask.key,
-            &req.destination_public_key,
+            &req.validator_public_key,
             &nonce,
         )?;
 
@@ -1167,19 +1175,6 @@ pub async fn handle_confidential_transfer(
         })
     })
     .await?
-}
-
-async fn wait_for_result(
-    events: &mut broadcast::Receiver<WalletEvent>,
-    transaction_id: TransactionId,
-) -> Result<TransactionFinalizedEvent, anyhow::Error> {
-    loop {
-        let wallet_event = events.recv().await?;
-        match wallet_event {
-            WalletEvent::TransactionFinalized(event) if event.transaction_id == transaction_id => return Ok(event),
-            _ => {},
-        }
-    }
 }
 
 fn is_account_substate(substate: &Substate) -> bool {

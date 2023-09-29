@@ -20,15 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { fromHexString } from '../routes/VN/Components/helpers';
+import { GetNetworkCommitteesResponse } from './interfaces';
 
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = 'localhost:18200';
+  let address = '127.0.0.1:18010';
   try {
     let text = await (await fetch('/json_rpc_address')).text();
     if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
+      console.log(`Setting JSON RPC address to ${text}`);
       address = text;
     }
   } catch {}
@@ -65,11 +66,14 @@ async function getMempoolStats() {
 async function getShardKey(height: number, public_key: string) {
   return await jsonRpc('get_shard_key', [height, public_key]);
 }
-async function getCommittee(height: number, shard_key: string) {
-  return await jsonRpc('get_committee', [height, shard_key]);
+async function getCommittee(epoch: number, shard_id: string) {
+  return await jsonRpc('get_committee', {epoch, shard_id});
 }
 async function getAllVns(epoch: number) {
   return await jsonRpc('get_all_vns', epoch);
+}
+async function getNetworkCommittees() : Promise<GetNetworkCommitteesResponse> {
+  return await jsonRpc('get_network_committees', {});
 }
 async function getConnections() {
   return await jsonRpc('get_connections');
@@ -81,31 +85,35 @@ async function addPeer(public_key: string, addresses: string[]) {
     wait_for_dial: false,
   });
 }
-async function registerValidatorNode() {
-  return await jsonRpc('register_validator_node');
+async function registerValidatorNode(feeClaimPublicKeyHex: string) {
+  return await jsonRpc('register_validator_node', { fee_claim_public_key: feeClaimPublicKeyHex });
 }
 async function getRecentTransactions() {
   return await jsonRpc('get_recent_transactions');
 }
 async function getTransaction(payload_id: string) {
-  return await jsonRpc('get_transaction', [fromHexString(payload_id)]);
+  return await jsonRpc('get_transaction', [payload_id]);
 }
-async function getFees(epoch: number, claim_leader_public_key: string) {
+async function getFees(start_epoch: number, end_epoch:number, claim_leader_public_key: string) {
   return await jsonRpc('get_fees', [
-    fromHexString(claim_leader_public_key),
-    epoch,
+    [start_epoch,end_epoch],
+    claim_leader_public_key,
   ]);
 }
-async function getSubstates(payload_id: string) {
+async function getUpSubstates(payload_id: string) {
   return await jsonRpc('get_substates_created_by_transaction', [
-    fromHexString(payload_id),
+    payload_id,
+  ]);
+}
+async function getDownSubstates(payload_id: string) {
+  return await jsonRpc('get_substates_destroyed_by_transaction', [
+    payload_id,
   ]);
 }
 async function getTemplates(limit: number) {
   return await jsonRpc('get_templates', [limit]);
 }
 async function getTemplate(address: string) {
-  console.log(address);
   return await jsonRpc('get_template', [address]);
 }
 
@@ -124,6 +132,8 @@ export {
   getTemplates,
   getTransaction,
   getFees,
-  getSubstates,
+  getUpSubstates,
+  getDownSubstates,
+  getNetworkCommittees,
   registerValidatorNode,
 };

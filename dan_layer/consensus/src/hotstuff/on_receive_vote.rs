@@ -14,7 +14,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
-    hotstuff::{common::update_high_qc, error::HotStuffError, on_beat::OnBeat},
+    hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::VoteMessage,
     traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
 };
@@ -26,7 +26,7 @@ pub struct OnReceiveVoteHandler<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
     vote_signature_service: TConsensusSpec::VoteSignatureService,
-    on_beat: OnBeat,
+    on_beat: PaceMakerHandle,
 }
 
 impl<TConsensusSpec> OnReceiveVoteHandler<TConsensusSpec>
@@ -37,7 +37,7 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
         vote_signature_service: TConsensusSpec::VoteSignatureService,
-        on_beat: OnBeat,
+        on_beat: PaceMakerHandle,
     ) -> Self {
         Self {
             store,
@@ -49,7 +49,11 @@ where TConsensusSpec: ConsensusSpec
     }
 
     #[allow(clippy::too_many_lines)]
-    pub async fn handle(&self, from: TConsensusSpec::Addr, message: VoteMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(
+        &self,
+        from: TConsensusSpec::Addr,
+        message: VoteMessage<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
             "🔥 Receive VOTE for node {} from {}", message.block_id, from,
@@ -84,26 +88,7 @@ where TConsensusSpec: ConsensusSpec
 
         self.validate_vote_message(&message, &sender_leaf_hash)?;
 
-        let (block, count) = self.store.with_write_tx(|tx| {
-            let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
-                return Err(HotStuffError::ReceivedVoteForUnknownBlock {
-                    block_id: message.block_id,
-                    sent_by: from.to_string(),
-                });
-            };
-            if !self.leader_strategy.is_leader_for_next_block(
-                &vn.address,
-                &committee,
-                &message.block_id,
-                block.height(),
-            ) {
-                return Err(HotStuffError::NotTheLeader {
-                    details: format!(
-                        "Not this leader for block {}, vote sent by {}",
-                        message.block_id, vn.address
-                    ),
-                });
-            }
+        let count = self.store.with_write_tx(|tx| {
             Vote {
                 epoch: message.epoch,
                 block_id: message.block_id,
@@ -114,79 +99,115 @@ where TConsensusSpec: ConsensusSpec
             }
             .save(tx)?;
 
-            let count = Vote::count_for_block(tx.deref_mut(), &message.block_id)?;
-            Ok::<_, HotStuffError>((block, count))
+            let count = Vote::<TConsensusSpec::Addr>::count_for_block(tx.deref_mut(), &message.block_id)?;
+            Ok::<_, HotStuffError>(count)
         })?;
 
         // We only generate the next high qc once when we have a quorum of votes. Any subsequent votes are not included
         // in the QC.
-        if count < local_committee_shard.quorum_threshold() as usize {
-            info!(
-                target: LOG_TARGET,
-                "🔥 Received vote for block {} from {} ({} of {})",
-                message.block_id,
-                from,
-                count,
-                local_committee_shard.quorum_threshold()
-            );
-            return Ok(());
-        }
 
-        let mut tx = self.store.create_write_tx()?;
-        let high_qc = HighQc::get(tx.deref_mut(), block.epoch())?;
-        if high_qc.block_id == *block.id() {
-            debug!(
-                target: LOG_TARGET,
-                "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block",
-                message.block_id,
-                from,
-                count,
-                local_committee_shard.quorum_threshold()
-            );
-            // We have already created a QC for this block
-            tx.rollback()?;
-            return Ok(());
-        }
-
-        let votes = block.get_votes(tx.deref_mut())?;
-        let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, &local_committee_shard) else {
-            warn!(
-                target: LOG_TARGET,
-                "🔥 Received conflicting votes from replicas for block {} ({} of {}). Waiting for more votes.",
-                message.block_id,
-                count,
-                local_committee_shard.quorum_threshold()
-            );
-            tx.rollback()?;
-            return Ok(());
-        };
-
-        let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
-        let (leaf_hashes, proofs) = votes
-            .iter()
-            .map(|v| (v.sender_leaf_hash, v.merkle_proof.clone()))
-            .unzip::<_, _, _, Vec<_>>();
-        let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(&proofs)?;
-
-        let qc = QuorumCertificate::new(
-            *block.id(),
-            block.height(),
-            block.epoch(),
-            signatures,
-            merged_proof,
-            leaf_hashes,
-            quorum_decision,
+        info!(
+            target: LOG_TARGET,
+            "🔥 Received vote for block {} from {} ({} of {})",
+            message.block_id,
+            from,
+            count,
+            local_committee_shard.quorum_threshold()
         );
+        if count < local_committee_shard.quorum_threshold() as usize {
+            return Ok(());
+        }
+        {
+            let mut tx = self.store.create_write_tx()?;
+            let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
+                warn!(
+                    target: LOG_TARGET,
+                    "❌ Received vote for unknown block {} from {}", message.block_id, from
+                );
+                tx.rollback()?;
+                return Ok(());
+            };
 
-        update_high_qc(&mut tx, &qc)?;
-        tx.commit()?;
+            if !self
+                .leader_strategy
+                .is_leader_for_next_block(&vn.address, &committee, block.height())
+            {
+                tx.rollback()?;
+                return Err(HotStuffError::NotTheLeader {
+                    details: format!(
+                        "Not this leader for block {}, vote sent by {}",
+                        message.block_id, vn.address
+                    ),
+                });
+            }
 
+            let high_qc = HighQc::get(tx.deref_mut())?;
+            if high_qc.block_id == *block.id() {
+                debug!(
+                    target: LOG_TARGET,
+                    "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block",
+                    message.block_id,
+                    from,
+                    count,
+                    local_committee_shard.quorum_threshold()
+                );
+                // We have already created a QC for this block
+                tx.rollback()?;
+                return Ok(());
+            }
+
+            let votes = block.get_votes(tx.deref_mut())?;
+            let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, &local_committee_shard) else {
+                warn!(
+                    target: LOG_TARGET,
+                    "🔥 Received conflicting votes from replicas for block {} ({} of {}). Waiting for more votes.",
+                    message.block_id,
+                    count,
+                    local_committee_shard.quorum_threshold()
+                );
+                tx.rollback()?;
+                return Ok(());
+            };
+
+            // Wait for our own vote to make sure we've processed all transactions and we also have an up to date
+            // database
+            if votes.iter().all(|x| x.signature.public_key != vn.address) {
+                warn!(target: LOG_TARGET, "🔥 Received enough votes but waiting for our own vote for block {}", message.block_id);
+                tx.rollback()?;
+                return Ok(());
+            }
+
+            let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
+            let (leaf_hashes, proofs) = votes
+                .iter()
+                .map(|v| (v.sender_leaf_hash, v.merkle_proof.clone()))
+                .unzip::<_, _, _, Vec<_>>();
+            let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(&proofs)?;
+
+            let qc = QuorumCertificate::new(
+                *block.id(),
+                block.height(),
+                block.epoch(),
+                signatures,
+                merged_proof,
+                leaf_hashes,
+                quorum_decision,
+            );
+
+            info!(target: LOG_TARGET, "🔥 New QC {}", qc);
+
+            qc.update_high_qc(&mut tx)?;
+            tx.commit()?;
+        }
         self.on_beat.beat();
 
         Ok(())
     }
 
-    fn calculate_threshold_decision(votes: &[Vote], local_committee_shard: &CommitteeShard) -> Option<QuorumDecision> {
+    fn calculate_threshold_decision(
+        votes: &[Vote<TConsensusSpec::Addr>],
+        local_committee_shard: &CommitteeShard,
+    ) -> Option<QuorumDecision> {
         let mut count_accept = 0;
         let mut count_reject = 0;
         for vote in votes {
@@ -207,13 +228,17 @@ where TConsensusSpec: ConsensusSpec
         None
     }
 
-    fn validate_vote_message(&self, message: &VoteMessage, sender_leaf_hash: &FixedHash) -> Result<(), HotStuffError> {
+    fn validate_vote_message(
+        &self,
+        message: &VoteMessage<TConsensusSpec::Addr>,
+        sender_leaf_hash: &FixedHash,
+    ) -> Result<(), HotStuffError> {
         let challenge =
             self.vote_signature_service
                 .create_challenge(sender_leaf_hash, &message.block_id, &message.decision);
-        if !message.signature.verify(challenge) {
+        if !self.vote_signature_service.verify(&message.signature, &challenge) {
             return Err(HotStuffError::InvalidVoteSignature {
-                signer_public_key: message.signature.public_key().clone(),
+                signer_public_key: message.signature.public_key().to_string(),
             });
         }
         Ok(())

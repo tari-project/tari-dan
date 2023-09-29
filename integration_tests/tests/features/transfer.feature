@@ -31,7 +31,7 @@ Feature: Account transfers
     Then the template "faucet" is listed as registered by the validator node VN
 
     # Create the sender account
-    When I create an account ACCOUNT via the wallet daemon WALLET_D with 1000 free coins
+    When I create an account ACCOUNT via the wallet daemon WALLET_D with 10000 free coins
 
     # Create a new Faucet component
     When I call function "mint" on template "faucet" using account ACCOUNT to pay fees via wallet daemon WALLET_D with args "amount_10000" and 3 outputs named "FAUCET"
@@ -61,7 +61,9 @@ Feature: Account transfers
 
     # Wait for the wallet daemon account monitor to update the sender account information
 
-    When I check the balance of ACCOUNT on wallet daemon WALLET_D the amount is at least 1000
+    # TODO: remove the wait
+    When I wait 5 seconds
+    When I check the balance of ACCOUNT on wallet daemon WALLET_D the amount is at least 10000
     # Do the transfer from ACCOUNT to the second account (which does not exist yet in the network)
     When I create a new key pair KEY_ACC_2
     When I transfer 50 tokens of resource FAUCET/resources/0 from account ACCOUNT to public key KEY_ACC_2 via the wallet daemon WALLET_D named TRANSFER
@@ -103,7 +105,7 @@ Feature: Account transfers
     Then the template "faucet" is listed as registered by the validator node VN
 
     # Create the sender account with some tokens
-    When I create an account ACCOUNT_1 via the wallet daemon WALLET_D with 1000 free coins
+    When I create an account ACCOUNT_1 via the wallet daemon WALLET_D with 10000 free coins
     When I create an account ACCOUNT_2 via the wallet daemon WALLET_D
 
     # Create a new Faucet component
@@ -166,10 +168,12 @@ Feature: Account transfers
     # Initialize the wallet daemon
     Given a wallet daemon WALLET_D connected to indexer IDX
 
+    # TODO: remove the wait
+    When I wait 5 seconds
     # Create the sender account
-    When I create an account ACC_1 via the wallet daemon WALLET_D with 1000 free coins
+    When I create an account ACC_1 via the wallet daemon WALLET_D with 10000 free coins
 
-    When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 1000
+    When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 10000
     # Do the transfer from ACC_1 to the second account (which does not exist yet in the network)
     When I create a new key pair KEY_ACC_2
     When I do a confidential transfer of 50 from account ACC_1 to public key KEY_ACC_2 via the wallet daemon WALLET_D named TRANSFER

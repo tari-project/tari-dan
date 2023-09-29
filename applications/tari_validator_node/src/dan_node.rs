@@ -26,14 +26,11 @@ use log::*;
 use tari_comms::{connection_manager::LivenessStatus, connectivity::ConnectivityEvent, peer_manager::NodeId};
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_storage::{consensus_models::Block, StateStore};
-use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
+use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
-use tokio::{task, time, time::MissedTickBehavior};
+use tokio::{time, time::MissedTickBehavior};
 
-use crate::{
-    p2p::services::{committee_state_sync::CommitteeStateSync, networking::NetworkingService},
-    Services,
-};
+use crate::{p2p::services::networking::NetworkingService, Services};
 
 const LOG_TARGET: &str = "tari::validator_node::dan_node";
 
@@ -64,8 +61,6 @@ impl DanNode {
         let mut tick = time::interval(Duration::from_secs(10));
         tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
 
-        let mut epoch_manager_events = self.services.epoch_manager.subscribe().await?;
-
         loop {
             tokio::select! {
                 // Wait until killed
@@ -85,10 +80,6 @@ impl DanNode {
                 Ok(event) = hotstuff_events.recv() => if let Err(err) = self.handle_hotstuff_event(event).await{
                     error!(target: LOG_TARGET, "Error handling hotstuff event: {}", err);
                 },
-
-                Ok(event) = epoch_manager_events.recv() => {
-                    self.handle_epoch_manager_event(event).await?;
-                }
 
                 Err(err) = self.services.on_any_exit() => {
                     error!(target: LOG_TARGET, "Error in service: {}", err);
@@ -115,7 +106,7 @@ impl DanNode {
     }
 
     async fn handle_hotstuff_event(&self, event: HotstuffEvent) -> Result<(), anyhow::Error> {
-        let HotstuffEvent::BlockCommitted { block_id } = event else {
+        let HotstuffEvent::BlockCommitted { block_id, .. } = event else {
             return Ok(());
         };
 
@@ -132,40 +123,13 @@ impl DanNode {
             )
         })?;
 
+        info!(target: LOG_TARGET, "🏁 Removing {} finalized transaction(s) from mempool", committed_transactions.len());
         for tx_id in committed_transactions {
-            info!(target: LOG_TARGET, "🏁 Removing finalized transaction {} from mempool", tx_id);
             if let Err(err) = self.services.mempool.remove_transaction(tx_id).await {
                 error!(target: LOG_TARGET, "Failed to remove transaction from mempool: {}", err);
             }
         }
 
-        Ok(())
-    }
-
-    async fn handle_epoch_manager_event(&self, event: EpochManagerEvent) -> Result<(), anyhow::Error> {
-        match event {
-            EpochManagerEvent::EpochChanged(epoch) => {
-                info!(target: LOG_TARGET, "📅 Epoch changed to {}", epoch);
-                let sync_service = CommitteeStateSync::new(
-                    self.services.epoch_manager.clone(),
-                    self.services.validator_node_client_factory.clone(),
-                    self.services.state_store.clone(),
-                    self.services.global_db.clone(),
-                    self.services.comms.node_identity().public_key().clone(),
-                );
-
-                // EpochChanged should only happen once per epoch and the event is not emitted during initial sync. So
-                // spawning state sync for each event should be ok.
-                task::spawn(async move {
-                    if let Err(e) = sync_service.sync_state(epoch).await {
-                        error!(
-                            target: LOG_TARGET,
-                            "Failed to sync peers state for epoch {}: {}", epoch, e
-                        );
-                    }
-                });
-            },
-        }
         Ok(())
     }
 
@@ -179,8 +143,8 @@ impl DanNode {
 
         let shard_id = match res {
             Ok(vn) => vn.shard_key,
-            Err(EpochManagerError::ValidatorNodeNotRegistered) => {
-                info!(target: LOG_TARGET, "Validator node registered for this epoch");
+            Err(EpochManagerError::ValidatorNodeNotRegistered { address }) => {
+                info!(target: LOG_TARGET, "Validator node {address} registered for this epoch");
                 return Ok(());
             },
             Err(EpochManagerError::BaseLayerConsensusConstantsNotSet) => {

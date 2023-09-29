@@ -46,19 +46,19 @@ function Wallet() {
         </StyledPaper>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
-        <SecondaryHeading>Keys</SecondaryHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <Keys />
-        </StyledPaper>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
         <SecondaryHeading>Transactions</SecondaryHeading>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <Transactions />
+        </StyledPaper>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <SecondaryHeading>Keys</SecondaryHeading>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <Keys />
         </StyledPaper>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>

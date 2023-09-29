@@ -35,6 +35,7 @@ mod p2p;
 mod registration;
 mod substate_resolver;
 mod template_registration_signing;
+mod virtual_substate;
 
 use std::{
     fs,
@@ -44,8 +45,8 @@ use std::{
 };
 
 use log::*;
+use minotari_app_utilities::identity_management::setup_node_identity;
 use serde::{Deserialize, Serialize};
-use tari_app_utilities::identity_management::setup_node_identity;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClientError};
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
@@ -103,6 +104,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         true,
         DAN_PEER_FEATURES,
     )?;
+
     let db_factory = SqliteDbFactory::new(config.validator_node.data_dir.clone());
     db_factory
         .migrate()

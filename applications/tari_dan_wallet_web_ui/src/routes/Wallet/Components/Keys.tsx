@@ -20,130 +20,116 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import Error from './Error';
+import { useState } from 'react';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import { keysCreate, keysList, keysSetActive } from '../../../utils/json_rpc';
+import {
+  useKeysCreate,
+  useKeysList,
+  useKeysSetActive,
+} from '../../../api/hooks/useKeys';
 import { BoxHeading2 } from '../../../Components/StyledComponents';
 import AddIcon from '@mui/icons-material/Add';
 import Fade from '@mui/material/Fade';
 import { Form } from 'react-router-dom';
-import TextField from '@mui/material/TextField/TextField';
 import Button from '@mui/material/Button/Button';
+import { DataTableCell } from '../../../Components/StyledComponents';
+import FetchStatusCheck from '../../../Components/FetchStatusCheck';
 
-function Key(key:any,setActive:any) {
+function Key(key: any, setActive: any) {
   return (
     <TableRow key={key[0]}>
-      <TableCell>
-        {key[0]}
-      </TableCell>
-      <TableCell>
-        {key[1]}
-      </TableCell>
-      <TableCell>
-        {key[2] ?<b>Active</b> : <div onClick={() => setActive(key[0])}>Activate</div>}
-      </TableCell>
+      <DataTableCell>{key[0]}</DataTableCell>
+      <DataTableCell>{key[1]}</DataTableCell>
+      <DataTableCell>
+        {key[2] ? (
+          <b>Active</b>
+        ) : (
+          <div onClick={() => setActive(key[0])}>Activate</div>
+        )}
+      </DataTableCell>
     </TableRow>
-  )
+  );
 }
 
 function Keys() {
-  const [state, setState] = useState<any>();
-  const [error, setError] = useState<String>();
   const [showKeyDialog, setShowAddKeyDialog] = useState(false);
-  const [formState, setFormState] = useState({ publicKey: '', address: '' });
+  const { data, isLoading, isError, error } = useKeysList();
+  const { mutate: mutateSetActive } = useKeysSetActive();
+  const { mutate: mutateCreateKey } = useKeysCreate();
 
   const showAddKeyDialog = (setElseToggle: boolean = !showKeyDialog) => {
     setShowAddKeyDialog(setElseToggle);
   };
-  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormState({ ...formState, [e.target.name]: e.target.value });
+
+  const setActive = (index: number) => {
+    mutateSetActive(index);
   };
-  const loadKeys = () => {
-    keysList()
-    .then((response) => {
-      console.log(response);
-      setState(response);
-      setError(undefined);
-    })
-    .catch((err) => {
-      setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`);
-    });
-  };
-  const setActive = (index:number) => {
-    keysSetActive(index).then((response) => {
-      loadKeys();
-    })
-    console.log('click')
-  };
+
   const onSubmitAddKey = () => {
-    keysCreate().then((response)=>{
-      loadKeys()
-    })
-    setFormState({ publicKey: '', address: '' });
+    mutateCreateKey();
     setShowAddKeyDialog(false);
   };
-  useEffect(() => {
-    loadKeys()
-  }, []);
-  if (error) {
-    return <Error component="Keys" message={error} />;
-  }
-  return (<>
-      <BoxHeading2>
-        {showKeyDialog && (
-          <Fade in={showKeyDialog}>
-            <Form onSubmit={onSubmitAddKey} className="flex-container">
-              <Button variant="contained" type="submit">
-                Add Key
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={() => showAddKeyDialog(false)}
-              >
-                Cancel
-              </Button>
-            </Form>
-          </Fade>
-        )}
-        {!showKeyDialog && (
-          <Fade in={!showKeyDialog}>
-            <div className="flex-container">
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => showAddKeyDialog()}
-              >
-                Add Key
-              </Button>
-            </div>
-          </Fade>
-        )}
-      </BoxHeading2>    <TableContainer>
-      <Table>
-        <TableHead>
-          <TableRow>
-            <TableCell>
-              Index
-            </TableCell>
-            <TableCell>
-              Public key
-            </TableCell>
-            <TableCell>
-              Active
-            </TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {state && state.keys.map((key:any)=>Key(key, setActive))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+
+  return (
+    <>
+      <FetchStatusCheck
+        isLoading={isLoading}
+        isError={isError}
+        errorMessage={error?.message || 'Error fetching data'}
+      />
+      <Fade in={!isLoading && !isError}>
+        <div>
+          <BoxHeading2>
+            {showKeyDialog && (
+              <Fade in={showKeyDialog}>
+                <Form onSubmit={onSubmitAddKey} className="flex-container">
+                  <Button variant="contained" type="submit">
+                    Add Key
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => showAddKeyDialog(false)}
+                  >
+                    Cancel
+                  </Button>
+                </Form>
+              </Fade>
+            )}
+            {!showKeyDialog && (
+              <Fade in={!showKeyDialog}>
+                <div className="flex-container">
+                  <Button
+                    variant="outlined"
+                    startIcon={<AddIcon />}
+                    onClick={() => showAddKeyDialog()}
+                  >
+                    Add Key
+                  </Button>
+                </div>
+              </Fade>
+            )}
+          </BoxHeading2>{' '}
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Index</TableCell>
+                  <TableCell>Public key</TableCell>
+                  <TableCell>Active</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data && data.keys.map((key: any) => Key(key, setActive))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </div>
+      </Fade>
     </>
   );
 }

@@ -20,41 +20,29 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import Committee from './Committee';
-import Table from '@mui/material/Table';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableBody from '@mui/material/TableBody';
-import TableRow from '@mui/material/TableRow';
-import TablePagination from '@mui/material/TablePagination';
-import { Typography } from '@mui/material';
-import CommitteesWaterfall from './CommitteesWaterfall';
-import { get_all_committees } from './helpers';
+import { useState } from "react";
+import Committee from "./Committee";
+import Table from "@mui/material/Table";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableBody from "@mui/material/TableBody";
+import TableRow from "@mui/material/TableRow";
+import TablePagination from "@mui/material/TablePagination";
+import { Typography } from "@mui/material";
+import CommitteesWaterfall from "./CommitteesWaterfall";
+import { CommitteeShardInfo } from "../../utils/interfaces";
 
 function Committees({
-  currentEpoch,
-  shardKey,
+  committees,
   publicKey,
 }: {
-  currentEpoch: number;
-  shardKey: string;
+  committees: CommitteeShardInfo[] | null;
   publicKey: string;
 }) {
-  const [committees, setCommittees] = useState<
-    Array<[string, string, Array<string>]>
-  >([]);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  useEffect(() => {
-    if (publicKey !== null) {
-      get_all_committees(currentEpoch, shardKey, publicKey).then((response) => {
-        if (response) setCommittees(response);
-      });
-    }
-  }, [currentEpoch, shardKey, publicKey]);
   if (!committees) {
     return <Typography>Committees are loading</Typography>;
   }
@@ -67,7 +55,7 @@ function Committees({
   };
 
   const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
@@ -80,17 +68,17 @@ function Committees({
           <TableHead>
             <TableRow>
               <TableCell>Range</TableCell>
-              <TableCell style={{ textAlign: 'center' }}>Members</TableCell>
-              <TableCell style={{ textAlign: 'center' }}>Details</TableCell>
+              <TableCell style={{ textAlign: "center" }}>Members</TableCell>
+              <TableCell style={{ textAlign: "center" }}>Details</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {committees.map(([begin, end, committee]) => (
+            {committees.map((committee) => (
               <Committee
-                key={begin}
-                begin={begin}
-                end={end}
-                members={committee}
+                key={committee.bucket}
+                begin={committee.shard_range.start}
+                end={committee.shard_range.end}
+                members={committee.validators}
                 publicKey={publicKey}
               />
             ))}

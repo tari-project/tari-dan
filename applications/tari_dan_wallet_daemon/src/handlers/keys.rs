@@ -18,11 +18,15 @@ use super::context::HandlerContext;
 pub async fn handle_create(
     context: &HandlerContext,
     token: Option<String>,
-    _value: KeysCreateRequest,
+    value: KeysCreateRequest,
 ) -> Result<KeysCreateResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
     sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
-    let key = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
+    let key_manager = sdk.key_manager_api();
+    let key = value
+        .specific_index
+        .map(|idx| key_manager.derive_key(key_manager::TRANSACTION_BRANCH, idx))
+        .unwrap_or_else(|| key_manager.next_key(key_manager::TRANSACTION_BRANCH))?;
     Ok(KeysCreateResponse {
         id: key.key_index,
         public_key: PublicKey::from_secret_key(&key.key),
@@ -35,7 +39,7 @@ pub async fn handle_list(
     _value: KeysListRequest,
 ) -> Result<KeysListResponse, anyhow::Error> {
     let sdk = context.wallet_sdk();
-    sdk.jwt_api().check_auth(token, &[JrpcPermission::Admin])?;
+    sdk.jwt_api().check_auth(token, &[JrpcPermission::KeyList])?;
     let keys = sdk.key_manager_api().get_all_keys(key_manager::TRANSACTION_BRANCH)?;
     Ok(KeysListResponse { keys })
 }

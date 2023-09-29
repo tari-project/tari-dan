@@ -8,12 +8,13 @@ use std::{
 
 use async_trait::async_trait;
 use tari_base_node_client::types::BaseLayerConsensusConstants;
-use tari_common_types::types::FixedHash;
+use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::types::CommsPublicKey;
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::ValidatorNodeMerkleProof,
+    shard_bucket::ShardBucket,
     Epoch,
     ShardId,
 };
@@ -133,6 +134,39 @@ impl EpochManagerHandle {
 
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
+
+    pub async fn get_fee_claim_public_key(&self) -> Result<Option<PublicKey>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetFeeClaimPublicKey { reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    pub async fn set_fee_claim_public_key(&self, public_key: PublicKey) -> Result<(), EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::SetFeeClaimPublicKey { public_key, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    pub async fn get_all_validator_nodes(
+        &self,
+        epoch: Epoch,
+    ) -> Result<Vec<ValidatorNode<CommsPublicKey>>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply: tx })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
 }
 
 #[async_trait]
@@ -183,6 +217,19 @@ impl EpochManagerReader for EpochManagerHandle {
                 addr: addr.clone(),
                 reply: tx,
             })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
+    async fn get_many_validator_nodes(
+        &self,
+        query: Vec<(Epoch, CommsPublicKey)>,
+    ) -> Result<HashMap<(Epoch, Self::Addr), ValidatorNode<Self::Addr>>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetManyValidatorNodes { query, reply: tx })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 
@@ -287,8 +334,8 @@ impl EpochManagerReader for EpochManagerHandle {
     async fn get_committees_by_buckets(
         &self,
         epoch: Epoch,
-        buckets: HashSet<u32>,
-    ) -> Result<HashMap<u32, Committee<Self::Addr>>, EpochManagerError> {
+        buckets: HashSet<ShardBucket>,
+    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommitteesByBuckets {

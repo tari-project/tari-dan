@@ -41,14 +41,15 @@ use tari_template_lib::{
 };
 
 use crate::{
-    commit_result::{TransactionReceipt, TransactionReceiptAddress},
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
+    fee_claim::{FeeClaim, FeeClaimAddress},
     hashing::{hasher, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
     serde_with,
+    transaction_receipt::{TransactionReceipt, TransactionReceiptAddress},
     vault::Vault,
 };
 
@@ -88,7 +89,7 @@ impl Substate {
 }
 
 /// Base object address, version tuples
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SubstateAddress {
     Component(#[serde(with = "serde_with::string")] ComponentAddress),
     Resource(#[serde(with = "serde_with::string")] ResourceAddress),
@@ -97,6 +98,7 @@ pub enum SubstateAddress {
     NonFungible(NonFungibleAddress),
     NonFungibleIndex(NonFungibleIndexAddress),
     TransactionReceipt(TransactionReceiptAddress),
+    FeeClaim(FeeClaimAddress),
 }
 
 impl SubstateAddress {
@@ -143,6 +145,7 @@ impl SubstateAddress {
                 .chain(&address.index())
                 .result(),
             SubstateAddress::TransactionReceipt(address) => *address.hash(),
+            SubstateAddress::FeeClaim(address) => *address.hash(),
         }
     }
 
@@ -196,6 +199,10 @@ impl SubstateAddress {
     pub fn is_layer1_commitment(&self) -> bool {
         matches!(self, Self::UnclaimedConfidentialOutput(_))
     }
+
+    pub fn is_transaction_receipt(&self) -> bool {
+        matches!(self, Self::TransactionReceipt(_))
+    }
 }
 
 impl From<ComponentAddress> for SubstateAddress {
@@ -244,6 +251,7 @@ impl Display for SubstateAddress {
             SubstateAddress::NonFungibleIndex(addr) => write!(f, "{}", addr),
             SubstateAddress::UnclaimedConfidentialOutput(commitment_address) => write!(f, "{}", commitment_address),
             SubstateAddress::TransactionReceipt(addr) => write!(f, "{}", addr),
+            SubstateAddress::FeeClaim(addr) => write!(f, "{}", addr),
         }
     }
 }
@@ -257,8 +265,8 @@ impl FromStr for SubstateAddress {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.split_once('_') {
-            Some(("component", _)) => {
-                let addr = ComponentAddress::from_str(s).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
+            Some(("component", addr)) => {
+                let addr = ComponentAddress::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
                 Ok(SubstateAddress::Component(addr))
             },
             Some(("resource", addr)) => {
@@ -307,6 +315,10 @@ impl FromStr for SubstateAddress {
                     .map_err(|_| InvalidSubstateAddressFormat(addr.to_string()))?;
                 Ok(SubstateAddress::TransactionReceipt(tx_receipt_addr))
             },
+            Some(("feeclaim", addr)) => {
+                let addr = Hash::from_hex(addr).map_err(|_| InvalidSubstateAddressFormat(addr.to_string()))?;
+                Ok(SubstateAddress::FeeClaim(addr.into()))
+            },
             Some(_) | None => Err(InvalidSubstateAddressFormat(s.to_string())),
         }
     }
@@ -345,6 +357,7 @@ pub enum SubstateValue {
     NonFungibleIndex(NonFungibleIndex),
     UnclaimedConfidentialOutput(UnclaimedConfidentialOutput),
     TransactionReceipt(TransactionReceipt),
+    FeeClaim(FeeClaim),
 }
 
 impl SubstateValue {
@@ -482,6 +495,12 @@ impl From<NonFungibleContainer> for SubstateValue {
 impl From<NonFungibleIndex> for SubstateValue {
     fn from(index: NonFungibleIndex) -> Self {
         Self::NonFungibleIndex(index)
+    }
+}
+
+impl From<FeeClaim> for SubstateValue {
+    fn from(fee_claim: FeeClaim) -> Self {
+        Self::FeeClaim(fee_claim)
     }
 }
 
