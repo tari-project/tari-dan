@@ -1,0 +1,36 @@
+use clap::Parser;
+use clap::Subcommand;
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+#[clap(propagate_version = true)]
+pub(crate) struct Cli {
+    #[clap(subcommand)]
+    pub command: Command,
+}
+
+impl Cli {
+    pub fn init() -> Self {
+        Self::parse()
+    }
+}
+
+#[derive(Debug, Subcommand, Clone)]
+pub(crate) enum Command {
+    Test,
+    {% for c in  commands %}
+    {{ c.title }}({{ c.name }}::Command),
+    {% endfor %}
+}
+
+{% for c in  commands %}
+pub(crate) mod {{ c.name }} {
+   use clap::Args;
+
+   #[derive(Debug, Args, Clone)]
+   pub struct Command {
+
+   }
+}
+{% endfor %}
+
