@@ -27,6 +27,7 @@ use tokio::sync::broadcast;
 ///
 /// We hold a sender because if we held a receiver then the broadcast buffer would always fill up because the receiver
 /// isn't reading off of it.
+#[derive(Debug)]
 pub struct EventSubscription<T>(broadcast::Sender<T>);
 
 impl<T> EventSubscription<T> {

@@ -6,11 +6,18 @@ use std::{future::Future, marker::PhantomData, time::Duration};
 use log::*;
 use tari_epoch_manager::EpochManagerEvent;
 use tari_shutdown::ShutdownSignal;
-use tokio::{sync::broadcast, time};
+use tokio::{
+    sync::{broadcast, watch},
+    time,
+};
 
 use crate::{
     hotstuff::{
-        state_machine::{event::ConsensusStateEvent, idle::IdleState, state::ConsensusState},
+        state_machine::{
+            event::ConsensusStateEvent,
+            idle::IdleState,
+            state::{ConsensusCurrentState, ConsensusState},
+        },
         HotStuffError,
         HotstuffWorker,
     },
@@ -31,6 +38,7 @@ pub struct ConsensusWorkerContext<TSpec: ConsensusSpec> {
     pub epoch_events: broadcast::Receiver<EpochManagerEvent>,
     pub hotstuff: HotstuffWorker<TSpec>,
     pub state_sync: TSpec::SyncManager,
+    pub tx_current_state: watch::Sender<ConsensusCurrentState>,
 }
 
 impl<TSpec> ConsensusWorker<TSpec>
@@ -108,6 +116,7 @@ where
         loop {
             let next_event = self.next_event(&mut context, &state).await;
             state = self.transition(state, next_event);
+            let _ignore = context.tx_current_state.send((&state).into());
             if state.is_shutdown() {
                 break;
             }

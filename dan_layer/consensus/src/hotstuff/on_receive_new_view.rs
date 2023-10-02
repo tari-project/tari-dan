@@ -1,7 +1,10 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::DerefMut,
+};
 
 use log::*;
 use tari_dan_common_types::NodeHeight;
@@ -54,6 +57,20 @@ where TConsensusSpec: ConsensusSpec
         self.newview_message_counts.clear();
     }
 
+    fn collect_new_views(
+        &mut self,
+        from: &TConsensusSpec::Addr,
+        new_height: NodeHeight,
+        high_qc: &QuorumCertificate<TConsensusSpec::Addr>,
+    ) -> usize {
+        let entry = self
+            .newview_message_counts
+            .entry((new_height, *high_qc.block_id()))
+            .or_default();
+        entry.insert(from.clone());
+        entry.len()
+    }
+
     #[allow(clippy::too_many_lines)]
     pub async fn handle(
         &mut self,
@@ -67,7 +84,7 @@ where TConsensusSpec: ConsensusSpec
         } = message;
         debug!(
             target: LOG_TARGET,
-            "🔥 Received NEWVIEW for qc {} new height {} from {}",
+            "🌟 Received NEWVIEW for qc {} new height {} from {}",
             high_qc.id(),
             new_height,
             from
@@ -99,17 +116,10 @@ where TConsensusSpec: ConsensusSpec
 
         self.validate_qc(&high_qc)?;
 
-        let checked_high_qc = self.store.with_write_tx(|tx| high_qc.update_high_qc(tx))?;
-
-        if checked_high_qc.block_height() > high_qc.block_height() {
-            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for because high QC is not higher than previous high QC, given high QC: {} current high QC: {}", high_qc.as_high_qc(), checked_high_qc);
-            return Ok(());
-        }
-
         // Sync if we do not have the block for this valid QC
         let exists = self
             .store
-            .with_read_tx(|tx| Block::record_exists(tx, checked_high_qc.block_id()))?;
+            .with_read_tx(|tx| Block::record_exists(tx, high_qc.block_id()))?;
         if !exists {
             return Err(HotStuffError::ProposalValidationError(
                 ProposalValidationError::JustifyBlockNotFound {
@@ -119,13 +129,6 @@ where TConsensusSpec: ConsensusSpec
                 },
             ));
         }
-
-        // Clear our NEWVIEWs for previous views
-        self.newview_message_counts = self
-            .newview_message_counts
-            .drain()
-            .filter(|((h, _), _)| *h >= checked_high_qc.block_height())
-            .collect();
 
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let leader = self
@@ -153,23 +156,31 @@ where TConsensusSpec: ConsensusSpec
         }
 
         // Take note of unique NEWVIEWs so that we can count them
-        let collected_new_views = self
-            .newview_message_counts
-            .entry((new_height, *high_qc.block_id()))
-            .or_default();
-        collected_new_views.insert(from.clone());
+        let newview_count = self.collect_new_views(&from, new_height, &high_qc);
+
+        let high_qc = self.store.with_write_tx(|tx| {
+            let high_qc = high_qc.update_high_qc(tx)?;
+            high_qc.get_quorum_certificate(tx.deref_mut())
+        })?;
+
+        // if checked_high_qc.block_height() > high_qc.block_height() {
+        //     warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for because high QC is not higher than previous high QC,
+        // given high QC: {} current high QC: {}", high_qc.as_high_qc(), checked_high_qc);     return Ok(());
+        // }
+
         let threshold = self.epoch_manager.get_local_threshold_for_epoch(epoch).await?;
+
         info!(
             target: LOG_TARGET,
             "🌟 Received NEWVIEW for block {} has {} votes out of {}",
             new_height,
-            collected_new_views.len(),
-            threshold
+            newview_count,
+            threshold,
         );
         // Once we have received enough (quorum) NEWVIEWS, we can create the dummy block(s) and propose the next block.
         // Any subsequent NEWVIEWs for this height/view are ignored.
-        if collected_new_views.len() == threshold {
-            info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum", new_height, high_qc.as_high_qc());
+        if newview_count == threshold {
+            info!(target: LOG_TARGET, "🌟✅ NEWVIEW for block {} (high_qc: {}) has reached quorum ({}/{})", new_height, high_qc.as_high_qc(), newview_count, threshold);
 
             // Determine how many missing blocks we must fill without actually creating them.
             // This node, as well as all other replicas, will create the blocks in on_receive_proposal.
@@ -188,6 +199,12 @@ where TConsensusSpec: ConsensusSpec
             debug!(target: LOG_TARGET, "🍼 dummy leaf block {}", parent_block);
             // Force beat so that a block is proposed even if there are no transactions
             self.pacemaker.force_beat(parent_block);
+            // Clear our NEWVIEWs for previous views
+            self.newview_message_counts = self
+                .newview_message_counts
+                .drain()
+                .filter(|((h, _), _)| *h >= high_qc.block_height())
+                .collect();
         }
 
         Ok(())

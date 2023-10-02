@@ -40,6 +40,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::MempoolError;
 use crate::{
+    consensus::ConsensusHandle,
     p2p::services::{
         mempool::{
             executor::{execute_transaction, ExecutionResult},
@@ -77,6 +78,8 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     state_store: SqliteStateStore<PublicKey>,
     transaction_pool: TransactionPool<SqliteStateStore<PublicKey>>,
     gossip: Gossip,
+    rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
+    consensus_handle: ConsensusHandle,
 }
 
 impl<TValidator, TExecutedValidator, TExecutor, TSubstateResolver>
@@ -99,6 +102,8 @@ where
         before_execute_validator: TValidator,
         after_execute_validator: TExecutedValidator,
         state_store: SqliteStateStore<PublicKey>,
+        rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
+        consensus_handle: ConsensusHandle,
     ) -> Self {
         Self {
             gossip: Gossip::new(epoch_manager.clone(), outbound, node_identity.public_key().clone()),
@@ -114,6 +119,8 @@ where
             after_execute_validator,
             state_store,
             transaction_pool: TransactionPool::new(),
+            rx_consensus_to_mempool,
+            consensus_handle,
         }
     }
 
@@ -128,6 +135,11 @@ where
                 },
                 Some((from, msg)) = self.new_transactions.recv() => {
                     if let Err(e) = self.handle_new_transaction_from_remote(from, msg).await {
+                        warn!(target: LOG_TARGET, "Mempool rejected transaction: {}", e);
+                    }
+                }
+                Some(msg) = self.rx_consensus_to_mempool.recv() => {
+                    if let Err(e) = self.handle_new_transaction(msg, vec![], false, None).await {
                         warn!(target: LOG_TARGET, "Mempool rejected transaction: {}", e);
                     }
                 }
@@ -198,6 +210,15 @@ where
             output_shards: unverified_output_shards,
         } = msg;
 
+        if !self.consensus_handle.get_current_state().is_running() {
+            info!(
+                target: LOG_TARGET,
+                "🎱 Transaction {} received while not in running state. Ignoring",
+                transaction.id()
+            );
+            return Ok(());
+        }
+
         if self.transaction_exists(transaction.id())? {
             return Ok(());
         }
@@ -234,6 +255,28 @@ where
                 warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input shard. Ignoring message.");
                 return Ok(());
             }
+        }
+
+        if self.transactions.contains(transaction.id()) {
+            info!(
+                target: LOG_TARGET,
+                "🎱 Transaction {} already in mempool",
+                transaction.id()
+            );
+            return Ok(());
+        }
+
+        let transaction_exists = self
+            .state_store
+            .with_read_tx(|tx| TransactionRecord::exists(tx, transaction.id()))?;
+
+        if transaction_exists {
+            info!(
+                target: LOG_TARGET,
+                "🎱 Transaction {} already exists. Ignoring",
+                transaction.id()
+            );
+            return Ok(());
         }
 
         self.handle_new_transaction(transaction, unverified_output_shards, true, maybe_sender_bucket)
@@ -416,6 +459,8 @@ where
         // This is due to a bug or possibly db failure only
         let (transaction_id, exec_result) = result?;
 
+        let is_consensus_running = self.consensus_handle.get_current_state().is_running();
+
         let executed = match exec_result {
             Ok(mut executed) => {
                 info!(
@@ -432,7 +477,10 @@ where
                         // either are awaiting execution OR execution is complete and it's in the pool.
                         self.state_store.with_write_tx(|tx| {
                             executed.update(tx)?;
-                            self.transaction_pool.insert(tx, executed.to_atom())
+                            if is_consensus_running {
+                                self.transaction_pool.insert(tx, executed.to_atom())?;
+                            }
+                            Ok::<_, MempoolError>(())
                         })?;
                     },
                     Err(e) => {
@@ -440,7 +488,10 @@ where
                             executed
                                 .set_abort(format!("Mempool after execution validation failed: {}", e))
                                 .update(tx)?;
-                            self.transaction_pool.insert(tx, executed.to_atom())
+                            if is_consensus_running {
+                                self.transaction_pool.insert(tx, executed.to_atom())?;
+                            }
+                            Ok::<_, MempoolError>(())
                         })?;
                         // We want this to go though to consensus, because validation may only fail in this shard (e.g
                         // outputs already exist) so we need to send LocalPrepared(ABORT) to
@@ -458,8 +509,7 @@ where
                     e
                 );
                 self.state_store.with_write_tx(|tx| {
-                    let mut transaction = TransactionRecord::get(tx.deref_mut(), &transaction_id)?;
-                    transaction
+                    TransactionRecord::get(tx.deref_mut(), &transaction_id)?
                         .set_abort(format!("Mempool failed to execute: {}", e))
                         .update(tx)
                 })?;
@@ -509,7 +559,7 @@ where
         }
 
         // Notify consensus that a transaction is ready to go!
-        if self.tx_executed_transactions.send(*executed.id()).await.is_err() {
+        if is_consensus_running && self.tx_executed_transactions.send(*executed.id()).await.is_err() {
             debug!(
                 target: LOG_TARGET,
                 "Executed transaction channel closed before executed transaction could be sent"

@@ -36,6 +36,10 @@ impl TransactionId {
         let bytes = from_hex(hex).map_err(|_| FixedHashSizeError)?;
         Self::try_from(bytes.as_slice())
     }
+
+    pub const fn byte_size() -> usize {
+        32
+    }
 }
 
 impl AsRef<[u8]> for TransactionId {

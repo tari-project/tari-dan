@@ -33,6 +33,7 @@ use crate::{
         TransactionAtom,
         TransactionPoolRecord,
         TransactionPoolStage,
+        TransactionPoolStatusUpdate,
         TransactionRecord,
         Vote,
     },
@@ -140,7 +141,13 @@ pub trait StateStoreReadTransaction {
     ) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
-    fn transaction_pool_get(&mut self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError>;
+    fn transaction_pool_get(
+        &mut self,
+        from_block_id: &BlockId,
+        to_block_id: &BlockId,
+        transaction_id: &TransactionId,
+    ) -> Result<TransactionPoolRecord, StorageError>;
+    fn transaction_pool_exists(&mut self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
     fn transaction_pool_get_many_ready(&mut self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError>;
     fn transaction_pool_count(
         &mut self,
@@ -189,6 +196,16 @@ pub trait StateStoreReadTransaction {
         &mut self,
         transaction_id: &TransactionId,
     ) -> Result<Vec<SubstateRecord>, StorageError>;
+    fn substates_check_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+        &mut self,
+        objects: I,
+        lock_flag: SubstateLockFlag,
+    ) -> Result<SubstateLockState, StorageError>;
+
+    fn locked_outputs_check_all<I, B>(&mut self, output_shards: I) -> Result<SubstateLockState, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>;
 }
 
 pub trait StateStoreWriteTransaction {
@@ -230,18 +247,23 @@ pub trait StateStoreWriteTransaction {
         stage: TransactionPoolStage,
         is_ready: bool,
     ) -> Result<(), StorageError>;
+    fn transaction_pool_add_pending_update(
+        &mut self,
+        pool_update: TransactionPoolStatusUpdate,
+    ) -> Result<(), StorageError>;
+
     fn transaction_pool_update(
         &mut self,
         transaction_id: &TransactionId,
-        evidence: Option<&Evidence>,
-        pending_stage: Option<Option<TransactionPoolStage>>,
         local_decision: Option<Decision>,
         remote_decision: Option<Decision>,
-        is_ready: Option<bool>,
+        remote_evidence: Option<&Evidence>,
     ) -> Result<(), StorageError>;
     fn transaction_pool_remove(&mut self, transaction_id: &TransactionId) -> Result<(), StorageError>;
     fn transaction_pool_set_all_transitions<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
+        locked_block: &LockedBlock,
+        new_locked_block: &LockedBlock,
         tx_ids: I,
     ) -> Result<(), StorageError>;
 

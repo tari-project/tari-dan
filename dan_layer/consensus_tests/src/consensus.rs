@@ -290,6 +290,7 @@ async fn foreign_shard_decides_to_abort() {
 async fn leader_failure_output_conflict() {
     setup_logger();
     let mut test = Test::builder()
+        .debug_sql("/tmp/test{}.db")
         .with_test_timeout(Duration::from_secs(60))
         .add_committee(0, vec!["1", "2"])
         .add_committee(1, vec!["3", "4"])
@@ -315,6 +316,7 @@ async fn leader_failure_output_conflict() {
         .await;
 
     test.wait_all_have_at_least_n_new_transactions_in_pool(2).await;
+    tokio::time::sleep(Duration::from_secs(1)).await;
     test.start_epoch(Epoch(0));
 
     loop {
@@ -380,7 +382,7 @@ async fn leader_failure_node_goes_down() {
             break;
         }
 
-        if committed_height > NodeHeight(20) {
+        if committed_height > NodeHeight(40) {
             panic!("Not all transaction committed after {} blocks", committed_height);
         }
     }

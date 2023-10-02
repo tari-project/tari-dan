@@ -30,6 +30,7 @@ impl Evidence {
     }
 
     pub fn all_shards_complete(&self) -> bool {
+        // TODO: we should check that remote has one QC and local has three
         self.evidence.values().all(|qc_ids| !qc_ids.is_empty())
     }
 
@@ -60,6 +61,18 @@ impl Evidence {
     pub fn qc_ids_iter(&self) -> impl Iterator<Item = &QcId> + '_ {
         self.evidence.values().flatten()
     }
+
+    pub fn merge(&mut self, other: Evidence) -> &mut Self {
+        for (shard_id, qc_ids) in other.evidence {
+            let entry = self.evidence.entry(shard_id).or_default();
+            for qc_id in qc_ids {
+                if !entry.contains(&qc_id) {
+                    entry.push(qc_id);
+                }
+            }
+        }
+        self
+    }
 }
 
 impl FromIterator<(ShardId, Vec<QcId>)> for Evidence {
@@ -89,6 +102,16 @@ impl TransactionAtom {
         tx: &mut TTx,
     ) -> Result<ExecutedTransaction, StorageError> {
         ExecutedTransaction::get(tx, &self.id)
+    }
+}
+
+impl Display for TransactionAtom {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "TransactionAtom({}, {}, {}, {})",
+            self.id, self.decision, self.transaction_fee, self.leader_fee
+        )
     }
 }
 

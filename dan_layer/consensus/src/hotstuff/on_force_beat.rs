@@ -23,7 +23,7 @@ impl OnForceBeat {
 
     pub async fn wait(&mut self) -> Option<LeafBlock> {
         self.receiver.changed().await.expect("sender can never be dropped");
-        self.receiver.borrow().clone()
+        *self.receiver.borrow()
     }
 
     pub fn beat(&self, parent_block: Option<LeafBlock>) {

@@ -25,6 +25,13 @@ impl Decision {
     pub fn is_abort(&self) -> bool {
         matches!(self, Decision::Abort)
     }
+
+    pub fn and(self, other: Self) -> Self {
+        match self {
+            Decision::Commit => other,
+            Decision::Abort => Decision::Abort,
+        }
+    }
 }
 
 impl Display for Decision {

@@ -17,7 +17,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_transaction::TransactionId;
-use tokio::{task, time::timeout};
+use tokio::task;
 
 use crate::support::{
     address::TestAddress,
@@ -35,7 +35,7 @@ pub struct Test {
     _leader_strategy: RoundRobinLeaderStrategy,
     epoch_manager: TestEpochManager,
     shutdown: Shutdown,
-    timeout: Duration,
+    timeout: Option<Duration>,
 }
 
 impl Test {
@@ -74,9 +74,13 @@ impl Test {
 
     pub async fn on_block_committed(&mut self) -> (BlockId, NodeHeight) {
         loop {
-            let event = timeout(self.timeout, self.on_hotstuff_event())
-                .await
-                .unwrap_or_else(|_| panic!("Timeout waiting for Hotstuff event"));
+            let event = if let Some(timeout) = self.timeout {
+                tokio::time::timeout(timeout, self.on_hotstuff_event())
+                    .await
+                    .unwrap_or_else(|_| panic!("Timeout waiting for Hotstuff event"))
+            } else {
+                self.on_hotstuff_event().await
+            };
             match event {
                 HotstuffEvent::BlockCommitted { block_id, height } => return (block_id, height),
                 HotstuffEvent::Failure { message } => panic!("Consensus failure: {}", message),
@@ -280,7 +284,7 @@ impl Test {
 pub struct TestBuilder {
     committees: HashMap<ShardBucket, Committee<TestAddress>>,
     sql_address: String,
-    timeout: Duration,
+    timeout: Option<Duration>,
     debug_sql_file: Option<String>,
 }
 
@@ -289,9 +293,15 @@ impl TestBuilder {
         Self {
             committees: HashMap::new(),
             sql_address: ":memory:".to_string(),
-            timeout: Duration::from_secs(10),
+            timeout: Some(Duration::from_secs(10)),
             debug_sql_file: None,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn disable_timeout(&mut self) -> &mut Self {
+        self.timeout = None;
+        self
     }
 
     #[allow(dead_code)]
@@ -307,7 +317,7 @@ impl TestBuilder {
     }
 
     pub fn with_test_timeout(&mut self, timeout: Duration) -> &mut Self {
-        self.timeout = timeout;
+        self.timeout = Some(timeout);
         self
     }
 

@@ -16,7 +16,7 @@ create table blocks
 (
     id               integer   not null primary key AUTOINCREMENT,
     block_id         text      not NULL,
-    parent_block_id  text      NULL,
+    parent_block_id  text      not NULL,
     height           bigint    not NULL,
     epoch            bigint    not NULL,
     proposed_by      text      not NULL,
@@ -142,11 +142,11 @@ create table transaction_pool
 (
     id                integer   not null primary key AUTOINCREMENT,
     transaction_id    text      not null,
-    involved_shards   text      not null,
     original_decision text      not null,
     local_decision    text      null,
     remote_decision   text      null,
     evidence          text      not null,
+    remote_evidence   text      null,
     transaction_fee   bigint    not null,
     leader_fee        bigint    not null,
     stage             text      not null,
@@ -159,19 +159,21 @@ create table transaction_pool
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
 create index transaction_pool_idx_is_ready on transaction_pool (is_ready);
 
-create table transaction_pool_status
+create table transaction_pool_state_updates
 (
     id             integer   not null primary key AUTOINCREMENT,
     block_id       text      not null,
     block_height   bigint    not null,
     transaction_id text      not null,
     stage          text      not null,
+    evidence       text      not null,
     is_ready       boolean   not null,
+    local_decision text      not null,
     created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id),
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
-create index transaction_pool_idx_block_id_transaction_id on transaction_pool_status (block_id, transaction_id);
+create unique index transaction_pool_uniq_block_id_transaction_id on transaction_pool_state_updates (block_id, transaction_id);
 
 create table locked_outputs
 (
@@ -214,3 +216,60 @@ CREATE TABLE missing_transactions
     is_awaiting_execution boolean   not NULL,
     created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+
+-- Debug Triggers
+CREATE TABLE transaction_pool_history
+(
+    history_id        INTEGER PRIMARY KEY,
+    id                integer   not null,
+    transaction_id    text      not null,
+    original_decision text      not null,
+    local_decision    text      null,
+    remote_decision   text      null,
+    evidence          text      not null,
+    transaction_fee   bigint    not null,
+    leader_fee        bigint    not null,
+    stage             text      not null,
+    new_stage         text      not null,
+    is_ready          boolean   not null,
+    new_is_ready      boolean   not null,
+    updated_at        timestamp NOT NULL,
+    created_at        timestamp NOT NULL,
+    change_time       DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
+);
+
+CREATE TRIGGER copy_transaction_pool_history
+    AFTER UPDATE
+    ON transaction_pool
+    FOR EACH ROW
+BEGIN
+    INSERT INTO transaction_pool_history (id,
+                                          transaction_id,
+                                          original_decision,
+                                          local_decision,
+                                          remote_decision,
+                                          evidence,
+                                          transaction_fee,
+                                          leader_fee,
+                                          stage,
+                                          new_stage,
+                                          is_ready,
+                                          new_is_ready,
+                                          updated_at,
+                                          created_at)
+    VALUES (OLD.id,
+            OLD.transaction_id,
+            OLD.original_decision,
+            OLD.local_decision,
+            OLD.remote_decision,
+            OLD.evidence,
+            OLD.transaction_fee,
+            OLD.leader_fee,
+            OLD.stage,
+            NEW.stage,
+            OLD.is_ready,
+            NEW.is_ready,
+            OLD.updated_at,
+            OLD.created_at);
+END;

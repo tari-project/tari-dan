@@ -18,6 +18,7 @@ use super::QuorumCertificate;
 use crate::{
     consensus_models::{
         Command,
+        HighQc,
         LastExecuted,
         LastProposed,
         LastVoted,
@@ -506,7 +507,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
         on_lock_block: TFnOnLock,
         on_commit: TFnOnCommit,
-    ) -> Result<(), E>
+    ) -> Result<HighQc, E>
     where
         TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
         TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
@@ -514,16 +515,16 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         TFnOnCommit: FnOnce(&mut TTx, &LastExecuted, &Block<TAddr>) -> Result<(), E>,
         E: From<StorageError>,
     {
-        self.justify().update_high_qc(tx)?;
+        let high_qc = self.justify().update_high_qc(tx)?;
 
         // b'' <- b*.justify.node
         let Some(commit_node) = self.justify().get_block(tx.deref_mut()).optional()? else {
-            return Ok(());
+            return Ok(high_qc);
         };
 
         // b' <- b''.justify.node
         let Some(precommit_node) = commit_node.justify().get_block(tx.deref_mut()).optional()? else {
-            return Ok(());
+            return Ok(high_qc);
         };
 
         let locked_block = LockedBlock::get(tx.deref_mut())?;
@@ -563,7 +564,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
             );
         }
 
-        Ok(())
+        Ok(high_qc)
     }
 
     /// safeNode predicate (https://arxiv.org/pdf/1803.05069v6.pdf)
@@ -632,6 +633,10 @@ impl BlockId {
 
     pub fn is_genesis(&self) -> bool {
         self.0.iter().all(|b| *b == 0)
+    }
+
+    pub const fn byte_size() -> usize {
+        FixedHash::byte_size()
     }
 }
 

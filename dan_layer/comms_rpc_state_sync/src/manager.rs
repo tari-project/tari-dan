@@ -162,7 +162,7 @@ where
                 info!(target: LOG_TARGET, "🌐 Syncing block {block}");
             }
             // expected_height += NodeHeight(1);
-            self.commit_block(block, qcs, updates)?;
+            self.process_block(block, qcs, updates)?;
         }
 
         info!(target: LOG_TARGET, "🌐 {} blocks synced", counter);
@@ -170,7 +170,7 @@ where
         Ok(())
     }
 
-    fn commit_block(
+    fn process_block(
         &self,
         block: Block<CommsPublicKey>,
         qcs: Vec<QuorumCertificate<CommsPublicKey>>,
@@ -202,6 +202,7 @@ where
             )?;
             let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
             // First do UPs then do DOWNs
+            // TODO: stage the updates, then check against the state hash in the block, then persist
             for update in ups {
                 update.apply(tx, &block)?;
             }

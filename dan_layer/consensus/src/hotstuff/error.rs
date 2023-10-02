@@ -42,6 +42,15 @@ pub enum HotStuffError {
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]
     TransactionDoesNotExist { transaction_id: TransactionId },
+    #[error(
+        "Unable execute block {block_id} because the committee decided to ACCEPT transaction {transaction_id} but it \
+         failed to execute locally: {reject_reason}"
+    )]
+    RejectedTransactionCommitDecision {
+        block_id: BlockId,
+        transaction_id: TransactionId,
+        reject_reason: String,
+    },
     #[error("Pacemaker channel dropped: {details}")]
     PacemakerChannelDropped { details: String },
     #[error(

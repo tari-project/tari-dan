@@ -33,6 +33,7 @@ use tari_transaction::{Transaction, TransactionId};
 use tokio::{sync::mpsc, task, task::JoinHandle};
 
 use crate::{
+    consensus::ConsensusHandle,
     p2p::services::{
         mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, SubstateResolver, Validator},
         messaging::OutboundMessaging,
@@ -51,6 +52,8 @@ pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
     validator: TValidator,
     after_executed_validator: TExecutedValidator,
     state_store: SqliteStateStore<PublicKey>,
+    rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
+    consensus_handle: ConsensusHandle,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
 where
     TValidator: Validator<Transaction, Error = MempoolError> + Send + Sync + 'static,
@@ -72,6 +75,8 @@ where
         validator,
         after_executed_validator,
         state_store,
+        rx_consensus_to_mempool,
+        consensus_handle,
     );
     let handle = MempoolHandle::new(tx_mempool_request);
 

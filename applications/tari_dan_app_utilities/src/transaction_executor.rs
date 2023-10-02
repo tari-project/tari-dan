@@ -80,7 +80,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         let result = match processor.execute(transaction.clone()) {
             Ok(result) => result,
             Err(err) => ExecuteResult {
-                finalize: FinalizeResult::reject(tx_id, RejectReason::ExecutionFailure(err.to_string())),
+                finalize: FinalizeResult::new_rejectted(tx_id, RejectReason::ExecutionFailure(err.to_string())),
                 transaction_failure: None,
                 fee_receipt: None,
             },
