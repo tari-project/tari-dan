@@ -12,20 +12,17 @@ use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, Nod
 use tari_dan_storage::{
     consensus_models::{
         Block,
-        Decision,
         HighQc,
         LastExecuted,
         LockedBlock,
         QuorumCertificate,
         SubstateUpdate,
         TransactionPoolRecord,
-        TransactionRecord,
     },
     StateStore,
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::Transaction;
 use tari_validator_node_rpc::{
     client::{TariCommsValidatorNodeClientFactory, ValidatorNodeClientFactory},
     proto::rpc::{GetHighQcRequest, SyncBlocksRequest},
@@ -197,25 +194,6 @@ where
                 updates.push(update);
             }
 
-            let Some(resp) = stream.next().await else {
-                return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
-                    "Peer closed session before sending transactions message"
-                )));
-            };
-            let msg = resp.map_err(RpcError::from)?;
-            let transactions = msg.into_transactions().ok_or_else(|| {
-                CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!("Expected peer to return QCs"))
-            })?;
-
-            debug!(target: LOG_TARGET, "🌐 Received block {}, {} transactions", block, transactions.len());
-
-            let transactions = transactions
-                .into_iter()
-                .map(Transaction::try_from)
-                .map(|r| r.map(TransactionRecord::new))
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
-
             debug!(
                 target: LOG_TARGET,
                 "🌐 Received block {}, {} qcs and {} substate updates",
@@ -228,7 +206,7 @@ where
                 info!(target: LOG_TARGET, "🌐 Syncing block {block}");
             }
             // expected_height += NodeHeight(1);
-            self.process_block(block, qcs, updates, transactions)?;
+            self.process_block(block, qcs, updates)?;
         }
 
         info!(target: LOG_TARGET, "🌐 {} blocks synced", counter);
@@ -241,19 +219,18 @@ where
         block: Block<CommsPublicKey>,
         qcs: Vec<QuorumCertificate<CommsPublicKey>>,
         updates: Vec<SubstateUpdate<CommsPublicKey>>,
-        transactions: Vec<TransactionRecord>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         self.state_store.with_write_tx(|tx| {
             if !block.is_safe(tx.deref_mut())? {
                 return Err(CommsRpcConsensusSyncError::BlockNotSafe { block_id: *block.id() });
             }
 
-            // TODO: Transactions are not strictly needed, but they prevent us from re-requesting transactions if
-            // someone proposes a block with these in.
-            TransactionRecord::save_all(tx, transactions.iter())?;
-
             block.justify().save(tx)?;
-            block.save(tx)?;
+            if !block.save(tx)? {
+                // We've already seen this block. This could happen because we're syncing from high qc and we receive a
+                // block that we already have
+                return Ok(());
+            }
             for qc in qcs {
                 qc.save(tx)?;
             }
@@ -269,19 +246,6 @@ where
                         tx,
                         block.commands().iter().filter_map(|cmd| cmd.accept()).map(|t| &t.id),
                     )?;
-
-                    for t in block.commands().iter().filter_map(|cmd| cmd.accept()) {
-                        let mut transaction = TransactionRecord::get(tx.deref_mut(), &t.id)?;
-                        if t.decision.is_abort() {
-                            transaction.set_abort("Transaction added during block sync and was aborted in the block");
-                        } else {
-                            // TODO: This is setting the final decision for the purposes of sync, but this may be
-                            // unexpected/invalid without the full execution result. We dont include the decision for
-                            // any particular reason, so it could be removed.
-                            transaction.final_decision = Some(Decision::Commit);
-                        }
-                        transaction.update(tx)?;
-                    }
 
                     Ok::<_, CommsRpcConsensusSyncError>(())
                 },

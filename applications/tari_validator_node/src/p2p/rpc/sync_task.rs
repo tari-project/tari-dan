@@ -6,29 +6,19 @@ use std::collections::HashSet;
 use log::*;
 use tari_comms::protocol::rpc::RpcStatus;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, QuorumCertificate, SubstateUpdate, TransactionRecord},
+    consensus_models::{Block, BlockId, QuorumCertificate, SubstateUpdate},
     StateStore,
     StateStoreReadTransaction,
     StorageError,
 };
-use tari_validator_node_rpc::proto::rpc::{
-    sync_blocks_response::SyncData,
-    QuorumCertificates,
-    SyncBlocksResponse,
-    Transactions,
-};
+use tari_validator_node_rpc::proto::rpc::{sync_blocks_response::SyncData, QuorumCertificates, SyncBlocksResponse};
 use tokio::sync::mpsc;
 
 const LOG_TARGET: &str = "tari::dan::rpc::sync_task";
 
 const BLOCK_BUFFER_SIZE: usize = 15;
 
-type BlockData<TAddr> = (
-    Block<TAddr>,
-    Vec<QuorumCertificate<TAddr>>,
-    Vec<SubstateUpdate<TAddr>>,
-    Vec<TransactionRecord>,
-);
+type BlockData<TAddr> = (Block<TAddr>, Vec<QuorumCertificate<TAddr>>, Vec<SubstateUpdate<TAddr>>);
 type BlockBuffer<TAddr> = Vec<BlockData<TAddr>>;
 
 pub struct BlockSyncTask<TStateStore: StateStore> {
@@ -128,9 +118,8 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                     .collect::<HashSet<_>>();
                 let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
                 let updates = child.get_substate_updates(tx)?;
-                let transactions = child.get_transactions(tx)?;
 
-                buffer.push((child, certificates, updates, transactions));
+                buffer.push((child, certificates, updates));
                 if buffer.len() == buffer.capacity() {
                     break;
                 }
@@ -159,10 +148,9 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                     .flat_map(|cmd| cmd.evidence().qc_ids_iter())
                     .collect::<HashSet<_>>();
                 let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
-                let transactions = block.get_transactions(tx)?;
 
                 // No substate updates can occur for blocks after the last commit
-                buffer.push((block, certificates, vec![], transactions));
+                buffer.push((block, certificates, vec![]));
             }
 
             Ok::<_, StorageError>(())
@@ -180,10 +168,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         Ok(())
     }
 
-    async fn send_block_data(
-        &mut self,
-        (block, qcs, updates, transactions): BlockData<TStateStore::Addr>,
-    ) -> Result<(), ()> {
+    async fn send_block_data(&mut self, (block, qcs, updates): BlockData<TStateStore::Addr>) -> Result<(), ()> {
         self.send(Ok(SyncBlocksResponse {
             sync_data: Some(SyncData::Block(block.into())),
         }))
@@ -213,16 +198,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             }))
             .await?;
         }
-        self.send(Ok(SyncBlocksResponse {
-            sync_data: Some(SyncData::Transactions(Transactions {
-                transactions: transactions
-                    .into_iter()
-                    .map(|t| t.transaction)
-                    .map(Into::into)
-                    .collect(),
-            })),
-        }))
-        .await?;
+
         Ok(())
     }
 }
