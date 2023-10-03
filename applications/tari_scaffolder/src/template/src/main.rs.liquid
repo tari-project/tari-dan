@@ -1,6 +1,14 @@
 mod cli;
 use crate::cli::Cli;
+use crate::cli::Command;
 
 fn main() {
     let cli = Cli::init();
+    match cli.command {
+        {% for c in  commands %}
+        Command::{{c.title}}(com) => {
+            com.run();
+        }
+        {% endfor %}
+    }
 }

@@ -28,7 +28,7 @@ fn main() {
             let wasm = compile_template(scaffold.wasm_path, &[]).unwrap();
 
             let loaded_template = wasm.load_template().unwrap();
-            // dbg!(&loaded_template);
+            dbg!(&loaded_template);
             generate(&loaded_template, cli.output_path.as_ref())
         },
     }
@@ -77,13 +77,21 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate) -> String {
         Wasm(loaded_wasm_template) => {
             for f in loaded_wasm_template.template_def().functions.iter() {
                 let arr = globals.get_mut("commands").unwrap().as_array_mut().unwrap();
+                let mut args = vec![];
+                for a in &f.arguments {
+                    args.push(liquid::object!({
+                        "name": a.name
+                    }));
+                }
                 arr.push(Value::Object(liquid::object!({
                     "name": f.name,
                     "title": f.name.to_case(Case::UpperCamel),
+                    "args" : args
                 })));
             }
         },
         _ => {},
     }
+    dbg!(&globals);
     template.render(&mut globals).unwrap()
 }
