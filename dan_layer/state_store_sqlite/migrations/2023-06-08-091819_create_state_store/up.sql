@@ -217,7 +217,6 @@ CREATE TABLE missing_transactions
     created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-
 -- Debug Triggers
 CREATE TABLE transaction_pool_history
 (
@@ -273,3 +272,4 @@ BEGIN
             OLD.updated_at,
             OLD.created_at);
 END;
+

@@ -10,7 +10,7 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, Decision, TransactionPoolStage},
+    consensus_models::{Block, BlockId, Decision, TransactionPoolStage, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
 };
@@ -96,8 +96,9 @@ impl Test {
         &mut self.network
     }
 
-    pub fn start_epoch(&mut self, epoch: Epoch) {
+    pub async fn start_epoch(&mut self, epoch: Epoch) {
         for validator in self.validators.values() {
+            validator.epoch_manager.set_is_epoch_active(true).await;
             // Fire off initial epoch change event so that the pacemaker starts
             validator
                 .tx_epoch_events
@@ -237,28 +238,25 @@ impl Test {
             let decisions = self.validators.values().map(|v| {
                 let decisions = v
                     .state_store
-                    .with_read_tx(|tx| Block::get_tip(tx))
+                    .with_read_tx(|tx| TransactionRecord::get(tx, transaction_id))
                     .unwrap()
-                    .commands()
-                    .iter()
-                    .filter(|cmd| cmd.transaction_id() == transaction_id)
-                    .map(|cmd| cmd.decision())
-                    .collect::<Vec<_>>();
+                    .final_decision();
                 (v.address.clone(), decisions)
             });
-            for (addr, decisions) in decisions {
-                let all_match = decisions.iter().all(|d| *d == expected_decision);
-                if all_match && attempts < 5 {
+            for (addr, decision) in decisions {
+                if decision.is_none() && attempts < 5 {
                     attempts += 1;
                     // Send this task to the back of the queue and try again after other tasks have executed
                     // to allow validators to catch up
                     task::yield_now().await;
                     continue 'outer;
                 }
-                assert!(
-                    all_match,
-                    "Expected {} but validator {} has decision(s) {:?} for transaction {}",
-                    expected_decision, addr, decisions, transaction_id
+
+                let decision = decision.unwrap_or_else(|| panic!("VN {} did not make a decision in time", addr));
+                assert_eq!(
+                    decision, expected_decision,
+                    "Expected {} but validator {} has decision {:?} for transaction {}",
+                    expected_decision, addr, decision, transaction_id
                 );
             }
             break;

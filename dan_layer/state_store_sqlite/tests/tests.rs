@@ -35,6 +35,7 @@ mod confirm_all_transitions {
     #[test]
     fn it_sets_pending_stage_to_stage() {
         let db = create_db();
+        // Need FK=off because otherwise we'd have to create transactions for each in the pool
         db.foreign_keys_off().unwrap();
         let mut tx = db.create_write_tx().unwrap();
 

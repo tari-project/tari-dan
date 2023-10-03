@@ -26,6 +26,7 @@ use crate::{
         LockedBlock,
         SubstateCreatedProof,
         SubstateUpdate,
+        TransactionRecord,
         Vote,
     },
     Ordering,
@@ -455,6 +456,26 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         validator_public_key: Option<&TAddr>,
     ) -> Result<Vec<Self>, StorageError> {
         tx.blocks_get_any_with_epoch_range(range, validator_public_key)
+    }
+
+    pub fn get_transactions<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Vec<TransactionRecord>, StorageError> {
+        let tx_ids = self.commands().iter().map(|t| t.transaction_id());
+        let (found, missing) = TransactionRecord::get_any(tx, tx_ids)?;
+        if !missing.is_empty() {
+            return Err(StorageError::NotFound {
+                item: "Transaction".to_string(),
+                key: missing
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            });
+        }
+
+        Ok(found)
     }
 
     pub fn get_substate_updates<TTx: StateStoreReadTransaction<Addr = TAddr>>(

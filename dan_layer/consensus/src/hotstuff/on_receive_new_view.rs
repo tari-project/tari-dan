@@ -172,8 +172,9 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🌟 Received NEWVIEW for block {} has {} votes out of {}",
+            "🌟 Received NEWVIEW for height {} (QC: {}) has {} votes out of {}",
             new_height,
+            high_qc,
             newview_count,
             threshold,
         );

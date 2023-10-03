@@ -90,6 +90,7 @@ pub trait StateStoreReadTransaction {
     fn high_qc_get(&mut self) -> Result<HighQc, StorageError>;
     fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError>;
     fn transactions_exists(&mut self, tx_id: &TransactionId) -> Result<bool, StorageError>;
+
     fn transactions_get_any<'a, I: IntoIterator<Item = &'a TransactionId>>(
         &mut self,
         tx_ids: I,
@@ -240,6 +241,10 @@ pub trait StateStoreWriteTransaction {
     // -------------------------------- Transaction -------------------------------- //
     fn transactions_insert(&mut self, transaction: &Transaction) -> Result<(), StorageError>;
     fn transactions_update(&mut self, transaction: &TransactionRecord) -> Result<(), StorageError>;
+    fn transactions_save_all<'a, I: IntoIterator<Item = &'a TransactionRecord>>(
+        &mut self,
+        transaction: I,
+    ) -> Result<(), StorageError>;
     // -------------------------------- Transaction Pool -------------------------------- //
     fn transaction_pool_insert(
         &mut self,

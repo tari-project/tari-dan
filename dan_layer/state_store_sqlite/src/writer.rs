@@ -578,6 +578,42 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
+    fn transactions_save_all<'a, I: IntoIterator<Item = &'a TransactionRecord>>(
+        &mut self,
+        txs: I,
+    ) -> Result<(), StorageError> {
+        use crate::schema::transactions;
+
+        let insert = txs
+            .into_iter()
+            .map(|rec| {
+                let transaction = rec.transaction();
+                Ok((
+                    transactions::transaction_id.eq(serialize_hex(transaction.id())),
+                    transactions::fee_instructions.eq(serialize_json(transaction.fee_instructions())?),
+                    transactions::instructions.eq(serialize_json(transaction.instructions())?),
+                    transactions::signature.eq(serialize_json(transaction.signature())?),
+                    transactions::inputs.eq(serialize_json(transaction.inputs())?),
+                    transactions::input_refs.eq(serialize_json(transaction.input_refs())?),
+                    transactions::outputs.eq(serialize_json(transaction.outputs())?),
+                    transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
+                    transactions::resulting_outputs.eq(serialize_json(rec.resulting_outputs())?),
+                    transactions::result.eq(rec.result().map(serialize_json).transpose()?),
+                ))
+            })
+            .collect::<Result<Vec<_>, StorageError>>()?;
+
+        diesel::insert_or_ignore_into(transactions::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transactions_insert",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
     fn transaction_pool_insert(
         &mut self,
         transaction: TransactionAtom,
@@ -752,7 +788,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         new_locked_block: &LockedBlock,
         tx_ids: I,
     ) -> Result<(), StorageError> {
-        use crate::schema::transaction_pool;
+        use crate::schema::{transaction_pool, transaction_pool_state_updates};
 
         let tx_ids = tx_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
 
@@ -784,14 +820,14 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             "transaction_pool_set_all_transitions: locked_block={}, new_locked_block={}, {} transactions, {} updates", locked_block, new_locked_block, tx_ids.len(), updates.len()
         );
 
-        // diesel::delete(transaction_pool_state_updates::table)
-        //     .filter(transaction_pool_state_updates::transaction_id.eq_any(&tx_ids))
-        //     .filter(transaction_pool_state_updates::block_height.le(new_locked_block.height().as_u64() as i64))
-        //     .execute(self.connection())
-        //     .map_err(|e| SqliteStorageError::DieselError {
-        //         operation: "transaction_pool_set_all_transitions",
-        //         source: e,
-        //     })?;
+        diesel::delete(transaction_pool_state_updates::table)
+            .filter(transaction_pool_state_updates::transaction_id.eq_any(&tx_ids))
+            .filter(transaction_pool_state_updates::block_height.le(new_locked_block.height().as_u64() as i64))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_set_all_transitions",
+                source: e,
+            })?;
 
         for update in updates.into_values() {
             diesel::update(transaction_pool::table)

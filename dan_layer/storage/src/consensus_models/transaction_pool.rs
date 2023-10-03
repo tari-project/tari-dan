@@ -425,31 +425,19 @@ impl TransactionPoolRecord {
         Ok(())
     }
 
-    // pub fn update_evidence<TTx: StateStoreWriteTransaction>(
-    //     &mut self,
-    //     tx: &mut TTx,
-    //     committee_shard: &CommitteeShard,
-    //     qc_id: QcId,
-    // ) -> Result<(), TransactionPoolError> { let evidence = &mut self.transaction.evidence; for (shard, qcs_mut) in
-    //   evidence.iter_mut() { if committee_shard.includes_shard(shard) { qcs_mut.push(qc_id); } }
-    //   tx.transaction_pool_add_pending_update(&self.transaction.id, Some(evidence), None, None, None, None)?;
-    //
-    //     Ok(())
-    // }
-
     pub fn remove<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), TransactionPoolError> {
         tx.transaction_pool_remove(&self.transaction.id)?;
         Ok(())
     }
 
-    pub fn remove_any<TTx, I>(tx: &mut TTx, transaction_ids: I) -> Result<(), TransactionPoolError>
+    pub fn remove_any<'a, TTx, I>(tx: &mut TTx, transaction_ids: I) -> Result<(), TransactionPoolError>
     where
         TTx: StateStoreWriteTransaction,
-        I: IntoIterator<Item = TransactionId>,
+        I: IntoIterator<Item = &'a TransactionId>,
     {
         // TODO(perf): n queries
         for id in transaction_ids {
-            let _ = tx.transaction_pool_remove(&id).optional()?;
+            let _ = tx.transaction_pool_remove(id).optional()?;
         }
         Ok(())
     }

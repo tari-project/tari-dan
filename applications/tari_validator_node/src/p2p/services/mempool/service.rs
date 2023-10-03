@@ -139,7 +139,7 @@ where
                     }
                 }
                 Some(msg) = self.rx_consensus_to_mempool.recv() => {
-                    if let Err(e) = self.handle_new_transaction(msg, vec![], false, None).await {
+                    if let Err(e) = self.handle_new_transaction_from_local(msg, false).await {
                         warn!(target: LOG_TARGET, "Mempool rejected transaction: {}", e);
                     }
                 }
@@ -255,28 +255,6 @@ where
                 warn!(target: LOG_TARGET, "Sender {from} sent a message with output shards but was not an input shard. Ignoring message.");
                 return Ok(());
             }
-        }
-
-        if self.transactions.contains(transaction.id()) {
-            info!(
-                target: LOG_TARGET,
-                "🎱 Transaction {} already in mempool",
-                transaction.id()
-            );
-            return Ok(());
-        }
-
-        let transaction_exists = self
-            .state_store
-            .with_read_tx(|tx| TransactionRecord::exists(tx, transaction.id()))?;
-
-        if transaction_exists {
-            info!(
-                target: LOG_TARGET,
-                "🎱 Transaction {} already exists. Ignoring",
-                transaction.id()
-            );
-            return Ok(());
         }
 
         self.handle_new_transaction(transaction, unverified_output_shards, true, maybe_sender_bucket)

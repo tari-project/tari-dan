@@ -166,11 +166,13 @@ where TConsensusSpec: ConsensusSpec
             // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
             // Specifically, it should extend the locked block via the dummy blocks.
             if !block.is_safe(tx.deref_mut())? {
-                return Err(ProposalValidationError::NotSafeBlock {
+                tx.rollback()?;
+                let err = ProposalValidationError::NotSafeBlock {
                     proposed_by: from.to_string(),
                     hash: *block.id(),
-                }
-                .into());
+                };
+                warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);
+                return Ok(());
             }
 
             // Insert the block if it doesnt already exist
@@ -282,13 +284,14 @@ where TConsensusSpec: ConsensusSpec
         block: &Block<TConsensusSpec::Addr>,
     ) -> Result<Option<QuorumDecision>, HotStuffError> {
         self.store.with_write_tx(|tx| {
-            let mut maybe_decision = None;
-            let should_vote = self.should_vote(tx.deref_mut(), block)?;
-            if should_vote {
-                maybe_decision = self.decide_what_to_vote(tx, block, local_committee_shard)?;
+            let mut decision = BlockDecision::vote_accept();
+            if self.should_vote(tx.deref_mut(), block)? {
+                decision = self.decide_what_to_vote(tx, block, local_committee_shard)?;
+            } else {
+                decision.dont_vote();
             }
 
-            if maybe_decision.is_some() {
+            if decision.is_accept() {
                 let high_qc = block.update_nodes(
                     tx,
                     |tx, locked, block| self.on_lock_block(tx, locked, block),
@@ -296,10 +299,10 @@ where TConsensusSpec: ConsensusSpec
                 )?;
 
                 // If we have a new high QC, we'll process the block it justifies
-                self.process_new_leaf(tx, high_qc, block)?;
+                self.process_new_leaf(tx, high_qc, block, local_committee_shard)?;
             }
 
-            Ok::<_, HotStuffError>(maybe_decision)
+            Ok::<_, HotStuffError>(decision.as_quorum_decision())
         })
     }
 
@@ -308,6 +311,7 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         high_qc: HighQc,
         tip_block: &Block<TConsensusSpec::Addr>,
+        local_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
         let leaf = high_qc.get_block(tx.deref_mut())?;
         if leaf.is_processed() {
@@ -316,7 +320,54 @@ where TConsensusSpec: ConsensusSpec
 
         for cmd in leaf.commands() {
             match cmd {
-                Command::Prepare(_) => {},
+                Command::Prepare(t) => {
+                    let mut tx_rec = self.transaction_pool.get(tx, tip_block.as_leaf_block(), t.id())?;
+
+                    if t.decision.is_commit() {
+                        let transaction = ExecutedTransaction::get(tx.deref_mut(), cmd.transaction_id())?;
+                        // Lock all inputs for the transaction as part of Prepare
+                        let is_inputs_locked =
+                            self.lock_inputs(tx, transaction.transaction(), local_committee_shard)?;
+                        let is_outputs_locked = is_inputs_locked && self.lock_outputs(tx, leaf.id(), &transaction)?;
+
+                        if !is_inputs_locked {
+                            // Unable to lock all inputs - do not vote
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ Unable to lock all inputs for transaction {} in block {}. Leader proposed {}, we decided {}",
+                                leaf.id(),
+                                transaction.id(),
+                                t.decision,
+                                Decision::Abort
+                            );
+                            // We change our decision to ABORT so that the next time we propose/receive a
+                            // proposal we will check for ABORT. It may
+                            // happen that the transaction causing the lock failure
+                            // is ABORTED too and the locks released allowing this transaction to succeed.
+                            // Currently, the client would have to resubmit the transaction to resolve this.
+                            tx_rec.update_local_decision(tx, Decision::Abort)?;
+
+                            // The leader should not have proposed conflicting transactions
+                        } else if !is_outputs_locked {
+                            // Unable to lock all outputs - do not vote
+                            warn!(
+                                target: LOG_TARGET,
+                                "❌ Unable to lock all outputs for transaction {} in block {}. Leader proposed {}, we decided {}",
+                                leaf.id(),
+                                transaction.id(),
+                                t.decision,
+                                Decision::Abort
+                            );
+                            // Unlock any locked inputs because we are not voting
+                            self.unlock_inputs(tx, transaction.transaction(), local_committee_shard)?;
+                            // We change our decision to ABORT so that the next time we propose/receive a
+                            // proposal we will check for ABORT
+                            tx_rec.update_local_decision(tx, Decision::Abort)?;
+                        } else {
+                            // We have locked all inputs and outputs
+                        }
+                    }
+                },
                 Command::LocalPrepared(t) => {
                     let mut tx_rec = self.transaction_pool.get(tx, tip_block.as_leaf_block(), t.id())?;
 
@@ -514,11 +565,11 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
-    ) -> Result<Option<QuorumDecision>, HotStuffError> {
+    ) -> Result<BlockDecision, HotStuffError> {
         let mut total_leader_fee = 0;
         let mut decision = BlockDecision::vote_accept();
-        // let mut locked_inputs = HashSet::new();
-        // let mut locked_outputs = HashSet::new();
+        let mut locked_inputs = HashSet::new();
+        let mut locked_outputs = HashSet::new();
         for cmd in block.commands() {
             let Some(mut tx_rec) = self
                 .transaction_pool
@@ -531,7 +582,8 @@ where TConsensusSpec: ConsensusSpec
                     block,
                     cmd.transaction_id(),
                 );
-                return Ok(None);
+                decision.dont_vote();
+                return Ok(decision);
             };
 
             // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
@@ -548,7 +600,7 @@ where TConsensusSpec: ConsensusSpec
             );
             match cmd {
                 Command::Prepare(t) => {
-                    if !tx_rec.current_stage().is_new() {
+                    if !tx_rec.current_stage().is_new() && !tx_rec.current_stage().is_prepared() {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Stage disagreement for tx {} in block {}. Leader proposed Prepare, local stage is {}",
@@ -576,19 +628,22 @@ where TConsensusSpec: ConsensusSpec
                         if tx_rec.current_decision().is_commit() {
                             let transaction = ExecutedTransaction::get(tx.deref_mut(), cmd.transaction_id())?;
                             // Lock all inputs for the transaction as part of Prepare
-                            let is_inputs_locked =
-                                self.lock_inputs(tx, transaction.transaction(), local_committee_shard)?;
+                            let is_inputs_locked = self.check_lock_inputs(
+                                tx,
+                                transaction.transaction(),
+                                local_committee_shard,
+                                &mut locked_inputs,
+                            )?;
                             let is_outputs_locked =
-                                is_inputs_locked && self.lock_outputs(tx, block.id(), &transaction)?;
+                                is_inputs_locked && self.check_lock_outputs(tx, &transaction, &mut locked_outputs)?;
 
                             if !is_inputs_locked {
                                 // Unable to lock all inputs - do not vote
                                 warn!(
                                     target: LOG_TARGET,
-                                    "❌ Unable to lock all inputs for transaction {} in block {}. Leader proposed {}, we decided {}",             block.id(),
+                                    "❌ Unable to lock all inputs for transaction {} in block {}.",
+                                    block.id(),
                                     transaction.id(),
-                                    t.decision,
-                                    Decision::Abort
                                 );
                                 // We change our decision to ABORT so that the next time we propose/receive a
                                 // proposal we will check for ABORT. It may
@@ -599,20 +654,20 @@ where TConsensusSpec: ConsensusSpec
 
                                 // The leader should not have proposed conflicting transactions
                                 decision.dont_vote();
+                                return Ok(decision);
                             } else if !is_outputs_locked {
                                 // Unable to lock all outputs - do not vote
                                 warn!(
                                     target: LOG_TARGET,
-                                    "❌ Unable to lock all outputs for transaction {} in block {}. Leader proposed
-                                {}, we decided {}",             block.id(),
+                                    "❌ Unable to lock all outputs for transaction {} in block {}.",
+                                    block.id(),
                                     transaction.id(),
-                                    t.decision,
-                                    Decision::Abort
                                 );
                                 // We change our decision to ABORT so that the next time we propose/receive a
                                 // proposal we will check for ABORT
                                 tx_rec.update_local_decision(tx, Decision::Abort)?;
                                 decision.dont_vote();
+                                return Ok(decision);
                             } else {
                                 // We have locked all inputs and outputs
                             }
@@ -644,7 +699,7 @@ where TConsensusSpec: ConsensusSpec
                     // We only mark the next step (Accept) as ready to propose once all shards have reported
                     // LocalPrepared.
 
-                    if !tx_rec.current_stage().is_prepared() {
+                    if !tx_rec.current_stage().is_prepared() && !tx_rec.current_stage().is_local_prepared() {
                         warn!(
                             target: LOG_TARGET,
                             "{} ❌ Stage disagreement in block {} for transaction {}. Leader proposed LocalPrepared, but local stage is {}",
@@ -695,7 +750,7 @@ where TConsensusSpec: ConsensusSpec
                 Command::Accept(t) => {
                     // Happy path: We've validated all the QCs and therefore are convinced that everyone also received
                     // LocalPrepare. We then propose new blocks until we have a 3-chain
-                    if !tx_rec.current_stage().is_local_prepared() {
+                    if !tx_rec.current_stage().is_local_prepared() && !tx_rec.current_stage().is_accepted() {
                         warn!(
                             target: LOG_TARGET,
                             "❌ Stage disagreement for tx {} in block {}. Leader proposed Accept, local stage {}",
@@ -787,20 +842,22 @@ where TConsensusSpec: ConsensusSpec
                     // If the decision was changed to Abort, which can only happen when a foreign shard decides ABORT
                     // and we decide COMMIT, we set SomePrepared, otherwise AllPrepared. There are no further stages
                     // after these, so these MUST never be ready to propose.
-                    if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
-                        tx_rec.add_pending_status_update(
-                            tx,
-                            block.as_leaf_block(),
-                            TransactionPoolStage::SomePrepared,
-                            false,
-                        )?;
-                    } else {
-                        tx_rec.add_pending_status_update(
-                            tx,
-                            block.as_leaf_block(),
-                            TransactionPoolStage::AllPrepared,
-                            false,
-                        )?;
+                    if decision.is_accept() {
+                        if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
+                            tx_rec.add_pending_status_update(
+                                tx,
+                                block.as_leaf_block(),
+                                TransactionPoolStage::SomePrepared,
+                                false,
+                            )?;
+                        } else {
+                            tx_rec.add_pending_status_update(
+                                tx,
+                                block.as_leaf_block(),
+                                TransactionPoolStage::AllPrepared,
+                                false,
+                            )?;
+                        }
                     }
                 },
             }
@@ -818,7 +875,7 @@ where TConsensusSpec: ConsensusSpec
             decision.dont_vote();
         }
 
-        Ok(decision.as_quorum_decision())
+        Ok(decision)
     }
 
     fn lock_inputs(
@@ -868,18 +925,18 @@ where TConsensusSpec: ConsensusSpec
         Ok(true)
     }
 
-    #[allow(dead_code)]
-    fn check_lock_inputs<'a>(
+    fn check_lock_inputs(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
-        transaction: &'a Transaction,
+        transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
-        locked_inputs: &mut HashSet<&'a ShardId>,
+        locked_inputs: &mut HashSet<ShardId>,
     ) -> Result<bool, HotStuffError> {
         let inputs = local_committee_shard
             .filter(transaction.inputs().iter().chain(transaction.filled_inputs()))
+            .copied()
             .collect::<HashSet<_>>();
-        let state = SubstateRecord::check_lock_all(tx, inputs.iter().copied(), SubstateLockFlag::Write)?;
+        let state = SubstateRecord::check_lock_all(tx, inputs.iter(), SubstateLockFlag::Write)?;
         if !state.is_acquired() {
             warn!(
                 target: LOG_TARGET,
@@ -968,17 +1025,31 @@ where TConsensusSpec: ConsensusSpec
         Ok(true)
     }
 
-    #[allow(dead_code)]
     fn check_lock_outputs(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         transaction: &ExecutedTransaction,
+        locked_outputs: &mut HashSet<ShardId>,
     ) -> Result<bool, HotStuffError> {
         let state = LockedOutput::check_locks(tx, transaction.resulting_outputs())?;
 
         if !state.is_acquired() {
             return Ok(false);
         }
+
+        if transaction
+            .resulting_outputs()
+            .iter()
+            .any(|i| locked_outputs.contains(i))
+        {
+            warn!(
+                target: LOG_TARGET,
+                "❌ Locks for transaction {} conflict with other transactions in the block",
+                transaction.id(),
+            );
+            return Ok(false);
+        }
+        locked_outputs.extend(transaction.resulting_outputs());
 
         Ok(true)
     }
@@ -1073,49 +1144,6 @@ where TConsensusSpec: ConsensusSpec
         }
         Ok(())
     }
-
-    // fn processed_locked_commands(
-    //     &self,
-    //     tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-    //     local_committee_shard: &CommitteeShard,
-    //     block: &Block<TConsensusSpec::Addr>,
-    // ) -> Result<(), HotStuffError> { for cmd in block.commands() { let mut tx_rec = self.transaction_pool.get(tx,
-    //   cmd.transaction_id())?;
-    //
-    //         // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
-    //         // part of the proposal DanMessage so that there is no race condition between receiving the
-    //         // proposed block and receiving the foreign proposals. Because this is only added on locked block,
-    //         // this should be less common.
-    //         tx_rec.update_evidence(tx, local_committee_shard, *block.justify().id())?;
-    //
-    //         match cmd {
-    //             Command::Prepare(_) => {
-    //                 tx_rec.pending_transition(tx, TransactionPoolStage::Prepared, true)?;
-    //             },
-    //             Command::LocalPrepared(t) => {
-    //                 tx_rec.pending_transition(
-    //                     tx,
-    //                     TransactionPoolStage::LocalPrepared,
-    //                     tx_rec.transaction().evidence.all_shards_complete(),
-    //                 )?;
-    //                 tx_rec.update_local_decision(tx, t.decision)?;
-    //             },
-    //             Command::Accept(t) => {
-    //                 // If the decision was changed to Abort, which can only happen when a foreign shard decides ABORT
-    //                 // and we decide COMMIT, we set SomePrepared, otherwise AllPrepared. There are no further stages
-    //                 // after these, so these MUST never be ready to propose.
-    //                 if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
-    //                     tx_rec.pending_transition(tx, TransactionPoolStage::SomePrepared, false)?;
-    //                 } else {
-    //                     tx_rec.pending_transition(tx, TransactionPoolStage::AllPrepared, false)?;
-    //                 }
-    //                 tx_rec.update_remote_decision(tx, t.decision)?;
-    //             },
-    //         }
-    //     }
-    //
-    //     Ok(())
-    // }
 
     fn publish_event(&self, event: HotstuffEvent) {
         let _ignore = self.tx_events.send(event);
@@ -1313,8 +1341,6 @@ where TConsensusSpec: ConsensusSpec
                 .into());
             }
 
-            let high_qc = HighQc::get(tx.deref_mut())?.get_quorum_certificate(tx.deref_mut())?;
-
             if justify_block.id() == candidate_block.parent() {
                 return Ok(());
             }
@@ -1341,7 +1367,7 @@ where TConsensusSpec: ConsensusSpec
                     *last_dummy_block.id(),
                     leader.clone(),
                     next_height,
-                    high_qc.clone(),
+                    candidate_block.justify().clone(),
                     candidate_block.epoch(),
                 );
                 debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);

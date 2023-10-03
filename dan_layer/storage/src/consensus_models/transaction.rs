@@ -60,6 +60,10 @@ impl TransactionRecord {
         }
     }
 
+    pub fn id(&self) -> &TransactionId {
+        self.transaction.id()
+    }
+
     pub fn transaction(&self) -> &Transaction {
         &self.transaction
     }
@@ -141,6 +145,15 @@ impl TransactionRecord {
         Ok(())
     }
 
+    pub fn save_all<'a, TTx, I>(tx: &mut TTx, transactions: I) -> Result<(), StorageError>
+    where
+        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx::Target: StateStoreReadTransaction,
+        I: IntoIterator<Item = &'a TransactionRecord>,
+    {
+        tx.transactions_save_all(transactions)
+    }
+
     pub fn update<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.transactions_update(self)
     }
@@ -156,6 +169,19 @@ impl TransactionRecord {
         tx.transactions_exists(tx_id)
     }
 
+    pub fn exists_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a TransactionId>>(
+        tx: &mut TTx,
+        tx_ids: I,
+    ) -> Result<bool, StorageError> {
+        for tx_id in tx_ids {
+            if tx.transactions_exists(tx_id)? {
+                return Ok(true);
+            }
+        }
+
+        Ok(false)
+    }
+
     pub fn get_any<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         tx_ids: I,
@@ -165,6 +191,7 @@ impl TransactionRecord {
         for rec in &recs {
             tx_ids.remove(rec.transaction.id());
         }
+
         Ok((recs, tx_ids))
     }
 

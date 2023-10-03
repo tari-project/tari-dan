@@ -38,7 +38,7 @@ async fn single_transaction() {
     // First get transaction in the mempool
     test.send_transaction_to_all(Decision::Commit, 1, 1).await;
     test.wait_until_new_pool_count(1).await;
-    test.start_epoch(Epoch(0));
+    test.start_epoch(Epoch(0)).await;
 
     loop {
         test.on_block_committed().await;
@@ -66,7 +66,7 @@ async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
         test.send_transaction_to_all(Decision::Commit, 1, 5).await;
     }
     test.wait_until_new_pool_count(10).await;
-    test.start_epoch(Epoch(0));
+    test.start_epoch(Epoch(0)).await;
 
     loop {
         test.on_block_committed().await;
@@ -96,7 +96,7 @@ async fn node_requests_missing_transaction_from_local_leader() {
             .await;
     }
     test.wait_until_new_pool_count_for_vn(10, TestAddress::new("2")).await;
-    test.start_epoch(Epoch(0));
+    test.start_epoch(Epoch(0)).await;
     loop {
         let (_, committed_height) = test.on_block_committed().await;
 
@@ -144,7 +144,7 @@ async fn propose_blocks_with_new_transactions_until_all_committed() {
     setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
     let mut remaining_txs = 10;
-    test.start_epoch(Epoch(0));
+    test.start_epoch(Epoch(0)).await;
     loop {
         if remaining_txs > 0 {
             test.send_transaction_to_all(Decision::Commit, 1, 5).await;
@@ -173,7 +173,7 @@ async fn multi_validator_propose_blocks_with_new_transactions_until_all_committe
         .start()
         .await;
     let mut remaining_txs = 10u32;
-    test.start_epoch(Epoch(0));
+    test.start_epoch(Epoch(0)).await;
     loop {
         if remaining_txs > 0 {
             test.send_transaction_to_all(Decision::Commit, 1, 5).await;
@@ -211,7 +211,7 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
     }
 
     test.wait_all_have_at_least_n_new_transactions_in_pool(20).await;
-    test.start_epoch(Epoch(0));
+    test.start_epoch(Epoch(0)).await;
 
     loop {
         test.on_block_committed().await;
@@ -258,7 +258,7 @@ async fn foreign_shard_decides_to_abort() {
     assert_eq!(tx1.id(), tx2.id());
 
     test.wait_all_have_at_least_n_new_transactions_in_pool(1).await;
-    test.start_epoch(Epoch(0));
+    test.start_epoch(Epoch(0)).await;
 
     loop {
         test.on_block_committed().await;
@@ -317,7 +317,7 @@ async fn leader_failure_output_conflict() {
 
     test.wait_all_have_at_least_n_new_transactions_in_pool(2).await;
     tokio::time::sleep(Duration::from_secs(1)).await;
-    test.start_epoch(Epoch(0));
+    test.start_epoch(Epoch(0)).await;
 
     loop {
         test.on_block_committed().await;
@@ -362,7 +362,7 @@ async fn leader_failure_node_goes_down() {
         test.send_transaction_to_all(Decision::Commit, 1, 2).await;
     }
     test.wait_all_have_at_least_n_new_transactions_in_pool(10).await;
-    test.start_epoch(Epoch(0));
+    test.start_epoch(Epoch(0)).await;
 
     loop {
         let (_, committed_height) = test.on_block_committed().await;
