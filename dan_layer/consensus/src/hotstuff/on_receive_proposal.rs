@@ -218,7 +218,7 @@ where TConsensusSpec: ConsensusSpec
                 self.pacemaker
                     .reset_leader_timeout(block.height(), high_qc.block_height())
                     .await?;
-                self.send_vote_to_leader(&local_committee, vote, block.height()).await;
+                self.send_vote_to_leader(&local_committee, vote, &block).await;
             }
         } else {
             self.pacemaker
@@ -536,14 +536,16 @@ where TConsensusSpec: ConsensusSpec
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
         vote: VoteMessage<TConsensusSpec::Addr>,
-        height: NodeHeight,
+        block: &Block<TConsensusSpec::Addr>,
     ) {
-        let leader = self.leader_strategy.get_leader_for_next_block(local_committee, height);
+        let leader = self
+            .leader_strategy
+            .get_leader_for_next_block(local_committee, block.height());
         info!(
             target: LOG_TARGET,
             "🔥 VOTE {:?} for block {} to next leader {:.4}",
             vote.decision,
-            vote.block_id,
+            block,
             leader,
         );
         if self
