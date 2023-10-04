@@ -76,8 +76,9 @@ async fn main() {
                 .summarized(),
         ))
         .before(move |_feature, _rule, scenario, world| {
+            log::info!(target: LOG_TARGET, "\n\n\n");
             log::info!(target: LOG_TARGET, "-------------------------------------------------------");
-            log::info!(target: LOG_TARGET, "------------- {} -------------", scenario.name);
+            log::info!(target: LOG_TARGET, "------------- SCENARIO: {} -------------", scenario.name);
             log::info!(target: LOG_TARGET, "-------------------------------------------------------");
             log::info!(target: LOG_TARGET, "\n\n\n");
             world.current_scenario_name = Some(scenario.name.clone());
