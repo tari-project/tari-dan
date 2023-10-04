@@ -1,10 +1,16 @@
 use clap::Parser;
 use clap::Subcommand;
+use multiaddr::Multiaddr;
+use crate::daemon_client::DaemonClient;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
 pub(crate) struct Cli {
+    #[clap(long, short = 'd', alias = "endpoint", env = "JRPC_ENDPOINT")]
+    pub daemon_jrpc_endpoint: Option<String>,
+    #[clap(long, short='t', alias= "token")]
+    pub auth_token: String,
     #[clap(subcommand)]
     pub command: Command,
 }
@@ -25,6 +31,7 @@ pub(crate) enum Command {
 {% for c in  commands %}
 pub(crate) mod {{ c.name }} {
    use clap::Args;
+   use crate::daemon_client::DaemonClient;
 
    #[derive(Debug, Args, Clone)]
    pub struct Command {
@@ -39,7 +46,8 @@ pub(crate) mod {{ c.name }} {
 
    impl Command {
     
-       pub fn run(self) {
+       pub fn run(self, client: DaemonClient) {
+                
             println!("Hello world");
 
        }

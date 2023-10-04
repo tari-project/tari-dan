@@ -1,0 +1,62 @@
+
+use multiaddr::Multiaddr;
+use std::str::FromStr;
+use reqwest;
+use serde_json::json;
+use serde_json::Value;
+
+pub struct DaemonClient {
+    endpoint: String,
+    auth_token: String,
+    last_id: usize,
+}
+
+impl DaemonClient {
+    pub(crate) fn new(endpoint: String, auth_token: String) -> Self {
+        Self {
+            endpoint,
+            auth_token,
+            last_id: 0,
+        }
+    }
+
+    async fn call_wallet(&mut self, method: &str, params: Value) {
+        self.last_id += 1;
+        let client = reqwest::Client::new();
+        let res = client
+            .post(&self.endpoint)
+            .header("Authorization", format!("Bearer {}", self.auth_token))
+            .body(
+                json!({
+                    "jsonrpc":"2.0",
+                    "method": method,
+                    "id": self.last_id,
+                    "params": params
+                })
+                .to_string(),
+            )
+            .send()
+            .await
+            .unwrap();
+
+        dbg!(res);
+    }
+
+
+    pub async fn submit_instruction(&mut self, instruction: Value, dump_buckets: bool) {
+        self.call_wallet("transaction.submit_instruction", json!({
+            "instruction": instruction,
+            "fee": 1000
+        })).await
+
+
+    }
+
+              //  {
+                //    "instruction": instruction,
+                  //  "fee_account": self.last_account_name,
+               //     "dump_outputs_into": self.last_account_name,
+               //     "fee": 1000,
+               // },
+          //  )
+}

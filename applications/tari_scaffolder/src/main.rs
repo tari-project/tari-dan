@@ -57,7 +57,11 @@ fn generate(template: &LoadedTemplate, output_path: &Path) {
         replace_tokens(include_str!("./template/src/cli.rs.liquid"), template),
     )
     .unwrap();
-
+    fs::write(
+        output_path.join("src/daemon_client.rs"),
+        replace_tokens(include_str!("./template/src/daemon_client.rs.liquid"), template),
+    )
+    .unwrap();
     // todo!()
 }
 
