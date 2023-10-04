@@ -49,19 +49,19 @@ pub(crate) mod {{ c.name }} {
     
        pub async fn run(self, mut client: DaemonClient) {
 
-        let template_address= "asdf";
+        let template_address= "0c54557e7e3ccfd8b1a632d40d58b4e8f65d319a49495966025350c097847cd8";
         let  function = "{{c.name}}";
 
         let inner=  json!({
                     "template_address": template_address,
                     "function": function,
-                    "args": {
+                    "args": [
                         {%  for arg in c.args %}
                           {% if arg.name != "self" %}
-       "{{ arg.name}}" : self.{{arg.name}},
+       self.{{arg.name}},
        {% endif %} 
                         {% endfor %}
-                    },
+                    ],
                 });
 
                 client.submit_instruction(json!({

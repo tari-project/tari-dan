@@ -5,9 +5,12 @@ edition = "2021"
 
 
 [dependencies]
+tari_wallet_daemon_client={path="/Users/mikethetike/projects/tari-dan/clients/wallet_daemon_client"}
+tari_engine_types={path="/Users/mikethetike/projects/tari-dan/dan_layer/engine_types"}
+
 
 clap = { version = "4", features = ["derive", "env"] }
 multiaddr = "0.14.0"
-reqwest="*"
+reqwest={ version="*", features=["json"]}
 serde_json="*"
 tokio ={version="1", features = ["full"] }
