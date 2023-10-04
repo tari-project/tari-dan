@@ -32,6 +32,7 @@ pub(crate) enum Command {
 pub(crate) mod {{ c.name }} {
    use clap::Args;
    use crate::daemon_client::DaemonClient;
+   use serde_json::json;
 
    #[derive(Debug, Args, Clone)]
    pub struct Command {
@@ -46,8 +47,27 @@ pub(crate) mod {{ c.name }} {
 
    impl Command {
     
-       pub fn run(self, client: DaemonClient) {
-                
+       pub async fn run(self, mut client: DaemonClient) {
+
+        let template_address= "asdf";
+        let  function = "{{c.name}}";
+
+        let inner=  json!({
+                    "template_address": template_address,
+                    "function": function,
+                    "args": {
+                        {%  for arg in c.args %}
+                          {% if arg.name != "self" %}
+       "{{ arg.name}}" : self.{{arg.name}},
+       {% endif %} 
+                        {% endfor %}
+                    },
+                });
+
+                client.submit_instruction(json!({
+                      "CallFunction":inner
+                })
+                , false).await;
             println!("Hello world");
 
        }

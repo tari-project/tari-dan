@@ -14,7 +14,9 @@ use reqwest;
 use serde_json::json;
 
 
-fn main() {
+
+#[tokio::main]
+async fn main() {
     let cli = Cli::init();
     let jrpc = cli.daemon_jrpc_endpoint.clone().unwrap_or_else(|| "http://127.0.0.1:18016".to_string());
     let token = cli.auth_token.clone();
@@ -22,7 +24,7 @@ fn main() {
     match cli.command {
         {% for c in  commands %}
         Command::{{c.title}}(com) => {
-            com.run(client);
+            com.run(client).await;
         }
         {% endfor %}
     }
