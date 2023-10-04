@@ -5,6 +5,7 @@ Feature: Fungible tokens
 
   @serial
   Scenario: Mint fungible tokens
+    Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -37,7 +38,7 @@ Feature: Fungible tokens
     When I create an account ACC_2 on VN
 
     # Submit a transaction manifest
-#    When I print the cucumber world
+    #    When I print the cucumber world
     When I submit a transaction manifest on VN with inputs "FAUCET, ACC_1" and 3 outputs named "TX1" signed with key ACC_1
     ```
     let faucet = global!["FAUCET/components/TestFaucet"];
@@ -47,17 +48,17 @@ Feature: Fungible tokens
     let faucet_bucket = faucet.take_free_coins();
     acc1.deposit(faucet_bucket);
     ```
-#    When I print the cucumber world
+    #    When I print the cucumber world
     # Submit a transaction manifest
     When I submit a transaction manifest on VN with inputs "FAUCET, TX1, ACC_2" and 1 output named "TX2" signed with key ACC_1
-      ```
-      let mut acc1 = global!["TX1/components/Account"];
-      let mut acc2 = global!["ACC_2/components/Account"];
-      let faucet_resource = global!["FAUCET/resources/0"];
+```
+let mut acc1 = global!["TX1/components/Account"];
+let mut acc2 = global!["ACC_2/components/Account"];
+let faucet_resource = global!["FAUCET/resources/0"];
 
-      // Withdraw 50 of the tokens and send them to acc2
-      let tokens = acc1.withdraw(faucet_resource, Amount(50));
-      acc2.deposit(tokens);
-      acc2.balance(faucet_resource);
-      acc1.balance(faucet_resource);
-      ```
+// Withdraw 50 of the tokens and send them to acc2
+let tokens = acc1.withdraw(faucet_resource, Amount(50));
+acc2.deposit(tokens);
+acc2.balance(faucet_resource);
+acc1.balance(faucet_resource);
+```

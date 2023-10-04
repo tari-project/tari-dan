@@ -39,7 +39,6 @@ async fn when_i_claim_burn_via_wallet_daemon(
         .claim_public_keys
         .get(&claim_pubkey_name)
         .unwrap_or_else(|| panic!("Claim public key {} not found", claim_pubkey_name));
-
     let claim_burn_resp = wallet_daemon_cli::claim_burn(
         world,
         account_name,
@@ -48,6 +47,7 @@ async fn when_i_claim_burn_via_wallet_daemon(
         proof.clone(),
         reciprocal_claim_public_key.clone(),
         wallet_daemon_name,
+        1000,
     )
     .await
     .unwrap();
@@ -96,6 +96,7 @@ async fn when_i_claim_burn_via_wallet_daemon_it_fails(
         proof.clone(),
         reciprocal_claim_public_key.clone(),
         wallet_daemon_name,
+        1000,
     )
     .await
     .unwrap_err();
