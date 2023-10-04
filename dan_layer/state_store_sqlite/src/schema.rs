@@ -221,7 +221,6 @@ diesel::table! {
         signature -> Text,
         inputs -> Text,
         input_refs -> Text,
-        outputs -> Text,
         filled_inputs -> Text,
         resulting_outputs -> Nullable<Text>,
         result -> Nullable<Text>,

@@ -106,11 +106,6 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
-        let outputs = request
-            .outputs
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
         let filled_inputs = request
             .filled_inputs
             .into_iter()
@@ -124,7 +119,6 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             signature,
             inputs,
             input_refs,
-            outputs,
             filled_inputs,
             min_epoch,
             max_epoch,
@@ -139,7 +133,6 @@ impl From<&Transaction> for proto::transaction::Transaction {
         let signature = transaction.signature().clone().into();
         let inputs = transaction.inputs().iter().map(|s| s.as_bytes().to_vec()).collect();
         let input_refs = transaction.input_refs().iter().map(|s| s.as_bytes().to_vec()).collect();
-        let outputs = transaction.outputs().iter().map(|s| s.as_bytes().to_vec()).collect();
         let filled_inputs = transaction
             .filled_inputs()
             .iter()
@@ -161,7 +154,6 @@ impl From<&Transaction> for proto::transaction::Transaction {
             signature: Some(signature),
             inputs,
             input_refs,
-            outputs,
             filled_inputs,
             min_epoch,
             max_epoch,

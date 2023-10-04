@@ -263,7 +263,6 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 transactions::meta.eq(serialize_json(&InputsAndOutputs {
                     inputs: transaction.inputs().to_vec(),
                     input_refs: transaction.input_refs().to_vec(),
-                    outputs: transaction.outputs().to_vec(),
                 })?),
                 transactions::status.eq(TransactionStatus::default().as_key_str()),
                 transactions::dry_run.eq(is_dry_run),
