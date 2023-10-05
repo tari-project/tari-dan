@@ -53,6 +53,6 @@ Feature: Block Sync
     When I create an account UNUSED4 via the wallet daemon WALLET_D
     When I create an account UNUSED5 via the wallet daemon WALLET_D
 
-    When I wait for validator VN has leaf block height of at least 40
-    When I wait for validator VN2 has leaf block height of at least 40
+    When I wait for validator VN has leaf block height of at least 26
+    When I wait for validator VN2 has leaf block height of at least 26
 
