@@ -12,6 +12,8 @@ pub(crate) struct Cli {
     pub daemon_jrpc_endpoint: Option<String>,
     #[clap(long, short='t', alias= "token")]
     pub auth_token: String,
+    #[clap(long, alias="template_address", default_value ="5d824fb9902af3afa3eefe6b15764ebf336c6b1c6d8438e6efd478b4639d1e36")]
+    pub template: String,
     #[clap(subcommand)]
     pub command: Command,
 }
@@ -38,7 +40,7 @@ pub(crate) mod {{ c.name }} {
     use tari_engine_types::instruction::Instruction;
     use tari_utilities::hex::Hex;
      use tari_utilities::hex::from_hex;
-
+use tari_engine_types::TemplateAddress;
    #[derive(Debug, Args, Clone)]
    pub struct Command {
       {%  for  arg in c.args %}
@@ -52,9 +54,9 @@ pub(crate) mod {{ c.name }} {
 
    impl Command {
     
-       pub async fn run(self, mut client: DaemonClient) {
+       pub async fn run(self, mut client: DaemonClient, template_address: TemplateAddress) {
 
-        let template_address= from_hex("0c54557e7e3ccfd8b1a632d40d58b4e8f65d319a49495966025350c097847cd8").unwrap().try_into().unwrap();
+       // let template_address= ;
         let  function = "{{c.name}}".to_string();
 
      
