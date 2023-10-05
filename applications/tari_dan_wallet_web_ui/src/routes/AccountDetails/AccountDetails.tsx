@@ -40,12 +40,6 @@ import { DataTableCell } from '../../Components/StyledComponents';
 import CopyToClipboard from '../../Components/CopyToClipboard';
 import FetchStatusCheck from '../../Components/FetchStatusCheck';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
-}
-
 function BalanceRow(props: any) {
   return (
     <TableRow key={props.index}>
@@ -91,7 +85,7 @@ function AccountDetailsLayout() {
     isLoading: accountsIsLoading,
     isError: accountsIsError,
     error: accountsError,
-  } = useAccountsGet(name|| '');
+  } = useAccountsGet(name || '');
 
   return (
     <>
