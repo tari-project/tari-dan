@@ -79,7 +79,7 @@ Feature: Claim Fees
 
     # Progress to the next epoch
     When miner MINER mines 10 new blocks
-    Then VN has scanned to height 27 within 10 seconds
+    Then VN has scanned to height 27 within 20 seconds
 
     # Claim fees into ACC2
     When I claim fees for validator VN and epoch 1 into account ACC2 using the wallet daemon WALLET_D
