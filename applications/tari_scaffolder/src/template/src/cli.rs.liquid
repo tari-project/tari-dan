@@ -2,6 +2,7 @@ use clap::Parser;
 use clap::Subcommand;
 use multiaddr::Multiaddr;
 use crate::daemon_client::DaemonClient;
+use tari_engine_types::parse_arg;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -33,6 +34,10 @@ pub(crate) mod {{ c.name }} {
    use clap::Args;
    use crate::daemon_client::DaemonClient;
    use serde_json::json;
+    use tari_engine_types::parse_arg;
+    use tari_engine_types::instruction::Instruction;
+    use tari_utilities::hex::Hex;
+     use tari_utilities::hex::from_hex;
 
    #[derive(Debug, Args, Clone)]
    pub struct Command {
@@ -49,25 +54,24 @@ pub(crate) mod {{ c.name }} {
     
        pub async fn run(self, mut client: DaemonClient) {
 
-        let template_address= "0c54557e7e3ccfd8b1a632d40d58b4e8f65d319a49495966025350c097847cd8";
-        let  function = "{{c.name}}";
+        let template_address= from_hex("0c54557e7e3ccfd8b1a632d40d58b4e8f65d319a49495966025350c097847cd8").unwrap().try_into().unwrap();
+        let  function = "{{c.name}}".to_string();
 
-        let inner=  json!({
-                    "template_address": template_address,
-                    "function": function,
-                    "args": [
-                        {%  for arg in c.args %}
-                          {% if arg.name != "self" %}
-       self.{{arg.name}},
-       {% endif %} 
-                        {% endfor %}
-                    ],
-                });
+     
 
-                client.submit_instruction(json!({
-                      "CallFunction":inner
-                })
-                , false).await;
+                client.submit_instruction(Instruction::CallFunction {
+                    template_address, 
+                    function,
+                    args: vec![
+                        {%  for  arg in c.args %}
+      {% if arg.name != "self" %}
+       parse_arg(&self.{{ arg.name}}).unwrap(),
+      {% endif %} 
+      {% endfor %}
+                    ]
+               }, false
+                
+            ).await;
             println!("Hello world");
 
        }
