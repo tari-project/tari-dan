@@ -270,12 +270,18 @@ jobs:
         with:
           command: test
           args: --all-features --release --package integration_tests
-      - name: upload artifact
+      - name: upload test result artifact
         uses: actions/upload-artifact@v3  # upload test results as artifact
         if: success() || failure()
         with:
             name: cucumber-test-results
             path: ${{ github.workspace }}/integration_tests/cucumber-output-junit.xml
+      - name: Upload cucumber log artifacts
+        uses: actions/upload-artifact@v3
+        if: success() || failure()
+        with:
+          name: cucumber-log-artifacts
+          path: ${{ github.workspace }}/integration_tests/tests/temp/cucumber_*/*.log
 
   # needed for test results
   event_file:

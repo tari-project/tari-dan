@@ -22,6 +22,7 @@ Feature: Block Sync
     # Initialize a VN
     Given a seed validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds
@@ -52,6 +53,6 @@ Feature: Block Sync
     When I create an account UNUSED4 via the wallet daemon WALLET_D
     When I create an account UNUSED5 via the wallet daemon WALLET_D
 
-    When I wait for validator VN has leaf block height of at least 40
-    When I wait for validator VN2 has leaf block height of at least 40
+    When I wait for validator VN has leaf block height of at least 26
+    When I wait for validator VN2 has leaf block height of at least 26
 

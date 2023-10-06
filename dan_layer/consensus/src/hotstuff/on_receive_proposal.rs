@@ -1055,16 +1055,6 @@ where TConsensusSpec: ConsensusSpec
             .into());
         }
 
-        // let leaf_block = LeafBlock::get(tx.deref_mut())?;
-        // if candidate_block.height() <= leaf_block.height() {
-        //     return Err(ProposalValidationError::CandidateBlockNotHigherThanLeafBlock {
-        //         proposed_by: from.to_string(),
-        //         leaf_block,
-        //         candidate_block: candidate_block.as_leaf_block(),
-        //     }
-        //     .into());
-        // }
-
         // Special case for genesis block
         if candidate_block.parent().is_genesis() && candidate_block.justify().is_genesis() {
             return Ok(());
@@ -1072,7 +1062,7 @@ where TConsensusSpec: ConsensusSpec
 
         // Part of the safenode predicate. Exclude this block early if this is the case
         let locked_block = LockedBlock::get(tx.deref_mut())?;
-        if !locked_block.block_id.is_genesis() && candidate_block.justify().block_height() <= locked_block.height() {
+        if !locked_block.block_id.is_genesis() && candidate_block.justify().block_height() < locked_block.height() {
             return Err(ProposalValidationError::CandidateBlockNotHigherThanLockedBlock {
                 proposed_by: from.to_string(),
                 locked_block,

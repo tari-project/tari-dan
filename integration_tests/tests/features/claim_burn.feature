@@ -12,6 +12,7 @@ Feature: Claim Burn
     # Initialize a VN
     Given a validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds

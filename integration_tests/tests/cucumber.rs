@@ -53,6 +53,8 @@ use tari_dan_storage::consensus_models::QuorumDecision;
 use tari_shutdown::Shutdown;
 use tari_validator_node_client::types::{AddPeerRequest, GetRecentTransactionsRequest, GetTransactionResultRequest};
 
+const LOG_TARGET: &str = "cucumber";
+
 #[tokio::main]
 async fn main() {
     let log_path = create_log_config_file();
@@ -74,6 +76,11 @@ async fn main() {
                 .summarized(),
         ))
         .before(move |_feature, _rule, scenario, world| {
+            log::info!(target: LOG_TARGET, "\n\n\n");
+            log::info!(target: LOG_TARGET, "-------------------------------------------------------");
+            log::info!(target: LOG_TARGET, "------------- SCENARIO: {} -------------", scenario.name);
+            log::info!(target: LOG_TARGET, "-------------------------------------------------------");
+            log::info!(target: LOG_TARGET, "\n\n\n");
             world.current_scenario_name = Some(scenario.name.clone());
             Box::pin(async move {
                 // Each scenario gets a mock connection. As each connection is dropped after the scenario, all the mock

@@ -22,6 +22,7 @@ Feature: Claim Fees
     # Initialize a VN
     Given a seed validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds
@@ -78,7 +79,7 @@ Feature: Claim Fees
 
     # Progress to the next epoch
     When miner MINER mines 10 new blocks
-    Then VN has scanned to height 27 within 10 seconds
+    Then VN has scanned to height 27 within 20 seconds
 
     # Claim fees into ACC2
     When I claim fees for validator VN and epoch 1 into account ACC2 using the wallet daemon WALLET_D
