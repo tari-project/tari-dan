@@ -33,35 +33,87 @@ use std::{
 use json::Value;
 use reqwest::{
     header::{self, HeaderMap, AUTHORIZATION},
-    IntoUrl, Url,
+    IntoUrl,
+    Url,
 };
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json as json;
 use serde_json::json;
 use tari_template_lib::models::ComponentAddress;
 use types::{
-    AccountsCreateFreeTestCoinsRequest, AccountsCreateFreeTestCoinsResponse, AuthLoginAcceptRequest,
-    AuthLoginAcceptResponse, AuthLoginDenyRequest, AuthLoginDenyResponse, AuthLoginRequest, AuthLoginResponse,
-    CallInstructionRequest, ClaimBurnRequest, ClaimBurnResponse, GetAccountNftRequest, GetAccountNftResponse,
-    ListAccountNftRequest, ListAccountNftResponse, MintAccountNftRequest, MintAccountNftResponse, ProofsCancelRequest,
-    ProofsCancelResponse, ProofsFinalizeRequest, ProofsFinalizeResponse, ProofsGenerateRequest, ProofsGenerateResponse,
-    TransferRequest, TransferResponse, WebRtcStartRequest, WebRtcStartResponse,
+    AccountsCreateFreeTestCoinsRequest,
+    AccountsCreateFreeTestCoinsResponse,
+    AuthLoginAcceptRequest,
+    AuthLoginAcceptResponse,
+    AuthLoginDenyRequest,
+    AuthLoginDenyResponse,
+    AuthLoginRequest,
+    AuthLoginResponse,
+    CallInstructionRequest,
+    ClaimBurnRequest,
+    ClaimBurnResponse,
+    GetAccountNftRequest,
+    GetAccountNftResponse,
+    ListAccountNftRequest,
+    ListAccountNftResponse,
+    MintAccountNftRequest,
+    MintAccountNftResponse,
+    ProofsCancelRequest,
+    ProofsCancelResponse,
+    ProofsFinalizeRequest,
+    ProofsFinalizeResponse,
+    ProofsGenerateRequest,
+    ProofsGenerateResponse,
+    TransferRequest,
+    TransferResponse,
+    WebRtcStartRequest,
+    WebRtcStartResponse,
 };
 
 use crate::{
     error::WalletDaemonClientError,
     types::{
-        AccountGetDefaultRequest, AccountGetRequest, AccountGetResponse, AccountSetDefaultRequest,
-        AccountSetDefaultResponse, AccountsCreateRequest, AccountsCreateResponse, AccountsGetBalancesRequest,
-        AccountsGetBalancesResponse, AccountsInvokeRequest, AccountsInvokeResponse, AccountsListRequest,
-        AccountsListResponse, AuthGetAllJwtRequest, AuthGetAllJwtResponse, AuthRevokeTokenRequest,
-        AuthRevokeTokenResponse, ClaimValidatorFeesRequest, ClaimValidatorFeesResponse,
-        ConfidentialCreateOutputProofRequest, ConfidentialCreateOutputProofResponse, ConfidentialTransferRequest,
-        ConfidentialTransferResponse, GetValidatorFeesRequest, GetValidatorFeesResponse, KeysCreateRequest,
-        KeysCreateResponse, KeysListRequest, KeysListResponse, KeysSetActiveRequest, KeysSetActiveResponse,
-        RevealFundsRequest, RevealFundsResponse, TransactionGetRequest, TransactionGetResponse,
-        TransactionGetResultRequest, TransactionGetResultResponse, TransactionSubmitRequest, TransactionSubmitResponse,
-        TransactionWaitResultRequest, TransactionWaitResultResponse,
+        AccountGetDefaultRequest,
+        AccountGetRequest,
+        AccountGetResponse,
+        AccountSetDefaultRequest,
+        AccountSetDefaultResponse,
+        AccountsCreateRequest,
+        AccountsCreateResponse,
+        AccountsGetBalancesRequest,
+        AccountsGetBalancesResponse,
+        AccountsInvokeRequest,
+        AccountsInvokeResponse,
+        AccountsListRequest,
+        AccountsListResponse,
+        AuthGetAllJwtRequest,
+        AuthGetAllJwtResponse,
+        AuthRevokeTokenRequest,
+        AuthRevokeTokenResponse,
+        ClaimValidatorFeesRequest,
+        ClaimValidatorFeesResponse,
+        ConfidentialCreateOutputProofRequest,
+        ConfidentialCreateOutputProofResponse,
+        ConfidentialTransferRequest,
+        ConfidentialTransferResponse,
+        GetValidatorFeesRequest,
+        GetValidatorFeesResponse,
+        KeysCreateRequest,
+        KeysCreateResponse,
+        KeysListRequest,
+        KeysListResponse,
+        KeysSetActiveRequest,
+        KeysSetActiveResponse,
+        RevealFundsRequest,
+        RevealFundsResponse,
+        TransactionGetRequest,
+        TransactionGetResponse,
+        TransactionGetResultRequest,
+        TransactionGetResultResponse,
+        TransactionSubmitRequest,
+        TransactionSubmitResponse,
+        TransactionWaitResultRequest,
+        TransactionWaitResultResponse,
     },
 };
 
@@ -149,12 +201,9 @@ impl WalletDaemonClient {
     }
 
     pub async fn create_specific_key(&mut self, index: u64) -> Result<KeysCreateResponse, WalletDaemonClientError> {
-        self.send_request(
-            "keys.create",
-            &KeysCreateRequest {
-                specific_index: Some(index),
-            },
-        )
+        self.send_request("keys.create", &KeysCreateRequest {
+            specific_index: Some(index),
+        })
         .await
     }
 

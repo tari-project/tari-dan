@@ -10,9 +10,7 @@ use tari_template_lib::{arg, args::Arg, models::Amount};
 use crate::{substate::SubstateAddress, template::parse_template_address, TemplateAddress};
 
 pub fn json_deserialize<'de, D>(d: D) -> Result<Vec<Arg>, D::Error>
-where
-    D: Deserializer<'de>,
-{
+where D: Deserializer<'de> {
     if d.is_human_readable() {
         // human_readable !== json. This is why the function name is json_deserialize
         let value = json::Value::deserialize(d)?;
