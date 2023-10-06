@@ -82,20 +82,26 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate) -> String {
             for f in loaded_wasm_template.template_def().functions.iter() {
                 let arr = globals.get_mut("commands").unwrap().as_array_mut().unwrap();
                 let mut args = vec![];
+                let mut is_method = false;
                 for a in &f.arguments {
                     args.push(liquid::object!({
                         "name": a.name
                     }));
+                    if &a.name == "self" {
+                        is_method = true;
+                    }
                 }
+
                 arr.push(Value::Object(liquid::object!({
                     "name": f.name,
                     "title": f.name.to_case(Case::UpperCamel),
-                    "args" : args
+                    "args" : args,
+                    "is_method": is_method,
+                    "is_mut": f.is_mut
                 })));
             }
         },
         _ => {},
     }
-    dbg!(&globals);
     template.render(&mut globals).unwrap()
 }

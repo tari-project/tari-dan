@@ -14,6 +14,8 @@ pub(crate) struct Cli {
     pub auth_token: String,
     #[clap(long, alias="template_address", default_value ="5d824fb9902af3afa3eefe6b15764ebf336c6b1c6d8438e6efd478b4639d1e36")]
     pub template: String,
+    #[clap(long, short='d')]
+    pub dump_buckets,
     #[clap(subcommand)]
     pub command: Command,
 }
@@ -41,6 +43,8 @@ pub(crate) mod {{ c.name }} {
     use tari_utilities::hex::Hex;
      use tari_utilities::hex::from_hex;
 use tari_engine_types::TemplateAddress;
+use tari_template_lib::prelude::ComponentAddress;
+
    #[derive(Debug, Args, Clone)]
    pub struct Command {
       {%  for  arg in c.args %}
@@ -54,6 +58,34 @@ use tari_engine_types::TemplateAddress;
 
    impl Command {
     
+    {% if c.is_method %}
+
+ pub async fn run(self, mut client: DaemonClient, dump_buckets: bool) {
+
+       // let template_address= ;
+        let method = "{{c.name}}".to_string();
+
+     
+
+                client.submit_instruction(Instruction::CallMethod {
+                    component_address: ComponentAddress::from_hex(&self.component_address).unwrap(), 
+                    method,
+                    args: vec![
+                        {%  for  arg in c.args %}
+      {% if arg.name != "self" %}
+       parse_arg(&self.{{ arg.name}}).unwrap(),
+      {% endif %} 
+      {% endfor %}
+                    ]
+               }, dump_buckets
+                
+            ).await;
+            println!("done");
+
+       }
+
+
+    {% else %}
        pub async fn run(self, mut client: DaemonClient, template_address: TemplateAddress) {
 
        // let template_address= ;
@@ -74,9 +106,11 @@ use tari_engine_types::TemplateAddress;
                }, false
                 
             ).await;
-            println!("Hello world");
+            println!("done");
 
        }
+
+       {% endif %}
 
    }
 }

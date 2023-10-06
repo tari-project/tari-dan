@@ -14,7 +14,7 @@ use reqwest;
 use serde_json::json;
 use tari_utilities::hex::from_hex;
 
-
+use tari_template_lib::prelude::ComponentAddress;
 
 #[tokio::main]
 async fn main() {
@@ -26,7 +26,11 @@ async fn main() {
     match cli.command {
         {% for c in  commands %}
         Command::{{c.title}}(com) => {
+            {% if c.is_method %}
+            com.run(client).await;
+            {% else %}
             com.run(client, template_address).await;
+            {% endif %}
         }
         {% endfor %}
     }
