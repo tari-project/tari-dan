@@ -32,13 +32,14 @@ import {
   DataTableCell,
   AccordionIconButton,
 } from '../../Components/StyledComponents';
-import { renderJson } from '../../utils/helpers';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import CodeBlockExpand from '../../Components/CodeBlock';
+import { useTheme } from '@mui/material/styles';
 
 function RowData({ title, data }: any, index: number) {
   const [open, setOpen] = useState(false);
+  const theme = useTheme();
   return (
     <>
       <TableRow key={`${index}-1`}>
@@ -59,9 +60,16 @@ function RowData({ title, data }: any, index: number) {
         <DataTableCell>{title}</DataTableCell>
       </TableRow>
       <TableRow key={`${index}-2`}>
-        <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={2}>
+        <DataTableCell
+          style={{
+            paddingBottom: theme.spacing(1),
+            paddingTop: 0,
+            borderBottom: 'none',
+          }}
+          colSpan={2}
+        >
           <Collapse in={open} timeout="auto" unmountOnExit>
-            <CodeBlockExpand title={title}>{renderJson(data)}</CodeBlockExpand>
+            <CodeBlockExpand title={title} content={data} />
           </Collapse>
         </DataTableCell>
       </TableRow>
