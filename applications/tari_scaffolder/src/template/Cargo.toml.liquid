@@ -1,13 +1,19 @@
 [package]
-name = "tari_scaffolder"
+name = "{{template_name}}"
 version = "0.0.1"
 edition = "2021"
 
 
 [dependencies]
-tari_wallet_daemon_client={path="/Users/mikethetike/projects/tari-dan/clients/wallet_daemon_client"}
-tari_engine_types={path="/Users/mikethetike/projects/tari-dan/dan_layer/engine_types"}
-tari_template_lib={path="/Users/mikethetike/projects/tari-dan/dan_layer/template_lib"}
+{% if crates_root == "[crates]" %}
+tari_wallet_daemon_client= "*"
+tari_engine_types= "*"
+tari_template_lib= "*"
+{% else %}
+tari_wallet_daemon_client={path="{{crates_root}}/clients/wallet_daemon_client"}
+tari_engine_types={path="{{crates_root}}/dan_layer/engine_types"}
+tari_template_lib={path="{{crates_root}}/dan_layer/template_lib"}
+{% endif %}
 tari_utilities ="*"
 
 

@@ -8,14 +8,14 @@ use tari_engine_types::parse_arg;
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
 pub(crate) struct Cli {
-    #[clap(long, short = 'd', alias = "endpoint", env = "JRPC_ENDPOINT")]
+    #[clap(long, short = 'e', alias = "endpoint", env = "JRPC_ENDPOINT")]
     pub daemon_jrpc_endpoint: Option<String>,
     #[clap(long, short='t', alias= "token")]
     pub auth_token: String,
     #[clap(long, alias="template_address", default_value ="5d824fb9902af3afa3eefe6b15764ebf336c6b1c6d8438e6efd478b4639d1e36")]
     pub template: String,
     #[clap(long, short='d')]
-    pub dump_buckets,
+    pub dump_buckets: bool,
     #[clap(subcommand)]
     pub command: Command,
 }
@@ -57,7 +57,7 @@ use tari_template_lib::prelude::ComponentAddress;
    }
 
    impl Command {
-    
+
     {% if c.is_method %}
 
  pub async fn run(self, mut client: DaemonClient, dump_buckets: bool) {
@@ -65,20 +65,20 @@ use tari_template_lib::prelude::ComponentAddress;
        // let template_address= ;
         let method = "{{c.name}}".to_string();
 
-     
+
 
                 client.submit_instruction(Instruction::CallMethod {
-                    component_address: ComponentAddress::from_hex(&self.component_address).unwrap(), 
+                    component_address: ComponentAddress::from_hex(&self.component_address).unwrap(),
                     method,
                     args: vec![
                         {%  for  arg in c.args %}
       {% if arg.name != "self" %}
        parse_arg(&self.{{ arg.name}}).unwrap(),
-      {% endif %} 
+      {% endif %}
       {% endfor %}
                     ]
                }, dump_buckets
-                
+
             ).await;
             println!("done");
 
@@ -91,20 +91,20 @@ use tari_template_lib::prelude::ComponentAddress;
        // let template_address= ;
         let  function = "{{c.name}}".to_string();
 
-     
+
 
                 client.submit_instruction(Instruction::CallFunction {
-                    template_address, 
+                    template_address,
                     function,
                     args: vec![
                         {%  for  arg in c.args %}
       {% if arg.name != "self" %}
        parse_arg(&self.{{ arg.name}}).unwrap(),
-      {% endif %} 
+      {% endif %}
       {% endfor %}
                     ]
                }, false
-                
+
             ).await;
             println!("done");
 

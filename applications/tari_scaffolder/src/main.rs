@@ -21,15 +21,15 @@ fn main() {
         }
     }
 
-    match cli.command {
+    match &cli.command {
         command::Command::Scaffold(scaffold) => {
             println!("Scaffolding wasm at {:?}", scaffold.wasm_path);
 
-            let wasm = compile_template(scaffold.wasm_path, &[]).unwrap();
+            let wasm = compile_template(&scaffold.wasm_path, &[]).unwrap();
 
             let loaded_template = wasm.load_template().unwrap();
-            dbg!(&loaded_template);
-            generate(&loaded_template, cli.output_path.as_ref())
+            // dbg!(&loaded_template);
+            generate(&loaded_template, cli.output_path.as_ref(), &cli)
         },
     }
     // let config_path = cli.common.config_path();
@@ -40,32 +40,32 @@ fn main() {
     println!("Hello, world!");
 }
 
-fn generate(template: &LoadedTemplate, output_path: &Path) {
+fn generate(template: &LoadedTemplate, output_path: &Path, cli: &Cli) {
     fs::create_dir_all(output_path.join("src")).unwrap();
     fs::write(
         output_path.join("Cargo.toml"),
-        include_bytes!("./template/Cargo.toml.liquid"),
+        replace_tokens(include_str!("./template/Cargo.toml.liquid"), template, cli),
     )
     .unwrap();
     fs::write(
         output_path.join("src/main.rs"),
-        replace_tokens(include_str!("./template/src/main.rs.liquid"), template),
+        replace_tokens(include_str!("./template/src/main.rs.liquid"), template, cli),
     )
     .unwrap();
     fs::write(
         output_path.join("src/cli.rs"),
-        replace_tokens(include_str!("./template/src/cli.rs.liquid"), template),
+        replace_tokens(include_str!("./template/src/cli.rs.liquid"), template, cli),
     )
     .unwrap();
     fs::write(
         output_path.join("src/daemon_client.rs"),
-        replace_tokens(include_str!("./template/src/daemon_client.rs.liquid"), template),
+        replace_tokens(include_str!("./template/src/daemon_client.rs.liquid"), template, cli),
     )
     .unwrap();
     // todo!()
 }
 
-fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate) -> String {
+fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) -> String {
     let template = liquid::ParserBuilder::with_stdlib()
         .build()
         .unwrap()
@@ -73,6 +73,8 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate) -> String {
         .unwrap();
 
     let mut globals = liquid::object!({
+        "template_name": loaded_template.template_name(),
+    "crates_root": cli.crates_root.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "[crates]".to_string()),
         "commands": [
         ]
     });

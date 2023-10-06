@@ -27,7 +27,7 @@ async fn main() {
         {% for c in  commands %}
         Command::{{c.title}}(com) => {
             {% if c.is_method %}
-            com.run(client).await;
+            com.run(client, cli.dump_buckets).await;
             {% else %}
             com.run(client, template_address).await;
             {% endif %}

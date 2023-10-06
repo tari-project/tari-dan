@@ -19,6 +19,9 @@ pub(crate) struct Cli {
     #[clap(subcommand)]
     pub command: Command,
 
+    #[clap(long)]
+    pub crates_root: Option<PathBuf>,
+
     #[clap(long, short = 'c', alias = "clean")]
     pub clean: bool,
 
