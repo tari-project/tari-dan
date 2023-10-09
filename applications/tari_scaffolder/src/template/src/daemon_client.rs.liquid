@@ -35,7 +35,7 @@ impl DaemonClient {
                     "params": params
                 })
                 .to_string();
-	dbg!(&body);	
+	dbg!(&body);
         let res = client
             .post(&self.endpoint)
             .header("Authorization", format!("Bearer {}", self.auth_token))
@@ -52,18 +52,22 @@ impl DaemonClient {
     }
 
 
-    pub async fn submit_instruction(&mut self, instruction: Instruction, dump_buckets: bool) {
+    pub async fn submit_instruction(&mut self, instruction: Instruction, dump_buckets: bool, is_dry_run: bool, fees: u64) {
      let mut client =
             WalletDaemonClient::connect(&self.endpoint, Some(self.auth_token.clone())).unwrap();
-        let r = client.list_keys().await;
+        //let r = client.list_keys().await;
 
-        dbg!(r);
+        //dbg!(r);
 
            let tx = CallInstructionRequest {
             instruction,
             fee_account: ComponentAddressOrName::Name("TestAccount_0".to_string()),
-            dump_outputs_into: None,
-            fee: 100,
+            dump_outputs_into: if dump_buckets {
+                Some(ComponentAddressOrName::Name("TestAccount_0".to_string()))
+            } else {
+                None
+            },
+            fee: fees,
             inputs: vec![],
             override_inputs: None,
             new_outputs: None,
@@ -71,17 +75,17 @@ impl DaemonClient {
             new_resources: vec![],
             new_non_fungible_outputs: vec![],
             new_non_fungible_index_outputs: vec![],
-            is_dry_run: false,
+            is_dry_run,
             proof_ids: vec![],
         };
 
         let r2 = client.submit_instruction(tx).await.unwrap();
 
 
-        dbg!(r2);       
-	
-	
-	
+        dbg!(r2);
+
+
+
 	    //"dump_outputs_into": "TestAccount_0",
 
     }
@@ -92,5 +96,5 @@ impl DaemonClient {
                //     "dump_outputs_into": self.last_account_name,
                //     "fee": 1000,
                // },
-          //  
+          //
 }
