@@ -122,7 +122,7 @@ where TConsensusSpec: ConsensusSpec
             let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
                 warn!(
                     target: LOG_TARGET,
-                    "❌ Received vote for unknown block {} from {}", message.block_id, from
+                    "❌ Received {} votes for unknown block {}", count, message.block_id
                 );
                 tx.rollback()?;
                 return Ok(());

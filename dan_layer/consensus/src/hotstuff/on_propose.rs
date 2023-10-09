@@ -104,8 +104,16 @@ where TConsensusSpec: ConsensusSpec
                         );
                         self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
                             .await?;
+                        return Ok(());
                     }
                 }
+
+                debug!(
+                    target: LOG_TARGET,
+                    "⤵️ SKIPPING propose for leaf {} because we already proposed block {}",
+                    leaf_block,
+                    last_proposed,
+                );
 
                 return Ok(());
             }
@@ -225,7 +233,7 @@ where TConsensusSpec: ConsensusSpec
         let batch = if empty_block {
             vec![]
         } else {
-            self.transaction_pool.get_batch(tx, TARGET_BLOCK_SIZE)?
+            self.transaction_pool.get_batch_for_next_block(tx, TARGET_BLOCK_SIZE)?
         };
 
         let mut total_leader_fee = 0;

@@ -30,6 +30,7 @@ where TConsensusSpec: ConsensusSpec
         msg: RequestedTransactionMessage,
     ) -> Result<(), HotStuffError> {
         info!(target: LOG_TARGET, "{:?} receiving {} requested transactions for block {}", from, msg.transactions.len(), msg.block_id);
+        // TODO: Check that we requested this
         for tx in msg.transactions {
             self.tx_mempool
                 .send(tx)

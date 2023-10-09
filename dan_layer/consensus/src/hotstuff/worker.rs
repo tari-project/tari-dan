@@ -298,7 +298,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn propose_if_leader(&mut self, leaf_block: Option<LeafBlock>) -> Result<(), HotStuffError> {
-        let must_propose = leaf_block.is_some();
+        let is_newview_propose = leaf_block.is_some();
         let leaf_block = match leaf_block {
             Some(leaf_block) => leaf_block,
             None => self.state_store.with_read_tx(|tx| LeafBlock::get(tx))?,
@@ -312,18 +312,23 @@ where TConsensusSpec: ConsensusSpec
                 .is_leader_for_next_block(&self.validator_addr, &local_committee, leaf_block.height);
         debug!(
             target: LOG_TARGET,
-            "🔥 [on_beat] {} Is leader: {:?}, leaf_block: {}, local_committee: {}, must_propose: {}",
+            "🔥 [on_beat{}] {} Is leader: {:?}, leaf_block: {}, local_committee: {}",
+            if is_newview_propose { " (NEWVIEW)"} else { "" },
             self.validator_addr,
             is_leader,
             leaf_block,
             local_committee
                 .len(),
-            must_propose
         );
         if is_leader {
             self.on_propose
-                .handle(current_epoch, local_committee, leaf_block, must_propose)
+                .handle(current_epoch, local_committee, leaf_block, is_newview_propose)
                 .await?;
+        } else if is_newview_propose {
+            // We can make this a warm/error in future, but for now I want to be sure this never happens
+            panic!("propose_if_leader called with is_newview_propose=true but we're not the leader");
+        } else {
+            // Nothing to do - thanks Clippy
         }
         Ok(())
     }

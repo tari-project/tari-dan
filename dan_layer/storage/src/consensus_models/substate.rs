@@ -134,6 +134,14 @@ impl SubstateRecord {
         tx.substates_try_lock_many(locked_by_tx, inputs, lock_flag)
     }
 
+    pub fn check_lock_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a ShardId>>(
+        tx: &mut TTx,
+        inputs: I,
+        lock_flag: SubstateLockFlag,
+    ) -> Result<SubstateLockState, StorageError> {
+        tx.substates_check_lock_many(inputs, lock_flag)
+    }
+
     pub fn try_unlock_many<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,

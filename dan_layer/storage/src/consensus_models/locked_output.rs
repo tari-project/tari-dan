@@ -37,6 +37,14 @@ impl LockedOutput {
         tx.locked_outputs_acquire_all(block_id, transaction_id, output_shards)
     }
 
+    pub fn check_locks<TTx>(tx: &mut TTx, output_shards: &[ShardId]) -> Result<SubstateLockState, StorageError>
+    where TTx: StateStoreReadTransaction {
+        if tx.substates_any_exist(output_shards)? {
+            return Ok(SubstateLockState::SomeOutputSubstatesExist);
+        }
+        tx.locked_outputs_check_all(output_shards)
+    }
+
     pub fn try_release_all<TTx, I, B>(tx: &mut TTx, output_shards: I) -> Result<Vec<Self>, StorageError>
     where
         TTx: StateStoreWriteTransaction,
