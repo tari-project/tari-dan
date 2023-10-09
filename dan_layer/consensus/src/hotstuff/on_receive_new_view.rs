@@ -109,8 +109,8 @@ where TConsensusSpec: ConsensusSpec
 
         // We can never accept NEWVIEWS for heights that are lower than the locked block height
         let locked = self.store.with_read_tx(|tx| LockedBlock::get(tx))?;
-        if new_height <= locked.height() {
-            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for height less than equal to locked block, locked block: {} new height: {}", locked, new_height);
+        if new_height < locked.height() {
+            warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for height less than the locked block, locked block: {} new height: {}", locked, new_height);
             return Ok(());
         }
 

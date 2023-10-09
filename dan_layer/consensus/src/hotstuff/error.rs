@@ -122,16 +122,7 @@ pub enum ProposalValidationError {
     #[error("Block {block_id} proposed by {proposed_by} is not the leader")]
     NotLeader { proposed_by: String, block_id: BlockId },
     #[error(
-        "Block {candidate_block} proposed by {proposed_by} is less than or equal to the current leaf {leaf_block}"
-    )]
-    CandidateBlockNotHigherThanLeafBlock {
-        proposed_by: String,
-        leaf_block: LeafBlock,
-        candidate_block: LeafBlock,
-    },
-    #[error(
-        "Block {candidate_block} justify proposed by {proposed_by} is less than or equal to the current locked \
-         {locked_block}"
+        "Block {candidate_block} justify proposed by {proposed_by} is less than the current locked {locked_block}"
     )]
     CandidateBlockNotHigherThanLockedBlock {
         proposed_by: String,

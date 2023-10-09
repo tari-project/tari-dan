@@ -103,6 +103,12 @@ root:
     - other
 
 loggers:
+  cucumber:
+    level: debug
+    appenders:
+      - dan_layer
+    additive: false
+
   tari::application:
     level: debug
     appenders:
