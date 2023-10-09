@@ -30,7 +30,7 @@ use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, Transact
 use tari_dan_common_types::{optional::Optional, shard_bucket::ShardBucket, Epoch, ShardId};
 use tari_dan_p2p::NewTransactionMessage;
 use tari_dan_storage::{
-    consensus_models::{ExecutedTransaction, TransactionPool, TransactionRecord},
+    consensus_models::{ExecutedTransaction, SubstateRecord, TransactionPool, TransactionRecord},
     StateStore,
 };
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
@@ -437,6 +437,23 @@ where
         // This is due to a bug or possibly db failure only
         let (transaction_id, exec_result) = result?;
 
+        // The avoids the case where:
+        // 1. A transaction is received and start executing
+        // 2. The node switches to sync mode
+        // 3. Sync completes (some transactions that were finalized in sync may have been busy executing)
+        // 4. Execution completes and the transaction is added to the pool even though it is finalized via sync
+        if self
+            .state_store
+            .with_read_tx(|tx| SubstateRecord::exists_for_transaction(tx, &transaction_id))?
+        {
+            debug!(
+                target: LOG_TARGET,
+                "🎱 Transaction {} already processed. Ignoring",
+                transaction_id
+            );
+            return Ok(());
+        }
+
         let is_consensus_running = self.consensus_handle.get_current_state().is_running();
 
         let executed = match exec_result {
@@ -455,7 +472,9 @@ where
                         // either are awaiting execution OR execution is complete and it's in the pool.
                         self.state_store.with_write_tx(|tx| {
                             executed.update(tx)?;
-                            if is_consensus_running {
+                            if is_consensus_running &&
+                                !SubstateRecord::exists_for_transaction(tx.deref_mut(), &transaction_id)?
+                            {
                                 self.transaction_pool.insert(tx, executed.to_atom())?;
                             }
                             Ok::<_, MempoolError>(())
@@ -466,7 +485,9 @@ where
                             executed
                                 .set_abort(format!("Mempool after execution validation failed: {}", e))
                                 .update(tx)?;
-                            if is_consensus_running {
+                            if is_consensus_running &&
+                                !SubstateRecord::exists_for_transaction(tx.deref_mut(), &transaction_id)?
+                            {
                                 self.transaction_pool.insert(tx, executed.to_atom())?;
                             }
                             Ok::<_, MempoolError>(())

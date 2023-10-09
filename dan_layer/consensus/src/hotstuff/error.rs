@@ -10,6 +10,8 @@ use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::TransactionId;
 
+use crate::hotstuff::inbound_messages::NeedsSync;
+
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
     #[error("Storage error: {0}")]
@@ -65,6 +67,8 @@ pub enum HotStuffError {
     InvariantError(String),
     #[error("Sync error: {0}")]
     SyncError(anyhow::Error),
+    #[error(transparent)]
+    NeedsSync(#[from] NeedsSync),
 }
 
 impl From<EpochManagerError> for HotStuffError {
@@ -119,8 +123,12 @@ pub enum ProposalValidationError {
         justify_block_height: NodeHeight,
         candidate_block_height: NodeHeight,
     },
-    #[error("Block {block_id} proposed by {proposed_by} is not the leader")]
-    NotLeader { proposed_by: String, block_id: BlockId },
+    #[error("Block {block_id} proposed by {proposed_by} is not the leader. Expect {expected_leader}")]
+    NotLeader {
+        proposed_by: String,
+        expected_leader: String,
+        block_id: BlockId,
+    },
     #[error(
         "Block {candidate_block} justify proposed by {proposed_by} is less than the current locked {locked_block}"
     )]

@@ -309,6 +309,13 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         Self::record_exists(tx, self.id())
     }
 
+    pub fn parent_exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<bool, StorageError> {
+        Self::record_exists(tx, self.parent())
+    }
+
     pub fn has_been_processed<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
         tx: &mut TTx,
         block_id: &BlockId,
@@ -386,6 +393,10 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
     ) -> Result<HashSet<ShardId>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
+    }
+
+    pub fn max_height<TTx: StateStoreReadTransaction<Addr = TAddr>>(tx: &mut TTx) -> Result<NodeHeight, StorageError> {
+        tx.blocks_max_height()
     }
 
     pub fn extends<TTx: StateStoreReadTransaction<Addr = TAddr>>(

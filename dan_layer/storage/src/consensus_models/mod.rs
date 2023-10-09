@@ -18,6 +18,7 @@ mod transaction;
 mod transaction_decision;
 mod transaction_pool;
 mod transaction_pool_status_update;
+mod validated_block;
 mod vote;
 mod vote_signature;
 
@@ -38,5 +39,6 @@ pub use transaction::*;
 pub use transaction_decision::*;
 pub use transaction_pool::*;
 pub use transaction_pool_status_update::*;
+pub use validated_block::*;
 pub use vote::*;
 pub use vote_signature::*;

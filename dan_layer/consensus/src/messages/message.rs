@@ -14,6 +14,7 @@ use crate::messages::RequestMissingTransactionsMessage;
 pub enum HotstuffMessage<TAddr> {
     NewView(NewViewMessage<TAddr>),
     Proposal(ProposalMessage<TAddr>),
+    ForeignProposal(ProposalMessage<TAddr>),
     Vote(VoteMessage<TAddr>),
     RequestMissingTransactions(RequestMissingTransactionsMessage),
     RequestedTransaction(RequestedTransactionMessage),
@@ -24,6 +25,7 @@ impl<TAddr> HotstuffMessage<TAddr> {
         match self {
             HotstuffMessage::NewView(_) => "NewView",
             HotstuffMessage::Proposal(_) => "Proposal",
+            HotstuffMessage::ForeignProposal(_) => "ForeignProposal",
             HotstuffMessage::Vote(_) => "Vote",
             HotstuffMessage::RequestMissingTransactions(_) => "RequestMissingTransactions",
             HotstuffMessage::RequestedTransaction(_) => "RequestedTransaction",
@@ -36,8 +38,9 @@ impl<TAddr> HotstuffMessage<TAddr> {
 
     pub fn epoch(&self) -> Epoch {
         match self {
-            Self::NewView(msg) => msg.high_qc.epoch(),
+            Self::NewView(msg) => msg.epoch,
             Self::Proposal(msg) => msg.block.epoch(),
+            Self::ForeignProposal(msg) => msg.block.epoch(),
             Self::Vote(msg) => msg.epoch,
             Self::RequestMissingTransactions(msg) => msg.epoch,
             Self::RequestedTransaction(msg) => msg.epoch,
@@ -48,6 +51,7 @@ impl<TAddr> HotstuffMessage<TAddr> {
         match self {
             Self::NewView(msg) => msg.high_qc.block_id(),
             Self::Proposal(msg) => msg.block.id(),
+            Self::ForeignProposal(msg) => msg.block.id(),
             Self::Vote(msg) => &msg.block_id,
             Self::RequestMissingTransactions(msg) => &msg.block_id,
             Self::RequestedTransaction(msg) => &msg.block_id,
@@ -60,6 +64,7 @@ impl<TAddr> Display for HotstuffMessage<TAddr> {
         match self {
             HotstuffMessage::NewView(msg) => write!(f, "NewView({})", msg.new_height),
             HotstuffMessage::Proposal(msg) => write!(f, "Proposal({})", msg.block.height()),
+            HotstuffMessage::ForeignProposal(msg) => write!(f, "ForeignProposal({})", msg.block.height()),
             HotstuffMessage::Vote(msg) => write!(f, "Vote({})", msg.block_id),
             HotstuffMessage::RequestMissingTransactions(msg) => {
                 write!(f, "RequestMissingTransactions({})", msg.transactions.len())

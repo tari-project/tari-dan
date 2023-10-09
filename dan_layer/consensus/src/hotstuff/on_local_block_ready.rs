@@ -1,17 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-// (New, true) ----(cmd:Prepare) ---> (Prepared, true) -----cmd:LocalPrepared ---> (LocalPrepared, false)
-// ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
-// Complete
-
 use std::{collections::HashSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    NodeHeight,
     ShardId,
 };
 use tari_dan_storage::{
@@ -24,7 +19,6 @@ use tari_dan_storage::{
         HighQc,
         LastExecuted,
         LastVoted,
-        LeafBlock,
         LockedBlock,
         LockedOutput,
         QuorumDecision,
@@ -32,30 +26,29 @@ use tari_dan_storage::{
         SubstateRecord,
         TransactionPool,
         TransactionPoolStage,
-        TransactionRecord,
+        ValidBlock,
     },
     StateStore,
-    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_transaction::{Transaction, TransactionId};
+use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::{
     hotstuff::{
-        common::{BlockDecision, EXHAUST_DIVISOR},
+        common::EXHAUST_DIVISOR,
         error::HotStuffError,
         event::HotstuffEvent,
         pacemaker_handle::PaceMakerHandle,
         ProposalValidationError,
     },
-    messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage, VoteMessage},
+    messages::{HotstuffMessage, VoteMessage},
     traits::{ConsensusSpec, LeaderStrategy, StateManager, VoteSignatureService},
 };
 
-const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_proposal";
+const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
 
-pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
+pub struct OnLocalBlockReady<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -68,7 +61,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     pacemaker: PaceMakerHandle,
 }
 
-impl<TConsensusSpec> OnReceiveProposalHandler<TConsensusSpec>
+impl<TConsensusSpec> OnLocalBlockReady<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
@@ -97,213 +90,71 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub async fn handle(
-        &self,
-        from: TConsensusSpec::Addr,
-        message: ProposalMessage<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
-        let ProposalMessage { block } = message;
-
-        let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
-        if local_committee.contains(&from) {
-            debug!(
-                target: LOG_TARGET,
-                "🔥 Receive LOCAL PROPOSAL for block {}, parent {}, height {} from {}",
-                block.id(),
-                block.parent(),
-                block.height(),
-                from,
-            );
-
-            self.handle_local_proposal(from, local_committee, block).await
-        } else {
-            debug!(
-                target: LOG_TARGET,
-                "🔥 Receive FOREIGN PROPOSAL for block {}, parent {}, height {} from {}",
-                block.id(),
-                block.parent(),
-                block.height(),
-                from,
-            );
-
-            self.handle_foreign_proposal(from, block).await
-        }
-    }
-
-    async fn handle_local_proposal(
-        &self,
-        from: TConsensusSpec::Addr,
-        local_committee: Committee<TConsensusSpec::Addr>,
-        block: Block<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-
-        // First save the block in one db transaction
-        let (missing_tx_ids, awaiting_execution) = {
-            let mut tx = self.store.create_write_tx()?;
-            if let Err(err) =
-                self.validate_local_proposed_block_and_fill_dummy_blocks(&mut tx, &from, &block, &local_committee)
-            {
-                match err {
-                    err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
-                        ..
-                    }) => {
-                        tx.rollback()?;
-                        return Err(err);
-                    },
-                    HotStuffError::ProposalValidationError(err) => {
-                        warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);
-                        // A bad block should not cause a FAILURE state transition
-                        tx.rollback()?;
-                        return Ok(());
-                    },
-                    e => {
-                        tx.rollback()?;
-                        return Err(e);
-                    },
-                }
-            }
-            // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
-            // Specifically, it should extend the locked block via the dummy blocks.
-            if !block.is_safe(tx.deref_mut())? {
-                tx.rollback()?;
-                let err = ProposalValidationError::NotSafeBlock {
-                    proposed_by: from.to_string(),
-                    hash: *block.id(),
-                };
-                warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);
-                return Ok(());
-            }
-
-            // Insert the block if it doesnt already exist
-            block.justify().save(&mut tx)?;
-            if block.save(&mut tx)? {
-                debug!(
-                    target: LOG_TARGET,
-                    "🔥 Block {} saved.", block
-                );
-            }
-
-            let missing_tuple = self.handle_missing_transaction(&mut tx, &block)?;
-            tx.commit()?;
-            missing_tuple
-        };
-
-        let high_qc = self.store.with_read_tx(|tx| HighQc::get(tx))?;
-
-        if !missing_tx_ids.is_empty() {
-            self.send_to_leader(
-                &local_committee,
-                block.height(),
-                HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
-                    block_id: *block.id(),
-                    epoch: block.epoch(),
-                    transactions: missing_tx_ids,
-                }),
-            )
-            .await;
-            self.pacemaker
-                .reset_leader_timeout(block.height(), high_qc.block_height())
-                .await?;
-            return Ok(());
-        }
-
-        if awaiting_execution.is_empty() {
-            if let Some(decision) = self.decide_on_block(&local_committee_shard, &block)? {
-                let vote = self.generate_vote_message(&block, decision).await?;
-                let high_qc = self.store.with_write_tx(|tx| {
-                    block.as_last_voted().set(tx)?;
-                    HighQc::get(tx.deref_mut())
-                })?;
-                self.pacemaker
-                    .reset_leader_timeout(block.height(), high_qc.block_height())
-                    .await?;
-                self.send_vote_to_leader(&local_committee, vote, &block).await;
-            }
-        } else {
-            self.pacemaker
-                .reset_leader_timeout(block.height(), high_qc.block_height())
-                .await?;
-        }
-
-        Ok(())
-    }
-
-    fn handle_missing_transaction(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block<TConsensusSpec::Addr>,
-    ) -> Result<(HashSet<TransactionId>, HashSet<TransactionId>), HotStuffError> {
-        let (transactions, missing_tx_ids) = TransactionRecord::get_any(tx.deref_mut(), block.all_transaction_ids())?;
-        let awaiting_execution = transactions
-            .into_iter()
-            .filter(|tx| tx.result.is_none())
-            .map(|tx| *tx.transaction.id())
-            .collect::<HashSet<_>>();
-
-        if missing_tx_ids.is_empty() && awaiting_execution.is_empty() {
-            debug!(
-                target: LOG_TARGET,
-                "✅ Block {} has no missing transactions", block
-            );
-            return Ok((HashSet::new(), HashSet::new()));
-        }
-
-        info!(
+    pub async fn handle(&self, valid_block: ValidBlock<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+        debug!(
             target: LOG_TARGET,
-            "🔥 Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
+            "🔥 LOCAL PROPOSAL {} READY",
+            valid_block,
         );
 
-        tx.insert_missing_transactions(block.id(), &missing_tx_ids, &awaiting_execution)?;
-
-        Ok((missing_tx_ids, awaiting_execution))
+        self.handle_proposal(valid_block).await
     }
 
-    pub async fn reprocess_block(&self, block_id: &BlockId) -> Result<(), HotStuffError> {
-        let block = self.store.with_read_tx(|tx| Block::get(tx, block_id))?;
-
-        if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
-            return Err(HotStuffError::EpochNotActive {
-                epoch: block.epoch(),
-                details: "Cannot reprocess block from inactive epoch".to_string(),
-            });
-        }
-
-        info!(target: LOG_TARGET, "♻️ Reprocessing block {block} after all transactions have been executed");
-
-        let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
-        self.handle_local_proposal(block.proposed_by().clone(), local_committee, block)
+    async fn handle_proposal(&self, valid_block: ValidBlock<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+        let local_committee = self.epoch_manager.get_local_committee(valid_block.epoch()).await?;
+        let local_committee_shard = self
+            .epoch_manager
+            .get_local_committee_shard(valid_block.epoch())
             .await?;
+
+        let (high_qc, maybe_decision) = self.store.with_write_tx(|tx| {
+            valid_block.block().justify().save(tx)?;
+            valid_block.save_all_dummy_blocks(tx)?;
+            valid_block.block().save(tx)?;
+
+            let maybe_decision = self.decide_on_block(tx, &local_committee_shard, valid_block.block())?;
+            if maybe_decision.is_some() {
+                valid_block.block().as_last_voted().set(tx)?;
+            }
+            let high_qc = HighQc::get(tx.deref_mut())?;
+            Ok::<_, HotStuffError>((high_qc, maybe_decision))
+        })?;
+
+        if let Some(decision) = maybe_decision {
+            let vote = self.generate_vote_message(valid_block.block(), decision).await?;
+            self.pacemaker
+                .reset_leader_timeout(valid_block.height(), high_qc.block_height())
+                .await?;
+            self.send_vote_to_leader(&local_committee, vote, valid_block.block())
+                .await;
+        }
 
         Ok(())
     }
 
     fn decide_on_block(
         &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         local_committee_shard: &CommitteeShard,
         block: &Block<TConsensusSpec::Addr>,
     ) -> Result<Option<QuorumDecision>, HotStuffError> {
-        self.store.with_write_tx(|tx| {
-            let mut decision = BlockDecision::vote_accept();
-            if self.should_vote(tx.deref_mut(), block)? {
-                decision = self.decide_what_to_vote(tx, block, local_committee_shard)?;
-            } else {
-                decision.dont_vote();
-            }
+        let mut maybe_decision = None;
+        if self.should_vote(tx.deref_mut(), block)? {
+            maybe_decision = self.decide_what_to_vote(tx, block, local_committee_shard)?;
+        }
 
-            if decision.is_accept() {
-                let high_qc = block.update_nodes(
-                    tx,
-                    |tx, locked, block| self.on_lock_block(tx, locked, block),
-                    |tx, last_exec, commit_block| self.on_commit(tx, last_exec, commit_block, local_committee_shard),
-                )?;
+        if maybe_decision.map(|d| d.is_accept()).unwrap_or(false) {
+            let high_qc = block.update_nodes(
+                tx,
+                |tx, locked, block| self.on_lock_block(tx, locked, block),
+                |tx, last_exec, commit_block| self.on_commit(tx, last_exec, commit_block, local_committee_shard),
+            )?;
 
-                // If we have a new high QC, we'll process the block it justifies
-                self.process_new_leaf(tx, high_qc, block, local_committee_shard)?;
-            }
+            // If we have a new high QC, we'll process the block it justifies
+            self.process_new_leaf(tx, high_qc, block, local_committee_shard)?;
+        }
 
-            Ok::<_, HotStuffError>(decision.as_quorum_decision())
-        })
+        Ok(maybe_decision)
     }
 
     fn process_new_leaf(
@@ -315,8 +166,19 @@ where TConsensusSpec: ConsensusSpec
     ) -> Result<(), HotStuffError> {
         let leaf = high_qc.get_block(tx.deref_mut())?;
         if leaf.is_processed() {
+            debug!(
+                target: LOG_TARGET,
+                "🔥 Process NEW leaf block: Block {} already processed",
+                leaf,
+            );
             return Ok(());
         }
+
+        debug!(
+            target: LOG_TARGET,
+            "🔥 Process NEW leaf block: Block {}",
+            leaf,
+        );
 
         for cmd in leaf.commands() {
             match cmd {
@@ -433,105 +295,6 @@ where TConsensusSpec: ConsensusSpec
         Ok(true)
     }
 
-    async fn handle_foreign_proposal(
-        &self,
-        from: TConsensusSpec::Addr,
-        block: Block<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
-        let vn = self.epoch_manager.get_validator_node(block.epoch(), &from).await?;
-        let committee_shard = self
-            .epoch_manager
-            .get_committee_shard(block.epoch(), vn.shard_key)
-            .await?;
-        self.validate_proposed_block(&from, &block)?;
-        self.store
-            .with_write_tx(|tx| self.on_receive_foreign_block(tx, &block, &committee_shard))?;
-
-        // We could have ready transactions at this point, so if we're the leader for the next block we can propose
-        self.pacemaker.beat();
-
-        Ok(())
-    }
-
-    fn on_receive_foreign_block(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block<TConsensusSpec::Addr>,
-        foreign_committee_shard: &CommitteeShard,
-    ) -> Result<(), HotStuffError> {
-        let leaf = LeafBlock::get(tx.deref_mut())?;
-        // We only want to save the QC once if applicable
-        let mut is_qc_saved = false;
-
-        for cmd in block.commands() {
-            let Some(t) = cmd.local_prepared() else {
-                continue;
-            };
-            let Some(mut tx_rec) = self.transaction_pool.get(tx, leaf, &t.id).optional()? else {
-                continue;
-            };
-
-            if tx_rec.current_stage().is_all_prepared() || tx_rec.current_stage().is_some_prepared() {
-                warn!(
-                    target: LOG_TARGET,
-                    "⚠️ Foreign proposal received after transaction {} is {}. Ignoring.",
-                    tx_rec.transaction_id(), tx_rec.current_stage()
-                );
-                continue;
-            }
-
-            let remote_decision = cmd.decision();
-            let local_decision = tx_rec.current_local_decision();
-            if remote_decision.is_abort() && local_decision.is_commit() {
-                info!(
-                    target: LOG_TARGET,
-                    "⚠️ Foreign shard ABORT {}. Update overall decision to ABORT. Local stage: {}, Leaf: {}",
-                    tx_rec.transaction_id(), tx_rec.current_stage(), leaf
-                );
-            }
-
-            if !is_qc_saved {
-                // Save the QCs if it doesnt exist already, we'll reference the QC in subsequent blocks
-                block.justify().save(tx)?;
-                is_qc_saved = true;
-            }
-
-            tx_rec.update_remote_data(tx, remote_decision, *block.justify().id(), foreign_committee_shard)?;
-
-            // If all shards are complete and we've already received our LocalPrepared, we can set out LocalPrepared
-            // transaction as ready to propose ACCEPT. If we have not received the local LocalPrepared, the transition
-            // will happen when we receive the local block.
-            if tx_rec.current_stage().is_local_prepared() && tx_rec.transaction().evidence.all_shards_complete() {
-                info!(
-                    target: LOG_TARGET,
-                    "🔥 FOREIGN PROPOSAL: Transaction is ready for propose ACCEPT({}, {}) Local Stage: {}",
-                    tx_rec.transaction_id(),
-                    tx_rec.current_decision(),
-                    tx_rec.current_stage()
-                );
-
-                tx_rec.add_pending_status_update(tx, leaf, TransactionPoolStage::LocalPrepared, true)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn send_to_leader(
-        &self,
-        local_committee: &Committee<TConsensusSpec::Addr>,
-        height: NodeHeight,
-        message: HotstuffMessage<TConsensusSpec::Addr>,
-    ) {
-        let leader = self.leader_strategy.get_leader(local_committee, height);
-        if self.tx_leader.send((leader.clone(), message)).await.is_err() {
-            debug!(
-                target: LOG_TARGET,
-                "tx_leader in OnReceiveProposalHandler::send_to_leader is closed",
-            );
-        }
-    }
-
     async fn send_vote_to_leader(
         &self,
         local_committee: &Committee<TConsensusSpec::Addr>,
@@ -543,9 +306,10 @@ where TConsensusSpec: ConsensusSpec
             .get_leader_for_next_block(local_committee, block.height());
         info!(
             target: LOG_TARGET,
-            "🔥 VOTE {:?} for block {} to next leader {:.4}",
+            "🔥 VOTE {:?} for block {} proposed by {} to next leader {:.4}",
             vote.decision,
             block,
+            block.proposed_by(),
             leader,
         );
         if self
@@ -556,7 +320,7 @@ where TConsensusSpec: ConsensusSpec
         {
             debug!(
                 target: LOG_TARGET,
-                "tx_leader in OnReceiveProposalHandler::send_vote_to_leader is closed",
+                "tx_leader in OnLocalProposalReady::send_vote_to_leader is closed",
             );
         }
     }
@@ -567,9 +331,8 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         block: &Block<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
-    ) -> Result<BlockDecision, HotStuffError> {
+    ) -> Result<Option<QuorumDecision>, HotStuffError> {
         let mut total_leader_fee = 0;
-        let mut decision = BlockDecision::vote_accept();
         let mut locked_inputs = HashSet::new();
         let mut locked_outputs = HashSet::new();
         for cmd in block.commands() {
@@ -584,8 +347,7 @@ where TConsensusSpec: ConsensusSpec
                     block,
                     cmd.transaction_id(),
                 );
-                decision.dont_vote();
-                return Ok(decision);
+                return Ok(None);
             };
 
             // TODO: we probably need to provide the all/some of the QCs referenced in local transactions as
@@ -610,8 +372,7 @@ where TConsensusSpec: ConsensusSpec
                             block.id(),
                             tx_rec.current_stage(),
                         );
-                        decision.dont_vote();
-                        continue;
+                        return Ok(None);
                     }
 
                     if tx_rec.transaction().transaction_fee != t.transaction_fee {
@@ -622,8 +383,7 @@ where TConsensusSpec: ConsensusSpec
                             t.transaction_fee,
                             tx_rec.transaction().transaction_fee
                         );
-                        decision.dont_vote();
-                        continue;
+                        return Ok(None);
                     }
 
                     if tx_rec.current_decision() == t.decision {
@@ -655,8 +415,7 @@ where TConsensusSpec: ConsensusSpec
                                 tx_rec.update_local_decision(tx, Decision::Abort)?;
 
                                 // The leader should not have proposed conflicting transactions
-                                decision.dont_vote();
-                                return Ok(decision);
+                                return Ok(None);
                             } else if !is_outputs_locked {
                                 // Unable to lock all outputs - do not vote
                                 warn!(
@@ -668,21 +427,18 @@ where TConsensusSpec: ConsensusSpec
                                 // We change our decision to ABORT so that the next time we propose/receive a
                                 // proposal we will check for ABORT
                                 tx_rec.update_local_decision(tx, Decision::Abort)?;
-                                decision.dont_vote();
-                                return Ok(decision);
+                                return Ok(None);
                             } else {
                                 // We have locked all inputs and outputs
                             }
                         }
 
-                        if decision.is_accept() {
-                            tx_rec.add_pending_status_update(
-                                tx,
-                                block.as_leaf_block(),
-                                TransactionPoolStage::Prepared,
-                                true,
-                            )?;
-                        }
+                        tx_rec.add_pending_status_update(
+                            tx,
+                            block.as_leaf_block(),
+                            TransactionPoolStage::Prepared,
+                            true,
+                        )?;
                     } else {
                         // If we disagree with any local decision we abstain from voting
                         warn!(
@@ -693,7 +449,7 @@ where TConsensusSpec: ConsensusSpec
                             t.decision,
                             tx_rec.current_decision()
                         );
-                        decision.dont_vote();
+                        return Ok(None);
                     }
                 },
                 Command::LocalPrepared(t) => {
@@ -710,7 +466,7 @@ where TConsensusSpec: ConsensusSpec
                             tx_rec.transaction_id(),
                             tx_rec.current_stage()
                         );
-                        decision.dont_vote();
+                        return Ok(None);
                     }
                     // We check that the leader decision is the same as our local decision.
                     // We disregard the remote decision because not all validators may have received the foreign
@@ -724,8 +480,7 @@ where TConsensusSpec: ConsensusSpec
                             t.decision,
                             tx_rec.current_local_decision()
                         );
-
-                        decision.dont_vote();
+                        return Ok(None);
                     }
 
                     if tx_rec.transaction().transaction_fee != t.transaction_fee {
@@ -737,17 +492,15 @@ where TConsensusSpec: ConsensusSpec
                             t.transaction_fee,
                             tx_rec.transaction().transaction_fee
                         );
-                        decision.dont_vote();
+                        return Ok(None);
                     }
 
-                    if decision.is_accept() {
-                        tx_rec.add_pending_status_update(
-                            tx,
-                            block.as_leaf_block(),
-                            TransactionPoolStage::LocalPrepared,
-                            tx_rec.transaction().evidence.all_shards_complete(),
-                        )?;
-                    }
+                    tx_rec.add_pending_status_update(
+                        tx,
+                        block.as_leaf_block(),
+                        TransactionPoolStage::LocalPrepared,
+                        tx_rec.transaction().evidence.all_shards_complete(),
+                    )?;
                 },
                 Command::Accept(t) => {
                     // Happy path: We've validated all the QCs and therefore are convinced that everyone also received
@@ -760,8 +513,7 @@ where TConsensusSpec: ConsensusSpec
                             block.id(),
                             tx_rec.current_stage(),
                         );
-                        decision.dont_vote();
-                        continue;
+                        return Ok(None);
                     }
                     if tx_rec.current_decision() != t.decision {
                         warn!(
@@ -772,8 +524,7 @@ where TConsensusSpec: ConsensusSpec
                             t.decision,
                             tx_rec.current_decision()
                         );
-                        decision.dont_vote();
-                        continue;
+                        return Ok(None);
                     }
 
                     if !tx_rec.transaction().evidence.all_shards_complete() {
@@ -785,8 +536,7 @@ where TConsensusSpec: ConsensusSpec
                             tx_rec.transaction().evidence.num_complete_shards(),
                             tx_rec.transaction().evidence.len(),
                         );
-                        decision.dont_vote();
-                        continue;
+                        return Ok(None);
                     }
 
                     if tx_rec.transaction().transaction_fee != t.transaction_fee {
@@ -799,8 +549,7 @@ where TConsensusSpec: ConsensusSpec
                             tx_rec.transaction().transaction_fee
                         );
 
-                        decision.dont_vote();
-                        continue;
+                        return Ok(None);
                     }
 
                     // Check if we have LocalPrepared ready i.e. LocalPrepared from all shards
@@ -814,8 +563,7 @@ where TConsensusSpec: ConsensusSpec
                             block,
                             tx_rec.transaction()
                         );
-                        decision.dont_vote();
-                        continue;
+                        return Ok(None);
                     }
 
                     let distinct_shards =
@@ -837,36 +585,32 @@ where TConsensusSpec: ConsensusSpec
                             calculated_leader_fee
                         );
 
-                        decision.dont_vote();
-                        continue;
+                        return Ok(None);
                     }
                     total_leader_fee += calculated_leader_fee;
                     // If the decision was changed to Abort, which can only happen when a foreign shard decides ABORT
                     // and we decide COMMIT, we set SomePrepared, otherwise AllPrepared. There are no further stages
                     // after these, so these MUST never be ready to propose.
-                    if decision.is_accept() {
-                        if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
-                            tx_rec.add_pending_status_update(
-                                tx,
-                                block.as_leaf_block(),
-                                TransactionPoolStage::SomePrepared,
-                                false,
-                            )?;
-                        } else {
-                            tx_rec.add_pending_status_update(
-                                tx,
-                                block.as_leaf_block(),
-                                TransactionPoolStage::AllPrepared,
-                                false,
-                            )?;
-                        }
+                    if tx_rec.remote_decision().map(|d| d.is_abort()).unwrap_or(false) {
+                        tx_rec.add_pending_status_update(
+                            tx,
+                            block.as_leaf_block(),
+                            TransactionPoolStage::SomePrepared,
+                            false,
+                        )?;
+                    } else {
+                        tx_rec.add_pending_status_update(
+                            tx,
+                            block.as_leaf_block(),
+                            TransactionPoolStage::AllPrepared,
+                            false,
+                        )?;
                     }
                 },
             }
         }
 
-        // If we decided not to vote, the total_leader_fee may be incorrectly summed up.
-        if decision.is_accept() && total_leader_fee != block.total_leader_fee() {
+        if total_leader_fee != block.total_leader_fee() {
             warn!(
                 target: LOG_TARGET,
                 "❌ Leader fee disagreement for block {}. Leader proposed {}, we calculated {}",
@@ -874,10 +618,10 @@ where TConsensusSpec: ConsensusSpec
                 block.total_leader_fee(),
                 total_leader_fee
             );
-            decision.dont_vote();
+            return Ok(None);
         }
 
-        Ok(decision)
+        Ok(Some(QuorumDecision::Accept))
     }
 
     fn lock_inputs(
@@ -1086,6 +830,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(VoteMessage {
             epoch: block.epoch(),
             block_id: *block.id(),
+            block_height: block.height(),
             decision,
             signature,
             merkle_proof,
@@ -1229,172 +974,6 @@ where TConsensusSpec: ConsensusSpec
                 total_transaction_fee
             );
         }
-
-        Ok(())
-    }
-
-    fn validate_local_proposed_block_and_fill_dummy_blocks(
-        &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        from: &TConsensusSpec::Addr,
-        candidate_block: &Block<TConsensusSpec::Addr>,
-        local_committee: &Committee<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
-        let leader = self
-            .leader_strategy
-            .get_leader(local_committee, candidate_block.height());
-        if leader != from {
-            return Err(ProposalValidationError::NotLeader {
-                proposed_by: from.to_string(),
-                block_id: *candidate_block.id(),
-            }
-            .into());
-        }
-        self.validate_proposed_block(from, candidate_block)?;
-
-        if Block::has_been_processed(tx.deref_mut(), candidate_block.id())? {
-            return Err(ProposalValidationError::BlockAlreadyProcessed {
-                block_id: *candidate_block.id(),
-                height: candidate_block.height(),
-            }
-            .into());
-        }
-
-        // Check that details included in the justify match previously added blocks
-        let Some(justify_block) = candidate_block.justify().get_block(tx.deref_mut()).optional()? else {
-            // This will trigger a sync
-            return Err(ProposalValidationError::JustifyBlockNotFound {
-                proposed_by: from.to_string(),
-                block_id: *candidate_block.id(),
-                justify_block: *candidate_block.justify().block_id(),
-            }
-            .into());
-        };
-
-        if justify_block.height() != candidate_block.justify().block_height() {
-            return Err(ProposalValidationError::JustifyBlockInvalid {
-                proposed_by: from.to_string(),
-                block_id: *candidate_block.id(),
-                details: format!(
-                    "Justify block height ({}) does not match justify block height ({})",
-                    justify_block.height(),
-                    candidate_block.justify().block_height()
-                ),
-            }
-            .into());
-        }
-
-        // Special case for genesis block
-        if candidate_block.parent().is_genesis() && candidate_block.justify().is_genesis() {
-            return Ok(());
-        }
-
-        // Part of the safenode predicate. Exclude this block early if this is the case
-        // let locked_block = LockedBlock::get(tx.deref_mut())?;
-        // if !locked_block.block_id.is_genesis() && candidate_block.justify().block_height() < locked_block.height() {
-        //     return Err(ProposalValidationError::CandidateBlockNotHigherThanLockedBlock {
-        //         proposed_by: from.to_string(),
-        //         locked_block,
-        //         candidate_block: candidate_block.as_leaf_block(),
-        //     }
-        //     .into());
-        // }
-
-        // candidate_block.justify().update_high_qc(tx)?;
-
-        // if candidate_block.height().saturating_sub(justify_block.height()).0 > local_committee.max_failures() as u64
-        // { TODO: We should maybe relax this constraint during GST, before the first block, many leaders might
-        // fail....
-        // Note: we are adding at least one more block from b_leaf, so we need to add 1 to the max_failures
-        // TODO: Skip this check for small committees just so that we can continue in testing. This case should be
-        //       formalized.
-        // Ignoring this for now as it blocks us when hammering nodes with transactions
-        // if local_committee.max_failures() > 0 &&
-        //     candidate_block.height().saturating_sub(justify_block.height()).as_u64() >
-        //         local_committee.len() as u64 + 1
-        // {
-        //     return Err(ProposalValidationError::CandidateBlockHigherThanMaxFailures {
-        //         proposed_by: from.to_string(),
-        //         justify_block_height: justify_block.height(),
-        //         candidate_block_height: candidate_block.height(),
-        //         max_failures: local_committee.max_failures(),
-        //     }
-        //     .into());
-        // }
-
-        // if the block parent is not the justify parent, then we have experienced a leader failure
-        // and should make dummy blocks to fill in the gaps.
-        if candidate_block.parent() != justify_block.id() {
-            if candidate_block.height() < justify_block.height() {
-                return Err(ProposalValidationError::CandidateBlockNotHigherThanJustifyBlock {
-                    justify_block_height: justify_block.height(),
-                    candidate_block_height: candidate_block.height(),
-                }
-                .into());
-            }
-
-            if justify_block.id() == candidate_block.parent() {
-                return Ok(());
-            }
-
-            let justify_block_height = justify_block.height();
-
-            let mut last_dummy_block = justify_block;
-
-            while last_dummy_block.id() != candidate_block.parent() {
-                if last_dummy_block.height() > candidate_block.height() {
-                    warn!(target: LOG_TARGET, "🔥 Bad proposal, dummy block height {} is greater than new height {}", last_dummy_block, candidate_block);
-                    return Err(ProposalValidationError::CandidateBlockDoesNotExtendJustify {
-                        justify_block_height,
-                        candidate_block_height: candidate_block.height(),
-                    }
-                    .into());
-                }
-
-                let next_height = last_dummy_block.height() + NodeHeight(1);
-                let leader = self.leader_strategy.get_leader(local_committee, next_height);
-
-                // TODO: replace with actual leader's propose
-                last_dummy_block = Block::dummy_block(
-                    *last_dummy_block.id(),
-                    leader.clone(),
-                    next_height,
-                    candidate_block.justify().clone(),
-                    candidate_block.epoch(),
-                );
-                debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);
-                last_dummy_block.save(tx)?;
-                // We dont set this as the leaf block because we are not proposing next from these dummy blocks, if the
-                // candidate block is valid it will become the leaf block.
-            }
-        }
-
-        Ok(())
-    }
-
-    fn validate_proposed_block(
-        &self,
-        from: &TConsensusSpec::Addr,
-        candidate_block: &Block<TConsensusSpec::Addr>,
-    ) -> Result<(), ProposalValidationError> {
-        if candidate_block.height() == NodeHeight::zero() || candidate_block.id().is_genesis() {
-            return Err(ProposalValidationError::ProposingGenesisBlock {
-                proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
-            });
-        }
-
-        let calculated_hash = candidate_block.calculate_hash().into();
-        if calculated_hash != *candidate_block.id() {
-            return Err(ProposalValidationError::NodeHashMismatch {
-                proposed_by: from.to_string(),
-                hash: *candidate_block.id(),
-                calculated_hash,
-            });
-        }
-
-        // TODO: validate justify signatures
-        // self.validate_qc(candidate_block.justify(), committee)?;
 
         Ok(())
     }

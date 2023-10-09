@@ -59,6 +59,9 @@ impl<TAddr: NodeAddressable> From<&HotstuffMessage<TAddr>> for proto::consensus:
             HotstuffMessage::Proposal(msg) => {
                 proto::consensus::hot_stuff_message::Message::Proposal(msg.clone().into())
             },
+            HotstuffMessage::ForeignProposal(msg) => {
+                proto::consensus::hot_stuff_message::Message::ForeignProposal(msg.clone().into())
+            },
             HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.clone().into()),
             HotstuffMessage::RequestMissingTransactions(msg) => {
                 proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.clone().into())
@@ -79,6 +82,9 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::HotStuffMessa
         Ok(match message {
             proto::consensus::hot_stuff_message::Message::NewView(msg) => HotstuffMessage::NewView(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::Proposal(msg) => HotstuffMessage::Proposal(msg.try_into()?),
+            proto::consensus::hot_stuff_message::Message::ForeignProposal(msg) => {
+                HotstuffMessage::ForeignProposal(msg.try_into()?)
+            },
             proto::consensus::hot_stuff_message::Message::Vote(msg) => HotstuffMessage::Vote(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg) => {
                 HotstuffMessage::RequestMissingTransactions(msg.try_into()?)
@@ -141,6 +147,7 @@ impl<TAddr: NodeAddressable> From<VoteMessage<TAddr>> for proto::consensus::Vote
         Self {
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
+            block_height: msg.block_height.as_u64(),
             decision: i32::from(msg.decision.as_u8()),
             signature: Some(msg.signature.into()),
             merkle_proof: encode(&msg.merkle_proof).unwrap(),
@@ -155,6 +162,7 @@ impl<TAddr: NodeAddressable> TryFrom<proto::consensus::VoteMessage> for VoteMess
         Ok(VoteMessage {
             epoch: Epoch(value.epoch),
             block_id: BlockId::try_from(value.block_id)?,
+            block_height: NodeHeight(value.block_height),
             decision: QuorumDecision::from_u8(u8::try_from(value.decision)?)
                 .ok_or_else(|| anyhow!("Invalid decision byte {}", value.decision))?,
             signature: value

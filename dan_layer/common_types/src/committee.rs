@@ -59,6 +59,10 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         self.members.choose_multiple(&mut OsRng, n)
     }
 
+    pub fn index_of(&self, member: &TAddr) -> Option<usize> {
+        self.members.iter().position(|x| x == member)
+    }
+
     /// Returns the n next members from start_index_inclusive, wrapping around if necessary.
     pub fn select_n_starting_from(&self, n: usize, start_index_inclusive: usize) -> impl Iterator<Item = &TAddr> + '_ {
         let n = cmp::min(n, self.members.len());

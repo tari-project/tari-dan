@@ -31,8 +31,26 @@ create table blocks
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
 
--- fetching by block_id will be a very common operation
+-- block_id must be unique. Optimise fetching by block_id
 create unique index blocks_uniq_idx_id on blocks (block_id);
+
+create table parked_blocks
+(
+    id               integer   not null primary key AUTOINCREMENT,
+    block_id         text      not NULL,
+    parent_block_id  text      not NULL,
+    height           bigint    not NULL,
+    epoch            bigint    not NULL,
+    proposed_by      text      not NULL,
+    justify          text      not NULL,
+    command_count    bigint    not NULL,
+    commands         text      not NULL,
+    total_leader_fee bigint    not NULL,
+    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- block_id must be unique. Optimise fetching by block_id
+create unique index parked_blocks_uniq_idx_id on parked_blocks (block_id);
 
 create table leaf_blocks
 (
@@ -69,6 +87,9 @@ create table substates
 
 -- All shard ids are unique
 create unique index substates_uniq_shard_id on substates (shard_id);
+-- querying for transaction ids that either Upd or Downd a substate
+create index substates_idx_created_by_transaction on substates (created_by_transaction);
+create index substates_idx_destroyed_by_transaction on substates (destroyed_by_transaction) where destroyed_by_transaction is not null;
 
 create table high_qcs
 (
@@ -200,21 +221,16 @@ create table votes
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE block_missing_transactions
-(
-    id              integer   not NULL PRIMARY KEY AUTOINCREMENT,
-    block_id        text      not NULL,
-    transaction_ids text      not NULL,
-    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP
-);
 
 CREATE TABLE missing_transactions
 (
     id                    integer   not NULL primary key AUTOINCREMENT,
     block_id              text      not NULL,
+    block_height          bigint    not NULL,
     transaction_id        text      not NULL,
     is_awaiting_execution boolean   not NULL,
-    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (block_id) REFERENCES parked_blocks (block_id)
 );
 
 -- Debug Triggers

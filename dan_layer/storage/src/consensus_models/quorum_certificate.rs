@@ -96,6 +96,10 @@ impl<TAddr: Serialize> QuorumCertificate<TAddr> {
             .result()
             .into()
     }
+
+    pub fn is_valid(&self) -> bool {
+        true
+    }
 }
 
 impl<TAddr> QuorumCertificate<TAddr> {

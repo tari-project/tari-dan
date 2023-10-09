@@ -25,7 +25,7 @@ use diesel::{
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -756,6 +756,39 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count)
     }
 
+    fn blocks_max_height(&mut self) -> Result<NodeHeight, StorageError> {
+        use crate::schema::blocks;
+
+        let height = blocks::table
+            .select(diesel::dsl::max(blocks::height))
+            .first::<Option<i64>>(self.connection())
+            .map(|height| NodeHeight(height.unwrap_or(0) as u64))
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_max_height",
+                source: e,
+            })?;
+
+        Ok(height)
+    }
+
+    fn parked_blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError> {
+        use crate::schema::parked_blocks;
+
+        let block_id = serialize_hex(block_id);
+
+        let count = parked_blocks::table
+            .filter(parked_blocks::block_id.eq(&block_id))
+            .count()
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_exists_or_parked",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
+
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
         use crate::schema::quorum_certificates;
 
@@ -1017,6 +1050,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         &mut self,
         stage: Option<TransactionPoolStage>,
         is_ready: Option<bool>,
+        has_foreign_data: Option<bool>,
     ) -> Result<usize, StorageError> {
         use crate::schema::transaction_pool;
 
@@ -1032,6 +1066,16 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         }
         if let Some(is_ready) = is_ready {
             query = query.filter(transaction_pool::is_ready.eq(is_ready));
+        }
+
+        match has_foreign_data {
+            Some(true) => {
+                query = query.filter(transaction_pool::remote_evidence.is_not_null());
+            },
+            Some(false) => {
+                query = query.filter(transaction_pool::remote_evidence.is_null());
+            },
+            None => {},
         }
 
         let count =
@@ -1087,6 +1131,25 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .get_result::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get_any",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
+
+    fn substates_exists_for_transaction(&mut self, transaction_id: &TransactionId) -> Result<bool, StorageError> {
+        use crate::schema::substates;
+
+        let transaction_id = serialize_hex(transaction_id);
+
+        let count = substates::table
+            .count()
+            .filter(substates::created_by_transaction.eq(&transaction_id))
+            .or_filter(substates::destroyed_by_transaction.eq(&transaction_id))
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_exists_for_transaction",
                 source: e,
             })?;
 

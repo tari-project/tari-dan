@@ -316,10 +316,9 @@ impl TestNetworkWorker {
         state_store
             .with_write_tx(|tx| {
                 existing_executed_tx.upsert(tx)?;
-                let atom = existing_executed_tx.to_atom();
                 let pool = TransactionPool::<SqliteStateStore<TestAddress>>::new();
-                if !pool.exists(tx, &atom.id)? {
-                    pool.insert(tx, atom)?;
+                if !pool.exists(tx, existing_executed_tx.id())? {
+                    pool.insert(tx, existing_executed_tx.to_atom())?;
                 }
                 Ok::<_, anyhow::Error>(())
             })

@@ -18,11 +18,13 @@ use tari_dan_storage::{
         QuorumCertificate,
         SubstateUpdate,
         TransactionPoolRecord,
+        TransactionRecord,
     },
     StateStore,
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
+use tari_transaction::Transaction;
 use tari_validator_node_rpc::{
     client::{TariCommsValidatorNodeClientFactory, ValidatorNodeClientFactory},
     proto::rpc::{GetHighQcRequest, SyncBlocksRequest},
@@ -95,6 +97,7 @@ where
             zero_block.as_locked_block().set(&mut tx)?;
             zero_block.as_leaf_block().set(&mut tx)?;
             zero_block.as_last_executed().set(&mut tx)?;
+            zero_block.as_last_voted().set(&mut tx)?;
             zero_block.justify().as_high_qc().set(&mut tx)?;
             zero_block.commit(&mut tx)?;
         }
@@ -194,6 +197,26 @@ where
                 updates.push(update);
             }
 
+            let Some(resp) = stream.next().await else {
+                return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
+                    "Peer closed session before sending transactions message"
+                )));
+            };
+            let msg = resp.map_err(RpcError::from)?;
+            let transactions = msg.into_transactions().ok_or_else(|| {
+                CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!("Expected peer to return QCs"))
+            })?;
+
+            debug!(target: LOG_TARGET, "🌐 Received block {}, {} transactions", block, transactions.len());
+
+            let transactions = transactions
+                .into_iter()
+                .map(Transaction::try_from)
+                .map(|r| r.map(TransactionRecord::new))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
+
+            // TODO: Validate
             debug!(
                 target: LOG_TARGET,
                 "🌐 Received block {}, {} qcs and {} substate updates",
@@ -206,7 +229,7 @@ where
                 info!(target: LOG_TARGET, "🌐 Syncing block {block}");
             }
             // expected_height += NodeHeight(1);
-            self.process_block(block, qcs, updates)?;
+            self.process_block(block, qcs, updates, transactions)?;
         }
 
         info!(target: LOG_TARGET, "🌐 {} blocks synced", counter);
@@ -219,10 +242,15 @@ where
         block: Block<CommsPublicKey>,
         qcs: Vec<QuorumCertificate<CommsPublicKey>>,
         updates: Vec<SubstateUpdate<CommsPublicKey>>,
+        transactions: Vec<TransactionRecord>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         self.state_store.with_write_tx(|tx| {
             if !block.is_safe(tx.deref_mut())? {
                 return Err(CommsRpcConsensusSyncError::BlockNotSafe { block_id: *block.id() });
+            }
+
+            for transaction in transactions {
+                transaction.save(tx)?;
             }
 
             block.justify().save(tx)?;
@@ -250,6 +278,7 @@ where
                     Ok::<_, CommsRpcConsensusSyncError>(())
                 },
             )?;
+            block.as_last_voted().set(tx)?;
             let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
             // First do UPs then do DOWNs
             // TODO: stage the updates, then check against the state hash in the block, then persist
@@ -298,6 +327,7 @@ where
         let mut highest_qc: Option<QuorumCertificate<CommsPublicKey>> = None;
         let mut num_succeeded = 0;
         let max_failures = committee.max_failures();
+        let committee_size = committee.len();
         for addr in committee {
             let mut rpc_client = self.client_factory.create_client(&addr);
             let mut client = match rpc_client.client_connection().await {
@@ -346,21 +376,23 @@ where
             }
         }
 
-        if let Some(highest_qc) = highest_qc {
-            let local_high_qc = self.state_store.with_read_tx(|tx| HighQc::get(tx).optional())?;
-            let local_height = local_high_qc
-                .as_ref()
-                .map(|qc| qc.block_height())
-                .unwrap_or(NodeHeight(0));
-            if highest_qc.block_height() > local_height {
-                info!(
-                    target: LOG_TARGET,
-                    "Highest QC from peers is at height {} and local high QC is at height {}",
-                    highest_qc.block_height(),
-                    local_height,
-                );
-                return Ok(SyncStatus::Behind);
-            }
+        let Some(highest_qc) = highest_qc else {
+            return Err(CommsRpcConsensusSyncError::NoPeersAvailable { committee_size });
+        };
+
+        let local_high_qc = self.state_store.with_read_tx(|tx| HighQc::get(tx).optional())?;
+        let local_height = local_high_qc
+            .as_ref()
+            .map(|qc| qc.block_height())
+            .unwrap_or(NodeHeight(0));
+        if highest_qc.block_height() > local_height {
+            info!(
+                target: LOG_TARGET,
+                "Highest QC from peers is at height {} and local high QC is at height {}",
+                highest_qc.block_height(),
+                local_height,
+            );
+            return Ok(SyncStatus::Behind);
         }
 
         Ok(SyncStatus::UpToDate)

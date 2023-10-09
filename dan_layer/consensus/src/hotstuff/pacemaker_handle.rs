@@ -5,7 +5,13 @@ use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::consensus_models::LeafBlock;
 use tokio::sync::mpsc;
 
-use crate::hotstuff::{on_beat::OnBeat, on_force_beat::OnForceBeat, on_leader_timeout::OnLeaderTimeout, HotStuffError};
+use crate::hotstuff::{
+    current_height::CurrentHeight,
+    on_beat::OnBeat,
+    on_force_beat::OnForceBeat,
+    on_leader_timeout::OnLeaderTimeout,
+    HotStuffError,
+};
 
 pub enum PacemakerRequest {
     ResetLeaderTimeout {
@@ -25,20 +31,23 @@ pub struct PaceMakerHandle {
     on_beat: OnBeat,
     on_force_beat: OnForceBeat,
     on_leader_timeout: OnLeaderTimeout,
+    current_height: CurrentHeight,
 }
 
 impl PaceMakerHandle {
-    pub fn new(
+    pub(super) fn new(
         sender: mpsc::Sender<PacemakerRequest>,
         on_beat: OnBeat,
         on_force_beat: OnForceBeat,
         on_leader_timeout: OnLeaderTimeout,
+        current_height: CurrentHeight,
     ) -> Self {
         Self {
             sender,
             on_beat,
             on_force_beat,
             on_leader_timeout,
+            current_height,
         }
     }
 
@@ -96,5 +105,9 @@ impl PaceMakerHandle {
             })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    }
+
+    pub fn current_height(&self) -> NodeHeight {
+        self.current_height.get()
     }
 }

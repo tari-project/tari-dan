@@ -36,5 +36,11 @@ pub trait VoteSignatureService<TAddr: NodeAddressable>: ValidatorSignatureServic
         ValidatorSignature::new(self.public_key().clone(), signature)
     }
 
-    fn verify(&self, signature: &ValidatorSignature<TAddr>, challenge: &FixedHash) -> bool;
+    fn verify(
+        &self,
+        signature: &ValidatorSignature<TAddr>,
+        leaf_hash: &FixedHash,
+        block_id: &BlockId,
+        decision: &QuorumDecision,
+    ) -> bool;
 }
