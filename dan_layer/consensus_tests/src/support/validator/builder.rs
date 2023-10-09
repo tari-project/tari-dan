@@ -6,7 +6,7 @@ use tari_dan_common_types::{shard_bucket::ShardBucket, ShardId};
 use tari_dan_storage::consensus_models::TransactionPool;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, watch};
 
 use crate::support::{
     address::TestAddress,
@@ -103,11 +103,13 @@ impl ValidatorBuilder {
             shutdown_signal.clone(),
         );
 
+        let (tx_current_state, _) = watch::channel(Default::default());
         let context = ConsensusWorkerContext {
             epoch_manager,
             epoch_events: rx_epoch_events,
             hotstuff: worker,
             state_sync: AlwaysSyncedSyncManager,
+            tx_current_state,
         };
 
         let mut worker = ConsensusWorker::new(shutdown_signal);

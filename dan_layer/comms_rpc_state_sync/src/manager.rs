@@ -33,6 +33,8 @@ use crate::error::CommsRpcConsensusSyncError;
 
 const LOG_TARGET: &str = "tari::dan::comms_rpc_state_sync";
 
+const MAX_SUBSTATE_UPDATES: usize = 10000;
+
 pub struct CommsRpcStateSyncManager<TEpochManager, TStateStore> {
     epoch_manager: TEpochManager,
     state_store: TStateStore,
@@ -119,37 +121,79 @@ where
 
         while let Some(resp) = stream.next().await {
             let msg = resp.map_err(RpcError::from)?;
-            let block = msg
-                .block
-                .map(Block::<CommsPublicKey>::try_from)
-                .transpose()
-                .map_err(CommsRpcConsensusSyncError::InvalidResponse)?
-                .ok_or_else(|| {
-                    CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
-                        "Peer returned an empty block response"
-                    ))
-                })?;
-            // if block.height() != expected_height {
+            let new_block = msg.into_block().ok_or_else(|| {
+                CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!("Expected peer to return a newblock",))
+            })?;
+
+            // if block.height != expected_height {
             //     return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
             //         "Peer returned block at height {} but expected {}",
             //         block.height(),
             //         expected_height,
             //     )));
             // }
-            let qcs = msg
-                .quorum_certificates
+
+            let block =
+                Block::<CommsPublicKey>::try_from(new_block).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
+
+            debug!(target: LOG_TARGET, "🌐 Received block {}", block);
+
+            let Some(resp) = stream.next().await else {
+                return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
+                    "Peer closed session before sending QC message"
+                )));
+            };
+            let msg = resp.map_err(RpcError::from)?;
+            let qcs = msg.into_quorum_certificates().ok_or_else(|| {
+                CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!("Expected peer to return QCs"))
+            })?;
+
+            debug!(target: LOG_TARGET, "🌐 Received block {}, {} qcs", block, qcs.len());
+
+            let qcs = qcs
                 .into_iter()
                 .map(QuorumCertificate::<CommsPublicKey>::try_from)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
-            let updates = msg
-                .substate_updates
-                .into_iter()
-                .map(SubstateUpdate::try_from)
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
 
             // TODO: Validate
+
+            let Some(resp) = stream.next().await else {
+                return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
+                    "Peer closed session before sending substate update count message"
+                )));
+            };
+            let msg = resp.map_err(RpcError::from)?;
+            let num_substates = msg.substate_count().ok_or_else(|| {
+                CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!("Expected peer to return substate count",))
+            })? as usize;
+
+            if num_substates > MAX_SUBSTATE_UPDATES {
+                return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
+                    "Peer returned {} substate updates, but the maximum is {}",
+                    num_substates,
+                    MAX_SUBSTATE_UPDATES,
+                )));
+            }
+
+            let mut updates = Vec::with_capacity(num_substates);
+            for _ in 0..num_substates {
+                let Some(resp) = stream.next().await else {
+                    return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
+                        "Peer closed session before sending substate updates message"
+                    )));
+                };
+                let msg = resp.map_err(RpcError::from)?;
+                let update = msg.into_substate_update().ok_or_else(|| {
+                    CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
+                        "Expected peer to return substate updates",
+                    ))
+                })?;
+
+                let update = SubstateUpdate::try_from(update).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
+                updates.push(update);
+            }
+
             debug!(
                 target: LOG_TARGET,
                 "🌐 Received block {}, {} qcs and {} substate updates",
@@ -162,7 +206,7 @@ where
                 info!(target: LOG_TARGET, "🌐 Syncing block {block}");
             }
             // expected_height += NodeHeight(1);
-            self.commit_block(block, qcs, updates)?;
+            self.process_block(block, qcs, updates)?;
         }
 
         info!(target: LOG_TARGET, "🌐 {} blocks synced", counter);
@@ -170,7 +214,7 @@ where
         Ok(())
     }
 
-    fn commit_block(
+    fn process_block(
         &self,
         block: Block<CommsPublicKey>,
         qcs: Vec<QuorumCertificate<CommsPublicKey>>,
@@ -182,7 +226,11 @@ where
             }
 
             block.justify().save(tx)?;
-            block.save(tx)?;
+            if !block.save(tx)? {
+                // We've already seen this block. This could happen because we're syncing from high qc and we receive a
+                // block that we already have
+                return Ok(());
+            }
             for qc in qcs {
                 qc.save(tx)?;
             }
@@ -193,15 +241,18 @@ where
                     let new_last_exec = block.as_last_executed();
                     Self::mark_block_committed(tx, last_executed, block)?;
                     new_last_exec.set(tx)?;
+
                     TransactionPoolRecord::remove_any(
                         tx,
-                        block.commands().iter().filter_map(|cmd| cmd.accept()).map(|t| t.id),
+                        block.commands().iter().filter_map(|cmd| cmd.accept()).map(|t| &t.id),
                     )?;
+
                     Ok::<_, CommsRpcConsensusSyncError>(())
                 },
             )?;
             let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
             // First do UPs then do DOWNs
+            // TODO: stage the updates, then check against the state hash in the block, then persist
             for update in ups {
                 update.apply(tx, &block)?;
             }

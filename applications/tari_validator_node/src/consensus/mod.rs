@@ -7,7 +7,7 @@ use tari_common_types::types::PublicKey;
 use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_comms_rpc_state_sync::CommsRpcStateSyncManager;
 use tari_consensus::{
-    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffEvent, HotstuffWorker},
+    hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker},
     messages::HotstuffMessage,
 };
 use tari_dan_common_types::committee::Committee;
@@ -19,7 +19,7 @@ use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
 use tokio::{
-    sync::{broadcast, mpsc},
+    sync::{broadcast, mpsc, watch},
     task::JoinHandle,
 };
 
@@ -31,13 +31,16 @@ use crate::{
         state_manager::TariStateManager,
     },
     event_subscription::EventSubscription,
-    p2p::services::{mempool::MempoolHandle, messaging::OutboundMessaging},
+    p2p::services::messaging::OutboundMessaging,
 };
 
+mod handle;
 mod leader_selection;
 mod signature_service;
 mod spec;
 mod state_manager;
+
+pub use handle::*;
 
 pub async fn spawn(
     store: SqliteStateStore<PublicKey>,
@@ -46,10 +49,13 @@ pub async fn spawn(
     rx_new_transactions: mpsc::Receiver<TransactionId>,
     rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
     outbound_messaging: OutboundMessaging,
-    mempool: MempoolHandle,
     client_factory: TariCommsValidatorNodeClientFactory,
     shutdown_signal: ShutdownSignal,
-) -> (JoinHandle<Result<(), anyhow::Error>>, EventSubscription<HotstuffEvent>) {
+) -> (
+    JoinHandle<Result<(), anyhow::Error>>,
+    ConsensusHandle,
+    mpsc::UnboundedReceiver<Transaction>,
+) {
     let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
     let (tx_leader, rx_leader) = mpsc::channel(10);
     let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
@@ -59,7 +65,7 @@ pub async fn spawn(
     let leader_strategy = RoundRobinLeaderStrategy::new();
     let transaction_pool = TransactionPool::new();
     let state_manager = TariStateManager::new();
-    let (tx_events, _) = broadcast::channel(100);
+    let (tx_hotstuff_events, _) = broadcast::channel(100);
 
     let epoch_events = epoch_manager.subscribe().await.unwrap();
 
@@ -75,16 +81,18 @@ pub async fn spawn(
         transaction_pool,
         tx_broadcast,
         tx_leader,
-        tx_events.clone(),
+        tx_hotstuff_events.clone(),
         tx_mempool,
         shutdown_signal.clone(),
     );
 
+    let (tx_current_state, rx_current_state) = watch::channel(Default::default());
     let context = ConsensusWorkerContext {
         epoch_manager: epoch_manager.clone(),
         epoch_events,
         hotstuff: hotstuff_worker,
         state_sync: CommsRpcStateSyncManager::new(epoch_manager, store, client_factory),
+        tx_current_state,
     };
 
     let handle = ConsensusWorker::new(shutdown_signal).spawn(context);
@@ -92,21 +100,21 @@ pub async fn spawn(
     ConsensusMessageWorker {
         rx_broadcast,
         rx_leader,
-        rx_mempool,
         outbound_messaging,
-        mempool,
     }
     .spawn();
 
-    (handle, EventSubscription::new(tx_events))
+    (
+        handle,
+        ConsensusHandle::new(rx_current_state, EventSubscription::new(tx_hotstuff_events)),
+        rx_mempool,
+    )
 }
 
 struct ConsensusMessageWorker {
     rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
     rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
-    rx_mempool: mpsc::UnboundedReceiver<Transaction>,
     outbound_messaging: OutboundMessaging,
-    mempool: MempoolHandle,
 }
 
 impl ConsensusMessageWorker {
@@ -126,9 +134,7 @@ impl ConsensusMessageWorker {
                             .await
                             .ok();
                     },
-                    Some(tx) = self.rx_mempool.recv() => {
-                        self.mempool.submit_transaction_without_propagating(tx).await.ok();
-                    },
+
                     else => break,
                 }
             }

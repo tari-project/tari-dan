@@ -44,7 +44,7 @@ impl DanNode {
     }
 
     pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), anyhow::Error> {
-        let mut hotstuff_events = self.services.hotstuff_events.subscribe();
+        let mut hotstuff_events = self.services.consensus_handle.subscribe_to_hotstuff_events();
 
         let mut connectivity_events = self.services.comms.connectivity().get_event_subscription();
 

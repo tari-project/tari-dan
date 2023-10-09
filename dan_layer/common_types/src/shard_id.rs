@@ -126,7 +126,7 @@ impl AsRef<[u8]> for ShardId {
 
 impl PartialOrd for ShardId {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.0.partial_cmp(&other.0)
+        Some(self.cmp(other))
     }
 }
 

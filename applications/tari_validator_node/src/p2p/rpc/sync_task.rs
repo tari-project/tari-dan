@@ -11,14 +11,15 @@ use tari_dan_storage::{
     StateStoreReadTransaction,
     StorageError,
 };
-use tari_validator_node_rpc::proto::rpc::SyncBlocksResponse;
+use tari_validator_node_rpc::proto::rpc::{sync_blocks_response::SyncData, QuorumCertificates, SyncBlocksResponse};
 use tokio::sync::mpsc;
 
 const LOG_TARGET: &str = "tari::dan::rpc::sync_task";
 
 const BLOCK_BUFFER_SIZE: usize = 15;
 
-type BlockBuffer<TAddr> = Vec<(Block<TAddr>, Vec<QuorumCertificate<TAddr>>, Vec<SubstateUpdate<TAddr>>)>;
+type BlockData<TAddr> = (Block<TAddr>, Vec<QuorumCertificate<TAddr>>, Vec<SubstateUpdate<TAddr>>);
+type BlockBuffer<TAddr> = Vec<BlockData<TAddr>>;
 
 pub struct BlockSyncTask<TStateStore: StateStore> {
     store: TStateStore,
@@ -63,13 +64,8 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             );
 
             counter += buffer.len();
-            for (block, quorum_certificates, updates) in buffer.drain(..) {
-                self.send(Ok(SyncBlocksResponse {
-                    block: Some(block.into()),
-                    quorum_certificates: quorum_certificates.iter().map(Into::into).collect(),
-                    substate_updates: updates.into_iter().map(Into::into).collect(),
-                }))
-                .await?;
+            for data in buffer.drain(..) {
+                self.send_block_data(data).await?;
             }
 
             // If we didnt fill up the buffer, send the final blocks
@@ -94,13 +90,8 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             buffer.len(),
         );
 
-        for (block, quorum_certificates, updates) in buffer.drain(..) {
-            self.send(Ok(SyncBlocksResponse {
-                block: Some(block.into()),
-                quorum_certificates: quorum_certificates.iter().map(Into::into).collect(),
-                substate_updates: updates.into_iter().map(Into::into).collect(),
-            }))
-            .await?;
+        for data in buffer.drain(..) {
+            self.send_block_data(data).await?;
         }
 
         Ok(())
@@ -127,6 +118,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                     .collect::<HashSet<_>>();
                 let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
                 let updates = child.get_substate_updates(tx)?;
+
                 buffer.push((child, certificates, updates));
                 if buffer.len() == buffer.capacity() {
                     break;
@@ -173,6 +165,40 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             );
             return Err(());
         }
+        Ok(())
+    }
+
+    async fn send_block_data(&mut self, (block, qcs, updates): BlockData<TStateStore::Addr>) -> Result<(), ()> {
+        self.send(Ok(SyncBlocksResponse {
+            sync_data: Some(SyncData::Block(block.into())),
+        }))
+        .await?;
+        self.send(Ok(SyncBlocksResponse {
+            sync_data: Some(SyncData::QuorumCertificates(QuorumCertificates {
+                quorum_certificates: qcs.iter().map(Into::into).collect(),
+            })),
+        }))
+        .await?;
+        match u32::try_from(updates.len()) {
+            Ok(count) => {
+                self.send(Ok(SyncBlocksResponse {
+                    sync_data: Some(SyncData::SubstateCount(count)),
+                }))
+                .await?;
+            },
+            Err(_) => {
+                self.send(Err(RpcStatus::general("number of substates exceeds u32")))
+                    .await?;
+                return Err(());
+            },
+        }
+        for update in updates {
+            self.send(Ok(SyncBlocksResponse {
+                sync_data: Some(SyncData::SubstateUpdate(update.into())),
+            }))
+            .await?;
+        }
+
         Ok(())
     }
 }

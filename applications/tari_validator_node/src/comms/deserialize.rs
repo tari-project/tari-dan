@@ -108,17 +108,19 @@ where
             let decoded_msg = proto::network::DanMessage::decode(&mut body)?;
             let message_tag = decoded_msg.message_tag.clone();
             let msg = DanMessage::try_from(decoded_msg)?;
-            log::info!(
-                target: LOG_TARGET,
-                "📨 Rx: {} ({} bytes) from {}",
-                msg.as_type_str(),
-                body_len,
-                source_peer
-            );
             let peer = peer_manager
                 .find_by_node_id(&source_peer)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Could not find peer with node id {}", source_peer))?;
+
+            log::info!(
+                target: LOG_TARGET,
+                "📨 Rx: {} ({} bytes) from {:15}",
+                msg.as_type_str(),
+                body_len,
+                peer.public_key
+            );
+
             logger.log_inbound_message(peer.public_key.as_bytes(), msg.as_type_str(), &message_tag, &msg);
             let mut svc = next_service.ready_oneshot().await?;
             svc.call((peer.public_key, msg)).await?;
@@ -154,17 +156,18 @@ where
             let body_len = body.len();
             let decoded_msg = proto::consensus::HotStuffMessage::decode(&mut body)?;
             let msg = HotstuffMessage::try_from(decoded_msg)?;
-            log::info!(
-                target: LOG_TARGET,
-                "📨 Rx: {} ({} bytes) from {}",
-                msg.as_type_str(),
-                body_len,
-                source_peer
-            );
             let peer = peer_manager
                 .find_by_node_id(&source_peer)
                 .await?
                 .ok_or_else(|| anyhow::anyhow!("Could not find peer with node id {}", source_peer))?;
+            log::info!(
+                target: LOG_TARGET,
+                "📨 Rx: {} ({} bytes) from {:15}",
+                msg.as_type_str(),
+                body_len,
+                peer.public_key
+            );
+
             logger.log_inbound_message(peer.public_key.as_bytes(), msg.as_type_str(), "", &msg);
             let mut svc = next_service.ready_oneshot().await?;
             svc.call((peer.public_key, msg)).await?;

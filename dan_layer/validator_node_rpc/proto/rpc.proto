@@ -193,9 +193,21 @@ message SyncBlocksRequest {
 }
 
 message SyncBlocksResponse {
-  tari.dan.consensus.Block block = 1;
-  repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 2;
-  repeated SubstateUpdate substate_updates = 3;
+  oneof sync_data {
+    tari.dan.consensus.Block block = 1;
+    QuorumCertificates quorum_certificates = 2;
+    uint32 substate_count = 3;
+    SubstateUpdate substate_update = 4;
+    Transactions transactions = 5;
+  }
+}
+
+message QuorumCertificates {
+  repeated tari.dan.consensus.QuorumCertificate quorum_certificates = 1;
+}
+
+message Transactions {
+  repeated tari.dan.transaction.Transaction transactions = 1;
 }
 
 message GetHighQcRequest { }

@@ -40,7 +40,6 @@ use tari_common::{
 };
 use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, types::CommsPublicKey, CommsNode, NodeIdentity, UnspawnedCommsNode};
-use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_app_utilities::{
     base_layer_scanner,
     consensus_constants::ConsensusConstants,
@@ -76,8 +75,8 @@ use tokio::{sync::mpsc, task::JoinHandle};
 use crate::{
     comms,
     consensus,
+    consensus::ConsensusHandle,
     dry_run_transaction_processor::DryRunTransactionProcessor,
-    event_subscription::EventSubscription,
     p2p::{
         create_tari_validator_node_rpc_service,
         services::{
@@ -194,9 +193,23 @@ pub async fn spawn_services(
 
     let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
 
+    // Consensus
+    let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
+    let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
+        state_store.clone(),
+        node_identity.clone(),
+        epoch_manager.clone(),
+        rx_executed_transaction,
+        rx_consensus_message,
+        outbound_messaging.clone(),
+        validator_node_client_factory.clone(),
+        shutdown.clone(),
+    )
+    .await;
+    handles.push(consensus_join_handle);
+
     // Mempool
     let virtual_substate_manager = VirtualSubstateManager::new(state_store.clone(), epoch_manager.clone());
-    let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
     let scanner = SubstateScanner::new(epoch_manager.clone(), validator_node_client_factory.clone());
     let substate_resolver = TariSubstateResolver::new(
         state_store.clone(),
@@ -206,7 +219,7 @@ pub async fn spawn_services(
     );
     let (mempool, join_handle) = mempool::spawn(
         rx_new_transaction_message,
-        outbound_messaging.clone(),
+        outbound_messaging,
         tx_executed_transaction,
         epoch_manager.clone(),
         node_identity.clone(),
@@ -219,6 +232,8 @@ pub async fn spawn_services(
         ),
         create_mempool_after_execute_validator(state_store.clone()),
         state_store.clone(),
+        rx_consensus_to_mempool,
+        consensus_handle.clone(),
     );
     handles.push(join_handle);
 
@@ -235,21 +250,6 @@ pub async fn spawn_services(
         config.validator_node.base_layer_scanning_interval,
     );
     handles.push(join_handle);
-
-    // Consensus
-    let (consensus_handle, consensus_events) = consensus::spawn(
-        state_store.clone(),
-        node_identity.clone(),
-        epoch_manager.clone(),
-        rx_executed_transaction,
-        rx_consensus_message,
-        outbound_messaging,
-        mempool.clone(),
-        validator_node_client_factory.clone(),
-        shutdown.clone(),
-    )
-    .await;
-    handles.push(consensus_handle);
 
     let comms = setup_p2p_rpc(
         config,
@@ -289,7 +289,7 @@ pub async fn spawn_services(
         mempool,
         epoch_manager,
         template_manager: template_manager_service,
-        hotstuff_events: consensus_events,
+        consensus_handle,
         global_db,
         state_store,
         dry_run_transaction_processor,
@@ -321,7 +321,7 @@ pub struct Services {
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle,
     pub template_manager: TemplateManagerHandle,
-    pub hotstuff_events: EventSubscription<HotstuffEvent>,
+    pub consensus_handle: ConsensusHandle,
     pub global_db: GlobalDb<SqliteGlobalDbAdapter>,
     pub dry_run_transaction_processor: DryRunTransactionProcessor,
     pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,

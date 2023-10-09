@@ -70,18 +70,6 @@ impl MempoolHandle {
         rx.await?
     }
 
-    pub async fn submit_transaction_without_propagating(&self, transaction: Transaction) -> Result<(), MempoolError> {
-        let (reply, rx) = oneshot::channel();
-        self.tx_mempool_request
-            .send(MempoolRequest::SubmitTransaction {
-                transaction: Box::new(transaction),
-                should_propagate: false,
-                reply,
-            })
-            .await?;
-        rx.await?
-    }
-
     pub async fn remove_transaction(&self, transaction_id: TransactionId) -> Result<(), MempoolError> {
         self.tx_mempool_request
             .send(MempoolRequest::RemoveTransaction { transaction_id })

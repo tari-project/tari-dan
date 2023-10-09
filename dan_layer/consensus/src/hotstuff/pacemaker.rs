@@ -134,8 +134,8 @@ impl PaceMaker {
                     let delta = self.delta_time();
                     leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
                     info!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}, Delta: {:.2?}", self.current_height, delta);
-                    on_leader_timeout.leader_timed_out(self.current_height);
                     self.current_height += NodeHeight(1);
+                    on_leader_timeout.leader_timed_out(self.current_height);
                 },
 
             }

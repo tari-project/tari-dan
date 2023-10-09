@@ -51,6 +51,16 @@ impl<TAddr> SqliteStateStore<TAddr> {
             _addr: PhantomData,
         })
     }
+
+    pub fn foreign_keys_off(&self) -> Result<(), StorageError> {
+        sql_query("PRAGMA foreign_keys = OFF;")
+            .execute(&mut *self.connection.lock().unwrap())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "set pragma",
+            })?;
+        Ok(())
+    }
 }
 
 // Manually implement the Debug implementation because `SqliteConnection` does not implement the Debug trait
