@@ -180,7 +180,7 @@ impl Command {
 
 impl PartialOrd for Command {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.transaction_id().partial_cmp(other.transaction_id())
+        Some(self.cmp(other))
     }
 }
 

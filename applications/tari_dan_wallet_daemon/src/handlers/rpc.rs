@@ -27,7 +27,7 @@ pub async fn handle_discover(
 
 pub async fn handle_login_request(
     context: &HandlerContext,
-    _: Option<String>,
+    _token: Option<String>,
     auth_request: AuthLoginRequest,
 ) -> Result<AuthLoginResponse, anyhow::Error> {
     let jwt = context.wallet_sdk().jwt_api();
@@ -42,7 +42,7 @@ pub async fn handle_login_request(
 
 pub async fn handle_login_accept(
     context: &HandlerContext,
-    _: Option<String>,
+    _token: Option<String>,
     auth_accept_request: AuthLoginAcceptRequest,
 ) -> Result<AuthLoginAcceptResponse, anyhow::Error> {
     let jwt = context.wallet_sdk().jwt_api();
@@ -52,7 +52,7 @@ pub async fn handle_login_accept(
 
 pub async fn handle_login_deny(
     context: &HandlerContext,
-    _: Option<String>,
+    _token: Option<String>,
     auth_deny_request: AuthLoginDenyRequest,
 ) -> Result<AuthLoginDenyResponse, anyhow::Error> {
     let jwt = context.wallet_sdk().jwt_api();

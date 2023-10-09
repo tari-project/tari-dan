@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{borrow::Borrow, fmt::Display};
+use std::fmt::Display;
 
 use crate::hotstuff::state_machine::{check_sync::CheckSync, idle::IdleState, running::Running, syncing::Syncing};
 
@@ -55,7 +55,7 @@ impl<TSpec> Display for ConsensusState<TSpec> {
 
 impl<TSpec> From<&ConsensusState<TSpec>> for ConsensusCurrentState {
     fn from(value: &ConsensusState<TSpec>) -> Self {
-        match value.borrow() {
+        match value {
             ConsensusState::Idle(_) => ConsensusCurrentState::Idle,
             ConsensusState::CheckSync(_) => ConsensusCurrentState::CheckSync,
             ConsensusState::Syncing(_) => ConsensusCurrentState::Syncing,
