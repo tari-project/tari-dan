@@ -41,7 +41,7 @@ pub struct Transaction {
 
 /// Struct used to keep inputs and outputs in a single field as json
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InputsAndOutputs {
+pub struct TransactionInputs {
     pub inputs: Vec<ShardId>,
     pub input_refs: Vec<ShardId>,
 }
@@ -56,7 +56,7 @@ impl Transaction {
                 details: e.to_string(),
             })?;
         let signature = TransactionSignature::new(sender_public_key, signature);
-        let InputsAndOutputs { inputs, input_refs } = deserialize_json(&self.meta)?;
+        let TransactionInputs { inputs, input_refs } = deserialize_json(&self.meta)?;
 
         Ok(WalletTransaction {
             transaction: tari_transaction::Transaction::new(
