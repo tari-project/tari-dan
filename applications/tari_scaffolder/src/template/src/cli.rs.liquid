@@ -68,6 +68,8 @@ pub(crate) mod {{ c.name }} {
      use tari_utilities::hex::from_hex;
 use tari_engine_types::TemplateAddress;
 use tari_template_lib::prelude::ComponentAddress;
+use tari_transaction::SubstateRequirement;
+
 
    #[derive(Debug, Args, Clone)]
    pub struct Command {
@@ -101,7 +103,7 @@ use tari_template_lib::prelude::ComponentAddress;
       {% endif %}
       {% endfor %}
                     ]
-               }, dump_buckets, is_dry_run, fees
+               }, dump_buckets, is_dry_run, fees, vec![format!("component_{}", self.component_address).parse().unwrap()]
 
             ).await;
             println!("done");
@@ -127,7 +129,7 @@ use tari_template_lib::prelude::ComponentAddress;
       {% endif %}
       {% endfor %}
                     ]
-               }, false, false, fees
+               }, false, false, fees, vec![]
 
             ).await;
             println!("done");

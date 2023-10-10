@@ -10,6 +10,8 @@ use tari_wallet_daemon_client::WalletDaemonClient;
 use tari_wallet_daemon_client::ComponentAddressOrName;
 use tari_wallet_daemon_client::types::CallInstructionRequest;
 use tari_wallet_daemon_client::types::AuthLoginRequest;
+ use tari_transaction::SubstateRequirement;
+
 
 pub struct DaemonClient {
     endpoint: String,
@@ -41,7 +43,7 @@ impl DaemonClient {
 
 
 
-    pub async fn submit_instruction(&mut self, instruction: Instruction, dump_buckets: bool, is_dry_run: bool, fees: u64) {
+    pub async fn submit_instruction(&mut self, instruction: Instruction, dump_buckets: bool, is_dry_run: bool, fees: u64, other_inputs: Vec<SubstateRequirement>) {
      let mut client =
             WalletDaemonClient::connect(&self.endpoint, self.auth_token.clone()).unwrap();
         //let r = client.list_keys().await;
@@ -57,7 +59,7 @@ impl DaemonClient {
                 None
             },
             fee: fees,
-            inputs: vec![],
+            inputs: other_inputs,
             override_inputs: None,
             new_outputs: None,
             specific_non_fungible_outputs: vec![],

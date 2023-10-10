@@ -99,7 +99,7 @@ where
 
         // let mut found_this_round = 0;
 
-        const MAX_RECURSION: usize = 1;
+        const MAX_RECURSION: usize = 2;
 
         for _i in 0..MAX_RECURSION {
             // add all substates related to the inputs

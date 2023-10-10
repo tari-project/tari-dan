@@ -9,10 +9,12 @@ edition = "2021"
 tari_wallet_daemon_client= "*"
 tari_engine_types= "*"
 tari_template_lib= "*"
+tari_transaction = "*"
 {% else %}
 tari_wallet_daemon_client={path="{{crates_root}}/clients/wallet_daemon_client"}
 tari_engine_types={path="{{crates_root}}/dan_layer/engine_types"}
 tari_template_lib={path="{{crates_root}}/dan_layer/template_lib"}
+tari_transaction ={path="{{crates_root}}/dan_layer/transaction"}
 {% endif %}
 tari_utilities ="*"
 

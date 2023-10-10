@@ -36,7 +36,8 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress
         SubstateValue::Component(header) => {
             // Look inside the component state for substate references
             let value = IndexedValue::from_raw(header.state())?;
-            debug!(
+            info!(target: LOG_TARGET, "Found indexed value: {:?}", &value);
+            info!(
                 target: LOG_TARGET,
                 "Found {} substates in component state",
                 value.referenced_substates().count()
@@ -67,6 +68,7 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress
             let substate_address = SubstateAddress::NonFungible(index.referenced_address().clone());
             Ok(vec![substate_address])
         },
+        SubstateValue::Vault(vault) => Ok(vec![SubstateAddress::Resource(vault.resource_address().clone())]),
         // Other types of substates cannot hold references to other substates
         _ => Ok(vec![]),
     }
