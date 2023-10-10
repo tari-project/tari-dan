@@ -113,7 +113,7 @@ impl DanWalletDaemonProcess {
         // authentication
         let AuthLoginResponse { auth_token } = client
             .auth_request(AuthLoginRequest {
-                permissions: JrpcPermissions(vec![JrpcPermission::Admin]),
+                permissions: vec!["Admin".to_string()],
                 duration: None,
             })
             .await

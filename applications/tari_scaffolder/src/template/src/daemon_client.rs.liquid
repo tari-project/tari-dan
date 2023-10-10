@@ -9,15 +9,16 @@ use tari_wallet_daemon_client::types::TransactionSubmitRequest;
 use tari_wallet_daemon_client::WalletDaemonClient;
 use tari_wallet_daemon_client::ComponentAddressOrName;
 use tari_wallet_daemon_client::types::CallInstructionRequest;
+use tari_wallet_daemon_client::types::AuthLoginRequest;
 
 pub struct DaemonClient {
     endpoint: String,
-    auth_token: String,
+    auth_token: Option<String>,
     last_id: usize,
 }
 
 impl DaemonClient {
-    pub(crate) fn new(endpoint: String, auth_token: String) -> Self {
+    pub(crate) fn new(endpoint: String, auth_token: Option<String>) -> Self {
         Self {
             endpoint,
             auth_token,
@@ -25,36 +26,24 @@ impl DaemonClient {
         }
     }
 
-    async fn call_wallet(&mut self, method: &str, params: Value) {
-        self.last_id += 1;
-        let client = reqwest::Client::new();
-	let body =  json!({
-                    "jsonrpc":"2.0",
-                    "method": method,
-                    "id": self.last_id,
-                    "params": params
-                })
-                .to_string();
-	dbg!(&body);
-        let res = client
-            .post(&self.endpoint)
-            .header("Authorization", format!("Bearer {}", self.auth_token))
-            .json(
-               &body
-            )
-            .send()
-            .await
-            .unwrap();
+    pub async fn login(&mut self) -> String {
+        let mut client =
+                   WalletDaemonClient::connect(&self.endpoint, self.auth_token.clone()).unwrap();
+        let r = client.auth_request(&AuthLoginRequest {
+            permissions: vec!["Admin".to_string()],
+            duration: None
+        }).await.unwrap();
 
-        let res_json: Value = res.json().await.unwrap();
+        dbg!(&r);
 
-        dbg!(res_json);
+        r.auth_token
     }
+
 
 
     pub async fn submit_instruction(&mut self, instruction: Instruction, dump_buckets: bool, is_dry_run: bool, fees: u64) {
      let mut client =
-            WalletDaemonClient::connect(&self.endpoint, Some(self.auth_token.clone())).unwrap();
+            WalletDaemonClient::connect(&self.endpoint, self.auth_token.clone()).unwrap();
         //let r = client.list_keys().await;
 
         //dbg!(r);

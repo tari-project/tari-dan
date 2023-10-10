@@ -27,6 +27,9 @@ pub(crate) struct Cli {
 
     #[clap(long, short = 'o', alias = "output", default_value = "./output")]
     pub output_path: PathBuf,
+
+    #[clap(long, short = 't', alias = "template")]
+    pub template_address: String,
 }
 
 impl Cli {

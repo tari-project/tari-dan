@@ -471,7 +471,7 @@ pub struct WebRtcStartResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginRequest {
-    pub permissions: JrpcPermissions,
+    pub permissions: Vec<String>,
     pub duration: Option<Duration>,
 }
 

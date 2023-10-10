@@ -97,53 +97,63 @@ where
         info!(target: LOG_TARGET, "✏️️ Found {} input substates", found_substates.len());
         autofilled_transaction.filled_inputs_mut().extend(input_shards);
 
-        // add all substates related to the inputs
-        // TODO: perform this loop concurrently by spawning a tokio task for each scan
-        // TODO: we are going to only check the first level of recursion, for composability we may want to do it
-        // recursively (with a recursion limit)
-        let mut autofilled_inputs = vec![];
-        let related_addresses: Vec<Vec<SubstateAddress>> = found_substates
-            .values()
-            .map(find_related_substates)
-            .collect::<Result<_, _>>()?;
+        // let mut found_this_round = 0;
 
-        info!(target: LOG_TARGET, "✏️️️ Found {} related substates", related_addresses.len());
-        // exclude related substates that have been already included as requirement by the client
-        let related_addresses = related_addresses
-            .into_iter()
-            .flatten()
-            .filter(|s| !substate_requirements.iter().any(|r| r.address() == s));
+        const MAX_RECURSION: usize = 1;
 
-        for address in related_addresses {
-            info!(target: LOG_TARGET, "✏️️️ Found {} related substate", address);
+        for _i in 0..MAX_RECURSION {
+            // add all substates related to the inputs
+            // TODO: perform this loop concurrently by spawning a tokio task for each scan
+            // TODO: we are going to only check the first level of recursion, for composability we may want to do it
+            // recursively (with a recursion limit)
+            let mut autofilled_inputs = vec![];
+            let related_addresses: Vec<Vec<SubstateAddress>> = found_substates
+                .values()
+                .map(find_related_substates)
+                .collect::<Result<_, _>>()?;
 
-            // we need to fetch the latest version of all the related substates
-            // note that if the version specified is "None", the scanner will fetch the latest version
-            let scan_res = self.substate_scanner.get_substate(&address, None).await?;
+            info!(target: LOG_TARGET, "✏️️️ Found {} related substates", related_addresses.len());
+            // exclude related substates that have been already included as requirement by the client
+            let related_addresses = related_addresses
+                .into_iter()
+                .flatten()
+                .filter(|s| !substate_requirements.iter().any(|r| r.address() == s));
 
-            if let SubstateResult::Up { substate, address, .. } = scan_res {
-                info!(
-                    target: LOG_TARGET,
-                    "✏️ Filling related substate {}:v{}",
-                    address,
-                    substate.version()
-                );
-                let shard = ShardId::from_address(&address, substate.version());
-                if autofilled_transaction.all_inputs_iter().any(|s| *s == shard) {
-                    // Shard is already an input (TODO: what a waste)
-                    continue;
+            for address in related_addresses {
+                info!(target: LOG_TARGET, "✏️️️ Found {} related substate", address);
+
+                // we need to fetch the latest version of all the related substates
+                // note that if the version specified is "None", the scanner will fetch the latest version
+                let scan_res = self.substate_scanner.get_substate(&address, None).await?;
+
+                if let SubstateResult::Up { substate, address, .. } = scan_res {
+                    info!(
+                        target: LOG_TARGET,
+                        "✏️ Filling related substate {}:v{}",
+                        address,
+                        substate.version()
+                    );
+                    let shard = ShardId::from_address(&address, substate.version());
+                    if autofilled_transaction.all_inputs_iter().any(|s| *s == shard) {
+                        // Shard is already an input (TODO: what a waste)
+                        continue;
+                    }
+                    autofilled_inputs.push(ShardId::from_address(&address, substate.version()));
+                    found_substates.insert(address, substate);
+                //       found_this_round += 1;
+                } else {
+                    warn!(
+                        target: LOG_TARGET,
+                        "✏️️ The related substate {} is not in UP status, skipping", address
+                    );
                 }
-                autofilled_inputs.push(ShardId::from_address(&address, substate.version()));
-                found_substates.insert(address, substate);
-            } else {
-                warn!(
-                    target: LOG_TARGET,
-                    "✏️️ The related substate {} is not in UP status, skipping", address
-                );
             }
-        }
 
-        autofilled_transaction.filled_inputs_mut().extend(autofilled_inputs);
+            autofilled_transaction.filled_inputs_mut().extend(autofilled_inputs);
+            //   if found_this_round == 0 {
+            //      break;
+            // }
+        }
 
         Ok((autofilled_transaction, found_substates))
     }

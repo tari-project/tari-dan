@@ -11,8 +11,8 @@ pub(crate) struct Cli {
     #[clap(long, short = 'e', alias = "endpoint", env = "JRPC_ENDPOINT")]
     pub daemon_jrpc_endpoint: Option<String>,
     #[clap(long, short='t', alias= "token")]
-    pub auth_token: String,
-    #[clap(long, alias="template_address", default_value ="2e01cec3c62abe4cfc160be87781680a2edef22be2a6dc9e4247bfcd9a8c03f7")]
+    pub auth_token: Option<String>,
+    #[clap(long, alias="template_address", default_value ="{{template_address}}")]
     pub template: String,
     #[clap(long, short='d')]
     pub dump_buckets: bool,
@@ -32,9 +32,29 @@ impl Cli {
 
 #[derive(Debug, Subcommand, Clone)]
 pub(crate) enum Command {
+    Login(login::Command),
     {% for c in  commands %}
     {{ c.title }}({{ c.name }}::Command),
     {% endfor %}
+}
+
+
+pub mod login {
+  use clap::Args;
+  use crate::daemon_client::DaemonClient;
+    use std::fs;
+
+    #[derive(Debug, Args, Clone)]
+    pub struct Command {
+
+    }
+
+    impl Command {
+    pub async fn run(self, mut client: DaemonClient) {
+       let token = client.login().await;
+       fs::write("token.data", token).unwrap();
+    }
+    }
 }
 
 {% for c in  commands %}

@@ -74,6 +74,7 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
 
     let mut globals = liquid::object!({
         "template_name": loaded_template.template_name(),
+        "template_address" : cli.template_address.clone(),
     "crates_root": cli.crates_root.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "[crates]".to_string()),
         "commands": [
         ]
