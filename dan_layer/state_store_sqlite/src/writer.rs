@@ -116,6 +116,21 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             });
         }
 
+        // check if block already exists in parked_blocks
+        let already_parked = parked_blocks::table
+            .count()
+            .filter(parked_blocks::block_id.eq(&block_id))
+            .first::<i64>(self.connection())
+            .map(|count| count > 0)
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "parked_blocks_insert",
+                source: e,
+            })?;
+
+        if already_parked {
+            return Ok(());
+        }
+
         let insert = (
             parked_blocks::block_id.eq(&block_id),
             parked_blocks::parent_block_id.eq(serialize_hex(block.parent())),
@@ -272,7 +287,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
     fn missing_transactions_remove(
         &mut self,
         current_height: NodeHeight,
-        transaction_id: TransactionId,
+        transaction_id: &TransactionId,
     ) -> Result<Option<Block<TAddr>>, StorageError> {
         use crate::schema::{missing_transactions, transactions};
 

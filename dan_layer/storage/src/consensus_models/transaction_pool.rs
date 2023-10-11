@@ -377,7 +377,8 @@ impl TransactionPoolRecord {
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), false) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), false) |
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), false) => {},
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), false) |
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), false) => {},
             _ => {
                 return Err(TransactionPoolError::InvalidTransactionTransition {
                     from: self.current_stage(),

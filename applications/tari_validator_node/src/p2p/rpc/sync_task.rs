@@ -85,25 +85,6 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             }
         }
 
-        // TODO: It may be better to ask each leader to resend each proposal
-        match self.fetch_last_blocks(&mut buffer, &current_block_id) {
-            Ok(_) => (),
-            Err(err) => {
-                self.send(Err(RpcStatus::log_internal_error(LOG_TARGET)(err))).await?;
-                return Err(());
-            },
-        }
-
-        debug!(
-            target: LOG_TARGET,
-            "Sending {} last blocks to peer.",
-            buffer.len(),
-        );
-
-        for data in buffer.drain(..) {
-            self.send_block_data(data).await?;
-        }
-
         Ok(())
     }
 
@@ -138,36 +119,6 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         })
     }
 
-    fn fetch_last_blocks(
-        &self,
-        buffer: &mut BlockBuffer<TStateStore::Addr>,
-        current_block_id: &BlockId,
-    ) -> Result<(), StorageError> {
-        self.store.with_read_tx(|tx| {
-            let blocks = Block::get_all_blocks_after(tx, current_block_id)?;
-            for block in blocks {
-                debug!(
-                    target: LOG_TARGET,
-                    "Fetching last blocks. Current block: {} to target {}",
-                    block,
-                    current_block_id
-                );
-                let all_qcs = block
-                    .commands()
-                    .iter()
-                    .flat_map(|cmd| cmd.evidence().qc_ids_iter())
-                    .collect::<HashSet<_>>();
-                let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
-                let transactions = block.get_transactions(tx)?;
-
-                // No substate updates can occur for blocks after the last commit
-                buffer.push((block, certificates, vec![], transactions));
-            }
-
-            Ok::<_, StorageError>(())
-        })
-    }
-
     async fn send(&mut self, result: Result<SyncBlocksResponse, RpcStatus>) -> Result<(), ()> {
         if self.sender.send(result).await.is_err() {
             debug!(
@@ -184,7 +135,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         (block, qcs, updates, transactions): BlockData<TStateStore::Addr>,
     ) -> Result<(), ()> {
         self.send(Ok(SyncBlocksResponse {
-            sync_data: Some(SyncData::Block(block.into())),
+            sync_data: Some(SyncData::Block((&block).into())),
         }))
         .await?;
         self.send(Ok(SyncBlocksResponse {
@@ -215,11 +166,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
 
         self.send(Ok(SyncBlocksResponse {
             sync_data: Some(SyncData::Transactions(Transactions {
-                transactions: transactions
-                    .into_iter()
-                    .map(|t| t.transaction)
-                    .map(Into::into)
-                    .collect(),
+                transactions: transactions.iter().map(|t| &t.transaction).map(Into::into).collect(),
             })),
         }))
         .await?;

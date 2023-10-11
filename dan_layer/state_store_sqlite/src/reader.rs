@@ -192,12 +192,48 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned> SqliteStateStore
         sql_frag
     }
 
+    fn get_block_ids_between(
+        &mut self,
+        start_block: &BlockId,
+        end_block: &BlockId,
+    ) -> Result<Vec<String>, SqliteStorageError> {
+        let block_ids = sql_query(
+            r#"
+            WITH RECURSIVE tree(bid, parent) AS (
+                SELECT block_id, parent_block_id FROM blocks where block_id = ?
+            UNION ALL
+                SELECT block_id, parent_block_id
+                FROM blocks JOIN tree ON
+                    block_id = tree.parent
+                    AND tree.bid != ?
+                LIMIT 1000
+            )
+            SELECT bid FROM tree"#,
+        )
+        .bind::<Text, _>(serialize_hex(end_block))
+        .bind::<Text, _>(serialize_hex(start_block))
+        .load_iter::<BlockIdSqlValue, _>(self.connection())
+        .map_err(|e| SqliteStorageError::DieselError {
+            operation: "get_block_ids_that_change_state_between",
+            source: e,
+        })?;
+
+        block_ids
+            .map(|b| {
+                b.map(|b| b.bid).map_err(|e| SqliteStorageError::DieselError {
+                    operation: "get_block_ids_that_change_state_between",
+                    source: e,
+                })
+            })
+            .collect()
+    }
+
     fn get_block_ids_that_change_state_between(
         &mut self,
         start_block: &BlockId,
         end_block: &BlockId,
     ) -> Result<Vec<String>, SqliteStorageError> {
-        let applicable_block_ids = sql_query(
+        let block_ids = sql_query(
             r#"
             WITH RECURSIVE tree(bid, parent, is_dummy, command_count) AS (
                 SELECT block_id, parent_block_id, is_dummy, command_count FROM blocks where block_id = ?
@@ -218,7 +254,7 @@ impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned> SqliteStateStore
             source: e,
         })?;
 
-        applicable_block_ids
+        block_ids
             .map(|b| {
                 b.map(|b| b.bid).map_err(|e| SqliteStorageError::DieselError {
                     operation: "get_block_ids_that_change_state_between",
@@ -450,22 +486,25 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         block.try_convert(qc)
     }
 
-    fn blocks_all_after(&mut self, block_id: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+    fn blocks_get_all_between(
+        &mut self,
+        start_block_id_exclusive: &BlockId,
+        end_block_id_inclusive: &BlockId,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
-        let query_height = blocks::table
-            .select(blocks::height)
-            .filter(blocks::block_id.eq(serialize_hex(block_id)))
-            .first::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "blocks_all_after",
-                source: e,
-            })?;
+        let mut block_ids = self.get_block_ids_between(start_block_id_exclusive, end_block_id_inclusive)?;
+        if block_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Exclude start block
+        block_ids.pop();
 
         let results = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
-            .filter(blocks::height.gt(query_height))
+            .filter(blocks::block_id.eq_any(block_ids))
             .order_by(blocks::height.asc())
             .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {

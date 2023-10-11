@@ -14,14 +14,8 @@ use crate::hotstuff::{
 };
 
 pub enum PacemakerRequest {
-    ResetLeaderTimeout {
-        last_seen_height: NodeHeight,
-        high_qc_height: NodeHeight,
-    },
-    Start {
-        current_height: NodeHeight,
-        high_qc_height: NodeHeight,
-    },
+    UpdateView { high_qc_height: NodeHeight },
+    Start { high_qc_height: NodeHeight },
     Stop,
 }
 
@@ -53,11 +47,9 @@ impl PaceMakerHandle {
 
     /// Start the pacemaker if it hasn't already been started. If it has, this is a no-op
     pub async fn start(&self, current_height: NodeHeight, high_qc_height: NodeHeight) -> Result<(), HotStuffError> {
+        self.current_height.update(current_height);
         self.sender
-            .send(PacemakerRequest::Start {
-                current_height,
-                high_qc_height,
-            })
+            .send(PacemakerRequest::Start { high_qc_height })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
@@ -93,16 +85,15 @@ impl PaceMakerHandle {
     }
 
     /// Reset the leader timeout. This should be called when a valid leader proposal is received.
-    pub async fn reset_leader_timeout(
+    pub async fn update_view(
         &self,
         last_seen_height: NodeHeight,
         high_qc_height: NodeHeight,
     ) -> Result<(), HotStuffError> {
+        // Update current height here to prevent possibility of race conditions
+        self.current_height.update(last_seen_height);
         self.sender
-            .send(PacemakerRequest::ResetLeaderTimeout {
-                last_seen_height,
-                high_qc_height,
-            })
+            .send(PacemakerRequest::UpdateView { high_qc_height })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }

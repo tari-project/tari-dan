@@ -143,14 +143,18 @@ impl CommitteeShard {
         }
     }
 
-    /// Returns n - f where n is the number of committee members and f is the tolerated failure nodes.
+    /// Returns $n - f$ where n is the number of committee members and f is the tolerated failure nodes.
     pub fn quorum_threshold(&self) -> u32 {
+        self.num_members - self.max_failures()
+    }
+
+    /// Returns the maximum number of failures $f$ that can be tolerated by this committee.
+    pub fn max_failures(&self) -> u32 {
         let len = self.num_members;
         if len == 0 {
             return 0;
         }
-        let max_failures = (len - 1) / 3;
-        len - max_failures
+        (len - 1) / 3
     }
 
     pub fn num_committees(&self) -> u32 {

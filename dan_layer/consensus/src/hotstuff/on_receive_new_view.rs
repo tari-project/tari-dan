@@ -124,7 +124,7 @@ where TConsensusSpec: ConsensusSpec
             return Err(HotStuffError::ProposalValidationError(
                 ProposalValidationError::JustifyBlockNotFound {
                     proposed_by: from.to_string(),
-                    block_id: *high_qc.block_id(),
+                    block_description: format!("HighQc block {}", high_qc.block_id()),
                     justify_block: *high_qc.block_id(),
                 },
             ));

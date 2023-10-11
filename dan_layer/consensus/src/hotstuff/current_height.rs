@@ -28,11 +28,15 @@ impl CurrentHeight {
         self.height.load(atomic::Ordering::SeqCst).into()
     }
 
-    pub fn update(&self, height: NodeHeight) {
+    /// Updates the height if the new height is greater than the current height.
+    /// Returns true if the height was updated, otherwise false.
+    pub fn update(&self, height: NodeHeight) -> bool {
         let current_height = self.get();
         if height > current_height {
             self.set(height);
+            return true;
         }
+        false
     }
 
     fn set(&self, height: NodeHeight) {

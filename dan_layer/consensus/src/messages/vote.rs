@@ -1,11 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tari_dan_common_types::{hashing::ValidatorNodeMerkleProof, Epoch, NodeHeight};
 use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSignature};
 
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct VoteMessage<TAddr> {
     pub epoch: Epoch,
     pub block_id: BlockId,

@@ -206,7 +206,7 @@ where TConsensusSpec: ConsensusSpec
             tx.commit()?;
         };
         self.pacemaker
-            .reset_leader_timeout(last_voted.height(), high_qc.block_height)
+            .update_view(last_voted.height(), high_qc.block_height)
             .await?;
         self.pacemaker.beat();
 

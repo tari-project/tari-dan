@@ -188,14 +188,14 @@ impl TestNetworkWorker {
         let tx_new_transactions = self.tx_new_transactions.clone();
         let transaction_store = self.transaction_store.clone();
 
-        // Handle transactions that come in from the test
+        // Handle transactions that come in from the test. This behaves like a mempool.
         tokio::spawn(async move {
             while let Some((dest, executed)) = rx_new_transaction.recv().await {
                 transaction_store
                     .write()
                     .await
                     .insert(*executed.transaction().id(), executed.clone());
-                for (addr, (bucket, tx_new_transaction, state_store)) in &tx_new_transactions {
+                for (addr, (bucket, tx_new_transaction_to_consensus, state_store)) in &tx_new_transactions {
                     if dest.is_for(addr, *bucket) {
                         state_store
                             .with_write_tx(|tx| {
@@ -208,7 +208,8 @@ impl TestNetworkWorker {
                                 Ok::<_, anyhow::Error>(())
                             })
                             .unwrap();
-                        tx_new_transaction.send(*executed.id()).await.unwrap();
+                        log::info!("🐞 New transaction {}", executed.id());
+                        tx_new_transaction_to_consensus.send(*executed.id()).await.unwrap();
                     }
                 }
             }

@@ -10,8 +10,6 @@ use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::TransactionId;
 
-use crate::hotstuff::inbound_messages::NeedsSync;
-
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
     #[error("Storage error: {0}")]
@@ -67,8 +65,11 @@ pub enum HotStuffError {
     InvariantError(String),
     #[error("Sync error: {0}")]
     SyncError(anyhow::Error),
-    #[error(transparent)]
-    NeedsSync(#[from] NeedsSync),
+    #[error("Fallen behind: local_height={local_height}, qc_height={qc_height}")]
+    FallenBehind {
+        local_height: NodeHeight,
+        qc_height: NodeHeight,
+    },
 }
 
 impl From<EpochManagerError> for HotStuffError {
@@ -91,10 +92,10 @@ pub enum ProposalValidationError {
     NotSafeBlock { proposed_by: String, hash: BlockId },
     #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
-    #[error("Justification block {justify_block} for proposed block {block_id} by {proposed_by} not found")]
+    #[error("Justification block {justify_block} for proposed block {block_description} by {proposed_by} not found")]
     JustifyBlockNotFound {
         proposed_by: String,
-        block_id: BlockId,
+        block_description: String,
         justify_block: BlockId,
     },
     #[error("QC in block {block_id} that was proposed by {proposed_by} is invalid: {details}")]
@@ -103,8 +104,8 @@ pub enum ProposalValidationError {
         block_id: BlockId,
         details: String,
     },
-    #[error("Candidate block {candidate_block_height} is not higher than justify block {justify_block_height}")]
-    CandidateBlockNotHigherThanJustifyBlock {
+    #[error("Candidate block {candidate_block_height} is not higher than justify {justify_block_height}")]
+    CandidateBlockNotHigherThanJustify {
         justify_block_height: NodeHeight,
         candidate_block_height: NodeHeight,
     },

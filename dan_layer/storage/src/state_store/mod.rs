@@ -103,7 +103,11 @@ pub trait StateStoreReadTransaction {
     ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_get_tip(&mut self) -> Result<Block<Self::Addr>, StorageError>;
-    fn blocks_all_after(&mut self, block_id: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError>;
+    fn blocks_get_all_between(
+        &mut self,
+        start_block_id_exclusive: &BlockId,
+        end_block_id_inclusive: &BlockId,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
     fn blocks_get_all_by_parent(&mut self, parent: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError>;
@@ -293,7 +297,7 @@ pub trait StateStoreWriteTransaction {
     fn missing_transactions_remove(
         &mut self,
         current_height: NodeHeight,
-        transaction_id: TransactionId,
+        transaction_id: &TransactionId,
     ) -> Result<Option<Block<Self::Addr>>, StorageError>;
 
     // -------------------------------- Votes -------------------------------- //

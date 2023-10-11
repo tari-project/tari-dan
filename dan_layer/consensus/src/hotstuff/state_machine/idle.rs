@@ -21,7 +21,9 @@ const LOG_TARGET: &str = "tari::dan::consensus::sm::idle";
 #[derive(Debug, Clone)]
 pub struct IdleState<TSpec>(PhantomData<TSpec>);
 
-impl<TSpec: ConsensusSpec> IdleState<TSpec> {
+impl<TSpec> IdleState<TSpec>
+where TSpec: ConsensusSpec
+{
     pub fn new() -> Self {
         Self(PhantomData)
     }

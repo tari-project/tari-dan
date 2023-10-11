@@ -16,6 +16,8 @@ message HotStuffMessage {
     VoteMessage vote = 4;
     RequestMissingTransactionsMessage request_missing_transactions = 5;
     RequestedTransactionMessage requested_transaction = 6;
+    SyncRequest sync_request = 7;
+    SyncResponse sync_response = 8;
   }
 }
 
@@ -180,3 +182,26 @@ message SubstateDestroyed {
   bytes transaction = 11;
   bytes justify = 12;
 }
+
+message SyncRequest {
+  uint64 epoch = 1;
+  HighQc high_qc = 2;
+}
+
+message HighQc {
+  bytes block_id = 1;
+  uint64 block_height = 2;
+  bytes qc_id = 3;
+}
+
+message SyncResponse {
+  repeated FullBlock blocks = 1;
+  uint64 epoch = 2;
+}
+
+message FullBlock {
+  Block block = 1;
+  repeated QuorumCertificate qcs = 2;
+  repeated tari.dan.transaction.Transaction transactions = 3;
+}
+

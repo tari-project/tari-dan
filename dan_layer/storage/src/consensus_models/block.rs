@@ -295,11 +295,12 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_get_tip()
     }
 
-    pub fn get_all_blocks_after<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn get_all_blocks_between<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         tx: &mut TTx,
-        block_id: &BlockId,
+        start_block_id_exclusive: &BlockId,
+        end_block_id_inclusive: &BlockId,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.blocks_all_after(block_id)
+        tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive)
     }
 
     pub fn exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
@@ -379,13 +380,6 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
     ) -> Result<(), StorageError> {
         tx.blocks_set_flags(self.id(), None, Some(true))
-    }
-
-    pub fn unset_as_processed<TTx: StateStoreWriteTransaction<Addr = TAddr>>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<(), StorageError> {
-        tx.blocks_set_flags(self.id(), None, Some(false))
     }
 
     pub fn find_involved_shards<TTx: StateStoreReadTransaction<Addr = TAddr>>(

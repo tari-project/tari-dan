@@ -142,7 +142,7 @@ where TConsensusSpec: ConsensusSpec
                 //       is a good idea.
                 is_newview_propose,
             )?;
-            next_block.save(&mut tx)?;
+
             next_block.as_last_proposed().set(&mut tx)?;
 
             // Get involved shards for all LocalPrepared commands in the block.

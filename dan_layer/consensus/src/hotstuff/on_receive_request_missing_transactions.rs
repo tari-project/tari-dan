@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
-use tari_dan_storage::{consensus_models::ExecutedTransaction, StateStore};
+use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
 use tokio::sync::mpsc;
 
 use crate::{
@@ -37,9 +37,9 @@ where TConsensusSpec: ConsensusSpec
         msg: RequestMissingTransactionsMessage,
     ) -> Result<(), HotStuffError> {
         debug!(target: LOG_TARGET, "{} is requesting {} missing transactions from block {}", from, msg.transactions.len(), msg.block_id);
-        let txs = self
+        let (txs, _) = self
             .store
-            .with_read_tx(|tx| ExecutedTransaction::get_all(tx, &msg.transactions))?;
+            .with_read_tx(|tx| TransactionRecord::get_any(tx, &msg.transactions))?;
         self.tx_request_missing_tx
             .send((
                 from,

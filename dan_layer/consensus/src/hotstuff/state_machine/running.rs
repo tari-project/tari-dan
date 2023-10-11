@@ -40,10 +40,6 @@ where TSpec: ConsensusSpec
                 info!(target: LOG_TARGET, "Behind peers, starting sync");
                 Ok(ConsensusStateEvent::NeedSync)
             },
-            Err(HotStuffError::NeedsSync(_)) => {
-                info!(target: LOG_TARGET, "Behind peers, starting sync");
-                Ok(ConsensusStateEvent::NeedSync)
-            },
             Err(err) => {
                 error!(target: LOG_TARGET, "HotStuff failed to start: {}", err);
                 Err(err)

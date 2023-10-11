@@ -107,6 +107,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn sync_blocks(
         &self,
         client: &mut ValidatorNodeRpcClient,
@@ -120,7 +121,7 @@ where
 
         let mut counter = 0usize;
 
-        // let mut expected_height = locked_block.height + NodeHeight(1);
+        let mut expected_height = locked_block.height + NodeHeight(1);
 
         while let Some(resp) = stream.next().await {
             let msg = resp.map_err(RpcError::from)?;
@@ -128,13 +129,13 @@ where
                 CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!("Expected peer to return a newblock",))
             })?;
 
-            // if block.height != expected_height {
-            //     return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
-            //         "Peer returned block at height {} but expected {}",
-            //         block.height(),
-            //         expected_height,
-            //     )));
-            // }
+            if new_block.height != expected_height.as_u64() {
+                return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
+                    "Peer returned block at height {} but expected {}",
+                    new_block.height,
+                    expected_height,
+                )));
+            }
 
             let block =
                 Block::<CommsPublicKey>::try_from(new_block).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
@@ -228,11 +229,11 @@ where
             if counter % 100 == 0 {
                 info!(target: LOG_TARGET, "🌐 Syncing block {block}");
             }
-            // expected_height += NodeHeight(1);
+            expected_height += NodeHeight(1);
             self.process_block(block, qcs, updates, transactions)?;
         }
 
-        info!(target: LOG_TARGET, "🌐 {} blocks synced", counter);
+        info!(target: LOG_TARGET, "🌐 {counter} blocks synced to height {expected_height}");
 
         Ok(())
     }

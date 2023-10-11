@@ -69,6 +69,6 @@ impl<TAddr: NodeAddressable> ValidBlock<TAddr> {
 
 impl<TAddr: NodeAddressable> Display for ValidBlock<TAddr> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ValidatedBlock({})", self.block)
+        write!(f, "ValidBlock({})", self.block)
     }
 }

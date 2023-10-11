@@ -91,13 +91,11 @@ impl PaceMaker {
                 maybe_req = self.handle_receiver.recv() => {
                     if let Some(req) = maybe_req {
                         match req {
-                           PacemakerRequest::ResetLeaderTimeout { last_seen_height, high_qc_height } => {
+                           PacemakerRequest::UpdateView { high_qc_height } => {
                                 if !started {
                                     continue;
                                 }
 
-                                self.current_height.update(last_seen_height);
-                                assert!(self.current_high_qc_height <= high_qc_height, "high_qc_height must be monotonically increasing");
                                 self.current_high_qc_height = high_qc_height;
                                 let delta = self.delta_time();
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
@@ -105,12 +103,11 @@ impl PaceMaker {
                                 // set a timer for when we must send a block...
                                 block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                            },
-                            PacemakerRequest::Start { current_height, high_qc_height } => {
-                                info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", current_height, high_qc_height);
+                            PacemakerRequest::Start { high_qc_height } => {
+                                info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", self.current_height, high_qc_height);
                                 if started {
                                     continue;
                                 }
-                                self.current_height.update(current_height);
                                 self.current_high_qc_height = high_qc_height;
                                 let delta = self.delta_time();
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);

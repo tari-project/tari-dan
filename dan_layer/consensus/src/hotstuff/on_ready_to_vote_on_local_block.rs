@@ -35,20 +35,14 @@ use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc};
 
 use crate::{
-    hotstuff::{
-        common::EXHAUST_DIVISOR,
-        error::HotStuffError,
-        event::HotstuffEvent,
-        pacemaker_handle::PaceMakerHandle,
-        ProposalValidationError,
-    },
+    hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, event::HotstuffEvent, ProposalValidationError},
     messages::{HotstuffMessage, VoteMessage},
     traits::{ConsensusSpec, LeaderStrategy, StateManager, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
 
-pub struct OnLocalBlockReady<TConsensusSpec: ConsensusSpec> {
+pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
@@ -58,10 +52,9 @@ pub struct OnLocalBlockReady<TConsensusSpec: ConsensusSpec> {
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
     tx_events: broadcast::Sender<HotstuffEvent>,
-    pacemaker: PaceMakerHandle,
 }
 
-impl<TConsensusSpec> OnLocalBlockReady<TConsensusSpec>
+impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
@@ -74,7 +67,6 @@ where TConsensusSpec: ConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
-        pacemaker: PaceMakerHandle,
     ) -> Self {
         Self {
             validator_addr,
@@ -86,7 +78,6 @@ where TConsensusSpec: ConsensusSpec
             transaction_pool,
             tx_leader,
             tx_events,
-            pacemaker,
         }
     }
 
@@ -97,34 +88,22 @@ where TConsensusSpec: ConsensusSpec
             valid_block,
         );
 
-        self.handle_proposal(valid_block).await
-    }
-
-    async fn handle_proposal(&self, valid_block: ValidBlock<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
         let local_committee = self.epoch_manager.get_local_committee(valid_block.epoch()).await?;
         let local_committee_shard = self
             .epoch_manager
             .get_local_committee_shard(valid_block.epoch())
             .await?;
 
-        let (high_qc, maybe_decision) = self.store.with_write_tx(|tx| {
-            valid_block.block().justify().save(tx)?;
-            valid_block.save_all_dummy_blocks(tx)?;
-            valid_block.block().save(tx)?;
-
+        let maybe_decision = self.store.with_write_tx(|tx| {
             let maybe_decision = self.decide_on_block(tx, &local_committee_shard, valid_block.block())?;
             if maybe_decision.is_some() {
                 valid_block.block().as_last_voted().set(tx)?;
             }
-            let high_qc = HighQc::get(tx.deref_mut())?;
-            Ok::<_, HotStuffError>((high_qc, maybe_decision))
+            Ok::<_, HotStuffError>(maybe_decision)
         })?;
 
         if let Some(decision) = maybe_decision {
             let vote = self.generate_vote_message(valid_block.block(), decision).await?;
-            self.pacemaker
-                .reset_leader_timeout(valid_block.height(), high_qc.block_height())
-                .await?;
             self.send_vote_to_leader(&local_committee, vote, valid_block.block())
                 .await;
         }
