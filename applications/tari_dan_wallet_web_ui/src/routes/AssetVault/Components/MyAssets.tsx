@@ -80,7 +80,20 @@ function MyAssets() {
         </Box>
         <Divider />
       </Grid>
-      <Grid item xs={12} md={12} lg={12}>
+      <Grid
+        item
+        xs={12}
+        md={12}
+        lg={12}
+        style={{
+          position: 'sticky',
+          top: 50,
+          background: theme.palette.background.default,
+          opacity: 0.9,
+          zIndex: 1,
+          paddingBottom: theme.spacing(1),
+        }}
+      >
         <Box
           className="flex-container"
           style={{
