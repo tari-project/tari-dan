@@ -8,7 +8,7 @@ use futures::StreamExt;
 use log::*;
 use tari_comms::{protocol::rpc::RpcError, types::CommsPublicKey};
 use tari_consensus::traits::{SyncManager, SyncStatus};
-use tari_dan_common_types::{committee::Committee, optional::Optional, Epoch, NodeHeight};
+use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -60,10 +60,8 @@ where
         }
     }
 
-    async fn get_sync_peers(
-        &self,
-        current_epoch: Epoch,
-    ) -> Result<Committee<CommsPublicKey>, CommsRpcConsensusSyncError> {
+    async fn get_sync_peers(&self) -> Result<Committee<CommsPublicKey>, CommsRpcConsensusSyncError> {
+        let current_epoch = self.epoch_manager.current_epoch().await?;
         let this_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
         let mut committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         committee.members.retain(|m| *m != this_vn.address);
@@ -323,8 +321,11 @@ where
     type Error = CommsRpcConsensusSyncError;
 
     async fn check_sync(&self) -> Result<SyncStatus, Self::Error> {
-        let current_epoch = self.epoch_manager.current_epoch().await?;
-        let committee = self.get_sync_peers(current_epoch).await?;
+        let committee = self.get_sync_peers().await?;
+        if committee.is_empty() {
+            warn!(target: LOG_TARGET, "No peers available for sync");
+            return Ok(SyncStatus::UpToDate);
+        }
         let mut highest_qc: Option<QuorumCertificate<CommsPublicKey>> = None;
         let mut num_succeeded = 0;
         let max_failures = committee.max_failures();
@@ -400,8 +401,11 @@ where
     }
 
     async fn sync(&self) -> Result<(), Self::Error> {
-        let current_epoch = self.epoch_manager.current_epoch().await?;
-        let committee = self.get_sync_peers(current_epoch).await?;
+        let committee = self.get_sync_peers().await?;
+        if committee.is_empty() {
+            warn!(target: LOG_TARGET, "No peers available for sync");
+            return Ok(());
+        }
 
         let mut sync_error = None;
         for member in committee {
