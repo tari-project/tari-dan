@@ -157,6 +157,8 @@ async fn call_template_constructor_via_wallet_daemon(
         function_call,
         args,
         num_outputs,
+        None,
+        None,
     )
     .await;
 
@@ -462,7 +464,17 @@ async fn submit_transaction_manifest_via_wallet_daemon(
     outputs_name: String,
 ) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
-    wallet_daemon_cli::submit_manifest(world, wallet_daemon_name, manifest, inputs, num_outputs, outputs_name).await;
+    wallet_daemon_cli::submit_manifest(
+        world,
+        wallet_daemon_name,
+        manifest,
+        inputs,
+        num_outputs,
+        outputs_name,
+        None,
+        None,
+    )
+    .await;
 }
 
 #[when(
@@ -486,6 +498,8 @@ async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
         inputs,
         num_outputs,
         outputs_name,
+        None,
+        None,
     )
     .await;
 }

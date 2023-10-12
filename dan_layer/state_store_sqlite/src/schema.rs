@@ -216,6 +216,8 @@ diesel::table! {
         execution_time_ms -> Nullable<BigInt>,
         final_decision -> Nullable<Text>,
         abort_details -> Nullable<Text>,
+        min_epoch -> Nullable<BigInt>,
+        max_epoch -> Nullable<BigInt>,
         created_at -> Timestamp,
     }
 }

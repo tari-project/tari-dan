@@ -154,6 +154,8 @@ create table transactions
     execution_time_ms bigint    NULL,
     final_decision    text      NULL,
     abort_details     text      NULL,
+    min_epoch         BIGINT   NULL,
+    max_epoch         BIGINT   NULL,
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
