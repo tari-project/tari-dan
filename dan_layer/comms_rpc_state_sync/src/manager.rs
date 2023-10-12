@@ -138,8 +138,6 @@ where
             let block =
                 Block::<CommsPublicKey>::try_from(new_block).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
 
-            debug!(target: LOG_TARGET, "🌐 Received block {}", block);
-
             let Some(resp) = stream.next().await else {
                 return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
                     "Peer closed session before sending QC message"
@@ -149,8 +147,6 @@ where
             let qcs = msg.into_quorum_certificates().ok_or_else(|| {
                 CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!("Expected peer to return QCs"))
             })?;
-
-            debug!(target: LOG_TARGET, "🌐 Received block {}, {} qcs", block, qcs.len());
 
             let qcs = qcs
                 .into_iter()

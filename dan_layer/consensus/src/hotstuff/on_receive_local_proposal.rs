@@ -119,17 +119,20 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         &self,
         block: Block<TConsensusSpec::Addr>,
     ) -> Result<Option<ValidBlock<TConsensusSpec::Addr>>, HotStuffError> {
-        let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
+        let local_committee = self
+            .epoch_manager
+            .get_committee_by_validator_address(block.epoch(), block.proposed_by())
+            .await?;
         // First save the block in one db transaction
         self.store.with_read_tx(|tx| {
             match self.validate_local_proposed_block(tx, block, &local_committee) {
                 Ok(validated) => Ok(Some(validated)),
                 // Block sync
-                Err(
-                    err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
-                        ..
-                    }),
-                ) => Err(err),
+                // Err(
+                //     err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
+                //         ..
+                //     }),
+                // ) => Err(err),
                 // Validation errors should not cause a FAILURE state transition
                 Err(HotStuffError::ProposalValidationError(err)) => {
                     warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);

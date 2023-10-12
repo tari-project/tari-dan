@@ -159,10 +159,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx: &mut TStateStore::ReadTransaction<'_>,
         max: usize,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
-        let mut recs = tx.transaction_pool_get_many_ready(max)?;
-        // We require the records to be canonically sorted by transaction ID
-        // TODO(perf): might be able to delegate this to the storage layer
-        recs.sort_by(|a, b| a.transaction.id.cmp(&b.transaction.id));
+        let recs = tx.transaction_pool_get_many_ready(max)?;
         Ok(recs)
     }
 

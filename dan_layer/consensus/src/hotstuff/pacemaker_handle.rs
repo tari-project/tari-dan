@@ -14,7 +14,7 @@ use crate::hotstuff::{
 };
 
 pub enum PacemakerRequest {
-    UpdateView { high_qc_height: NodeHeight },
+    ResetLeaderTimeout { high_qc_height: NodeHeight },
     Start { high_qc_height: NodeHeight },
     Stop,
 }
@@ -93,7 +93,19 @@ impl PaceMakerHandle {
         // Update current height here to prevent possibility of race conditions
         self.current_height.update(last_seen_height);
         self.sender
-            .send(PacemakerRequest::UpdateView { high_qc_height })
+            .send(PacemakerRequest::ResetLeaderTimeout { high_qc_height })
+            .await
+            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    }
+
+    pub async fn reset_view(
+        &self,
+        last_seen_height: NodeHeight,
+        high_qc_height: NodeHeight,
+    ) -> Result<(), HotStuffError> {
+        self.current_height.set(last_seen_height);
+        self.sender
+            .send(PacemakerRequest::ResetLeaderTimeout { high_qc_height })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }

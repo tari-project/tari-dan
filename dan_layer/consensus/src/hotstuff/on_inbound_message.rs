@@ -23,7 +23,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerReader;
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::TransactionId;
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time};
 
 use crate::{
     block_validations::{check_hash_and_height, check_proposed_by_leader, check_quorum_certificate},
@@ -34,9 +34,9 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::inbound_messages";
 
-pub type IncomingMessageResult<TAddr> = Result<(TAddr, HotstuffMessage<TAddr>), NeedsSync<TAddr>>;
+pub type IncomingMessageResult<TAddr> = Result<Option<(TAddr, HotstuffMessage<TAddr>)>, NeedsSync<TAddr>>;
 
-pub struct InboundMessages<TConsensusSpec: ConsensusSpec> {
+pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -49,7 +49,7 @@ pub struct InboundMessages<TConsensusSpec: ConsensusSpec> {
     shutdown: ShutdownSignal,
 }
 
-impl<TConsensusSpec> InboundMessages<TConsensusSpec>
+impl<TConsensusSpec> OnInboundMessage<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
@@ -77,15 +77,15 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub async fn next(&mut self, current_height: NodeHeight) -> Option<IncomingMessageResult<TConsensusSpec::Addr>> {
+    pub async fn next(&mut self, current_height: NodeHeight) -> IncomingMessageResult<TConsensusSpec::Addr> {
         loop {
             tokio::select! {
                 biased;
 
-                _ = self.shutdown.wait() => { break None; }
+                _ = self.shutdown.wait() => { break Ok(None); }
 
-                Some(result) = self.message_buffer.next(current_height) => {
-                    break Some(result);
+                msg_or_sync = self.message_buffer.next(current_height) => {
+                    break msg_or_sync;
                 },
 
                 Some((from, msg)) = self.rx_hotstuff_message.recv() => {
@@ -160,9 +160,12 @@ where TConsensusSpec: ConsensusSpec
         }
 
         check_hash_and_height(&block)?;
-        let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
-        check_proposed_by_leader(&self.leader_strategy, &local_committee, &block)?;
-        check_quorum_certificate(&local_committee, &block)?;
+        let committee_for_block = self
+            .epoch_manager
+            .get_committee_by_validator_address(block.epoch(), block.proposed_by())
+            .await?;
+        check_proposed_by_leader(&self.leader_strategy, &committee_for_block, &block)?;
+        check_quorum_certificate(&committee_for_block, &block)?;
 
         let Some(ready_block) = self.handle_missing_transactions(block).await? else {
             // Block not ready
@@ -294,31 +297,18 @@ impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
         }
     }
 
-    pub async fn next(
-        &mut self,
-        current_height: NodeHeight,
-    ) -> Option<Result<(TAddr, HotstuffMessage<TAddr>), NeedsSync<TAddr>>> {
+    pub async fn next(&mut self, current_height: NodeHeight) -> IncomingMessageResult<TAddr> {
         // Clear buffer with lower heights
         self.buffer = self.buffer.split_off(&current_height);
 
         // Check if message is in the buffer
         if let Some(buffer) = self.buffer.get_mut(&current_height) {
             if let Some(msg_tuple) = buffer.pop_front() {
-                return Some(Ok(msg_tuple));
+                return Ok(Some(msg_tuple));
             }
         }
 
-        while let Some((from, msg)) = self.rx_msg_ready.recv().await {
-            if let Some(msg) = msg.proposal() {
-                if msg.block.justify().block_height() > current_height {
-                    return Some(Err(NeedsSync {
-                        from: msg.block.proposed_by().clone(),
-                        local_height: current_height,
-                        qc_height: msg.block.justify().block_height(),
-                    }));
-                }
-            }
-
+        while let Some((from, msg)) = self.next_message_or_sync(current_height).await? {
             match msg_height(&msg) {
                 // Discard old message
                 Some(h) if h < current_height => {
@@ -332,11 +322,11 @@ impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
                     continue;
                 },
                 // Height is irrelevant or current, return message
-                _ => return Some(Ok((from, msg))),
+                _ => return Ok(Some((from, msg))),
             }
         }
 
-        None
+        Ok(None)
     }
 
     pub async fn discard(&mut self) {
@@ -346,6 +336,37 @@ impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
 
     pub fn clear_buffer(&mut self) {
         self.buffer.clear();
+    }
+
+    async fn next_message_or_sync(
+        &mut self,
+        current_height: NodeHeight,
+    ) -> Result<Option<(TAddr, HotstuffMessage<TAddr>)>, NeedsSync<TAddr>> {
+        loop {
+            // Don't really like this but because we can receive proposals out of order, we need to wait a bit to see
+            // if we get a proposal at our height without switching to sync.
+            let timeout = time::sleep(time::Duration::from_secs(2));
+            tokio::pin!(timeout);
+            tokio::select! {
+                msg = self.rx_msg_ready.recv() => return Ok(msg),
+                _ = timeout.as_mut() => {
+                    // Check if we have any proposals
+                    for  queue in self.buffer.values() {
+                        for (from, msg) in queue {
+                           if let Some(proposal) = msg.proposal() {
+                                if proposal.block.justify().block_height()  > current_height {
+                                     return Err(NeedsSync {
+                                        from: from.clone(),
+                                        local_height: current_height,
+                                        qc_height: proposal.block.justify().block_height(),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     fn push_to_buffer(&mut self, height: NodeHeight, from: TAddr, msg: HotstuffMessage<TAddr>) {
@@ -364,7 +385,7 @@ pub struct NeedsSync<TAddr: NodeAddressable> {
 fn msg_height<TAddr>(msg: &HotstuffMessage<TAddr>) -> Option<NodeHeight> {
     match msg {
         HotstuffMessage::Proposal(msg) => Some(msg.block.height()),
-        // If vote for block is 2, then we are listening for votes at current height 3
+        // Votes for block 2, occur at current height 3
         HotstuffMessage::Vote(msg) => Some(msg.block_height.saturating_add(NodeHeight(1))),
         _ => None,
     }

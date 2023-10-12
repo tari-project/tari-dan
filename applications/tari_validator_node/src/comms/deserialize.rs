@@ -163,7 +163,7 @@ where
             log::info!(
                 target: LOG_TARGET,
                 "📨 Rx: {} ({} bytes) from {:15}",
-                msg.as_type_str(),
+                msg,
                 body_len,
                 peer.public_key
             );

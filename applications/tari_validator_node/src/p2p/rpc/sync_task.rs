@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use log::*;
 use tari_comms::protocol::rpc::RpcStatus;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, QuorumCertificate, SubstateUpdate, TransactionRecord},
+    consensus_models::{Block, BlockId, LockedBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
     StorageError,
@@ -85,6 +85,24 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
             }
         }
 
+        match self.fetch_last_blocks(&mut buffer, &current_block_id) {
+            Ok(_) => (),
+            Err(err) => {
+                self.send(Err(RpcStatus::log_internal_error(LOG_TARGET)(err))).await?;
+                return Err(());
+            },
+        }
+
+        debug!(
+            target: LOG_TARGET,
+            "Sending {} last blocks to peer.",
+            buffer.len(),
+        );
+
+        for data in buffer.drain(..) {
+            self.send_block_data(data).await?;
+        }
+
         Ok(())
     }
 
@@ -116,6 +134,36 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                 }
             }
             Ok::<_, StorageError>(current_block_id)
+        })
+    }
+
+    fn fetch_last_blocks(
+        &self,
+        buffer: &mut BlockBuffer<TStateStore::Addr>,
+        current_block_id: &BlockId,
+    ) -> Result<(), StorageError> {
+        self.store.with_read_tx(|tx| {
+            let locked_block = LockedBlock::get(tx)?;
+            let blocks = Block::get_all_blocks_between(tx, current_block_id, locked_block.block_id())?;
+            for block in blocks {
+                debug!(
+                    target: LOG_TARGET,
+                    "Fetching last blocks. Current block: {} to target {}",
+                    block,
+                    current_block_id
+                );
+                let all_qcs = block
+                    .commands()
+                    .iter()
+                    .flat_map(|cmd| cmd.evidence().qc_ids_iter())
+                    .collect::<HashSet<_>>();
+                let certificates = QuorumCertificate::get_all(tx, all_qcs)?;
+
+                // No substate updates can occur for blocks after the last commit
+                buffer.push((block, certificates, vec![], vec![]));
+            }
+
+            Ok::<_, StorageError>(())
         })
     }
 

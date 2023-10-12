@@ -9,18 +9,13 @@ use std::{
 use log::*;
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, LockedBlock, QuorumCertificate},
+    consensus_models::{Block, BlockId, LeafBlock, LockedBlock, QuorumCertificate},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
-    hotstuff::{
-        common::calculate_dummy_blocks,
-        error::HotStuffError,
-        pacemaker_handle::PaceMakerHandle,
-        ProposalValidationError,
-    },
+    hotstuff::{common::calculate_dummy_blocks, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
     traits::{ConsensusSpec, LeaderStrategy},
 };
@@ -90,11 +85,7 @@ where TConsensusSpec: ConsensusSpec
             from
         );
 
-        if !self
-            .epoch_manager
-            .is_local_validator_registered_for_epoch(epoch)
-            .await?
-        {
+        if !self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await? {
             warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for epoch {} because the epoch is invalid or we are not registered for that epoch", epoch);
             return Ok(());
         }
@@ -121,13 +112,15 @@ where TConsensusSpec: ConsensusSpec
             .store
             .with_read_tx(|tx| Block::record_exists(tx, high_qc.block_id()))?;
         if !exists {
-            return Err(HotStuffError::ProposalValidationError(
-                ProposalValidationError::JustifyBlockNotFound {
-                    proposed_by: from.to_string(),
-                    block_description: format!("HighQc block {}", high_qc.block_id()),
-                    justify_block: *high_qc.block_id(),
-                },
-            ));
+            let leaf = self
+                .store
+                .with_read_tx(|tx| LeafBlock::get(tx))
+                // We need something for the returned error even if this query fails
+                .unwrap_or_else(|_| LeafBlock::genesis());
+            return Err(HotStuffError::FallenBehind {
+                local_height: leaf.height(),
+                qc_height: high_qc.block_height(),
+            });
         }
 
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
@@ -159,6 +152,7 @@ where TConsensusSpec: ConsensusSpec
         let newview_count = self.collect_new_views(from, new_height, &high_qc);
 
         let high_qc = self.store.with_write_tx(|tx| {
+            high_qc.save(tx)?;
             let high_qc = high_qc.update_high_qc(tx)?;
             high_qc.get_quorum_certificate(tx.deref_mut())
         })?;

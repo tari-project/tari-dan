@@ -88,14 +88,26 @@ where TConsensusSpec: ConsensusSpec
             valid_block,
         );
 
-        let local_committee = self.epoch_manager.get_local_committee(valid_block.epoch()).await?;
         let local_committee_shard = self
             .epoch_manager
-            .get_local_committee_shard(valid_block.epoch())
+            .get_committee_shard_by_validator_address(valid_block.epoch(), valid_block.proposed_by())
             .await?;
 
         let maybe_decision = self.store.with_write_tx(|tx| {
             let maybe_decision = self.decide_on_block(tx, &local_committee_shard, valid_block.block())?;
+
+            // Update nodes
+            if maybe_decision.map(|d| d.is_accept()).unwrap_or(false) {
+                let high_qc = valid_block.block().update_nodes(
+                    tx,
+                    |tx, locked, block| self.on_lock_block(tx, locked, block),
+                    |tx, last_exec, commit_block| self.on_commit(tx, last_exec, commit_block, &local_committee_shard),
+                )?;
+
+                // If we have a new high QC, we'll process the block it justifies
+                self.process_new_leaf(tx, high_qc, valid_block.block(), &local_committee_shard)?;
+            }
+
             if maybe_decision.is_some() {
                 valid_block.block().as_last_voted().set(tx)?;
             }
@@ -103,9 +115,31 @@ where TConsensusSpec: ConsensusSpec
         })?;
 
         if let Some(decision) = maybe_decision {
-            let vote = self.generate_vote_message(valid_block.block(), decision).await?;
-            self.send_vote_to_leader(&local_committee, vote, valid_block.block())
-                .await;
+            let is_registered = self
+                .epoch_manager
+                .is_this_validator_registered_for_epoch(valid_block.epoch())
+                .await?;
+
+            if is_registered {
+                debug!(
+                    target: LOG_TARGET,
+                    "🔥 LOCAL PROPOSAL {} DECIDED {:?}",
+                    valid_block,
+                    decision,
+                );
+                let local_committee = self.epoch_manager.get_local_committee(valid_block.epoch()).await?;
+
+                let vote = self.generate_vote_message(valid_block.block(), decision).await?;
+                self.send_vote_to_leader(&local_committee, vote, valid_block.block())
+                    .await;
+            } else {
+                info!(
+                    target: LOG_TARGET,
+                    "❓️ Local validator not registered for epoch {}. Not voting on block {}",
+                    valid_block.epoch(),
+                    valid_block,
+                );
+            }
         }
 
         Ok(())
@@ -120,17 +154,6 @@ where TConsensusSpec: ConsensusSpec
         let mut maybe_decision = None;
         if self.should_vote(tx.deref_mut(), block)? {
             maybe_decision = self.decide_what_to_vote(tx, block, local_committee_shard)?;
-        }
-
-        if maybe_decision.map(|d| d.is_accept()).unwrap_or(false) {
-            let high_qc = block.update_nodes(
-                tx,
-                |tx, locked, block| self.on_lock_block(tx, locked, block),
-                |tx, last_exec, commit_block| self.on_commit(tx, last_exec, commit_block, local_committee_shard),
-            )?;
-
-            // If we have a new high QC, we'll process the block it justifies
-            self.process_new_leaf(tx, high_qc, block, local_committee_shard)?;
         }
 
         Ok(maybe_decision)

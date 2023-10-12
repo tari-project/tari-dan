@@ -1035,8 +1035,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         use crate::schema::transaction_pool;
 
         let ready_txs = transaction_pool::table
-            // .filter(transaction_pool::is_ready.eq(true))
-            // .limit(max_txs as i64)
+            .order_by(transaction_pool::transaction_id.asc())
             .get_results::<sql_models::TransactionPoolRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pool_get_many_ready",
@@ -1072,7 +1071,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                 let maybe_update = updates.remove(&rec.transaction_id);
                 match rec.try_convert(maybe_update) {
                     Ok(rec) => {
-                        if rec.is_ready() {
+                        if rec.is_ready() || rec.stage().is_new() {
                             Some(Ok(rec))
                         } else {
                             None

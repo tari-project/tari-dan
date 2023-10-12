@@ -284,7 +284,7 @@ where TPeerProvider: PeerProvider + Clone + Send + Sync + 'static
         let start_block = store
             .with_read_tx(|tx| Block::get(tx, &start_block_id).optional())
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?
-            .ok_or_else(|| RpcStatus::not_found("start_block_id not found"))?;
+            .ok_or_else(|| RpcStatus::not_found(&format!("start_block_id {start_block_id} not found")))?;
 
         // Check that the start block
         let locked_block = store

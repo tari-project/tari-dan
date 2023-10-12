@@ -55,6 +55,10 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         self.members.shuffle(&mut OsRng);
     }
 
+    pub fn shuffled(&self) -> impl Iterator<Item = &TAddr> + '_ {
+        self.members.choose_multiple(&mut OsRng, self.len())
+    }
+
     pub fn select_n_random(&self, n: usize) -> impl Iterator<Item = &TAddr> + '_ {
         self.members.choose_multiple(&mut OsRng, n)
     }

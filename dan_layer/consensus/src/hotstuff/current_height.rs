@@ -39,7 +39,7 @@ impl CurrentHeight {
         false
     }
 
-    fn set(&self, height: NodeHeight) {
+    pub fn set(&self, height: NodeHeight) {
         self.height.store(height.as_u64(), atomic::Ordering::SeqCst);
     }
 }

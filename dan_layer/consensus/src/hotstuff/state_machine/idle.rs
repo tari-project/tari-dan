@@ -70,7 +70,7 @@ where TSpec: ConsensusSpec
     ) -> Result<bool, HotStuffError> {
         let is_registered = context
             .epoch_manager
-            .is_local_validator_registered_for_epoch(epoch)
+            .is_this_validator_registered_for_epoch(epoch)
             .await?;
         Ok(is_registered)
     }

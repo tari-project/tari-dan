@@ -16,6 +16,8 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_sync_request";
 
+pub(super) const MAX_BLOCKS_PER_SYNC: usize = 100;
+
 #[derive(Debug)]
 pub struct OnSyncRequest<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
@@ -84,7 +86,13 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                 },
             };
 
-            for block in blocks {
+            for block in blocks.into_iter().take(MAX_BLOCKS_PER_SYNC) {
+                debug!(
+                    target: LOG_TARGET,
+                    "🌐 Sending block {} to {}",
+                    block,
+                    from
+                );
                 if tx_leader
                     .send((from.clone(), HotstuffMessage::Proposal(ProposalMessage { block })))
                     .await

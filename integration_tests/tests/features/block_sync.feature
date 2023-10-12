@@ -45,6 +45,7 @@ Feature: Block Sync
     When indexer IDX connects to all other validators
     When validator node VN2 sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
     When miner MINER mines 20 new blocks
+    Then VN has scanned to height 37 within 20 seconds
     Then VN2 has scanned to height 37 within 10 seconds
     Then the validator node VN2 is listed as registered
 

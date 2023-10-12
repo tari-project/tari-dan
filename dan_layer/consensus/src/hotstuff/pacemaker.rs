@@ -91,7 +91,7 @@ impl PaceMaker {
                 maybe_req = self.handle_receiver.recv() => {
                     if let Some(req) = maybe_req {
                         match req {
-                           PacemakerRequest::UpdateView { high_qc_height } => {
+                           PacemakerRequest::ResetLeaderTimeout { high_qc_height } => {
                                 if !started {
                                     continue;
                                 }
@@ -167,7 +167,9 @@ impl PaceMaker {
             MAX_DELTA,
             2u64.checked_pow(exp).map(Duration::from_secs).unwrap_or(MAX_DELTA),
         );
-        self.block_time + delta
+        // TODO: get real avg latency
+        let avg_latency = Duration::from_secs(2);
+        self.block_time + delta + avg_latency
     }
 }
 
