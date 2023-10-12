@@ -135,7 +135,7 @@ impl Test {
         self.wait_all_for_predicate(format!("new pool count to be {}", count), |v| {
             v.address != vn ||
                 v.state_store
-                    .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None))
+                    .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None, None))
                     .unwrap() >=
                     count
         })
@@ -145,7 +145,7 @@ impl Test {
     pub async fn wait_until_new_pool_count(&self, count: usize) {
         self.wait_all_for_predicate(format!("new pool count to be {}", count), |v| {
             v.state_store
-                .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None))
+                .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None, None))
                 .unwrap() >=
                 count
         })
@@ -156,7 +156,7 @@ impl Test {
         self.wait_all_for_predicate(format!("waiting for {} new transaction(s) in pool", n), |v| {
             let pool_count = v
                 .state_store
-                .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), Some(true)))
+                .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), Some(true), None))
                 .unwrap();
 
             pool_count >= n

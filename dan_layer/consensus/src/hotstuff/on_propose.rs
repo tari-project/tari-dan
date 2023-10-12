@@ -3,7 +3,6 @@
 
 use std::{
     collections::{BTreeSet, HashSet},
-    iter,
     num::NonZeroU64,
     ops::DerefMut,
 };
@@ -108,7 +107,7 @@ where TConsensusSpec: ConsensusSpec
                     }
                 }
 
-                debug!(
+                info!(
                     target: LOG_TARGET,
                     "⤵️ SKIPPING propose for leaf {} because we already proposed block {}",
                     leaf_block,
@@ -143,7 +142,7 @@ where TConsensusSpec: ConsensusSpec
                 //       is a good idea.
                 is_newview_propose,
             )?;
-            next_block.save(&mut tx)?;
+
             next_block.as_last_proposed().set(&mut tx)?;
 
             // Get involved shards for all LocalPrepared commands in the block.
@@ -200,15 +199,23 @@ where TConsensusSpec: ConsensusSpec
         );
 
         // Broadcast to local and foreign committees
-        // TODO: only broadcast to f + 1 foreign committee members. They can gossip the proposal around from there.
-        let committee = iter::once(local_committee)
-            .chain(non_local_committees.into_values())
-            .collect();
-
         self.tx_broadcast
             .send((
-                committee,
-                HotstuffMessage::Proposal(ProposalMessage { block: next_block }),
+                local_committee,
+                HotstuffMessage::Proposal(ProposalMessage {
+                    block: next_block.clone(),
+                }),
+            ))
+            .await
+            .map_err(|_| HotStuffError::InternalChannelClosed {
+                context: "proposing a new block",
+            })?;
+
+        // TODO: only broadcast to f + 1 foreign committee members. They can gossip the proposal around from there.
+        self.tx_broadcast
+            .send((
+                non_local_committees.into_values().collect(),
+                HotstuffMessage::ForeignProposal(ProposalMessage { block: next_block }),
             ))
             .await
             .map_err(|_| HotStuffError::InternalChannelClosed {

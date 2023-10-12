@@ -52,7 +52,7 @@ use crate::{
 impl From<NewTransactionMessage> for proto::transaction::NewTransactionMessage {
     fn from(msg: NewTransactionMessage) -> Self {
         Self {
-            transaction: Some(msg.transaction.into()),
+            transaction: Some((&msg.transaction).into()),
             output_shards: msg.output_shards.into_iter().map(|s| s.as_bytes().to_vec()).collect(),
         }
     }
@@ -129,8 +129,8 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
     }
 }
 
-impl From<Transaction> for proto::transaction::Transaction {
-    fn from(transaction: Transaction) -> Self {
+impl From<&Transaction> for proto::transaction::Transaction {
+    fn from(transaction: &Transaction) -> Self {
         let signature = transaction.signature().clone().into();
         let inputs = transaction.inputs().iter().map(|s| s.as_bytes().to_vec()).collect();
         let input_refs = transaction.input_refs().iter().map(|s| s.as_bytes().to_vec()).collect();
@@ -140,7 +140,8 @@ impl From<Transaction> for proto::transaction::Transaction {
             .iter()
             .map(|s| s.as_bytes().to_vec())
             .collect();
-        let (fee_instructions, instructions) = transaction.into_instructions();
+        let fee_instructions = transaction.fee_instructions().to_vec();
+        let instructions = transaction.instructions().to_vec();
         let fee_instructions = fee_instructions.into_iter().map(Into::into).collect();
         let instructions = instructions.into_iter().map(Into::into).collect();
 

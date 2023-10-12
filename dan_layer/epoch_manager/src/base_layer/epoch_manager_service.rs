@@ -97,6 +97,7 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
                 self.inner.get_validator_node(epoch, &addr).and_then(|x| {
                     x.ok_or(EpochManagerError::ValidatorNodeNotRegistered {
                         address: addr.to_string(),
+                        epoch,
                     })
                 }),
             ),

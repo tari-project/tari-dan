@@ -22,6 +22,7 @@
 
 use std::fmt::Display;
 
+use serde::Serialize;
 use tari_dan_common_types::NodeHeight;
 
 use crate::{
@@ -31,7 +32,7 @@ use crate::{
     StorageError,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HighQc {
     pub block_id: BlockId,
     pub block_height: NodeHeight,

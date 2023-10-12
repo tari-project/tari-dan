@@ -51,7 +51,6 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
             .get_leader_for_next_block(&local_committee, new_height);
 
         info!(target: LOG_TARGET, "🌟 Send NEWVIEW {new_height} HighQC: {} to {next_leader}", high_qc);
-
         let message = NewViewMessage {
             high_qc,
             new_height,
@@ -63,6 +62,8 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
             .await
             .map_err(|_| HotStuffError::InternalChannelClosed {
                 context: "tx_leader in OnNextSyncViewHandler::send_to_leader",
-            })
+            })?;
+
+        Ok(())
     }
 }

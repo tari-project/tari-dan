@@ -12,9 +12,12 @@ message HotStuffMessage {
   oneof message {
     NewViewMessage new_view = 1;
     ProposalMessage proposal = 2;
-    VoteMessage vote = 3;
-    RequestMissingTransactionsMessage request_missing_transactions = 4;
-    RequestedTransactionMessage requested_transaction = 5;
+    ProposalMessage foreign_proposal = 3;
+    VoteMessage vote = 4;
+    RequestMissingTransactionsMessage request_missing_transactions = 5;
+    RequestedTransactionMessage requested_transaction = 6;
+    SyncRequest sync_request = 7;
+    SyncResponse sync_response = 8;
   }
 }
 
@@ -31,9 +34,10 @@ message ProposalMessage {
 message VoteMessage {
   uint64 epoch = 1;
   bytes block_id = 2;
-  QuorumDecision decision = 3;
-  tari.dan.common.SignatureAndPublicKey signature = 4;
-  bytes merkle_proof = 5;
+  uint64 block_height = 3;
+  QuorumDecision decision = 4;
+  tari.dan.common.SignatureAndPublicKey signature = 5;
+  bytes merkle_proof = 6;
 }
 
 message Block {
@@ -178,3 +182,26 @@ message SubstateDestroyed {
   bytes transaction = 11;
   bytes justify = 12;
 }
+
+message SyncRequest {
+  uint64 epoch = 1;
+  HighQc high_qc = 2;
+}
+
+message HighQc {
+  bytes block_id = 1;
+  uint64 block_height = 2;
+  bytes qc_id = 3;
+}
+
+message SyncResponse {
+  repeated FullBlock blocks = 1;
+  uint64 epoch = 2;
+}
+
+message FullBlock {
+  Block block = 1;
+  repeated QuorumCertificate qcs = 2;
+  repeated tari.dan.transaction.Transaction transactions = 3;
+}
+

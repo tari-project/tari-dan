@@ -40,11 +40,7 @@ impl Gossip {
     ) -> Result<(), MempoolError> {
         let committee = self.epoch_manager.get_local_committee(epoch).await?;
 
-        let Some(our_index) = committee
-            .members()
-            .iter()
-            .position(|addr| addr == &self.validator_public_key)
-        else {
+        let Some(our_index) = committee.index_of(&self.validator_public_key) else {
             error!(target: LOG_TARGET, "BUG: forward_to_local_replicas: get_local_committee returned committee that this node is not part of");
             return Ok(());
         };

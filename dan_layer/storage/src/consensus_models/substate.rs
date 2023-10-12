@@ -152,6 +152,16 @@ impl SubstateRecord {
         Ok(())
     }
 
+    pub fn unlock_any<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
+        tx: &mut TTx,
+        locked_by_tx: &TransactionId,
+        inputs: I,
+        lock_flag: SubstateLockFlag,
+    ) -> Result<(), StorageError> {
+        tx.substates_try_unlock_many(locked_by_tx, inputs, lock_flag)?;
+        Ok(())
+    }
+
     pub fn create<TTx: StateStoreWriteTransaction>(self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.substates_create(self)?;
         Ok(())
@@ -170,6 +180,13 @@ impl SubstateRecord {
         substates: I,
     ) -> Result<bool, StorageError> {
         tx.substates_any_exist(substates)
+    }
+
+    pub fn exists_for_transaction<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &mut TTx,
+        transaction_id: &TransactionId,
+    ) -> Result<bool, StorageError> {
+        tx.substates_exists_for_transaction(transaction_id)
     }
 
     pub fn get<TTx: StateStoreReadTransaction + ?Sized>(

@@ -9,18 +9,13 @@ use std::{
 use log::*;
 use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, LockedBlock, QuorumCertificate},
+    consensus_models::{Block, BlockId, LeafBlock, LockedBlock, QuorumCertificate},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
-    hotstuff::{
-        common::calculate_dummy_blocks,
-        error::HotStuffError,
-        pacemaker_handle::PaceMakerHandle,
-        ProposalValidationError,
-    },
+    hotstuff::{common::calculate_dummy_blocks, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
     traits::{ConsensusSpec, LeaderStrategy},
 };
@@ -59,7 +54,7 @@ where TConsensusSpec: ConsensusSpec
 
     fn collect_new_views(
         &mut self,
-        from: &TConsensusSpec::Addr,
+        from: TConsensusSpec::Addr,
         new_height: NodeHeight,
         high_qc: &QuorumCertificate<TConsensusSpec::Addr>,
     ) -> usize {
@@ -67,7 +62,7 @@ where TConsensusSpec: ConsensusSpec
             .newview_message_counts
             .entry((new_height, *high_qc.block_id()))
             .or_default();
-        entry.insert(from.clone());
+        entry.insert(from);
         entry.len()
     }
 
@@ -90,11 +85,7 @@ where TConsensusSpec: ConsensusSpec
             from
         );
 
-        if !self
-            .epoch_manager
-            .is_local_validator_registered_for_epoch(epoch)
-            .await?
-        {
+        if !self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await? {
             warn!(target: LOG_TARGET, "❌ Ignoring NEWVIEW for epoch {} because the epoch is invalid or we are not registered for that epoch", epoch);
             return Ok(());
         }
@@ -121,13 +112,15 @@ where TConsensusSpec: ConsensusSpec
             .store
             .with_read_tx(|tx| Block::record_exists(tx, high_qc.block_id()))?;
         if !exists {
-            return Err(HotStuffError::ProposalValidationError(
-                ProposalValidationError::JustifyBlockNotFound {
-                    proposed_by: from.to_string(),
-                    block_id: *high_qc.block_id(),
-                    justify_block: *high_qc.block_id(),
-                },
-            ));
+            let leaf = self
+                .store
+                .with_read_tx(|tx| LeafBlock::get(tx))
+                // We need something for the returned error even if this query fails
+                .unwrap_or_else(|_| LeafBlock::genesis());
+            return Err(HotStuffError::FallenBehind {
+                local_height: leaf.height(),
+                qc_height: high_qc.block_height(),
+            });
         }
 
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
@@ -156,9 +149,10 @@ where TConsensusSpec: ConsensusSpec
         }
 
         // Take note of unique NEWVIEWs so that we can count them
-        let newview_count = self.collect_new_views(&from, new_height, &high_qc);
+        let newview_count = self.collect_new_views(from, new_height, &high_qc);
 
         let high_qc = self.store.with_write_tx(|tx| {
+            high_qc.save(tx)?;
             let high_qc = high_qc.update_high_qc(tx)?;
             high_qc.get_quorum_certificate(tx.deref_mut())
         })?;
@@ -188,24 +182,13 @@ where TConsensusSpec: ConsensusSpec
             let dummy_blocks =
                 calculate_dummy_blocks(epoch, &high_qc, new_height, &self.leader_strategy, &local_committee);
             // Set the last voted block so that we do not vote on other conflicting blocks
-            if let Some(new_last_voted) = dummy_blocks.last().map(|b| b.as_last_voted()) {
-                self.store.with_write_tx(|tx| new_last_voted.set(tx))?;
+            if let Some(last_dummy) = dummy_blocks.last() {
+                debug!(target: LOG_TARGET, "🍼 dummy leaf block {}", last_dummy);
+                // Force beat so that a block is proposed even if there are no transactions
+                self.pacemaker.force_beat(last_dummy.as_leaf_block());
+            } else {
+                warn!(target: LOG_TARGET, "❌ No dummy blocks were created for height {}", new_height);
             }
-
-            let parent_block = dummy_blocks
-                .last()
-                .map(|b| b.as_leaf_block())
-                .unwrap_or_else(|| high_qc.as_leaf_block());
-
-            debug!(target: LOG_TARGET, "🍼 dummy leaf block {}", parent_block);
-            // Force beat so that a block is proposed even if there are no transactions
-            self.pacemaker.force_beat(parent_block);
-            // Clear our NEWVIEWs for previous views
-            self.newview_message_counts = self
-                .newview_message_counts
-                .drain()
-                .filter(|((h, _), _)| *h >= high_qc.block_height())
-                .collect();
         }
 
         Ok(())

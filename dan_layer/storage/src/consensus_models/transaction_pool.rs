@@ -159,10 +159,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         tx: &mut TStateStore::ReadTransaction<'_>,
         max: usize,
     ) -> Result<Vec<TransactionPoolRecord>, TransactionPoolError> {
-        let mut recs = tx.transaction_pool_get_many_ready(max)?;
-        // We require the records to be canonically sorted by transaction ID
-        // TODO(perf): might be able to delegate this to the storage layer
-        recs.sort_by(|a, b| a.transaction.id.cmp(&b.transaction.id));
+        let recs = tx.transaction_pool_get_many_ready(max)?;
         Ok(recs)
     }
 
@@ -170,31 +167,39 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
         &self,
         tx: &mut TStateStore::ReadTransaction<'_>,
     ) -> Result<bool, TransactionPoolError> {
-        let count = tx.transaction_pool_count(None, Some(true))?;
+        let count = tx.transaction_pool_count(None, Some(true), None)?;
         if count > 0 {
             return Ok(true);
         }
-        let count = tx.transaction_pool_count(Some(TransactionPoolStage::Prepared), None)?;
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::Prepared), None, None)?;
         if count > 0 {
             return Ok(true);
         }
-        let count = tx.transaction_pool_count(Some(TransactionPoolStage::LocalPrepared), Some(true))?;
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::LocalPrepared), Some(true), None)?;
         if count > 0 {
             return Ok(true);
         }
-        let count = tx.transaction_pool_count(Some(TransactionPoolStage::AllPrepared), None)?;
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::AllPrepared), None, None)?;
         if count > 0 {
             return Ok(true);
         }
-        let count = tx.transaction_pool_count(Some(TransactionPoolStage::SomePrepared), None)?;
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::SomePrepared), None, None)?;
         if count > 0 {
             return Ok(true);
         }
+
+        // Check if we have any localprepared, is_ready=false but have foreign localprepared. If so, propose so that the
+        // leaf block is processed.
+        let count = tx.transaction_pool_count(Some(TransactionPoolStage::LocalPrepared), None, Some(true))?;
+        if count > 0 {
+            return Ok(true);
+        }
+
         Ok(count > 0)
     }
 
     pub fn count(&self, tx: &mut TStateStore::ReadTransaction<'_>) -> Result<usize, TransactionPoolError> {
-        let count = tx.transaction_pool_count(None, None)?;
+        let count = tx.transaction_pool_count(None, None, None)?;
         Ok(count)
     }
 
@@ -369,7 +374,8 @@ impl TransactionPoolRecord {
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::LocalPrepared), true) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::AllPrepared), false) |
             ((TransactionPoolStage::LocalPrepared, TransactionPoolStage::SomePrepared), false) |
-            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), false) => {},
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::SomePrepared), false) |
+            ((TransactionPoolStage::AllPrepared, TransactionPoolStage::AllPrepared), false) => {},
             _ => {
                 return Err(TransactionPoolError::InvalidTransactionTransition {
                     from: self.current_stage(),

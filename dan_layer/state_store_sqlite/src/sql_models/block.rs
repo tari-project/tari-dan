@@ -56,3 +56,43 @@ impl Block {
         ))
     }
 }
+
+#[derive(Debug, Clone, Queryable)]
+pub struct ParkedBlock {
+    pub id: i32,
+    pub block_id: String,
+    pub parent_block_id: String,
+    pub height: i64,
+    pub epoch: i64,
+    pub proposed_by: String,
+    pub justify: String,
+    pub command_count: i64,
+    pub commands: String,
+    pub total_leader_fee: i64,
+    pub created_at: PrimitiveDateTime,
+}
+
+impl<TAddr: NodeAddressable> TryFrom<ParkedBlock> for consensus_models::Block<TAddr> {
+    type Error = StorageError;
+
+    fn try_from(value: ParkedBlock) -> Result<Self, Self::Error> {
+        Ok(consensus_models::Block::load(
+            deserialize_hex_try_from(&value.block_id)?,
+            deserialize_hex_try_from(&value.parent_block_id)?,
+            deserialize_json(&value.justify)?,
+            NodeHeight(value.height as u64),
+            Epoch(value.epoch as u64),
+            TAddr::from_bytes(&deserialize_hex(&value.proposed_by)?).ok_or_else(|| StorageError::DecodingError {
+                operation: "try_convert",
+                item: "block",
+                details: format!("Block #{} proposed_by is malformed", value.id),
+            })?,
+            deserialize_json(&value.commands)?,
+            value.total_leader_fee as u64,
+            false,
+            false,
+            false,
+            value.created_at,
+        ))
+    }
+}

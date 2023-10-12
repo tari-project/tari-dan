@@ -21,7 +21,9 @@ const LOG_TARGET: &str = "tari::dan::consensus::sm::idle";
 #[derive(Debug, Clone)]
 pub struct IdleState<TSpec>(PhantomData<TSpec>);
 
-impl<TSpec: ConsensusSpec> IdleState<TSpec> {
+impl<TSpec> IdleState<TSpec>
+where TSpec: ConsensusSpec
+{
     pub fn new() -> Self {
         Self(PhantomData)
     }
@@ -68,7 +70,7 @@ impl<TSpec: ConsensusSpec> IdleState<TSpec> {
     ) -> Result<bool, HotStuffError> {
         let is_registered = context
             .epoch_manager
-            .is_local_validator_registered_for_epoch(epoch)
+            .is_this_validator_registered_for_epoch(epoch)
             .await?;
         Ok(is_registered)
     }

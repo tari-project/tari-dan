@@ -85,6 +85,32 @@ async fn propose_blocks_with_queued_up_transactions_until_all_committed() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn propose_blocks_with_new_transactions_until_all_committed() {
+    setup_logger();
+    let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
+    let mut remaining_txs = 10;
+    test.start_epoch(Epoch(0)).await;
+    loop {
+        if remaining_txs > 0 {
+            test.send_transaction_to_all(Decision::Commit, 1, 5).await;
+        }
+        remaining_txs -= 1;
+        test.on_block_committed().await;
+
+        if test.is_transaction_pool_empty() {
+            break;
+        }
+        let leaf = test.get_validator(&TestAddress::new("1")).get_leaf_block();
+        if leaf.height > NodeHeight(20) {
+            panic!("Not all transaction committed after {} blocks", leaf.height);
+        }
+    }
+
+    test.assert_all_validators_at_same_height().await;
+    test.assert_clean_shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn node_requests_missing_transaction_from_local_leader() {
     setup_logger();
     let mut test = Test::builder().add_committee(0, vec!["1", "2"]).start().await;
@@ -140,32 +166,6 @@ async fn node_requests_missing_transaction_from_local_leader() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn propose_blocks_with_new_transactions_until_all_committed() {
-    setup_logger();
-    let mut test = Test::builder().add_committee(0, vec!["1"]).start().await;
-    let mut remaining_txs = 10;
-    test.start_epoch(Epoch(0)).await;
-    loop {
-        if remaining_txs > 0 {
-            test.send_transaction_to_all(Decision::Commit, 1, 5).await;
-        }
-        remaining_txs -= 1;
-        test.on_block_committed().await;
-
-        if test.is_transaction_pool_empty() {
-            break;
-        }
-        let leaf = test.get_validator(&TestAddress::new("1")).get_leaf_block();
-        if leaf.height > NodeHeight(20) {
-            panic!("Not all transaction committed after {} blocks", leaf.height);
-        }
-    }
-
-    test.assert_all_validators_at_same_height().await;
-    test.assert_clean_shutdown().await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn multi_validator_propose_blocks_with_new_transactions_until_all_committed() {
     setup_logger();
     let mut test = Test::builder()
@@ -201,6 +201,7 @@ async fn multi_validator_propose_blocks_with_new_transactions_until_all_committe
 async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() {
     setup_logger();
     let mut test = Test::builder()
+        .with_test_timeout(Duration::from_secs(60))
         .add_committee(0, vec!["1", "2", "3"])
         .add_committee(1, vec!["4", "5", "6"])
         .add_committee(2, vec!["7", "8", "9"])

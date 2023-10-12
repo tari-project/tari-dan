@@ -26,11 +26,14 @@ use anyhow::anyhow;
 use serde::Serialize;
 use tari_bor::{decode_exact, encode};
 use tari_consensus::messages::{
+    FullBlock,
     HotstuffMessage,
     NewViewMessage,
     ProposalMessage,
     RequestMissingTransactionsMessage,
     RequestedTransactionMessage,
+    SyncRequestMessage,
+    SyncResponseMessage,
     VoteMessage,
 };
 use tari_crypto::tari_utilities::ByteArray;
@@ -40,6 +43,8 @@ use tari_dan_storage::consensus_models::{
     Command,
     Decision,
     Evidence,
+    HighQc,
+    QcId,
     QuorumCertificate,
     QuorumDecision,
     SubstateDestroyed,
@@ -55,16 +60,21 @@ use crate::proto;
 impl<TAddr: NodeAddressable> From<&HotstuffMessage<TAddr>> for proto::consensus::HotStuffMessage {
     fn from(source: &HotstuffMessage<TAddr>) -> Self {
         let message = match source {
-            HotstuffMessage::NewView(msg) => proto::consensus::hot_stuff_message::Message::NewView(msg.clone().into()),
-            HotstuffMessage::Proposal(msg) => {
-                proto::consensus::hot_stuff_message::Message::Proposal(msg.clone().into())
+            HotstuffMessage::NewView(msg) => proto::consensus::hot_stuff_message::Message::NewView(msg.into()),
+            HotstuffMessage::Proposal(msg) => proto::consensus::hot_stuff_message::Message::Proposal(msg.into()),
+            HotstuffMessage::ForeignProposal(msg) => {
+                proto::consensus::hot_stuff_message::Message::ForeignProposal(msg.into())
             },
-            HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.clone().into()),
+            HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.into()),
             HotstuffMessage::RequestMissingTransactions(msg) => {
-                proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.clone().into())
+                proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.into())
             },
             HotstuffMessage::RequestedTransaction(msg) => {
-                proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.clone().into())
+                proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg.into())
+            },
+            HotstuffMessage::SyncRequest(msg) => proto::consensus::hot_stuff_message::Message::SyncRequest(msg.into()),
+            HotstuffMessage::SyncResponse(msg) => {
+                proto::consensus::hot_stuff_message::Message::SyncResponse(msg.into())
             },
         };
         Self { message: Some(message) }
@@ -79,6 +89,9 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::HotStuffMessa
         Ok(match message {
             proto::consensus::hot_stuff_message::Message::NewView(msg) => HotstuffMessage::NewView(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::Proposal(msg) => HotstuffMessage::Proposal(msg.try_into()?),
+            proto::consensus::hot_stuff_message::Message::ForeignProposal(msg) => {
+                HotstuffMessage::ForeignProposal(msg.try_into()?)
+            },
             proto::consensus::hot_stuff_message::Message::Vote(msg) => HotstuffMessage::Vote(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg) => {
                 HotstuffMessage::RequestMissingTransactions(msg.try_into()?)
@@ -86,14 +99,20 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::HotStuffMessa
             proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg) => {
                 HotstuffMessage::RequestedTransaction(msg.try_into()?)
             },
+            proto::consensus::hot_stuff_message::Message::SyncRequest(msg) => {
+                HotstuffMessage::SyncRequest(msg.try_into()?)
+            },
+            proto::consensus::hot_stuff_message::Message::SyncResponse(msg) => {
+                HotstuffMessage::SyncResponse(msg.try_into()?)
+            },
         })
     }
 }
 
 //---------------------------------- NewView --------------------------------------------//
 
-impl<TAddr: NodeAddressable> From<NewViewMessage<TAddr>> for proto::consensus::NewViewMessage {
-    fn from(value: NewViewMessage<TAddr>) -> Self {
+impl<TAddr: NodeAddressable> From<&NewViewMessage<TAddr>> for proto::consensus::NewViewMessage {
+    fn from(value: &NewViewMessage<TAddr>) -> Self {
         Self {
             high_qc: Some((&value.high_qc).into()),
             new_height: value.new_height.0,
@@ -116,10 +135,10 @@ impl<TAddr: NodeAddressable> TryFrom<proto::consensus::NewViewMessage> for NewVi
 
 //---------------------------------- ProposalMessage --------------------------------------------//
 
-impl<TAddr: NodeAddressable> From<ProposalMessage<TAddr>> for proto::consensus::ProposalMessage {
-    fn from(value: ProposalMessage<TAddr>) -> Self {
+impl<TAddr: NodeAddressable> From<&ProposalMessage<TAddr>> for proto::consensus::ProposalMessage {
+    fn from(value: &ProposalMessage<TAddr>) -> Self {
         Self {
-            block: Some(value.block.into()),
+            block: Some((&value.block).into()),
         }
     }
 }
@@ -136,13 +155,14 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::ProposalMessa
 
 // -------------------------------- VoteMessage -------------------------------- //
 
-impl<TAddr: NodeAddressable> From<VoteMessage<TAddr>> for proto::consensus::VoteMessage {
-    fn from(msg: VoteMessage<TAddr>) -> Self {
+impl<TAddr: NodeAddressable> From<&VoteMessage<TAddr>> for proto::consensus::VoteMessage {
+    fn from(msg: &VoteMessage<TAddr>) -> Self {
         Self {
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
+            block_height: msg.block_height.as_u64(),
             decision: i32::from(msg.decision.as_u8()),
-            signature: Some(msg.signature.into()),
+            signature: Some((&msg.signature).into()),
             merkle_proof: encode(&msg.merkle_proof).unwrap(),
         }
     }
@@ -155,6 +175,7 @@ impl<TAddr: NodeAddressable> TryFrom<proto::consensus::VoteMessage> for VoteMess
         Ok(VoteMessage {
             epoch: Epoch(value.epoch),
             block_id: BlockId::try_from(value.block_id)?,
+            block_height: NodeHeight(value.block_height),
             decision: QuorumDecision::from_u8(u8::try_from(value.decision)?)
                 .ok_or_else(|| anyhow!("Invalid decision byte {}", value.decision))?,
             signature: value
@@ -167,16 +188,12 @@ impl<TAddr: NodeAddressable> TryFrom<proto::consensus::VoteMessage> for VoteMess
 }
 
 //---------------------------------- RequestMissingTransactionsMessage --------------------------------------------//
-impl From<RequestMissingTransactionsMessage> for proto::consensus::RequestMissingTransactionsMessage {
-    fn from(msg: RequestMissingTransactionsMessage) -> Self {
+impl From<&RequestMissingTransactionsMessage> for proto::consensus::RequestMissingTransactionsMessage {
+    fn from(msg: &RequestMissingTransactionsMessage) -> Self {
         Self {
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
-            transaction_ids: msg
-                .transactions
-                .into_iter()
-                .map(|tx_id| tx_id.as_bytes().to_vec())
-                .collect(),
+            transaction_ids: msg.transactions.iter().map(|tx_id| tx_id.as_bytes().to_vec()).collect(),
         }
     }
 }
@@ -198,12 +215,12 @@ impl TryFrom<proto::consensus::RequestMissingTransactionsMessage> for RequestMis
 }
 //---------------------------------- RequestedTransactionMessage --------------------------------------------//
 
-impl From<RequestedTransactionMessage> for proto::consensus::RequestedTransactionMessage {
-    fn from(msg: RequestedTransactionMessage) -> Self {
+impl From<&RequestedTransactionMessage> for proto::consensus::RequestedTransactionMessage {
+    fn from(msg: &RequestedTransactionMessage) -> Self {
         Self {
             epoch: msg.epoch.as_u64(),
             block_id: msg.block_id.as_bytes().to_vec(),
-            transactions: msg.transactions.into_iter().map(|tx| tx.into()).collect(),
+            transactions: msg.transactions.iter().map(|tx| tx.into()).collect(),
         }
     }
 }
@@ -225,8 +242,8 @@ impl TryFrom<proto::consensus::RequestedTransactionMessage> for RequestedTransac
 }
 //---------------------------------- Block --------------------------------------------//
 
-impl<TAddr: NodeAddressable> From<tari_dan_storage::consensus_models::Block<TAddr>> for proto::consensus::Block {
-    fn from(value: tari_dan_storage::consensus_models::Block<TAddr>) -> Self {
+impl<TAddr: NodeAddressable> From<&tari_dan_storage::consensus_models::Block<TAddr>> for proto::consensus::Block {
+    fn from(value: &tari_dan_storage::consensus_models::Block<TAddr>) -> Self {
         Self {
             height: value.height().as_u64(),
             epoch: value.epoch().as_u64(),
@@ -235,7 +252,7 @@ impl<TAddr: NodeAddressable> From<tari_dan_storage::consensus_models::Block<TAdd
             merkle_root: value.merkle_root().as_slice().to_vec(),
             justify: Some(value.justify().into()),
             total_leader_fee: value.total_leader_fee(),
-            commands: value.into_commands().into_iter().map(Into::into).collect(),
+            commands: value.commands().iter().map(Into::into).collect(),
         }
     }
 }
@@ -267,8 +284,8 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::Block>
 
 //---------------------------------- Command --------------------------------------------//
 
-impl From<Command> for proto::consensus::Command {
-    fn from(value: Command) -> Self {
+impl From<&Command> for proto::consensus::Command {
+    fn from(value: &Command) -> Self {
         let command = match value {
             Command::Prepare(tx) => proto::consensus::command::Command::Prepare(tx.into()),
             Command::LocalPrepared(tx) => proto::consensus::command::Command::LocalPrepared(tx.into()),
@@ -294,12 +311,12 @@ impl TryFrom<proto::consensus::Command> for Command {
 
 //---------------------------------- TranactionAtom --------------------------------------------//
 
-impl From<TransactionAtom> for proto::consensus::TransactionAtom {
-    fn from(value: TransactionAtom) -> Self {
+impl From<&TransactionAtom> for proto::consensus::TransactionAtom {
+    fn from(value: &TransactionAtom) -> Self {
         Self {
             id: value.id.as_bytes().to_vec(),
             decision: proto::consensus::Decision::from(value.decision) as i32,
-            evidence: Some(value.evidence.into()),
+            evidence: Some((&value.evidence).into()),
             fee: value.transaction_fee,
             leader_fee: value.leader_fee,
         }
@@ -350,11 +367,11 @@ impl TryFrom<proto::consensus::Decision> for Decision {
 
 //---------------------------------- Evidence --------------------------------------------//
 
-impl From<Evidence> for proto::consensus::Evidence {
-    fn from(value: Evidence) -> Self {
+impl From<&Evidence> for proto::consensus::Evidence {
+    fn from(value: &Evidence) -> Self {
         // TODO: we may want to write out the protobuf here
         Self {
-            encoded_evidence: encode(&value).unwrap(),
+            encoded_evidence: encode(value).unwrap(),
         }
     }
 }
@@ -377,7 +394,7 @@ impl<TAddr: NodeAddressable> From<&QuorumCertificate<TAddr>> for proto::consensu
             block_id: source.block_id().as_bytes().to_vec(),
             block_height: source.block_height().as_u64(),
             epoch: source.epoch().as_u64(),
-            signatures: source.signatures().iter().cloned().map(Into::into).collect(),
+            signatures: source.signatures().iter().map(Into::into).collect(),
             merged_proof: merged_merkle_proof,
             leaf_hashes: source.leaf_hashes().iter().map(|h| h.to_vec()).collect(),
             decision: i32::from(source.decision().as_u8()),
@@ -505,5 +522,95 @@ impl From<SubstateDestroyed> for proto::consensus::SubstateDestroyed {
             block: value.by_block.as_bytes().to_vec(),
             epoch: Some(value.at_epoch.into()),
         }
+    }
+}
+
+// -------------------------------- SyncRequest -------------------------------- //
+
+impl From<&SyncRequestMessage> for proto::consensus::SyncRequest {
+    fn from(value: &SyncRequestMessage) -> Self {
+        Self {
+            epoch: value.epoch.as_u64(),
+            high_qc: Some(proto::consensus::HighQc {
+                block_id: value.high_qc.block_id.as_bytes().to_vec(),
+                block_height: value.high_qc.block_height.as_u64(),
+                qc_id: value.high_qc.qc_id.as_bytes().to_vec(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::SyncRequest> for SyncRequestMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::SyncRequest) -> Result<Self, Self::Error> {
+        Ok(Self {
+            epoch: Epoch(value.epoch),
+            high_qc: value
+                .high_qc
+                .map(|value| {
+                    Ok::<_, anyhow::Error>(HighQc {
+                        block_id: BlockId::try_from(value.block_id)?,
+                        block_height: NodeHeight(value.block_height),
+                        qc_id: QcId::try_from(value.qc_id)?,
+                    })
+                })
+                .transpose()?
+                .ok_or_else(|| anyhow!("High QC not provided"))?,
+        })
+    }
+}
+
+// -------------------------------- SyncResponse -------------------------------- //
+
+impl<TAddr: NodeAddressable> From<&SyncResponseMessage<TAddr>> for proto::consensus::SyncResponse {
+    fn from(value: &SyncResponseMessage<TAddr>) -> Self {
+        Self {
+            epoch: value.epoch.as_u64(),
+            blocks: value.blocks.iter().map(|block| block.into()).collect::<Vec<_>>(),
+        }
+    }
+}
+
+impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::SyncResponse> for SyncResponseMessage<TAddr> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::SyncResponse) -> Result<Self, Self::Error> {
+        Ok(Self {
+            epoch: Epoch(value.epoch),
+            blocks: value
+                .blocks
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+// -------------------------------- FullBlock -------------------------------- //
+
+impl<TAddr: NodeAddressable> From<&FullBlock<TAddr>> for proto::consensus::FullBlock {
+    fn from(value: &FullBlock<TAddr>) -> Self {
+        Self {
+            block: Some((&value.block).into()),
+            qcs: value.qcs.iter().map(Into::into).collect(),
+            transactions: value.transactions.iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::FullBlock> for FullBlock<TAddr> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::FullBlock) -> Result<Self, Self::Error> {
+        Ok(Self {
+            block: value.block.ok_or_else(|| anyhow!("Block is missing"))?.try_into()?,
+            qcs: value.qcs.into_iter().map(TryInto::try_into).collect::<Result<_, _>>()?,
+            transactions: value
+                .transactions
+                .into_iter()
+                .map(TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+        })
     }
 }
