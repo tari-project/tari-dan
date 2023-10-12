@@ -18,6 +18,7 @@ use super::QuorumCertificate;
 use crate::{
     consensus_models::{
         Command,
+        HighQc,
         LastExecuted,
         LastProposed,
         LastVoted,
@@ -25,6 +26,7 @@ use crate::{
         LockedBlock,
         SubstateCreatedProof,
         SubstateUpdate,
+        TransactionRecord,
         Vote,
     },
     Ordering,
@@ -293,11 +295,12 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_get_tip()
     }
 
-    pub fn get_all_blocks_after<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn get_all_blocks_between<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         tx: &mut TTx,
-        block_id: &BlockId,
+        start_block_id_exclusive: &BlockId,
+        end_block_id_inclusive: &BlockId,
     ) -> Result<Vec<Self>, StorageError> {
-        tx.blocks_all_after(block_id)
+        tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive)
     }
 
     pub fn exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
@@ -305,6 +308,13 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
     ) -> Result<bool, StorageError> {
         Self::record_exists(tx, self.id())
+    }
+
+    pub fn parent_exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<bool, StorageError> {
+        Self::record_exists(tx, self.parent())
     }
 
     pub fn has_been_processed<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
@@ -372,18 +382,15 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_set_flags(self.id(), None, Some(true))
     }
 
-    pub fn unset_as_processed<TTx: StateStoreWriteTransaction<Addr = TAddr>>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<(), StorageError> {
-        tx.blocks_set_flags(self.id(), None, Some(false))
-    }
-
     pub fn find_involved_shards<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         &self,
         tx: &mut TTx,
     ) -> Result<HashSet<ShardId>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
+    }
+
+    pub fn max_height<TTx: StateStoreReadTransaction<Addr = TAddr>>(tx: &mut TTx) -> Result<NodeHeight, StorageError> {
+        tx.blocks_max_height()
     }
 
     pub fn extends<TTx: StateStoreReadTransaction<Addr = TAddr>>(
@@ -456,6 +463,26 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_get_any_with_epoch_range(range, validator_public_key)
     }
 
+    pub fn get_transactions<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Vec<TransactionRecord>, StorageError> {
+        let tx_ids = self.commands().iter().map(|t| t.transaction_id());
+        let (found, missing) = TransactionRecord::get_any(tx, tx_ids)?;
+        if !missing.is_empty() {
+            return Err(StorageError::NotFound {
+                item: "Transaction".to_string(),
+                key: missing
+                    .into_iter()
+                    .map(|id| id.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            });
+        }
+
+        Ok(found)
+    }
+
     pub fn get_substate_updates<TTx: StateStoreReadTransaction<Addr = TAddr>>(
         &self,
         tx: &mut TTx,
@@ -506,7 +533,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
         on_lock_block: TFnOnLock,
         on_commit: TFnOnCommit,
-    ) -> Result<(), E>
+    ) -> Result<HighQc, E>
     where
         TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
         TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
@@ -514,16 +541,16 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         TFnOnCommit: FnOnce(&mut TTx, &LastExecuted, &Block<TAddr>) -> Result<(), E>,
         E: From<StorageError>,
     {
-        self.justify().update_high_qc(tx)?;
+        let high_qc = self.justify().update_high_qc(tx)?;
 
         // b'' <- b*.justify.node
         let Some(commit_node) = self.justify().get_block(tx.deref_mut()).optional()? else {
-            return Ok(());
+            return Ok(high_qc);
         };
 
         // b' <- b''.justify.node
         let Some(precommit_node) = commit_node.justify().get_block(tx.deref_mut()).optional()? else {
-            return Ok(());
+            return Ok(high_qc);
         };
 
         let locked_block = LockedBlock::get(tx.deref_mut())?;
@@ -563,7 +590,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
             );
         }
 
-        Ok(())
+        Ok(high_qc)
     }
 
     /// safeNode predicate (https://arxiv.org/pdf/1803.05069v6.pdf)
@@ -632,6 +659,10 @@ impl BlockId {
 
     pub fn is_genesis(&self) -> bool {
         self.0.iter().all(|b| *b == 0)
+    }
+
+    pub const fn byte_size() -> usize {
+        FixedHash::byte_size()
     }
 }
 

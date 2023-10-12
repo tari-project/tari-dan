@@ -55,8 +55,16 @@ impl<TAddr: PartialEq> Committee<TAddr> {
         self.members.shuffle(&mut OsRng);
     }
 
+    pub fn shuffled(&self) -> impl Iterator<Item = &TAddr> + '_ {
+        self.members.choose_multiple(&mut OsRng, self.len())
+    }
+
     pub fn select_n_random(&self, n: usize) -> impl Iterator<Item = &TAddr> + '_ {
         self.members.choose_multiple(&mut OsRng, n)
+    }
+
+    pub fn index_of(&self, member: &TAddr) -> Option<usize> {
+        self.members.iter().position(|x| x == member)
     }
 
     /// Returns the n next members from start_index_inclusive, wrapping around if necessary.
@@ -139,14 +147,18 @@ impl CommitteeShard {
         }
     }
 
-    /// Returns n - f where n is the number of committee members and f is the tolerated failure nodes.
+    /// Returns $n - f$ where n is the number of committee members and f is the tolerated failure nodes.
     pub fn quorum_threshold(&self) -> u32 {
+        self.num_members - self.max_failures()
+    }
+
+    /// Returns the maximum number of failures $f$ that can be tolerated by this committee.
+    pub fn max_failures(&self) -> u32 {
         let len = self.num_members;
         if len == 0 {
             return 0;
         }
-        let max_failures = (len - 1) / 3;
-        len - max_failures
+        (len - 1) / 3
     }
 
     pub fn num_committees(&self) -> u32 {

@@ -58,11 +58,11 @@ impl Transaction {
             outputs,
             filled_inputs,
         };
-        tx.id = TransactionId::new(tx.calculate_hash().into_array());
+        tx.id = tx.calculate_hash();
         tx
     }
 
-    fn calculate_hash(&self) -> Hash {
+    fn calculate_hash(&self) -> TransactionId {
         hasher(EngineHashDomainLabel::Transaction)
             .chain(&self.signature)
             .chain(&self.fee_instructions)
@@ -71,6 +71,8 @@ impl Transaction {
             .chain(&self.input_refs)
             .chain(&self.outputs)
             .result()
+            .into_array()
+            .into()
     }
 
     pub fn id(&self) -> &TransactionId {

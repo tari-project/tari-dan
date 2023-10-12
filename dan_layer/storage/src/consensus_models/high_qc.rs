@@ -22,16 +22,17 @@
 
 use std::fmt::Display;
 
+use serde::Serialize;
 use tari_dan_common_types::NodeHeight;
 
 use crate::{
-    consensus_models::{BlockId, QcId, QuorumCertificate},
+    consensus_models::{Block, BlockId, LeafBlock, QcId, QuorumCertificate},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct HighQc {
     pub block_id: BlockId,
     pub block_height: NodeHeight,
@@ -50,6 +51,13 @@ impl HighQc {
     pub fn qc_id(&self) -> &QcId {
         &self.qc_id
     }
+
+    pub fn as_leaf_block(&self) -> LeafBlock {
+        LeafBlock {
+            block_id: self.block_id,
+            height: self.block_height,
+        }
+    }
 }
 
 impl HighQc {
@@ -62,6 +70,13 @@ impl HighQc {
         tx: &mut TTx,
     ) -> Result<QuorumCertificate<TTx::Addr>, StorageError> {
         QuorumCertificate::get(tx, &self.qc_id)
+    }
+
+    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(
+        &self,
+        tx: &mut TTx,
+    ) -> Result<Block<TTx::Addr>, StorageError> {
+        Block::get(tx, &self.block_id)
     }
 
     pub fn set<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {

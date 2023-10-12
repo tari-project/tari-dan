@@ -5,17 +5,17 @@ use tari_dan_common_types::NodeHeight;
 use tari_dan_storage::consensus_models::LeafBlock;
 use tokio::sync::mpsc;
 
-use crate::hotstuff::{on_beat::OnBeat, on_force_beat::OnForceBeat, on_leader_timeout::OnLeaderTimeout, HotStuffError};
+use crate::hotstuff::{
+    current_height::CurrentHeight,
+    on_beat::OnBeat,
+    on_force_beat::OnForceBeat,
+    on_leader_timeout::OnLeaderTimeout,
+    HotStuffError,
+};
 
 pub enum PacemakerRequest {
-    ResetLeaderTimeout {
-        last_seen_height: NodeHeight,
-        high_qc_height: NodeHeight,
-    },
-    Start {
-        current_height: NodeHeight,
-        high_qc_height: NodeHeight,
-    },
+    ResetLeaderTimeout { high_qc_height: NodeHeight },
+    Start { high_qc_height: NodeHeight },
     Stop,
 }
 
@@ -25,30 +25,31 @@ pub struct PaceMakerHandle {
     on_beat: OnBeat,
     on_force_beat: OnForceBeat,
     on_leader_timeout: OnLeaderTimeout,
+    current_height: CurrentHeight,
 }
 
 impl PaceMakerHandle {
-    pub fn new(
+    pub(super) fn new(
         sender: mpsc::Sender<PacemakerRequest>,
         on_beat: OnBeat,
         on_force_beat: OnForceBeat,
         on_leader_timeout: OnLeaderTimeout,
+        current_height: CurrentHeight,
     ) -> Self {
         Self {
             sender,
             on_beat,
             on_force_beat,
             on_leader_timeout,
+            current_height,
         }
     }
 
     /// Start the pacemaker if it hasn't already been started. If it has, this is a no-op
     pub async fn start(&self, current_height: NodeHeight, high_qc_height: NodeHeight) -> Result<(), HotStuffError> {
+        self.current_height.update(current_height);
         self.sender
-            .send(PacemakerRequest::Start {
-                current_height,
-                high_qc_height,
-            })
+            .send(PacemakerRequest::Start { high_qc_height })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
     }
@@ -84,17 +85,32 @@ impl PaceMakerHandle {
     }
 
     /// Reset the leader timeout. This should be called when a valid leader proposal is received.
-    pub async fn reset_leader_timeout(
+    pub async fn update_view(
         &self,
         last_seen_height: NodeHeight,
         high_qc_height: NodeHeight,
     ) -> Result<(), HotStuffError> {
+        // Update current height here to prevent possibility of race conditions
+        self.current_height.update(last_seen_height);
         self.sender
-            .send(PacemakerRequest::ResetLeaderTimeout {
-                last_seen_height,
-                high_qc_height,
-            })
+            .send(PacemakerRequest::ResetLeaderTimeout { high_qc_height })
             .await
             .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    }
+
+    pub async fn reset_view(
+        &self,
+        last_seen_height: NodeHeight,
+        high_qc_height: NodeHeight,
+    ) -> Result<(), HotStuffError> {
+        self.current_height.set(last_seen_height);
+        self.sender
+            .send(PacemakerRequest::ResetLeaderTimeout { high_qc_height })
+            .await
+            .map_err(|e| HotStuffError::PacemakerChannelDropped { details: e.to_string() })
+    }
+
+    pub fn current_height(&self) -> NodeHeight {
+        self.current_height.get()
     }
 }

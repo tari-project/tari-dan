@@ -9,4 +9,5 @@ mod state;
 mod syncing;
 mod worker;
 
+pub use state::ConsensusCurrentState;
 pub use worker::{ConsensusWorker, ConsensusWorkerContext};

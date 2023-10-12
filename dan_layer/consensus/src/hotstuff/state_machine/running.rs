@@ -36,8 +36,9 @@ where TSpec: ConsensusSpec
                 info!(target: LOG_TARGET, "HotStuff shut down");
                 Ok(ConsensusStateEvent::Shutdown)
             },
-            Err(HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound { .. })) => {
-                info!(target: LOG_TARGET, "Behind peers, starting sync");
+            Err(err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound { .. })) |
+            Err(err @ HotStuffError::FallenBehind { .. }) => {
+                info!(target: LOG_TARGET, "Behind peers, starting sync ({err})");
                 Ok(ConsensusStateEvent::NeedSync)
             },
             Err(err) => {

@@ -31,7 +31,7 @@ use crate::{
     StorageError,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LeafBlock {
     pub block_id: BlockId,
     pub height: NodeHeight,
@@ -65,10 +65,6 @@ impl LeafBlock {
 
     pub fn set<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.leaf_block_set(self)
-    }
-
-    pub fn unset<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
-        tx.leaf_block_unset(self)
     }
 
     pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block<TTx::Addr>, StorageError> {

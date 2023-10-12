@@ -26,7 +26,7 @@ pub struct OnReceiveVoteHandler<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
     vote_signature_service: TConsensusSpec::VoteSignatureService,
-    on_beat: PaceMakerHandle,
+    pacemaker: PaceMakerHandle,
 }
 
 impl<TConsensusSpec> OnReceiveVoteHandler<TConsensusSpec>
@@ -37,34 +37,30 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
         vote_signature_service: TConsensusSpec::VoteSignatureService,
-        on_beat: PaceMakerHandle,
+        pacemaker: PaceMakerHandle,
     ) -> Self {
         Self {
             store,
             leader_strategy,
             epoch_manager,
-            on_beat,
+            pacemaker,
             vote_signature_service,
         }
     }
 
     #[allow(clippy::too_many_lines)]
-    pub async fn handle(
-        &self,
-        from: TConsensusSpec::Addr,
-        message: VoteMessage<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
+    pub async fn handle(&self, message: VoteMessage<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
-            "🔥 Receive VOTE for node {} from {}", message.block_id, from,
+            "🔥 Receive VOTE for node {} from {}", message.block_id, message.signature.public_key,
         );
 
         // Is a committee member sending us this vote?
         let committee = self.epoch_manager.get_local_committee(message.epoch).await?;
-        if !committee.contains(&from) {
+        if !committee.contains(&message.signature.public_key) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: message.epoch,
-                sender: from.to_string(),
+                sender: message.signature.public_key.to_string(),
                 context: "OnReceiveVote".to_string(),
             });
         }
@@ -75,11 +71,14 @@ where TConsensusSpec: ConsensusSpec
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
 
         // Get the sender shard, and check that they are in the local committee
-        let sender_vn = self.epoch_manager.get_validator_node(message.epoch, &from).await?;
+        let sender_vn = self
+            .epoch_manager
+            .get_validator_node(message.epoch, &message.signature.public_key)
+            .await?;
         if !local_committee_shard.includes_shard(&sender_vn.shard_key) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: message.epoch,
-                sender: from.to_string(),
+                sender: message.signature.public_key.to_string(),
                 context: "OnReceiveVote".to_string(),
             });
         }
@@ -87,6 +86,8 @@ where TConsensusSpec: ConsensusSpec
         let sender_leaf_hash = sender_vn.node_hash();
 
         self.validate_vote_message(&message, &sender_leaf_hash)?;
+
+        let from = message.signature.public_key.clone();
 
         let count = self.store.with_write_tx(|tx| {
             Vote {
@@ -108,7 +109,8 @@ where TConsensusSpec: ConsensusSpec
 
         info!(
             target: LOG_TARGET,
-            "🔥 Received vote for block {} from {} ({} of {})",
+            "🔥 Received vote for block #{} {} from {} ({} of {})",
+            message.block_height,
             message.block_id,
             from,
             count,
@@ -117,12 +119,14 @@ where TConsensusSpec: ConsensusSpec
         if count < local_committee_shard.quorum_threshold() as usize {
             return Ok(());
         }
+        let last_voted;
+        let high_qc;
         {
             let mut tx = self.store.create_write_tx()?;
             let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
                 warn!(
                     target: LOG_TARGET,
-                    "❌ Received vote for unknown block {} from {}", message.block_id, from
+                    "❌ Received {} votes for unknown block {}", count, message.block_id
                 );
                 tx.rollback()?;
                 return Ok(());
@@ -141,8 +145,8 @@ where TConsensusSpec: ConsensusSpec
                 });
             }
 
-            let high_qc = HighQc::get(tx.deref_mut())?;
-            if high_qc.block_id == *block.id() {
+            let h_qc = HighQc::get(tx.deref_mut())?;
+            if h_qc.block_id == *block.id() {
                 debug!(
                     target: LOG_TARGET,
                     "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block",
@@ -172,9 +176,9 @@ where TConsensusSpec: ConsensusSpec
             // Wait for our own vote to make sure we've processed all transactions and we also have an up to date
             // database
             if votes.iter().all(|x| x.signature.public_key != vn.address) {
-                warn!(target: LOG_TARGET, "🔥 Received enough votes but waiting for our own vote for block {}", message.block_id);
-                tx.rollback()?;
-                return Ok(());
+                warn!(target: LOG_TARGET, "❓️ Received enough votes but not our own vote for block {}", message.block_id);
+                // tx.rollback()?;
+                // return Ok(());
             }
 
             let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
@@ -196,10 +200,15 @@ where TConsensusSpec: ConsensusSpec
 
             info!(target: LOG_TARGET, "🔥 New QC {}", qc);
 
-            qc.update_high_qc(&mut tx)?;
+            last_voted = block.as_last_voted();
+            last_voted.set(&mut tx)?;
+            high_qc = qc.update_high_qc(&mut tx)?;
             tx.commit()?;
-        }
-        self.on_beat.beat();
+        };
+        self.pacemaker
+            .update_view(last_voted.height(), high_qc.block_height)
+            .await?;
+        self.pacemaker.beat();
 
         Ok(())
     }
@@ -233,10 +242,12 @@ where TConsensusSpec: ConsensusSpec
         message: &VoteMessage<TConsensusSpec::Addr>,
         sender_leaf_hash: &FixedHash,
     ) -> Result<(), HotStuffError> {
-        let challenge =
-            self.vote_signature_service
-                .create_challenge(sender_leaf_hash, &message.block_id, &message.decision);
-        if !self.vote_signature_service.verify(&message.signature, &challenge) {
+        if !self.vote_signature_service.verify(
+            &message.signature,
+            sender_leaf_hash,
+            &message.block_id,
+            &message.decision,
+        ) {
             return Err(HotStuffError::InvalidVoteSignature {
                 signer_public_key: message.signature.public_key().to_string(),
             });

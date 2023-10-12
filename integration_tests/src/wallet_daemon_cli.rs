@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, time::Duration};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde_json::json;
@@ -63,6 +63,7 @@ use tari_wallet_daemon_client::{
     ComponentAddressOrName,
     WalletDaemonClient,
 };
+use tokio::time::timeout;
 
 use crate::{validator_node_cli::add_substate_addresses, TariWorld};
 
@@ -262,7 +263,10 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         key_id: None,
     };
 
-    let resp = client.create_account(request).await.unwrap();
+    let resp = timeout(Duration::from_secs(120), client.create_account(request))
+        .await
+        .unwrap()
+        .unwrap();
 
     // TODO: store the secret key in the world, but we don't have a need for it at the moment
     world.account_keys.insert(

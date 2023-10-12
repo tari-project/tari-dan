@@ -44,7 +44,7 @@ impl DanNode {
     }
 
     pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), anyhow::Error> {
-        let mut hotstuff_events = self.services.hotstuff_events.subscribe();
+        let mut hotstuff_events = self.services.consensus_handle.subscribe_to_hotstuff_events();
 
         let mut connectivity_events = self.services.comms.connectivity().get_event_subscription();
 
@@ -112,7 +112,7 @@ impl DanNode {
 
         let committed_transactions = self.services.state_store.with_read_tx(|tx| {
             let block = Block::get(tx, &block_id)?;
-            info!(target: LOG_TARGET, "🏁 Block {} committed", block_id);
+            info!(target: LOG_TARGET, "🏁 Block {} committed", block);
             Ok::<_, anyhow::Error>(
                 block
                     .commands()
@@ -146,8 +146,8 @@ impl DanNode {
 
         let shard_id = match res {
             Ok(vn) => vn.shard_key,
-            Err(EpochManagerError::ValidatorNodeNotRegistered { address }) => {
-                info!(target: LOG_TARGET, "Validator node {address} registered for this epoch");
+            Err(EpochManagerError::ValidatorNodeNotRegistered { address, epoch }) => {
+                info!(target: LOG_TARGET, "Validator node {address} not registered for current epoch {epoch}");
                 return Ok(());
             },
             Err(EpochManagerError::BaseLayerConsensusConstantsNotSet) => {

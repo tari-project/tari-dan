@@ -3,11 +3,11 @@
 
 use log::*;
 use tari_dan_common_types::{committee::Committee, Epoch, NodeAddressable, NodeHeight};
-use tari_dan_storage::consensus_models::{Block, QuorumCertificate, QuorumDecision};
+use tari_dan_storage::consensus_models::{Block, QuorumCertificate};
 
 use crate::{messages::HotstuffMessage, traits::LeaderStrategy};
 
-const LOG_TARGET: &str = "tari::dan::consensus::hotstuff";
+const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::common";
 
 /// The value that fees are divided by to determine the amount of fees to burn. 0 means no fees are burned.
 /// This is a placeholder for the fee exhaust consensus constant so that we know where it's used later.
@@ -35,9 +35,7 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
         );
         return Vec::new();
     }
-    if current_height == new_height {
-        return Vec::new();
-    }
+
     debug!(
         target: LOG_TARGET,
         "🍼 calculating dummy blocks from {} to {}",
@@ -70,29 +68,4 @@ pub fn calculate_dummy_blocks<TAddr: NodeAddressable, TLeaderStrategy: LeaderStr
     }
 
     blocks
-}
-
-#[derive(Debug)]
-pub struct BlockDecision(bool);
-
-impl BlockDecision {
-    pub fn vote_accept() -> Self {
-        Self(true)
-    }
-
-    pub fn is_accept(&self) -> bool {
-        self.0
-    }
-
-    pub fn as_quorum_decision(&self) -> Option<QuorumDecision> {
-        if self.0 {
-            Some(QuorumDecision::Accept)
-        } else {
-            None
-        }
-    }
-
-    pub fn dont_vote(&mut self) {
-        self.0 = false;
-    }
 }

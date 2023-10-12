@@ -310,6 +310,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
                 .optional()?
                 .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
                     address: public_key.to_string(),
+                    epoch,
                 })?;
 
             validators.insert((epoch, public_key), vn);
@@ -479,6 +480,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let vn = self.get_validator_node(epoch, &self.node_public_key)?.ok_or_else(|| {
             EpochManagerError::ValidatorNodeNotRegistered {
                 address: self.node_public_key.to_string(),
+                epoch,
             }
         })?;
         let leaf_index = bmt.find_leaf_index_for_hash(&vn.node_hash().to_vec())?;
@@ -527,6 +529,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             self.get_validator_node(epoch, addr)?
                 .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
                     address: addr.to_string(),
+                    epoch,
                 })?;
 
         let num_committees = self.get_number_of_committees(epoch)?;
@@ -563,6 +566,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let vn = self.get_validator_node(epoch, &self.node_public_key)?.ok_or_else(|| {
             EpochManagerError::ValidatorNodeNotRegistered {
                 address: self.node_public_key.to_string(),
+                epoch,
             }
         })?;
         Ok(vn)
@@ -591,18 +595,19 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         let num_validators = validator_node_db.count_in_bucket(start_epoch, end_epoch, bucket)?;
         let num_validators = u32::try_from(num_validators).map_err(|_| EpochManagerError::IntegerOverflow {
-            func: "get_committee_count_and_bucket",
+            func: "get_committee_shard",
         })?;
         Ok(CommitteeShard::new(num_committees, num_validators, bucket))
     }
 
     pub fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError> {
-        let shard_key = self
-            .current_shard_key
-            .ok_or_else(|| EpochManagerError::ValidatorNodeNotRegistered {
+        let vn = self.get_validator_node(epoch, &self.node_public_key)?.ok_or_else(|| {
+            EpochManagerError::ValidatorNodeNotRegistered {
                 address: self.node_public_key.to_string(),
-            })?;
-        self.get_committee_shard(epoch, shard_key)
+                epoch,
+            }
+        })?;
+        self.get_committee_shard(epoch, vn.shard_key)
     }
 
     pub fn get_committees_by_buckets(

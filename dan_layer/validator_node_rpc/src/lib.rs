@@ -20,6 +20,7 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+mod block_sync;
 pub mod client;
 mod conversions;
 mod error;
@@ -27,4 +28,5 @@ pub mod peer_sync;
 pub mod proto;
 pub mod rpc_service;
 mod utils;
+
 pub use error::ValidatorNodeRpcClientError;

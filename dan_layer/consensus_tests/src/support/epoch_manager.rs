@@ -35,6 +35,11 @@ impl TestEpochManager {
         }
     }
 
+    pub async fn set_is_epoch_active(&self, is_epoch_active: bool) -> &Self {
+        self.inner.lock().await.is_epoch_active = is_epoch_active;
+        self
+    }
+
     pub async fn state_lock(&self) -> MutexGuard<TestEpochManagerState> {
         self.inner.lock().await
     }
@@ -214,7 +219,7 @@ impl Default for TestEpochManagerState {
         Self {
             current_epoch: Epoch(0),
             validator_shards: HashMap::new(),
-            is_epoch_active: true,
+            is_epoch_active: false,
             committees: HashMap::new(),
             address_bucket: HashMap::new(),
         }

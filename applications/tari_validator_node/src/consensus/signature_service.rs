@@ -7,7 +7,7 @@ use rand::rngs::OsRng;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_comms::NodeIdentity;
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
-use tari_dan_storage::consensus_models::{ValidatorSchnorrSignature, ValidatorSignature};
+use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSchnorrSignature, ValidatorSignature};
 
 #[derive(Debug, Clone)]
 pub struct TariSignatureService {
@@ -31,7 +31,14 @@ impl ValidatorSignatureService<PublicKey> for TariSignatureService {
 }
 
 impl VoteSignatureService<PublicKey> for TariSignatureService {
-    fn verify(&self, signature: &ValidatorSignature<PublicKey>, challenge: &FixedHash) -> bool {
+    fn verify(
+        &self,
+        signature: &ValidatorSignature<PublicKey>,
+        leaf_hash: &FixedHash,
+        block_id: &BlockId,
+        decision: &QuorumDecision,
+    ) -> bool {
+        let challenge = self.create_challenge(leaf_hash, block_id, decision);
         signature.verify(challenge)
     }
 }

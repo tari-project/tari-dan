@@ -1,15 +1,6 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    block_missing_transactions (id) {
-        id -> Integer,
-        block_id -> Text,
-        transaction_ids -> Text,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
     blocks (id) {
         id -> Integer,
         block_id -> Text,
@@ -97,8 +88,25 @@ diesel::table! {
     missing_transactions (id) {
         id -> Integer,
         block_id -> Text,
+        block_height -> BigInt,
         transaction_id -> Text,
         is_awaiting_execution -> Bool,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    parked_blocks (id) {
+        id -> Integer,
+        block_id -> Text,
+        parent_block_id -> Text,
+        height -> BigInt,
+        epoch -> BigInt,
+        proposed_by -> Text,
+        justify -> Text,
+        command_count -> BigInt,
+        commands -> Text,
+        total_leader_fee -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -142,11 +150,11 @@ diesel::table! {
     transaction_pool (id) {
         id -> Integer,
         transaction_id -> Text,
-        involved_shards -> Text,
         original_decision -> Text,
         local_decision -> Nullable<Text>,
         remote_decision -> Nullable<Text>,
         evidence -> Text,
+        remote_evidence -> Nullable<Text>,
         transaction_fee -> BigInt,
         leader_fee -> BigInt,
         stage -> Text,
@@ -158,13 +166,36 @@ diesel::table! {
 }
 
 diesel::table! {
-    transaction_pool_status (id) {
+    transaction_pool_history (history_id) {
+        history_id -> Nullable<Integer>,
+        id -> Integer,
+        transaction_id -> Text,
+        original_decision -> Text,
+        local_decision -> Nullable<Text>,
+        remote_decision -> Nullable<Text>,
+        evidence -> Text,
+        transaction_fee -> BigInt,
+        leader_fee -> BigInt,
+        stage -> Text,
+        new_stage -> Text,
+        is_ready -> Bool,
+        new_is_ready -> Bool,
+        updated_at -> Timestamp,
+        created_at -> Timestamp,
+        change_time -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
+    transaction_pool_state_updates (id) {
         id -> Integer,
         block_id -> Text,
         block_height -> BigInt,
         transaction_id -> Text,
         stage -> Text,
+        evidence -> Text,
         is_ready -> Bool,
+        local_decision -> Text,
         created_at -> Timestamp,
     }
 }
@@ -204,7 +235,6 @@ diesel::table! {
 }
 
 diesel::allow_tables_to_appear_in_same_query!(
-    block_missing_transactions,
     blocks,
     high_qcs,
     last_executed,
@@ -214,10 +244,12 @@ diesel::allow_tables_to_appear_in_same_query!(
     locked_block,
     locked_outputs,
     missing_transactions,
+    parked_blocks,
     quorum_certificates,
     substates,
     transaction_pool,
-    transaction_pool_status,
+    transaction_pool_history,
+    transaction_pool_state_updates,
     transactions,
     votes,
 );

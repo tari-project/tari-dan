@@ -87,10 +87,7 @@ impl Data {
     }
 
     pub fn add_offer_ice_candidate(&mut self, id: u64, ice_candidate: RTCIceCandidateInit) {
-        self.offer_ice_candidates
-            .entry(id)
-            .or_insert_with(Vec::new)
-            .push(ice_candidate);
+        self.offer_ice_candidates.entry(id).or_default().push(ice_candidate);
     }
 
     pub fn get_offer_ice_candidates(&self, id: u64) -> Result<&Vec<RTCIceCandidateInit>> {
@@ -100,10 +97,7 @@ impl Data {
     }
 
     pub fn add_answer_ice_candidate(&mut self, id: u64, ice_candidate: RTCIceCandidateInit) {
-        self.answer_ice_candidates
-            .entry(id)
-            .or_insert_with(Vec::new)
-            .push(ice_candidate);
+        self.answer_ice_candidates.entry(id).or_default().push(ice_candidate);
     }
 
     pub fn get_answer_ice_candidates(&self, id: u64) -> Result<&Vec<RTCIceCandidateInit>> {

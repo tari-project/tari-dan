@@ -129,7 +129,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
     ) -> Result<TransactionId, ValidatorNodeRpcClientError> {
         let mut client = self.client_connection().await?;
         let request = SubmitTransactionRequest {
-            transaction: Some(transaction.into()),
+            transaction: Some((&transaction).into()),
         };
         let response = client.submit_transaction(request).await?;
 

@@ -10,6 +10,7 @@ use tari_dan_common_types::NodeHeight;
 use tokio::sync::mpsc;
 
 use crate::hotstuff::{
+    current_height::CurrentHeight,
     on_beat::OnBeat,
     on_force_beat::OnForceBeat,
     on_leader_timeout::OnLeaderTimeout,
@@ -24,7 +25,7 @@ pub struct PaceMaker {
     pace_maker_handle: PaceMakerHandle,
     handle_receiver: mpsc::Receiver<PacemakerRequest>,
     block_time: Duration,
-    current_height: NodeHeight,
+    current_height: CurrentHeight,
     current_high_qc_height: NodeHeight,
 }
 
@@ -35,13 +36,20 @@ impl PaceMaker {
         let on_beat = OnBeat::new();
         let on_force_beat = OnForceBeat::new();
         let on_leader_timeout = OnLeaderTimeout::new();
+        let current_height = CurrentHeight::new();
 
         Self {
             handle_receiver: receiver,
-            pace_maker_handle: PaceMakerHandle::new(sender, on_beat, on_force_beat, on_leader_timeout),
+            pace_maker_handle: PaceMakerHandle::new(
+                sender,
+                on_beat,
+                on_force_beat,
+                on_leader_timeout,
+                current_height.clone(),
+            ),
             // TODO: make network constant. We're starting slow with 10s but should be 1s in the future
             block_time: Duration::from_secs(10),
-            current_height: NodeHeight(0),
+            current_height,
             current_high_qc_height: NodeHeight(0),
         }
     }
@@ -83,13 +91,11 @@ impl PaceMaker {
                 maybe_req = self.handle_receiver.recv() => {
                     if let Some(req) = maybe_req {
                         match req {
-                           PacemakerRequest::ResetLeaderTimeout { last_seen_height, high_qc_height } => {
+                           PacemakerRequest::ResetLeaderTimeout { high_qc_height } => {
                                 if !started {
                                     continue;
                                 }
 
-                                self.current_height = cmp::max(self.current_height, last_seen_height);
-                                assert!(self.current_high_qc_height <= high_qc_height, "high_qc_height must be monotonically increasing");
                                 self.current_high_qc_height = high_qc_height;
                                 let delta = self.delta_time();
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
@@ -97,12 +103,11 @@ impl PaceMaker {
                                 // set a timer for when we must send a block...
                                 block_timer.as_mut().reset(tokio::time::Instant::now() + self.block_time);
                            },
-                            PacemakerRequest::Start { current_height, high_qc_height } => {
-                                info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", current_height, high_qc_height);
+                            PacemakerRequest::Start { high_qc_height } => {
+                                info!(target: LOG_TARGET, "🚀 Starting pacemaker at leaf height {} and high QC: {}", self.current_height, high_qc_height);
                                 if started {
                                     continue;
                                 }
-                                self.current_height = current_height;
                                 self.current_high_qc_height = high_qc_height;
                                 let delta = self.delta_time();
                                 info!(target: LOG_TARGET, "Reset! Current height: {}, Delta: {:.2?}", self.current_height, delta);
@@ -134,8 +139,8 @@ impl PaceMaker {
                     let delta = self.delta_time();
                     leader_timeout.as_mut().reset(tokio::time::Instant::now() + delta);
                     info!(target: LOG_TARGET, "⚠️ Leader timeout! Current height: {}, Delta: {:.2?}", self.current_height, delta);
-                    on_leader_timeout.leader_timed_out(self.current_height);
-                    self.current_height += NodeHeight(1);
+                    self.current_height.next_height();
+                    on_leader_timeout.leader_timed_out(self.current_height.get());
                 },
 
             }
@@ -148,23 +153,23 @@ impl PaceMaker {
     /// high QC height. This is always greater than the block time.
     /// Ensure that current_height and current_high_qc_height are set before calling this function.
     fn delta_time(&self) -> Duration {
-        if self.current_height.is_zero() {
+        let current_height = self.current_height.get();
+        if current_height.is_zero() {
             // Allow extra time for the first block
             return self.block_time * 2;
         }
         let exp = u32::try_from(cmp::min(
             u64::from(u32::MAX),
-            cmp::max(
-                1,
-                self.current_height.saturating_sub(self.current_high_qc_height).as_u64(),
-            ),
+            cmp::max(1, current_height.saturating_sub(self.current_high_qc_height).as_u64()),
         ))
         .unwrap_or(u32::MAX);
         let delta = cmp::min(
             MAX_DELTA,
             2u64.checked_pow(exp).map(Duration::from_secs).unwrap_or(MAX_DELTA),
         );
-        self.block_time + delta
+        // TODO: get real avg latency
+        let avg_latency = Duration::from_secs(2);
+        self.block_time + delta + avg_latency
     }
 }
 
