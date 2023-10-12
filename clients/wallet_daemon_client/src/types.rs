@@ -27,7 +27,7 @@ use serde_json::Value;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_wallet_sdk::{
-    apis::jwt::{Claims, JrpcPermissions},
+    apis::jwt::Claims,
     models::{Account, ConfidentialProofId, TransactionStatus},
 };
 use tari_engine_types::{

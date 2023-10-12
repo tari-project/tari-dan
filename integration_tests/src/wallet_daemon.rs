@@ -31,7 +31,6 @@ use tari_dan_wallet_daemon::{
     config::{ApplicationConfig, WalletDaemonConfig},
     run_tari_dan_wallet_daemon,
 };
-use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
 use tari_shutdown::Shutdown;
 use tari_wallet_daemon_client::{
     types::{AuthLoginAcceptRequest, AuthLoginRequest, AuthLoginResponse},

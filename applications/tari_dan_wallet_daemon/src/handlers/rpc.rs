@@ -1,9 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::str::FromStr;
-
-use tari_dan_wallet_sdk::apis::jwt::{JrpcPermission, JrpcPermissions};
+use tari_dan_wallet_sdk::apis::jwt::JrpcPermission;
 use tari_wallet_daemon_client::types::{
     AuthGetAllJwtRequest,
     AuthGetAllJwtResponse,

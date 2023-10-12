@@ -90,6 +90,7 @@ where
     TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
     TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         new_transactions: mpsc::Receiver<(CommsPublicKey, NewTransactionMessage)>,
         mempool_requests: mpsc::Receiver<MempoolRequest>,

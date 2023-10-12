@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    fmt::{Display, Formatter, Write},
+    fmt::{Display, Formatter},
     str::FromStr,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };

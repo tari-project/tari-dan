@@ -68,7 +68,7 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress
             let substate_address = SubstateAddress::NonFungible(index.referenced_address().clone());
             Ok(vec![substate_address])
         },
-        SubstateValue::Vault(vault) => Ok(vec![SubstateAddress::Resource(vault.resource_address().clone())]),
+        SubstateValue::Vault(vault) => Ok(vec![SubstateAddress::Resource(*vault.resource_address())]),
         // Other types of substates cannot hold references to other substates
         _ => Ok(vec![]),
     }

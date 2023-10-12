@@ -15,10 +15,8 @@ use crate::{cli::Cli, LoadedTemplate::Wasm};
 fn main() {
     let cli = Cli::init();
 
-    if cli.clean {
-        if fs::remove_dir_all(&cli.output_path).is_err() {
-            println!("Failed to clean output directory");
-        }
+    if cli.clean && fs::remove_dir_all(&cli.output_path).is_err() {
+        println!("Failed to clean output directory");
     }
 
     match &cli.command {
@@ -104,7 +102,9 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
                 })));
             }
         },
-        _ => {},
+        _ => {
+            todo!("Not yet supported");
+        },
     }
-    template.render(&mut globals).unwrap()
+    template.render(&globals).unwrap()
 }

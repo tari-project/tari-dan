@@ -131,7 +131,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
-                signing_service.clone(),
+                signing_service,
                 pacemaker.clone_handle(),
             ),
             on_receive_new_view: OnReceiveNewViewHandler::new(
@@ -144,7 +144,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 state_store.clone(),
                 tx_leader.clone(),
             ),
-            on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool.clone()),
+            on_receive_requested_txs: OnReceiveRequestedTransactions::new(tx_mempool),
             on_propose: OnPropose::new(
                 state_store.clone(),
                 epoch_manager.clone(),
