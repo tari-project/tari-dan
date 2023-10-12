@@ -257,6 +257,15 @@ impl SubstateManager {
         Ok(None)
     }
 
+    pub async fn get_specific_substate(
+        &self,
+        substate_address: &SubstateAddress,
+        version: u32,
+    ) -> Result<SubstateResult, anyhow::Error> {
+        let substate_result = self.substate_scanner.get_specific_substate_from_committee(substate_address, version).await?;
+        return Ok(substate_result);
+    }
+
     pub async fn get_non_fungible_collections(&self) -> Result<Vec<(String, i64)>, anyhow::Error> {
         let mut tx = self.substate_store.create_read_tx()?;
         tx.get_non_fungible_collections().map_err(|e| e.into())
