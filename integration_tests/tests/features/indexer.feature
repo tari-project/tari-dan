@@ -71,6 +71,7 @@ Feature: Indexer node
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
+    Then indexer IDX has scanned to height 13 within 10 seconds
 
     # Track a component
     When the indexer IDX tracks the address ACC1/components/Account
