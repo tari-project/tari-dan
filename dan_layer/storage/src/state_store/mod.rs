@@ -21,6 +21,7 @@ use crate::{
         HighQc,
         LastExecuted,
         LastProposed,
+        LastSentVote,
         LastVoted,
         LeafBlock,
         LockedBlock,
@@ -82,6 +83,7 @@ pub trait StateStore {
 pub trait StateStoreReadTransaction {
     type Addr: NodeAddressable;
 
+    fn last_sent_vote_get(&mut self) -> Result<LastSentVote<Self::Addr>, StorageError>;
     fn last_voted_get(&mut self) -> Result<LastVoted, StorageError>;
     fn last_executed_get(&mut self) -> Result<LastExecuted, StorageError>;
     fn last_proposed_get(&mut self) -> Result<LastProposed, StorageError>;
@@ -240,6 +242,7 @@ pub trait StateStoreWriteTransaction {
     fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError>;
 
     // -------------------------------- Bookkeeping -------------------------------- //
+    fn last_sent_vote_set(&mut self, last_sent_vote: &LastSentVote<Self::Addr>) -> Result<(), StorageError>;
     fn last_voted_set(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
     fn last_votes_unset(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
     fn last_executed_set(&mut self, last_exec: &LastExecuted) -> Result<(), StorageError>;

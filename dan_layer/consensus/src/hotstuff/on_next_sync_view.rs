@@ -3,13 +3,16 @@
 
 use log::*;
 use tari_dan_common_types::{Epoch, NodeHeight};
-use tari_dan_storage::{consensus_models::HighQc, StateStore};
+use tari_dan_storage::{
+    consensus_models::{HighQc, LastSentVote},
+    StateStore,
+};
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
 use crate::{
     hotstuff::HotStuffError,
-    messages::{HotstuffMessage, NewViewMessage},
+    messages::{HotstuffMessage, NewViewMessage, VoteMessage},
     traits::{ConsensusSpec, LeaderStrategy},
 };
 
@@ -41,10 +44,23 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
         info!(target: LOG_TARGET, "⚠️ Leader failure: NEXTSYNCVIEW for epoch {} and node height {}", epoch, new_height);
         let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
         let current_epoch = self.epoch_manager.current_epoch().await?;
-
+        let last_sent_vote = self.store.with_read_tx(|tx| LastSentVote::get(tx));
         let high_qc = self
             .store
             .with_read_tx(|tx| HighQc::get(tx)?.get_quorum_certificate(tx))?;
+        let mut vote = None;
+        if let Ok(last_sent_vote) = last_sent_vote {
+            if high_qc.block_height() < last_sent_vote.block_height {
+                vote = Some(VoteMessage {
+                    epoch: last_sent_vote.epoch,
+                    block_id: last_sent_vote.block_id,
+                    block_height: last_sent_vote.block_height,
+                    decision: last_sent_vote.decision,
+                    signature: last_sent_vote.signature,
+                    merkle_proof: last_sent_vote.merkle_proof,
+                });
+            }
+        }
 
         let next_leader = self
             .leader_strategy
@@ -55,6 +71,7 @@ impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
             high_qc,
             new_height,
             epoch: current_epoch,
+            last_vote: vote,
         };
 
         self.tx_leader

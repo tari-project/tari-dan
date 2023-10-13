@@ -2,11 +2,17 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::NodeHeight;
-use tari_dan_storage::{consensus_models, StorageError};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight};
+use tari_dan_storage::{
+    consensus_models::{self, QuorumDecision},
+    StorageError,
+};
 use time::PrimitiveDateTime;
 
-use crate::serialization::deserialize_hex_try_from;
+use crate::{
+    error::SqliteStorageError,
+    serialization::{deserialize_hex_try_from, deserialize_json},
+};
 
 #[derive(Debug, Clone, Queryable)]
 pub struct HighQc {
@@ -82,6 +88,42 @@ impl TryFrom<LastVoted> for consensus_models::LastVoted {
         Ok(Self {
             block_id: deserialize_hex_try_from(&value.block_id)?,
             height: NodeHeight(value.height as u64),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Queryable)]
+pub struct LastSentVote {
+    pub id: i32,
+    pub epoch: i64,
+    pub block_id: String,
+    pub block_height: i64,
+    pub decision: i32,
+    pub signature: String,
+    pub merkle_proof: String,
+    pub created_at: PrimitiveDateTime,
+}
+
+impl<TAddr: NodeAddressable> TryFrom<LastSentVote> for consensus_models::LastSentVote<TAddr> {
+    type Error = StorageError;
+
+    fn try_from(value: LastSentVote) -> Result<Self, Self::Error> {
+        Ok(Self {
+            epoch: Epoch(value.epoch as u64),
+            block_id: deserialize_hex_try_from(&value.block_id)?,
+            block_height: NodeHeight(value.block_height as u64),
+            decision: QuorumDecision::from_u8(u8::try_from(value.decision).map_err(|_| {
+                SqliteStorageError::MalformedDbData {
+                    operation: "TryFrom<Vote> decision",
+                    details: format!("Could not convert {} to u8", value.decision),
+                }
+            })?)
+            .ok_or_else(|| SqliteStorageError::MalformedDbData {
+                operation: "TryFrom<Vote> decision",
+                details: format!("Could not convert {} to QuorumDecision", value.decision),
+            })?,
+            signature: deserialize_json(&value.signature)?,
+            merkle_proof: deserialize_json(&value.merkle_proof)?,
         })
     }
 }

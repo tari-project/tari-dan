@@ -36,6 +36,7 @@ use crate::{
         on_sync_request::{OnSyncRequest, MAX_BLOCKS_PER_SYNC},
         pacemaker::PaceMaker,
         pacemaker_handle::PaceMakerHandle,
+        vote_receiver::VoteReceiver,
     },
     messages::{HotstuffMessage, SyncRequestMessage},
     traits::{ConsensusSpec, LeaderStrategy},
@@ -88,6 +89,13 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         shutdown: ShutdownSignal,
     ) -> Self {
         let pacemaker = PaceMaker::new();
+        let vote_receiver = VoteReceiver::new(
+            state_store.clone(),
+            leader_strategy.clone(),
+            epoch_manager.clone(),
+            signing_service.clone(),
+            pacemaker.clone_handle(),
+        );
         Self {
             validator_addr: validator_addr.clone(),
             tx_events: tx_events.clone(),
@@ -127,18 +135,13 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 transaction_pool.clone(),
                 pacemaker.clone_handle(),
             ),
-            on_receive_vote: OnReceiveVoteHandler::new(
-                state_store.clone(),
-                leader_strategy.clone(),
-                epoch_manager.clone(),
-                signing_service.clone(),
-                pacemaker.clone_handle(),
-            ),
+            on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
                 state_store.clone(),
                 leader_strategy.clone(),
                 epoch_manager.clone(),
                 pacemaker.clone_handle(),
+                vote_receiver,
             ),
             on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(
                 state_store.clone(),

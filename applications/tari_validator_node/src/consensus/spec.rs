@@ -13,6 +13,7 @@ use crate::consensus::{
     state_manager::TariStateManager,
 };
 
+#[derive(Clone)]
 pub struct TariConsensusSpec;
 
 impl ConsensusSpec for TariConsensusSpec {
