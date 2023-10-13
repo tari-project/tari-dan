@@ -83,7 +83,7 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
 
     match loaded_template {
         Wasm(loaded_wasm_template) => {
-            for f in loaded_wasm_template.template_def().functions.iter() {
+            for f in &loaded_wasm_template.template_def().functions {
                 let arr = globals.get_mut("commands").unwrap().as_array_mut().unwrap();
                 let mut args = vec![];
                 let mut is_method = false;
