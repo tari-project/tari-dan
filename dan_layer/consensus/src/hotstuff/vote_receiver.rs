@@ -54,8 +54,16 @@ where TConsensusSpec: ConsensusSpec
         message: VoteMessage<TConsensusSpec::Addr>,
         check_leadership: bool,
     ) -> Result<(), HotStuffError> {
-        if self.handle_vote(message, check_leadership).await? {
-            self.pacemaker.beat();
+        match self.handle_vote(message, check_leadership).await {
+            Ok(true) => {
+                // If we reached quorum, trigger a check to see if we should propose
+                self.pacemaker.beat();
+            },
+            Ok(false) => {},
+            Err(err) => {
+                // We dont want bad vote messages to kick us out of running mode
+                warn!(target: LOG_TARGET, "❌ Error handling vote: {}", err);
+            },
         }
         Ok(())
     }
@@ -67,29 +75,30 @@ where TConsensusSpec: ConsensusSpec
         message: VoteMessage<TConsensusSpec::Addr>,
         check_leadership: bool,
     ) -> Result<bool, HotStuffError> {
+        let current_epoch = self.epoch_manager.current_epoch().await?;
         // Is a committee member sending us this vote?
-        let committee = self.epoch_manager.get_local_committee(message.epoch).await?;
+        let committee = self.epoch_manager.get_local_committee(current_epoch).await?;
         if !committee.contains(&message.signature.public_key) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
-                epoch: message.epoch,
+                epoch: current_epoch,
                 sender: message.signature.public_key.to_string(),
                 context: "OnReceiveVote".to_string(),
             });
         }
 
         // Are we the leader for the block being voted for?
-        let vn = self.epoch_manager.get_our_validator_node(message.epoch).await?;
+        let vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
 
-        let local_committee_shard = self.epoch_manager.get_local_committee_shard(message.epoch).await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
 
         // Get the sender shard, and check that they are in the local committee
         let sender_vn = self
             .epoch_manager
-            .get_validator_node(message.epoch, &message.signature.public_key)
+            .get_validator_node(current_epoch, &message.signature.public_key)
             .await?;
         if !local_committee_shard.includes_shard(&sender_vn.shard_key) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
-                epoch: message.epoch,
+                epoch: current_epoch,
                 sender: message.signature.public_key.to_string(),
                 context: "OnReceiveVote".to_string(),
             });
