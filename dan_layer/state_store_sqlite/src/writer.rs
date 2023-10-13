@@ -653,7 +653,6 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                     transactions::signature.eq(serialize_json(transaction.signature())?),
                     transactions::inputs.eq(serialize_json(transaction.inputs())?),
                     transactions::input_refs.eq(serialize_json(transaction.input_refs())?),
-                    transactions::outputs.eq(serialize_json(transaction.outputs())?),
                     transactions::filled_inputs.eq(serialize_json(transaction.filled_inputs())?),
                     transactions::resulting_outputs.eq(serialize_json(rec.resulting_outputs())?),
                     transactions::result.eq(rec.result().map(serialize_json).transpose()?),
