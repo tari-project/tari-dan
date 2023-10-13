@@ -100,6 +100,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
                 .await?;
 
             self.on_ready_to_vote_on_local_block.handle(valid_block).await?;
+
+            self.pacemaker.beat();
         }
 
         Ok(())

@@ -2,8 +2,9 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::*;
+use tari_dan_common_types::optional::Optional;
 use tari_dan_storage::{
-    consensus_models::{Block, LastVoted},
+    consensus_models::{Block, LastSentVote, LastVoted},
     StateStore,
 };
 use tokio::{sync::mpsc, task};
@@ -102,6 +103,25 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     return;
                 }
             }
+
+            // Send last vote. TODO: This isn't quite
+            let maybe_last_vote = match store.with_read_tx(|tx| LastSentVote::get(tx)).optional() {
+                Ok(last_vote) => last_vote,
+                Err(err) => {
+                    warn!(target: LOG_TARGET, "Failed to fetch last vote for sync request: {}", err);
+                    return;
+                },
+            };
+            if let Some(last_vote) = maybe_last_vote {
+                if tx_leader
+                    .send((from.clone(), HotstuffMessage::Vote(last_vote.into())))
+                    .await
+                    .is_err()
+                {
+                    warn!(target: LOG_TARGET, "Leader channel closed while sending LastVote");
+                }
+            }
+
             // let _ignore = tx_leader
             //     .send((
             //         from,

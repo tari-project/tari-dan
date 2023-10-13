@@ -112,6 +112,19 @@ create table last_voted
     created_at timestamp NOT NULL default current_timestamp
 );
 
+create table last_sent_vote
+(
+    id           integer   NOT NULL PRIMARY KEY AUTOINCREMENT,
+    epoch        integer,
+    block_id     text,
+    block_height integer,
+    decision     integer,
+    signature    text,
+    merkle_proof text,
+    created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
+);
+
 create table last_executed
 (
     id         integer   not null primary key autoincrement,

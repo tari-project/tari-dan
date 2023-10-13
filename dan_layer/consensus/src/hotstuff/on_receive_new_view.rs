@@ -14,6 +14,7 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerReader;
 
+use super::vote_receiver::VoteReceiver;
 use crate::{
     hotstuff::{common::calculate_dummy_blocks, error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::NewViewMessage,
@@ -28,6 +29,7 @@ pub struct OnReceiveNewViewHandler<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     newview_message_counts: HashMap<(NodeHeight, BlockId), HashSet<TConsensusSpec::Addr>>,
     pacemaker: PaceMakerHandle,
+    vote_receiver: VoteReceiver<TConsensusSpec>,
 }
 
 impl<TConsensusSpec> OnReceiveNewViewHandler<TConsensusSpec>
@@ -38,6 +40,7 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
         pacemaker: PaceMakerHandle,
+        vote_receiver: VoteReceiver<TConsensusSpec>,
     ) -> Self {
         Self {
             store,
@@ -45,6 +48,7 @@ where TConsensusSpec: ConsensusSpec
             epoch_manager,
             newview_message_counts: HashMap::default(),
             pacemaker,
+            vote_receiver,
         }
     }
 
@@ -76,6 +80,7 @@ where TConsensusSpec: ConsensusSpec
             high_qc,
             new_height,
             epoch,
+            last_vote,
         } = message;
         debug!(
             target: LOG_TARGET,
@@ -137,6 +142,14 @@ where TConsensusSpec: ConsensusSpec
                     new_height
                 ),
             });
+        }
+
+        if let Some(vote) = last_vote {
+            debug!(
+                target: LOG_TARGET,
+                "🔥 Receive VOTE with NEWVIEW for node {} from {}", vote.block_id, from,
+            );
+            self.vote_receiver.handle(vote, false).await?;
         }
 
         // Are nodes requesting to create more than the minimum number of dummy blocks?

@@ -33,6 +33,7 @@ use tari_dan_storage::{
         HighQc,
         LastExecuted,
         LastProposed,
+        LastSentVote,
         LastVoted,
         LeafBlock,
         LockedBlock,
@@ -278,6 +279,20 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .first::<sql_models::LastVoted>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "last_voted_get",
+                source: e,
+            })?;
+
+        last_voted.try_into()
+    }
+
+    fn last_sent_vote_get(&mut self) -> Result<LastSentVote<Self::Addr>, StorageError> {
+        use crate::schema::last_sent_vote;
+
+        let last_voted = last_sent_vote::table
+            .order_by(last_sent_vote::id.desc())
+            .first::<sql_models::LastSentVote>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "last_sent_vote_get",
                 source: e,
             })?;
 

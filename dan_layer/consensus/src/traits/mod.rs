@@ -16,7 +16,7 @@ use tari_epoch_manager::EpochManagerReader;
 
 pub use crate::traits::signing_service::*;
 
-pub trait ConsensusSpec: Send + Sync + 'static {
+pub trait ConsensusSpec: Send + Sync + Clone + 'static {
     type Addr: NodeAddressable + Serialize;
 
     type StateStore: StateStore<Addr = Self::Addr> + Send + Sync + Clone + 'static;
