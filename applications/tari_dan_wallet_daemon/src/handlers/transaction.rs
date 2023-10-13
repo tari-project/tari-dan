@@ -83,8 +83,8 @@ pub async fn handle_submit_instruction(
         new_non_fungible_index_outputs: req.new_non_fungible_index_outputs,
         is_dry_run: req.is_dry_run,
         proof_ids: vec![],
-        min_epoch: req.min_epoch.map(|epoch| Epoch(epoch)),
-        max_epoch: req.max_epoch.map(|epoch| Epoch(epoch)),
+        min_epoch: req.min_epoch.map(Epoch),
+        max_epoch: req.max_epoch.map(Epoch),
     };
     handle_submit(context, token, request).await
 }

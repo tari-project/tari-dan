@@ -300,8 +300,8 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
             .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
-        min_epoch: common.min_epoch.map(|epoch| Epoch(epoch)),
-        max_epoch: common.max_epoch.map(|epoch| Epoch(epoch)),
+        min_epoch: common.min_epoch.map(Epoch),
+        max_epoch: common.max_epoch.map(Epoch),
     };
     submit_transaction(request, client).await?;
     Ok(())
@@ -355,8 +355,8 @@ async fn handle_submit_manifest(
             .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
-        min_epoch: common.min_epoch.map(|epoch| Epoch(epoch)),
-        max_epoch: common.max_epoch.map(|epoch| Epoch(epoch)),
+        min_epoch: common.min_epoch.map(Epoch),
+        max_epoch: common.max_epoch.map(Epoch),
     };
 
     submit_transaction(request, client).await?;
