@@ -119,7 +119,6 @@ impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
                     .is_err()
                 {
                     warn!(target: LOG_TARGET, "Leader channel closed while sending LastVote");
-                    return;
                 }
             }
 
