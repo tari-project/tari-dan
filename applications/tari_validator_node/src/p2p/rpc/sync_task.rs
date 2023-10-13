@@ -6,7 +6,7 @@ use std::collections::HashSet;
 use log::*;
 use tari_comms::protocol::rpc::RpcStatus;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, LockedBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
+    consensus_models::{Block, BlockId, LeafBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
     StorageError,
@@ -143,8 +143,9 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         current_block_id: &BlockId,
     ) -> Result<(), StorageError> {
         self.store.with_read_tx(|tx| {
-            let locked_block = LockedBlock::get(tx)?;
-            let blocks = Block::get_all_blocks_between(tx, current_block_id, locked_block.block_id())?;
+            // TODO: if there are any transactions this will break the syncing node.
+            let leaf_block = LeafBlock::get(tx)?;
+            let blocks = Block::get_all_blocks_between(tx, current_block_id, leaf_block.block_id())?;
             for block in blocks {
                 debug!(
                     target: LOG_TARGET,

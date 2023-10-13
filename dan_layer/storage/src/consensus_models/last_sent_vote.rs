@@ -25,8 +25,12 @@ impl<TAddr> LastSentVote<TAddr> {
     }
 }
 
-// impl<TAddr> std::fmt::Display for LastSentVote<TAddr> {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         write!(f, "(block_id: {}, height: {})", self.block_id, self.height)
-//     }
-// }
+impl<TAddr> std::fmt::Display for LastSentVote<TAddr> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "(block_id: {}, height: {}, {:?})",
+            self.block_id, self.block_height, self.decision
+        )
+    }
+}

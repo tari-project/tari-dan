@@ -49,12 +49,24 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    #[allow(clippy::too_many_lines)]
     pub async fn handle(
         &self,
         message: VoteMessage<TConsensusSpec::Addr>,
         check_leadership: bool,
     ) -> Result<(), HotStuffError> {
+        if self.handle_vote(message, check_leadership).await? {
+            self.pacemaker.beat();
+        }
+        Ok(())
+    }
+
+    /// Returns true if quorum is reached
+    #[allow(clippy::too_many_lines)]
+    pub async fn handle_vote(
+        &self,
+        message: VoteMessage<TConsensusSpec::Addr>,
+        check_leadership: bool,
+    ) -> Result<bool, HotStuffError> {
         // Is a committee member sending us this vote?
         let committee = self.epoch_manager.get_local_committee(message.epoch).await?;
         if !committee.contains(&message.signature.public_key) {
@@ -117,7 +129,7 @@ where TConsensusSpec: ConsensusSpec
             local_committee_shard.quorum_threshold()
         );
         if count < local_committee_shard.quorum_threshold() as usize {
-            return Ok(());
+            return Ok(false);
         }
         let high_qc;
         let block_height;
@@ -129,7 +141,7 @@ where TConsensusSpec: ConsensusSpec
                     "❌ Received {} votes for unknown block {}", count, message.block_id
                 );
                 tx.rollback()?;
-                return Ok(());
+                return Ok(false);
             };
 
             if check_leadership &&
@@ -158,7 +170,7 @@ where TConsensusSpec: ConsensusSpec
                 );
                 // We have already created a QC for this block
                 tx.rollback()?;
-                return Ok(());
+                return Ok(true);
             }
 
             let votes = block.get_votes(tx.deref_mut())?;
@@ -171,7 +183,7 @@ where TConsensusSpec: ConsensusSpec
                     local_committee_shard.quorum_threshold()
                 );
                 tx.rollback()?;
-                return Ok(());
+                return Ok(false);
             };
 
             // Wait for our own vote to make sure we've processed all transactions and we also have an up to date
@@ -205,10 +217,10 @@ where TConsensusSpec: ConsensusSpec
             tx.commit()?;
             block_height = block.height();
         };
-        self.pacemaker.update_view(block_height, high_qc.block_height).await?;
-        self.pacemaker.beat();
 
-        Ok(())
+        self.pacemaker.update_view(block_height, high_qc.block_height).await?;
+
+        Ok(true)
     }
 
     fn calculate_threshold_decision(

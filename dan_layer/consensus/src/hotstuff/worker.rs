@@ -8,13 +8,13 @@ use std::{
 };
 
 use log::*;
-use tari_dan_common_types::NodeHeight;
+use tari_dan_common_types::{optional::Optional, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, LastVoted, LeafBlock, TransactionPool},
+    consensus_models::{Block, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
-use tari_epoch_manager::EpochManagerReader;
+use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{broadcast, mpsc};
@@ -201,6 +201,8 @@ where TConsensusSpec: ConsensusSpec
         let mut on_force_beat = self.pacemaker.get_on_force_beat();
         let mut on_leader_timeout = self.pacemaker.get_on_leader_timeout();
 
+        let mut epoch_manager_events = self.epoch_manager.subscribe().await?;
+
         self.request_initial_catch_up_sync().await?;
 
         loop {
@@ -218,6 +220,10 @@ where TConsensusSpec: ConsensusSpec
                         self.on_failure("on_new_hs_message", &e).await;
                         return Err(e);
                     }
+                },
+
+                Ok(event) = epoch_manager_events.recv() => {
+                    self.handle_epoch_manager_event(event).await?;
                 },
 
                 _ = on_beat.wait() => {
@@ -258,6 +264,43 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
+    async fn handle_epoch_manager_event(&self, event: EpochManagerEvent) -> Result<(), HotStuffError> {
+        match event {
+            EpochManagerEvent::EpochChanged(epoch) => {
+                if !self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await? {
+                    info!(
+                        target: LOG_TARGET,
+                        "💤 This validator is not registered for epoch {}. Going to sleep.", epoch
+                    );
+                    return Err(HotStuffError::NotRegisteredForCurrentEpoch { epoch });
+                }
+
+                // Send the last vote to the leader at the next epoch so that they can justify the current tip.
+                if let Some(last_voted) = self.state_store.with_read_tx(|tx| LastSentVote::get(tx)).optional()? {
+                    info!(
+                        target: LOG_TARGET,
+                        "💌 Sending last vote to the leader at epoch {}: {}",
+                        epoch,
+                        last_voted
+                    );
+                    let local_committee = self.epoch_manager.get_local_committee(epoch).await?;
+                    let leader = self
+                        .leader_strategy
+                        .get_leader_for_next_block(&local_committee, last_voted.block_height);
+                    self.tx_leader
+                        .send((leader.clone(), HotstuffMessage::Vote(last_voted.into())))
+                        .await
+                        .map_err(|_| HotStuffError::InternalChannelClosed {
+                            context: "tx_leader in handle_epoch_manager_event",
+                        })?;
+                }
+            },
+            EpochManagerEvent::ThisValidatorIsRegistered { .. } => {},
+        }
+
+        Ok(())
+    }
+
     async fn request_initial_catch_up_sync(&self) -> Result<(), HotStuffError> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let committee = self.epoch_manager.get_local_committee(current_epoch).await?;
@@ -288,20 +331,8 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn on_leader_timeout(&mut self, new_height: NodeHeight) -> Result<(), HotStuffError> {
-        let epoch = self.epoch_manager.current_epoch().await?;
-        // Is the VN registered?
-        if !self.epoch_manager.is_epoch_active(epoch).await? {
-            info!(
-                target: LOG_TARGET,
-                "[on_leader_timeout] Validator is not active within this epoch"
-            );
-            return Ok(());
-        }
-
-        self.on_next_sync_view.handle(epoch, new_height).await?;
-
+        self.on_next_sync_view.handle(new_height).await?;
         self.publish_event(HotstuffEvent::LeaderTimeout { new_height });
-
         Ok(())
     }
 

@@ -5,12 +5,7 @@ use std::marker::PhantomData;
 
 use crate::{
     hotstuff::{
-        state_machine::{
-            event::ConsensusStateEvent,
-            idle::IdleState,
-            running::Running,
-            worker::ConsensusWorkerContext,
-        },
+        state_machine::{event::ConsensusStateEvent, idle::Idle, running::Running, worker::ConsensusWorkerContext},
         HotStuffError,
     },
     traits::{ConsensusSpec, SyncManager, SyncStatus},
@@ -37,8 +32,8 @@ where
     }
 }
 
-impl<TSpec> From<IdleState<TSpec>> for CheckSync<TSpec> {
-    fn from(_: IdleState<TSpec>) -> Self {
+impl<TSpec> From<Idle<TSpec>> for CheckSync<TSpec> {
+    fn from(_: Idle<TSpec>) -> Self {
         Self(PhantomData)
     }
 }

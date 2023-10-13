@@ -14,10 +14,10 @@ use tari_dan_storage::{
     StateStore,
     StateStoreReadTransaction,
 };
-use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
+use tari_epoch_manager::EpochManagerReader;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_transaction::TransactionId;
-use tokio::task;
+use tokio::{sync::broadcast, task};
 
 use crate::support::{
     address::TestAddress,
@@ -98,12 +98,8 @@ impl Test {
 
     pub async fn start_epoch(&mut self, epoch: Epoch) {
         for validator in self.validators.values() {
-            validator.epoch_manager.set_is_epoch_active(true).await;
             // Fire off initial epoch change event so that the pacemaker starts
-            validator
-                .tx_epoch_events
-                .send(EpochManagerEvent::EpochChanged(epoch))
-                .unwrap();
+            validator.epoch_manager.set_current_epoch(epoch).await;
         }
         self.network.start();
     }
@@ -365,7 +361,8 @@ impl TestBuilder {
         }
 
         let leader_strategy = RoundRobinLeaderStrategy::new();
-        let epoch_manager = TestEpochManager::new();
+        let (tx_epoch_events, _) = broadcast::channel(10);
+        let epoch_manager = TestEpochManager::new(tx_epoch_events);
         epoch_manager.add_committees(self.committees.clone()).await;
         let shutdown = Shutdown::new();
         let (channels, validators) = self
