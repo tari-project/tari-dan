@@ -117,7 +117,7 @@ function Accounts() {
     isError: isErrorAccountsList,
     error: errorAccountsList,
   } = useAccountsList(0, 10);
-  const { mutateAsync } = useAccountsCreateFreeTestCoins();
+  const { mutateAsync: mutateCreateFeeTestCoins } = useAccountsCreateFreeTestCoins();
 
   const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
@@ -157,7 +157,7 @@ function Accounts() {
   };
 
   const onClaimFreeCoins = async () => {
-    await mutate({
+    await mutateCreateFeeTestCoins({
       accountName: 'TestAccount',
       amount: 100000,
       fee: 1000,
