@@ -3,7 +3,7 @@
 
 use serde::Serialize;
 use tari_dan_common_types::{hashing::ValidatorNodeMerkleProof, Epoch, NodeHeight};
-use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSignature};
+use tari_dan_storage::consensus_models::{BlockId, LastSentVote, QuorumDecision, ValidatorSignature};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct VoteMessage<TAddr> {
@@ -15,4 +15,17 @@ pub struct VoteMessage<TAddr> {
     // TODO: Surely the current leader can generate the aggregate proof for the new QC. I dont think we need to include
     //       it in each vote message.
     pub merkle_proof: ValidatorNodeMerkleProof,
+}
+
+impl<TAddr> From<LastSentVote<TAddr>> for VoteMessage<TAddr> {
+    fn from(value: LastSentVote<TAddr>) -> Self {
+        Self {
+            epoch: value.epoch,
+            block_id: value.block_id,
+            block_height: value.block_height,
+            decision: value.decision,
+            signature: value.signature,
+            merkle_proof: value.merkle_proof,
+        }
+    }
 }

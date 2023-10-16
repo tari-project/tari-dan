@@ -18,6 +18,8 @@ pub enum HotStuffError {
     InternalChannelClosed { context: &'static str },
     #[error("Epoch {epoch} is not active. {details}")]
     EpochNotActive { epoch: Epoch, details: String },
+    #[error("Not registered for current epoch {epoch}")]
+    NotRegisteredForCurrentEpoch { epoch: Epoch },
     #[error("Received message from non-committee member. Epoch: {epoch}, Sender: {sender}, {context}")]
     ReceivedMessageFromNonCommitteeMember {
         epoch: Epoch,

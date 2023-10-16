@@ -26,7 +26,7 @@ pub struct ValidatorBuilder {
     pub bucket: ShardBucket,
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
-    pub epoch_manager: TestEpochManager,
+    pub epoch_manager: Option<TestEpochManager>,
 }
 
 impl ValidatorBuilder {
@@ -37,7 +37,7 @@ impl ValidatorBuilder {
             bucket: ShardBucket::from(0),
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
-            epoch_manager: TestEpochManager::new(),
+            epoch_manager: None,
         }
     }
 
@@ -57,7 +57,7 @@ impl ValidatorBuilder {
     }
 
     pub fn with_epoch_manager(&mut self, epoch_manager: TestEpochManager) -> &mut Self {
-        self.epoch_manager = epoch_manager;
+        self.epoch_manager = Some(epoch_manager);
         self
     }
 
@@ -83,9 +83,12 @@ impl ValidatorBuilder {
         let transaction_pool = TransactionPool::new();
         let noop_state_manager = NoopStateManager::new();
         let (tx_events, _) = broadcast::channel(100);
-        let (tx_epoch_events, rx_epoch_events) = broadcast::channel(1);
 
-        let epoch_manager = self.epoch_manager.clone_for(self.address.clone(), self.shard);
+        let epoch_manager = self
+            .epoch_manager
+            .as_ref()
+            .unwrap()
+            .clone_for(self.address.clone(), self.shard);
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address.clone(),
             rx_new_transactions,
@@ -105,8 +108,7 @@ impl ValidatorBuilder {
 
         let (tx_current_state, _) = watch::channel(Default::default());
         let context = ConsensusWorkerContext {
-            epoch_manager,
-            epoch_events: rx_epoch_events,
+            epoch_manager: epoch_manager.clone(),
             hotstuff: worker,
             state_sync: AlwaysSyncedSyncManager,
             tx_current_state,
@@ -130,8 +132,7 @@ impl ValidatorBuilder {
             address: self.address.clone(),
             shard: self.shard,
             state_store: store,
-            epoch_manager: self.epoch_manager.clone_for(self.address.clone(), self.shard),
-            tx_epoch_events,
+            epoch_manager,
             state_manager: noop_state_manager,
             leader_strategy: self.leader_strategy,
             events: tx_events.subscribe(),

@@ -35,8 +35,9 @@ use tari_dan_common_types::{
     ShardId,
 };
 use tari_dan_storage::global::models::ValidatorNode;
+use tokio::sync::broadcast;
 
-use crate::EpochManagerError;
+use crate::{EpochManagerError, EpochManagerEvent};
 
 // // TODO: Rename to reflect that it's a read only interface (e.g. EpochReader, EpochQuery)
 // #[async_trait]
@@ -89,6 +90,8 @@ use crate::EpochManagerError;
 #[async_trait]
 pub trait EpochManagerReader: Send + Sync {
     type Addr: NodeAddressable;
+
+    async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError>;
 
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError>;
     async fn get_committee_within_shard_range(

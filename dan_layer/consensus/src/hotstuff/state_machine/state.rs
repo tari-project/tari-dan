@@ -3,11 +3,11 @@
 
 use std::fmt::Display;
 
-use crate::hotstuff::state_machine::{check_sync::CheckSync, idle::IdleState, running::Running, syncing::Syncing};
+use crate::hotstuff::state_machine::{check_sync::CheckSync, idle::Idle, running::Running, syncing::Syncing};
 
 #[derive(Debug)]
 pub(super) enum ConsensusState<TSpec> {
-    Idle(IdleState<TSpec>),
+    Idle(Idle<TSpec>),
     CheckSync(CheckSync<TSpec>),
     Syncing(Syncing<TSpec>),
     Running(Running<TSpec>),

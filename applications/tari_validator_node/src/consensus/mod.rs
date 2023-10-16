@@ -67,8 +67,6 @@ pub async fn spawn(
     let state_manager = TariStateManager::new();
     let (tx_hotstuff_events, _) = broadcast::channel(100);
 
-    let epoch_events = epoch_manager.subscribe().await.unwrap();
-
     let hotstuff_worker = HotstuffWorker::<TariConsensusSpec>::new(
         validator_addr,
         rx_new_transactions,
@@ -89,7 +87,6 @@ pub async fn spawn(
     let (tx_current_state, rx_current_state) = watch::channel(Default::default());
     let context = ConsensusWorkerContext {
         epoch_manager: epoch_manager.clone(),
-        epoch_events,
         hotstuff: hotstuff_worker,
         state_sync: CommsRpcStateSyncManager::new(epoch_manager, store, client_factory),
         tx_current_state,
