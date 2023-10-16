@@ -37,7 +37,14 @@ use diesel::{
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness};
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, NodeAddressable, ShardId};
+use tari_dan_common_types::{
+    committee::Committee,
+    hashing::ValidatorNodeBalancedMerkleTree,
+    shard_bucket::ShardBucket,
+    Epoch,
+    NodeAddressable,
+    ShardId,
+};
 use tari_dan_storage::{
     global::{
         models::ValidatorNode,
@@ -559,6 +566,50 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
         match query_res {
             Some(e) => Ok(Some(e.into())),
+            None => Ok(None),
+        }
+    }
+
+    fn insert_bmt(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: u64,
+        bmt: ValidatorNodeBalancedMerkleTree,
+    ) -> Result<(), Self::Error> {
+        use crate::global::schema::bmt_cache;
+
+        println!("Inserting");
+        diesel::insert_into(bmt_cache::table)
+            .values((
+                bmt_cache::epoch.eq(epoch as i64),
+                bmt_cache::bmt.eq(serde_json::to_vec(&bmt)?),
+            ))
+            .execute(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "insert::bmt".to_string(),
+            })?;
+        println!("Insert done");
+        Ok(())
+    }
+
+    fn get_bmt(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: u64,
+    ) -> Result<Option<ValidatorNodeBalancedMerkleTree>, Self::Error> {
+        use crate::global::schema::bmt_cache::dsl;
+
+        let query_res: Option<models::Bmt> = dsl::bmt_cache
+            .find(epoch as i64)
+            .first(tx.connection())
+            .optional()
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get::bmt".to_string(),
+            })?;
+        match query_res {
+            Some(bmt) => Ok(Some(serde_json::from_slice(&bmt.bmt)?)),
             None => Ok(None),
         }
     }
