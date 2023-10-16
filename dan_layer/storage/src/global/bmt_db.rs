@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::hashing::ValidatorNodeBalancedMerkleTree;
+use tari_dan_common_types::{hashing::ValidatorNodeBalancedMerkleTree, Epoch};
 
 use crate::global::GlobalDbAdapter;
 
@@ -44,7 +44,10 @@ impl<'a, 'tx, TGlobalDbAdapter: GlobalDbAdapter> BmtDb<'a, 'tx, TGlobalDbAdapter
             .map_err(TGlobalDbAdapter::Error::into)
     }
 
-    pub fn get_bmt(&mut self, epoch: u64) -> Result<Option<ValidatorNodeBalancedMerkleTree>, TGlobalDbAdapter::Error> {
+    pub fn get_bmt(
+        &mut self,
+        epoch: Epoch,
+    ) -> Result<Option<ValidatorNodeBalancedMerkleTree>, TGlobalDbAdapter::Error> {
         self.backend
             .get_bmt(self.tx, epoch)
             .map_err(TGlobalDbAdapter::Error::into)

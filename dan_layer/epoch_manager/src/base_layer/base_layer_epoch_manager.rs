@@ -458,25 +458,21 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         }
     }
 
-    pub fn get_validator_node_balanced_merkle_tree(
+    fn get_validator_node_balanced_merkle_tree(
         &self,
         epoch: Epoch,
     ) -> Result<ValidatorNodeBalancedMerkleTree, EpochManagerError> {
         let db = {
             let mut tx = self.global_db.create_transaction()?;
-            self.global_db.bmt(&mut tx).get_bmt(epoch.0)
+            self.global_db.bmt(&mut tx).get_bmt(epoch)
         }?;
         if let Some(bmt) = db {
             return Ok(bmt);
         }
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
 
-        let mut vn_bmt_vec = Vec::with_capacity(vns.len());
-        for vn in vns {
-            vn_bmt_vec.push(vn.node_hash().to_vec())
-        }
-
-        let vn_bmt = ValidatorNodeBalancedMerkleTree::create(vn_bmt_vec.clone());
+        let vn_bmt_leaves = vns.iter().map(|vn| vn.node_hash().to_vec()).collect();
+        let vn_bmt = ValidatorNodeBalancedMerkleTree::create(vn_bmt_leaves);
         let mut tx = self.global_db.create_transaction()?;
         self.global_db.bmt(&mut tx).insert_bmt(epoch.as_u64(), vn_bmt.clone())?;
         tx.commit()?;

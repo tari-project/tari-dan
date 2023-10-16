@@ -133,9 +133,6 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
                 handle(reply, self.inner.is_validator_in_committee(epoch, shard, &identity));
             },
             EpochManagerRequest::Subscribe { reply } => handle(reply, Ok(self.events.subscribe())),
-            EpochManagerRequest::GetValidatorNodeBalancedMerkleTree { epoch, reply } => {
-                handle(reply, self.inner.get_validator_node_balanced_merkle_tree(epoch))
-            },
             EpochManagerRequest::GetValidatorSetMergedMerkleProof {
                 epoch,
                 validator_set,
