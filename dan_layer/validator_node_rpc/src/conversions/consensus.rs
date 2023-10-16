@@ -168,7 +168,6 @@ impl<TAddr: NodeAddressable> From<&VoteMessage<TAddr>> for proto::consensus::Vot
             block_height: msg.block_height.as_u64(),
             decision: i32::from(msg.decision.as_u8()),
             signature: Some((&msg.signature).into()),
-            merkle_proof: encode(&msg.merkle_proof).unwrap(),
         }
     }
 }
@@ -187,7 +186,6 @@ impl<TAddr: NodeAddressable> TryFrom<proto::consensus::VoteMessage> for VoteMess
                 .signature
                 .ok_or_else(|| anyhow!("Signature is missing"))?
                 .try_into()?,
-            merkle_proof: decode_exact(&value.merkle_proof)?,
         })
     }
 }

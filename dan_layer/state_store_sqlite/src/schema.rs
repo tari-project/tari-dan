@@ -48,15 +48,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    last_voted (id) {
-        id -> Integer,
-        block_id -> Text,
-        height -> BigInt,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
     last_sent_vote (id) {
         id -> Integer,
         epoch -> BigInt,
@@ -64,7 +55,15 @@ diesel::table! {
         block_height -> BigInt,
         decision -> Integer,
         signature -> Text,
-        merkle_proof -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    last_voted (id) {
+        id -> Integer,
+        block_id -> Text,
+        height -> BigInt,
         created_at -> Timestamp,
     }
 }
@@ -242,7 +241,6 @@ diesel::table! {
         decision -> Integer,
         sender_leaf_hash -> Text,
         signature -> Text,
-        merkle_proof -> Text,
         created_at -> Timestamp,
     }
 }
@@ -252,6 +250,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     high_qcs,
     last_executed,
     last_proposed,
+    last_sent_vote,
     last_voted,
     leaf_blocks,
     locked_block,

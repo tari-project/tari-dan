@@ -34,7 +34,7 @@ use tari_core::{blocks::BlockHeader, transactions::transaction_components::Valid
 use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    hashing::{ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
+    hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     optional::Optional,
     shard_bucket::ShardBucket,
     Epoch,
@@ -42,6 +42,7 @@ use tari_dan_common_types::{
 };
 use tari_dan_storage::global::{models::ValidatorNode, DbEpoch, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
+use tari_mmr::MergedBalancedBinaryMerkleProof;
 use tokio::sync::broadcast;
 
 use crate::{base_layer::config::EpochManagerConfig, error::EpochManagerError, EpochManagerEvent};
@@ -474,19 +475,28 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         Ok(vn_bmt)
     }
 
-    pub fn get_validator_node_merkle_proof(&self, epoch: Epoch) -> Result<ValidatorNodeMerkleProof, EpochManagerError> {
+    pub fn get_validator_set_merged_merkle_proof(
+        &self,
+        epoch: Epoch,
+        validators: Vec<CommsPublicKey>,
+    ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError> {
+        let mut proofs = Vec::with_capacity(validators.len());
         let bmt = self.get_validator_node_balanced_merkle_tree(epoch)?;
 
-        let vn = self.get_validator_node(epoch, &self.node_public_key)?.ok_or_else(|| {
-            EpochManagerError::ValidatorNodeNotRegistered {
-                address: self.node_public_key.to_string(),
-                epoch,
-            }
-        })?;
-        let leaf_index = bmt.find_leaf_index_for_hash(&vn.node_hash().to_vec())?;
+        for validator in &validators {
+            let vn = self.get_validator_node(epoch, validator)?.ok_or_else(|| {
+                EpochManagerError::ValidatorNodeNotRegistered {
+                    address: self.node_public_key.to_string(),
+                    epoch,
+                }
+            })?;
+            let leaf_index = bmt.find_leaf_index_for_hash(&vn.node_hash().to_vec())?;
 
-        let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, leaf_index as usize)?;
-        Ok(proof)
+            let proof = ValidatorNodeMerkleProof::generate_proof(&bmt, leaf_index as usize)?;
+            proofs.push(proof);
+        }
+
+        Ok(MergedBalancedBinaryMerkleProof::create_from_proofs(&proofs).unwrap())
     }
 
     pub async fn on_scanning_complete(&mut self) -> Result<(), EpochManagerError> {

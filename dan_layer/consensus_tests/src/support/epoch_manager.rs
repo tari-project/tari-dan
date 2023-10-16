@@ -10,7 +10,7 @@ use std::{
 use async_trait::async_trait;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    hashing::{ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
+    hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     shard_bucket::ShardBucket,
     Epoch,
     ShardId,
@@ -152,13 +152,15 @@ impl EpochManagerReader for TestEpochManager {
         Ok(self.inner.lock().await.committees.len() as u32)
     }
 
-    async fn get_validator_node_merkle_proof(
+    async fn get_validator_set_merged_merkle_proof(
         &self,
         _epoch: Epoch,
-    ) -> Result<ValidatorNodeMerkleProof, EpochManagerError> {
+        _validators: Vec<Self::Addr>,
+    ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError> {
         let leaves = vec![];
         let tree = ValidatorNodeBalancedMerkleTree::create(leaves);
-        Ok(ValidatorNodeMerkleProof::generate_proof(&tree, 0).unwrap())
+        let proof = ValidatorNodeMerkleProof::generate_proof(&tree, 0).unwrap();
+        Ok(MergedValidatorNodeMerkleProof::create_from_proofs(&[proof]).unwrap())
     }
 
     async fn get_committees_by_buckets(

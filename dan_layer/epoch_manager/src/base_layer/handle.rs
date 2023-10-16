@@ -13,7 +13,7 @@ use tari_comms::types::CommsPublicKey;
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    hashing::ValidatorNodeMerkleProof,
+    hashing::MergedValidatorNodeMerkleProof,
     shard_bucket::ShardBucket,
     Epoch,
     ShardId,
@@ -254,13 +254,18 @@ impl EpochManagerReader for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_validator_node_merkle_proof(
+    async fn get_validator_set_merged_merkle_proof(
         &self,
         epoch: Epoch,
-    ) -> Result<ValidatorNodeMerkleProof, EpochManagerError> {
+        validator_set: Vec<Self::Addr>,
+    ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
-            .send(EpochManagerRequest::GetValidatorNodeMerkleProof { epoch, reply: tx })
+            .send(EpochManagerRequest::GetValidatorSetMergedMerkleProof {
+                epoch,
+                reply: tx,
+                validator_set,
+            })
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 

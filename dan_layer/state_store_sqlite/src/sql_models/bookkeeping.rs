@@ -100,7 +100,6 @@ pub struct LastSentVote {
     pub block_height: i64,
     pub decision: i32,
     pub signature: String,
-    pub merkle_proof: String,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -123,7 +122,6 @@ impl<TAddr: NodeAddressable> TryFrom<LastSentVote> for consensus_models::LastSen
                 details: format!("Could not convert {} to QuorumDecision", value.decision),
             })?,
             signature: deserialize_json(&value.signature)?,
-            merkle_proof: deserialize_json(&value.merkle_proof)?,
         })
     }
 }
