@@ -322,7 +322,7 @@ impl<TAddr: NodeAddressable> SubstateUpdate<TAddr> {
             Self::Create(proof) => {
                 debug!(
                     target: LOG_TARGET,
-                    "🔥 Applying substate CREATE for {} v{}",
+                    "🌲 Applying substate CREATE for {} v{}",
                     proof.substate.address, proof.substate.version
                 );
                 proof.created_qc.save(tx)?;

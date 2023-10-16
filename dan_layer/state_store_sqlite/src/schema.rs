@@ -57,6 +57,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    last_sent_vote (id) {
+        id -> Integer,
+        epoch -> BigInt,
+        block_id -> Text,
+        block_height -> BigInt,
+        decision -> Integer,
+        signature -> Text,
+        merkle_proof -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     leaf_blocks (id) {
         id -> Integer,
         block_id -> Text,

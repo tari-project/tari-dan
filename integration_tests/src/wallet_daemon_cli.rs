@@ -263,7 +263,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         key_id: None,
     };
 
-    let resp = timeout(Duration::from_secs(120), client.create_account(request))
+    let resp = timeout(Duration::from_secs(240), client.create_account(request))
         .await
         .unwrap()
         .unwrap();

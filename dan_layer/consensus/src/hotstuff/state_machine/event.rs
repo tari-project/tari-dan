@@ -10,6 +10,7 @@ use crate::hotstuff::HotStuffError;
 #[derive(Debug)]
 pub enum ConsensusStateEvent {
     RegisteredForEpoch { epoch: Epoch },
+    NotRegisteredForEpoch { epoch: Epoch },
     NeedSync,
     SyncComplete,
     Ready,
@@ -24,6 +25,7 @@ impl Display for ConsensusStateEvent {
         use ConsensusStateEvent::*;
         match self {
             RegisteredForEpoch { epoch } => write!(f, "Registered for epoch {}", epoch),
+            NotRegisteredForEpoch { epoch } => write!(f, "Not registered for epoch {}", epoch),
             NeedSync => write!(f, "Behind peers"),
             SyncComplete => write!(f, "Sync complete"),
             Ready => write!(f, "Ready"),

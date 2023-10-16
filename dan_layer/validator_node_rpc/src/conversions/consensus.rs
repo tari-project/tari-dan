@@ -117,6 +117,7 @@ impl<TAddr: NodeAddressable> From<&NewViewMessage<TAddr>> for proto::consensus::
             high_qc: Some((&value.high_qc).into()),
             new_height: value.new_height.0,
             epoch: value.epoch.as_u64(),
+            last_vote: value.last_vote.as_ref().map(|a| a.into()),
         }
     }
 }
@@ -129,6 +130,10 @@ impl<TAddr: NodeAddressable> TryFrom<proto::consensus::NewViewMessage> for NewVi
             high_qc: value.high_qc.ok_or_else(|| anyhow!("High QC is missing"))?.try_into()?,
             new_height: value.new_height.into(),
             epoch: Epoch(value.epoch),
+            last_vote: value
+                .last_vote
+                .map(|a: proto::consensus::VoteMessage| a.try_into())
+                .transpose()?,
         })
     }
 }

@@ -18,6 +18,7 @@ use tari_dan_storage::{
         ExecutedTransaction,
         HighQc,
         LastExecuted,
+        LastSentVote,
         LastVoted,
         LockedBlock,
         LockedOutput,
@@ -131,7 +132,7 @@ where TConsensusSpec: ConsensusSpec
 
                 let vote = self.generate_vote_message(valid_block.block(), decision).await?;
                 self.send_vote_to_leader(&local_committee, vote, valid_block.block())
-                    .await;
+                    .await?;
             } else {
                 info!(
                     target: LOG_TARGET,
@@ -302,7 +303,7 @@ where TConsensusSpec: ConsensusSpec
         local_committee: &Committee<TConsensusSpec::Addr>,
         vote: VoteMessage<TConsensusSpec::Addr>,
         block: &Block<TConsensusSpec::Addr>,
-    ) {
+    ) -> Result<(), HotStuffError> {
         let leader = self
             .leader_strategy
             .get_leader_for_next_block(local_committee, block.height());
@@ -316,7 +317,7 @@ where TConsensusSpec: ConsensusSpec
         );
         if self
             .tx_leader
-            .send((leader.clone(), HotstuffMessage::Vote(vote)))
+            .send((leader.clone(), HotstuffMessage::Vote(vote.clone())))
             .await
             .is_err()
         {
@@ -325,6 +326,18 @@ where TConsensusSpec: ConsensusSpec
                 "tx_leader in OnLocalProposalReady::send_vote_to_leader is closed",
             );
         }
+        self.store.with_write_tx(|tx| {
+            let last_sent_vote = LastSentVote {
+                epoch: vote.epoch,
+                block_id: vote.block_id,
+                block_height: vote.block_height,
+                decision: vote.decision,
+                signature: vote.signature,
+                merkle_proof: vote.merkle_proof,
+            };
+            last_sent_vote.set(tx)
+        })?;
+        Ok(())
     }
 
     #[allow(clippy::too_many_lines)]

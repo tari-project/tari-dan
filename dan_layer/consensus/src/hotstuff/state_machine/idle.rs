@@ -10,7 +10,7 @@ use tokio::sync::broadcast;
 
 use crate::{
     hotstuff::{
-        state_machine::{event::ConsensusStateEvent, worker::ConsensusWorkerContext},
+        state_machine::{event::ConsensusStateEvent, running::Running, worker::ConsensusWorkerContext},
         HotStuffError,
     },
     traits::ConsensusSpec,
@@ -19,9 +19,9 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::consensus::sm::idle";
 
 #[derive(Debug, Clone)]
-pub struct IdleState<TSpec>(PhantomData<TSpec>);
+pub struct Idle<TSpec>(PhantomData<TSpec>);
 
-impl<TSpec> IdleState<TSpec>
+impl<TSpec> Idle<TSpec>
 where TSpec: ConsensusSpec
 {
     pub fn new() -> Self {
@@ -32,6 +32,8 @@ where TSpec: ConsensusSpec
         &self,
         context: &mut ConsensusWorkerContext<TSpec>,
     ) -> Result<ConsensusStateEvent, HotStuffError> {
+        // Subscribe before checking if we're registered to eliminate the chance that we miss the epoch event
+        let mut epoch_events = context.epoch_manager.subscribe().await?;
         let current_epoch = context.epoch_manager.current_epoch().await?;
         if self.is_registered_for_epoch(context, current_epoch).await? {
             return Ok(ConsensusStateEvent::RegisteredForEpoch { epoch: current_epoch });
@@ -39,7 +41,7 @@ where TSpec: ConsensusSpec
 
         loop {
             tokio::select! {
-                event = context.epoch_events.recv() => {
+                event = epoch_events.recv() => {
                     match event {
                         Ok(event) => {
                             if let Some(event) = self.on_epoch_event(context, event).await? {
@@ -90,5 +92,11 @@ where TSpec: ConsensusSpec
             },
             EpochManagerEvent::ThisValidatorIsRegistered { .. } => Ok(None),
         }
+    }
+}
+
+impl<TSpec: ConsensusSpec> From<Running<TSpec>> for Idle<TSpec> {
+    fn from(_value: Running<TSpec>) -> Self {
+        Idle::new()
     }
 }

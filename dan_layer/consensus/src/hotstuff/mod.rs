@@ -22,6 +22,7 @@ mod on_sync_request;
 mod pacemaker;
 mod pacemaker_handle;
 mod state_machine;
+mod vote_receiver;
 mod worker;
 
 pub use error::*;
