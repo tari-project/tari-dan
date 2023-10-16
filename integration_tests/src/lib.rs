@@ -160,7 +160,7 @@ impl TariWorld {
         self.commitments.clear();
         self.commitment_ownership_proofs.clear();
         self.miners.clear();
-        self.fees_enabled = false;
+        self.fees_enabled = true;
     }
 
     pub async fn wait_until_base_nodes_have_transaction_in_mempool(&self, min_tx_count: usize, timeout: Duration) {

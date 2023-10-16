@@ -5,6 +5,7 @@ Feature: Wallet Daemon
 
     @serial
     Scenario: Create account and transfer faucets via wallet daemon
+        Given fees are disabled
         # Initialize a base node, wallet, miner and VN
         Given a base node BASE
         Given a wallet WALLET connected to base node BASE
@@ -85,6 +86,7 @@ Feature: Wallet Daemon
 
     @serial
     Scenario: Claim and transfer confidential assets via wallet daemon
+        Given fees are disabled
         # Initialize a base node, wallet, miner and VN
         Given a base node BASE
         Given a wallet WALLET connected to base node BASE
@@ -128,6 +130,7 @@ Feature: Wallet Daemon
 
     @serial
     Scenario: Create and mint account NFT
+        Given fees are disabled
         # Initialize a base node, wallet, miner and VN
         Given a base node BASE
         Given a wallet WALLET connected to base node BASE

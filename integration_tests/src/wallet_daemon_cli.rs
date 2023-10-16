@@ -75,6 +75,7 @@ pub async fn claim_burn(
     ownership_proof: CommitmentSignature<RistrettoPublicKey, RistrettoSecretKey>,
     reciprocal_claim_public_key: RistrettoPublicKey,
     wallet_daemon_name: String,
+    fee: i64,
 ) -> Result<ClaimBurnResponse, WalletDaemonClientError> {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
@@ -90,7 +91,7 @@ pub async fn claim_burn(
             "reciprocal_claim_public_key": BASE64.encode(reciprocal_claim_public_key.as_bytes()),
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
-        fee: Some(Amount(1)),
+        fee: Some(Amount(fee)),
     };
 
     client.claim_burn(claim_burn_request).await
@@ -769,7 +770,7 @@ pub async fn confidential_transfer(
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
     let account = Some(ComponentAddressOrName::Name(account_name));
-    let fee = Some(Amount(1));
+    let fee = Some(Amount(2000));
 
     let request = ConfidentialTransferRequest {
         account,
