@@ -596,12 +596,12 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     fn get_bmt(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        epoch: u64,
+        epoch: Epoch,
     ) -> Result<Option<ValidatorNodeBalancedMerkleTree>, Self::Error> {
         use crate::global::schema::bmt_cache::dsl;
 
         let query_res: Option<models::Bmt> = dsl::bmt_cache
-            .find(epoch as i64)
+            .find(epoch.as_u64() as i64)
             .first(tx.connection())
             .optional()
             .map_err(|source| SqliteStorageError::DieselError {

@@ -38,7 +38,6 @@ message VoteMessage {
   uint64 block_height = 3;
   QuorumDecision decision = 4;
   tari.dan.common.SignatureAndPublicKey signature = 5;
-  bytes merkle_proof = 6;
 }
 
 message Block {

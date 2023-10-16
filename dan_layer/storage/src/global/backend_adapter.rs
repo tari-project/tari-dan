@@ -146,6 +146,6 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
     fn get_bmt(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        epoch: u64,
+        epoch: Epoch,
     ) -> Result<Option<ValidatorNodeBalancedMerkleTree>, Self::Error>;
 }

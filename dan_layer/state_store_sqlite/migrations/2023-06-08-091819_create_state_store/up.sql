@@ -115,12 +115,11 @@ create table last_voted
 create table last_sent_vote
 (
     id           integer   NOT NULL PRIMARY KEY AUTOINCREMENT,
-    epoch        integer,
-    block_id     text,
-    block_height integer,
-    decision     integer,
-    signature    text,
-    merkle_proof text,
+    epoch        bigint    NOT NULL,
+    block_id     text      NOT NULL,
+    block_height bigint    NOT NULL,
+    decision     integer   NOT NULL,
+    signature    text      NOT NULL,
     created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
@@ -232,7 +231,6 @@ create table votes
     decision         integer   not null,
     sender_leaf_hash text      not NULL,
     signature        text      not NULL,
-    merkle_proof     text      not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
