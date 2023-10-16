@@ -113,6 +113,8 @@ table! {
         final_fee -> Nullable<BigInt>,
         status -> Text,
         dry_run -> Bool,
+        min_epoch -> Nullable<BigInt>,
+        max_epoch -> Nullable<BigInt>,
         created_at -> Timestamp,
         updated_at -> Timestamp,
     }

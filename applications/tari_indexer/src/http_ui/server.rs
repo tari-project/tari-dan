@@ -30,7 +30,7 @@ use axum::{
 };
 use include_dir::{include_dir, Dir};
 use log::{error, info};
-use reqwest::StatusCode;
+use reqwest::{header::CONTENT_TYPE, StatusCode};
 
 const LOG_TARGET: &str = "tari::indexer::http_ui::server";
 
@@ -78,13 +78,15 @@ async fn handler(uri: Uri) -> impl IntoResponse {
     let path = path.strip_prefix('/').unwrap_or(path);
 
     // If the path is a file, return it. Otherwise use index.html (SPA)
-    if let Some(body) = PROJECT_DIR
-        .get_file(path)
-        .or_else(|| PROJECT_DIR.get_file("index.html"))
-        .and_then(|file| file.contents_utf8())
-    {
+    let (file, path) = match PROJECT_DIR.get_file(path) {
+        Some(file) => (file, path),
+        None => (PROJECT_DIR.get_file("index.html").unwrap(), "index.html"),
+    };
+    if let Some(body) = file.contents_utf8() {
+        let content_type = mime_guess::from_path(path).first_raw().unwrap_or("text/html");
         return Response::builder()
             .status(StatusCode::OK)
+            .header(CONTENT_TYPE, content_type)
             .body(body.to_owned())
             .unwrap();
     }

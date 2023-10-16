@@ -5,6 +5,7 @@ Feature: Account transfers
 
   @serial
   Scenario: Transfer tokens to unexisting account
+    Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -13,6 +14,7 @@ Feature: Account transfers
     # Initialize a VN
     Given a validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
@@ -79,6 +81,7 @@ Feature: Account transfers
 
   @serial
   Scenario: Transfer tokens to existing account
+    Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -87,6 +90,7 @@ Feature: Account transfers
     # Initialize a VN
     Given a validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
@@ -158,6 +162,7 @@ Feature: Account transfers
     # Initialize a VN
     Given a validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
     Then the validator node VN is listed as registered
@@ -173,7 +178,7 @@ Feature: Account transfers
     # Create the sender account
     When I create an account ACC_1 via the wallet daemon WALLET_D with 10000 free coins
 
-    When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 10000
+    When I check the balance of ACC_1 on wallet daemon WALLET_D the amount is at least 9000
     # Do the transfer from ACC_1 to the second account (which does not exist yet in the network)
     When I create a new key pair KEY_ACC_2
     When I do a confidential transfer of 50 from account ACC_1 to public key KEY_ACC_2 via the wallet daemon WALLET_D named TRANSFER

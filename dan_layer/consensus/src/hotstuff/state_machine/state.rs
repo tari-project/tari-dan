@@ -3,16 +3,33 @@
 
 use std::fmt::Display;
 
-use crate::hotstuff::state_machine::{check_sync::CheckSync, idle::IdleState, running::Running, syncing::Syncing};
+use crate::hotstuff::state_machine::{check_sync::CheckSync, idle::Idle, running::Running, syncing::Syncing};
 
 #[derive(Debug)]
 pub(super) enum ConsensusState<TSpec> {
-    Idle(IdleState<TSpec>),
+    Idle(Idle<TSpec>),
     CheckSync(CheckSync<TSpec>),
     Syncing(Syncing<TSpec>),
     Running(Running<TSpec>),
     Sleeping,
     Shutdown,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub enum ConsensusCurrentState {
+    #[default]
+    Idle,
+    CheckSync,
+    Syncing,
+    Running,
+    Sleeping,
+    Shutdown,
+}
+
+impl ConsensusCurrentState {
+    pub fn is_running(&self) -> bool {
+        matches!(self, ConsensusCurrentState::Running)
+    }
 }
 
 impl<TSpec> ConsensusState<TSpec> {
@@ -32,6 +49,19 @@ impl<TSpec> Display for ConsensusState<TSpec> {
             Running(_) => write!(f, "Running"),
             Sleeping => write!(f, "Sleeping"),
             Shutdown => write!(f, "Shutdown"),
+        }
+    }
+}
+
+impl<TSpec> From<&ConsensusState<TSpec>> for ConsensusCurrentState {
+    fn from(value: &ConsensusState<TSpec>) -> Self {
+        match value {
+            ConsensusState::Idle(_) => ConsensusCurrentState::Idle,
+            ConsensusState::CheckSync(_) => ConsensusCurrentState::CheckSync,
+            ConsensusState::Syncing(_) => ConsensusCurrentState::Syncing,
+            ConsensusState::Running(_) => ConsensusCurrentState::Running,
+            ConsensusState::Sleeping => ConsensusCurrentState::Sleeping,
+            ConsensusState::Shutdown => ConsensusCurrentState::Shutdown,
         }
     }
 }

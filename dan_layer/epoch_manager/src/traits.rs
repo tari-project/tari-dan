@@ -35,8 +35,9 @@ use tari_dan_common_types::{
     ShardId,
 };
 use tari_dan_storage::global::models::ValidatorNode;
+use tokio::sync::broadcast;
 
-use crate::EpochManagerError;
+use crate::{EpochManagerError, EpochManagerEvent};
 
 // // TODO: Rename to reflect that it's a read only interface (e.g. EpochReader, EpochQuery)
 // #[async_trait]
@@ -90,6 +91,8 @@ use crate::EpochManagerError;
 pub trait EpochManagerReader: Send + Sync {
     type Addr: NodeAddressable;
 
+    async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError>;
+
     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError>;
     async fn get_committee_within_shard_range(
         &self,
@@ -125,6 +128,15 @@ pub trait EpochManagerReader: Send + Sync {
     async fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError>;
     async fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, EpochManagerError>;
 
+    async fn get_committee_shard_by_validator_address(
+        &self,
+        epoch: Epoch,
+        addr: &Self::Addr,
+    ) -> Result<CommitteeShard, EpochManagerError> {
+        let validator = self.get_validator_node(epoch, addr).await?;
+        self.get_committee_shard(epoch, validator.shard_key).await
+    }
+
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError>;
     async fn is_epoch_active(&self, epoch: Epoch) -> Result<bool, EpochManagerError>;
 
@@ -138,6 +150,16 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let validator = self.get_our_validator_node(epoch).await?;
+        let committee = self.get_committee(epoch, validator.shard_key).await?;
+        Ok(committee)
+    }
+
+    async fn get_committee_by_validator_address(
+        &self,
+        epoch: Epoch,
+        addr: &Self::Addr,
+    ) -> Result<Committee<Self::Addr>, EpochManagerError> {
+        let validator = self.get_validator_node(epoch, addr).await?;
         let committee = self.get_committee(epoch, validator.shard_key).await?;
         Ok(committee)
     }
@@ -163,7 +185,7 @@ pub trait EpochManagerReader: Send + Sync {
         Ok(committee.quorum_threshold() as usize)
     }
 
-    async fn is_local_validator_registered_for_epoch(&self, epoch: Epoch) -> Result<bool, EpochManagerError> {
+    async fn is_this_validator_registered_for_epoch(&self, epoch: Epoch) -> Result<bool, EpochManagerError> {
         if !self.is_epoch_active(epoch).await? {
             return Ok(false);
         }

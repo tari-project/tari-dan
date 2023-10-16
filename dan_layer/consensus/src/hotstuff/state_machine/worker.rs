@@ -4,13 +4,16 @@
 use std::{future::Future, marker::PhantomData, time::Duration};
 
 use log::*;
-use tari_epoch_manager::EpochManagerEvent;
 use tari_shutdown::ShutdownSignal;
-use tokio::{sync::broadcast, time};
+use tokio::{sync::watch, time};
 
 use crate::{
     hotstuff::{
-        state_machine::{event::ConsensusStateEvent, idle::IdleState, state::ConsensusState},
+        state_machine::{
+            event::ConsensusStateEvent,
+            idle::Idle,
+            state::{ConsensusCurrentState, ConsensusState},
+        },
         HotStuffError,
         HotstuffWorker,
     },
@@ -28,9 +31,9 @@ pub struct ConsensusWorker<TSpec> {
 #[derive(Debug)]
 pub struct ConsensusWorkerContext<TSpec: ConsensusSpec> {
     pub epoch_manager: TSpec::EpochManager,
-    pub epoch_events: broadcast::Receiver<EpochManagerEvent>,
     pub hotstuff: HotstuffWorker<TSpec>,
     pub state_sync: TSpec::SyncManager,
+    pub tx_current_state: watch::Sender<ConsensusCurrentState>,
 }
 
 impl<TSpec> ConsensusWorker<TSpec>
@@ -79,8 +82,11 @@ where
             (ConsensusState::Syncing(state), ConsensusStateEvent::SyncComplete) => {
                 ConsensusState::Running(state.into())
             },
-            (ConsensusState::Sleeping, ConsensusStateEvent::Resume) => ConsensusState::Idle(IdleState::new()),
+            (ConsensusState::Sleeping, ConsensusStateEvent::Resume) => ConsensusState::Idle(Idle::new()),
             (ConsensusState::Running(state), ConsensusStateEvent::NeedSync) => ConsensusState::CheckSync(state.into()),
+            (ConsensusState::Running(state), ConsensusStateEvent::NotRegisteredForEpoch { .. }) => {
+                ConsensusState::Idle(state.into())
+            },
             (_, ConsensusStateEvent::Failure { error }) => {
                 error!(target: LOG_TARGET, "🚨 Failure: {}", error);
                 ConsensusState::Sleeping
@@ -104,10 +110,11 @@ where
     }
 
     pub async fn run(&mut self, mut context: ConsensusWorkerContext<TSpec>) {
-        let mut state = ConsensusState::Idle(IdleState::new());
+        let mut state = ConsensusState::Idle(Idle::new());
         loop {
             let next_event = self.next_event(&mut context, &state).await;
             state = self.transition(state, next_event);
+            let _ignore = context.tx_current_state.send((&state).into());
             if state.is_shutdown() {
                 break;
             }

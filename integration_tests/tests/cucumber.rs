@@ -53,6 +53,8 @@ use tari_dan_storage::consensus_models::QuorumDecision;
 use tari_shutdown::Shutdown;
 use tari_validator_node_client::types::{AddPeerRequest, GetRecentTransactionsRequest, GetTransactionResultRequest};
 
+const LOG_TARGET: &str = "cucumber";
+
 #[tokio::main]
 async fn main() {
     let log_path = create_log_config_file();
@@ -74,7 +76,13 @@ async fn main() {
                 .summarized(),
         ))
         .before(move |_feature, _rule, scenario, world| {
+            log::info!(target: LOG_TARGET, "\n\n\n");
+            log::info!(target: LOG_TARGET, "-------------------------------------------------------");
+            log::info!(target: LOG_TARGET, "------------- SCENARIO: {} -------------", scenario.name);
+            log::info!(target: LOG_TARGET, "-------------------------------------------------------");
+            log::info!(target: LOG_TARGET, "\n\n\n");
             world.current_scenario_name = Some(scenario.name.clone());
+            world.fees_enabled = true;
             Box::pin(async move {
                 // Each scenario gets a mock connection. As each connection is dropped after the scenario, all the mock
                 // urls are deregistered
@@ -99,9 +107,9 @@ async fn start_base_node(world: &mut TariWorld, bn_name: String) {
     spawn_base_node(world, bn_name).await;
 }
 
-#[given(expr = "fees are enabled")]
+#[given(expr = "fees are disabled")]
 async fn fees_are_enabled(world: &mut TariWorld) {
-    world.fees_enabled = true;
+    world.fees_enabled = false;
 }
 
 #[given(expr = "a validator node {word} connected to base node {word} and wallet {word}")]
@@ -150,6 +158,8 @@ async fn call_template_constructor_via_wallet_daemon(
         function_call,
         args,
         num_outputs,
+        None,
+        None,
     )
     .await;
 
@@ -455,7 +465,17 @@ async fn submit_transaction_manifest_via_wallet_daemon(
     outputs_name: String,
 ) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
-    wallet_daemon_cli::submit_manifest(world, wallet_daemon_name, manifest, inputs, num_outputs, outputs_name).await;
+    wallet_daemon_cli::submit_manifest(
+        world,
+        wallet_daemon_name,
+        manifest,
+        inputs,
+        num_outputs,
+        outputs_name,
+        None,
+        None,
+    )
+    .await;
 }
 
 #[when(
@@ -479,6 +499,8 @@ async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
         inputs,
         num_outputs,
         outputs_name,
+        None,
+        None,
     )
     .await;
 }

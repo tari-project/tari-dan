@@ -67,8 +67,8 @@ impl<TAddr: NodeAddressable> TryFrom<proto::common::SignatureAndPublicKey> for V
     }
 }
 
-impl<TAddr: NodeAddressable> From<ValidatorSignature<TAddr>> for proto::common::SignatureAndPublicKey {
-    fn from(value: ValidatorSignature<TAddr>) -> Self {
+impl<TAddr: NodeAddressable> From<&ValidatorSignature<TAddr>> for proto::common::SignatureAndPublicKey {
+    fn from(value: &ValidatorSignature<TAddr>) -> Self {
         Self {
             public_nonce: value.signature.get_public_nonce().to_vec(),
             signature: value.signature.get_signature().to_vec(),

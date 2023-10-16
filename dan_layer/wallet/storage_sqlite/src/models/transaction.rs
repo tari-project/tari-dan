@@ -6,7 +6,7 @@ use std::str::FromStr;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_wallet_sdk::{
     models::{TransactionStatus, WalletTransaction},
     storage::WalletStorageError,
@@ -33,6 +33,8 @@ pub struct Transaction {
     pub final_fee: Option<i64>,
     pub status: String,
     pub is_dry_run: bool,
+    pub min_epoch: Option<i64>,
+    pub max_epoch: Option<i64>,
     pub updated_at: NaiveDateTime,
     pub created_at: NaiveDateTime,
 }
@@ -70,6 +72,8 @@ impl Transaction {
                 input_refs,
                 outputs,
                 vec![],
+                self.min_epoch.map(|epoch| Epoch(epoch as u64)),
+                self.max_epoch.map(|epoch| Epoch(epoch as u64)),
             ),
             status: TransactionStatus::from_str(&self.status).map_err(|e| WalletStorageError::DecodingError {
                 operation: "transaction_get",

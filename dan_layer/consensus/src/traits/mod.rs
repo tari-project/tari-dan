@@ -16,13 +16,13 @@ use tari_epoch_manager::EpochManagerReader;
 
 pub use crate::traits::signing_service::*;
 
-pub trait ConsensusSpec: Send + Sync + 'static {
+pub trait ConsensusSpec: Send + Sync + Clone + 'static {
     type Addr: NodeAddressable + Serialize;
 
-    type StateStore: StateStore<Addr = Self::Addr> + Send + Sync + 'static;
-    type EpochManager: EpochManagerReader<Addr = Self::Addr> + Send + Sync + 'static;
-    type LeaderStrategy: LeaderStrategy<Self::Addr> + Send + Sync + 'static;
-    type VoteSignatureService: VoteSignatureService<Self::Addr> + Send + Sync + 'static;
+    type StateStore: StateStore<Addr = Self::Addr> + Send + Sync + Clone + 'static;
+    type EpochManager: EpochManagerReader<Addr = Self::Addr> + Send + Sync + Clone + 'static;
+    type LeaderStrategy: LeaderStrategy<Self::Addr> + Send + Sync + Clone + 'static;
+    type VoteSignatureService: VoteSignatureService<Self::Addr> + Send + Sync + Clone + 'static;
     type StateManager: StateManager<Self::StateStore> + Send + Sync + 'static;
     type SyncManager: SyncManager + Send + Sync + 'static;
 }

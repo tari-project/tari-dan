@@ -1,10 +1,16 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{borrow::Borrow, collections::HashSet, marker::PhantomData, ops::RangeInclusive};
+use std::{
+    borrow::Borrow,
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    ops::RangeInclusive,
+};
 
 use bigdecimal::{BigDecimal, ToPrimitive};
 use diesel::{
+    query_builder::SqlQuery,
     sql_query,
     sql_types::{BigInt, Text},
     BoolExpressionMethods,
@@ -19,7 +25,7 @@ use diesel::{
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeAddressable, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -27,11 +33,14 @@ use tari_dan_storage::{
         HighQc,
         LastExecuted,
         LastProposed,
+        LastSentVote,
         LastVoted,
         LeafBlock,
         LockedBlock,
         QcId,
         QuorumCertificate,
+        SubstateLockFlag,
+        SubstateLockState,
         SubstateRecord,
         TransactionPoolRecord,
         TransactionPoolStage,
@@ -79,6 +88,184 @@ impl<'a, TAddr> SqliteStateStoreReadTransaction<'a, TAddr> {
     }
 }
 
+impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned> SqliteStateStoreReadTransaction<'a, TAddr> {
+    pub(super) fn get_transaction_atom_state_updates_between_blocks<'i, ITx>(
+        &mut self,
+        from_block_id: &BlockId,
+        to_block_id: &BlockId,
+        transaction_ids: ITx,
+    ) -> Result<HashMap<String, sql_models::TransactionPoolStateUpdate>, SqliteStorageError>
+    where
+        ITx: Iterator<Item = &'i str> + ExactSizeIterator,
+    {
+        if transaction_ids.len() == 0 {
+            return Ok(HashMap::new());
+        }
+
+        let applicable_block_ids = self.get_block_ids_that_change_state_between(from_block_id, to_block_id)?;
+
+        debug!(
+            target: LOG_TARGET,
+            "get_transaction_atom_state_updates_between_blocks: from_block_id={}, to_block_id={}, len(applicable_block_ids)={}",
+            from_block_id,
+            to_block_id,
+            applicable_block_ids.len());
+
+        if applicable_block_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        self.create_transaction_atom_updates_query(transaction_ids, applicable_block_ids.iter().map(|s| s.as_str()))
+            .load_iter::<sql_models::TransactionPoolStateUpdate, _>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_get_many_ready",
+                source: e,
+            })?
+            .map(|update| update.map(|u| (u.transaction_id.clone(), u)))
+            .collect::<diesel::QueryResult<HashMap<_, _>>>()
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_get_many_ready",
+                source: e,
+            })
+    }
+
+    /// Creates a query to select the latest transaction pool state updates for the given transaction ids and block ids.
+    /// WARNING: This method does not protect against SQL-injection, Be sure that the transaction ids and block ids
+    /// strings are what they are meant to be.
+    fn create_transaction_atom_updates_query<
+        'i1,
+        'i2,
+        IBlk: Iterator<Item = &'i1 str> + ExactSizeIterator,
+        ITx: Iterator<Item = &'i2 str> + ExactSizeIterator,
+    >(
+        &mut self,
+        transaction_ids: ITx,
+        block_ids: IBlk,
+    ) -> SqlQuery {
+        // Unfortunate hack. Binding array types in diesel is only supported for postgres.
+        sql_query(format!(
+            r#"
+                 WITH RankedResults AS (
+                    SELECT
+                        tpsu.*,
+                        ROW_NUMBER() OVER (PARTITION BY tpsu.transaction_id ORDER BY tpsu.block_height DESC) AS `rank`
+                    FROM
+                        transaction_pool_state_updates AS tpsu
+                    WHERE
+                        tpsu.block_id in ({})
+                    AND tpsu.transaction_id in ({})
+                )
+                SELECT
+                    id,
+                    block_id,
+                    block_height,
+                    transaction_id,
+                    stage,
+                    evidence,
+                    is_ready,
+                    local_decision,
+                    created_at
+                FROM
+                    RankedResults
+                WHERE
+                    rank = 1;
+                "#,
+            self.sql_frag_for_in_statement(block_ids, BlockId::byte_size() * 2),
+            self.sql_frag_for_in_statement(transaction_ids, TransactionId::byte_size() * 2),
+        ))
+    }
+
+    fn sql_frag_for_in_statement<'i, I: Iterator<Item = &'i str> + ExactSizeIterator>(
+        &self,
+        values: I,
+        item_size: usize,
+    ) -> String {
+        let len = values.len();
+        let mut sql_frag = String::with_capacity(len * item_size + len * 3 + len - 1);
+        for (i, value) in values.enumerate() {
+            sql_frag.push('"');
+            sql_frag.push_str(value);
+            sql_frag.push('"');
+            if i < len - 1 {
+                sql_frag.push(',');
+            }
+        }
+        sql_frag
+    }
+
+    fn get_block_ids_between(
+        &mut self,
+        start_block: &BlockId,
+        end_block: &BlockId,
+    ) -> Result<Vec<String>, SqliteStorageError> {
+        let block_ids = sql_query(
+            r#"
+            WITH RECURSIVE tree(bid, parent) AS (
+                SELECT block_id, parent_block_id FROM blocks where block_id = ?
+            UNION ALL
+                SELECT block_id, parent_block_id
+                FROM blocks JOIN tree ON
+                    block_id = tree.parent
+                    AND tree.bid != ?
+                LIMIT 1000
+            )
+            SELECT bid FROM tree"#,
+        )
+        .bind::<Text, _>(serialize_hex(end_block))
+        .bind::<Text, _>(serialize_hex(start_block))
+        .load_iter::<BlockIdSqlValue, _>(self.connection())
+        .map_err(|e| SqliteStorageError::DieselError {
+            operation: "get_block_ids_that_change_state_between",
+            source: e,
+        })?;
+
+        block_ids
+            .map(|b| {
+                b.map(|b| b.bid).map_err(|e| SqliteStorageError::DieselError {
+                    operation: "get_block_ids_that_change_state_between",
+                    source: e,
+                })
+            })
+            .collect()
+    }
+
+    fn get_block_ids_that_change_state_between(
+        &mut self,
+        start_block: &BlockId,
+        end_block: &BlockId,
+    ) -> Result<Vec<String>, SqliteStorageError> {
+        let block_ids = sql_query(
+            r#"
+            WITH RECURSIVE tree(bid, parent, is_dummy, command_count) AS (
+                SELECT block_id, parent_block_id, is_dummy, command_count FROM blocks where block_id = ?
+            UNION ALL
+                SELECT block_id, parent_block_id, blocks.is_dummy, blocks.command_count
+                FROM blocks JOIN tree ON
+                    block_id = tree.parent
+                    AND tree.bid != ?
+                LIMIT 1000
+            )
+            SELECT bid FROM tree where is_dummy = 0 AND command_count > 0"#,
+        )
+        .bind::<Text, _>(serialize_hex(end_block))
+        .bind::<Text, _>(serialize_hex(start_block))
+        .load_iter::<BlockIdSqlValue, _>(self.connection())
+        .map_err(|e| SqliteStorageError::DieselError {
+            operation: "get_block_ids_that_change_state_between",
+            source: e,
+        })?;
+
+        block_ids
+            .map(|b| {
+                b.map(|b| b.bid).map_err(|e| SqliteStorageError::DieselError {
+                    operation: "get_block_ids_that_change_state_between",
+                    source: e,
+                })
+            })
+            .collect()
+    }
+}
+
 impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransaction
     for SqliteStateStoreReadTransaction<'_, TAddr>
 {
@@ -92,6 +279,20 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .first::<sql_models::LastVoted>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "last_voted_get",
+                source: e,
+            })?;
+
+        last_voted.try_into()
+    }
+
+    fn last_sent_vote_get(&mut self) -> Result<LastSentVote<Self::Addr>, StorageError> {
+        use crate::schema::last_sent_vote;
+
+        let last_voted = last_sent_vote::table
+            .order_by(last_sent_vote::id.desc())
+            .first::<sql_models::LastSentVote>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "last_sent_vote_get",
                 source: e,
             })?;
 
@@ -300,22 +501,25 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         block.try_convert(qc)
     }
 
-    fn blocks_all_after(&mut self, block_id: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+    fn blocks_get_all_between(
+        &mut self,
+        start_block_id_exclusive: &BlockId,
+        end_block_id_inclusive: &BlockId,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
-        let query_height = blocks::table
-            .select(blocks::height)
-            .filter(blocks::block_id.eq(serialize_hex(block_id)))
-            .first::<i64>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "blocks_all_after",
-                source: e,
-            })?;
+        let mut block_ids = self.get_block_ids_between(start_block_id_exclusive, end_block_id_inclusive)?;
+        if block_ids.is_empty() {
+            return Ok(vec![]);
+        }
+
+        // Exclude start block
+        block_ids.pop();
 
         let results = blocks::table
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
-            .filter(blocks::height.gt(query_height))
+            .filter(blocks::block_id.eq_any(block_ids))
             .order_by(blocks::height.asc())
             .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -606,6 +810,39 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count)
     }
 
+    fn blocks_max_height(&mut self) -> Result<NodeHeight, StorageError> {
+        use crate::schema::blocks;
+
+        let height = blocks::table
+            .select(diesel::dsl::max(blocks::height))
+            .first::<Option<i64>>(self.connection())
+            .map(|height| NodeHeight(height.unwrap_or(0) as u64))
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_max_height",
+                source: e,
+            })?;
+
+        Ok(height)
+    }
+
+    fn parked_blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError> {
+        use crate::schema::parked_blocks;
+
+        let block_id = serialize_hex(block_id);
+
+        let count = parked_blocks::table
+            .filter(parked_blocks::block_id.eq(&block_id))
+            .count()
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_exists_or_parked",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
+
     fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
         use crate::schema::quorum_certificates;
 
@@ -759,32 +996,106 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Vote::try_from(vote)
     }
 
-    fn transaction_pool_get(&mut self, transaction_id: &TransactionId) -> Result<TransactionPoolRecord, StorageError> {
+    fn transaction_pool_get(
+        &mut self,
+        from_block_id: &BlockId,
+        to_block_id: &BlockId,
+        transaction_id: &TransactionId,
+    ) -> Result<TransactionPoolRecord, StorageError> {
         use crate::schema::transaction_pool;
 
-        transaction_pool::table
-            .filter(transaction_pool::transaction_id.eq(serialize_hex(transaction_id)))
+        let transaction_id = serialize_hex(transaction_id);
+        let mut updates = self.get_transaction_atom_state_updates_between_blocks(
+            from_block_id,
+            to_block_id,
+            std::iter::once(transaction_id.as_str()),
+        )?;
+
+        debug!(
+            target: LOG_TARGET,
+            "transaction_pool_get: from_block_id={}, to_block_id={}, transaction_id={}, updates={}",
+            from_block_id,
+            to_block_id,
+            transaction_id,
+            updates.len()
+        );
+
+        let rec = transaction_pool::table
+            .filter(transaction_pool::transaction_id.eq(&transaction_id))
             .first::<sql_models::TransactionPoolRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pool_get",
                 source: e,
-            })?
-            .try_into()
+            })?;
+
+        rec.try_convert(updates.remove(&transaction_id))
+    }
+
+    fn transaction_pool_exists(&mut self, transaction_id: &TransactionId) -> Result<bool, StorageError> {
+        use crate::schema::transaction_pool;
+
+        let count = transaction_pool::table
+            .count()
+            .filter(transaction_pool::transaction_id.eq(serialize_hex(transaction_id)))
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_get",
+                source: e,
+            })?;
+
+        Ok(count > 0)
     }
 
     fn transaction_pool_get_many_ready(&mut self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError> {
         use crate::schema::transaction_pool;
 
-        transaction_pool::table
-            .filter(transaction_pool::is_ready.eq(true))
-            .limit(max_txs as i64)
+        let ready_txs = transaction_pool::table
+            .order_by(transaction_pool::transaction_id.asc())
             .get_results::<sql_models::TransactionPoolRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pool_get_many_ready",
                 source: e,
-            })?
+            })?;
+
+        if ready_txs.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Fetch all applicable block ids between the locked block and the given block
+        let locked = self.locked_block_get()?;
+        let leaf = self.leaf_block_get()?;
+
+        let mut updates = self.get_transaction_atom_state_updates_between_blocks(
+            &locked.block_id,
+            &leaf.block_id,
+            ready_txs.iter().map(|s| s.transaction_id.as_str()),
+        )?;
+
+        debug!(
+            target: LOG_TARGET,
+            "transaction_pool_get: from_block_id={}, to_block_id={}, len(ready_txs)={}, updates={}",
+            locked.block_id,
+            leaf.block_id,
+            ready_txs.len(),
+            updates.len()
+        );
+
+        ready_txs
             .into_iter()
-            .map(TryInto::try_into)
+            .filter_map(|rec| {
+                let maybe_update = updates.remove(&rec.transaction_id);
+                match rec.try_convert(maybe_update) {
+                    Ok(rec) => {
+                        if rec.is_ready() || rec.stage().is_new() {
+                            Some(Ok(rec))
+                        } else {
+                            None
+                        }
+                    },
+                    Err(e) => Some(Err(e)),
+                }
+            })
+            .take(max_txs)
             .collect()
     }
 
@@ -792,6 +1103,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         &mut self,
         stage: Option<TransactionPoolStage>,
         is_ready: Option<bool>,
+        has_foreign_data: Option<bool>,
     ) -> Result<usize, StorageError> {
         use crate::schema::transaction_pool;
 
@@ -807,6 +1119,16 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         }
         if let Some(is_ready) = is_ready {
             query = query.filter(transaction_pool::is_ready.eq(is_ready));
+        }
+
+        match has_foreign_data {
+            Some(true) => {
+                query = query.filter(transaction_pool::remote_evidence.is_not_null());
+            },
+            Some(false) => {
+                query = query.filter(transaction_pool::remote_evidence.is_null());
+            },
+            None => {},
         }
 
         let count =
@@ -862,6 +1184,25 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .get_result::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get_any",
+                source: e,
+            })?;
+
+        Ok(count > 0)
+    }
+
+    fn substates_exists_for_transaction(&mut self, transaction_id: &TransactionId) -> Result<bool, StorageError> {
+        use crate::schema::substates;
+
+        let transaction_id = serialize_hex(transaction_id);
+
+        let count = substates::table
+            .count()
+            .filter(substates::created_by_transaction.eq(&transaction_id))
+            .or_filter(substates::destroyed_by_transaction.eq(&transaction_id))
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "substates_exists_for_transaction",
                 source: e,
             })?;
 
@@ -974,10 +1315,87 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
 
         Ok(substates)
     }
+
+    fn substates_check_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+        &mut self,
+        objects: I,
+        lock_flag: SubstateLockFlag,
+    ) -> Result<SubstateLockState, StorageError> {
+        use crate::schema::substates;
+
+        // Lock unique shards
+        let objects: HashSet<String> = objects.into_iter().map(serialize_hex).collect();
+
+        let locked_details = substates::table
+            .select((substates::is_locked_w, substates::destroyed_by_transaction))
+            .filter(substates::shard_id.eq_any(&objects))
+            .get_results::<(bool, Option<String>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transactions_try_lock_many",
+                source: e,
+            })?;
+        if locked_details.len() < objects.len() {
+            return Err(SqliteStorageError::NotAllSubstatesFound {
+                operation: "substates_try_lock_all",
+                details: format!(
+                    "{:?}: Found {} substates, but {} were requested",
+                    lock_flag,
+                    locked_details.len(),
+                    objects.len()
+                ),
+            }
+            .into());
+        }
+
+        if locked_details.iter().any(|(w, _)| *w) {
+            return Ok(SubstateLockState::SomeAlreadyWriteLocked);
+        }
+
+        if locked_details.iter().any(|(_, downed)| downed.is_some()) {
+            return Ok(SubstateLockState::SomeDestroyed);
+        }
+
+        Ok(SubstateLockState::LockAcquired)
+    }
+
+    // -------------------------------- LockedOutputs -------------------------------- //
+    fn locked_outputs_check_all<I, B>(&mut self, output_shards: I) -> Result<SubstateLockState, StorageError>
+    where
+        I: IntoIterator<Item = B>,
+        B: Borrow<ShardId>,
+    {
+        use crate::schema::locked_outputs;
+
+        let outputs_hex = output_shards
+            .into_iter()
+            .map(|shard_id| serialize_hex(shard_id.borrow()))
+            .collect::<Vec<_>>();
+
+        let has_conflict = locked_outputs::table
+            .count()
+            .filter(locked_outputs::shard_id.eq_any(outputs_hex))
+            .first::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "locked_outputs_check_all",
+                source: e,
+            })?;
+
+        if has_conflict > 0 {
+            Ok(SubstateLockState::SomeAlreadyWriteLocked)
+        } else {
+            Ok(SubstateLockState::LockAcquired)
+        }
+    }
 }
 
 #[derive(QueryableByName)]
 struct Count {
     #[diesel(sql_type = diesel::sql_types::BigInt)]
     pub count: i64,
+}
+
+#[derive(QueryableByName)]
+struct BlockIdSqlValue {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    pub bid: String,
 }

@@ -6,7 +6,7 @@ use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
 use tari_crypto::keys::PublicKey as _;
 use tari_dan_common_types::NodeAddressable;
-use tari_dan_storage::consensus_models::{ValidatorSchnorrSignature, ValidatorSignature};
+use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSchnorrSignature, ValidatorSignature};
 
 #[derive(Debug, Clone)]
 pub struct TestVoteSignatureService<TAddr> {
@@ -37,7 +37,13 @@ impl<TAddr> ValidatorSignatureService<TAddr> for TestVoteSignatureService<TAddr>
 }
 
 impl<TAddr: NodeAddressable> VoteSignatureService<TAddr> for TestVoteSignatureService<TAddr> {
-    fn verify(&self, _signature: &ValidatorSignature<TAddr>, _challenge: &FixedHash) -> bool {
+    fn verify(
+        &self,
+        _signature: &ValidatorSignature<TAddr>,
+        _leaf_hash: &FixedHash,
+        _block_id: &BlockId,
+        _decision: &QuorumDecision,
+    ) -> bool {
         self.is_signature_valid
     }
 }

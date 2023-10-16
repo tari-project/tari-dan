@@ -7,6 +7,7 @@ use tari_consensus::{
     traits::{SyncManager, SyncStatus},
 };
 
+#[derive(Clone)]
 pub struct AlwaysSyncedSyncManager;
 
 #[async_trait]

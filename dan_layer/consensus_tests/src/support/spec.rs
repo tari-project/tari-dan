@@ -13,6 +13,7 @@ use crate::support::{
     RoundRobinLeaderStrategy,
 };
 
+#[derive(Clone)]
 pub struct TestConsensusSpec;
 
 impl ConsensusSpec for TestConsensusSpec {

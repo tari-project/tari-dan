@@ -202,8 +202,8 @@ fn configure_comms(
                     .service(sink)
             }
         })
-        .max_concurrent_inbound_tasks(1)
-        .max_concurrent_outbound_tasks(1)
+        .max_concurrent_inbound_tasks(3)
+        .max_concurrent_outbound_tasks(3)
         .with_inbound_pipeline(
             ServiceBuilder::new()
                 .layer(DanDeserialize::new(comms.peer_manager(), logger))

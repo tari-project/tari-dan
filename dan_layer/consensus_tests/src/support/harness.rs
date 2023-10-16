@@ -10,14 +10,14 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, Decision, TransactionPoolStage},
+    consensus_models::{Block, BlockId, Decision, TransactionPoolStage, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
 };
-use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
+use tari_epoch_manager::EpochManagerReader;
 use tari_shutdown::{Shutdown, ShutdownSignal};
 use tari_transaction::TransactionId;
-use tokio::{task, time::timeout};
+use tokio::{sync::broadcast, task};
 
 use crate::support::{
     address::TestAddress,
@@ -35,7 +35,7 @@ pub struct Test {
     _leader_strategy: RoundRobinLeaderStrategy,
     epoch_manager: TestEpochManager,
     shutdown: Shutdown,
-    timeout: Duration,
+    timeout: Option<Duration>,
 }
 
 impl Test {
@@ -74,9 +74,13 @@ impl Test {
 
     pub async fn on_block_committed(&mut self) -> (BlockId, NodeHeight) {
         loop {
-            let event = timeout(self.timeout, self.on_hotstuff_event())
-                .await
-                .unwrap_or_else(|_| panic!("Timeout waiting for Hotstuff event"));
+            let event = if let Some(timeout) = self.timeout {
+                tokio::time::timeout(timeout, self.on_hotstuff_event())
+                    .await
+                    .unwrap_or_else(|_| panic!("Timeout waiting for Hotstuff event"))
+            } else {
+                self.on_hotstuff_event().await
+            };
             match event {
                 HotstuffEvent::BlockCommitted { block_id, height } => return (block_id, height),
                 HotstuffEvent::Failure { message } => panic!("Consensus failure: {}", message),
@@ -92,13 +96,10 @@ impl Test {
         &mut self.network
     }
 
-    pub fn start_epoch(&mut self, epoch: Epoch) {
+    pub async fn start_epoch(&mut self, epoch: Epoch) {
         for validator in self.validators.values() {
             // Fire off initial epoch change event so that the pacemaker starts
-            validator
-                .tx_epoch_events
-                .send(EpochManagerEvent::EpochChanged(epoch))
-                .unwrap();
+            validator.epoch_manager.set_current_epoch(epoch).await;
         }
         self.network.start();
     }
@@ -130,7 +131,7 @@ impl Test {
         self.wait_all_for_predicate(format!("new pool count to be {}", count), |v| {
             v.address != vn ||
                 v.state_store
-                    .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None))
+                    .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None, None))
                     .unwrap() >=
                     count
         })
@@ -140,7 +141,7 @@ impl Test {
     pub async fn wait_until_new_pool_count(&self, count: usize) {
         self.wait_all_for_predicate(format!("new pool count to be {}", count), |v| {
             v.state_store
-                .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None))
+                .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), None, None))
                 .unwrap() >=
                 count
         })
@@ -151,7 +152,7 @@ impl Test {
         self.wait_all_for_predicate(format!("waiting for {} new transaction(s) in pool", n), |v| {
             let pool_count = v
                 .state_store
-                .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), Some(true)))
+                .with_read_tx(|tx| tx.transaction_pool_count(Some(TransactionPoolStage::New), Some(true), None))
                 .unwrap();
 
             pool_count >= n
@@ -233,28 +234,25 @@ impl Test {
             let decisions = self.validators.values().map(|v| {
                 let decisions = v
                     .state_store
-                    .with_read_tx(|tx| Block::get_tip(tx))
+                    .with_read_tx(|tx| TransactionRecord::get(tx, transaction_id))
                     .unwrap()
-                    .commands()
-                    .iter()
-                    .filter(|cmd| cmd.transaction_id() == transaction_id)
-                    .map(|cmd| cmd.decision())
-                    .collect::<Vec<_>>();
+                    .final_decision();
                 (v.address.clone(), decisions)
             });
-            for (addr, decisions) in decisions {
-                let all_match = decisions.iter().all(|d| *d == expected_decision);
-                if all_match && attempts < 5 {
+            for (addr, decision) in decisions {
+                if decision.is_none() && attempts < 5 {
                     attempts += 1;
                     // Send this task to the back of the queue and try again after other tasks have executed
                     // to allow validators to catch up
                     task::yield_now().await;
                     continue 'outer;
                 }
-                assert!(
-                    all_match,
-                    "Expected {} but validator {} has decision(s) {:?} for transaction {}",
-                    expected_decision, addr, decisions, transaction_id
+
+                let decision = decision.unwrap_or_else(|| panic!("VN {} did not make a decision in time", addr));
+                assert_eq!(
+                    decision, expected_decision,
+                    "Expected {} but validator {} has decision {:?} for transaction {}",
+                    expected_decision, addr, decision, transaction_id
                 );
             }
             break;
@@ -280,7 +278,7 @@ impl Test {
 pub struct TestBuilder {
     committees: HashMap<ShardBucket, Committee<TestAddress>>,
     sql_address: String,
-    timeout: Duration,
+    timeout: Option<Duration>,
     debug_sql_file: Option<String>,
 }
 
@@ -289,9 +287,15 @@ impl TestBuilder {
         Self {
             committees: HashMap::new(),
             sql_address: ":memory:".to_string(),
-            timeout: Duration::from_secs(10),
+            timeout: Some(Duration::from_secs(10)),
             debug_sql_file: None,
         }
+    }
+
+    #[allow(dead_code)]
+    pub fn disable_timeout(&mut self) -> &mut Self {
+        self.timeout = None;
+        self
     }
 
     #[allow(dead_code)]
@@ -307,7 +311,7 @@ impl TestBuilder {
     }
 
     pub fn with_test_timeout(&mut self, timeout: Duration) -> &mut Self {
-        self.timeout = timeout;
+        self.timeout = Some(timeout);
         self
     }
 
@@ -357,7 +361,8 @@ impl TestBuilder {
         }
 
         let leader_strategy = RoundRobinLeaderStrategy::new();
-        let epoch_manager = TestEpochManager::new();
+        let (tx_epoch_events, _) = broadcast::channel(10);
+        let epoch_manager = TestEpochManager::new(tx_epoch_events);
         epoch_manager.add_committees(self.committees.clone()).await;
         let shutdown = Shutdown::new();
         let (channels, validators) = self

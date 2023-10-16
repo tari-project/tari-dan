@@ -4,7 +4,6 @@
 use tari_consensus::{hotstuff::HotstuffEvent, messages::HotstuffMessage};
 use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, ShardId};
 use tari_dan_storage::{consensus_models::LeafBlock, StateStore, StateStoreReadTransaction};
-use tari_epoch_manager::EpochManagerEvent;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::{
@@ -40,7 +39,6 @@ pub struct Validator {
     pub epoch_manager: TestEpochManager,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub events: broadcast::Receiver<HotstuffEvent>,
-    pub tx_epoch_events: broadcast::Sender<EpochManagerEvent>,
     pub state_manager: NoopStateManager,
 
     pub handle: JoinHandle<()>,
@@ -62,7 +60,7 @@ impl Validator {
 
     pub fn get_transaction_pool_count(&self) -> usize {
         self.state_store
-            .with_read_tx(|tx| tx.transaction_pool_count(None, None))
+            .with_read_tx(|tx| tx.transaction_pool_count(None, None, None))
             .unwrap()
     }
 

@@ -28,6 +28,18 @@ impl NodeHeight {
         self.0.to_le_bytes()
     }
 
+    pub const fn saturating_add(self, other: Self) -> Self {
+        Self(self.0.saturating_add(other.0))
+    }
+
+    pub const fn checked_add(self, other: Self) -> Option<Self> {
+        // Option::map as a const fn is not yet stablized, so we re-implement it here
+        match self.0.checked_add(other.0) {
+            Some(v) => Some(Self(v)),
+            None => None,
+        }
+    }
+
     pub const fn saturating_sub(self, other: Self) -> Self {
         Self(self.0.saturating_sub(other.0))
     }

@@ -36,8 +36,13 @@ where TSpec: ConsensusSpec
                 info!(target: LOG_TARGET, "HotStuff shut down");
                 Ok(ConsensusStateEvent::Shutdown)
             },
-            Err(HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound { .. })) => {
-                info!(target: LOG_TARGET, "Behind peers, starting sync");
+            Err(ref err @ HotStuffError::NotRegisteredForCurrentEpoch { epoch }) => {
+                info!(target: LOG_TARGET, "Not registered for current epoch ({err})");
+                Ok(ConsensusStateEvent::NotRegisteredForEpoch { epoch })
+            },
+            Err(err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound { .. })) |
+            Err(err @ HotStuffError::FallenBehind { .. }) => {
+                info!(target: LOG_TARGET, "Behind peers, starting sync ({err})");
                 Ok(ConsensusStateEvent::NeedSync)
             },
             Err(err) => {

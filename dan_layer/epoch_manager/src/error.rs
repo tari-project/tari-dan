@@ -26,8 +26,8 @@ pub enum EpochManagerError {
     ValidatorNodesNotFound,
     #[error("No committee VNs found for shard {shard_id} and epoch {epoch}")]
     NoCommitteeVns { shard_id: ShardId, epoch: Epoch },
-    #[error("Validator node {address} is not registered")]
-    ValidatorNodeNotRegistered { address: String },
+    #[error("Validator node {address} is not registered at epoch {epoch}")]
+    ValidatorNodeNotRegistered { address: String, epoch: Epoch },
     #[error("Base layer consensus constants not set")]
     BaseLayerConsensusConstantsNotSet,
     #[error("Base layer could not return shard key for {public_key} at height {block_height}")]

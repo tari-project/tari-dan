@@ -5,6 +5,7 @@ Feature: Wallet Daemon
 
     @serial
     Scenario: Create account and transfer faucets via wallet daemon
+        Given fees are disabled
         # Initialize a base node, wallet, miner and VN
         Given a base node BASE
         Given a wallet WALLET connected to base node BASE
@@ -14,12 +15,13 @@ Feature: Wallet Daemon
         Given a validator node VAL_1 connected to base node BASE and wallet WALLET
 
         # The wallet must have some funds before the VN sends transactions
-        When miner MINER mines 6 new blocks
-        When wallet WALLET has at least 20000000 uT
+        When miner MINER mines 4 new blocks
+        When wallet WALLET has at least 5000 T
 
         # VN registration
         When validator node VAL_1 sends a registration transaction
         When miner MINER mines 16 new blocks
+        Then VAL_1 has scanned to height 17 within 10 seconds
         Then the validator node VAL_1 is listed as registered
 
         # Initialize an indexer
@@ -33,6 +35,7 @@ Feature: Wallet Daemon
 
         # Mine some blocks until the UTXOs are scanned
         When miner MINER mines 5 new blocks
+        Then VAL_1 has scanned to height 22 within 10 seconds
         Then the template "faucet" is listed as registered by the validator node VAL_1
 
         # Create two accounts to test sending the tokens
@@ -83,6 +86,7 @@ Feature: Wallet Daemon
 
     @serial
     Scenario: Claim and transfer confidential assets via wallet daemon
+        Given fees are disabled
         # Initialize a base node, wallet, miner and VN
         Given a base node BASE
         Given a wallet WALLET connected to base node BASE
@@ -91,6 +95,7 @@ Feature: Wallet Daemon
         # Initialize a VN
         Given a validator node VN connected to base node BASE and wallet WALLET
         When miner MINER mines 4 new blocks
+        When wallet WALLET has at least 5000 T
         When validator node VN sends a registration transaction
         When miner MINER mines 16 new blocks
         Then the validator node VN is listed as registered
@@ -125,6 +130,7 @@ Feature: Wallet Daemon
 
     @serial
     Scenario: Create and mint account NFT
+        Given fees are disabled
         # Initialize a base node, wallet, miner and VN
         Given a base node BASE
         Given a wallet WALLET connected to base node BASE

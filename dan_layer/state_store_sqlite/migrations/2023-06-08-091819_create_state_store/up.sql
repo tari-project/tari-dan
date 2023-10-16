@@ -16,7 +16,7 @@ create table blocks
 (
     id               integer   not null primary key AUTOINCREMENT,
     block_id         text      not NULL,
-    parent_block_id  text      NULL,
+    parent_block_id  text      not NULL,
     height           bigint    not NULL,
     epoch            bigint    not NULL,
     proposed_by      text      not NULL,
@@ -31,8 +31,26 @@ create table blocks
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
 
--- fetching by block_id will be a very common operation
+-- block_id must be unique. Optimise fetching by block_id
 create unique index blocks_uniq_idx_id on blocks (block_id);
+
+create table parked_blocks
+(
+    id               integer   not null primary key AUTOINCREMENT,
+    block_id         text      not NULL,
+    parent_block_id  text      not NULL,
+    height           bigint    not NULL,
+    epoch            bigint    not NULL,
+    proposed_by      text      not NULL,
+    justify          text      not NULL,
+    command_count    bigint    not NULL,
+    commands         text      not NULL,
+    total_leader_fee bigint    not NULL,
+    created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- block_id must be unique. Optimise fetching by block_id
+create unique index parked_blocks_uniq_idx_id on parked_blocks (block_id);
 
 create table leaf_blocks
 (
@@ -69,6 +87,9 @@ create table substates
 
 -- All shard ids are unique
 create unique index substates_uniq_shard_id on substates (shard_id);
+-- querying for transaction ids that either Upd or Downd a substate
+create index substates_idx_created_by_transaction on substates (created_by_transaction);
+create index substates_idx_destroyed_by_transaction on substates (destroyed_by_transaction) where destroyed_by_transaction is not null;
 
 create table high_qcs
 (
@@ -89,6 +110,19 @@ create table last_voted
     block_id   text      not null,
     height     bigint    not null,
     created_at timestamp NOT NULL default current_timestamp
+);
+
+create table last_sent_vote
+(
+    id           integer   NOT NULL PRIMARY KEY AUTOINCREMENT,
+    epoch        integer,
+    block_id     text,
+    block_height integer,
+    decision     integer,
+    signature    text,
+    merkle_proof text,
+    created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
 
 create table last_executed
@@ -133,6 +167,8 @@ create table transactions
     execution_time_ms bigint    NULL,
     final_decision    text      NULL,
     abort_details     text      NULL,
+    min_epoch         BIGINT   NULL,
+    max_epoch         BIGINT   NULL,
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -142,11 +178,11 @@ create table transaction_pool
 (
     id                integer   not null primary key AUTOINCREMENT,
     transaction_id    text      not null,
-    involved_shards   text      not null,
     original_decision text      not null,
     local_decision    text      null,
     remote_decision   text      null,
     evidence          text      not null,
+    remote_evidence   text      null,
     transaction_fee   bigint    not null,
     leader_fee        bigint    not null,
     stage             text      not null,
@@ -159,19 +195,21 @@ create table transaction_pool
 create unique index transaction_pool_uniq_idx_transaction_id on transaction_pool (transaction_id);
 create index transaction_pool_idx_is_ready on transaction_pool (is_ready);
 
-create table transaction_pool_status
+create table transaction_pool_state_updates
 (
     id             integer   not null primary key AUTOINCREMENT,
     block_id       text      not null,
     block_height   bigint    not null,
     transaction_id text      not null,
     stage          text      not null,
+    evidence       text      not null,
     is_ready       boolean   not null,
+    local_decision text      not null,
     created_at     timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id),
     FOREIGN KEY (transaction_id) REFERENCES transactions (transaction_id)
 );
-create index transaction_pool_idx_block_id_transaction_id on transaction_pool_status (block_id, transaction_id);
+create unique index transaction_pool_uniq_block_id_transaction_id on transaction_pool_state_updates (block_id, transaction_id);
 
 create table locked_outputs
 (
@@ -198,19 +236,71 @@ create table votes
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE block_missing_transactions
-(
-    id              integer   not NULL PRIMARY KEY AUTOINCREMENT,
-    block_id        text      not NULL,
-    transaction_ids text      not NULL,
-    created_at      timestamp not NULL DEFAULT CURRENT_TIMESTAMP
-);
 
 CREATE TABLE missing_transactions
 (
     id                    integer   not NULL primary key AUTOINCREMENT,
     block_id              text      not NULL,
+    block_height          bigint    not NULL,
     transaction_id        text      not NULL,
     is_awaiting_execution boolean   not NULL,
-    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP
+    created_at            timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (block_id) REFERENCES parked_blocks (block_id)
 );
+
+-- Debug Triggers
+CREATE TABLE transaction_pool_history
+(
+    history_id        INTEGER PRIMARY KEY,
+    id                integer   not null,
+    transaction_id    text      not null,
+    original_decision text      not null,
+    local_decision    text      null,
+    remote_decision   text      null,
+    evidence          text      not null,
+    transaction_fee   bigint    not null,
+    leader_fee        bigint    not null,
+    stage             text      not null,
+    new_stage         text      not null,
+    is_ready          boolean   not null,
+    new_is_ready      boolean   not null,
+    updated_at        timestamp NOT NULL,
+    created_at        timestamp NOT NULL,
+    change_time       DATETIME DEFAULT (STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW'))
+);
+
+CREATE TRIGGER copy_transaction_pool_history
+    AFTER UPDATE
+    ON transaction_pool
+    FOR EACH ROW
+BEGIN
+    INSERT INTO transaction_pool_history (id,
+                                          transaction_id,
+                                          original_decision,
+                                          local_decision,
+                                          remote_decision,
+                                          evidence,
+                                          transaction_fee,
+                                          leader_fee,
+                                          stage,
+                                          new_stage,
+                                          is_ready,
+                                          new_is_ready,
+                                          updated_at,
+                                          created_at)
+    VALUES (OLD.id,
+            OLD.transaction_id,
+            OLD.original_decision,
+            OLD.local_decision,
+            OLD.remote_decision,
+            OLD.evidence,
+            OLD.transaction_fee,
+            OLD.leader_fee,
+            OLD.stage,
+            NEW.stage,
+            OLD.is_ready,
+            NEW.is_ready,
+            OLD.updated_at,
+            OLD.created_at);
+END;
+

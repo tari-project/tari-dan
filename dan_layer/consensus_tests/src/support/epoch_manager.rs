@@ -16,8 +16,8 @@ use tari_dan_common_types::{
     ShardId,
 };
 use tari_dan_storage::global::models::ValidatorNode;
-use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
-use tokio::sync::{Mutex, MutexGuard};
+use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
+use tokio::sync::{broadcast, Mutex, MutexGuard};
 
 use crate::support::{address::TestAddress, helpers::random_shard_in_bucket};
 
@@ -25,14 +25,30 @@ use crate::support::{address::TestAddress, helpers::random_shard_in_bucket};
 pub struct TestEpochManager {
     inner: Arc<Mutex<TestEpochManagerState>>,
     our_validator_node: Option<ValidatorNode<TestAddress>>,
+    tx_epoch_events: broadcast::Sender<EpochManagerEvent>,
 }
 
 impl TestEpochManager {
-    pub fn new() -> Self {
+    pub fn new(tx_epoch_events: broadcast::Sender<EpochManagerEvent>) -> Self {
         Self {
             inner: Default::default(),
             our_validator_node: None,
+            tx_epoch_events,
         }
+    }
+
+    pub async fn set_current_epoch(&self, current_epoch: Epoch) -> &Self {
+        {
+            let mut lock = self.inner.lock().await;
+            lock.current_epoch = current_epoch;
+            lock.is_epoch_active = true;
+        }
+
+        let _ = self
+            .tx_epoch_events
+            .send(EpochManagerEvent::EpochChanged(current_epoch));
+
+        self
     }
 
     pub async fn state_lock(&self) -> MutexGuard<TestEpochManagerState> {
@@ -84,6 +100,10 @@ impl TestEpochManager {
 #[async_trait]
 impl EpochManagerReader for TestEpochManager {
     type Addr = TestAddress;
+
+    async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError> {
+        Ok(self.tx_epoch_events.subscribe())
+    }
 
     async fn get_committee(&self, _epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let state = self.state_lock().await;
@@ -214,7 +234,7 @@ impl Default for TestEpochManagerState {
         Self {
             current_epoch: Epoch(0),
             validator_shards: HashMap::new(),
-            is_epoch_active: true,
+            is_epoch_active: false,
             committees: HashMap::new(),
             address_bucket: HashMap::new(),
         }

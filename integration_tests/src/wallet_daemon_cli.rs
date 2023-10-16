@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, time::Duration};
 
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use serde_json::json;
@@ -63,6 +63,7 @@ use tari_wallet_daemon_client::{
     ComponentAddressOrName,
     WalletDaemonClient,
 };
+use tokio::time::timeout;
 
 use crate::{validator_node_cli::add_substate_addresses, TariWorld};
 
@@ -74,6 +75,7 @@ pub async fn claim_burn(
     ownership_proof: CommitmentSignature<RistrettoPublicKey, RistrettoSecretKey>,
     reciprocal_claim_public_key: RistrettoPublicKey,
     wallet_daemon_name: String,
+    fee: i64,
 ) -> Result<ClaimBurnResponse, WalletDaemonClientError> {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
@@ -89,7 +91,7 @@ pub async fn claim_burn(
             "reciprocal_claim_public_key": BASE64.encode(reciprocal_claim_public_key.as_bytes()),
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
-        fee: Some(Amount(1)),
+        fee: Some(Amount(fee)),
     };
 
     client.claim_burn(claim_burn_request).await
@@ -147,6 +149,8 @@ pub async fn transfer_confidential(
     amount: u64,
     wallet_daemon_name: String,
     outputs_name: String,
+    min_epoch: Option<Epoch>,
+    max_epoch: Option<Epoch>,
 ) -> tari_wallet_daemon_client::types::TransactionSubmitResponse {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
@@ -228,6 +232,8 @@ pub async fn transfer_confidential(
         instructions,
         inputs: vec![source_account_addr, dest_account_addr],
         new_outputs: 1,
+        min_epoch,
+        max_epoch,
     };
 
     let submit_resp = client.submit_transaction(submit_req).await.unwrap();
@@ -262,7 +268,10 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         key_id: None,
     };
 
-    let resp = client.create_account(request).await.unwrap();
+    let resp = timeout(Duration::from_secs(240), client.create_account(request))
+        .await
+        .unwrap()
+        .unwrap();
 
     // TODO: store the secret key in the world, but we don't have a need for it at the moment
     world.account_keys.insert(
@@ -408,6 +417,8 @@ pub async fn submit_manifest_with_signing_keys(
     inputs: String,
     num_outputs: u64,
     outputs_name: String,
+    min_epoch: Option<Epoch>,
+    max_epoch: Option<Epoch>,
 ) {
     let input_groups = inputs.split(',').map(|s| s.trim()).collect::<Vec<_>>();
 
@@ -492,6 +503,8 @@ pub async fn submit_manifest_with_signing_keys(
         inputs,
         new_non_fungible_outputs,
         new_non_fungible_index_outputs,
+        min_epoch,
+        max_epoch,
     };
 
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
@@ -523,6 +536,8 @@ pub async fn submit_manifest(
     inputs: String,
     num_outputs: u64,
     outputs_name: String,
+    min_epoch: Option<Epoch>,
+    max_epoch: Option<Epoch>,
 ) {
     let input_groups = inputs.split(',').map(|s| s.trim()).collect::<Vec<_>>();
 
@@ -603,6 +618,8 @@ pub async fn submit_manifest(
         inputs,
         new_non_fungible_outputs,
         new_non_fungible_index_outputs,
+        min_epoch,
+        max_epoch,
     };
 
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
@@ -635,6 +652,8 @@ pub async fn submit_transaction(
     instructions: Vec<Instruction>,
     inputs: Vec<SubstateRequirement>,
     outputs_name: String,
+    min_epoch: Option<Epoch>,
+    max_epoch: Option<Epoch>,
 ) -> TransactionWaitResultResponse {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
@@ -651,6 +670,8 @@ pub async fn submit_transaction(
         new_outputs: 0,
         new_non_fungible_outputs: vec![],
         new_non_fungible_index_outputs: vec![],
+        min_epoch,
+        max_epoch,
     };
 
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
@@ -676,6 +697,8 @@ pub async fn create_component(
     function_call: String,
     args: Vec<String>,
     _num_outputs: u64,
+    min_epoch: Option<Epoch>,
+    max_epoch: Option<Epoch>,
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
@@ -704,6 +727,8 @@ pub async fn create_component(
         new_outputs: 0,
         new_non_fungible_outputs: vec![],
         new_non_fungible_index_outputs: vec![],
+        min_epoch,
+        max_epoch,
     };
 
     let resp = client.submit_transaction(transaction_submit_req).await.unwrap();
@@ -765,7 +790,7 @@ pub async fn confidential_transfer(
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
     let account = Some(ComponentAddressOrName::Name(account_name));
-    let fee = Some(Amount(1));
+    let fee = Some(Amount(2000));
 
     let request = ConfidentialTransferRequest {
         account,

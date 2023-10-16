@@ -18,6 +18,8 @@ pub enum HotStuffError {
     InternalChannelClosed { context: &'static str },
     #[error("Epoch {epoch} is not active. {details}")]
     EpochNotActive { epoch: Epoch, details: String },
+    #[error("Not registered for current epoch {epoch}")]
+    NotRegisteredForCurrentEpoch { epoch: Epoch },
     #[error("Received message from non-committee member. Epoch: {epoch}, Sender: {sender}, {context}")]
     ReceivedMessageFromNonCommitteeMember {
         epoch: Epoch,
@@ -42,6 +44,15 @@ pub enum HotStuffError {
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]
     TransactionDoesNotExist { transaction_id: TransactionId },
+    #[error(
+        "Unable execute block {block_id} because the committee decided to ACCEPT transaction {transaction_id} but it \
+         failed to execute locally: {reject_reason}"
+    )]
+    RejectedTransactionCommitDecision {
+        block_id: BlockId,
+        transaction_id: TransactionId,
+        reject_reason: String,
+    },
     #[error("Pacemaker channel dropped: {details}")]
     PacemakerChannelDropped { details: String },
     #[error(
@@ -56,6 +67,11 @@ pub enum HotStuffError {
     InvariantError(String),
     #[error("Sync error: {0}")]
     SyncError(anyhow::Error),
+    #[error("Fallen behind: local_height={local_height}, qc_height={qc_height}")]
+    FallenBehind {
+        local_height: NodeHeight,
+        qc_height: NodeHeight,
+    },
 }
 
 impl From<EpochManagerError> for HotStuffError {
@@ -78,10 +94,10 @@ pub enum ProposalValidationError {
     NotSafeBlock { proposed_by: String, hash: BlockId },
     #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
-    #[error("Justification block {justify_block} for proposed block {block_id} by {proposed_by} not found")]
+    #[error("Justification block {justify_block} for proposed block {block_description} by {proposed_by} not found")]
     JustifyBlockNotFound {
         proposed_by: String,
-        block_id: BlockId,
+        block_description: String,
         justify_block: BlockId,
     },
     #[error("QC in block {block_id} that was proposed by {proposed_by} is invalid: {details}")]
@@ -90,8 +106,8 @@ pub enum ProposalValidationError {
         block_id: BlockId,
         details: String,
     },
-    #[error("Candidate block {candidate_block_height} is not higher than justify block {justify_block_height}")]
-    CandidateBlockNotHigherThanJustifyBlock {
+    #[error("Candidate block {candidate_block_height} is not higher than justify {justify_block_height}")]
+    CandidateBlockNotHigherThanJustify {
         justify_block_height: NodeHeight,
         candidate_block_height: NodeHeight,
     },
@@ -110,19 +126,14 @@ pub enum ProposalValidationError {
         justify_block_height: NodeHeight,
         candidate_block_height: NodeHeight,
     },
-    #[error("Block {block_id} proposed by {proposed_by} is not the leader")]
-    NotLeader { proposed_by: String, block_id: BlockId },
-    #[error(
-        "Block {candidate_block} proposed by {proposed_by} is less than or equal to the current leaf {leaf_block}"
-    )]
-    CandidateBlockNotHigherThanLeafBlock {
+    #[error("Block {block_id} proposed by {proposed_by} is not the leader. Expect {expected_leader}")]
+    NotLeader {
         proposed_by: String,
-        leaf_block: LeafBlock,
-        candidate_block: LeafBlock,
+        expected_leader: String,
+        block_id: BlockId,
     },
     #[error(
-        "Block {candidate_block} justify proposed by {proposed_by} is less than or equal to the current locked \
-         {locked_block}"
+        "Block {candidate_block} justify proposed by {proposed_by} is less than the current locked {locked_block}"
     )]
     CandidateBlockNotHigherThanLockedBlock {
         proposed_by: String,

@@ -35,3 +35,9 @@ impl LastProposed {
         Block::get(tx, &self.block_id)
     }
 }
+
+impl std::fmt::Display for LastProposed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(height: {}, block_id: {})", self.height, self.block_id)
+    }
+}

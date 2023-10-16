@@ -134,7 +134,25 @@ impl SubstateRecord {
         tx.substates_try_lock_many(locked_by_tx, inputs, lock_flag)
     }
 
+    pub fn check_lock_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a ShardId>>(
+        tx: &mut TTx,
+        inputs: I,
+        lock_flag: SubstateLockFlag,
+    ) -> Result<SubstateLockState, StorageError> {
+        tx.substates_check_lock_many(inputs, lock_flag)
+    }
+
     pub fn try_unlock_many<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
+        tx: &mut TTx,
+        locked_by_tx: &TransactionId,
+        inputs: I,
+        lock_flag: SubstateLockFlag,
+    ) -> Result<(), StorageError> {
+        tx.substates_try_unlock_many(locked_by_tx, inputs, lock_flag)?;
+        Ok(())
+    }
+
+    pub fn unlock_any<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,
         inputs: I,
@@ -162,6 +180,13 @@ impl SubstateRecord {
         substates: I,
     ) -> Result<bool, StorageError> {
         tx.substates_any_exist(substates)
+    }
+
+    pub fn exists_for_transaction<TTx: StateStoreReadTransaction + ?Sized>(
+        tx: &mut TTx,
+        transaction_id: &TransactionId,
+    ) -> Result<bool, StorageError> {
+        tx.substates_exists_for_transaction(transaction_id)
     }
 
     pub fn get<TTx: StateStoreReadTransaction + ?Sized>(
@@ -297,7 +322,7 @@ impl<TAddr> SubstateUpdate<TAddr> {
             Self::Create(proof) => {
                 debug!(
                     target: LOG_TARGET,
-                    "🔥 Applying substate CREATE for {} v{}",
+                    "🌲 Applying substate CREATE for {} v{}",
                     proof.substate.address, proof.substate.version
                 );
                 proof.created_qc.save(tx)?;

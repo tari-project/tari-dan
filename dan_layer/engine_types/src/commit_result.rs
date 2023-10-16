@@ -113,7 +113,7 @@ impl FinalizeResult {
         }
     }
 
-    pub fn reject(transaction_hash: Hash, reason: RejectReason) -> Self {
+    pub fn new_rejectted(transaction_hash: Hash, reason: RejectReason) -> Self {
         Self {
             transaction_hash,
             logs: vec![],
@@ -124,8 +124,19 @@ impl FinalizeResult {
         }
     }
 
+    pub fn reject(&self) -> Option<&RejectReason> {
+        match self.result {
+            TransactionResult::Accept(_) => None,
+            TransactionResult::Reject(ref reason) => Some(reason),
+        }
+    }
+
     pub fn is_accept(&self) -> bool {
         matches!(self.result, TransactionResult::Accept(_))
+    }
+
+    pub fn is_reject(&self) -> bool {
+        matches!(self.result, TransactionResult::Reject(_))
     }
 }
 

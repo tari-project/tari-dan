@@ -12,6 +12,7 @@ Feature: Claim Burn
     # Initialize a VN
     Given a validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds
@@ -37,7 +38,7 @@ Feature: Claim Burn
     Then validator node VN has state at COMM_ADDRESS
 
     When I claim burn COMMITMENT with PROOF, RANGEPROOF and CLAIM_PUBKEY and spend it into account ACC via the wallet daemon WALLET_D
-# Then account ACC has one confidential bucket in it
+  # Then account ACC has one confidential bucket in it
 
   @serial
   Scenario: Double Claim base layer burn funds with wallet daemon. should fail
@@ -49,6 +50,7 @@ Feature: Claim Burn
     # Initialize a VN
     Given a validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 10000 T
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds

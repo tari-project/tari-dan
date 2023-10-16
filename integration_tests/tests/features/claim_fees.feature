@@ -4,9 +4,6 @@
 Feature: Claim Fees
   @serial
   Scenario: Claim validator fees
-    # TODO: Update all cucumbers to use fees. For now we'll enable just for this test.
-    Given fees are enabled
-
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -22,6 +19,7 @@ Feature: Claim Fees
     # Initialize a VN
     Given a seed validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds
@@ -46,9 +44,7 @@ Feature: Claim Fees
 
   @serial
   Scenario: Prevent double claim of validator fees
-    Given fees are enabled
-
-      # Initialize a base node, wallet, miner and VN
+    # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -63,6 +59,7 @@ Feature: Claim Fees
     # Initialize a VN
     Given a seed validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
+    When wallet WALLET has at least 10000 T
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds
@@ -75,10 +72,11 @@ Feature: Claim Fees
     When I create an account ACC1 via the wallet daemon WALLET_D with 10000 free coins
     When I create an account ACC2 via the wallet daemon WALLET_D with 10000 free coins using key K1
     When I create an account ACC3 via the wallet daemon WALLET_D with 10000 free coins
+    When I create an account ACC4 via the wallet daemon WALLET_D with 10000 free coins
 
     # Progress to the next epoch
     When miner MINER mines 10 new blocks
-    Then VN has scanned to height 27 within 10 seconds
+    Then VN has scanned to height 27 within 20 seconds
 
     # Claim fees into ACC2
     When I claim fees for validator VN and epoch 1 into account ACC2 using the wallet daemon WALLET_D
@@ -89,9 +87,7 @@ Feature: Claim Fees
 
   @serial
   Scenario: Prevent validator fees claim for unauthorized wallet
-    Given fees are enabled
-
-      # Initialize a base node, wallet, miner and VN
+    # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
     Given a miner MINER connected to base node BASE and wallet WALLET
@@ -109,6 +105,7 @@ Feature: Claim Fees
     Given a seed validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
     Then VN has scanned to height 1 within 10 seconds
+    When wallet WALLET has at least 10000 T
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET1 using key K1
     When miner MINER mines 16 new blocks
     Then VN has scanned to height 17 within 10 seconds

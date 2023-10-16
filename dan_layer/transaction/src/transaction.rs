@@ -32,6 +32,8 @@ pub struct Transaction {
     outputs: Vec<ShardId>,
     /// Inputs filled by some authority. These are not part of the transaction hash. (TODO: Secure this somehow)
     filled_inputs: Vec<ShardId>,
+    min_epoch: Option<Epoch>,
+    max_epoch: Option<Epoch>,
 }
 
 impl Transaction {
@@ -47,6 +49,8 @@ impl Transaction {
         input_refs: Vec<ShardId>,
         outputs: Vec<ShardId>,
         filled_inputs: Vec<ShardId>,
+        min_epoch: Option<Epoch>,
+        max_epoch: Option<Epoch>,
     ) -> Self {
         let mut tx = Self {
             id: TransactionId::default(),
@@ -57,12 +61,14 @@ impl Transaction {
             input_refs,
             outputs,
             filled_inputs,
+            min_epoch,
+            max_epoch,
         };
-        tx.id = TransactionId::new(tx.calculate_hash().into_array());
+        tx.id = tx.calculate_hash();
         tx
     }
 
-    fn calculate_hash(&self) -> Hash {
+    fn calculate_hash(&self) -> TransactionId {
         hasher(EngineHashDomainLabel::Transaction)
             .chain(&self.signature)
             .chain(&self.fee_instructions)
@@ -70,7 +76,11 @@ impl Transaction {
             .chain(&self.inputs)
             .chain(&self.input_refs)
             .chain(&self.outputs)
+            .chain(&self.min_epoch)
+            .chain(&self.max_epoch)
             .result()
+            .into_array()
+            .into()
     }
 
     pub fn id(&self) -> &TransactionId {
@@ -156,6 +166,14 @@ impl Transaction {
                     None
                 }
             })
+    }
+
+    pub fn min_epoch(&self) -> Option<Epoch> {
+        self.min_epoch
+    }
+
+    pub fn max_epoch(&self) -> Option<Epoch> {
+        self.max_epoch
     }
 }
 
