@@ -43,7 +43,7 @@ pub async fn handle_submit_instruction(
     token: Option<String>,
     req: CallInstructionRequest,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    let mut instructions = vec![req.instruction];
+    let mut instructions = req.instructions;
     if let Some(dump_account) = req.dump_outputs_into {
         instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"bucket".to_vec(),

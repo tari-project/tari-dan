@@ -124,7 +124,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 leader_strategy.clone(),
                 pacemaker.clone_handle(),
                 tx_leader.clone(),
-                signing_service.clone(),
+                signing_service,
                 state_manager,
                 transaction_pool.clone(),
                 tx_events,

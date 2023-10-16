@@ -53,7 +53,7 @@ use crate::{
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CallInstructionRequest {
-    pub instruction: Instruction,
+    pub instructions: Vec<Instruction>,
     #[serde(deserialize_with = "string_or_struct")]
     pub fee_account: ComponentAddressOrName,
     #[serde(default, deserialize_with = "opt_string_or_struct")]

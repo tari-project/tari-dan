@@ -49,6 +49,11 @@ fn generate(template: &LoadedTemplate, output_path: &Path, cli: &Cli) {
     )
     .unwrap();
     fs::write(
+        output_path.join(".gitignore"),
+        replace_tokens(include_str!("./template/.gitignore.liquid"), template, cli),
+    )
+    .unwrap();
+    fs::write(
         output_path.join("src/main.rs"),
         replace_tokens(include_str!("./template/src/main.rs.liquid"), template, cli),
     )
@@ -63,6 +68,11 @@ fn generate(template: &LoadedTemplate, output_path: &Path, cli: &Cli) {
         replace_tokens(include_str!("./template/src/daemon_client.rs.liquid"), template, cli),
     )
     .unwrap();
+    std::process::Command::new("cargo")
+        .args(["fmt"])
+        .current_dir(output_path)
+        .status()
+        .unwrap();
     // todo!()
 }
 
@@ -88,8 +98,10 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
                 let mut args = vec![];
                 let mut is_method = false;
                 for a in &f.arguments {
+                    dbg!(a);
                     args.push(liquid::object!({
-                        "name": a.name
+                        "name": a.name,
+                        "arg_type": a.arg_type.to_string(),
                     }));
                     if &a.name == "self" {
                         is_method = true;
@@ -109,5 +121,6 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
             todo!("Not yet supported");
         },
     }
+    dbg!(&globals);
     template.render(&globals).unwrap()
 }
