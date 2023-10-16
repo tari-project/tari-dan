@@ -31,3 +31,6 @@ pub use epoch::*;
 
 mod validator_node;
 pub use validator_node::*;
+
+mod bmt;
+pub use bmt::*;
