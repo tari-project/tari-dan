@@ -7,7 +7,7 @@ use log::*;
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{committee::CommitteeShard, hashing::MergedValidatorNodeMerkleProof, optional::Optional};
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, QuorumCertificate, QuorumDecision, Vote},
+    consensus_models::{Block, QuorumCertificate, QuorumDecision, Vote},
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -167,15 +167,17 @@ where TConsensusSpec: ConsensusSpec
                 });
             }
 
-            let h_qc = HighQc::get(tx.deref_mut())?;
-            if h_qc.block_id == *block.id() {
+            if let Some(existing_qc_for_block) =
+                QuorumCertificate::get_by_block_id(tx.deref_mut(), block.id()).optional()?
+            {
                 debug!(
                     target: LOG_TARGET,
-                    "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block",
+                    "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block ({})",
                     message.block_id,
                     from,
                     count,
-                    local_committee_shard.quorum_threshold()
+                    local_committee_shard.quorum_threshold(),
+                    existing_qc_for_block
                 );
                 // We have already created a QC for this block
                 tx.rollback()?;
@@ -199,15 +201,21 @@ where TConsensusSpec: ConsensusSpec
             // database
             if votes.iter().all(|x| x.signature.public_key != vn.address) {
                 warn!(target: LOG_TARGET, "❓️ Received enough votes but not our own vote for block {}", message.block_id);
-                // tx.rollback()?;
-                // return Ok(());
+                tx.rollback()?;
+                return Ok(true);
             }
 
-            let signatures = votes.iter().map(|v| v.signature().clone()).collect::<Vec<_>>();
-            let (leaf_hashes, proofs) = votes
-                .iter()
-                .map(|v| (v.sender_leaf_hash, v.merkle_proof.clone()))
-                .unzip::<_, _, _, Vec<_>>();
+            let mut signatures = Vec::with_capacity(votes.len());
+            let mut proofs = Vec::with_capacity(votes.len());
+            let mut leaf_hashes = Vec::with_capacity(votes.len());
+            for vote in votes {
+                signatures.push(vote.signature);
+                proofs.push(vote.merkle_proof);
+                leaf_hashes.push(vote.sender_leaf_hash);
+            }
+
+            signatures.sort_by(|a, b| a.public_key.cmp(&b.public_key));
+
             let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(&proofs)?;
 
             let qc = QuorumCertificate::new(

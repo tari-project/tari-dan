@@ -184,6 +184,13 @@ impl<TAddr> QuorumCertificate<TAddr> {
         Block::get(tx, &self.block_id)
     }
 
+    pub fn get_by_block_id<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<Self, StorageError> {
+        tx.quorum_certificates_get_by_block_id(block_id)
+    }
+
     pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr> + ?Sized>(
         &self,
         tx: &mut TTx,

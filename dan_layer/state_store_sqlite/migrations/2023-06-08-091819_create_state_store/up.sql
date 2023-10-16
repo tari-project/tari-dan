@@ -9,8 +9,6 @@ create table quorum_certificates
 
 -- fetching by qc_id will be a very common operation
 create unique index quorum_certificates_uniq_idx_id on quorum_certificates (qc_id);
--- only one QC permitted for a block
-create unique index quorum_certificates_uniq_block_id on quorum_certificates (block_id);
 
 create table blocks
 (
