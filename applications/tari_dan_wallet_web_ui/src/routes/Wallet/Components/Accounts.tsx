@@ -200,7 +200,7 @@ function Accounts() {
             startIcon={<AddIcon />}
             onClick={() => onClaimFreeCoins()}
           >
-            Claim free testnet coins
+            Claim Free Testnet Coins
           </Button>
         </div>
         {showAccountDialog && (

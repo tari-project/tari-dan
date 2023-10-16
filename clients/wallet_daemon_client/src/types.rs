@@ -388,7 +388,7 @@ pub struct ConfidentialTransferRequest {
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
     pub resource_address: ResourceAddress,
-    pub validator_public_key: PublicKey,
+    pub destination_public_key: PublicKey,
     pub fee: Option<Amount>,
 }
 

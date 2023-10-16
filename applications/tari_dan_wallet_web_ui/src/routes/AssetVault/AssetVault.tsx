@@ -55,6 +55,7 @@ import SelectAccount from './Components/SelectAccount';
 import { useAccountsCreateFreeTestCoins } from '../../api/hooks/useAccounts';
 import ClaimBurn from './Components/ClaimBurn';
 import TariGem from '../../assets/TariGem';
+import SendMoney from './Components/SendMoney';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -371,6 +372,7 @@ function AssetVault() {
               marginBottom: theme.spacing(2),
             }}
           >
+            <SendMoney />
             <Button variant="outlined" onClick={onClaimFreeCoins}>
               Claim Free Testnet Coins
             </Button>
