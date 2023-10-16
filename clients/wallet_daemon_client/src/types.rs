@@ -77,6 +77,10 @@ pub struct CallInstructionRequest {
     pub is_dry_run: bool,
     #[serde(default)]
     pub proof_ids: Vec<ConfidentialProofId>,
+    #[serde(default)]
+    pub min_epoch: Option<u64>,
+    #[serde(default)]
+    pub max_epoch: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -96,6 +100,8 @@ pub struct TransactionSubmitRequest {
 
     pub is_dry_run: bool,
     pub proof_ids: Vec<ConfidentialProofId>,
+    pub min_epoch: Option<Epoch>,
+    pub max_epoch: Option<Epoch>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

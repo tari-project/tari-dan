@@ -158,6 +158,8 @@ async fn when_i_create_transfer_proof_via_wallet_daemon(
         amount,
         wallet_daemon_name,
         outputs_name,
+        None,
+        None,
     )
     .await;
 }
