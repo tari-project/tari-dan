@@ -149,7 +149,7 @@ function AssetVault() {
   } = useAccountsGet(accountName);
 
 
-  const { mutate } = useAccountsCreateFreeTestCoins();
+  const { mutateAsync } = useAccountsCreateFreeTestCoins();
 
   const theme = useTheme();
 
@@ -159,8 +159,8 @@ function AssetVault() {
     nftsListRefetch();
   }, [accountName]);
 
-  const onClaimFreeCoins = () => {
-    mutate({
+  const onClaimFreeCoins = async () => {
+    await mutateAsync({
       accountName: 'TestAccount',
       amount: 100000,
       fee: 1000,

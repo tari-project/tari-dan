@@ -117,16 +117,16 @@ function Accounts() {
     isError: isErrorAccountsList,
     error: errorAccountsList,
   } = useAccountsList(0, 10);
-  const { mutate } = useAccountsCreateFreeTestCoins();
+  const { mutateAsync } = useAccountsCreateFreeTestCoins();
 
-  const { mutate: mutateAddAccount } = useAccountsCreate(
+  const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
       undefined,
     undefined,
     false
   );
 
-  const { mutate: mutateClaimBurn } = useAccountsClaimBurn(
+  const { mutateAsync: mutateClaimBurn } = useAccountsClaimBurn(
     claimBurnFormState.account,
     claimBurnFormState.claimProof
       ? JSON.parse(claimBurnFormState.claimProof)
@@ -144,8 +144,8 @@ function Accounts() {
     setShowClaimBurnDialog(setElseToggle);
   };
 
-  const onSubmitAddAccount = () => {
-    mutateAddAccount();
+  const onSubmitAddAccount = async () => {
+    await mutateAddAccount();
     setAccountFormState({ accountName: '', signingKeyIndex: '', fee: '' });
     setShowAddAccountDialog(false);
   };
@@ -156,16 +156,16 @@ function Accounts() {
     });
   };
 
-  const onClaimFreeCoins = () => {
-    mutate({
+  const onClaimFreeCoins = async () => {
+    await mutate({
       accountName: 'TestAccount',
       amount: 100000,
       fee: 1000,
     });
   };
 
-  const onClaimBurn = () => {
-    mutateClaimBurn();
+  const onClaimBurn = async () => {
+    await mutateClaimBurn();
     setClaimBurnFormState({ account: '', claimProof: '', fee: '' });
     setShowClaimBurnDialog(false);
   };
