@@ -6,6 +6,7 @@ Feature: Indexer node
 
   @serial
   Scenario: Indexer is able to connect to validator nodes
+    Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -127,6 +128,7 @@ Feature: Indexer node
 
   @serial
   Scenario: Indexer GraphQL requests events over network substate indexing
+    Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
