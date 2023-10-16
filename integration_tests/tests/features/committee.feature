@@ -58,6 +58,7 @@ Feature: Committee scenarios
 
   @serial
   Scenario: Template registration and invocation in a 4-VN committee
+    Given fees are disabled
     # Initialize a base node, wallet and miner
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -82,7 +83,7 @@ Feature: Committee scenarios
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
     When miner MINER mines 23 new blocks
-    Then VAL_1 has scanned to height 29 within 10 seconds
+    Then all validators have scanned to height 29 within 10 seconds
     Then all validator nodes are listed as registered
     Then the template "counter" is listed as registered by all validator nodes
 
