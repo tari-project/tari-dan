@@ -43,6 +43,8 @@ CREATE TABLE transactions
     final_fee           BIGINT   NULL,
     status              TEXT     NOT NULL,
     dry_run             BOOLEAN  NOT NULL,
+    min_epoch           BIGINT   NULL,
+    max_epoch           BIGINT   NULL,
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

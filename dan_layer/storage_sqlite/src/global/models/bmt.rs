@@ -19,25 +19,9 @@
 //  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-mod global_db;
-pub use global_db::{DbFactory, GlobalDb};
 
-mod backend_adapter;
-pub use backend_adapter::GlobalDbAdapter;
-
-mod metadata_db;
-pub use metadata_db::{MetadataDb, MetadataKey};
-
-mod template_db;
-pub use template_db::{DbTemplate, DbTemplateType, DbTemplateUpdate, TemplateDb, TemplateStatus};
-
-mod validator_node_db;
-pub use validator_node_db::ValidatorNodeDb;
-
-mod epoch_db;
-pub use epoch_db::{DbEpoch, EpochDb};
-
-mod bmt_db;
-pub use bmt_db::{BmtDb, DbBmt};
-
-pub mod models;
+#[derive(Queryable)]
+pub struct Bmt {
+    pub epoch: i64,
+    pub bmt: Vec<u8>,
+}

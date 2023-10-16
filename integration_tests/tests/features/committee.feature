@@ -5,6 +5,7 @@ Feature: Committee scenarios
 
   @serial
   Scenario: Template registration and invocation in a 2-VN committee
+    Given fees are disabled
     # Initialize a base node, wallet and miner
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -51,9 +52,9 @@ Feature: Committee scenarios
     When I invoke on VAL_1 on component TX1/components/Counter the method call "value" with 1 outputs the result is "1"
     When I invoke on VAL_2 on component TX1/components/Counter the method call "value" with 1 outputs the result is "1"
 
-    # Uncomment the following lines to stop execution for manual inspection of the nodes
-    # When I print the cucumber world
-    # When I wait 5000 seconds
+  # Uncomment the following lines to stop execution for manual inspection of the nodes
+  # When I print the cucumber world
+  # When I wait 5000 seconds
 
 # TODO: Ignored because Counter::new transaction fails because of OutputsDontExistLocally - FAIL - investigate this
 #  @serial
