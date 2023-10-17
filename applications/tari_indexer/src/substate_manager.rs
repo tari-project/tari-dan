@@ -266,7 +266,7 @@ impl SubstateManager {
             .substate_scanner
             .get_specific_substate_from_committee(substate_address, version)
             .await?;
-        return Ok(substate_result);
+        Ok(substate_result)
     }
 
     pub async fn get_non_fungible_collections(&self) -> Result<Vec<(String, i64)>, anyhow::Error> {

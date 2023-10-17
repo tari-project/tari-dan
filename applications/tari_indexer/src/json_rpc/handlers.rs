@@ -53,6 +53,8 @@ use tari_indexer_client::types::{
     GetNonFungibleCountRequest,
     GetNonFungiblesRequest,
     GetNonFungiblesResponse,
+    GetRelatedTransactionsRequest,
+    GetRelatedTransactionsResponse,
     GetSubstateRequest,
     GetSubstateResponse,
     GetTransactionResultRequest,
