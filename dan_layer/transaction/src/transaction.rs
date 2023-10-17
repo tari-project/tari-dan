@@ -28,8 +28,6 @@ pub struct Transaction {
     inputs: Vec<ShardId>,
     /// Input objects that must exist but cannot be downed by this transaction
     input_refs: Vec<ShardId>,
-    /// Output objects that will be created by this transaction
-    outputs: Vec<ShardId>,
     /// Inputs filled by some authority. These are not part of the transaction hash. (TODO: Secure this somehow)
     filled_inputs: Vec<ShardId>,
     min_epoch: Option<Epoch>,
@@ -47,7 +45,6 @@ impl Transaction {
         signature: TransactionSignature,
         inputs: Vec<ShardId>,
         input_refs: Vec<ShardId>,
-        outputs: Vec<ShardId>,
         filled_inputs: Vec<ShardId>,
         min_epoch: Option<Epoch>,
         max_epoch: Option<Epoch>,
@@ -59,7 +56,6 @@ impl Transaction {
             signature,
             inputs,
             input_refs,
-            outputs,
             filled_inputs,
             min_epoch,
             max_epoch,
@@ -75,7 +71,6 @@ impl Transaction {
             .chain(&self.instructions)
             .chain(&self.inputs)
             .chain(&self.input_refs)
-            .chain(&self.outputs)
             .chain(&self.min_epoch)
             .chain(&self.max_epoch)
             .result()
@@ -111,12 +106,11 @@ impl Transaction {
         self.inputs()
             .iter()
             .chain(self.input_refs())
-            .chain(self.outputs())
             .chain(self.filled_inputs())
     }
 
     pub fn num_involved_shards(&self) -> usize {
-        self.inputs().len() + self.input_refs().len() + self.outputs().len() + self.filled_inputs().len()
+        self.inputs().len() + self.input_refs().len() + self.filled_inputs().len()
     }
 
     pub fn input_refs(&self) -> &[ShardId] {
@@ -145,10 +139,6 @@ impl Transaction {
 
     pub fn filled_inputs_mut(&mut self) -> &mut Vec<ShardId> {
         &mut self.filled_inputs
-    }
-
-    pub fn outputs(&self) -> &[ShardId] {
-        &self.outputs
     }
 
     pub fn fee_claims(&self) -> impl Iterator<Item = (Epoch, PublicKey)> + '_ {

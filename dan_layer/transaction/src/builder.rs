@@ -201,7 +201,6 @@ impl TransactionBuilder {
             self.signature.take().expect("not signed"),
             self.inputs,
             self.input_refs,
-            self.outputs,
             vec![],
             self.min_epoch,
             self.max_epoch,

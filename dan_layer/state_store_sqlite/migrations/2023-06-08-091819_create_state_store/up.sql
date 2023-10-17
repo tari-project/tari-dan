@@ -159,7 +159,6 @@ create table transactions
     signature         text      not NULL,
     inputs            text      not NULL,
     input_refs        text      not NULL,
-    outputs           text      not NULL,
     filled_inputs     text      not NULL,
     resulting_outputs text      NULL,
     result            text      NULL,
