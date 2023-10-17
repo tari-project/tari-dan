@@ -74,7 +74,7 @@ export default function Transactions() {
               {data?.transactions
                 ?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                 .map((t: any) => {
-                  if (t[0].id !== undefined) {
+                  if (t?.[0]?.id !== undefined) {
                     const hash = t[0].id;
                     return (
                       <TableRow key={hash}>
@@ -93,9 +93,7 @@ export default function Transactions() {
                           <StatusChip status={t[2]} showTitle />
                         </DataTableCell>
                         <DataTableCell>
-                          {t[1] !== null
-                            ? t[1].cost_breakdown?.total_fees_charged
-                            : 0}
+                          {t?.[1]?.cost_breakdown?.total_fees_charged || 0}
                         </DataTableCell>
                         <DataTableCell>
                           <IconButton
