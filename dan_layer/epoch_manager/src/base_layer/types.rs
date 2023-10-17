@@ -12,7 +12,7 @@ use tari_comms::types::CommsPublicKey;
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    hashing::{ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
+    hashing::MergedValidatorNodeMerkleProof,
     shard_bucket::ShardBucket,
     Epoch,
     ShardId,
@@ -81,13 +81,10 @@ pub enum EpochManagerRequest {
         epoch: Epoch,
         reply: Reply<Vec<ValidatorNode<PublicKey>>>,
     },
-    GetValidatorNodeBalancedMerkleTree {
+    GetValidatorSetMergedMerkleProof {
         epoch: Epoch,
-        reply: Reply<ValidatorNodeBalancedMerkleTree>,
-    },
-    GetValidatorNodeMerkleProof {
-        epoch: Epoch,
-        reply: Reply<ValidatorNodeMerkleProof>,
+        validator_set: Vec<CommsPublicKey>,
+        reply: Reply<MergedValidatorNodeMerkleProof>,
     },
     GetValidatorNodeMerkleRoot {
         epoch: Epoch,

@@ -394,7 +394,6 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             last_sent_vote::block_height.eq(last_sent_vote.block_height.as_u64() as i64),
             last_sent_vote::decision.eq(i32::from(last_sent_vote.decision.as_u8())),
             last_sent_vote::signature.eq(serialize_json(&last_sent_vote.signature)?),
-            last_sent_vote::merkle_proof.eq(serialize_json(&last_sent_vote.merkle_proof)?),
         );
 
         diesel::insert_into(last_sent_vote::table)
@@ -919,7 +918,6 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             votes::sender_leaf_hash.eq(serialize_hex(vote.sender_leaf_hash)),
             votes::decision.eq(i32::from(vote.decision.as_u8())),
             votes::signature.eq(serialize_json(&vote.signature)?),
-            votes::merkle_proof.eq(serialize_json(&vote.merkle_proof)?),
         );
 
         diesel::insert_into(votes::table)

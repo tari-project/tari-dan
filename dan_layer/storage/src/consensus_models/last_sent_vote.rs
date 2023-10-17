@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::{hashing::ValidatorNodeMerkleProof, Epoch, NodeHeight};
+use tari_dan_common_types::{Epoch, NodeHeight};
 
 use super::{QuorumDecision, ValidatorSignature};
 use crate::{consensus_models::BlockId, StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
@@ -12,7 +12,6 @@ pub struct LastSentVote<TAddr> {
     pub block_height: NodeHeight,
     pub decision: QuorumDecision,
     pub signature: ValidatorSignature<TAddr>,
-    pub merkle_proof: ValidatorNodeMerkleProof,
 }
 
 impl<TAddr> LastSentVote<TAddr> {

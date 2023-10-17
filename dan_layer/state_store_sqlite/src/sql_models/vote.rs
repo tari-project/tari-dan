@@ -20,7 +20,6 @@ pub struct Vote {
     pub decision: i32,
     pub sender: String,
     pub signature: String,
-    pub merkle_proof: String,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -43,7 +42,6 @@ impl<TAddr: NodeAddressable> TryFrom<Vote> for consensus_models::Vote<TAddr> {
             })?,
             sender_leaf_hash: deserialize_hex_try_from(&value.sender)?,
             signature: deserialize_json(&value.signature)?,
-            merkle_proof: deserialize_json(&value.merkle_proof)?,
         })
     }
 }
