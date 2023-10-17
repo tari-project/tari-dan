@@ -72,13 +72,25 @@ pub(crate) mod {{ c.name }} {
 use tari_engine_types::TemplateAddress;
 use tari_template_lib::prelude::ComponentAddress;
 use tari_transaction::SubstateRequirement;
+use tari_template_lib::args;
+ use tari_template_lib::prelude::Amount;
+ use tari_template_lib::prelude::ResourceAddress;
+  use std::str::FromStr;
+
+
 
 
    #[derive(Debug, Args, Clone)]
    pub struct Command {
       {%  for  arg in c.args %}
       {% if arg.name != "self" %}
+          {% if arg.arg_type != "Bucket" %}
        pub {{ arg.name}} : String,
+           {% else %}
+        pub {{ arg.name}}_amount : u64,
+        pub {{ arg.name}}_resource: String,
+        pub {{ arg.name}}_withdraw_from_component: String,
+           {% endif %}
        {% else %}
        pub component_address: String,
        {% endif %}
@@ -94,19 +106,40 @@ use tari_transaction::SubstateRequirement;
        // let template_address= ;
         let method = "{{c.name}}".to_string();
 
+    let mut instructions = vec![];
+    {% if c.requires_buckets %}
+    {% for bucket_arg in c.args %}
+    {% if bucket_arg.arg_type == "Bucket" %}
+       instructions.push(Instruction::CallMethod {
+                component_address: ComponentAddress::from_hex(&self.{{bucket_arg.name}}_withdraw_from_component).unwrap(),
+                method: "withdraw".to_string(),
+                args: args![ResourceAddress::from_str(&self.{{ bucket_arg.name}}_resource).unwrap(), self.{{ bucket_arg.name}}_amount],
+            });
+  instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
+            key: b"bucket_{{bucket_arg.name}}".to_vec(),
+        });
+     {% endif %}
+     {% endfor %}
+    {% endif %}
+    instructions.push(
+    Instruction::CallMethod {
+                        component_address: ComponentAddress::from_hex(&self.component_address).unwrap(),
+                        method,
+                        args: args![
+                            {%  for  arg in c.args %}
+          {% if arg.name != "self" %}
+            {% if arg.arg_type != "Bucket" %}
+           parse_arg(&self.{{ arg.name}}).unwrap(),
+           {% else %}
+              Variable("bucket_{{arg.name}}"),
+          {% endif %}
+          {% endif %}
+          {% endfor %}
+                        ]
+                   }
+    );
 
-
-                client.submit_instruction(Instruction::CallMethod {
-                    component_address: ComponentAddress::from_hex(&self.component_address).unwrap(),
-                    method,
-                    args: vec![
-                        {%  for  arg in c.args %}
-      {% if arg.name != "self" %}
-       parse_arg(&self.{{ arg.name}}).unwrap(),
-      {% endif %}
-      {% endfor %}
-                    ]
-               }, dump_buckets, is_dry_run, fees, vec![format!("component_{}", self.component_address).parse().unwrap()]
+                client.submit_instructions(instructions, dump_buckets, is_dry_run, fees, vec![format!("component_{}", self.component_address).parse().unwrap()]
 
             ).await;
             println!("done");

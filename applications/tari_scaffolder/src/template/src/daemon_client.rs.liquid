@@ -49,7 +49,7 @@ impl DaemonClient {
         self.submit_instructions(vec![instruction], dump_buckets, is_dry_run, fees, other_inputs).await;
     }
 
-    pub async fn submit_instructions(&mut self, instruction: Vec<Instruction>, dump_buckets: bool, is_dry_run: bool, fees: u64, other_inputs: Vec<SubstateRequirement>) {
+    pub async fn submit_instructions(&mut self, instructions: Vec<Instruction>, dump_buckets: bool, is_dry_run: bool, fees: u64, other_inputs: Vec<SubstateRequirement>) {
      let mut client =
             WalletDaemonClient::connect(&self.endpoint, self.auth_token.clone()).unwrap();
         //let r = client.list_keys().await;
@@ -57,7 +57,7 @@ impl DaemonClient {
         //dbg!(r);
 
            let tx = CallInstructionRequest {
-            instruction,
+            instructions,
             fee_account: ComponentAddressOrName::Name("TestAccount_0".to_string()),
             dump_outputs_into: if dump_buckets {
                 Some(ComponentAddressOrName::Name("TestAccount_0".to_string()))

@@ -97,12 +97,16 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
                 let arr = globals.get_mut("commands").unwrap().as_array_mut().unwrap();
                 let mut args = vec![];
                 let mut is_method = false;
+                let mut requires_buckets = false;
                 for a in &f.arguments {
                     dbg!(a);
                     args.push(liquid::object!({
                         "name": a.name,
                         "arg_type": a.arg_type.to_string(),
                     }));
+                    if &a.arg_type.to_string() == "Bucket" {
+                        requires_buckets = true;
+                    }
                     if &a.name == "self" {
                         is_method = true;
                     }
@@ -113,7 +117,8 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
                     "title": f.name.to_case(Case::UpperCamel),
                     "args" : args,
                     "is_method": is_method,
-                    "is_mut": f.is_mut
+                    "is_mut": f.is_mut,
+                    "requires_buckets": requires_buckets,
                 })));
             }
         },
