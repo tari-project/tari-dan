@@ -107,18 +107,6 @@ Feature: Indexer node
   Scenario: Indexer GraphQL requests work
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
-    Given a wallet WALLET connected to base node BASE
-    Given a miner MINER connected to base node BASE and wallet WALLET
-
-    # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
-
-    # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 2000000000 uT
-
-    # VN registration
-    When validator node VN sends a registration transaction
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
@@ -137,6 +125,9 @@ Feature: Indexer node
     # Initialize a VN
     Given a validator node VN connected to base node BASE and wallet WALLET
 
+    # Initialize an indexer
+      Given an indexer IDX connected to base node BASE
+
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 6 new blocks
     When wallet WALLET has at least 2000000000 uT
@@ -145,6 +136,8 @@ Feature: Indexer node
     When validator node VN sends a registration transaction
 
     When miner MINER mines 16 new blocks
+    Then VN has scanned to height 19 within 10 seconds
+    Then indexer IDX has scanned to height 19 within 10 seconds
     Then the validator node VN is listed as registered
 
     # A file-base CLI account must be created to sign future calls
@@ -154,8 +147,6 @@ Feature: Indexer node
     When I create an account ACC_1 on VN
     When I create an account ACC_2 on VN
 
-    # Initialize an indexer
-    Given an indexer IDX connected to base node BASE
 
     # Scan the network for the event emitted on ACC_1 creation
     When indexer IDX scans the network 1 events for account ACC_1 with topics component-created

@@ -36,6 +36,7 @@ Feature: Wallet Daemon
         # Mine some blocks until the UTXOs are scanned
         When miner MINER mines 5 new blocks
         Then VAL_1 has scanned to height 22 within 10 seconds
+        Then indexer IDX has scanned to height 22 within 10 seconds
         Then the template "faucet" is listed as registered by the validator node VAL_1
 
         # Create two accounts to test sending the tokens
