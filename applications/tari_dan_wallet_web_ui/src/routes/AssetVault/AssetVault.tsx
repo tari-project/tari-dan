@@ -20,41 +20,42 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect } from 'react';
-import Grid from '@mui/material/Grid';
-import { StyledPaper, InnerHeading } from '../../Components/StyledComponents';
-import TableContainer from '@mui/material/TableContainer';
-import Table from '@mui/material/Table';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import TableCell from '@mui/material/TableCell';
-import TableBody from '@mui/material/TableBody';
-import Tabs from '@mui/material/Tabs';
-import Tab from '@mui/material/Tab';
-import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
-import Fade from '@mui/material/Fade';
-import Button from '@mui/material/Button';
+import { useState, useEffect } from "react";
+import Grid from "@mui/material/Grid";
+import { StyledPaper, InnerHeading } from "../../Components/StyledComponents";
+import TableContainer from "@mui/material/TableContainer";
+import Table from "@mui/material/Table";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TableCell from "@mui/material/TableCell";
+import TableBody from "@mui/material/TableBody";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
+import Typography from "@mui/material/Typography";
+import Box from "@mui/material/Box";
+import Fade from "@mui/material/Fade";
+import Button from "@mui/material/Button";
 import {
   useAccountsGetBalances,
   useAccountsGet,
   useAccountNFTsList,
   useAccountsList,
-} from '../../api/hooks/useAccounts';
-import useAccountStore from '../../store/accountStore';
-import Transactions from '../Transactions/Transactions';
-import { removeTagged, shortenString } from '../../utils/helpers';
-import { DataTableCell } from '../../Components/StyledComponents';
-import CopyToClipboard from '../../Components/CopyToClipboard';
-import FetchStatusCheck from '../../Components/FetchStatusCheck';
-import { IoEyeOffOutline, IoEyeOutline } from 'react-icons/io5';
-import IconButton from '@mui/material/IconButton';
-import Divider from '@mui/material/Divider';
-import { useTheme } from '@mui/material/styles';
-import SelectAccount from './Components/SelectAccount';
-import { useAccountsCreateFreeTestCoins } from '../../api/hooks/useAccounts';
-import ClaimBurn from './Components/ClaimBurn';
-import TariGem from '../../assets/TariGem';
+} from "../../api/hooks/useAccounts";
+import useAccountStore from "../../store/accountStore";
+import Transactions from "../Transactions/Transactions";
+import { removeTagged, shortenString } from "../../utils/helpers";
+import { DataTableCell } from "../../Components/StyledComponents";
+import CopyToClipboard from "../../Components/CopyToClipboard";
+import FetchStatusCheck from "../../Components/FetchStatusCheck";
+import { IoEyeOffOutline, IoEyeOutline } from "react-icons/io5";
+import IconButton from "@mui/material/IconButton";
+import Divider from "@mui/material/Divider";
+import { useTheme } from "@mui/material/styles";
+import SelectAccount from "./Components/SelectAccount";
+import { useAccountsCreateFreeTestCoins } from "../../api/hooks/useAccounts";
+import ClaimBurn from "./Components/ClaimBurn";
+import TariGem from "../../assets/TariGem";
+import SendMoney from "./Components/SendMoney";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -109,19 +110,18 @@ function TabPanel(props: TabPanelProps) {
 function tabProps(index: number) {
   return {
     id: `asset-tab-${index}`,
-    'aria-controls': `asset-tabpanel-${index}`,
+    "aria-controls": `asset-tabpanel-${index}`,
   };
 }
 
 function AssetVault() {
-  const { showBalance, setShowBalance, accountName, setAccountName } =
-    useAccountStore();
+  const { showBalance, setShowBalance, accountName, setAccountName } = useAccountStore();
 
-    const { data: dataAccountsList } = useAccountsList(0, 10);
-    // Set to the first account if we haven't selected an account
-    if (!accountName && dataAccountsList?.accounts?.length > 0) {
-        setAccountName(dataAccountsList.accounts[0].account.name);
-    }
+  const { data: dataAccountsList } = useAccountsList(0, 10);
+  // Set to the first account if we haven't selected an account
+  if (!accountName && dataAccountsList?.accounts?.length > 0) {
+    setAccountName(dataAccountsList.accounts[0].account.name);
+  }
 
   const {
     data: balancesData,
@@ -147,8 +147,7 @@ function AssetVault() {
     isFetching: accountsIsFetching,
   } = useAccountsGet(accountName);
 
-
-  const { mutate } = useAccountsCreateFreeTestCoins();
+  const { mutateAsync: mutateCreateFeeTestCoins } = useAccountsCreateFreeTestCoins();
 
   const theme = useTheme();
 
@@ -158,26 +157,25 @@ function AssetVault() {
     nftsListRefetch();
   }, [accountName]);
 
-  const onClaimFreeCoins = () => {
-    mutate({
-      accountName: 'TestAccount',
+  const onClaimFreeCoins = async () => {
+    await mutateCreateFeeTestCoins({
+      accountName: "TestAccount",
       amount: 100000,
       fee: 1000,
     });
   };
 
   function AccountBalance() {
-    const formattedBalance =
-      balancesData?.balances[0]?.confidential_balance.toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
+    const formattedBalance = balancesData?.balances[0]?.confidential_balance.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
 
     return (
       <>
         <FetchStatusCheck
           isError={balancesIsError}
-          errorMessage={balancesError?.message || 'Error fetching data'}
+          errorMessage={balancesError?.message || "Error fetching data"}
           isLoading={balancesIsFetching}
         />
         <Fade in={!balancesIsFetching && !balancesIsError} timeout={100}>
@@ -189,26 +187,25 @@ function AssetVault() {
             </Box>
             <Box
               style={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
+                display: "flex",
+                alignItems: "flex-start",
+                justifyContent: "space-between",
                 gap: theme.spacing(1),
-                minWidth: '230px',
+                minWidth: "230px",
               }}
             >
               <Typography variant="h2">
                 {showBalance
                   ? (
                       <>
-                        <TariGem fill={theme.palette.text.primary} />{' '}
-                        {formattedBalance}
+                        <TariGem fill={theme.palette.text.primary} /> {formattedBalance}
                       </>
                     ) || (
                       <>
                         <TariGem fill={theme.palette.text.primary} /> 0
                       </>
                     )
-                  : '************'}
+                  : "************"}
               </Typography>
               <IconButton onClick={() => setShowBalance(!showBalance)}>
                 {showBalance ? (
@@ -230,7 +227,7 @@ function AssetVault() {
         {accountsIsError || accountsIsFetching ? (
           <FetchStatusCheck
             isError={accountsIsError}
-            errorMessage={accountsError?.message || 'Error fetching data'}
+            errorMessage={accountsError?.message || "Error fetching data"}
             isLoading={accountsIsFetching}
           />
         ) : (
@@ -249,9 +246,7 @@ function AssetVault() {
                     <DataTableCell>{accountsData.account.name}</DataTableCell>
                     <DataTableCell>
                       {shortenString(accountsData.account.address.Component)}
-                      <CopyToClipboard
-                        copy={accountsData.account.address.Component}
-                      />
+                      <CopyToClipboard copy={accountsData.account.address.Component} />
                     </DataTableCell>
                     <DataTableCell>
                       {shortenString(accountsData.public_key)}
@@ -275,14 +270,9 @@ function AssetVault() {
     };
 
     return (
-      <Box sx={{ width: '100%' }}>
-        <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-          <Tabs
-            value={value}
-            onChange={handleChange}
-            aria-label="account assets"
-            variant="standard"
-          >
+      <Box sx={{ width: "100%" }}>
+        <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+          <Tabs value={value} onChange={handleChange} aria-label="account assets" variant="standard">
             <Tab label="Tokens" {...tabProps(0)} style={{ width: 150 }} />
             <Tab label="NFTs" {...tabProps(1)} style={{ width: 150 }} />
           </Tabs>
@@ -291,7 +281,7 @@ function AssetVault() {
           {balancesIsError || balancesIsFetching ? (
             <FetchStatusCheck
               isError={balancesIsError}
-              errorMessage={balancesError?.message || 'Error fetching data'}
+              errorMessage={balancesError?.message || "Error fetching data"}
               isLoading={balancesIsFetching}
             />
           ) : (
@@ -306,9 +296,7 @@ function AssetVault() {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {balancesData?.balances.map(
-                    (balance: number, index: number) => BalanceRow(balance)
-                  )}
+                  {balancesData?.balances.map((balance: number, index: number) => BalanceRow(balance))}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -318,7 +306,7 @@ function AssetVault() {
           {nftsListIsError || nftsListIsFetching ? (
             <FetchStatusCheck
               isError={nftsListIsError}
-              errorMessage={nftsListError?.message || 'Error fetching data'}
+              errorMessage={nftsListError?.message || "Error fetching data"}
               isLoading={nftsListIsFetching}
             />
           ) : (
@@ -331,11 +319,7 @@ function AssetVault() {
                     <TableCell>Is Burned</TableCell>
                   </TableRow>
                 </TableHead>
-                <TableBody>
-                  {nftsListData?.nfts.map((nft: any, index: number) =>
-                    NftsList(nft)
-                  )}
-                </TableBody>
+                <TableBody>{nftsListData?.nfts.map((nft: any, index: number) => NftsList(nft))}</TableBody>
               </Table>
             </TableContainer>
           )}
@@ -350,10 +334,10 @@ function AssetVault() {
         <Box
           className="flex-container"
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '100%',
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            width: "100%",
           }}
         >
           <Typography
@@ -366,11 +350,12 @@ function AssetVault() {
           </Typography>
           <Box
             style={{
-              display: 'flex',
+              display: "flex",
               gap: theme.spacing(1),
               marginBottom: theme.spacing(2),
             }}
           >
+            <SendMoney />
             <Button variant="outlined" onClick={onClaimFreeCoins}>
               Claim Free Testnet Coins
             </Button>
@@ -382,9 +367,9 @@ function AssetVault() {
       <Grid item xs={12} md={12} lg={12}>
         <Box
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
           <AccountBalance />
