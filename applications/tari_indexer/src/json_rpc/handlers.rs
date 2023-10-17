@@ -24,7 +24,9 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use axum_jrpc::{
     error::{JsonRpcError, JsonRpcErrorReason},
-    JrpcResult, JsonRpcExtractor, JsonRpcResponse,
+    JrpcResult,
+    JsonRpcExtractor,
+    JsonRpcResponse,
 };
 use log::{error, warn};
 use serde::Serialize;
@@ -34,7 +36,8 @@ use tari_comms::{
     multiaddr::Multiaddr,
     peer_manager::{NodeId, PeerFeatures},
     types::CommsPublicKey,
-    CommsNode, NodeIdentity,
+    CommsNode,
+    NodeIdentity,
 };
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_common_types::{optional::Optional, Epoch};
@@ -65,8 +68,10 @@ use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClie
 
 use super::json_encoding::{encode_execute_result_into_json, encode_finalized_result_into_json};
 use crate::{
-    bootstrap::Services, dry_run::processor::DryRunTransactionProcessor,
-    json_rpc::json_encoding::encode_substate_into_json, substate_manager::SubstateManager,
+    bootstrap::Services,
+    dry_run::processor::DryRunTransactionProcessor,
+    json_rpc::json_encoding::encode_substate_into_json,
+    substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
 };
 
@@ -267,15 +272,12 @@ impl JsonRpcHandlers {
                 warn!(target: LOG_TARGET, "Error getting substate: {}", e);
                 Self::internal_error(answer_id, format!("Error getting substate: {}", e))
             })? {
-            Some(substate_resp) => Ok(JsonRpcResponse::success(
-                answer_id,
-                GetSubstateResponse {
-                    address: substate_resp.address,
-                    version: substate_resp.version,
-                    substate: substate_resp.substate,
-                    created_by_transaction: substate_resp.created_by_transaction,
-                },
-            )),
+            Some(substate_resp) => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+                address: substate_resp.address,
+                version: substate_resp.version,
+                substate: substate_resp.substate,
+                created_by_transaction: substate_resp.created_by_transaction,
+            })),
             None => {
                 if request.local_search_only {
                     Err(JsonRpcResponse::error(
@@ -324,15 +326,12 @@ impl JsonRpcHandlers {
                             address,
                             substate,
                             created_by_tx,
-                        } => Ok(JsonRpcResponse::success(
-                            answer_id,
-                            GetSubstateResponse {
-                                address,
-                                version: substate.version(),
-                                substate,
-                                created_by_transaction: created_by_tx,
-                            },
-                        )),
+                        } => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+                            address,
+                            version: substate.version(),
+                            substate,
+                            created_by_transaction: created_by_tx,
+                        })),
                         SubstateResult::Down { version, .. } => Err(JsonRpcResponse::error(
                             answer_id,
                             JsonRpcError::new(
@@ -380,16 +379,13 @@ impl JsonRpcHandlers {
                 )
             })?;
 
-        Ok(JsonRpcResponse::success(
-            answer_id,
-            InspectSubstateResponse {
-                address: resp.address,
-                version: resp.version,
-                substate_contents: encode_substate_into_json(&resp.substate)
-                    .map_err(|e| Self::internal_error(answer_id, e))?,
-                created_by_transaction: resp.created_by_transaction,
-            },
-        ))
+        Ok(JsonRpcResponse::success(answer_id, InspectSubstateResponse {
+            address: resp.address,
+            version: resp.version,
+            substate_contents: encode_substate_into_json(&resp.substate)
+                .map_err(|e| Self::internal_error(answer_id, e))?,
+            created_by_transaction: resp.created_by_transaction,
+        }))
     }
 
     pub async fn get_addresses(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -499,19 +495,16 @@ impl JsonRpcHandlers {
             .await
             .map_err(|e| Self::internal_error(answer_id, e))?;
 
-        Ok(JsonRpcResponse::success(
-            answer_id,
-            GetNonFungiblesResponse {
-                non_fungibles: res
-                    .into_iter()
-                    .map(|v| NonFungibleSubstate {
-                        index: v.index,
-                        address: v.address,
-                        substate: v.substate,
-                    })
-                    .collect(),
-            },
-        ))
+        Ok(JsonRpcResponse::success(answer_id, GetNonFungiblesResponse {
+            non_fungibles: res
+                .into_iter()
+                .map(|v| NonFungibleSubstate {
+                    index: v.index,
+                    address: v.address,
+                    substate: v.substate,
+                })
+                .collect(),
+        }))
     }
 
     pub async fn submit_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
@@ -529,18 +522,15 @@ impl JsonRpcHandlers {
             let json_results =
                 encode_execute_result_into_json(&exec_result).map_err(|e| Self::internal_error(answer_id, e))?;
 
-            Ok(JsonRpcResponse::success(
-                answer_id,
-                SubmitTransactionResponse {
-                    result: IndexerTransactionFinalizedResult::Finalized {
-                        execution_result: Some(exec_result),
-                        final_decision: Decision::Commit,
-                        abort_details: None,
-                        json_results,
-                    },
-                    transaction_id,
+            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+                result: IndexerTransactionFinalizedResult::Finalized {
+                    execution_result: Some(exec_result),
+                    final_decision: Decision::Commit,
+                    abort_details: None,
+                    json_results,
                 },
-            ))
+                transaction_id,
+            }))
         } else {
             let transaction_id = self
                 .transaction_manager
@@ -548,13 +538,10 @@ impl JsonRpcHandlers {
                 .await
                 .map_err(|e| Self::internal_error(answer_id, e))?;
 
-            Ok(JsonRpcResponse::success(
-                answer_id,
-                SubmitTransactionResponse {
-                    result: IndexerTransactionFinalizedResult::Pending,
-                    transaction_id,
-                },
-            ))
+            Ok(JsonRpcResponse::success(answer_id, SubmitTransactionResponse {
+                result: IndexerTransactionFinalizedResult::Pending,
+                transaction_id,
+            }))
         }
     }
 
@@ -653,7 +640,8 @@ impl JsonRpcHandlers {
 
         let mut transaction_results = vec![];
         for transaction_id in transaction_ids {
-            let transaction_result = self.transaction_manager
+            let transaction_result = self
+                .transaction_manager
                 .get_transaction_result(transaction_id)
                 .await
                 .map_err(|e| Self::internal_error(answer_id, e))?;

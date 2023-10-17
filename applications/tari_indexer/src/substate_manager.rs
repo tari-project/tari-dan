@@ -262,7 +262,10 @@ impl SubstateManager {
         substate_address: &SubstateAddress,
         version: u32,
     ) -> Result<SubstateResult, anyhow::Error> {
-        let substate_result = self.substate_scanner.get_specific_substate_from_committee(substate_address, version).await?;
+        let substate_result = self
+            .substate_scanner
+            .get_specific_substate_from_committee(substate_address, version)
+            .await?;
         return Ok(substate_result);
     }
 
