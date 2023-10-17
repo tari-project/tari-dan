@@ -11,7 +11,7 @@ use tari_template_abi::rust::{
 
 use crate::Hash;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RistrettoPublicKeyBytes(
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
