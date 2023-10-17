@@ -16,3 +16,10 @@ bytes = "0.4"
 clap = { version = "4.3.21", features = ["derive"] }
 rayon = "1.7.0"
 rand = "0.8"
+once_cell = { version = "1.18.0", features = ["critical-section"] }
+
+[package.metadata.cargo-machete]
+ignored = [
+    # Need to force critical_section feature
+    "once_cell",
+]

@@ -578,7 +578,6 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     ) -> Result<(), Self::Error> {
         use crate::global::schema::bmt_cache;
 
-        println!("Inserting");
         diesel::insert_into(bmt_cache::table)
             .values((
                 bmt_cache::epoch.eq(epoch as i64),
@@ -589,7 +588,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
                 source,
                 operation: "insert::bmt".to_string(),
             })?;
-        println!("Insert done");
+
         Ok(())
     }
 
