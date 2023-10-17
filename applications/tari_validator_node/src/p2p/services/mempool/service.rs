@@ -332,7 +332,6 @@ where
             // Known output shards
             // This is to allow for the txreceipt output
             iter::once(&tx_shard_id)
-                .chain(transaction.outputs())
                 .chain(unverified_output_shards.iter())
                 .chain(claim_shards.iter()),
         );

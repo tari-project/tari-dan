@@ -150,6 +150,10 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     }
     // Run the http ui
     if let Some(address) = config.indexer.http_ui_address {
+        let jrpc_address = match config.indexer.jrpc_for_ui_address {
+            Some(jrpc_address) => Some(jrpc_address),
+            None => jrpc_address.map(|address| address.to_string()),
+        };
         task::spawn(run_http_ui_server(address, jrpc_address));
     }
 

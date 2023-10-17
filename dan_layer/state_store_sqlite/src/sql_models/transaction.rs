@@ -19,7 +19,6 @@ pub struct Transaction {
     pub signature: String,
     pub inputs: String,
     pub input_refs: String,
-    pub outputs: String,
     pub filled_inputs: String,
     pub resulting_outputs: Option<String>,
     pub result: Option<String>,
@@ -41,7 +40,6 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
 
         let inputs = deserialize_json(&value.inputs)?;
         let input_refs = deserialize_json(&value.input_refs)?;
-        let outputs = deserialize_json(&value.outputs)?;
         let filled_inputs = deserialize_json(&value.filled_inputs)?;
         let min_epoch = value.min_epoch.map(|epoch| Epoch(epoch as u64));
         let max_epoch = value.max_epoch.map(|epoch| Epoch(epoch as u64));
@@ -52,7 +50,6 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
             signature,
             inputs,
             input_refs,
-            outputs,
             filled_inputs,
             min_epoch,
             max_epoch,

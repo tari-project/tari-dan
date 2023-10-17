@@ -14,7 +14,7 @@ mod substate;
 pub use substate::Substate;
 
 mod transaction;
-pub use transaction::{InputsAndOutputs, Transaction};
+pub use transaction::{Transaction, TransactionInputs};
 
 mod vault;
 pub use vault::Vault;
