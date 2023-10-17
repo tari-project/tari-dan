@@ -5,11 +5,15 @@ use std::ops::DerefMut;
 
 use log::*;
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{committee::CommitteeShard, hashing::MergedValidatorNodeMerkleProof, optional::Optional};
+use tari_dan_common_types::{
+    committee::CommitteeShard,
+    hashing::MergedValidatorNodeMerkleProof,
+    optional::Optional,
+    NodeAddressable,
+};
 use tari_dan_storage::{
-    consensus_models::{Block, QuorumCertificate, QuorumDecision, Vote},
+    consensus_models::{Block, QuorumCertificate, QuorumDecision, ValidatorSignature, Vote},
     StateStore,
-    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 
@@ -117,7 +121,6 @@ where TConsensusSpec: ConsensusSpec
                 decision: message.decision,
                 sender_leaf_hash,
                 signature: message.signature,
-                merkle_proof: message.merkle_proof,
             }
             .save(tx)?;
 
@@ -140,16 +143,15 @@ where TConsensusSpec: ConsensusSpec
         if count < local_committee_shard.quorum_threshold() as usize {
             return Ok(false);
         }
-        let high_qc;
-        let block_height;
+
+        let vote_data;
         {
-            let mut tx = self.store.create_write_tx()?;
-            let Some(block) = Block::get(tx.deref_mut(), &message.block_id).optional()? else {
+            let mut tx = self.store.create_read_tx()?;
+            let Some(block) = Block::get(&mut tx, &message.block_id).optional()? else {
                 warn!(
                     target: LOG_TARGET,
                     "❌ Received {} votes for unknown block {}", count, message.block_id
                 );
-                tx.rollback()?;
                 return Ok(false);
             };
 
@@ -158,7 +160,6 @@ where TConsensusSpec: ConsensusSpec
                     .leader_strategy
                     .is_leader_for_next_block(&vn.address, &committee, block.height())
             {
-                tx.rollback()?;
                 return Err(HotStuffError::NotTheLeader {
                     details: format!(
                         "Not this leader for block {}, vote sent by {}",
@@ -167,9 +168,7 @@ where TConsensusSpec: ConsensusSpec
                 });
             }
 
-            if let Some(existing_qc_for_block) =
-                QuorumCertificate::get_by_block_id(tx.deref_mut(), block.id()).optional()?
-            {
+            if let Some(existing_qc_for_block) = QuorumCertificate::get_by_block_id(&mut tx, block.id()).optional()? {
                 debug!(
                     target: LOG_TARGET,
                     "🔥 Received vote for block {} from {} ({} of {}), but we already have a QC for this block ({})",
@@ -179,12 +178,10 @@ where TConsensusSpec: ConsensusSpec
                     local_committee_shard.quorum_threshold(),
                     existing_qc_for_block
                 );
-                // We have already created a QC for this block
-                tx.rollback()?;
                 return Ok(true);
             }
 
-            let votes = block.get_votes(tx.deref_mut())?;
+            let votes = block.get_votes(&mut tx)?;
             let Some(quorum_decision) = Self::calculate_threshold_decision(&votes, &local_committee_shard) else {
                 warn!(
                     target: LOG_TARGET,
@@ -193,7 +190,6 @@ where TConsensusSpec: ConsensusSpec
                     count,
                     local_committee_shard.quorum_threshold()
                 );
-                tx.rollback()?;
                 return Ok(false);
             };
 
@@ -201,39 +197,39 @@ where TConsensusSpec: ConsensusSpec
             // database
             if votes.iter().all(|x| x.signature.public_key != vn.address) {
                 warn!(target: LOG_TARGET, "❓️ Received enough votes but not our own vote for block {}", message.block_id);
-                tx.rollback()?;
                 return Ok(true);
             }
 
             let mut signatures = Vec::with_capacity(votes.len());
-            let mut proofs = Vec::with_capacity(votes.len());
             let mut leaf_hashes = Vec::with_capacity(votes.len());
             for vote in votes {
                 signatures.push(vote.signature);
-                proofs.push(vote.merkle_proof);
                 leaf_hashes.push(vote.sender_leaf_hash);
             }
 
             signatures.sort_by(|a, b| a.public_key.cmp(&b.public_key));
 
-            let merged_proof = MergedValidatorNodeMerkleProof::create_from_proofs(&proofs)?;
-
-            let qc = QuorumCertificate::new(
-                *block.id(),
-                block.height(),
-                block.epoch(),
+            vote_data = VoteData {
                 signatures,
-                merged_proof,
                 leaf_hashes,
                 quorum_decision,
-            );
+                block,
+            };
+        }
 
-            info!(target: LOG_TARGET, "🔥 New QC {}", qc);
+        // Generate merkle proofs for signer set
+        let merged_proof = self
+            .epoch_manager
+            .get_validator_set_merged_merkle_proof(
+                current_epoch,
+                vote_data.signatures.iter().map(|s| s.public_key().clone()).collect(),
+            )
+            .await?;
 
-            high_qc = qc.update_high_qc(&mut tx)?;
-            tx.commit()?;
-            block_height = block.height();
-        };
+        let block_height = vote_data.block.height();
+        let qc = create_qc(vote_data, merged_proof);
+        info!(target: LOG_TARGET, "🔥 New QC {}", qc);
+        let high_qc = self.store.with_write_tx(|tx| qc.update_high_qc(tx))?;
 
         self.pacemaker.update_view(block_height, high_qc.block_height).await?;
 
@@ -281,4 +277,32 @@ where TConsensusSpec: ConsensusSpec
         }
         Ok(())
     }
+}
+
+fn create_qc<TAddr: NodeAddressable>(
+    vote_data: VoteData<TAddr>,
+    merged_proof: MergedValidatorNodeMerkleProof,
+) -> QuorumCertificate<TAddr> {
+    let VoteData {
+        signatures,
+        leaf_hashes,
+        quorum_decision,
+        block,
+    } = vote_data;
+    QuorumCertificate::new(
+        *block.id(),
+        block.height(),
+        block.epoch(),
+        signatures,
+        merged_proof,
+        leaf_hashes,
+        quorum_decision,
+    )
+}
+
+struct VoteData<TAddr> {
+    signatures: Vec<ValidatorSignature<TAddr>>,
+    leaf_hashes: Vec<FixedHash>,
+    quorum_decision: QuorumDecision,
+    block: Block<TAddr>,
 }

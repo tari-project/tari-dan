@@ -5,6 +5,7 @@ Feature: Counter template
 
   @serial
   Scenario: Counter template registration and invocation
+    Given fees are disabled
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE
@@ -46,8 +47,8 @@ Feature: Counter template
     When I invoke on VAL_1 on component TX1/components/Counter the method call "value" with 1 outputs the result is "1"
 #    When I print the cucumber world
 
-    # Uncomment the following lines to stop execution for manual inspection of the nodes
-    # When I print the cucumber world
-    # When I wait 5000 seconds
+# Uncomment the following lines to stop execution for manual inspection of the nodes
+# When I print the cucumber world
+# When I wait 5000 seconds
 
 

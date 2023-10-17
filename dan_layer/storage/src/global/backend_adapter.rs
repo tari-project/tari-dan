@@ -27,7 +27,13 @@ use std::{
 
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, ShardId};
+use tari_dan_common_types::{
+    committee::Committee,
+    hashing::ValidatorNodeBalancedMerkleTree,
+    shard_bucket::ShardBucket,
+    Epoch,
+    ShardId,
+};
 
 use super::DbEpoch;
 use crate::{
@@ -130,4 +136,16 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;
+
+    fn insert_bmt(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: u64,
+        bmt: ValidatorNodeBalancedMerkleTree,
+    ) -> Result<(), Self::Error>;
+    fn get_bmt(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        epoch: Epoch,
+    ) -> Result<Option<ValidatorNodeBalancedMerkleTree>, Self::Error>;
 }

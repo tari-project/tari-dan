@@ -333,7 +333,6 @@ where TConsensusSpec: ConsensusSpec
                 block_height: vote.block_height,
                 decision: vote.decision,
                 signature: vote.signature,
-                merkle_proof: vote.merkle_proof,
             };
             last_sent_vote.set(tx)
         })?;
@@ -830,10 +829,6 @@ where TConsensusSpec: ConsensusSpec
         block: &Block<TConsensusSpec::Addr>,
         decision: QuorumDecision,
     ) -> Result<VoteMessage<TConsensusSpec::Addr>, HotStuffError> {
-        let merkle_proof = self
-            .epoch_manager
-            .get_validator_node_merkle_proof(block.epoch())
-            .await?;
         let vn = self
             .epoch_manager
             .get_validator_node(block.epoch(), &self.validator_addr)
@@ -848,7 +843,6 @@ where TConsensusSpec: ConsensusSpec
             block_height: block.height(),
             decision,
             signature,
-            merkle_proof,
         })
     }
 

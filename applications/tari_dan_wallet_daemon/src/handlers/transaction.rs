@@ -5,7 +5,7 @@ use std::{collections::HashSet, convert::TryFrom, time::Duration};
 use anyhow::anyhow;
 use futures::{future, future::Either};
 use log::*;
-use tari_dan_common_types::optional::Optional;
+use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     network::{TransactionFinalizedResult, TransactionQueryResult},
@@ -43,7 +43,7 @@ pub async fn handle_submit_instruction(
     token: Option<String>,
     req: CallInstructionRequest,
 ) -> Result<TransactionSubmitResponse, anyhow::Error> {
-    let mut instructions = vec![req.instruction];
+    let mut instructions = req.instructions;
     if let Some(dump_account) = req.dump_outputs_into {
         instructions.push(Instruction::PutLastInstructionOutputOnWorkspace {
             key: b"bucket".to_vec(),
@@ -83,6 +83,8 @@ pub async fn handle_submit_instruction(
         new_non_fungible_index_outputs: req.new_non_fungible_index_outputs,
         is_dry_run: req.is_dry_run,
         proof_ids: vec![],
+        min_epoch: req.min_epoch.map(Epoch),
+        max_epoch: req.max_epoch.map(Epoch),
     };
     handle_submit(context, token, request).await
 }
@@ -121,6 +123,8 @@ pub async fn handle_submit(
     let transaction = Transaction::builder()
         .with_instructions(req.instructions)
         .with_fee_instructions(req.fee_instructions)
+        .with_min_epoch(req.min_epoch)
+        .with_max_epoch(req.max_epoch)
         .sign(&key.key)
         .build();
 

@@ -1,0 +1,147 @@
+//  Copyright 2023 The Tari Project
+//  SPDX-License-Identifier: BSD-3-Clause
+
+use clap::Parser;
+use clap::Subcommand;
+use multiaddr::Multiaddr;
+use crate::daemon_client::DaemonClient;
+use tari_engine_types::parse_arg;
+
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+#[clap(propagate_version = true)]
+pub(crate) struct Cli {
+    #[clap(long, short = 'e', alias = "endpoint", env = "JRPC_ENDPOINT")]
+    pub daemon_jrpc_endpoint: Option<String>,
+    #[clap(long, short='t', alias= "token")]
+    pub auth_token: Option<String>,
+    #[clap(long, alias="template_address", default_value ="{{template_address}}")]
+    pub template: String,
+    #[clap(long, short='d')]
+    pub dump_buckets: bool,
+    #[clap(long)]
+    pub dry_run: bool,
+    #[clap(subcommand)]
+    pub command: Command,
+    #[clap(long, short='f', default_value="100")]
+    pub fees: u64
+}
+
+impl Cli {
+    pub fn init() -> Self {
+        Self::parse()
+    }
+}
+
+#[derive(Debug, Subcommand, Clone)]
+pub(crate) enum Command {
+    Login(login::Command),
+    {% for c in  commands %}
+    {{ c.title }}({{ c.name }}::Command),
+    {% endfor %}
+}
+
+
+pub mod login {
+  use clap::Args;
+  use crate::daemon_client::DaemonClient;
+    use std::fs;
+
+    #[derive(Debug, Args, Clone)]
+    pub struct Command {
+
+    }
+
+    impl Command {
+    pub async fn run(self, mut client: DaemonClient) {
+       let token = client.login().await;
+       fs::write("token.data", token).unwrap();
+    }
+    }
+}
+
+{% for c in  commands %}
+pub(crate) mod {{ c.name }} {
+   use clap::Args;
+   use crate::daemon_client::DaemonClient;
+   use serde_json::json;
+    use tari_engine_types::parse_arg;
+    use tari_engine_types::instruction::Instruction;
+    use tari_utilities::hex::Hex;
+     use tari_utilities::hex::from_hex;
+use tari_engine_types::TemplateAddress;
+use tari_template_lib::prelude::ComponentAddress;
+use tari_transaction::SubstateRequirement;
+
+
+   #[derive(Debug, Args, Clone)]
+   pub struct Command {
+      {%  for  arg in c.args %}
+      {% if arg.name != "self" %}
+       pub {{ arg.name}} : String,
+       {% else %}
+       pub component_address: String,
+       {% endif %}
+      {% endfor %}
+   }
+
+   impl Command {
+
+    {% if c.is_method %}
+
+ pub async fn run(self, mut client: DaemonClient, dump_buckets: bool, is_dry_run: bool, fees: u64) {
+
+       // let template_address= ;
+        let method = "{{c.name}}".to_string();
+
+
+
+                client.submit_instruction(Instruction::CallMethod {
+                    component_address: ComponentAddress::from_hex(&self.component_address).unwrap(),
+                    method,
+                    args: vec![
+                        {%  for  arg in c.args %}
+      {% if arg.name != "self" %}
+       parse_arg(&self.{{ arg.name}}).unwrap(),
+      {% endif %}
+      {% endfor %}
+                    ]
+               }, dump_buckets, is_dry_run, fees, vec![format!("component_{}", self.component_address).parse().unwrap()]
+
+            ).await;
+            println!("done");
+
+       }
+
+
+    {% else %}
+       pub async fn run(self, mut client: DaemonClient, template_address: TemplateAddress, fees: u64) {
+
+       // let template_address= ;
+        let  function = "{{c.name}}".to_string();
+
+
+
+                client.submit_instruction(Instruction::CallFunction {
+                    template_address,
+                    function,
+                    args: vec![
+                        {%  for  arg in c.args %}
+      {% if arg.name != "self" %}
+       parse_arg(&self.{{ arg.name}}).unwrap(),
+      {% endif %}
+      {% endfor %}
+                    ]
+               }, false, false, fees, vec![]
+
+            ).await;
+            println!("done");
+
+       }
+
+       {% endif %}
+
+   }
+}
+{% endfor %}
+

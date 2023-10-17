@@ -81,7 +81,7 @@ impl AuthSubcommand {
                 } else {
                     let resp = client
                         .auth_request(AuthLoginRequest {
-                            permissions: args.permissions,
+                            permissions: args.permissions.0.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
                             duration: args.validity_in_seconds.map(Duration::from_secs),
                         })
                         .await?;

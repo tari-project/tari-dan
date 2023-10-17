@@ -43,7 +43,7 @@ function AddAccount({
     signingKeyIndex: '',
     fee: '',
   });
-  const { mutate: mutateAddAccount } = useAccountsCreate(
+  const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
     undefined,
     accountFormState.fee ? +accountFormState.fee : undefined,
@@ -55,8 +55,8 @@ function AddAccount({
     setOpen(false);
   };
 
-  const onSubmitAddAccount = () => {
-    mutateAddAccount();
+  const onSubmitAddAccount = async () => {
+    await mutateAddAccount();
     setAccountFormState({ accountName: '', signingKeyIndex: '', fee: '' });
     setOpen(false);
   };

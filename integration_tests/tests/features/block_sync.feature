@@ -5,8 +5,6 @@ Feature: Block Sync
 
   @serial
   Scenario: New validator node registers and syncs
-    Given fees are enabled
-
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
     Given a wallet WALLET connected to base node BASE

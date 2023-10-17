@@ -28,7 +28,7 @@ use std::{
 use async_trait::async_trait;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
-    hashing::ValidatorNodeMerkleProof,
+    hashing::MergedValidatorNodeMerkleProof,
     shard_bucket::ShardBucket,
     Epoch,
     NodeAddressable,
@@ -38,54 +38,6 @@ use tari_dan_storage::global::models::ValidatorNode;
 use tokio::sync::broadcast;
 
 use crate::{EpochManagerError, EpochManagerEvent};
-
-// // TODO: Rename to reflect that it's a read only interface (e.g. EpochReader, EpochQuery)
-// #[async_trait]
-// pub trait EpochManager<TAddr: NodeAddressable>: Clone {
-//     type Error;
-//
-//     async fn current_epoch(&self) -> Result<Epoch, Self::Error>;
-//     async fn current_block_height(&self) -> Result<u64, Self::Error>;
-//     async fn get_validator_node(&self, epoch: Epoch, addr: TAddr) -> Result<ValidatorNode<TAddr>, Self::Error>;
-//     async fn is_epoch_valid(&self, epoch: Epoch) -> Result<bool, Self::Error>;
-//     async fn get_committees(
-//         &self,
-//         epoch: Epoch,
-//         shards: &[ShardId],
-//     ) -> Result<Vec<ShardCommitteeAllocation<TAddr>>, Self::Error>;
-//
-//     async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, Self::Error>;
-//     async fn get_committee_for_shard_range(
-//         &self,
-//         epoch: Epoch,
-//         shard_range: RangeInclusive<ShardId>,
-//     ) -> Result<Committee<TAddr>, Self::Error>;
-//     async fn is_validator_in_committee_for_current_epoch(
-//         &self,
-//         shard: ShardId,
-//         identity: TAddr,
-//     ) -> Result<bool, Self::Error>;
-//     /// Filters out from the available_shards, returning the ShardIds for committees for each available_shard that
-//     /// `for_addr` is part of.
-//     async fn filter_to_local_shards(
-//         &self,
-//         epoch: Epoch,
-//         for_addr: &TAddr,
-//         available_shards: &[ShardId],
-//     ) -> Result<Vec<ShardId>, Self::Error>;
-//
-//     async fn get_validator_nodes_per_epoch(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<TAddr>>, Self::Error>;
-//     async fn get_validator_node_balanced_merkle_tree(
-//         &self,
-//         epoch: Epoch,
-//     ) -> Result<ValidatorNodeBalancedMerkleTree, Self::Error>;
-//     async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, Self::Error>;
-//
-//     async fn get_local_shard_range(&self, epoch: Epoch, addr: TAddr) -> Result<RangeInclusive<ShardId>, Self::Error>;
-//
-//     // TODO: Should be part of VN state machine
-//     async fn notify_scanning_complete(&self) -> Result<(), Self::Error>;
-// }
 
 #[async_trait]
 pub trait EpochManagerReader: Send + Sync {
@@ -119,10 +71,11 @@ pub trait EpochManagerReader: Send + Sync {
         Ok(results)
     }
 
-    async fn get_validator_node_merkle_proof(
+    async fn get_validator_set_merged_merkle_proof(
         &self,
         epoch: Epoch,
-    ) -> Result<ValidatorNodeMerkleProof, EpochManagerError>;
+        validators: Vec<Self::Addr>,
+    ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError>;
 
     async fn get_our_validator_node(&self, epoch: Epoch) -> Result<ValidatorNode<Self::Addr>, EpochManagerError>;
     async fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError>;
