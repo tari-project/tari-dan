@@ -19,7 +19,7 @@ Feature: Committee scenarios
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 15000 T
+    When wallet WALLET has at least 20000 T
 
     # VN registration
     When validator node VAL_1 sends a registration transaction
@@ -28,12 +28,12 @@ Feature: Committee scenarios
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
     When miner MINER mines 15 new blocks
+    Then VAL_1 has scanned to height 18 within 10 seconds
+    Then VAL_2 has scanned to height 18 within 10 seconds
     Then the validator node VAL_1 is listed as registered
     Then the validator node VAL_2 is listed as registered
     Then the template "counter" is listed as registered by the validator node VAL_1
     Then the template "counter" is listed as registered by the validator node VAL_2
-    Then VAL_1 has scanned to height 18 within 10 seconds
-    Then VAL_2 has scanned to height 18 within 10 seconds
 
     # A file-base CLI account must be created to sign future calls
     When I use an account key named K1

@@ -20,8 +20,6 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::time::Duration;
-
 use minotari_app_grpc::{
     authentication::ClientAuthenticationInterceptor,
     tari_rpc::{
@@ -68,11 +66,7 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
 
     for _ in 0..num_blocks {
         mine_block(&mut base_client, &mut wallet_client).await;
-        tokio::time::sleep(Duration::from_millis(100)).await;
     }
-
-    // Give some time for the base node and wallet to sync the new blocks
-    tokio::time::sleep(Duration::from_secs(5)).await;
 }
 
 async fn create_base_node_client(world: &TariWorld, miner_name: &String) -> BaseNodeClient {
