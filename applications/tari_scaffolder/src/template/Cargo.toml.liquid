@@ -1,0 +1,26 @@
+[package]
+name = "{{template_name}}"
+version = "0.0.1"
+edition = "2021"
+
+
+[dependencies]
+{% if crates_root == "[crates]" %}
+tari_wallet_daemon_client= "*"
+tari_engine_types= "*"
+tari_template_lib= "*"
+tari_transaction = "*"
+{% else %}
+tari_wallet_daemon_client={path="{{crates_root}}/clients/wallet_daemon_client"}
+tari_engine_types={path="{{crates_root}}/dan_layer/engine_types"}
+tari_template_lib={path="{{crates_root}}/dan_layer/template_lib"}
+tari_transaction ={path="{{crates_root}}/dan_layer/transaction"}
+{% endif %}
+tari_utilities ="*"
+
+
+clap = { version = "4", features = ["derive", "env"] }
+multiaddr = "0.14.0"
+reqwest={ version="*", features=["json"]}
+serde_json="*"
+tokio ={version="1", features = ["full"] }

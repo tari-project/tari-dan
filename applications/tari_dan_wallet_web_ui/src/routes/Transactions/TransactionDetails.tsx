@@ -156,7 +156,7 @@ export default function TransactionDetails() {
                     <TableCell>Total Fees</TableCell>
                     <DataTableCell>
                       {data.result &&
-                        data.result.cost_breakdown.total_fees_charged}
+                        data.result.cost_breakdown && data.result.cost_breakdown.total_fees_charged}
                     </DataTableCell>
                   </TableRow>
                   <TableRow>

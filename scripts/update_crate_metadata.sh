@@ -13,6 +13,7 @@ function update_versions {
    applications/tari_dan_wallet_cli
    applications/tari_dan_wallet_daemon
    applications/tari_indexer
+   applications/tari_scaffolder
    applications/tari_validator_node
    applications/tari_validator_node_cli
    clients/tari_indexer_client

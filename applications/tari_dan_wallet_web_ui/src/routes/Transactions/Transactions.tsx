@@ -94,7 +94,7 @@ export default function Transactions() {
                         </DataTableCell>
                         <DataTableCell>
                           {t[1] !== null
-                            ? t[1].cost_breakdown.total_fees_charged
+                            ? t[1].cost_breakdown?.total_fees_charged
                             : 0}
                         </DataTableCell>
                         <DataTableCell>

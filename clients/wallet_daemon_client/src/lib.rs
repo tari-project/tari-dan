@@ -49,6 +49,7 @@ use types::{
     AuthLoginDenyResponse,
     AuthLoginRequest,
     AuthLoginResponse,
+    CallInstructionRequest,
     ClaimBurnRequest,
     ClaimBurnResponse,
     GetAccountNftRequest,
@@ -241,6 +242,14 @@ impl WalletDaemonClient {
         request: T,
     ) -> Result<TransactionSubmitResponse, WalletDaemonClientError> {
         self.send_request("transactions.submit", request.borrow()).await
+    }
+
+    pub async fn submit_instruction<T: Borrow<CallInstructionRequest>>(
+        &mut self,
+        request: T,
+    ) -> Result<TransactionSubmitResponse, WalletDaemonClientError> {
+        self.send_request("transactions.submit_instruction", request.borrow())
+            .await
     }
 
     pub async fn create_account<T: Borrow<AccountsCreateRequest>>(

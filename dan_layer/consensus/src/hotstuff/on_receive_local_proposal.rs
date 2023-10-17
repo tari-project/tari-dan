@@ -53,7 +53,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
             store: store.clone(),
             epoch_manager: epoch_manager.clone(),
             leader_strategy: leader_strategy.clone(),
-            pacemaker: pacemaker.clone(),
+            pacemaker,
             on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock::new(
                 validator_addr,
                 store,
