@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
@@ -32,6 +34,15 @@ impl QuorumDecision {
             0 => Some(QuorumDecision::Accept),
             1 => Some(QuorumDecision::Reject),
             _ => None,
+        }
+    }
+}
+
+impl Display for QuorumDecision {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            QuorumDecision::Accept => write!(f, "Accept"),
+            QuorumDecision::Reject => write!(f, "Reject"),
         }
     }
 }

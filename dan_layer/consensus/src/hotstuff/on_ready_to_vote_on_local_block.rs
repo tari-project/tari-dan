@@ -85,7 +85,7 @@ where TConsensusSpec: ConsensusSpec
     pub async fn handle(&self, valid_block: ValidBlock<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
-            "🔥 LOCAL PROPOSAL {} READY",
+            "🔥 LOCAL PROPOSAL READY: {}",
             valid_block,
         );
 

@@ -72,10 +72,10 @@ impl ValidatorBuilder {
     }
 
     pub fn spawn(&self, shutdown_signal: ShutdownSignal) -> (ValidatorChannels, Validator) {
-        let (tx_broadcast, rx_broadcast) = mpsc::channel(10);
+        let (tx_broadcast, rx_broadcast) = mpsc::channel(100);
         let (tx_new_transactions, rx_new_transactions) = mpsc::channel(100);
-        let (tx_hs_message, rx_hs_message) = mpsc::channel(10);
-        let (tx_leader, rx_leader) = mpsc::channel(10);
+        let (tx_hs_message, rx_hs_message) = mpsc::channel(100);
+        let (tx_leader, rx_leader) = mpsc::channel(100);
         let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
