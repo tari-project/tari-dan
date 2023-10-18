@@ -107,16 +107,17 @@ function Accounts() {
     isError: isErrorAccountsList,
     error: errorAccountsList,
   } = useAccountsList(0, 10);
-  const { mutate } = useAccountsCreateFreeTestCoins();
+  const { mutateAsync: mutateCreateFeeTestCoins } =
+    useAccountsCreateFreeTestCoins();
 
-  const { mutate: mutateAddAccount } = useAccountsCreate(
+  const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
     undefined,
     undefined,
     false
   );
 
-  const { mutate: mutateClaimBurn } = useAccountsClaimBurn(
+  const { mutateAsync: mutateClaimBurn } = useAccountsClaimBurn(
     claimBurnFormState.account,
     claimBurnFormState.claimProof
       ? JSON.parse(claimBurnFormState.claimProof)
@@ -166,8 +167,8 @@ function Accounts() {
     });
   };
 
-  const onClaimFreeCoins = () => {
-    mutate({
+  const onClaimFreeCoins = async () => {
+    await mutateCreateFeeTestCoins({
       accountName: 'TestAccount',
       amount: 100000,
       fee: 1000,
@@ -213,7 +214,7 @@ function Accounts() {
             startIcon={<AddIcon />}
             onClick={() => onClaimFreeCoins()}
           >
-            Claim free testnet coins
+            Claim Free Testnet Coins
           </Button>
         </div>
         {showAccountDialog && (

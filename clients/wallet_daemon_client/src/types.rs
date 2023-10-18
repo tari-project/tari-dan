@@ -27,7 +27,7 @@ use serde_json::Value;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_wallet_sdk::{
-    apis::jwt::{Claims, JrpcPermissions},
+    apis::jwt::Claims,
     models::{Account, ConfidentialProofId, TransactionStatus},
 };
 use tari_engine_types::{
@@ -53,7 +53,7 @@ use crate::{
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct CallInstructionRequest {
-    pub instruction: Instruction,
+    pub instructions: Vec<Instruction>,
     #[serde(deserialize_with = "string_or_struct")]
     pub fee_account: ComponentAddressOrName,
     #[serde(default, deserialize_with = "opt_string_or_struct")]
@@ -394,7 +394,7 @@ pub struct ConfidentialTransferRequest {
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
     pub resource_address: ResourceAddress,
-    pub validator_public_key: PublicKey,
+    pub destination_public_key: PublicKey,
     pub fee: Option<Amount>,
 }
 
@@ -477,7 +477,7 @@ pub struct WebRtcStartResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AuthLoginRequest {
-    pub permissions: JrpcPermissions,
+    pub permissions: Vec<String>,
     pub duration: Option<Duration>,
 }
 

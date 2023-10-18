@@ -83,6 +83,8 @@ pub struct IndexerConfig {
     pub graphql_address: Option<SocketAddr>,
     /// The address of the HTTP UI
     pub http_ui_address: Option<SocketAddr>,
+    /// The jrpc address where the UI should connect
+    pub jrpc_for_ui_address: Option<String>,
     /// Substate addresses to keep watching
     pub address_watchlist: Vec<SubstateAddress>,
     /// How often do we want to scan the second layer for new versions
@@ -129,6 +131,7 @@ impl Default for IndexerConfig {
             json_rpc_address: Some("127.0.0.1:18300".parse().unwrap()),
             graphql_address: Some("127.0.0.1:18301".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:15000".parse().unwrap()),
+            jrpc_for_ui_address: None,
             address_watchlist: vec![],
             dan_layer_scanning_internal: Duration::from_secs(10),
             templates: TemplateConfig::default(),

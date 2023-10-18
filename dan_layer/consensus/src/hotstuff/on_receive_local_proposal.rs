@@ -53,7 +53,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
             store: store.clone(),
             epoch_manager: epoch_manager.clone(),
             leader_strategy: leader_strategy.clone(),
-            pacemaker: pacemaker.clone(),
+            pacemaker,
             on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock::new(
                 validator_addr,
                 store,
@@ -73,7 +73,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
 
         debug!(
             target: LOG_TARGET,
-            "🔥 LOCAL PROPOSAL READY: block {} from {}",
+            "🔥 LOCAL PROPOSAL: block {} from {}",
             block,
             block.proposed_by()
         );
@@ -129,12 +129,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         self.store.with_read_tx(|tx| {
             match self.validate_local_proposed_block(tx, block, &local_committee) {
                 Ok(validated) => Ok(Some(validated)),
-                // Block sync
-                // Err(
-                //     err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
-                //         ..
-                //     }),
-                // ) => Err(err),
                 // Validation errors should not cause a FAILURE state transition
                 Err(HotStuffError::ProposalValidationError(err)) => {
                     warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);

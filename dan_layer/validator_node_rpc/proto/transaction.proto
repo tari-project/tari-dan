@@ -24,7 +24,6 @@ message Transaction {
   tari.dan.common.SignatureAndPublicKey signature = 3;
   repeated bytes inputs = 4;
   repeated bytes input_refs = 5;
-  repeated bytes outputs = 6;
   repeated bytes filled_inputs = 7;
   tari.dan.common.Epoch min_epoch = 8;
   tari.dan.common.Epoch max_epoch = 9;

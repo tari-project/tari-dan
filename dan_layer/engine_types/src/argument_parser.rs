@@ -33,7 +33,7 @@ where D: Deserializer<'de> {
     }
 }
 
-fn parse_arg(s: &str) -> Result<Arg, ArgParseError> {
+pub fn parse_arg(s: &str) -> Result<Arg, ArgParseError> {
     let ty = try_parse_special_string_arg(s)?;
     Ok(ty.into())
 }

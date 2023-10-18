@@ -1,13 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-//   Copyright 2023 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Clause
-
-// (New, true) ----(cmd:Prepare) ---> (Prepared, true) -----cmd:LocalPrepared ---> (LocalPrepared, false)
-// ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
-// Complete
-
 use std::{
     collections::{BTreeMap, HashSet, VecDeque},
     ops::DerefMut,
@@ -89,7 +82,7 @@ where TConsensusSpec: ConsensusSpec
                 },
 
                 Some((from, msg)) = self.rx_hotstuff_message.recv() => {
-                    if let Err(err) = self.handle_hotstuff_message(from, msg).await {
+                    if let Err(err) = self.handle_hotstuff_message(current_height, from, msg).await {
                         error!(target: LOG_TARGET, "Error handling message: {}", err);
                     }
                 },
@@ -121,12 +114,13 @@ where TConsensusSpec: ConsensusSpec
 
     pub async fn handle_hotstuff_message(
         &self,
+        current_height: NodeHeight,
         from: TConsensusSpec::Addr,
         msg: HotstuffMessage<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         match msg {
             HotstuffMessage::Proposal(msg) => {
-                self.process_proposal(msg).await?;
+                self.process_proposal(current_height, msg).await?;
             },
             msg => self
                 .tx_msg_ready
@@ -138,17 +132,21 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn process_proposal(&self, proposal: ProposalMessage<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+    async fn process_proposal(
+        &self,
+        current_height: NodeHeight,
+        proposal: ProposalMessage<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = proposal;
 
         info!(
             target: LOG_TARGET,
-            "📜 new unvalidated PROPOSAL message {} from {}",
+            "📜 new unvalidated PROPOSAL message {} from {} (current height = {})",
             block,
-            block.proposed_by()
+            block.proposed_by(),
+            current_height,
         );
 
-        let current_height = self.pacemaker.current_height();
         if block.height() < current_height {
             debug!(
                 target: LOG_TARGET,
@@ -208,6 +206,11 @@ where TConsensusSpec: ConsensusSpec
             .with_write_tx(|tx| self.check_for_missing_transactions(tx, &block))?;
 
         if !missing_tx_ids.is_empty() || !awaiting_execution.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "🔥 Block {} has {} missing transactions and {} awaiting execution", block, missing_tx_ids.len(), awaiting_execution.len(),
+            );
+
             let block_id = *block.id();
             let epoch = block.epoch();
             let block_proposed_by = block.proposed_by().clone();
@@ -351,10 +354,10 @@ impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
                 msg = self.rx_msg_ready.recv() => return Ok(msg),
                 _ = timeout.as_mut() => {
                     // Check if we have any proposals
-                    for  queue in self.buffer.values() {
+                    for queue in self.buffer.values() {
                         for (from, msg) in queue {
                            if let Some(proposal) = msg.proposal() {
-                                if proposal.block.justify().block_height()  > current_height {
+                                if proposal.block.justify().block_height() > current_height {
                                      return Err(NeedsSync {
                                         from: from.clone(),
                                         local_height: current_height,

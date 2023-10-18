@@ -63,7 +63,7 @@ impl<TAddr> Display for HotstuffMessage<TAddr> {
             HotstuffMessage::NewView(msg) => write!(f, "NewView({})", msg.new_height),
             HotstuffMessage::Proposal(msg) => write!(f, "Proposal({})", msg.block.height()),
             HotstuffMessage::ForeignProposal(msg) => write!(f, "ForeignProposal({})", msg.block.height()),
-            HotstuffMessage::Vote(msg) => write!(f, "Vote({})", msg.block_id),
+            HotstuffMessage::Vote(msg) => write!(f, "Vote({}, {}, {})", msg.block_height, msg.block_id, msg.decision),
             HotstuffMessage::RequestMissingTransactions(msg) => {
                 write!(f, "RequestMissingTransactions({})", msg.transactions.len())
             },

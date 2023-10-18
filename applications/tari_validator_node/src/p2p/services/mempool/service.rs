@@ -90,6 +90,7 @@ where
     TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
     TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         new_transactions: mpsc::Receiver<(CommsPublicKey, NewTransactionMessage)>,
         mempool_requests: mpsc::Receiver<MempoolRequest>,
@@ -331,7 +332,6 @@ where
             // Known output shards
             // This is to allow for the txreceipt output
             iter::once(&tx_shard_id)
-                .chain(transaction.outputs())
                 .chain(unverified_output_shards.iter())
                 .chain(claim_shards.iter()),
         );

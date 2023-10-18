@@ -125,9 +125,9 @@ export default function TransactionDetails() {
                 <TableRow>
                   <TableCell>Reason</TableCell>
                   <DataTableCell>
-                    {`${Object.keys(data.transaction_failure)[0]}: ${
+                    {data?.transaction_failure?`${Object.keys(data.transaction_failure)[0]}: ${
                       Object.values(data.transaction_failure)[0]
-                    }`}
+                    }`:"No reason"}
                   </DataTableCell>
                 </TableRow>
               </TableBody>
@@ -156,7 +156,7 @@ export default function TransactionDetails() {
                     <TableCell>Total Fees</TableCell>
                     <DataTableCell>
                       {data.result &&
-                        data.result.cost_breakdown.total_fees_charged}
+                        data.result.cost_breakdown && data.result.cost_breakdown.total_fees_charged}
                     </DataTableCell>
                   </TableRow>
                   <TableRow>

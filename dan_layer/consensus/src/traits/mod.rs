@@ -7,7 +7,6 @@ mod state_manager;
 mod sync;
 
 pub use leader_strategy::*;
-use serde::Serialize;
 pub use state_manager::*;
 pub use sync::*;
 use tari_dan_common_types::NodeAddressable;
@@ -17,7 +16,7 @@ use tari_epoch_manager::EpochManagerReader;
 pub use crate::traits::signing_service::*;
 
 pub trait ConsensusSpec: Send + Sync + Clone + 'static {
-    type Addr: NodeAddressable + Serialize;
+    type Addr: NodeAddressable + 'static;
 
     type StateStore: StateStore<Addr = Self::Addr> + Send + Sync + Clone + 'static;
     type EpochManager: EpochManagerReader<Addr = Self::Addr> + Send + Sync + Clone + 'static;

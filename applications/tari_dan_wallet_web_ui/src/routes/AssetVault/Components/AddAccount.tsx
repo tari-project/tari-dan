@@ -43,7 +43,7 @@ function AddAccount({
   const [accountFormState, setAccountFormState] = useState({
     accountName: '',
   });
-  const { mutate: mutateAddAccount } = useAccountsCreate(
+  const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
     undefined,
     undefined,

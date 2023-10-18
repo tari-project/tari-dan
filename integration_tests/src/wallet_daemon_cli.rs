@@ -795,7 +795,7 @@ pub async fn confidential_transfer(
     let request = ConfidentialTransferRequest {
         account,
         amount,
-        validator_public_key: destination_public_key,
+        destination_public_key,
         fee,
         resource_address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     };

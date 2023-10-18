@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
+    fmt::{Display, Formatter},
     str::FromStr,
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
@@ -75,6 +76,26 @@ impl FromStr for JrpcPermission {
     }
 }
 
+impl Display for JrpcPermission {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            JrpcPermission::AccountInfo => f.write_str("AccountInfo"),
+            JrpcPermission::NftGetOwnershipProof(Some(a)) => f.write_str(&format!("NftGetOwnershipProof_{}", a)),
+            JrpcPermission::NftGetOwnershipProof(None) => f.write_str("NftGetOwnershipProof"),
+            JrpcPermission::AccountBalance(a) => f.write_str(&format!("AccountBalance_{}", a)),
+            JrpcPermission::AccountList(None) => f.write_str("AccountList"),
+            JrpcPermission::AccountList(Some(a)) => f.write_str(&format!("AccountList_{}", a)),
+            JrpcPermission::KeyList => f.write_str("KeyList"),
+            JrpcPermission::TransactionGet => f.write_str("TransactionGet"),
+            JrpcPermission::TransactionSend(None) => f.write_str("TransactionSend"),
+            JrpcPermission::TransactionSend(Some(s)) => f.write_str(&format!("TransactionSend_{}", s)),
+            JrpcPermission::GetNft(_, _) => f.write_str("GetNft"),
+            JrpcPermission::StartWebrtc => f.write_str("StartWebrtc"),
+            JrpcPermission::Admin => f.write_str("Admin"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JrpcPermissions(pub Vec<JrpcPermission>);
 
@@ -101,6 +122,18 @@ impl JrpcPermissions {
                 required: permission.clone(),
             })
         }
+    }
+}
+
+impl TryFrom<&[String]> for JrpcPermissions {
+    type Error = InvalidJrpcPermissionsFormat;
+
+    fn try_from(value: &[String]) -> Result<Self, Self::Error> {
+        let mut permissions = Vec::new();
+        for permission in value {
+            permissions.push(JrpcPermission::from_str(permission)?);
+        }
+        Ok(JrpcPermissions(permissions))
     }
 }
 
