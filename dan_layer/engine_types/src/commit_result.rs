@@ -62,7 +62,7 @@ impl ExecuteResult {
     }
 
     pub fn expect_transaction_failure(&self) -> &RejectReason {
-        if let Some(reason) = self.finalize.reject() {
+        if let Some(reason) = self.finalize.full_reject() {
             reason
         } else {
             panic!("Transaction succeeded but it was expected to fail");
@@ -128,6 +128,14 @@ impl FinalizeResult {
         match self.result {
             TransactionResult::Accept(_) => None,
             TransactionResult::AcceptFeeRejectRest(_, _) => None,
+            TransactionResult::Reject(ref reason) => Some(reason),
+        }
+    }
+
+    pub fn full_reject(&self) -> Option<&RejectReason> {
+        match self.result {
+            TransactionResult::Accept(_) => None,
+            TransactionResult::AcceptFeeRejectRest(_, ref reason) => Some(reason),
             TransactionResult::Reject(ref reason) => Some(reason),
         }
     }
