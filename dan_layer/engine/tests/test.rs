@@ -200,10 +200,10 @@ fn test_engine_errors() {
         )
         .unwrap();
 
-    let RejectReason::ExecutionFailure(reason) = result.transaction_failure.as_ref().unwrap() else {
+    let RejectReason::ExecutionFailure(reason) = result.finalize.result.reject().unwrap() else {
         panic!(
             "Unexpected transaction reject reason: {}",
-            result.transaction_failure.unwrap()
+            result.finalize.result.reject().unwrap()
         );
     };
 
@@ -285,7 +285,7 @@ mod errors {
                 vec![],
             )
             .unwrap();
-        match result.transaction_failure.unwrap() {
+        match result.finalize.result.reject().unwrap() {
             RejectReason::ExecutionFailure(message) => {
                 assert_eq!(
                     message,
@@ -312,7 +312,7 @@ mod errors {
                 vec![],
             )
             .unwrap();
-        match result.transaction_failure.unwrap() {
+        match result.finalize.result.reject().unwrap() {
             RejectReason::ExecutionFailure(message) => {
                 assert!(message.starts_with(
                     "Panic! failed to decode argument at position 0 for function 'please_pass_invalid_args':"

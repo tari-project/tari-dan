@@ -496,7 +496,7 @@ impl TemplateTest {
         // It is convenient to commit the state back to the staged state store in tests.
         self.commit_diff(diff);
 
-        if let Some(reason) = result.transaction_failure {
+        if let Some(reason) = result.finalize.reject() {
             return Err(anyhow!("Transaction failed: {}", reason));
         }
 

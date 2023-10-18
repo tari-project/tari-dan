@@ -142,13 +142,11 @@ where
                         transaction.transaction.id(),
                         transaction.status,
                     );
-
                     match transaction.finalize {
                         Some(finalize) => {
                             notify.notify(TransactionFinalizedEvent {
                                 transaction_id: *transaction.transaction.id(),
                                 finalize,
-                                transaction_failure: transaction.transaction_failure,
                                 final_fee: transaction.final_fee.unwrap_or_default(),
                                 status: transaction.status,
                                 json_result: transaction.json_result,
@@ -158,7 +156,6 @@ where
                             transaction_id: *transaction.transaction.id(),
                             status: transaction.status,
                             finalize: transaction.finalize,
-                            transaction_failure: transaction.transaction_failure,
                             final_fee: transaction.final_fee,
                             is_dry_run: transaction.is_dry_run,
                         }),

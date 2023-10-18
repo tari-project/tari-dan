@@ -466,7 +466,7 @@ pub async fn submit_manifest_with_signing_keys(
         timeout_secs: Some(120),
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
-    if let Some(reason) = wait_resp.transaction_failure {
+    if let Some(reason) = wait_resp.result.clone().and_then(|result| result.reject().cloned()) {
         panic!("Transaction failed: {}", reason);
     }
 
@@ -540,8 +540,8 @@ pub async fn submit_manifest(
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
 
-    if let Some(reason) = wait_resp.transaction_failure {
-        panic!("Transaction failed: {}", reason);
+    if let Some(reason) = wait_resp.result.clone().and_then(|finalize| finalize.reject().cloned()) {
+        panic!("Transaction failed: {:?}", reason);
     }
     add_substate_addresses(
         world,
@@ -637,7 +637,7 @@ pub async fn create_component(
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
 
-    if let Some(reason) = wait_resp.transaction_failure {
+    if let Some(reason) = wait_resp.result.clone().and_then(|finalize| finalize.reject().cloned()) {
         panic!("Transaction failed: {}", reason);
     }
     add_substate_addresses(

@@ -31,7 +31,8 @@ pub async fn wait_for_result(
                 return Err(anyhow::anyhow!(
                     "Transaction invalid: {} [status: {}]",
                     event
-                        .transaction_failure
+                        .finalize
+                        .and_then(|finalize| finalize.reject().cloned())
                         .map(|f| f.to_string())
                         .unwrap_or_else(|| "Unknown".to_string()),
                     event.status,

@@ -38,31 +38,12 @@ use tari_template_lib::{
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::{
     types::{
-        AccountGetDefaultRequest,
-        AccountGetRequest,
-        AccountGetResponse,
-        AccountInfo,
-        AccountSetDefaultRequest,
-        AccountSetDefaultResponse,
-        AccountsCreateFreeTestCoinsRequest,
-        AccountsCreateFreeTestCoinsResponse,
-        AccountsCreateRequest,
-        AccountsCreateResponse,
-        AccountsGetBalancesRequest,
-        AccountsGetBalancesResponse,
-        AccountsInvokeRequest,
-        AccountsInvokeResponse,
-        AccountsListRequest,
-        AccountsListResponse,
-        BalanceEntry,
-        ClaimBurnRequest,
-        ClaimBurnResponse,
-        ConfidentialTransferRequest,
-        ConfidentialTransferResponse,
-        RevealFundsRequest,
-        RevealFundsResponse,
-        TransferRequest,
-        TransferResponse,
+        AccountGetDefaultRequest, AccountGetRequest, AccountGetResponse, AccountInfo, AccountSetDefaultRequest,
+        AccountSetDefaultResponse, AccountsCreateFreeTestCoinsRequest, AccountsCreateFreeTestCoinsResponse,
+        AccountsCreateRequest, AccountsCreateResponse, AccountsGetBalancesRequest, AccountsGetBalancesResponse,
+        AccountsInvokeRequest, AccountsInvokeResponse, AccountsListRequest, AccountsListResponse, BalanceEntry,
+        ClaimBurnRequest, ClaimBurnResponse, ConfidentialTransferRequest, ConfidentialTransferResponse,
+        RevealFundsRequest, RevealFundsResponse, TransferRequest, TransferResponse,
     },
     ComponentAddressOrName,
 };
@@ -71,11 +52,7 @@ use tokio::task;
 use super::context::HandlerContext;
 use crate::{
     handlers::helpers::{
-        get_account,
-        get_account_or_default,
-        get_account_with_inputs,
-        invalid_params,
-        wait_for_result,
+        get_account, get_account_or_default, get_account_with_inputs, invalid_params, wait_for_result,
     },
     indexer_jrpc_impl::IndexerJsonRpcNetworkInterface,
     services::{NewAccountInfo, TransactionSubmittedEvent},
@@ -149,7 +126,8 @@ pub async fn handle_create(
     if let Some(reject) = event.finalize.result.reject() {
         return Err(anyhow!("Create account transaction rejected: {}", reject));
     }
-    if let Some(reason) = event.transaction_failure {
+
+    if let Some(reason) = event.finalize.reject() {
         return Err(anyhow!("Create account transaction failed: {}", reason));
     }
 
@@ -245,7 +223,7 @@ pub async fn handle_invoke(
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reject) = finalized.transaction_failure {
+    if let Some(reject) = finalized.finalize.reject() {
         return Err(anyhow!("Transaction rejected: {}", reject));
     }
 
@@ -420,10 +398,11 @@ pub async fn handle_reveal_funds(
         } else {
             builder = builder
                 .fee_transaction_pay_from_component(account_address, max_fee)
-                .call_method(account_address, "withdraw_confidential", args![
-                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-                    reveal_proof
-                ])
+                .call_method(
+                    account_address,
+                    "withdraw_confidential",
+                    args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, reveal_proof],
+                )
                 .put_last_instruction_output_on_workspace("revealed")
                 .call_method(account_address, "deposit", args![Workspace("revealed")]);
         }
@@ -453,7 +432,7 @@ pub async fn handle_reveal_funds(
         });
 
         let finalized = wait_for_result(&mut events, tx_id).await?;
-        if let Some(reason) = finalized.transaction_failure {
+        if let Some(reason) = finalized.finalize.reject() {
             return Err(anyhow::anyhow!("Transaction failed: {}", reason));
         }
 
@@ -684,7 +663,7 @@ pub async fn handle_claim_burn(
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.transaction_failure {
+    if let Some(reason) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!(
             "Fee transaction succeeded (fees charged) however the transaction failed: {}",
             reason
@@ -831,7 +810,7 @@ pub async fn handle_create_free_test_coins(
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.transaction_failure {
+    if let Some(reason) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!(
             "Fee transaction succeeded (fees charged) however the transaction failed: {}",
             reason
@@ -881,6 +860,7 @@ pub async fn handle_transfer(
     inputs.push(resource_substate.address);
 
     let mut instructions = vec![];
+    let mut fee_instructions = vec![];
 
     // get destination account information
     let destination_account_address =
@@ -902,19 +882,21 @@ pub async fn handle_transfer(
             method: "deposit".to_string(),
             args: args![Workspace("bucket")],
         },
-        Instruction::CallMethod {
-            component_address: source_account_address,
-            method: "pay_fee".to_string(),
-            args: args![max_fee],
-        },
     ]);
+
+    fee_instructions.append(&mut vec![Instruction::CallMethod {
+        component_address: source_account_address,
+        method: "pay_fee".to_string(),
+        args: args![max_fee],
+    }]);
 
     let account_secret_key = sdk
         .key_manager_api()
         .derive_key(key_manager::TRANSACTION_BRANCH, account.key_index)?;
 
     let transaction = Transaction::builder()
-        .with_fee_instructions(instructions)
+        .with_fee_instructions(fee_instructions)
+        .with_instructions(instructions)
         .with_input_refs(vec![resource_shard_id])
         .sign(&account_secret_key.key)
         .build();
@@ -937,7 +919,7 @@ pub async fn handle_transfer(
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.transaction_failure {
+    if let Some(reason) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!(
             "Fee transaction succeeded (fees charged) however the transaction failed: {}",
             reason
@@ -986,11 +968,14 @@ async fn get_or_create_account_address(
             let owner_token = NonFungibleAddress::from_public_key(
                 RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
             );
-            instructions.insert(0, Instruction::CallFunction {
-                template_address: *ACCOUNT_TEMPLATE_ADDRESS,
-                function: "create".to_string(),
-                args: args![owner_token],
-            });
+            instructions.insert(
+                0,
+                Instruction::CallFunction {
+                    template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+                    function: "create".to_string(),
+                    args: args![owner_token],
+                },
+            );
         },
     };
 
@@ -1161,7 +1146,7 @@ pub async fn handle_confidential_transfer(
         if let Some(reject) = finalized.finalize.result.reject() {
             return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
         }
-        if let Some(reason) = finalized.transaction_failure {
+        if let Some(reason) = finalized.finalize.reject() {
             return Err(anyhow::anyhow!(
                 "Fee transaction succeeded (fees charged) however the transaction failed: {}",
                 reason

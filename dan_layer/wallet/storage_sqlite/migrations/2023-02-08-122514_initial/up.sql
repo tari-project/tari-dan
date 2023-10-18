@@ -38,7 +38,6 @@ CREATE TABLE transactions
     fee_instructions    TEXT     NOT NULL,
     meta                TEXT     NOT NULL,
     result              TEXT     NULL,
-    transaction_failure TEXT     NULL,
     qcs                 TEXT     NULL,
     final_fee           BIGINT   NULL,
     status              TEXT     NOT NULL,
