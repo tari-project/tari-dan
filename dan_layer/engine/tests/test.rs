@@ -200,7 +200,7 @@ fn test_engine_errors() {
         )
         .unwrap();
 
-    let RejectReason::ExecutionFailure(reason) = result.finalize.result.reject().unwrap() else {
+    let RejectReason::ExecutionFailure(reason) = result.finalize.result.full_reject().unwrap() else {
         panic!(
             "Unexpected transaction reject reason: {}",
             result.finalize.result.reject().unwrap()
