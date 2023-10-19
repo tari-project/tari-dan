@@ -20,64 +20,40 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import { IoAdd } from 'react-icons/io5';
-import Divider from '@mui/material/Divider';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import { useTheme } from '@mui/material/styles';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import Select, { SelectChangeEvent } from '@mui/material/Select';
-import Dialog from './AddAccount';
+import { useAccountsCreateFreeTestCoins } from '../../../api/hooks/useAccounts';
+import ClaimBurn from './ClaimBurn';
 import useAccountStore from '../../../store/accountStore';
-import { useAccountsList } from '../../../api/hooks/useAccounts';
 
-function SelectAccount() {
+function ActionMenu() {
+  const { mutate } = useAccountsCreateFreeTestCoins();
   const { accountName, setAccountName } = useAccountStore();
-  const { data: dataAccountsList } = useAccountsList(0, 10);
-  const [dialogOpen, setDialogOpen] = useState(false);
   const theme = useTheme();
 
-  const handleChange = (event: SelectChangeEvent) => {
-    const selectedValue = event.target.value as string;
-    if (selectedValue !== 'addAccount') {
-      setAccountName(event.target.value as string);
-    }
-  };
-
-  const handleAddAccount = () => {
-    setDialogOpen(true);
+  const onClaimFreeCoins = () => {
+    mutate({
+      accountName: accountName,
+      amount: 100000,
+      fee: 1000,
+    });
   };
 
   return (
-    <Box sx={{ minWidth: 250 }}>
-      <Dialog open={dialogOpen} setOpen={setDialogOpen} />
-      <FormControl fullWidth>
-        <InputLabel id="account-select-label">Account</InputLabel>
-        <Select
-          labelId="account-select-label"
-          id="account-select"
-          value={accountName}
-          label="Account"
-          onChange={handleChange}
-        >
-          {dataAccountsList?.accounts.map((account: any, index: number) => {
-            return (
-              <MenuItem value={account.account.name} key={index}>
-                {account.account.name}
-              </MenuItem>
-            );
-          })}
-          <Divider />
-          <MenuItem value={'addAccount'} onClick={handleAddAccount}>
-            <IoAdd style={{ marginRight: theme.spacing(1) }} />
-            Add Account
-          </MenuItem>
-        </Select>
-      </FormControl>
+    <Box
+      style={{
+        display: 'flex',
+        gap: theme.spacing(1),
+        marginBottom: theme.spacing(2),
+      }}
+    >
+      <Button variant="outlined" onClick={onClaimFreeCoins}>
+        Claim Free Testnet Coins
+      </Button>
+      <ClaimBurn />
     </Box>
   );
 }
 
-export default SelectAccount;
+export default ActionMenu;

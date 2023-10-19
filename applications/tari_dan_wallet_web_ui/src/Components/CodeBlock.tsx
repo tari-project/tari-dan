@@ -20,19 +20,51 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { IoExpandOutline } from 'react-icons/io5';
-import { useState } from 'react';
+import CloseIcon from '@mui/icons-material/Close';
+import { Box, Fade } from '@mui/material';
 import Dialog from '@mui/material/Dialog';
 import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import CloseIcon from '@mui/icons-material/Close';
-import { Box } from '@mui/material';
-import { CodeBlock } from './StyledComponents';
+import { styled, useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import { useTheme } from '@mui/material/styles';
+import { useState } from 'react';
+import {
+  IoCopyOutline,
+  IoDownloadOutline,
+  IoExpandOutline,
+  IoContractOutline,
+  IoCheckmarkOutline,
+} from 'react-icons/io5';
+import { renderJson } from '../utils/helpers';
 
-export default function CodeBlockExpand({ title, children }: any) {
+interface ICodeBlockExpand {
+  title: string;
+  content: string;
+}
+
+const CodeBlock = styled(Box)(({ theme }) => ({
+  backgroundColor: theme.palette.divider,
+  borderRadius: `${theme.spacing(1)} ${theme.spacing(1)} 0 0`,
+  padding: theme.spacing(3),
+  maxHeight: '400px',
+  overflowY: 'scroll',
+}));
+
+const StyledToolbar = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'row',
+  gap: theme.spacing(1),
+  background: theme.palette.background.paper,
+  borderRadius: `0 0 ${theme.spacing(1)} ${theme.spacing(1)}`,
+  borderRight: `1px solid ${theme.palette.divider}`,
+  padding: 4,
+  border: `1px solid ${theme.palette.divider}`,
+}));
+
+export default function CodeBlockExpand({ title, content }: ICodeBlockExpand) {
   const [open, setOpen] = useState(false);
+
   const media = useTheme();
   const matches = useMediaQuery(media.breakpoints.down('md'));
   const theme = useTheme();
@@ -45,25 +77,8 @@ export default function CodeBlockExpand({ title, children }: any) {
     setOpen(false);
   };
 
-  return (
-    <div>
-      <CodeBlock
-        style={{
-          position: 'relative',
-        }}
-      >
-        {children}
-        <IconButton
-          onClick={handleClickOpen}
-          style={{
-            position: 'sticky',
-            bottom: '0',
-            float: 'right',
-          }}
-        >
-          <IoExpandOutline style={{ height: 16, width: 16 }} />
-        </IconButton>
-      </CodeBlock>
+  function CodeDialog() {
+    return (
       <Dialog
         fullScreen={matches}
         open={open}
@@ -101,9 +116,103 @@ export default function CodeBlockExpand({ title, children }: any) {
             background: theme.palette.background.paper,
           }}
         >
-          {children}
+          {renderJson(content)}
+        </Box>
+        <Box
+          style={{
+            position: 'sticky',
+            bottom: 0,
+            left: 0,
+            width: '100%',
+          }}
+        >
+          <ToolBar content={content} />
         </Box>
       </Dialog>
-    </div>
+    );
+  }
+
+  function ToolBar({ content }: { content: string }) {
+    const [copied, setCopied] = useState(false);
+    const formattedContent = JSON.stringify(content);
+
+    const handleCopy = () => {
+      navigator.clipboard.writeText(formattedContent);
+      setCopied(true);
+      setTimeout(() => {
+        setCopied(false);
+      }, 3000);
+    };
+
+    const handleDownload = () => {
+      const element = document.createElement('a');
+      const file = new Blob([formattedContent], { type: 'application/json' });
+      element.href = URL.createObjectURL(file);
+      element.download = `${title}.json`;
+      document.body.appendChild(element);
+      element.click();
+    };
+
+    const menuItems = [
+      {
+        tooltip: copied ? 'Copied!' : 'Copy to clipboard',
+        icon: copied ? (
+          <IoCheckmarkOutline style={{ height: 16, width: 16 }} />
+        ) : (
+          <IoCopyOutline style={{ height: 16, width: 16 }} />
+        ),
+        onClick: () => handleCopy(),
+      },
+      {
+        tooltip: 'Download',
+        icon: <IoDownloadOutline style={{ height: 16, width: 16 }} />,
+        onClick: () => handleDownload(),
+      },
+      open
+        ? {
+            tooltip: 'Close',
+            icon: <IoContractOutline style={{ height: 16, width: 16 }} />,
+            onClick: () => setOpen(false),
+          }
+        : {
+            tooltip: 'Expand',
+            icon: <IoExpandOutline style={{ height: 16, width: 16 }} />,
+            onClick: () => handleClickOpen(),
+          },
+    ];
+
+    const renderMenu = menuItems.map((item, index) => {
+      return (
+        <Tooltip
+          TransitionComponent={Fade}
+          TransitionProps={{ timeout: 300 }}
+          title={item.tooltip}
+          placement="top"
+          arrow
+          key={index}
+        >
+          <IconButton
+            onClick={item.onClick}
+            style={{
+              borderRadius: 2,
+            }}
+          >
+            {item.icon}
+          </IconButton>
+        </Tooltip>
+      );
+    });
+
+    return <StyledToolbar>{renderMenu}</StyledToolbar>;
+  }
+
+  return (
+    <>
+      <Box>
+        <CodeBlock>{renderJson(content)}</CodeBlock>
+        <ToolBar content={content} />
+      </Box>
+      <CodeDialog />
+    </>
   );
 }
