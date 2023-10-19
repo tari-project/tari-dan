@@ -190,7 +190,7 @@ fn failed_fee_transaction() {
     let reason = result.expect_failure();
     assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
     let reason = result.expect_transaction_failure();
-    assert!(matches!(reason, RejectReason::FeeTransactionFailed));
+    assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
     test.disable_fees();
 
     assert!(result.fee_receipt.is_none());
@@ -205,7 +205,7 @@ fn fail_partial_paid_fees() {
     let (account, owner_token, private_key) = test.create_owned_account();
     let (account2, owner_token2, _) = test.create_owned_account();
     let orig_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
-
+    println!("{:?}", orig_balance);
     test.enable_fees();
 
     let result = test.execute_expect_commit(
@@ -227,6 +227,7 @@ fn fail_partial_paid_fees() {
     test.disable_fees();
 
     let reason = result.expect_transaction_failure();
+    println!("NOT HERE!");
     assert!(matches!(reason, RejectReason::FeesNotPaid(_)));
 
     // Check that the fee paid was deducted
@@ -345,10 +346,11 @@ fn success_pay_fee_in_main_instructions() {
 
     let result = test.execute_expect_success(
         Transaction::builder()
-            .call_method(account2, "withdraw", args![
-                CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-                Amount(500)
-            ])
+            .call_method(
+                account2,
+                "withdraw",
+                args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS, Amount(500)],
+            )
             .put_last_instruction_output_on_workspace("bucket")
             .call_method(account, "deposit", args![Workspace("bucket")])
             .call_method(account, "pay_fee", args![Amount(1000)])

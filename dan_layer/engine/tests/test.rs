@@ -285,7 +285,7 @@ mod errors {
                 vec![],
             )
             .unwrap();
-        match result.finalize.result.reject().unwrap() {
+        match result.finalize.result.full_reject().unwrap() {
             RejectReason::ExecutionFailure(message) => {
                 assert_eq!(
                     message,
@@ -312,7 +312,8 @@ mod errors {
                 vec![],
             )
             .unwrap();
-        match result.finalize.result.reject().unwrap() {
+        println!("{:?}", result.finalize.result);
+        match result.finalize.result.full_reject().unwrap() {
             RejectReason::ExecutionFailure(message) => {
                 assert!(message.starts_with(
                     "Panic! failed to decode argument at position 0 for function 'please_pass_invalid_args':"
