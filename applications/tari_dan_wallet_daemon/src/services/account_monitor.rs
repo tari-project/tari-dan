@@ -150,6 +150,11 @@ where
         let substate_api = self.wallet_sdk.substate_api();
         let accounts_api = self.wallet_sdk.accounts_api();
 
+        if !accounts_api.exists_by_address(account_address)? {
+            // This is not our account
+            return Ok(false);
+        }
+
         let mut is_updated = false;
         let account_substate = substate_api.get_substate(account_address)?;
         let ValidatorScanResult {
@@ -227,6 +232,10 @@ where
 
         let balance = vault.balance();
         let vault_addr = SubstateAddress::Vault(*vault.vault_id());
+        if !accounts_api.exists_by_address(account_addr)? {
+            // This is not our account
+            return Ok(());
+        }
         if !accounts_api.has_vault(&vault_addr)? {
             info!(
                 target: LOG_TARGET,
@@ -434,6 +443,10 @@ where
     ) -> Result<(), AccountMonitorError> {
         let vault_addr = SubstateAddress::Vault(*vault.vault_id());
         let accounts_api = self.wallet_sdk.accounts_api();
+        if !accounts_api.exists_by_address(account_addr)? {
+            // This is not our account
+            return Ok(());
+        }
         if accounts_api.has_vault(&vault_addr)? {
             return Ok(());
         }
