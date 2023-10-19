@@ -418,12 +418,15 @@ fn create_mempool_before_execute_validator(
     template_manager: TemplateManager,
     epoch_manager: EpochManagerHandle,
 ) -> impl Validator<Transaction, Error = MempoolError> {
-    let mut validator = HasInputs::new()
-        .and_then(TemplateExistsValidator::new(template_manager))
+    let mut validator = TemplateExistsValidator::new(template_manager)
         .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
         .boxed();
     if !config.no_fees {
-        validator = validator.and_then(FeeTransactionValidator).boxed();
+        // A transaction without fee payment may have 0 inputs.
+        validator = HasInputs::new()
+            .and_then(validator)
+            .and_then(FeeTransactionValidator)
+            .boxed();
     }
     validator
 }
