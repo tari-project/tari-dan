@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{net::SocketAddr, path::PathBuf, str::FromStr, sync::Arc};
+use std::{path::PathBuf, str::FromStr, sync::Arc};
 
 use minotari_node::{run_base_node, BaseNodeConfig, MetricsConfig};
 use rand::rngs::OsRng;
@@ -136,6 +136,5 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
 }
 
 pub fn get_base_node_client(port: u16) -> GrpcBaseNodeClient {
-    let endpoint: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
-    GrpcBaseNodeClient::new(endpoint)
+    GrpcBaseNodeClient::new(format!("127.0.0.1:{}", port))
 }

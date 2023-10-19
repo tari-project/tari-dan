@@ -22,7 +22,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{convert::TryInto, net::SocketAddr};
+use std::convert::TryInto;
 
 use async_trait::async_trait;
 use log::*;
@@ -45,16 +45,16 @@ type Client = BaseNodeGrpcClient<tonic::transport::Channel>;
 
 #[derive(Clone)]
 pub struct GrpcBaseNodeClient {
-    endpoint: SocketAddr,
+    endpoint: String,
     client: Option<Client>,
 }
 
 impl GrpcBaseNodeClient {
-    pub fn new(endpoint: SocketAddr) -> Self {
+    pub fn new(endpoint: String) -> Self {
         Self { endpoint, client: None }
     }
 
-    pub async fn connect(endpoint: SocketAddr) -> Result<Self, BaseNodeClientError> {
+    pub async fn connect(endpoint: String) -> Result<Self, BaseNodeClientError> {
         let mut client = Self { endpoint, client: None };
         client.test_connection().await?;
         Ok(client)
@@ -62,8 +62,7 @@ impl GrpcBaseNodeClient {
 
     async fn connection(&mut self) -> Result<&mut Client, BaseNodeClientError> {
         if self.client.is_none() {
-            let url = format!("http://{}", self.endpoint);
-            let inner = Client::connect(url).await?;
+            let inner = Client::connect(format!("http://{}", self.endpoint)).await?;
             self.client = Some(inner);
         }
         self.client.as_mut().ok_or(BaseNodeClientError::ConnectionError)
