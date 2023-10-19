@@ -114,7 +114,7 @@ pub async fn handle_create_transfer_proof(
             commitment: get_commitment_factory().commit_value(&change_mask.key, change_amount),
             value: change_amount,
             sender_public_nonce: Some(public_nonce.clone()),
-            secret_key_index: change_mask.key_index,
+            encryption_secret_key_index: change_mask.key_index,
             encrypted_data: encrypted_data.clone(),
             public_asset_tag: None,
             status: OutputStatus::LockedUnconfirmed,
