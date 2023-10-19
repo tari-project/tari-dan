@@ -20,57 +20,49 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import PageHeading from '../../Components/PageHeading';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import Accounts from '../Wallet/Components/Accounts';
-import Keys from '../Wallet/Components/Keys';
-import AccessTokens from '../Wallet/Components/AccessTokens';
-import SettingsTabs from './Components/SettingsTabs';
-import GeneralSettings from './Components/GeneralSettings';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import { useState } from 'react';
+import { Form } from 'react-router-dom';
+import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
+import Box from '@mui/material/Box';
+import useAccountStore from '../../../store/accountStore';
+import { useTheme } from '@mui/material/styles';
+import IndexerSettings from './IndexerSettings';
+import { Divider } from '@mui/material';
 
-export interface ISettingsMenu {
-  label: string;
-  title: string;
-  content: React.ReactNode;
-}
-
-function SettingsPage() {
-  const menuItems = [
+function GeneralSettings() {
+  const theme = useTheme();
+  const items = [
     {
-      label: 'General',
-      title: 'General Settings',
-      content: <GeneralSettings />,
-    },
-    {
-      label: 'Accounts',
-      title: 'Manage Accounts',
-      content: <Accounts />,
-    },
-    {
-      label: 'Keys',
-      title: 'Manage Keys',
-      content: <Keys />,
-    },
-    {
-      label: 'Access Tokens',
-      title: 'Manage Access Tokens',
-      content: <AccessTokens />,
+      label: 'Indexer Url',
+      content: <IndexerSettings />,
     },
   ];
 
+  const renderItems = items.map((item) => {
+    return (
+      <>
+        <Typography>{item.label}</Typography>
+        <Box>{item.content}</Box>
+        <Divider />
+      </>
+    );
+  });
+
   return (
-    <>
-      <Grid item xs={12} md={12} lg={12}>
-        <PageHeading>Settings</PageHeading>
-      </Grid>
-      <Grid item xs={12} md={12} lg={12}>
-        <StyledPaper>
-          <SettingsTabs menuItems={menuItems} />
-        </StyledPaper>
-      </Grid>
-    </>
+    <Box
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: theme.spacing(3),
+        paddingTop: theme.spacing(3),
+      }}
+    >
+      {renderItems}
+    </Box>
   );
 }
 
-export default SettingsPage;
+export default GeneralSettings;
