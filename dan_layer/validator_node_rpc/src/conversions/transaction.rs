@@ -25,6 +25,7 @@ use std::convert::{TryFrom, TryInto};
 use anyhow::anyhow;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
+use tari_dan_common_types::Epoch;
 use tari_dan_p2p::NewTransactionMessage;
 use tari_engine_types::{
     confidential::{ConfidentialClaim, ConfidentialOutput},
@@ -105,24 +106,22 @@ impl TryFrom<proto::transaction::Transaction> for Transaction {
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
-        let outputs = request
-            .outputs
-            .into_iter()
-            .map(TryInto::try_into)
-            .collect::<Result<_, _>>()?;
         let filled_inputs = request
             .filled_inputs
             .into_iter()
             .map(TryInto::try_into)
             .collect::<Result<_, _>>()?;
+        let min_epoch = request.min_epoch.map(|epoch| Epoch(epoch.epoch));
+        let max_epoch = request.max_epoch.map(|epoch| Epoch(epoch.epoch));
         let transaction = Transaction::new(
             fee_instructions,
             instructions,
             signature,
             inputs,
             input_refs,
-            outputs,
             filled_inputs,
+            min_epoch,
+            max_epoch,
         );
 
         Ok(transaction)
@@ -134,7 +133,6 @@ impl From<&Transaction> for proto::transaction::Transaction {
         let signature = transaction.signature().clone().into();
         let inputs = transaction.inputs().iter().map(|s| s.as_bytes().to_vec()).collect();
         let input_refs = transaction.input_refs().iter().map(|s| s.as_bytes().to_vec()).collect();
-        let outputs = transaction.outputs().iter().map(|s| s.as_bytes().to_vec()).collect();
         let filled_inputs = transaction
             .filled_inputs()
             .iter()
@@ -142,17 +140,23 @@ impl From<&Transaction> for proto::transaction::Transaction {
             .collect();
         let fee_instructions = transaction.fee_instructions().to_vec();
         let instructions = transaction.instructions().to_vec();
+        let min_epoch = transaction
+            .min_epoch()
+            .map(|epoch| proto::common::Epoch { epoch: epoch.0 });
+        let max_epoch = transaction
+            .max_epoch()
+            .map(|epoch| proto::common::Epoch { epoch: epoch.0 });
         let fee_instructions = fee_instructions.into_iter().map(Into::into).collect();
         let instructions = instructions.into_iter().map(Into::into).collect();
-
         proto::transaction::Transaction {
             fee_instructions,
             instructions,
             signature: Some(signature),
             inputs,
             input_refs,
-            outputs,
             filled_inputs,
+            min_epoch,
+            max_epoch,
         }
     }
 }

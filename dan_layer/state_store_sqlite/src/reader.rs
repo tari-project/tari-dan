@@ -918,9 +918,9 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         let tx_ids = transaction_ids.into_iter().map(serialize_hex).collect::<Vec<_>>();
 
         let involved_shards = transactions::table
-            .select((transactions::inputs, transactions::input_refs, transactions::outputs))
+            .select((transactions::inputs, transactions::input_refs))
             .filter(transactions::transaction_id.eq_any(tx_ids))
-            .load::<(String, String, String)>(self.connection())
+            .load::<(String, String)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transaction_pools_fetch_involved_shards",
                 source: e,
@@ -928,21 +928,14 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
 
         let shards = involved_shards
             .into_iter()
-            .map(|(inputs, input_refs, outputs)| {
+            .map(|(inputs, input_refs)| {
                 (
                     // a Result is very inconvenient with flat_map
                     deserialize_json::<HashSet<ShardId>>(&inputs).unwrap(),
                     deserialize_json::<HashSet<ShardId>>(&input_refs).unwrap(),
-                    deserialize_json::<HashSet<ShardId>>(&outputs).unwrap(),
                 )
             })
-            .flat_map(|(inputs, input_refs, outputs)| {
-                inputs
-                    .into_iter()
-                    .chain(input_refs)
-                    .chain(outputs)
-                    .collect::<HashSet<_>>()
-            })
+            .flat_map(|(inputs, input_refs)| inputs.into_iter().chain(input_refs).collect::<HashSet<_>>())
             .collect();
 
         Ok(shards)

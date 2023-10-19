@@ -17,6 +17,7 @@ use tari_dan_common_types::{
     optional::Optional,
     serde_with,
     Epoch,
+    NodeAddressable,
     NodeHeight,
 };
 use tari_mmr::MergedBalancedBinaryMerkleProof;
@@ -162,7 +163,7 @@ impl<TAddr> QuorumCertificate<TAddr> {
     }
 }
 
-impl<TAddr> QuorumCertificate<TAddr> {
+impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
     pub fn get<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
         tx: &mut TTx,
         qc_id: &QcId,
@@ -182,6 +183,13 @@ impl<TAddr> QuorumCertificate<TAddr> {
         tx: &mut TTx,
     ) -> Result<Block<TTx::Addr>, StorageError> {
         Block::get(tx, &self.block_id)
+    }
+
+    pub fn get_by_block_id<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+        tx: &mut TTx,
+        block_id: &BlockId,
+    ) -> Result<Self, StorageError> {
+        tx.quorum_certificates_get_by_block_id(block_id)
     }
 
     pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr> + ?Sized>(
@@ -205,9 +213,8 @@ impl<TAddr> QuorumCertificate<TAddr> {
         if high_qc.block_height() < self.block_height() {
             debug!(
                 target: LOG_TARGET,
-                "🔥 UPDATE_HIGH_QC (node: {} {}, previous high QC: {} {})",
-                self.id(),
-                self.block_height(),
+                "🔥 UPDATE_HIGH_QC ({}, previous high QC: {} {})",
+                self,
                 high_qc.block_id(),
                 high_qc.block_height(),
             );

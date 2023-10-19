@@ -4,7 +4,7 @@
 use std::borrow::Borrow;
 
 use tari_common_types::types::PrivateKey;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{
     confidential::ConfidentialClaim,
     instruction::Instruction,
@@ -27,6 +27,8 @@ pub struct TransactionBuilder {
     inputs: Vec<ShardId>,
     input_refs: Vec<ShardId>,
     outputs: Vec<ShardId>,
+    min_epoch: Option<Epoch>,
+    max_epoch: Option<Epoch>,
 }
 
 impl TransactionBuilder {
@@ -38,6 +40,8 @@ impl TransactionBuilder {
             inputs: Vec::new(),
             input_refs: Vec::new(),
             outputs: Vec::new(),
+            min_epoch: None,
+            max_epoch: None,
         }
     }
 
@@ -180,6 +184,16 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn with_min_epoch(mut self, min_epoch: Option<Epoch>) -> Self {
+        self.min_epoch = min_epoch;
+        self
+    }
+
+    pub fn with_max_epoch(mut self, max_epoch: Option<Epoch>) -> Self {
+        self.max_epoch = max_epoch;
+        self
+    }
+
     pub fn build(mut self) -> Transaction {
         Transaction::new(
             self.fee_instructions.drain(..).collect(),
@@ -187,8 +201,9 @@ impl TransactionBuilder {
             self.signature.take().expect("not signed"),
             self.inputs,
             self.input_refs,
-            self.outputs,
             vec![],
+            self.min_epoch,
+            self.max_epoch,
         )
     }
 }

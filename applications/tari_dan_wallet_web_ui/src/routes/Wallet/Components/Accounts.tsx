@@ -52,18 +52,15 @@ import {
   useAccountsList,
 } from '../../../api/hooks/useAccounts';
 import FetchStatusCheck from '../../../Components/FetchStatusCheck';
+import queryClient from '../../../api/queryClient';
 
-function Account(account: any) {
+function Account(account: any, index: number) {
   const { pathname } = useLocation();
   return (
-    <TableRow key={toHexString(account.account.address.Component)}>
+    <TableRow key={index}>
       <DataTableCell>
         <Link
-          to={
-            pathname.includes('/accounts')
-              ? account.account.name
-              : `accounts/${account.account.name}`
-          }
+          to={`/accounts/${account.account.name}`}
           style={{
             textDecoration: 'none',
             color: 'inherit',
@@ -82,14 +79,7 @@ function Account(account: any) {
         <CopyToClipboard copy={account.public_key} />
       </DataTableCell>
       <DataTableCell>
-        <IconButton
-          component={Link}
-          to={
-            pathname.includes('/accounts')
-              ? account.account.name
-              : `accounts/${account.account.name}`
-          }
-        >
+        <IconButton component={Link} to={`/accounts/${account.account.name}`}>
           <ChevronRight />
         </IconButton>
       </DataTableCell>
@@ -117,16 +107,17 @@ function Accounts() {
     isError: isErrorAccountsList,
     error: errorAccountsList,
   } = useAccountsList(0, 10);
-  const { mutate } = useAccountsCreateFreeTestCoins();
+  const { mutateAsync: mutateCreateFeeTestCoins } =
+    useAccountsCreateFreeTestCoins();
 
-  const { mutate: mutateAddAccount } = useAccountsCreate(
+  const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
-      undefined,
+    undefined,
     undefined,
     false
   );
 
-  const { mutate: mutateClaimBurn } = useAccountsClaimBurn(
+  const { mutateAsync: mutateClaimBurn } = useAccountsClaimBurn(
     claimBurnFormState.account,
     claimBurnFormState.claimProof
       ? JSON.parse(claimBurnFormState.claimProof)
@@ -138,26 +129,46 @@ function Accounts() {
     setElseToggle: boolean = !showAccountDialog
   ) => {
     setShowAddAccountDialog(setElseToggle);
+    setAccountFormState({
+      accountName: '',
+      signingKeyIndex: '',
+      fee: '',
+    });
   };
 
   const showClaimBurnDialog = (setElseToggle: boolean = !showClaimDialog) => {
     setShowClaimBurnDialog(setElseToggle);
+    setClaimBurnFormState({
+      account: '',
+      claimProof: '',
+      fee: '',
+    });
   };
 
   const onSubmitAddAccount = () => {
-    mutateAddAccount();
-    setAccountFormState({ accountName: '', signingKeyIndex: '', fee: '' });
-    setShowAddAccountDialog(false);
+    mutateAddAccount(undefined, {
+      onSettled: () => {
+        setAccountFormState({
+          accountName: '',
+          signingKeyIndex: '',
+          fee: '',
+        });
+        setShowAddAccountDialog(false);
+        queryClient.invalidateQueries(['accounts']);
+      },
+    });
   };
+
   const onAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.preventDefault();
     setAccountFormState({
       ...accountFormState,
       [e.target.name]: e.target.value,
     });
   };
 
-  const onClaimFreeCoins = () => {
-    mutate({
+  const onClaimFreeCoins = async () => {
+    await mutateCreateFeeTestCoins({
       accountName: 'TestAccount',
       amount: 100000,
       fee: 1000,
@@ -165,9 +176,12 @@ function Accounts() {
   };
 
   const onClaimBurn = () => {
-    mutateClaimBurn();
-    setClaimBurnFormState({ account: '', claimProof: '', fee: '' });
-    setShowClaimBurnDialog(false);
+    mutateClaimBurn(undefined, {
+      onSettled: () => {
+        setClaimBurnFormState({ account: '', claimProof: '', fee: '' });
+        setShowClaimBurnDialog(false);
+      },
+    });
   };
 
   const onClaimBurnChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -200,7 +214,7 @@ function Accounts() {
             startIcon={<AddIcon />}
             onClick={() => onClaimFreeCoins()}
           >
-            Claim free testnet coins
+            Claim Free Testnet Coins
           </Button>
         </div>
         {showAccountDialog && (
@@ -251,17 +265,19 @@ function Accounts() {
                   onChange={onClaimBurnAccountChange}
                   style={{ flexGrow: 1, minWidth: '200px' }}
                 >
-                  {dataAccountsList?.accounts.map((account: any) => (
-                    <MenuItem
-                      key={toHexString(account.account.address.Component)}
-                      value={
-                        'component_' +
-                        toHexString(account.account.address.Component)
-                      }
-                    >
-                      {account.account.name}{' '}
-                    </MenuItem>
-                  ))}
+                  {dataAccountsList?.accounts.map(
+                    (account: any, index: number) => (
+                      <MenuItem
+                        key={toHexString(account.account.address.Component)}
+                        value={
+                          'component_' +
+                          toHexString(account.account.address.Component)
+                        }
+                      >
+                        {account.account.name}
+                      </MenuItem>
+                    )
+                  )}
                 </Select>
               </FormControl>
               <TextField
@@ -323,8 +339,8 @@ function Accounts() {
             </TableHead>
             <TableBody>
               {dataAccountsList &&
-                dataAccountsList.accounts.map((account: any) =>
-                  Account(account)
+                dataAccountsList.accounts.map((account: any, index: number) =>
+                  Account(account, index)
                 )}
             </TableBody>
           </Table>

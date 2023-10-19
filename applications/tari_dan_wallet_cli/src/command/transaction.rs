@@ -33,7 +33,7 @@ use std::{
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
     commit_result::{FinalizeResult, TransactionResult},
@@ -124,6 +124,10 @@ pub struct CommonSubmitArgs {
     pub fee: Option<u64>,
     #[clap(long, short = 'f', alias = "fee-account")]
     pub fee_account: Option<ComponentAddressOrName>,
+    #[clap(long)]
+    pub min_epoch: Option<u64>,
+    #[clap(long)]
+    pub max_epoch: Option<u64>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -296,6 +300,8 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
             .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
+        min_epoch: common.min_epoch.map(Epoch),
+        max_epoch: common.max_epoch.map(Epoch),
     };
     submit_transaction(request, client).await?;
     Ok(())
@@ -349,6 +355,8 @@ async fn handle_submit_manifest(
             .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
+        min_epoch: common.min_epoch.map(Epoch),
+        max_epoch: common.max_epoch.map(Epoch),
     };
 
     submit_transaction(request, client).await?;
@@ -406,7 +414,7 @@ pub async fn handle_confidential_transfer(
             account: source_account,
             amount: Amount::try_from(amount)?,
             resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
-            validator_public_key: destination_public_key,
+            destination_public_key,
             fee: common.fee.map(|f| f.try_into()).transpose()?,
         })
         .await?;

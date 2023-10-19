@@ -30,10 +30,14 @@ import MenuItem from '@mui/material/MenuItem';
 import FormControl from '@mui/material/FormControl';
 import Select, { SelectChangeEvent } from '@mui/material/Select';
 import Dialog from './AddAccount';
+import useAccountStore from '../../../store/accountStore';
+import { useAccountsList } from '../../../api/hooks/useAccounts';
 
-function SelectAccount({ accountName, setAccountName, dataAccountsList }: any) {
-  const theme = useTheme();
+function SelectAccount() {
+  const { accountName, setAccountName } = useAccountStore();
+  const { data: dataAccountsList } = useAccountsList(0, 10);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const theme = useTheme();
 
   const handleChange = (event: SelectChangeEvent) => {
     const selectedValue = event.target.value as string;
@@ -43,7 +47,6 @@ function SelectAccount({ accountName, setAccountName, dataAccountsList }: any) {
   };
 
   const handleAddAccount = () => {
-    console.log('Add Account');
     setDialogOpen(true);
   };
 

@@ -46,7 +46,7 @@ export default function ClaimBurn() {
     claimProof: '',
     fee: '',
   });
-  const { mutate: mutateClaimBurn } = useAccountsClaimBurn(
+  const { mutateAsync: mutateClaimBurn } = useAccountsClaimBurn(
     claimBurnFormState.account,
     claimBurnFormState.claimProof
       ? JSON.parse(claimBurnFormState.claimProof)
@@ -72,8 +72,8 @@ export default function ClaimBurn() {
     });
   };
 
-  const onClaimBurn = () => {
-    mutateClaimBurn();
+  const onClaimBurn = async () => {
+    await mutateClaimBurn();
     setClaimBurnFormState({ account: '', claimProof: '', fee: '' });
     setOpen(false);
   };

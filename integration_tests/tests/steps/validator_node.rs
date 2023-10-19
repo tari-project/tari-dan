@@ -335,6 +335,17 @@ async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_
     assert_eq!(stats.current_block_height, block_height);
 }
 
+#[then(expr = "all validators have scanned to height {int} within {int} seconds")]
+async fn all_vns_have_scanned_to_height(world: &mut TariWorld, block_height: u64, seconds: usize) {
+    let all_names = world
+        .all_validators_iter()
+        .map(|vn| vn.name.clone())
+        .collect::<Vec<_>>();
+    for vn in all_names {
+        vn_has_scanned_to_height(world, vn, block_height, seconds).await;
+    }
+}
+
 #[when(expr = "I create a new key pair {word}")]
 async fn when_i_create_new_key_pair(world: &mut TariWorld, key_name: String) {
     create_key(world, key_name);

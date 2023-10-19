@@ -212,15 +212,17 @@ where TConsensusSpec: ConsensusSpec
             })?;
 
         // TODO: only broadcast to f + 1 foreign committee members. They can gossip the proposal around from there.
-        self.tx_broadcast
-            .send((
-                non_local_committees.into_values().collect(),
-                HotstuffMessage::ForeignProposal(ProposalMessage { block: next_block }),
-            ))
-            .await
-            .map_err(|_| HotStuffError::InternalChannelClosed {
-                context: "proposing a new block",
-            })?;
+        if !non_local_committees.is_empty() {
+            self.tx_broadcast
+                .send((
+                    non_local_committees.into_values().collect(),
+                    HotstuffMessage::ForeignProposal(ProposalMessage { block: next_block }),
+                ))
+                .await
+                .map_err(|_| HotStuffError::InternalChannelClosed {
+                    context: "proposing a new block",
+                })?;
+        }
 
         Ok(())
     }

@@ -286,6 +286,25 @@ where
 
         let transaction = transaction.into_transaction();
 
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        if let Some(min_epoch) = transaction.min_epoch() {
+            if current_epoch < min_epoch {
+                return Err(MempoolError::CurrentEpochLessThanMinimum {
+                    current_epoch,
+                    min_epoch,
+                });
+            }
+        }
+
+        if let Some(max_epoch) = transaction.max_epoch() {
+            if current_epoch > max_epoch {
+                return Err(MempoolError::CurrentEpochGreaterThanMaximum {
+                    current_epoch,
+                    max_epoch,
+                });
+            }
+        }
+
         // Get the shards involved in claim fees.
         let fee_claims = transaction.fee_claims().collect::<Vec<_>>();
 
@@ -303,7 +322,6 @@ where
 
         let tx_shard_id = ShardId::from(transaction.id().into_array());
 
-        let current_epoch = self.epoch_manager.current_epoch().await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
 
         let mut is_input_shard = local_committee_shard.includes_any_shard(transaction.all_inputs_iter());
@@ -314,7 +332,6 @@ where
             // Known output shards
             // This is to allow for the txreceipt output
             iter::once(&tx_shard_id)
-                .chain(transaction.outputs())
                 .chain(unverified_output_shards.iter())
                 .chain(claim_shards.iter()),
         );

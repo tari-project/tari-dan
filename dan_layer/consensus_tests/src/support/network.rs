@@ -271,6 +271,7 @@ impl TestNetworkWorker {
         to: Committee<TestAddress>,
         msg: HotstuffMessage<TestAddress>,
     ) {
+        log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.iter().join(", "));
         self.num_sent_messages
             .fetch_add(to.len(), std::sync::atomic::Ordering::Relaxed);
         for vn in to {
@@ -290,6 +291,7 @@ impl TestNetworkWorker {
     }
 
     async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage<TestAddress>) {
+        log::debug!("✉️ Message {} from {} to {}", msg, from, to);
         if from != to && self.is_offline_destination(&from, u32::MAX.into()).await {
             return;
         }

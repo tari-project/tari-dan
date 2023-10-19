@@ -10,7 +10,9 @@ use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 
-pub trait NodeAddressable: Eq + Hash + Clone + Debug + Send + Sync + Display + Serialize + DeserializeOwned {
+pub trait NodeAddressable:
+    Eq + Hash + Clone + Debug + Ord + Send + Sync + Display + Serialize + DeserializeOwned
+{
     fn zero() -> Self;
     fn as_bytes(&self) -> &[u8];
 

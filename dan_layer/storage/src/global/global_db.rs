@@ -22,7 +22,7 @@
 
 use std::sync::Arc;
 
-use super::{validator_node_db::ValidatorNodeDb, EpochDb};
+use super::{validator_node_db::ValidatorNodeDb, BmtDb, EpochDb};
 use crate::{
     global::{backend_adapter::GlobalDbAdapter, metadata_db::MetadataDb, template_db::TemplateDb},
     StorageError,
@@ -85,6 +85,13 @@ impl<TGlobalDbAdapter: GlobalDbAdapter> GlobalDb<TGlobalDbAdapter> {
         tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
     ) -> EpochDb<'a, 'tx, TGlobalDbAdapter> {
         EpochDb::new(&self.adapter, tx)
+    }
+
+    pub fn bmt<'a, 'tx>(
+        &'a self,
+        tx: &'tx mut TGlobalDbAdapter::DbTransaction<'a>,
+    ) -> BmtDb<'a, 'tx, TGlobalDbAdapter> {
+        BmtDb::new(&self.adapter, tx)
     }
 
     pub fn commit(&self, tx: TGlobalDbAdapter::DbTransaction<'_>) -> Result<(), TGlobalDbAdapter::Error> {

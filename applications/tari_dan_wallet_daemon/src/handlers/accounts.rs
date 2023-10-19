@@ -1049,7 +1049,7 @@ pub async fn handle_confidential_transfer(
 
         // get destination account information
         let destination_account_address =
-            get_or_create_account_address(&sdk, &req.validator_public_key, &mut inputs, &mut instructions).await?;
+            get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
         // -------------------------------- Lock outputs for spending -------------------------------- //
         let total_amount = req.fee.unwrap_or(DEFAULT_FEE) + req.amount;
@@ -1063,7 +1063,7 @@ pub async fn handle_confidential_transfer(
         let encrypted_data = sdk.confidential_crypto_api().encrypt_value_and_mask(
             req.amount.as_u64_checked().unwrap(),
             &output_mask.key,
-            &req.validator_public_key,
+            &req.destination_public_key,
             &nonce,
         )?;
 

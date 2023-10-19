@@ -125,9 +125,9 @@ export default function TransactionDetails() {
                 <TableRow>
                   <TableCell>Reason</TableCell>
                   <DataTableCell>
-                    {`${Object.keys(data.transaction_failure)[0]}: ${
+                    {data?.transaction_failure?`${Object.keys(data.transaction_failure)[0]}: ${
                       Object.values(data.transaction_failure)[0]
-                    }`}
+                    }`:"No reason"}
                   </DataTableCell>
                 </TableRow>
               </TableBody>

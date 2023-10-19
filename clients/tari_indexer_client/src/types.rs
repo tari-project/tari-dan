@@ -136,6 +136,19 @@ pub struct NonFungibleSubstate {
     pub substate: Substate,
 }
 
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetRelatedTransactionsRequest {
+    #[serde_as(as = "DisplayFromStr")]
+    pub address: SubstateAddress,
+    pub version: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GetRelatedTransactionsResponse {
+    pub transaction_results: Vec<IndexerTransactionFinalizedResult>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddPeerRequest {
     pub public_key: PublicKey,

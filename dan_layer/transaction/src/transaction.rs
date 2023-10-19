@@ -28,10 +28,10 @@ pub struct Transaction {
     inputs: Vec<ShardId>,
     /// Input objects that must exist but cannot be downed by this transaction
     input_refs: Vec<ShardId>,
-    /// Output objects that will be created by this transaction
-    outputs: Vec<ShardId>,
     /// Inputs filled by some authority. These are not part of the transaction hash. (TODO: Secure this somehow)
     filled_inputs: Vec<ShardId>,
+    min_epoch: Option<Epoch>,
+    max_epoch: Option<Epoch>,
 }
 
 impl Transaction {
@@ -45,8 +45,9 @@ impl Transaction {
         signature: TransactionSignature,
         inputs: Vec<ShardId>,
         input_refs: Vec<ShardId>,
-        outputs: Vec<ShardId>,
         filled_inputs: Vec<ShardId>,
+        min_epoch: Option<Epoch>,
+        max_epoch: Option<Epoch>,
     ) -> Self {
         let mut tx = Self {
             id: TransactionId::default(),
@@ -55,8 +56,9 @@ impl Transaction {
             signature,
             inputs,
             input_refs,
-            outputs,
             filled_inputs,
+            min_epoch,
+            max_epoch,
         };
         tx.id = tx.calculate_hash();
         tx
@@ -69,7 +71,8 @@ impl Transaction {
             .chain(&self.instructions)
             .chain(&self.inputs)
             .chain(&self.input_refs)
-            .chain(&self.outputs)
+            .chain(&self.min_epoch)
+            .chain(&self.max_epoch)
             .result()
             .into_array()
             .into()
@@ -103,12 +106,11 @@ impl Transaction {
         self.inputs()
             .iter()
             .chain(self.input_refs())
-            .chain(self.outputs())
             .chain(self.filled_inputs())
     }
 
     pub fn num_involved_shards(&self) -> usize {
-        self.inputs().len() + self.input_refs().len() + self.outputs().len() + self.filled_inputs().len()
+        self.inputs().len() + self.input_refs().len() + self.filled_inputs().len()
     }
 
     pub fn input_refs(&self) -> &[ShardId] {
@@ -139,10 +141,6 @@ impl Transaction {
         &mut self.filled_inputs
     }
 
-    pub fn outputs(&self) -> &[ShardId] {
-        &self.outputs
-    }
-
     pub fn fee_claims(&self) -> impl Iterator<Item = (Epoch, PublicKey)> + '_ {
         self.instructions()
             .iter()
@@ -158,6 +156,14 @@ impl Transaction {
                     None
                 }
             })
+    }
+
+    pub fn min_epoch(&self) -> Option<Epoch> {
+        self.min_epoch
+    }
+
+    pub fn max_epoch(&self) -> Option<Epoch> {
+        self.max_epoch
     }
 }
 

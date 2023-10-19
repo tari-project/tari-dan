@@ -90,3 +90,20 @@ export const DialogContainer = styled(Box)(({ theme }) => ({
   gap: theme.spacing(3),
   width: '100%',
 }));
+
+export const GridHeadCell = styled(Box)(({ theme, className }) => ({
+  padding: theme.spacing(2),
+  fontSize: '0.875rem',
+  color: theme.palette.text.primary,
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  gridArea: `${className}`,
+}));
+
+export const GridDataCell = styled(Box)(({ theme, className }) => ({
+  padding: theme.spacing(2),
+  fontSize: '0.875rem',
+  color: theme.palette.text.primary,
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  fontFamily: "'Courier New', Courier, monospace",
+  gridArea: `${className}`,
+}));

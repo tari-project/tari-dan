@@ -53,6 +53,8 @@ use tari_indexer_client::types::{
     GetNonFungibleCountRequest,
     GetNonFungiblesRequest,
     GetNonFungiblesResponse,
+    GetRelatedTransactionsRequest,
+    GetRelatedTransactionsResponse,
     GetSubstateRequest,
     GetSubstateResponse,
     GetTransactionResultRequest,
@@ -605,6 +607,65 @@ impl JsonRpcHandlers {
                 }
             },
         };
+
+        Ok(JsonRpcResponse::success(answer_id, resp))
+    }
+
+    pub async fn get_substate_transactions(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let request: GetRelatedTransactionsRequest = value.parse_params()?;
+
+        let mut version = request.version.unwrap_or(0);
+        let mut transaction_ids = vec![];
+
+        loop {
+            let res = self
+                .substate_manager
+                .get_specific_substate(&request.address, version)
+                .await;
+
+            if let Ok(substate_result) = res {
+                let transaction_id = match substate_result {
+                    SubstateResult::DoesNotExist => break,
+                    SubstateResult::Up { created_by_tx, .. } => created_by_tx,
+                    SubstateResult::Down { deleted_by_tx, .. } => deleted_by_tx,
+                };
+                transaction_ids.push(transaction_id);
+                version += 1;
+            } else {
+                break;
+            }
+        }
+
+        // the last transaction may both down and up a substate
+        transaction_ids.dedup();
+
+        let mut transaction_results = vec![];
+        for transaction_id in transaction_ids {
+            let transaction_result = self
+                .transaction_manager
+                .get_transaction_result(transaction_id)
+                .await
+                .map_err(|e| Self::internal_error(answer_id, e))?;
+
+            let indexer_transaction_result = match transaction_result {
+                TransactionResultStatus::Pending => IndexerTransactionFinalizedResult::Pending,
+                TransactionResultStatus::Finalized(finalized) => {
+                    let json_results = encode_finalized_result_into_json(&finalized)
+                        .map_err(|e| Self::internal_error(answer_id, e))?;
+                    IndexerTransactionFinalizedResult::Finalized {
+                        final_decision: finalized.final_decision,
+                        execution_result: finalized.execute_result,
+                        abort_details: finalized.abort_details,
+                        json_results,
+                    }
+                },
+            };
+
+            transaction_results.push(indexer_transaction_result);
+        }
+
+        let resp = GetRelatedTransactionsResponse { transaction_results };
 
         Ok(JsonRpcResponse::success(answer_id, resp))
     }

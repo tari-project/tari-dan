@@ -31,6 +31,7 @@ import AccessTokensLayout from './routes/AccessTokens/AccessTokens';
 import Transactions from './routes/Transactions/TransactionsLayout';
 import TransactionDetails from './routes/Transactions/TransactionDetails';
 import AssetVault from './routes/AssetVault/AssetVault';
+import SettingsPage from './routes/Settings/Settings';
 
 export const breadcrumbRoutes = [
   {
@@ -73,6 +74,11 @@ export const breadcrumbRoutes = [
     path: '/wallet',
     dynamic: false,
   },
+  {
+    label: 'Settings',
+    path: '/settings',
+    dynamic: false,
+  },
 ];
 
 function App() {
@@ -88,6 +94,7 @@ function App() {
           <Route path="transactions" element={<Transactions />} />
           <Route path="wallet" element={<Wallet />} />
           <Route path="transactions/:id" element={<TransactionDetails />} />
+          <Route path="settings" element={<SettingsPage />} />
           <Route path="*" element={<ErrorPage />} />
         </Route>
       </Routes>

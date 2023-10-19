@@ -9,8 +9,6 @@ create table quorum_certificates
 
 -- fetching by qc_id will be a very common operation
 create unique index quorum_certificates_uniq_idx_id on quorum_certificates (qc_id);
--- only one QC permitted for a block
-create unique index quorum_certificates_uniq_block_id on quorum_certificates (block_id);
 
 create table blocks
 (
@@ -115,12 +113,11 @@ create table last_voted
 create table last_sent_vote
 (
     id           integer   NOT NULL PRIMARY KEY AUTOINCREMENT,
-    epoch        integer,
-    block_id     text,
-    block_height integer,
-    decision     integer,
-    signature    text,
-    merkle_proof text,
+    epoch        bigint    NOT NULL,
+    block_id     text      NOT NULL,
+    block_height bigint    NOT NULL,
+    decision     integer   NOT NULL,
+    signature    text      NOT NULL,
     created_at   timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (block_id) REFERENCES blocks (block_id)
 );
@@ -160,13 +157,14 @@ create table transactions
     signature         text      not NULL,
     inputs            text      not NULL,
     input_refs        text      not NULL,
-    outputs           text      not NULL,
     filled_inputs     text      not NULL,
     resulting_outputs text      NULL,
     result            text      NULL,
     execution_time_ms bigint    NULL,
     final_decision    text      NULL,
     abort_details     text      NULL,
+    min_epoch         BIGINT   NULL,
+    max_epoch         BIGINT   NULL,
     created_at        timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -230,7 +228,6 @@ create table votes
     decision         integer   not null,
     sender_leaf_hash text      not NULL,
     signature        text      not NULL,
-    merkle_proof     text      not NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

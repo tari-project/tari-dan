@@ -4,6 +4,7 @@
 use std::{str::FromStr, time::Duration};
 
 use diesel::Queryable;
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::{consensus_models, consensus_models::Decision, StorageError};
 use time::PrimitiveDateTime;
 
@@ -18,13 +19,14 @@ pub struct Transaction {
     pub signature: String,
     pub inputs: String,
     pub input_refs: String,
-    pub outputs: String,
     pub filled_inputs: String,
     pub resulting_outputs: Option<String>,
     pub result: Option<String>,
     pub execution_time_ms: Option<i64>,
     pub final_decision: Option<String>,
     pub abort_details: Option<String>,
+    pub min_epoch: Option<i64>,
+    pub max_epoch: Option<i64>,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -38,8 +40,9 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
 
         let inputs = deserialize_json(&value.inputs)?;
         let input_refs = deserialize_json(&value.input_refs)?;
-        let outputs = deserialize_json(&value.outputs)?;
         let filled_inputs = deserialize_json(&value.filled_inputs)?;
+        let min_epoch = value.min_epoch.map(|epoch| Epoch(epoch as u64));
+        let max_epoch = value.max_epoch.map(|epoch| Epoch(epoch as u64));
 
         Ok(Self::new(
             fee_instructions,
@@ -47,8 +50,9 @@ impl TryFrom<Transaction> for tari_transaction::Transaction {
             signature,
             inputs,
             input_refs,
-            outputs,
             filled_inputs,
+            min_epoch,
+            max_epoch,
         ))
     }
 }

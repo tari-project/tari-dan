@@ -28,8 +28,10 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Box from '@mui/material/Box';
+import Snackbar from '@mui/material/Snackbar';
 import { useAccountsCreate } from '../../../api/hooks/useAccounts';
 import { useTheme } from '@mui/material/styles';
+import queryClient from '../../../api/queryClient';
 
 function AddAccount({
   open,
@@ -40,13 +42,11 @@ function AddAccount({
 }) {
   const [accountFormState, setAccountFormState] = useState({
     accountName: '',
-    signingKeyIndex: '',
-    fee: '',
   });
-  const { mutate: mutateAddAccount } = useAccountsCreate(
+  const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
     undefined,
-    accountFormState.fee ? +accountFormState.fee : undefined,
+    undefined,
     false
   );
   const theme = useTheme();
@@ -56,9 +56,15 @@ function AddAccount({
   };
 
   const onSubmitAddAccount = () => {
-    mutateAddAccount();
-    setAccountFormState({ accountName: '', signingKeyIndex: '', fee: '' });
-    setOpen(false);
+    mutateAddAccount(undefined, {
+      onSettled: () => {
+        setAccountFormState({
+          accountName: '',
+        });
+        setOpen(false);
+        queryClient.invalidateQueries(['accounts']);
+      },
+    });
   };
 
   const onAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -81,20 +87,6 @@ function AddAccount({
             name="accountName"
             label="Account Name"
             value={accountFormState.accountName}
-            onChange={onAccountChange}
-            style={{ flexGrow: 1 }}
-          />
-          <TextField
-            name="signingKeyIndex"
-            label="Signing Key Index"
-            value={accountFormState.signingKeyIndex}
-            onChange={onAccountChange}
-            style={{ flexGrow: 1 }}
-          />
-          <TextField
-            name="fee"
-            label="Fee"
-            value={accountFormState.fee}
             onChange={onAccountChange}
             style={{ flexGrow: 1 }}
           />
