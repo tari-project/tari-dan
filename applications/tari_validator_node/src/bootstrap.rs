@@ -85,6 +85,8 @@ use crate::{
             mempool::{
                 ClaimFeeTransactionValidator,
                 FeeTransactionValidator,
+                HasInputs,
+                HasInvolvedShards,
                 InputRefsValidator,
                 MempoolError,
                 MempoolHandle,
@@ -416,7 +418,8 @@ fn create_mempool_before_execute_validator(
     template_manager: TemplateManager,
     epoch_manager: EpochManagerHandle,
 ) -> impl Validator<Transaction, Error = MempoolError> {
-    let mut validator = TemplateExistsValidator::new(template_manager)
+    let mut validator = HasInputs::new()
+        .and_then(TemplateExistsValidator::new(template_manager))
         .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
         .boxed();
     if !config.no_fees {
@@ -428,5 +431,7 @@ fn create_mempool_before_execute_validator(
 fn create_mempool_after_execute_validator(
     store: SqliteStateStore<CommsPublicKey>,
 ) -> impl Validator<ExecutedTransaction, Error = MempoolError> {
-    InputRefsValidator::new().and_then(OutputsDontExistLocally::new(store))
+    HasInvolvedShards::new()
+        .and_then(InputRefsValidator::new())
+        .and_then(OutputsDontExistLocally::new(store))
 }
