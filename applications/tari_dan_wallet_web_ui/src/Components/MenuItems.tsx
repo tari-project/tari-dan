@@ -35,6 +35,8 @@ import {
   IoWallet,
   IoTicketOutline,
   IoTicket,
+  IoSettingsOutline,
+  IoSettings,
 } from 'react-icons/io5';
 import Tooltip from '@mui/material/Tooltip';
 import Fade from '@mui/material/Fade';
@@ -63,29 +65,35 @@ function MainListItems() {
       activeIcon: <IoHome style={activeIconStyle} />,
       link: '/',
     },
+    // {
+    //   title: 'Accounts',
+    //   icon: <IoBarChartOutline style={iconStyle} />,
+    //   activeIcon: <IoBarChart style={activeIconStyle} />,
+    //   link: '/accounts',
+    // },
+    // {
+    //   title: 'Keys',
+    //   icon: <IoKeyOutline style={iconStyle} />,
+    //   activeIcon: <IoKey style={activeIconStyle} />,
+    //   link: 'keys',
+    // },
+    // {
+    //   title: 'Transactions',
+    //   icon: <IoWalletOutline style={iconStyle} />,
+    //   activeIcon: <IoWallet style={activeIconStyle} />,
+    //   link: 'transactions',
+    // },
+    // {
+    //   title: 'Access Tokens',
+    //   icon: <IoTicketOutline style={iconStyle} />,
+    //   activeIcon: <IoTicket style={activeIconStyle} />,
+    //   link: 'access-tokens',
+    // },
     {
-      title: 'Accounts',
-      icon: <IoBarChartOutline style={iconStyle} />,
-      activeIcon: <IoBarChart style={activeIconStyle} />,
-      link: '/accounts',
-    },
-    {
-      title: 'Keys',
-      icon: <IoKeyOutline style={iconStyle} />,
-      activeIcon: <IoKey style={activeIconStyle} />,
-      link: 'keys',
-    },
-    {
-      title: 'Transactions',
-      icon: <IoWalletOutline style={iconStyle} />,
-      activeIcon: <IoWallet style={activeIconStyle} />,
-      link: 'transactions',
-    },
-    {
-      title: 'Access Tokens',
-      icon: <IoTicketOutline style={iconStyle} />,
-      activeIcon: <IoTicket style={activeIconStyle} />,
-      link: 'access-tokens',
+      title: 'Settings',
+      icon: <IoSettingsOutline style={iconStyle} />,
+      activeIcon: <IoSettings style={activeIconStyle} />,
+      link: 'settings',
     },
   ];
 
@@ -119,8 +127,9 @@ function MainListItems() {
                   TransitionComponent={Fade}
                   TransitionProps={{ timeout: 300 }}
                   title={title}
-                  followCursor={true}
+                  followCursor={false}
                   placement="right"
+                  arrow
                 >
                   <ListItemIcon>{isActive ? activeIcon : icon}</ListItemIcon>
                 </Tooltip>
