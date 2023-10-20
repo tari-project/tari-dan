@@ -125,8 +125,8 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
         })
     }
 
-    fn set_endpoint(&mut self, endpoint: &String) -> Result<(), Self::Error> {
-        *self.indexer_jrpc_address.lock().unwrap() = Url::parse(endpoint.as_str())?;
+    fn set_endpoint(&mut self, endpoint: &str) -> Result<(), Self::Error> {
+        *self.indexer_jrpc_address.lock().unwrap() = Url::parse(endpoint)?;
         Ok(())
     }
 }
