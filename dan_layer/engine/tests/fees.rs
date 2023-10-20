@@ -227,7 +227,6 @@ fn fail_partial_paid_fees() {
     test.disable_fees();
 
     let reason = result.expect_transaction_failure();
-    println!("NOT HERE!");
     assert!(matches!(reason, RejectReason::FeesNotPaid(_)));
 
     // Check that the fee paid was deducted

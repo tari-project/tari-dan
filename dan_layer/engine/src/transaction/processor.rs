@@ -151,14 +151,22 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 } = runtime.interface().finalize()?;
 
                 if !fee_receipt.is_paid_in_full() {
-                    finalized.result = TransactionResult::AcceptFeeRejectRest(
-                        finalized.result.accept().unwrap().clone(),
-                        RejectReason::FeesNotPaid(format!(
+                    finalized.result = if let Some(accept) = finalized.result.accept() {
+                        TransactionResult::AcceptFeeRejectRest(
+                            accept.clone(),
+                            RejectReason::FeesNotPaid(format!(
+                                "Required fees {} but {} paid",
+                                fee_receipt.total_fees_charged(),
+                                fee_receipt.total_fees_paid()
+                            )),
+                        )
+                    } else {
+                        TransactionResult::Reject(RejectReason::FeesNotPaid(format!(
                             "Required fees {} but {} paid",
                             fee_receipt.total_fees_charged(),
                             fee_receipt.total_fees_paid()
-                        )),
-                    );
+                        )))
+                    };
                     return Ok(ExecuteResult {
                         finalize: finalized,
                         // transaction_failure: Some(RejectReason::FeesNotPaid(format!(

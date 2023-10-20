@@ -147,7 +147,7 @@ where
                 json_results,
             } => {
                 let new_status = if final_decision.is_commit() {
-                    match execution_result.clone() {
+                    match execution_result.as_ref() {
                         Some(execution_result) => {
                             if execution_result.finalize.is_fee_only() {
                                 TransactionStatus::OnlyFeeAccepted

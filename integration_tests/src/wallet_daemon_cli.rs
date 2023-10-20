@@ -466,7 +466,7 @@ pub async fn submit_manifest_with_signing_keys(
         timeout_secs: Some(120),
     };
     let wait_resp = client.wait_transaction_result(wait_req).await.unwrap();
-    if let Some(reason) = wait_resp.result.clone().and_then(|result| result.reject().cloned()) {
+    if let Some(reason) = wait_resp.result.as_ref().and_then(|result| result.reject().cloned()) {
         panic!("Transaction failed: {}", reason);
     }
 
