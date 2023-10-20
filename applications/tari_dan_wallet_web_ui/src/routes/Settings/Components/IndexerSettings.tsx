@@ -57,31 +57,6 @@ function IndexerSettings() {
 
   return (
     <>
-      {/* <Box
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          gap: theme.spacing(3),
-        }}
-      >
-        {indexer === '' ? (
-          <Alert severity="warning">No Indexer Set</Alert>
-        ) : (
-          <Alert severity="success">Current indexer: {indexer}</Alert>
-        )}
-        <Form onSubmit={onSubmitIndexer} className="flex-container">
-          <TextField
-            name="indexer"
-            label="Account Name"
-            value={accountFormState.indexer}
-            onChange={onAccountChange}
-            style={{ flexGrow: 1 }}
-          />
-          <Button variant="contained" type="submit">
-            Set Indexer
-          </Button>
-        </Form>
-      </Box> */}
       <Box className="flex-container">
         {showForm ? (
           <Form onSubmit={onSubmitIndexer} className="flex-container">
