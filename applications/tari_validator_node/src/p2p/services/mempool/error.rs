@@ -59,6 +59,10 @@ pub enum MempoolError {
     CurrentEpochLessThanMinimum { current_epoch: Epoch, min_epoch: Epoch },
     #[error("Current epoch ({current_epoch}) is greater than maximum epoch ({max_epoch}) required for transaction")]
     CurrentEpochGreaterThanMaximum { current_epoch: Epoch, max_epoch: Epoch },
+    #[error("Transaction {transaction_id} does not have any inputs")]
+    NoInputs { transaction_id: TransactionId },
+    #[error("Executed transaction {transaction_id} does not involved any shards")]
+    NoInvolvedShards { transaction_id: TransactionId },
 }
 
 impl From<mpsc::error::SendError<MempoolRequest>> for MempoolError {

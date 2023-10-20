@@ -18,7 +18,7 @@ pub struct ConfidentialOutput {
     pub commitment: String,
     pub value: i64,
     pub sender_public_nonce: Option<String>,
-    pub secret_key_index: i64,
+    pub encryption_secret_key_index: i64,
     pub public_asset_tag: Option<String>,
     pub status: String,
     pub locked_at: Option<NaiveDateTime>,
@@ -56,7 +56,7 @@ impl ConfidentialOutput {
             sender_public_nonce: self
                 .sender_public_nonce
                 .map(|nonce| PublicKey::from_hex(&nonce).unwrap()),
-            secret_key_index: self.secret_key_index as u64,
+            encryption_secret_key_index: self.encryption_secret_key_index as u64,
             encrypted_data: EncryptedData::try_from(self.encrypted_data.as_slice()).map_err(|_| {
                 WalletStorageError::DecodingError {
                     operation: "try_into_output",

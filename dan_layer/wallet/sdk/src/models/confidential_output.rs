@@ -16,7 +16,7 @@ pub struct ConfidentialOutputModel {
     pub commitment: Commitment,
     pub value: u64,
     pub sender_public_nonce: Option<PublicKey>,
-    pub secret_key_index: u64,
+    pub encryption_secret_key_index: u64,
     pub encrypted_data: EncryptedData,
     pub public_asset_tag: Option<PublicKey>,
     pub status: OutputStatus,

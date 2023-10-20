@@ -84,7 +84,7 @@ impl ExecutedTransaction {
     }
 
     pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
-        self.transaction.involved_shards_iter().chain(&self.resulting_outputs)
+        self.transaction.all_inputs_iter().chain(&self.resulting_outputs)
     }
 
     pub fn into_final_result(self) -> Option<ExecuteResult> {
@@ -129,7 +129,7 @@ impl ExecutedTransaction {
 
     pub fn to_initial_evidence(&self) -> Evidence {
         self.transaction
-            .involved_shards_iter()
+            .all_inputs_iter()
             .chain(self.resulting_outputs())
             .map(|shard| (*shard, vec![]))
             .collect()

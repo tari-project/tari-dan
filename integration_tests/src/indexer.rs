@@ -169,8 +169,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
 
     // we need to add all the validator nodes as seed peers
     let peer_seeds: Vec<String> = world
-        .validator_nodes
-        .values()
+        .all_validators_iter()
         .map(|vn| format!("{}::/ip4/127.0.0.1/tcp/{}", vn.public_key, vn.port))
         .collect();
 

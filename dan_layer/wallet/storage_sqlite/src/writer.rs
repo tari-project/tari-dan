@@ -568,7 +568,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             sender_public_nonce: locked_output
                 .sender_public_nonce
                 .map(|nonce| PublicKey::from_hex(&nonce).unwrap()),
-            secret_key_index: locked_output.secret_key_index as u64,
+            encryption_secret_key_index: locked_output.encryption_secret_key_index as u64,
             encrypted_data: EncryptedData::try_from(locked_output.encrypted_data.as_slice()).map_err(|_| {
                 WalletStorageError::DecodingError {
                     operation: "outputs_lock_smallest_amount",
@@ -604,7 +604,7 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 outputs::commitment.eq(output.commitment.to_hex()),
                 outputs::value.eq(output.value as i64),
                 outputs::sender_public_nonce.eq(output.sender_public_nonce.map(|pk| pk.to_hex())),
-                outputs::secret_key_index.eq(output.secret_key_index as i64),
+                outputs::encryption_secret_key_index.eq(output.encryption_secret_key_index as i64),
                 outputs::encrypted_data.eq(output.encrypted_data.as_ref()),
                 outputs::status.eq(output.status.as_key_str()),
                 outputs::locked_by_proof.eq(output.locked_by_proof.map(|v| v as i32)),
