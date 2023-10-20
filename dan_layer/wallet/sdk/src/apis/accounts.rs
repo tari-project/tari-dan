@@ -86,6 +86,10 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         Ok(())
     }
 
+    pub fn exists_by_address(&self, address: &SubstateAddress) -> Result<bool, AccountsApiError> {
+        Ok(self.get_account_by_address(address).optional()?.is_some())
+    }
+
     pub fn get_account_by_address(&self, address: &SubstateAddress) -> Result<Account, AccountsApiError> {
         let mut tx = self.store.create_read_tx()?;
         let account = tx.accounts_get(address)?;

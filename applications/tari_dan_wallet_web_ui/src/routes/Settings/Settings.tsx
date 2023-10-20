@@ -20,28 +20,51 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import PageHeading from '../../Components/PageHeading';
+import Grid from '@mui/material/Grid';
+import { StyledPaper } from '../../Components/StyledComponents';
+import Accounts from '../Wallet/Components/Accounts';
+import Keys from '../Wallet/Components/Keys';
+import AccessTokens from '../Wallet/Components/AccessTokens';
+import SettingsTabs from './Components/SettingsTabs';
 
-interface Store {
-  showBalance: boolean;
-  setShowBalance: (show: boolean) => void;
-  accountName: string;
-  setAccountName: (name: string) => void;
+export interface ISettingsMenu {
+  label: string;
+  title: string;
+  content: React.ReactNode;
 }
 
-const useAccountStore = create<Store>()(
-  persist<Store>(
-    (set) => ({
-      showBalance: true,
-      setShowBalance: (show) => set({ showBalance: show }),
-      accountName: '',
-      setAccountName: (name) => set({ accountName: name }),
-    }),
+function SettingsPage() {
+  const menuItems = [
     {
-      name: 'account-store',
-    }
-  )
-);
+      label: 'Accounts',
+      title: 'Manage Accounts',
+      content: <Accounts />,
+    },
+    {
+      label: 'Keys',
+      title: 'Manage Keys',
+      content: <Keys />,
+    },
+    {
+      label: 'Access Tokens',
+      title: 'Manage Access Tokens',
+      content: <AccessTokens />,
+    },
+  ];
 
-export default useAccountStore;
+  return (
+    <>
+      <Grid item xs={12} md={12} lg={12}>
+        <PageHeading>Settings</PageHeading>
+      </Grid>
+      <Grid item xs={12} md={12} lg={12}>
+        <StyledPaper>
+          <SettingsTabs menuItems={menuItems} />
+        </StyledPaper>
+      </Grid>
+    </>
+  );
+}
+
+export default SettingsPage;

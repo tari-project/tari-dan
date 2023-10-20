@@ -28,18 +28,20 @@ import {
   TableBody,
   Collapse,
 } from '@mui/material';
-import { renderJson } from '../../utils/helpers';
 import { DataTableCell } from '../../Components/StyledComponents';
 import { AccordionIconButton } from '../../Components/StyledComponents';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { IoArrowDownCircle, IoArrowUpCircle } from 'react-icons/io5';
-import CodeBlockDialog from '../../Components/CodeBlock';
+import CodeBlockExpand from '../../Components/CodeBlock';
+import { useTheme } from '@mui/material/styles';
 
 function RowData({ info, state }: any, index: number) {
   const [open, setOpen] = useState(false);
+  const theme = useTheme();
   const itemKey = Object.keys(info[0])[0];
   const itemValue = Object.values(info[0])[0];
+  console.log(info);
   return (
     <>
       <TableRow key={`${index}-1`}>
@@ -83,11 +85,16 @@ function RowData({ info, state }: any, index: number) {
         </DataTableCell>
       </TableRow>
       <TableRow key={`${index}-2`}>
-        <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={4}>
+        <DataTableCell
+          style={{
+            paddingBottom: theme.spacing(1),
+            paddingTop: 0,
+            borderBottom: 'none',
+          }}
+          colSpan={4}
+        >
           <Collapse in={open} timeout="auto" unmountOnExit>
-            <CodeBlockDialog title="Substate">
-              {renderJson(info)}
-            </CodeBlockDialog>
+            <CodeBlockExpand title="Substate" content={info} />
           </Collapse>
         </DataTableCell>
       </TableRow>

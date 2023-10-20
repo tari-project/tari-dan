@@ -11,7 +11,7 @@ use std::{
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
 use tari_transaction::TransactionId;
 
@@ -312,7 +312,7 @@ impl<TAddr> SubstateUpdate<TAddr> {
     }
 }
 
-impl<TAddr> SubstateUpdate<TAddr> {
+impl<TAddr: NodeAddressable> SubstateUpdate<TAddr> {
     pub fn apply<TTx>(self, tx: &mut TTx, block: &Block<TAddr>) -> Result<(), StorageError>
     where
         TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,

@@ -3,7 +3,7 @@ name = "tari_dan_wallet_sdk"
 authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet library"
 repository = "https://github.com/tari-project/tari-dan"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 license = "BSD-3-Clause"
 
