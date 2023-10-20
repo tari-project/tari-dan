@@ -9,6 +9,7 @@ mod helpers;
 pub mod keys;
 pub mod nfts;
 pub mod rpc;
+pub mod settings;
 pub mod transaction;
 pub mod validator;
 pub mod webrtc;

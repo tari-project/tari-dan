@@ -46,6 +46,7 @@ webrtc = "0.7.1"
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }
 log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller", "console_appender"] }
 mime_guess = "2.0.4"
+url = "2.4.1"
 
 [dev-dependencies]
 tari_utilities = "0.4.10"

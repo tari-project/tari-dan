@@ -38,6 +38,8 @@ pub trait WalletNetworkInterface {
         &self,
         transaction_id: TransactionId,
     ) -> Result<TransactionQueryResult, Self::Error>;
+
+    fn set_endpoint(&mut self, endpoint: &String) -> Result<(), Self::Error>;
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
