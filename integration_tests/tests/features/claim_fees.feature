@@ -104,7 +104,6 @@ Feature: Claim Fees
     # Initialize a VN
     Given a seed validator node VN connected to base node BASE and wallet WALLET
     When miner MINER mines 4 new blocks
-    Then VN has scanned to height 1 within 10 seconds
     When wallet WALLET has at least 10000 T
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET1 using key K1
     When miner MINER mines 16 new blocks

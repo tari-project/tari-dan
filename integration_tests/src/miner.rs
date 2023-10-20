@@ -68,11 +68,11 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
 
     for _ in 0..num_blocks {
         mine_block(&mut base_client, &mut wallet_client).await;
+        // Makes less likely that base layer will fail with
+        // "Chain storage error: You tried to execute an invalid Database operation: UTXO 248a... was already marked as
+        // deleted."
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-
-    // Give some time for the base node and wallet to sync the new blocks
-    tokio::time::sleep(Duration::from_secs(5)).await;
 }
 
 async fn create_base_node_client(world: &TariWorld, miner_name: &String) -> BaseNodeClient {
