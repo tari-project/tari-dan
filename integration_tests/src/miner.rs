@@ -63,7 +63,11 @@ pub fn register_miner_process(world: &mut TariWorld, miner_name: String, base_no
 
 pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: u64) {
     let miner = world.get_miner(&miner_name);
+    println!("a");
+    println!("a");
     let mut base_client = create_base_node_client(world, &miner_name).await;
+    println!("b");
+    println!("b");
     let mut wallet_client = world.get_wallet(&miner.wallet_name).create_client().await;
 
     for _ in 0..num_blocks {
@@ -78,7 +82,7 @@ pub async fn mine_blocks(world: &mut TariWorld, miner_name: String, num_blocks: 
 async fn create_base_node_client(world: &TariWorld, miner_name: &String) -> BaseNodeClient {
     let miner = world.miners.get(miner_name).unwrap();
     let base_node_grpc_port = world.base_nodes.get(&miner.base_node_name).unwrap().grpc_port;
-    let base_node_grpc_url = format!("127.0.0.1:{}", base_node_grpc_port);
+    let base_node_grpc_url = format!("http://127.0.0.1:{}", base_node_grpc_port);
     eprintln!("Base node GRPC at {}", base_node_grpc_url);
     BaseNodeClient::connect(base_node_grpc_url).await.unwrap()
 }
