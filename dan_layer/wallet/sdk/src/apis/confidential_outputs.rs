@@ -120,7 +120,9 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
     ) -> Result<Vec<ConfidentialOutputWithMask>, ConfidentialOutputsApiError> {
         let mut outputs_with_masks = Vec::with_capacity(outputs.len());
         for output in outputs {
-            let output_key = self.key_manager_api.derive_key(key_branch, output.secret_key_index)?;
+            let output_key = self
+                .key_manager_api
+                .derive_key(key_branch, output.encryption_secret_key_index)?;
             // Either derive the mask from the sender's public nonce or from the local key manager
             let shared_decrypt_key = match output.sender_public_nonce {
                 Some(nonce) => {
@@ -129,7 +131,9 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
                 },
                 None => {
                     // Derive local secret
-                    let output_key = self.key_manager_api.derive_key(key_branch, output.secret_key_index)?;
+                    let output_key = self
+                        .key_manager_api
+                        .derive_key(key_branch, output.encryption_secret_key_index)?;
                     output_key.key
                 },
             };
@@ -233,7 +237,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
             commitment: output.commitment.clone(),
             value,
             sender_public_nonce: Some(output.stealth_public_nonce.clone()),
-            secret_key_index: account.key_index,
+            encryption_secret_key_index: account.key_index,
             encrypted_data: output.encrypted_data.clone(),
             public_asset_tag: None,
             status,

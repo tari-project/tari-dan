@@ -21,21 +21,12 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 mod steps;
-use std::{
-    collections::{BTreeMap, HashMap},
-    fs,
-    future,
-    io,
-    panic,
-    str::FromStr,
-    time::Duration,
-};
+use std::{fs, future, io, panic, str::FromStr, time::Duration};
 
 use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, World, WriterExt};
 use integration_tests::{
     base_node::spawn_base_node,
     http_server::{spawn_template_http_server, MockHttpServer},
-    indexer::{spawn_indexer, IndexerProcess},
     logging::{create_log_config_file, get_base_dir},
     miner::{mine_blocks, register_miner_process},
     validator_node::spawn_validator_node,
@@ -47,7 +38,6 @@ use integration_tests::{
 };
 use tari_common::initialize_logging;
 use tari_comms::multiaddr::Multiaddr;
-use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_engine::abi::Type;
 use tari_dan_storage::consensus_models::QuorumDecision;
 use tari_shutdown::Shutdown;
@@ -533,123 +523,6 @@ fn wrap_manifest_in_main(world: &TariWorld, contents: &str) -> String {
         format!("{}\nuse template_{} as {};", acc, template.address, name)
     });
     format!("{} fn main() {{ {} }}", template_defs, contents)
-}
-
-#[given(expr = "an indexer {word} connected to base node {word}")]
-async fn start_indexer(world: &mut TariWorld, indexer_name: String, bn_name: String) {
-    spawn_indexer(world, indexer_name, bn_name).await;
-}
-
-#[given(expr = "{word} indexer GraphQL request works")]
-async fn works_indexer_graphql(world: &mut TariWorld, indexer_name: String) {
-    let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
-    // insert event mock data in the substate manager database
-    indexer.insert_event_mock_data().await;
-    let mut graphql_client = indexer.get_graphql_indexer_client().await;
-    let component_address = [0u8; 32];
-    let template_address = [0u8; 32];
-    let tx_hash = [0u8; 32];
-    let query = format!(
-        "{{ getEventsForTransaction(txHash: {:?}) {{ componentAddress, templateAddress, txHash, topic, payload }}
-    }}",
-        tx_hash.to_hex()
-    );
-    let res = graphql_client
-        .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
-        .await
-        .expect("Failed to obtain getEventsForTransaction query result");
-    let res = res.get("getEventsForTransaction").unwrap();
-    assert_eq!(res.len(), 1);
-    assert_eq!(res[0].component_address, Some(component_address));
-    assert_eq!(res[0].template_address, template_address);
-    assert_eq!(res[0].tx_hash, tx_hash);
-    assert_eq!(res[0].topic, "my_event");
-    assert_eq!(
-        res[0].payload,
-        BTreeMap::from([("my".to_string(), "event".to_string())])
-    );
-}
-
-#[when(expr = "indexer {word} scans the network {int} events for account {word} with topics {word}")]
-async fn indexer_scans_network_events(
-    world: &mut TariWorld,
-    indexer_name: String,
-    num_events: u32,
-    account_name: String,
-    topics: String,
-) {
-    let indexer: &mut IndexerProcess = world.indexers.get_mut(&indexer_name).unwrap();
-    let accounts_component_addresses = world.outputs.get(&account_name).expect("Account name not found");
-    let component_address = accounts_component_addresses
-        .into_iter()
-        .find(|(k, _)| k.contains("components/Account"))
-        .map(|(_, v)| v)
-        .expect("Did not find component address");
-
-    let mut graphql_client = indexer.get_graphql_indexer_client().await;
-    let query = format!(
-        r#"{{ getEventsForComponent(componentAddress: "{}", version: {}) {{ componentAddress, templateAddress, txHash, topic, payload }} }}"#,
-        component_address.address, component_address.version
-    );
-    let res = graphql_client
-        .send_request::<HashMap<String, Vec<tari_indexer::graphql::model::events::Event>>>(&query, None, None)
-        .await
-        .expect("Failed to obtain getEventsForComponent query result");
-
-    let events_for_component = res.get("getEventsForComponent").unwrap();
-    assert_eq!(events_for_component.len(), num_events as usize);
-
-    let topics = topics.split(',').collect::<Vec<_>>();
-    assert_eq!(topics.len(), num_events as usize);
-
-    for (ind, topic) in topics.iter().enumerate() {
-        let event = events_for_component[ind].clone();
-        assert_eq!(&event.topic, topic);
-    }
-}
-
-#[when(expr = "the indexer {word} tracks the address {word}")]
-async fn track_addresss_in_indexer(world: &mut TariWorld, indexer_name: String, output_ref: String) {
-    let indexer = world.indexers.get(&indexer_name).unwrap();
-    assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
-    indexer.add_address(world, output_ref).await;
-}
-
-#[then(expr = "the indexer {word} returns version {int} for substate {word}")]
-async fn assert_indexer_substate_version(
-    world: &mut TariWorld,
-    indexer_name: String,
-    version: u32,
-    output_ref: String,
-) {
-    let indexer = world.indexers.get(&indexer_name).unwrap();
-    assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
-    let substate = indexer.get_substate(world, output_ref, version).await;
-    eprintln!(
-        "indexer.get_substate result: {}",
-        serde_json::to_string_pretty(&substate).unwrap()
-    );
-    assert_eq!(substate.version, version);
-}
-
-#[then(expr = "the indexer {word} returns {int} non fungibles for resource {word}")]
-async fn assert_indexer_non_fungible_list(
-    world: &mut TariWorld,
-    indexer_name: String,
-    count: usize,
-    output_ref: String,
-) {
-    let indexer = world.indexers.get(&indexer_name).unwrap();
-    assert!(!indexer.handle.is_finished(), "Indexer {} is not running", indexer_name);
-    let nfts = indexer.get_non_fungibles(world, output_ref, 0, count as u64).await;
-    eprintln!("indexer.get_non_fungibles result: {:?}", nfts);
-    assert_eq!(
-        nfts.len(),
-        count,
-        "Unexpected number of NFTs returned. Expected: {}, Actual: {}",
-        count,
-        nfts.len()
-    );
 }
 
 #[given(expr = "all validator nodes are connected to each other")]

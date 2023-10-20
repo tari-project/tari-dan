@@ -63,7 +63,7 @@ table! {
         commitment -> Text,
         value -> BigInt,
         sender_public_nonce -> Nullable<Text>,
-        secret_key_index -> BigInt,
+        encryption_secret_key_index -> BigInt,
         public_asset_tag -> Nullable<Text>,
         status -> Text,
         locked_at -> Nullable<Timestamp>,

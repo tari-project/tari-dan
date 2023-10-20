@@ -1,20 +1,14 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+pub use after::*;
 pub use and_then::*;
-pub use claim_fee_instructions::*;
-pub use fee::*;
-pub use input_refs::*;
-pub use outputs_dont_exist_locally::*;
-pub use template_exists::*;
+pub use before::*;
+
+mod after;
+mod before;
 
 mod and_then;
-mod claim_fee_instructions;
-mod fee;
-mod input_refs;
-mod outputs_dont_exist_locally;
-mod template_exists;
-
 use async_trait::async_trait;
 
 #[async_trait]

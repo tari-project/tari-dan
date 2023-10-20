@@ -4,7 +4,7 @@ authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet CLI"
 repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2021"
 
 [dependencies]
