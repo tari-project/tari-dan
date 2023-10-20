@@ -62,16 +62,8 @@ impl IdProvider {
         Ok(id)
     }
 
-    pub fn new_resource_address(
-        &self,
-        template_address: &TemplateAddress,
-        token_symbol: &str,
-    ) -> Result<ResourceAddress, IdProviderError> {
-        Ok(hasher(EngineHashDomainLabel::ResourceAddress)
-            .chain(&template_address)
-            .chain(&token_symbol)
-            .result()
-            .into())
+    pub fn new_resource_address(&self) -> Result<ResourceAddress, IdProviderError> {
+        Ok(self.new_id()?.into())
     }
 
     pub fn new_component_address(
