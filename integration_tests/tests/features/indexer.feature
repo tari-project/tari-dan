@@ -126,7 +126,7 @@ Feature: Indexer node
     Given a validator node VN connected to base node BASE and wallet WALLET
 
     # Initialize an indexer
-      Given an indexer IDX connected to base node BASE
+    Given an indexer IDX connected to base node BASE
 
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 6 new blocks
@@ -146,7 +146,6 @@ Feature: Indexer node
     # Creates a new account
     When I create an account ACC_1 on VN
     When I create an account ACC_2 on VN
-
 
     # Scan the network for the event emitted on ACC_1 creation
     When indexer IDX scans the network 1 events for account ACC_1 with topics component-created
