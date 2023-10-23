@@ -277,27 +277,6 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         instructions,
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
-        new_outputs: common.num_outputs.unwrap_or(0),
-        specific_non_fungible_outputs: common
-            .non_fungible_mint_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.non_fungible_id))
-            .collect(),
-        new_resources: common
-            .new_resources
-            .into_iter()
-            .map(|r| (r.template_address, r.token_symbol))
-            .collect(),
-        new_non_fungible_outputs: common
-            .new_non_fungible_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.count))
-            .collect(),
-        new_non_fungible_index_outputs: common
-            .new_non_fungible_index_outputs
-            .into_iter()
-            .map(|i| (i.parent_address, i.index))
-            .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
         min_epoch: common.min_epoch.map(Epoch),
@@ -332,27 +311,6 @@ async fn handle_submit_manifest(
         instructions,
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
-        new_outputs: common.num_outputs.unwrap_or(0),
-        specific_non_fungible_outputs: common
-            .non_fungible_mint_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.non_fungible_id))
-            .collect(),
-        new_resources: common
-            .new_resources
-            .into_iter()
-            .map(|r| (r.template_address, r.token_symbol))
-            .collect(),
-        new_non_fungible_outputs: common
-            .new_non_fungible_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.count))
-            .collect(),
-        new_non_fungible_index_outputs: common
-            .new_non_fungible_index_outputs
-            .into_iter()
-            .map(|i| (i.parent_address, i.index))
-            .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
         min_epoch: common.min_epoch.map(Epoch),

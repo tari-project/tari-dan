@@ -90,14 +90,6 @@ pub struct TransactionSubmitRequest {
     pub instructions: Vec<Instruction>,
     pub inputs: Vec<SubstateRequirement>,
     pub override_inputs: bool,
-
-    // TODO: all of these are ignored
-    pub new_outputs: u8,
-    pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
-    pub new_resources: Vec<(TemplateAddress, String)>,
-    pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
-    pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
-
     pub is_dry_run: bool,
     pub proof_ids: Vec<ConfidentialProofId>,
     pub min_epoch: Option<Epoch>,

@@ -47,13 +47,13 @@ Feature: Wallet Daemon
         When I check the balance of ACC_2 on wallet daemon WALLET_D the amount is exactly 0
 
         # Create a new Faucet component
-        When I call function "mint" on template "faucet" using account ACC_1 to pay fees via wallet daemon WALLET_D with args "10000" and 3 outputs named "FAUCET"
+        When I call function "mint" on template "faucet" using account ACC_1 to pay fees via wallet daemon WALLET_D with args "10000" named "FAUCET"
 
         # Submit a transaction manifest
         When I print the cucumber world
         # TODO: remove the wait
         When I wait 5 seconds
-        When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACC_1" and 3 outputs named "TX1"
+        When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACC_1" named "TX1"
         ```
         let faucet = global!["FAUCET/components/TestFaucet"];
         let mut acc1 = global!["ACC_1/components/Account"];

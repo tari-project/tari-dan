@@ -32,21 +32,15 @@ Feature: NFTs
     When I use an account key named K1
 
     # Create a new BasicNft component
-    When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT" with new resource "SPKL"
+    When I call function "new" on template "basic_nft" on VN named "NFT" with new resource "SPKL"
 
     # Create an account to deposit the minted nfts
     When I create an account ACC1 on VN
     When I create an account ACC2 on VN
 
     # Submit a transaction with NFT operations
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" and 6 outputs named "TX1" signed with key ACC1
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" named "TX1" signed with key ACC1
     ```
-    // $mint NFT/resources/0 1
-    // $mint_specific NFT/resources/0 str:SpecialNft
-    // $mint_specific NFT/resources/0 str:Burn!
-    // $nft_index NFT/resources/0 0
-    // $nft_index NFT/resources/0 1
-    // $nft_index NFT/resources/0 2
     let sparkle_nft = global!["NFT/components/SparkleNft"];
     let sparkle_res = global!["NFT/resources/0"];
     let mut acc1 = global!["ACC1/components/Account"];

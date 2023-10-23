@@ -31,7 +31,7 @@ Feature: Fungible tokens
     When I use an account key named K1
 
     # Create a new Faucet component
-    When I call function "mint" on template "faucet" on VN with args "amount_10000" and 3 outputs named "FAUCET" with new resource "test"
+    When I call function "mint" on template "faucet" on VN with args "amount_10000" named "FAUCET" with new resource "test"
 
     # Create two accounts to test sending the tokens
     When I create an account ACC_1 on VN
@@ -39,7 +39,7 @@ Feature: Fungible tokens
 
     # Submit a transaction manifest
     #    When I print the cucumber world
-    When I submit a transaction manifest on VN with inputs "FAUCET, ACC_1" and 3 outputs named "TX1" signed with key ACC_1
+    When I submit a transaction manifest on VN with inputs "FAUCET, ACC_1" named "TX1" signed with key ACC_1
     ```
     let faucet = global!["FAUCET/components/TestFaucet"];
     let mut acc1 = global!["ACC_1/components/Account"];
