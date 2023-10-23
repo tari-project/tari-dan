@@ -29,17 +29,15 @@ use tari_template_lib::{
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Resource {
     resource_type: ResourceType,
-    token_symbol: String,
     metadata: Metadata,
     total_supply: Amount,
 }
 
 impl Resource {
-    pub fn new(resource_type: ResourceType, token_symbol: String, metadata: Metadata) -> Self {
+    pub fn new(resource_type: ResourceType, metadata: Metadata) -> Self {
         Self {
             resource_type,
             metadata,
-            token_symbol,
             total_supply: 0.into(),
         }
     }
@@ -78,9 +76,5 @@ impl Resource {
 
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
-    }
-
-    pub fn token_symbol(&self) -> &str {
-        &self.token_symbol
     }
 }

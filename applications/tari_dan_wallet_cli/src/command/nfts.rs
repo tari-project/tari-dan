@@ -52,8 +52,6 @@ pub enum AccountNftSubcommand {
 pub struct MintAccountNftArgs {
     #[clap(long, short = 'a', alias = "account")]
     pub account: Option<ComponentAddressOrName>,
-    #[clap(long, short = 't', alias = "token-symbol")]
-    pub token_symbol: Option<String>,
     #[clap(long, short = 'i', alias = "metadata-file")]
     pub metadata_file: Option<PathBuf>,
     #[clap(long, short = 'm', alias = "metadata")]
@@ -97,7 +95,6 @@ pub async fn handle_mint_account_nft(
 ) -> Result<(), anyhow::Error> {
     let MintAccountNftArgs {
         account,
-        token_symbol,
         metadata_file,
         metadata,
         mint_fee,
@@ -116,19 +113,6 @@ pub async fn handle_mint_account_nft(
         io::stdin().read_line(&mut account)?;
         ComponentAddressOrName::from_str(&account)
             .map_err(|e| anyhow!("Failed to parse account name or component address, with error = {}", e))?
-    };
-
-    let token_symbol = if let Some(token_symbol) = token_symbol {
-        token_symbol
-    } else {
-        println!(
-            "Please paste console wallet token symbol from mint_account_nft call in the terminal: Press <Ctrl/Cmd + \
-             d> once done"
-        );
-
-        let mut token_symbol = String::new();
-        io::stdin().read_line(&mut token_symbol)?;
-        token_symbol
     };
 
     let metadata = if let Some(metadata) = metadata {
@@ -153,7 +137,6 @@ pub async fn handle_mint_account_nft(
 
     let req = MintAccountNftRequest {
         account,
-        token_symbol,
         metadata,
         mint_fee: mint_fee.map(|f| Amount::new(i64::from(f))),
         create_account_nft_fee: create_account_nft_fee.map(|f| Amount::new(i64::from(f))),
@@ -188,8 +171,8 @@ pub async fn handle_get_account_nft(
         .map_err(|e| anyhow!("Failed to get account NFT with error = {}", e.to_string()))?;
 
     println!(
-        "Account NFT token_symbol {} metadata {} is_burned: {}",
-        resp.token_symbol, resp.metadata, resp.is_burned
+        "Account NFT with metadata {} is_burned: {}",
+        resp.metadata, resp.is_burned
     );
     println!();
 
@@ -215,13 +198,8 @@ pub async fn handle_list_account_nfts(
     table.enable_row_count();
     table.set_titles(vec!["Name", "Address", "Public Key", "Default"]);
     println!("Accounts:");
-    for AccountNftInfo {
-        token_symbol,
-        metadata,
-        is_burned,
-    } in resp.nfts
-    {
-        table.add_row(table_row!(token_symbol, metadata, is_burned));
+    for AccountNftInfo { metadata, is_burned } in resp.nfts {
+        table.add_row(table_row!(metadata, is_burned));
     }
     table.print_stdout();
     Ok(())
