@@ -75,3 +75,48 @@ Feature: NFTs
     ```
     When I print the cucumber world
 
+  @serial
+  Scenario: Create resource and mint in one transaction
+    Given fees are disabled
+    # Initialize a base node, wallet, miner and VN
+    Given a base node BASE
+    Given a wallet WALLET connected to base node BASE
+    Given a miner MINER connected to base node BASE and wallet WALLET
+
+    # Initialize a VN
+    Given a validator node VN connected to base node BASE and wallet WALLET
+
+    # The wallet must have some funds before the VN sends transactions
+    When miner MINER mines 7 new blocks
+    When wallet WALLET has at least 10000 T
+
+    # VN registration
+    When validator node VN sends a registration transaction
+
+    # Register the "basic_nft" template
+    When validator node VN registers the template "basic_nft"
+    When miner MINER mines 13 new blocks
+    Then VN has scanned to height 17 within 10 seconds
+    Then the validator node VN is listed as registered
+    Then the template "basic_nft" is listed as registered by the validator node VN
+
+    # A file-base CLI account must be created to sign future calls
+    When I use an account key named K1
+
+    # Create a new BasicNft component and mint in the same transaction
+    When I call function "new_with_initial_nft" on template "basic_nft" on VN with args "nft_str:1000" and 3 outputs named "NFT" with new resource "SPKL"
+
+    # Check that the initial NFT was actually minted by trying to deposit it into an account
+    When I create an account ACC1 on VN
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 6 outputs named "TX1" signed with key ACC1
+    ```
+    let sparkle_nft = global!["NFT/components/SparkleNft"];
+    let mut acc1 = global!["ACC1/components/Account"];
+
+    // get the initailly NFT from the component's vault
+    let nft_bucket = sparkle_nft.take_initial_nft();
+    acc1.deposit(nft_bucket);
+    ```
+
+    When I print the cucumber world
+
