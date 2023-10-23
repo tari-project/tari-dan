@@ -33,7 +33,6 @@ mod sparkle_nft_template {
     pub struct SparkleNft {
         resource_address: ResourceAddress,
         vault: Vault,
-        vault: Vault,
     }
 
     impl SparkleNft {
