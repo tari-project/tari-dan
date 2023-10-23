@@ -110,16 +110,6 @@ pub struct CommonSubmitArgs {
     pub dump_outputs_into: Option<ComponentAddressOrName>,
     #[clap(long)]
     pub dry_run: bool,
-    #[clap(long, short = 'r', alias = "resource")]
-    pub new_resources: Vec<NewResourceOutput>,
-    #[clap(long, short = 'm', alias = "mint-specific")]
-    pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
-    /// New non-fungible outputs to mint in the format <resource_address>,<num>
-    #[clap(long, alias = "mint-new")]
-    pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
-    /// New non-fungible index outputs to mint in the format <resource_address>,<index>
-    #[clap(long, alias = "new-nft-index")]
-    pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
     #[clap(long)]
     pub fee: Option<u64>,
     #[clap(long, short = 'f', alias = "fee-account")]

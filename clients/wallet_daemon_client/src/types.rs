@@ -36,7 +36,6 @@ use tari_engine_types::{
     instruction_result::InstructionResult,
     serde_with,
     substate::SubstateAddress,
-    TemplateAddress,
 };
 use tari_template_lib::{
     args::Arg,
@@ -65,14 +64,6 @@ pub struct CallInstructionRequest {
     pub override_inputs: Option<bool>,
     #[serde(default)]
     pub new_outputs: Option<u8>,
-    #[serde(default)]
-    pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
-    #[serde(default)]
-    pub new_resources: Vec<(TemplateAddress, String)>,
-    #[serde(default)]
-    pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
-    #[serde(default)]
-    pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
     #[serde(default)]
     pub is_dry_run: bool,
     #[serde(default)]

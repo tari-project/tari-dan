@@ -42,7 +42,7 @@ Feature: Indexer node
     When I create an account ACC1 on VN
 
     # Create a new SparkleNft component and mint an NFT
-    When I call function "new" on template "basic_nft" on VN named "NFT" with new resource "SPKL"
+    When I call function "new" on template "basic_nft" on VN named "NFT"
     When I submit a transaction manifest on VN with inputs "NFT, ACC1" named "TX2" signed with key ACC1
     ```
     // $mint NFT/resources/0 6

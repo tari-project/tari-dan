@@ -32,7 +32,7 @@ Feature: NFTs
     When I use an account key named K1
 
     # Create a new BasicNft component
-    When I call function "new" on template "basic_nft" on VN named "NFT" with new resource "SPKL"
+    When I call function "new" on template "basic_nft" on VN named "NFT"
 
     # Create an account to deposit the minted nfts
     When I create an account ACC1 on VN
@@ -98,7 +98,7 @@ Feature: NFTs
     When I use an account key named K1
 
     # Create a new BasicNft component and mint in the same transaction
-    When I call function "new_with_initial_nft" on template "basic_nft" on VN with args "nft_str:1000" and 3 outputs named "NFT" with new resource "SPKL"
+    When I call function "new_with_initial_nft" on template "basic_nft" on VN with args "nft_str:1000" and 3 outputs named "NFT"
 
     # Check that the initial NFT was actually minted by trying to deposit it into an account
     When I create an account ACC1 on VN
