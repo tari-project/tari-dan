@@ -573,14 +573,14 @@ pub struct ClaimValidatorFeesResponse {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SettingsSetIndexerUrlRequest {
+pub struct SettingsSetRequest {
     pub indexer_url: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SettingsSetIndexerUrlResponse {}
+pub struct SettingsSetResponse {}
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct SettingsGetIndexerUrlResponse {
+pub struct SettingsGetResponse {
     pub indexer_url: String,
 }

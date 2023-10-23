@@ -103,8 +103,8 @@ async fn handler(
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("settings", method)) => match method {
-            "get_indexer_url" => call_handler(context, value, token, settings::handle_get_indexer_url).await,
-            "set_indexer_url" => call_handler(context, value, token, settings::handle_set_indexer_url).await,
+            "get" => call_handler(context, value, token, settings::handle_get).await,
+            "set" => call_handler(context, value, token, settings::handle_set).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("webrtc", "start")) => webrtc::handle_start(context, value, token, shutdown_signal, addresses),
