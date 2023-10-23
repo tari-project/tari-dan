@@ -165,27 +165,23 @@ async fn call_template_constructor(
     outputs_name: String,
 ) {
     let args = args.split(',').map(|a| a.trim().to_string()).collect();
-    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, args)
-        .await;
+    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, args).await;
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(
-    expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#
-)]
+#[when(expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#)]
 async fn call_template_constructor_resource(
     world: &mut TariWorld,
     function_call: String,
     template_name: String,
     vn_name: String,
     args: String,
-    outputs_name: String
+    outputs_name: String,
 ) {
     let args = args.split(',').map(|a| a.trim().to_string()).collect();
-    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, args)
-    .await;
+    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, args).await;
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
@@ -199,15 +195,7 @@ async fn call_template_constructor_with_no_args(
     vn_name: String,
     outputs_name: String,
 ) {
-    validator_node_cli::create_component(
-        world,
-        outputs_name,
-        template_name,
-        vn_name,
-        function_call,
-        vec![]
-    )
-    .await;
+    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, vec![]).await;
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
@@ -221,15 +209,7 @@ async fn call_template_constructor_without_args(
     vn_name: String,
     function_call: String,
 ) {
-    validator_node_cli::create_component(
-        world,
-        component_name,
-        template_name,
-        vn_name,
-        function_call,
-        vec![]
-    )
-    .await;
+    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call, vec![]).await;
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;

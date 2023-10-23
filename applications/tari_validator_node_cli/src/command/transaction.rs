@@ -105,7 +105,7 @@ pub struct CommonSubmitArgs {
     #[clap(long, short = 'a')]
     pub account_template_address: Option<String>,
     #[clap(long)]
-    pub dry_run: bool
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Args, Clone)]

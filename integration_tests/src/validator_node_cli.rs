@@ -66,7 +66,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
-        dry_run: false
+        dry_run: false,
     };
     let mut client = world.get_validator_node(&validator_node_name).get_client();
     let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
@@ -91,7 +91,7 @@ pub async fn create_component(
     template_name: String,
     vn_name: String,
     function_call: String,
-    args: Vec<String>
+    args: Vec<String>,
 ) {
     let data_dir = get_cli_data_dir(world);
 
@@ -117,7 +117,7 @@ pub async fn create_component(
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
-            dry_run: false
+            dry_run: false,
         },
     };
     let mut client = world.get_validator_node(&vn_name).get_client();
@@ -250,7 +250,7 @@ pub async fn call_method(
             version: None,
             dump_outputs_into: None,
             account_template_address: None,
-            dry_run: false
+            dry_run: false,
         },
     };
     let mut client = world.get_validator_node(&vn_name).get_client();
@@ -345,7 +345,7 @@ pub async fn submit_manifest(
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
-        dry_run: false
+        dry_run: false,
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await

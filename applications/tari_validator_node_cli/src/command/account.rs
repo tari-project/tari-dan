@@ -85,7 +85,7 @@ pub async fn handle_create(
         version: None,
         dump_outputs_into: None,
         account_template_address: None,
-        dry_run: args.is_dry_run
+        dry_run: args.is_dry_run,
     };
 
     submit_transaction(vec![instruction], common, base_dir, client).await
