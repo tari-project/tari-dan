@@ -36,14 +36,14 @@ Feature: Indexer node
 
     # Create a new Counter component and increase it to have a version 1
     When I create a component COUNTER_1 of template "counter" on VN using "new"
-    When I invoke on VN on component COUNTER_1/components/Counter the method call "increase" with 1 outputs named "TX1"
+    When I invoke on VN on component COUNTER_1/components/Counter the method call "increase" named "TX1"
 
     # Create an account to deposit minted nfts
     When I create an account ACC1 on VN
 
     # Create a new SparkleNft component and mint an NFT
-    When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT" with new resource "SPKL"
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 12 outputs named "TX2" signed with key ACC1
+    When I call function "new" on template "basic_nft" on VN named "NFT"
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1" named "TX2" signed with key ACC1
     ```
     // $mint NFT/resources/0 6
     // $nft_index NFT/resources/0 0
