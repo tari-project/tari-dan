@@ -35,7 +35,7 @@ use tari_template_lib::{
     args,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::Amount,
-    prelude::{NonFungibleId, ResourceAddress},
+    prelude::ResourceAddress,
     resource::TOKEN_SYMBOL,
 };
 use tari_transaction::SubstateRequirement;
