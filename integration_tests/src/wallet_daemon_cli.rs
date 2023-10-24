@@ -76,7 +76,7 @@ pub async fn claim_burn(
     ownership_proof: CommitmentSignature<RistrettoPublicKey, RistrettoSecretKey>,
     reciprocal_claim_public_key: RistrettoPublicKey,
     wallet_daemon_name: String,
-    fee: i64,
+    max_fee: i64,
 ) -> Result<ClaimBurnResponse, WalletDaemonClientError> {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
@@ -92,7 +92,7 @@ pub async fn claim_burn(
             "reciprocal_claim_public_key": BASE64.encode(reciprocal_claim_public_key.as_bytes()),
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
-        fee: Some(Amount(fee)),
+        max_fee: Some(Amount(max_fee)),
     };
 
     client.claim_burn(claim_burn_request).await
@@ -111,7 +111,7 @@ pub async fn claim_fees(
 
     let request = ClaimValidatorFeesRequest {
         account: Some(ComponentAddressOrName::Name(account_name)),
-        fee: None,
+        max_fee: None,
         validator_public_key: vn.public_key.clone(),
         epoch: Epoch(epoch),
     };
@@ -125,7 +125,7 @@ pub async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, am
     let request = RevealFundsRequest {
         account: Some(ComponentAddressOrName::Name(account_name)),
         amount_to_reveal: Amount(amount as i64),
-        fee: Some(Amount(1)),
+        max_fee: Some(Amount(1)),
         pay_fee_from_reveal: true,
     };
 
@@ -260,7 +260,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, wallet_
         account_name: Some(account_name.clone()),
         custom_access_rules: None,
         is_default: false,
-        fee: None,
+        max_fee: None,
         key_id: None,
     };
 
@@ -300,7 +300,7 @@ pub async fn create_account_with_free_coins(
     let request = AccountsCreateFreeTestCoinsRequest {
         account: Some(ComponentAddressOrName::Name(account_name.clone())),
         amount,
-        fee: None,
+        max_fee: None,
         key_id: key_index,
     };
 
@@ -663,14 +663,14 @@ pub async fn transfer(
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
     let account = Some(ComponentAddressOrName::Name(account_name));
-    let fee = Some(Amount(1));
+    let max_fee = Some(Amount(1));
 
     let request = TransferRequest {
         account,
         amount,
         resource_address,
         destination_public_key,
-        fee,
+        max_fee,
     };
 
     let resp = client.accounts_transfer(request).await.unwrap();
@@ -688,13 +688,13 @@ pub async fn confidential_transfer(
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
     let account = Some(ComponentAddressOrName::Name(account_name));
-    let fee = Some(Amount(2000));
+    let max_fee = Some(Amount(2000));
 
     let request = ConfidentialTransferRequest {
         account,
         amount,
         destination_public_key,
-        fee,
+        max_fee,
         resource_address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     };
 

@@ -71,7 +71,7 @@ pub async fn handle_submit_instruction(
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
-            args: args![Amount::try_from(req.fee)?],
+            args: args![Amount::try_from(req.max_fee)?],
         }],
         instructions,
         inputs: req.inputs,

@@ -31,7 +31,7 @@ pub struct ClaimFeesArgs {
     #[clap(long, short = 'e')]
     pub epoch: u64,
     #[clap(long)]
-    pub fee: Option<u32>,
+    pub max_fee: Option<u32>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -76,7 +76,7 @@ pub async fn handle_claim_validator_fees(
         dest_account_name,
         validator_public_key,
         epoch,
-        fee,
+        max_fee,
     } = args;
 
     println!("Submitting claim validator fees transaction...");
@@ -86,7 +86,7 @@ pub async fn handle_claim_validator_fees(
             account: dest_account_name
                 .map(|name| ComponentAddressOrName::from_str(&name))
                 .transpose()?,
-            fee: fee.map(Amount::from),
+            max_fee: max_fee.map(Amount::from),
             validator_public_key: PublicKey::from_bytes(validator_public_key.into_inner().as_bytes())
                 .map_err(anyhow::Error::msg)?,
             epoch: Epoch(epoch),
