@@ -39,11 +39,7 @@ mod substate_manager;
 mod substate_storage_sqlite;
 mod transaction_manager;
 
-use std::{
-    fs,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
-};
+use std::{fs, sync::Arc};
 
 use http_ui::server::run_http_ui_server;
 use log::*;
@@ -141,20 +137,19 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
             dry_run_transaction_processor,
         );
         task::spawn(run_json_rpc(address, handlers));
+        // Run the http ui
+        if let Some(address) = config.indexer.http_ui_address {
+            task::spawn(run_http_ui_server(
+                address,
+                config.indexer.ui_connect_address.unwrap_or(address.to_string()),
+            ));
+        }
     }
     // Run the GraphQL API
     let graphql_address = config.indexer.graphql_address;
     if let Some(address) = graphql_address {
         info!(target: LOG_TARGET, "🌐 Started GraphQL server on {}", address);
         task::spawn(run_graphql(address, substate_manager.clone()));
-    }
-    // Run the http ui
-    if let Some(address) = config.indexer.http_ui_address {
-        let jrpc_address = match config.indexer.jrpc_for_ui_address {
-            Some(jrpc_address) => Some(jrpc_address),
-            None => jrpc_address.map(|address| address.to_string()),
-        };
-        task::spawn(run_http_ui_server(address, jrpc_address));
     }
 
     // Create pid to allow watchers to know that the process has started
@@ -183,9 +178,9 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
 }
 
 async fn create_base_layer_clients(config: &ApplicationConfig) -> Result<GrpcBaseNodeClient, ExitError> {
-    GrpcBaseNodeClient::connect(config.indexer.base_node_grpc_address.unwrap_or_else(|| {
+    GrpcBaseNodeClient::connect(config.indexer.base_node_grpc_address.clone().unwrap_or_else(|| {
         let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+        format!("127.0.0.1:{port}")
     }))
     .await
     .map_err(|err| ExitError::new(ExitCode::ConfigError, format!("Could not connect to base node {}", err)))

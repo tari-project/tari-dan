@@ -35,7 +35,7 @@ pub struct Cli {
     #[clap(long, alias = "endpoint", env = "JRPC_ENDPOINT")]
     pub json_rpc_address: Option<SocketAddr>,
     #[clap(long, env = "TARI_DAN_WALLET_UI_CONNECT_ADDRESS")]
-    pub ui_connect_address: Option<SocketAddr>,
+    pub ui_connect_address: Option<String>,
     #[clap(long, env = "SIGNALING_SERVER_ADDRESS")]
     pub signaling_server_address: Option<SocketAddr>,
     #[clap(long, alias = "indexer_url")]
