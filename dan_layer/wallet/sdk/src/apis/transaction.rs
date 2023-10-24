@@ -9,6 +9,7 @@ use tari_engine_types::{
     indexed_value::{IndexedValue, IndexedValueError},
     substate::SubstateDiff,
 };
+use tari_template_lib::prelude::ComponentAddress;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 use crate::{
@@ -104,18 +105,13 @@ where
         Ok(query)
     }
 
-    pub fn fetch_all_by_status(
+    pub fn fetch_all(
         &self,
-        status: TransactionStatus,
+        status: Option<TransactionStatus>,
+        component: Option<ComponentAddress>,
     ) -> Result<Vec<WalletTransaction<PublicKey>>, TransactionApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let transactions = tx.transactions_fetch_all_by_status(status)?;
-        Ok(transactions)
-    }
-
-    pub fn fetch_all(&self) -> Result<Vec<WalletTransaction<PublicKey>>, TransactionApiError> {
-        let mut tx = self.store.create_read_tx()?;
-        let transactions = tx.transactions_fetch_all()?;
+        let transactions = tx.transactions_fetch_all(status, component)?;
         Ok(transactions)
     }
 

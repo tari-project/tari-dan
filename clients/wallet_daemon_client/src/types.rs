@@ -41,7 +41,7 @@ use tari_template_lib::{
     args::Arg,
     auth::ComponentAccessRules,
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
-    prelude::{ConfidentialWithdrawProof, ResourceType},
+    prelude::{ComponentAddress, ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
@@ -111,6 +111,7 @@ pub struct TransactionGetResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetAllRequest {
     pub status: Option<TransactionStatus>,
+    pub component: Option<ComponentAddress>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
