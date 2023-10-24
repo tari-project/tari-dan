@@ -20,12 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    fs,
-    io,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
-};
+use std::{fs, io, sync::Arc};
 
 use minotari_app_utilities::{identity_management, identity_management::load_from_json};
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
@@ -68,10 +63,11 @@ pub async fn spawn_services(
     ensure_directories_exist(config)?;
 
     // GRPC client connection to base node
-    let base_node_client = GrpcBaseNodeClient::new(config.indexer.base_node_grpc_address.unwrap_or_else(|| {
-        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-    }));
+    let base_node_client =
+        GrpcBaseNodeClient::new(config.indexer.base_node_grpc_address.clone().unwrap_or_else(|| {
+            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+            format!("127.0.0.1:{port}")
+        }));
 
     // Initialize comms
     let (comms, _) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;

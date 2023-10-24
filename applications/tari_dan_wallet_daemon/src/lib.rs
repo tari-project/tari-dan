@@ -87,7 +87,10 @@ pub async fn run_tari_dan_wallet_daemon(
     if let Some(http_address) = config.dan_wallet_daemon.http_ui_address {
         task::spawn(run_http_ui_server(
             http_address,
-            config.dan_wallet_daemon.ui_connect_address.unwrap_or(address),
+            config
+                .dan_wallet_daemon
+                .ui_connect_address
+                .unwrap_or(address.to_string()),
         ));
     }
 

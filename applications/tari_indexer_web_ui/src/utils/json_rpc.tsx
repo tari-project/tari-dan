@@ -23,15 +23,11 @@
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = 'localhost:3333';
+  let address = 'http://localhost:3333';
   try {
-    let text = await (await fetch('/json_rpc_address')).text();
-    if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
-      address = text;
-    }
+    address = await (await fetch('/json_rpc_address')).text();
   } catch {}
-  console.log('jsonRpc ', method, params);
-  let response = await fetch(`http://${address}`, {
+  let response = await fetch(address, {
     method: 'POST',
     body: JSON.stringify({
       method: method,

@@ -38,12 +38,9 @@ async function internalJsonRpc(
     id = json_id;
     json_id += 1;
   });
-  let address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || 'localhost:9000';
+  let address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || 'http://localhost:9000';
   try {
-    let text = await (await fetch('/json_rpc_address')).text();
-    if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
-      address = text;
-    }
+    address = await (await fetch('/json_rpc_address')).text();
   } catch {}
   let headers: { [key: string]: string } = {
     'Content-Type': 'application/json',
@@ -51,7 +48,7 @@ async function internalJsonRpc(
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  let response = await fetch(`http://${address}`, {
+  let response = await fetch(address, {
     method: 'POST',
     body: JSON.stringify({
       method: method,

@@ -148,7 +148,11 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
         if let Some(address) = config.validator_node.http_ui_address {
             task::spawn(run_http_ui_server(
                 address,
-                config.validator_node.ui_connect_address.unwrap_or(*jrpc_address),
+                config
+                    .validator_node
+                    .ui_connect_address
+                    .clone()
+                    .unwrap_or(jrpc_address.to_string()),
             ));
         }
     }
@@ -172,9 +176,9 @@ async fn create_base_layer_clients(
     config: &ApplicationConfig,
 ) -> Result<(GrpcBaseNodeClient, GrpcWalletClient), ExitError> {
     let base_node_client =
-        GrpcBaseNodeClient::connect(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
+        GrpcBaseNodeClient::connect(config.validator_node.base_node_grpc_address.clone().unwrap_or_else(|| {
             let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-            SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
+            format!("127.0.0.1:{port}")
         }))
         .await
         .map_err(|error| ExitError::new(ExitCode::ConfigError, error))?;
