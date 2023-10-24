@@ -98,11 +98,11 @@ Feature: NFTs
     When I use an account key named K1
 
     # Create a new BasicNft component and mint in the same transaction
-    When I call function "new_with_initial_nft" on template "basic_nft" on VN with args "nft_str:1000" and 3 outputs named "NFT"
+    When I call function "new_with_initial_nft" on template "basic_nft" on VN with args "nft_str:1000" named "NFT"
 
     # Check that the initial NFT was actually minted by trying to deposit it into an account
     When I create an account ACC1 on VN
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 6 outputs named "TX1" signed with key ACC1
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1" named "TX1" signed with key ACC1
     ```
     let sparkle_nft = global!["NFT/components/SparkleNft"];
     let mut acc1 = global!["ACC1/components/Account"];

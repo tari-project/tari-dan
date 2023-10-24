@@ -65,7 +65,7 @@ Feature: Wallet Daemon
         When I print the cucumber world
 
         # Submit a transaction manifest
-        When I submit a transaction manifest via wallet daemon WALLET_D signed by the key of ACC_1 with inputs "FAUCET, TX1, ACC_2" and 1 output named "TX2"
+        When I submit a transaction manifest via wallet daemon WALLET_D signed by the key of ACC_1 with inputs "FAUCET, TX1, ACC_2" named "TX2"
         ```
         let mut acc1 = global!["TX1/components/Account"];
         let mut acc2 = global!["ACC_2/components/Account"];

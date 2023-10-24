@@ -126,7 +126,7 @@ async fn stop_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String) {
 }
 
 #[when(
-    expr = r#"I call function "{word}" on template "{word}" using account {word} to pay fees via wallet daemon {word} with args "{word}" and {int} outputs named "{word}""#
+    expr = r#"I call function "{word}" on template "{word}" using account {word} to pay fees via wallet daemon {word} with args "{word}" named "{word}""#
 )]
 async fn call_template_constructor_via_wallet_daemon(
     world: &mut TariWorld,
@@ -157,22 +157,6 @@ async fn call_template_constructor_via_wallet_daemon(
 
 #[when(expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#)]
 async fn call_template_constructor(
-    world: &mut TariWorld,
-    function_call: String,
-    template_name: String,
-    vn_name: String,
-    args: String,
-    outputs_name: String,
-) {
-    let args = args.split(',').map(|a| a.trim().to_string()).collect();
-    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, args).await;
-
-    // give it some time between transactions
-    // tokio::time::sleep(Duration::from_secs(4)).await;
-}
-
-#[when(expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#)]
-async fn call_template_constructor_resource(
     world: &mut TariWorld,
     function_call: String,
     template_name: String,

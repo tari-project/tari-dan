@@ -74,7 +74,7 @@ Feature: Account transfers
     When I transfer 50 tokens of resource FAUCET/resources/0 from account ACCOUNT to public key KEY_ACC_2 via the wallet daemon WALLET_D named TRANSFER
 
     # Check that ACC_2 component was created and has funds
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, TRANSFER" and 1 output named "TX2"
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, TRANSFER" named "TX2"
     ```
     let mut acc2 = global!["TRANSFER/components/Account"];
     let faucet_resource = global!["FAUCET/resources/0"];
@@ -151,7 +151,7 @@ Feature: Account transfers
     When I transfer 50 tokens of resource FAUCET/resources/0 from account ACCOUNT_1 to public key ACCOUNT_2 via the wallet daemon WALLET_D named TRANSFER
 
     # Check that ACCOUNT_2 component now has funds
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT_2" and 1 output named "TX2"
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT_2" named "TX2"
     ```
     let mut acc2 = global!["ACCOUNT_2/components/Account"];
     let faucet_resource = global!["FAUCET/resources/0"];

@@ -50,7 +50,7 @@ Feature: Fungible tokens
     ```
     #    When I print the cucumber world
     # Submit a transaction manifest
-    When I submit a transaction manifest on VN with inputs "FAUCET, TX1, ACC_2" and 1 output named "TX2" signed with key ACC_1
+    When I submit a transaction manifest on VN with inputs "FAUCET, TX1, ACC_2" named "TX2" signed with key ACC_1
 ```
 let mut acc1 = global!["TX1/components/Account"];
 let mut acc2 = global!["ACC_2/components/Account"];
