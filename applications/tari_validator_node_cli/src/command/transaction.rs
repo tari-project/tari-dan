@@ -106,14 +106,6 @@ pub struct CommonSubmitArgs {
     pub account_template_address: Option<String>,
     #[clap(long)]
     pub dry_run: bool,
-    #[clap(long, short = 'r', alias = "resource")]
-    pub new_resources: Vec<NewResourceOutput>,
-    #[clap(long, short = 'm', alias = "mint-specific")]
-    pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
-    #[clap(long, alias = "mint-new")]
-    pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
-    #[clap(long, alias = "new-nft-index")]
-    pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
 }
 
 #[derive(Debug, Args, Clone)]

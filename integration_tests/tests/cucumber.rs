@@ -126,7 +126,7 @@ async fn stop_wallet_daemon(world: &mut TariWorld, wallet_daemon_name: String) {
 }
 
 #[when(
-    expr = r#"I call function "{word}" on template "{word}" using account {word} to pay fees via wallet daemon {word} with args "{word}" and {int} outputs named "{word}""#
+    expr = r#"I call function "{word}" on template "{word}" using account {word} to pay fees via wallet daemon {word} with args "{word}" named "{word}""#
 )]
 async fn call_template_constructor_via_wallet_daemon(
     world: &mut TariWorld,
@@ -135,7 +135,6 @@ async fn call_template_constructor_via_wallet_daemon(
     account_name: String,
     wallet_daemon_name: String,
     args: String,
-    num_outputs: u64,
     outputs_name: String,
 ) {
     let args = args.split(',').map(|a| a.trim().to_string()).collect();
@@ -147,7 +146,6 @@ async fn call_template_constructor_via_wallet_daemon(
         wallet_daemon_name,
         function_call,
         args,
-        num_outputs,
         None,
         None,
     )
@@ -157,71 +155,31 @@ async fn call_template_constructor_via_wallet_daemon(
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(
-    expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" and {int} outputs named "{word}""#
-)]
+#[when(expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" named "{word}""#)]
 async fn call_template_constructor(
     world: &mut TariWorld,
     function_call: String,
     template_name: String,
     vn_name: String,
     args: String,
-    _num_outputs: u64,
     outputs_name: String,
 ) {
     let args = args.split(',').map(|a| a.trim().to_string()).collect();
-    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, args, vec![])
-        .await;
+    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, args).await;
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(
-    expr = r#"I call function "{word}" on template "{word}" on {word} with args "{word}" and {int} outputs named "{word}" with new resource "{word}""#
-)]
-async fn call_template_constructor_resource(
-    world: &mut TariWorld,
-    function_call: String,
-    template_name: String,
-    vn_name: String,
-    args: String,
-    _num_outputs: u64,
-    outputs_name: String,
-    new_resource_token: String,
-) {
-    let args = args.split(',').map(|a| a.trim().to_string()).collect();
-    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, args, vec![
-        new_resource_token,
-    ])
-    .await;
-
-    // give it some time between transactions
-    // tokio::time::sleep(Duration::from_secs(4)).await;
-}
-
-#[when(
-    expr = r#"I call function "{word}" on template "{word}" on {word} with {int} outputs named "{word}" with new resource "{word}""#
-)]
+#[when(expr = r#"I call function "{word}" on template "{word}" on {word} named "{word}""#)]
 async fn call_template_constructor_with_no_args(
     world: &mut TariWorld,
     function_call: String,
     template_name: String,
     vn_name: String,
-    _num_outputs: u64,
     outputs_name: String,
-    new_resource_token_symbol: String,
 ) {
-    validator_node_cli::create_component(
-        world,
-        outputs_name,
-        template_name,
-        vn_name,
-        function_call,
-        vec![],
-        vec![new_resource_token_symbol],
-    )
-    .await;
+    validator_node_cli::create_component(world, outputs_name, template_name, vn_name, function_call, vec![]).await;
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
@@ -235,52 +193,18 @@ async fn call_template_constructor_without_args(
     vn_name: String,
     function_call: String,
 ) {
-    validator_node_cli::create_component(
-        world,
-        component_name,
-        template_name,
-        vn_name,
-        function_call,
-        vec![],
-        vec![],
-    )
-    .await;
+    validator_node_cli::create_component(world, component_name, template_name, vn_name, function_call, vec![]).await;
 
     // give it some time between transactions
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(expr = r#"I create a component {word} of template "{word}" on {word} using "{word}" and new resource "{word}"#)]
-async fn call_template_constructor_without_args_and_resource(
-    world: &mut TariWorld,
-    component_name: String,
-    template_name: String,
-    vn_name: String,
-    function_call: String,
-    new_resource_token_symbol: String,
-) {
-    validator_node_cli::create_component(
-        world,
-        component_name,
-        template_name,
-        vn_name,
-        function_call,
-        vec![],
-        vec![new_resource_token_symbol],
-    )
-    .await;
-
-    // give it some time between transactions
-    // tokio::time::sleep(Duration::from_secs(4)).await;
-}
-
-#[when(expr = r#"I invoke on {word} on component {word} the method call "{word}" with {int} outputs named "{word}""#)]
+#[when(expr = r#"I invoke on {word} on component {word} the method call "{word}" named "{word}""#)]
 async fn call_component_method(
     world: &mut TariWorld,
     vn_name: String,
     component_name: String,
     method_call: String,
-    _num_outputs: u64,
     output_name: String,
 ) {
     let resp = validator_node_cli::call_method(world, vn_name, component_name, output_name, method_call).await;
@@ -290,14 +214,11 @@ async fn call_component_method(
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(
-    expr = r#"I invoke on all validator nodes on component {word} the method call "{word}" with {int} outputs named "{word}""#
-)]
+#[when(expr = r#"I invoke on all validator nodes on component {word} the method call "{word}" named "{word}""#)]
 async fn call_component_method_on_all_vns(
     world: &mut TariWorld,
     component_name: String,
     method_call: String,
-    _num_outputs: u64,
     output_name: String,
 ) {
     let vn_names = world.validator_nodes.iter().map(|(v, _)| v.clone()).collect::<Vec<_>>();
@@ -316,16 +237,12 @@ async fn call_component_method_on_all_vns(
     // tokio::time::sleep(Duration::from_secs(4)).await;
 }
 
-#[when(
-    expr = "I invoke on {word} on component {word} the method call \"{word}\" with {int} outputs the result is \
-            \"{word}\""
-)]
+#[when(expr = "I invoke on {word} on component {word} the method call \"{word}\" the result is \"{word}\"")]
 async fn call_component_method_and_check_result(
     world: &mut TariWorld,
     vn_name: String,
     component_name: String,
     method_call: String,
-    _num_outputs: u64,
     expected_result: String,
 ) {
     let resp =
@@ -349,14 +266,12 @@ async fn call_component_method_and_check_result(
 }
 
 #[when(
-    expr = "I invoke on all validator nodes on component {word} the method call \"{word}\" with {int} outputs the \
-            result is \"{word}\""
+    expr = "I invoke on all validator nodes on component {word} the method call \"{word}\" the result is \"{word}\""
 )]
 async fn call_component_method_on_all_vns_and_check_result(
     world: &mut TariWorld,
     component_name: String,
     method_call: String,
-    _num_outputs: u64,
     expected_result: String,
 ) {
     let vn_names = world.validator_nodes.iter().map(|(v, _)| v.clone()).collect::<Vec<_>>();
@@ -407,30 +322,20 @@ async fn create_multiple_accounts(world: &mut TariWorld, num_accounts: u64, vn_n
     }
 }
 
-#[when(expr = r#"I submit a transaction manifest on {word} with {int} outputs named "{word}" signed with key {word}"#)]
-async fn submit_manifest(
-    world: &mut TariWorld,
-    step: &Step,
-    vn_name: String,
-    // TODO: remove
-    _num_outputs: u64,
-    output_name: String,
-    key_name: String,
-) {
+#[when(expr = r#"I submit a transaction manifest on {word} named "{word}" signed with key {word}"#)]
+async fn submit_manifest(world: &mut TariWorld, step: &Step, vn_name: String, output_name: String, key_name: String) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
     validator_node_cli::submit_manifest(world, vn_name, output_name, manifest, String::new(), key_name).await;
 }
 
 #[when(
-    regex = r#"^I submit a transaction manifest on (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)" signed with key (\w+)$"#
+    regex = r#"^I submit a transaction manifest on (\w+) with inputs "([^"]+)" named "(\w+)" signed with key (\w+)$"#
 )]
 async fn submit_manifest_with_inputs(
     world: &mut TariWorld,
     step: &Step,
     vn_name: String,
     inputs: String,
-    // TODO: remove
-    _num_outputs: u64,
     outputs_name: String,
     key_name: String,
 ) {
@@ -443,33 +348,20 @@ async fn reveal_burned_funds(world: &mut TariWorld, account_name: String, amount
     wallet_daemon_cli::reveal_burned_funds(world, account_name, amount, wallet_daemon_name).await;
 }
 
-#[when(
-    regex = r#"^I submit a transaction manifest via wallet daemon (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)"$"#
-)]
+#[when(regex = r#"^I submit a transaction manifest via wallet daemon (\w+) with inputs "([^"]+)" named "(\w+)"$"#)]
 async fn submit_transaction_manifest_via_wallet_daemon(
     world: &mut TariWorld,
     step: &Step,
     wallet_daemon_name: String,
     inputs: String,
-    num_outputs: u64,
     outputs_name: String,
 ) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
-    wallet_daemon_cli::submit_manifest(
-        world,
-        wallet_daemon_name,
-        manifest,
-        inputs,
-        num_outputs,
-        outputs_name,
-        None,
-        None,
-    )
-    .await;
+    wallet_daemon_cli::submit_manifest(world, wallet_daemon_name, manifest, inputs, outputs_name, None, None).await;
 }
 
 #[when(
-    regex = r#"^I submit a transaction manifest via wallet daemon (\w+) signed by the key of (\w+) with inputs "([^"]+)" and (\d+) outputs? named "(\w+)"$"#
+    regex = r#"^I submit a transaction manifest via wallet daemon (\w+) signed by the key of (\w+) with inputs "([^"]+)" named "(\w+)"$"#
 )]
 async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
     world: &mut TariWorld,
@@ -477,7 +369,6 @@ async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
     wallet_daemon_name: String,
     account_signing_key: String,
     inputs: String,
-    num_outputs: u64,
     outputs_name: String,
 ) {
     let manifest = wrap_manifest_in_main(world, step.docstring.as_ref().expect("manifest code not provided"));
@@ -487,7 +378,6 @@ async fn submit_transaction_manifest_via_wallet_daemon_with_signing_keys(
         account_signing_key,
         manifest,
         inputs,
-        num_outputs,
         outputs_name,
         None,
         None,

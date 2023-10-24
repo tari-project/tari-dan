@@ -67,10 +67,6 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
-        new_resources: vec![],
-        non_fungible_mint_outputs: vec![],
-        new_non_fungible_outputs: vec![],
-        new_non_fungible_index_outputs: vec![],
     };
     let mut client = world.get_validator_node(&validator_node_name).get_client();
     let resp = submit_transaction(vec![instruction], common, data_dir, &mut client)
@@ -96,7 +92,6 @@ pub async fn create_component(
     vn_name: String,
     function_call: String,
     args: Vec<String>,
-    new_resource_token_symbols: Vec<String>,
 ) {
     let data_dir = get_cli_data_dir(world);
 
@@ -123,13 +118,6 @@ pub async fn create_component(
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
-            new_resources: new_resource_token_symbols
-                .iter()
-                .map(|s| format!("{}:{}", template_address, s).parse().unwrap())
-                .collect(),
-            non_fungible_mint_outputs: vec![],
-            new_non_fungible_outputs: vec![],
-            new_non_fungible_index_outputs: vec![],
         },
     };
     let mut client = world.get_validator_node(&vn_name).get_client();
@@ -263,10 +251,6 @@ pub async fn call_method(
             dump_outputs_into: None,
             account_template_address: None,
             dry_run: false,
-            new_resources: vec![],
-            non_fungible_mint_outputs: vec![],
-            new_non_fungible_outputs: vec![],
-            new_non_fungible_index_outputs: vec![],
         },
     };
     let mut client = world.get_validator_node(&vn_name).get_client();
@@ -362,11 +346,6 @@ pub async fn submit_manifest(
         dump_outputs_into: None,
         account_template_address: None,
         dry_run: false,
-        // TODO: remove
-        new_resources: vec![],
-        non_fungible_mint_outputs: vec![],
-        new_non_fungible_outputs: vec![],
-        new_non_fungible_index_outputs: vec![],
     };
     let resp = submit_transaction(instructions, args, data_dir, &mut client)
         .await
