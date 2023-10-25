@@ -6,7 +6,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
     commit_result::RejectReason,
-    indexed_value::{IndexedValue, IndexedValueVisitorError},
+    indexed_value::{IndexedValue, IndexedValueError},
     substate::SubstateDiff,
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
@@ -297,7 +297,7 @@ pub enum TransactionApiError {
     #[error("Network interface error: {0}")]
     NetworkInterfaceError(String),
     #[error("Failed to extract known type data from value: {0}")]
-    ValueVisitorError(#[from] IndexedValueVisitorError),
+    ValueVisitorError(#[from] IndexedValueError),
     #[error("Invalid transaction query response: {details}")]
     InvalidTransactionQueryResponse { details: String },
 }

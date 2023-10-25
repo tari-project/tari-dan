@@ -66,8 +66,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         };
 
         let initial_cost = 0;
-        let modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>> =
-            vec![Arc::new(FeeModule::new(initial_cost, self.fee_table.clone()))];
+        let modules: Vec<Arc<dyn RuntimeModule>> = vec![Arc::new(FeeModule::new(initial_cost, self.fee_table.clone()))];
 
         let processor = TransactionProcessor::new(
             self.template_provider.clone(),
@@ -80,7 +79,7 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
         let result = match processor.execute(transaction.clone()) {
             Ok(result) => result,
             Err(err) => ExecuteResult {
-                finalize: FinalizeResult::new_rejectted(tx_id, RejectReason::ExecutionFailure(err.to_string())),
+                finalize: FinalizeResult::new_rejected(tx_id, RejectReason::ExecutionFailure(err.to_string())),
                 transaction_failure: None,
                 fee_receipt: None,
             },

@@ -22,20 +22,20 @@
 
 //! The prelude contains all the commonly used types and functions that are used. To use it, add the import `use
 //! tari_template_lib::prelude::*;`
+
 pub use tari_bor;
 #[cfg(feature = "macro")]
 pub use tari_template_macros::template;
 
 pub use crate::{
-    auth::{AccessRule, AccessRules, RestrictedAccessRule::*},
+    args,
+    auth::{ComponentAccessRules as AccessRules, RestrictedAccessRule::*, *},
     caller_context::CallerContext,
-    component::{
-        interface::{ComponentInstanceInterface, ComponentInterface},
-        ComponentManager,
-    },
+    component::{Component, ComponentManager},
     consensus::Consensus,
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     crypto::RistrettoPublicKeyBytes,
+    debug,
     events::emit_event,
     invoke_args,
     models::{
@@ -49,6 +49,8 @@ pub use crate::{
         NonFungible,
         NonFungibleAddress,
         NonFungibleId,
+        Proof,
+        ProofId,
         ResourceAddress,
         TemplateAddress,
         Vault,

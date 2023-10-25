@@ -160,11 +160,11 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         Ok(balance)
     }
 
-    pub fn verify_and_update_confidential_outputs(
+    pub fn verify_and_update_confidential_outputs<'i, I: IntoIterator<Item = &'i ConfidentialOutput>>(
         &self,
         account_addr: &SubstateAddress,
         vault_addr: &SubstateAddress,
-        outputs: Vec<&ConfidentialOutput>,
+        outputs: I,
     ) -> Result<(), ConfidentialOutputsApiError> {
         let account = self.accounts_api.get_account_by_address(account_addr)?;
         // We do not support changing of account key at this time

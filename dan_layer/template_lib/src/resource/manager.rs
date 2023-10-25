@@ -36,6 +36,7 @@ use crate::{
         ResourceRef,
         ResourceUpdateNonFungibleDataArg,
     },
+    auth::{OwnerRule, ResourceAccessRules},
     models::{Amount, Bucket, Metadata, NonFungible, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
@@ -78,6 +79,8 @@ impl ResourceManager {
     pub fn create(
         &mut self,
         resource_type: ResourceType,
+        owner_rule: OwnerRule,
+        access_rules: ResourceAccessRules,
         token_symbol: String,
         metadata: Metadata,
         mint_arg: Option<MintArg>,
@@ -87,6 +90,8 @@ impl ResourceManager {
             action: ResourceAction::Create,
             args: invoke_args![CreateResourceArg {
                 resource_type,
+                owner_rule,
+                access_rules,
                 token_symbol,
                 metadata,
                 mint_arg
@@ -176,7 +181,16 @@ impl ResourceManager {
             }],
         });
 
-        resp.decode()
-            .expect("[update_non_fungible_data] Failed to decode Amount")
+        resp.decode().expect("[update_non_fungible_data] Failed")
+    }
+
+    pub fn set_access_rules(&self, access_rules: ResourceAccessRules) {
+        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
+            resource_ref: self.expect_resource_address(),
+            action: ResourceAction::UpdateAccessRules,
+            args: invoke_args![access_rules],
+        });
+
+        resp.decode().expect("[set_access_rules] Failed")
     }
 }

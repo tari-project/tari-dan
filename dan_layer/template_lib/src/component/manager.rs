@@ -25,8 +25,17 @@ use tari_bor::{decode_exact, encode};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
-    args::{CallAction, CallInvokeArg, CallMethodArg, ComponentAction, ComponentInvokeArg, ComponentRef, InvokeResult},
-    auth::AccessRules,
+    args::{
+        Arg,
+        CallAction,
+        CallInvokeArg,
+        CallMethodArg,
+        ComponentAction,
+        ComponentInvokeArg,
+        ComponentRef,
+        InvokeResult,
+    },
+    auth::ComponentAccessRules,
     models::ComponentAddress,
 };
 
@@ -43,7 +52,7 @@ impl ComponentManager {
         Self { address }
     }
 
-    pub fn call<T: DeserializeOwned>(&self, method: String, args: Vec<Vec<u8>>) -> T {
+    pub fn call<T: DeserializeOwned>(&self, method: String, args: Vec<Arg>) -> T {
         self.call_internal(CallMethodArg {
             component_address: self.address,
             method,
@@ -83,7 +92,7 @@ impl ComponentManager {
         });
     }
 
-    pub fn set_access_rules(&self, access_rules: AccessRules) {
+    pub fn set_access_rules(&self, access_rules: ComponentAccessRules) {
         call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Ref(self.address),
             action: ComponentAction::SetAccessRules,

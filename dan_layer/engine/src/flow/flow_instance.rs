@@ -17,7 +17,7 @@ use crate::{
     },
     function_definitions::FunctionArgDefinition,
     packager::LoadedTemplate,
-    runtime::{AuthorizationScope, Runtime},
+    runtime::Runtime,
 };
 
 #[derive(Clone, Debug)]
@@ -48,14 +48,13 @@ impl FlowInstance {
         &self,
         template_provider: Arc<TTemplateProvider>,
         runtime: Runtime,
-        auth_scope: AuthorizationScope,
         args: &[Arg],
         arg_defs: &[FunctionArgDefinition],
         recursion_depth: usize,
         max_recursion_depth: usize,
     ) -> Result<InstructionResult, FlowEngineError> {
         let engine = Engine::new("tari@0.1.0".to_string(), load_workers());
-        let args = runtime.resolve_args(args.to_vec())?;
+        let args = runtime.resolve_args(args)?;
         let mut args_map = HashMap::new();
         for (i, arg_def) in arg_defs.iter().enumerate() {
             if i >= args.len() {
@@ -69,7 +68,6 @@ impl FlowInstance {
         let context = FlowContext {
             template_provider,
             runtime,
-            auth_scope,
             args: args_map,
             recursion_depth,
             max_recursion_depth,

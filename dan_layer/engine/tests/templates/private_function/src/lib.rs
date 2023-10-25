@@ -21,16 +21,18 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_template_lib::prelude::*;
-
 #[template]
 mod private_function {
+    use super::*;
     pub struct PrivateCounter {
         pub value: u32,
     }
 
     impl PrivateCounter {
-        pub fn new() -> Self {
-            Self { value: 0 }
+        pub fn new() -> Component<Self> {
+            Component::new(Self { value: 0 })
+                .with_access_rules(AccessRules::allow_all())
+                .create()
         }
 
         pub fn get(&self) -> u32 {

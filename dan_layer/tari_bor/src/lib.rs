@@ -17,8 +17,7 @@ mod walker;
 pub use ciborium::value::Value;
 use ciborium::{de::from_reader, ser::into_writer};
 pub use error::BorError;
-pub use serde;
-use serde::{de::DeserializeOwned, Serialize};
+pub use serde::{self, de::DeserializeOwned, Deserialize, Serialize};
 pub use walker::*;
 
 pub fn encode_with_len<T: Serialize>(val: &T) -> Vec<u8> {
@@ -52,6 +51,14 @@ pub fn encode<T: Serialize + ?Sized>(val: &T) -> Result<Vec<u8>, BorError> {
     let mut buf = Vec::with_capacity(512);
     encode_into(val, &mut buf).map_err(|e| BorError::new(format!("{:?}", e)))?;
     Ok(buf)
+}
+
+pub fn to_value<T: Serialize + ?Sized>(val: &T) -> Result<Value, BorError> {
+    Value::serialized(val).map_err(to_bor_error)
+}
+
+pub fn from_value<T: DeserializeOwned>(val: &Value) -> Result<T, BorError> {
+    Value::deserialized(val).map_err(to_bor_error)
 }
 
 pub fn decode<T: DeserializeOwned>(mut input: &[u8]) -> Result<T, BorError> {

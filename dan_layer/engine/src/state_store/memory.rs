@@ -104,7 +104,7 @@ impl<'a> StateReader for MemoryTransaction<RwLockReadGuard<'a, InnerKvMap>> {
             })
     }
 
-    fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
+    fn exists_raw(&self, key: &[u8]) -> Result<bool, StateStoreError> {
         Ok(self.pending.contains_key(key) || self.guard.contains_key(key))
     }
 }
@@ -121,7 +121,7 @@ impl<'a> StateReader for MemoryTransaction<RwLockWriteGuard<'a, InnerKvMap>> {
             })
     }
 
-    fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
+    fn exists_raw(&self, key: &[u8]) -> Result<bool, StateStoreError> {
         Ok(self.pending.contains_key(key) || self.guard.contains_key(key))
     }
 }

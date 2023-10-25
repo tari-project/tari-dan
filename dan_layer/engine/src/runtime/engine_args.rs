@@ -33,12 +33,34 @@ impl EngineArgs {
             })
     }
 
+    pub fn assert_one_arg<T: DeserializeOwned>(&self) -> Result<T, RuntimeError> {
+        if self.len() == 1 {
+            self.get(0)
+        } else {
+            Err(RuntimeError::InvalidArgument {
+                argument: type_name::<T>(),
+                reason: format!("Expected only one argument but got {}", self.len()),
+            })
+        }
+    }
+
     pub fn len(&self) -> usize {
         self.args.len()
     }
 
     pub fn is_empty(&self) -> bool {
         self.args.is_empty()
+    }
+
+    pub fn assert_is_empty(&self, op_name: &'static str) -> Result<(), RuntimeError> {
+        if self.is_empty() {
+            Ok(())
+        } else {
+            Err(RuntimeError::InvalidArgument {
+                argument: op_name,
+                reason: format!("Expected no arguments but got {}", self.len()),
+            })
+        }
     }
 }
 

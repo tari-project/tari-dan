@@ -47,12 +47,13 @@ mod tickets {
             initial_supply: usize,
             price: Amount,
             event_description: String,
-        ) -> Self {
+        ) -> Component<Self> {
+            let owner = CallerContext::transaction_signer_public_key().to_non_fungible_address();
             // Create the non-fungible resource
-            // TODO: restrict minting to only the owner
             let resource_address = ResourceBuilder::non_fungible("tix")
                 // The event description is common for all tickets
                 .add_metadata("event", event_description)
+                .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(owner.into()))))
                 .build();
 
             // Mint the initial tickets
@@ -65,12 +66,14 @@ mod tickets {
 
             let earnings = Vault::new_empty(payment_resource_address);
 
-            Self {
+            Component::new(Self {
                 resource_address,
                 tickets,
                 price,
                 earnings,
-            }
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
         }
 
         // TODO: this method should only be allowed for the owner, when they want to increase attendance of the event

@@ -27,6 +27,7 @@ use tari_bor::BorError;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{optional::IsNotFoundError, Epoch};
 use tari_engine_types::{
+    indexed_value::IndexedValueError,
     resource_container::ResourceError,
     substate::SubstateAddress,
     transaction_receipt::TransactionReceiptAddress,
@@ -37,6 +38,7 @@ use tari_template_lib::models::{
     BucketId,
     ComponentAddress,
     NonFungibleId,
+    ProofId,
     ResourceAddress,
     TemplateAddress,
     UnclaimedConfidentialOutputAddress,
@@ -46,14 +48,16 @@ use tari_transaction::id_provider::IdProviderError;
 
 use super::workspace::WorkspaceError;
 use crate::{
-    runtime::{FunctionIdent, RuntimeModuleError},
+    runtime::{ActionIdent, RuntimeModuleError},
     state_store::StateStoreError,
 };
 
 #[derive(Debug, thiserror::Error)]
 pub enum RuntimeError {
-    #[error("Runtime encoding error: {0}")]
+    #[error("Encoding error: {0}")]
     EncodingError(#[from] BorError),
+    #[error("Indexed value error: {0}")]
+    IndexedValueError(#[from] IndexedValueError),
     #[error("State DB error: {0}")]
     StateDbError(#[from] anyhow::Error),
     #[error("State storage error: {0}")]
@@ -89,13 +93,15 @@ pub enum RuntimeError {
     },
     #[error("Bucket not found with id {bucket_id}")]
     BucketNotFound { bucket_id: BucketId },
+    #[error("Proof not found with id {proof_id}")]
+    ProofNotFound { proof_id: ProofId },
     #[error("Resource not found with address {resource_address}")]
     ResourceNotFound { resource_address: ResourceAddress },
     #[error(transparent)]
     ResourceError(#[from] ResourceError),
     #[error("Bucket {bucket_id} was dropped but was not empty")]
     BucketNotEmpty { bucket_id: BucketId },
-    #[error("Named argument {key} was not found")]
+    #[error("No workspace item named {key} was found")]
     ItemNotOnWorkspace { key: String },
     #[error("Attempted to take the last output but there was no previous instruction output")]
     NoLastInstructionOutput,
@@ -105,8 +111,10 @@ pub enum RuntimeError {
     TooManyOutputs(#[from] IdProviderError),
     #[error("Duplicate NFT token id: {token_id}")]
     DuplicateNonFungibleId { token_id: NonFungibleId },
-    #[error("Access Denied: {fn_ident}")]
-    AccessDenied { fn_ident: FunctionIdent },
+    #[error("Access Denied: {action_ident}")]
+    AccessDenied { action_ident: ActionIdent },
+    #[error("Access Denied: {action}")]
+    AccessDeniedOwnerRequired { action: ActionIdent },
     #[error("Invalid method address rule for {template_name}: {details}")]
     InvalidMethodAccessRule { template_name: String, details: String },
     #[error("Runtime module error: {0}")]
@@ -155,6 +163,12 @@ pub enum RuntimeError {
     VirtualSubstateNotFound { address: VirtualSubstateAddress },
     #[error("Double claimed fee for epoch {epoch} vn address {address:.10}")]
     DoubleClaimedFee { address: PublicKey, epoch: Epoch },
+    #[error("Invalid return value: {0}")]
+    InvalidReturnValue(IndexedValueError),
+    #[error("Attempt to pop auth scope stack but it was empty")]
+    AuthScopeStackEmpty,
+    #[error("Invalid deposit of bucket {bucket_id} has locked value amounting to {locked_amount}")]
+    InvalidOpDepositLockedBucket { bucket_id: BucketId, locked_amount: Amount },
 }
 
 impl RuntimeError {
@@ -171,7 +185,8 @@ impl IsNotFoundError for RuntimeError {
                 RuntimeError::VaultNotFound { .. } |
                 RuntimeError::BucketNotFound { .. } |
                 RuntimeError::ResourceNotFound { .. } |
-                RuntimeError::NonFungibleNotFound { .. }
+                RuntimeError::NonFungibleNotFound { .. } |
+                RuntimeError::ProofNotFound { .. }
         )
     }
 }
@@ -180,6 +195,10 @@ impl IsNotFoundError for RuntimeError {
 pub enum TransactionCommitError {
     #[error("{count} dangling buckets remain after transaction execution")]
     DanglingBuckets { count: usize },
+    #[error("{count} dangling proofs remain after transaction execution")]
+    DanglingProofs { count: usize },
+    #[error("Locked value (amount: {locked_amount}) remaining in vault {vault_id}")]
+    DanglingLockedValueInVault { vault_id: VaultId, locked_amount: Amount },
     #[error("{count} dangling items in workspace after transaction execution")]
     WorkspaceNotEmpty { count: usize },
     #[error(transparent)]

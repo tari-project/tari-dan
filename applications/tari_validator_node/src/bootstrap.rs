@@ -59,9 +59,11 @@ use tari_indexer_lib::substate_scanner::SubstateScanner;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::{
+    auth::ResourceAccessRules,
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
+    crypto::RistrettoPublicKeyBytes,
     models::Metadata,
-    prelude::ResourceType,
+    prelude::{OwnerRule, ResourceType},
 };
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
@@ -409,7 +411,15 @@ where
         SubstateRecord {
             address,
             version: 0,
-            substate_value: Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()).into(),
+            substate_value: Resource::new(
+                ResourceType::NonFungible,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::new(),
+                "ID".to_string(),
+                Default::default(),
+            )
+            .into(),
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
@@ -427,7 +437,15 @@ where
         SubstateRecord {
             address,
             version: 0,
-            substate_value: Resource::new(ResourceType::Confidential, "tXTR2".to_string(), Metadata::new()).into(),
+            substate_value: Resource::new(
+                ResourceType::Confidential,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::new(),
+                "tXTR2".to_string(),
+                Metadata::new(),
+            )
+            .into(),
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),

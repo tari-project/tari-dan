@@ -94,7 +94,7 @@ impl<'a, T: Deref<Target = ConstTransaction<'a>>> StateReader for LmdbTransactio
             })
     }
 
-    fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError> {
+    fn exists_raw(&self, key: &[u8]) -> Result<bool, StateStoreError> {
         Ok(self.get_state_raw(&encode(key)?).optional()?.is_some())
     }
 }
@@ -143,7 +143,7 @@ mod tests {
         {
             let mut access = store.write_access().unwrap();
             access.set_state(b"abc", user_data.clone()).unwrap();
-            assert!(access.exists(b"abc").unwrap());
+            assert!(access.exists_raw(b"abc").unwrap());
             let res: UserData = access.get_state(b"abc").unwrap();
             assert_eq!(res, user_data);
             let res = access.get_state::<_, UserData>(b"def").optional().unwrap();
@@ -155,7 +155,7 @@ mod tests {
             let access = store.read_access().unwrap();
             let res = access.get_state::<_, UserData>(b"abc").optional().unwrap();
             assert_eq!(res, None);
-            assert!(!access.exists(b"abc").unwrap());
+            assert!(!access.exists_raw(b"abc").unwrap());
         }
 
         {

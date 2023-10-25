@@ -24,10 +24,6 @@ impl InvokeResult {
         Self(Ok(data))
     }
 
-    pub fn unwrap_decode<T: DeserializeOwned>(self) -> T {
-        self.decode().unwrap()
-    }
-
     pub fn unit() -> Self {
         Self(Ok(encode(&()).unwrap()))
     }

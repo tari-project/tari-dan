@@ -24,13 +24,20 @@ use tari_template_lib::prelude::*;
 
 #[template]
 mod tuple_template {
+    use super::*;
+
     pub struct Tuple {
         pub value: u32,
     }
 
     impl Tuple {
-        pub fn new() -> (Self, String) {
-            (Self { value: 0 }, "Hello World!".to_string())
+        pub fn new() -> (Component<Self>, String) {
+            (
+                Component::new(Self { value: 0 })
+                    .with_access_rules(AccessRules::allow_all())
+                    .create(),
+                "Hello World!".to_string(),
+            )
         }
 
         pub fn tuple_output() -> (String, u32) {

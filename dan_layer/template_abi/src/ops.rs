@@ -38,6 +38,7 @@ pub enum EngineOp {
     GenerateRandomInvoke = 0x0A,
     EmitEvent = 0x0B,
     CallInvoke = 0x0C,
+    ProofInvoke = 0x0D,
 }
 
 impl EngineOp {
@@ -56,6 +57,7 @@ impl EngineOp {
             0x0A => Some(EngineOp::GenerateRandomInvoke),
             0x0B => Some(EngineOp::EmitEvent),
             0x0C => Some(EngineOp::CallInvoke),
+            0x0D => Some(EngineOp::ProofInvoke),
             _ => None,
         }
     }

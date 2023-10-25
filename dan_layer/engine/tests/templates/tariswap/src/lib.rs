@@ -35,10 +35,9 @@ mod tariswap {
     }
 
     impl TariSwapPool {
-
         // Initialises a new pool component for for the pool A - B
         // the fees is represented as a per-mil quantity (e.g. "1" represents "0.1%")
-        pub fn new(a_addr: ResourceAddress, b_addr: ResourceAddress, fee: u16) -> Self {
+        pub fn new(a_addr: ResourceAddress, b_addr: ResourceAddress, fee: u16) -> Component<Self> {
             // check that the the resource pair is correct
             assert!(a_addr != b_addr, "The resources of the pair must be different");
             Self::check_resource_is_fungible(a_addr);
@@ -57,11 +56,14 @@ mod tariswap {
             // TODO: add lp resource minting/burning security, only this component should be allowed
             let lp_resource = ResourceBuilder::fungible("LP").build();
 
-            Self {
+            Component::new(Self {
                 pools,
                 lp_resource,
                 fee,
-            }
+            })
+            // TODO: proper access rules
+            .with_access_rules(AccessRules::allow_all())
+            .create()
         }
 
         // swap A tokens for B tokens or viceversa
@@ -75,8 +77,16 @@ mod tariswap {
             let output_pool_balance = self.get_pool_balance(output_resource);
 
             // check that the pools are not empty, to prevent division by 0 errors later
-            assert!(!input_pool_balance.is_zero(), "The pool for resource '{}' is empty", input_resource);
-            assert!(!output_pool_balance.is_zero(), "The pool for resource '{}' is empty", output_resource);
+            assert!(
+                !input_pool_balance.is_zero(),
+                "The pool for resource '{}' is empty",
+                input_resource
+            );
+            assert!(
+                !output_pool_balance.is_zero(),
+                "The pool for resource '{}' is empty",
+                output_resource
+            );
 
             // apply the fee to the input bucket
             // so the user will get a lesser amout of tokens than the theoritical (for the gain of the LP holders)
@@ -93,10 +103,13 @@ mod tariswap {
 
             // calculate the amount of output tokens to return to the user
             let output_bucket_amount = output_pool_balance - new_output_pool_balance;
-            
+
             // perform the swap
             self.pools.get_mut(&input_resource).unwrap().deposit(input_bucket);
-            self.pools.get_mut(&output_resource).unwrap().withdraw(output_bucket_amount)
+            self.pools
+                .get_mut(&output_resource)
+                .unwrap()
+                .withdraw(output_bucket_amount)
         }
 
         pub fn add_liquidity(&mut self, a_bucket: Bucket, b_bucket: Bucket) -> Bucket {
@@ -164,9 +177,11 @@ mod tariswap {
 
             balances
         }
-        
+
         pub fn get_pool_balance(&self, resource_address: ResourceAddress) -> Amount {
-            let vault = self.pools.get(&resource_address)
+            let vault = self
+                .pools
+                .get(&resource_address)
                 .unwrap_or_else(|| panic!("Resource {} is not in the pool", resource_address));
             vault.balance()
         }
@@ -180,7 +195,7 @@ mod tariswap {
                 amount / balance
             }
         }
-         
+
         pub fn lp_resource(&self) -> ResourceAddress {
             self.lp_resource
         }
@@ -195,14 +210,23 @@ mod tariswap {
 
         fn check_pool_resources(&self, a_resource: ResourceAddress, b_resource: ResourceAddress) {
             assert!(a_resource != b_resource, "The resource addresses are the same");
-            assert!(self.pools.contains_key(&a_resource), "The resource {} is not in the pool", a_resource);
-            assert!(self.pools.contains_key(&b_resource), "The resource {} is not in the pool", b_resource);
+            assert!(
+                self.pools.contains_key(&a_resource),
+                "The resource {} is not in the pool",
+                a_resource
+            );
+            assert!(
+                self.pools.contains_key(&b_resource),
+                "The resource {} is not in the pool",
+                b_resource
+            );
         }
 
         fn check_resource_is_fungible(resource: ResourceAddress) {
             assert!(
                 ResourceManager::get(resource).resource_type() == ResourceType::Fungible,
-                "Resource {} is not fungible", resource
+                "Resource {} is not fungible",
+                resource
             );
         }
     }

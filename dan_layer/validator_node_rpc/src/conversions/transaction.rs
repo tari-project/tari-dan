@@ -221,6 +221,7 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
                 validator_public_key: PublicKey::from_bytes(&request.claim_validator_fees_validator_public_key)
                     .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
             },
+            InstructionType::DropAllProofsInWorkspace => Instruction::DropAllProofsInWorkspace,
             InstructionType::CreateFreeTestCoins => Instruction::CreateFreeTestCoins {
                 revealed_amount: request.create_free_test_coins_amount.try_into()?,
                 output: tari_bor::decode(&request.create_free_test_coins_output_blob)?,
@@ -273,6 +274,17 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.claim_burn_public_key = claim.public_key.to_vec();
                 result.claim_burn_withdraw_proof = claim.withdraw_proof.map(Into::into);
             },
+            Instruction::ClaimValidatorFees {
+                epoch,
+                validator_public_key,
+            } => {
+                result.instruction_type = InstructionType::ClaimValidatorFees as i32;
+                result.claim_validator_fees_epoch = epoch;
+                result.claim_validator_fees_validator_public_key = validator_public_key.to_vec();
+            },
+            Instruction::DropAllProofsInWorkspace => {
+                result.instruction_type = InstructionType::DropAllProofsInWorkspace as i32;
+            },
             // TODO: debugging feature should not be the default. Perhaps a better way to create faucet coins is to mint
             //       a faucet vault in the genesis state for dev networks and use faucet builtin template to withdraw
             //       funds.
@@ -285,14 +297,6 @@ impl From<Instruction> for proto::transaction::Instruction {
                 result.create_free_test_coins_output_blob = output
                     .map(|o| tari_bor::encode(&o).unwrap())
                     .unwrap_or_else(|| tari_bor::encode(&None::<ConfidentialOutput>).unwrap());
-            },
-            Instruction::ClaimValidatorFees {
-                epoch,
-                validator_public_key,
-            } => {
-                result.instruction_type = InstructionType::ClaimValidatorFees as i32;
-                result.claim_validator_fees_epoch = epoch;
-                result.claim_validator_fees_validator_public_key = validator_public_key.to_vec();
             },
         }
         result

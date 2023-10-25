@@ -37,6 +37,7 @@ message Instruction {
     EMIT_LOG = 3;
     CLAIM_BURN = 4;
     CLAIM_VALIDATOR_FEES = 5;
+    DROP_ALL_PROOFS_IN_WORKSPACE = 6;
     CREATE_FREE_TEST_COINS = 101;
   }
   InstructionType instruction_type = 1;

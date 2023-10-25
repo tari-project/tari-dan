@@ -66,7 +66,7 @@ impl ExecuteResult {
         if let Some(ref reason) = self.transaction_failure {
             reason
         } else {
-            panic!("Transaction succeeded");
+            panic!("Transaction succeeded but it was expected to fail");
         }
     }
 
@@ -113,7 +113,7 @@ impl FinalizeResult {
         }
     }
 
-    pub fn new_rejectted(transaction_hash: Hash, reason: RejectReason) -> Self {
+    pub fn new_rejected(transaction_hash: Hash, reason: RejectReason) -> Self {
         Self {
             transaction_hash,
             logs: vec![],

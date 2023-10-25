@@ -5,7 +5,7 @@
 // there is no way to actually mutate the compressed value once it is lazily initialized.
 #![allow(clippy::mutable_key_type)]
 
-use std::{collections::BTreeMap, iter};
+use std::{collections::BTreeMap, iter, mem};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
@@ -28,38 +28,52 @@ pub enum ResourceContainer {
         #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         amount: Amount,
+        locked_amount: Amount,
     },
     NonFungible {
         #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         token_ids: BTreeSet<NonFungibleId>,
+        locked_token_ids: BTreeSet<NonFungibleId>,
     },
     Confidential {
         #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         commitments: BTreeMap<PublicKey, ConfidentialOutput>,
         revealed_amount: Amount,
+        locked_commitments: BTreeMap<PublicKey, ConfidentialOutput>,
+        locked_revealed_amount: Amount,
     },
 }
 
 impl ResourceContainer {
     pub fn fungible(address: ResourceAddress, amount: Amount) -> ResourceContainer {
-        ResourceContainer::Fungible { address, amount }
+        ResourceContainer::Fungible {
+            address,
+            amount,
+            locked_amount: Amount::zero(),
+        }
     }
 
     pub fn non_fungible(address: ResourceAddress, token_ids: BTreeSet<NonFungibleId>) -> ResourceContainer {
-        ResourceContainer::NonFungible { address, token_ids }
+        ResourceContainer::NonFungible {
+            address,
+            token_ids,
+            locked_token_ids: BTreeSet::new(),
+        }
     }
 
-    pub fn confidential(
+    pub fn confidential<I: IntoIterator<Item = (PublicKey, ConfidentialOutput)>>(
         address: ResourceAddress,
-        commitment: Option<(PublicKey, ConfidentialOutput)>,
+        commitment: I,
         revealed_amount: Amount,
     ) -> ResourceContainer {
         ResourceContainer::Confidential {
             address,
             commitments: commitment.into_iter().collect(),
             revealed_amount,
+            locked_commitments: BTreeMap::new(),
+            locked_revealed_amount: Amount::zero(),
         }
     }
 
@@ -83,6 +97,8 @@ impl ResourceContainer {
             ))
             .collect(),
             revealed_amount: Amount::zero(),
+            locked_commitments: BTreeMap::new(),
+            locked_revealed_amount: Amount::zero(),
         })
     }
 
@@ -91,6 +107,16 @@ impl ResourceContainer {
             ResourceContainer::Fungible { amount, .. } => *amount,
             ResourceContainer::NonFungible { token_ids, .. } => token_ids.len().into(),
             ResourceContainer::Confidential { revealed_amount, .. } => *revealed_amount,
+        }
+    }
+
+    pub fn locked_amount(&self) -> Amount {
+        match self {
+            ResourceContainer::Fungible { locked_amount, .. } => *locked_amount,
+            ResourceContainer::NonFungible { locked_token_ids, .. } => locked_token_ids.len().into(),
+            ResourceContainer::Confidential {
+                locked_revealed_amount, ..
+            } => *locked_revealed_amount,
         }
     }
 
@@ -118,10 +144,11 @@ impl ResourceContainer {
         }
     }
 
-    pub fn non_fungible_token_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
+    pub fn non_fungible_token_ids(&self) -> &BTreeSet<NonFungibleId> {
+        static EMPTY_BTREE_SET: BTreeSet<NonFungibleId> = BTreeSet::new();
         match self {
-            ResourceContainer::NonFungible { token_ids, .. } => Some(token_ids),
-            _ => None,
+            ResourceContainer::NonFungible { token_ids, .. } => token_ids,
+            _ => &EMPTY_BTREE_SET,
         }
     }
 
@@ -337,11 +364,275 @@ impl ResourceContainer {
         self.withdraw_confidential(proof)
     }
 
-    /// Returns all confidential outputs. If the resource is not confidential, None is returned.
-    pub fn get_confidential_outputs(&self) -> Option<Vec<&ConfidentialOutput>> {
+    /// Returns all confidential commitments. If the resource is not confidential, None is returned.
+    pub fn get_confidential_commitments(&self) -> Option<&BTreeMap<PublicKey, ConfidentialOutput>> {
         match self {
             ResourceContainer::Fungible { .. } | ResourceContainer::NonFungible { .. } => None,
-            ResourceContainer::Confidential { commitments, .. } => Some(commitments.values().collect()),
+            ResourceContainer::Confidential { commitments, .. } => Some(commitments),
+        }
+    }
+
+    pub fn into_confidential_commitments(self) -> Option<BTreeMap<PublicKey, ConfidentialOutput>> {
+        match self {
+            ResourceContainer::Fungible { .. } | ResourceContainer::NonFungible { .. } => None,
+            ResourceContainer::Confidential { commitments, .. } => Some(commitments),
+        }
+    }
+
+    pub fn lock_all(&mut self) -> Result<ResourceContainer, ResourceError> {
+        let resource_address = *self.resource_address();
+        match self {
+            ResourceContainer::Fungible {
+                amount, locked_amount, ..
+            } => {
+                if *amount == 0 {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: "lock_all: resource container contained no funds".to_string(),
+                    });
+                }
+                let newly_locked_amount = mem::take(amount);
+                *locked_amount += newly_locked_amount;
+                Ok(ResourceContainer::fungible(resource_address, newly_locked_amount))
+            },
+            ResourceContainer::NonFungible {
+                token_ids,
+                locked_token_ids,
+                ..
+            } => {
+                if token_ids.is_empty() {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: "lock_all: resource container contained no tokens".to_string(),
+                    });
+                }
+                let newly_locked_token_ids = mem::take(token_ids);
+                locked_token_ids.extend(newly_locked_token_ids.iter().cloned());
+
+                Ok(ResourceContainer::non_fungible(
+                    resource_address,
+                    newly_locked_token_ids,
+                ))
+            },
+            ResourceContainer::Confidential {
+                commitments,
+                revealed_amount,
+                locked_commitments,
+                locked_revealed_amount,
+                ..
+            } => {
+                if commitments.is_empty() {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: "lock_all: resource container contained no commitments".to_string(),
+                    });
+                }
+                let newly_locked_commitments = mem::take(commitments);
+                let newly_locked_revealed_amount = *revealed_amount;
+                locked_commitments.extend(newly_locked_commitments.iter().map(|(c, o)| (c.clone(), o.clone())));
+                *locked_revealed_amount += newly_locked_revealed_amount;
+
+                Ok(ResourceContainer::confidential(
+                    resource_address,
+                    newly_locked_commitments,
+                    newly_locked_revealed_amount,
+                ))
+            },
+        }
+    }
+
+    pub fn unlock(&mut self, container: ResourceContainer) -> Result<(), ResourceError> {
+        if self.resource_type() != container.resource_type() {
+            return Err(ResourceError::ResourceTypeMismatch);
+        }
+        if self.resource_address() != container.resource_address() {
+            return Err(ResourceError::ResourceAddressMismatch {
+                expected: *self.resource_address(),
+                actual: *container.resource_address(),
+            });
+        }
+
+        match self {
+            ResourceContainer::Fungible {
+                amount, locked_amount, ..
+            } => {
+                if *locked_amount < container.amount() {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: format!(
+                            "unlock: resource container did not contain enough locked funds. Required: {}, Available: \
+                             {}",
+                            container.amount(),
+                            locked_amount
+                        ),
+                    });
+                }
+                *amount += container.amount();
+                *locked_amount -= container.amount();
+            },
+            ResourceContainer::NonFungible {
+                token_ids,
+                locked_token_ids,
+                ..
+            } => {
+                if locked_token_ids.len() < container.non_fungible_token_ids().len() {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: format!(
+                            "unlock: resource container did not contain enough locked tokens. Required: {}, \
+                             Available: {}",
+                            container.non_fungible_token_ids().len(),
+                            locked_token_ids.len()
+                        ),
+                    });
+                }
+                for token in container.non_fungible_token_ids() {
+                    let token = locked_token_ids.take(token).ok_or_else(|| {
+                        ResourceError::InvariantError(format!(
+                            "unlock: tried to unlock token {token} that was not locked",
+                        ))
+                    })?;
+                    token_ids.insert(token);
+                }
+            },
+            ResourceContainer::Confidential {
+                commitments,
+                locked_commitments,
+                revealed_amount,
+                locked_revealed_amount,
+                ..
+            } => {
+                if locked_commitments.len() < container.get_commitment_count() as usize {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: format!(
+                            "unlock: resource container did not contain enough locked commitments. Required: {}, \
+                             Available: {}",
+                            container.get_commitment_count(),
+                            locked_commitments.len()
+                        ),
+                    });
+                }
+
+                if *locked_revealed_amount < container.amount() {
+                    return Err(ResourceError::InvariantError(format!(
+                        "unlock: resource container did not contain enough locked revealed amount. Required: {}, \
+                         Available: {}",
+                        container.amount(),
+                        locked_revealed_amount
+                    )));
+                }
+
+                for (commitment, _) in container.get_confidential_commitments().into_iter().flatten() {
+                    let (commitment, output) = locked_commitments.remove_entry(commitment).ok_or_else(|| {
+                        ResourceError::InvariantError(
+                            "unlock: tried to unlock commitment that was not locked".to_string(),
+                        )
+                    })?;
+                    if commitments.insert(commitment, output).is_some() {
+                        return Err(ResourceError::InvariantError(
+                            "unlock: container contained duplicate commitment".to_string(),
+                        ));
+                    }
+                }
+                *revealed_amount += container.amount();
+                *locked_revealed_amount -= container.amount();
+            },
+        }
+
+        Ok(())
+    }
+
+    pub fn lock_by_non_fungible_ids(&mut self, ids: BTreeSet<NonFungibleId>) -> Result<Self, ResourceError> {
+        match self {
+            ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot lock by NFT token id from a fungible resource".to_string(),
+            )),
+            ResourceContainer::NonFungible {
+                token_ids,
+                locked_token_ids,
+                ..
+            } => {
+                let mut newly_locked = BTreeSet::new();
+                for id in ids {
+                    if let Some(token) = token_ids.take(&id) {
+                        newly_locked.insert(token.clone());
+                        locked_token_ids.insert(token);
+                    } else {
+                        return Err(ResourceError::NonFungibleTokenIdNotFound { token: id });
+                    }
+                }
+                Ok(ResourceContainer::non_fungible(*self.resource_address(), newly_locked))
+            },
+            ResourceContainer::Confidential { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot lock by NFT token id from a confidential resource".to_string(),
+            )),
+        }
+    }
+
+    pub fn lock_by_amount(&mut self, amount: Amount) -> Result<Self, ResourceError> {
+        match self {
+            ResourceContainer::Fungible {
+                amount: available_amount,
+                locked_amount,
+                ..
+            } => {
+                if amount > *available_amount {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: format!(
+                            "lock_by_amount: resource container did not contain enough funds. Required: {}, \
+                             Available: {}",
+                            amount, available_amount
+                        ),
+                    });
+                }
+                *available_amount -= amount;
+                *locked_amount += amount;
+                Ok(ResourceContainer::fungible(*self.resource_address(), amount))
+            },
+            ResourceContainer::NonFungible {
+                token_ids,
+                locked_token_ids,
+                ..
+            } => {
+                if amount > token_ids.len().into() {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: format!(
+                            "lock_by_amount: resource container did not contain enough tokens. Required: {}, \
+                             Available: {}",
+                            amount,
+                            token_ids.len()
+                        ),
+                    });
+                }
+                let num_to_take = usize::try_from(amount.value())
+                    .map_err(|_| ResourceError::OperationNotAllowed(format!("Amount {} too large to lock", amount)))?;
+                let newly_locked_token_ids = (0..num_to_take)
+                    .map(|_| {
+                        token_ids
+                            .pop_first()
+                            .expect("Invariant violation: tokens.len() < amount")
+                    })
+                    .collect::<BTreeSet<_>>();
+                locked_token_ids.extend(newly_locked_token_ids.iter().cloned());
+
+                Ok(ResourceContainer::non_fungible(
+                    *self.resource_address(),
+                    newly_locked_token_ids,
+                ))
+            },
+            ResourceContainer::Confidential {
+                revealed_amount,
+                locked_revealed_amount,
+                ..
+            } => {
+                if amount > *revealed_amount {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: format!(
+                            "lock_by_amount: resource container did not contain enough revealed funds. Required: {}, \
+                             Available: {}",
+                            amount, revealed_amount
+                        ),
+                    });
+                }
+                *revealed_amount -= amount;
+                *locked_revealed_amount += amount;
+                Ok(ResourceContainer::confidential(*self.resource_address(), None, amount))
+            },
         }
     }
 }

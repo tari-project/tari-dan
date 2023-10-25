@@ -7,13 +7,16 @@ use tari_template_abi::rust::{collections::HashMap, fmt, ops::RangeInclusive};
 
 use crate::{
     args::MintArg,
+    auth::{AccessRule, OwnerRule, ResourceAccessRules},
     models::{Bucket, Metadata, NonFungibleId, ResourceAddress},
     resource::{ResourceManager, ResourceType},
 };
 
 pub struct NonFungibleResourceBuilder {
     token_symbol: String,
+    owner_rule: OwnerRule,
     metadata: Metadata,
+    access_rules: ResourceAccessRules,
     tokens_ids: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
 }
 
@@ -21,13 +24,60 @@ impl NonFungibleResourceBuilder {
     pub(super) fn new<S: Into<String>>(symbol: S) -> Self {
         Self {
             token_symbol: symbol.into(),
+            owner_rule: OwnerRule::default(),
             metadata: Metadata::new(),
+            access_rules: ResourceAccessRules::new(),
             tokens_ids: HashMap::new(),
         }
     }
 
+    pub fn with_owner_rule(mut self, rule: OwnerRule) -> Self {
+        self.owner_rule = rule;
+        self
+    }
+
+    pub fn with_access_rules(mut self, rules: ResourceAccessRules) -> Self {
+        self.access_rules = rules;
+        self
+    }
+
+    pub fn mintable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.mintable(rule);
+        self
+    }
+
+    pub fn burnable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.burnable(rule);
+        self
+    }
+
+    pub fn withdrawable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.withdrawable(rule);
+        self
+    }
+
+    pub fn depositable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.depositable(rule);
+        self
+    }
+
+    pub fn update_non_fungible_data(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.update_non_fungible_data(rule);
+        self
+    }
+
     pub fn add_metadata<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
         self.metadata.insert(key, value);
+        self
+    }
+
+    pub fn with_non_fungible<T, U>(mut self, id: NonFungibleId, data: &T, mutable: &U) -> Self
+    where
+        T: Serialize,
+        U: Serialize,
+    {
+        self.tokens_ids
+            .insert(id, (encode(data).unwrap(), encode(mutable).unwrap()));
         self
     }
 
@@ -58,7 +108,13 @@ impl NonFungibleResourceBuilder {
     pub fn build(self) -> ResourceAddress {
         // TODO: Improve API
         assert!(self.tokens_ids.is_empty(), "call build_bucket with initial tokens set");
-        let (address, _) = Self::build_internal(self.token_symbol, self.metadata, None);
+        let (address, _) = Self::build_internal(
+            self.token_symbol,
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            None,
+        );
         address
     }
 
@@ -67,15 +123,30 @@ impl NonFungibleResourceBuilder {
             tokens: self.tokens_ids,
         };
 
-        let (_, bucket) = Self::build_internal(self.token_symbol, self.metadata, Some(mint_args));
+        let (_, bucket) = Self::build_internal(
+            self.token_symbol,
+            self.owner_rule,
+            self.access_rules,
+            self.metadata,
+            Some(mint_args),
+        );
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
     fn build_internal(
         token_symbol: String,
+        owner_rule: OwnerRule,
+        access_rules: ResourceAccessRules,
         metadata: Metadata,
         mint_args: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::NonFungible, token_symbol, metadata, mint_args)
+        ResourceManager::new().create(
+            ResourceType::NonFungible,
+            owner_rule,
+            access_rules,
+            token_symbol,
+            metadata,
+            mint_args,
+        )
     }
 }

@@ -1,53 +1,70 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
+use std::{
+    collections::{HashMap, HashSet},
+    mem,
+};
 
-use tari_bor::{decode, encode, BorError, Value};
+use tari_engine_types::indexed_value::{IndexedValue, IndexedValueError};
+use tari_template_lib::models::ProofId;
 
 #[derive(Debug, thiserror::Error)]
 pub enum WorkspaceError {
-    #[error("Value decoding error: {0}")]
-    ValueDecodingError(#[from] BorError),
+    // #[error("Value decoding error: {0}")]
+    // ValueDecodingError(#[from] BorError),
+    #[error("Indexed value error: {0}")]
+    IndexedValueError(#[from] IndexedValueError),
 }
 
 #[derive(Debug, Clone, Default)]
-pub(super) struct Workspace {
-    pub variables: HashMap<Vec<u8>, Vec<u8>>,
+pub struct Workspace {
+    variables: HashMap<Vec<u8>, IndexedValue>,
+    proofs: HashSet<ProofId>,
 }
 
 impl Workspace {
-    pub fn get(&self, key: &[u8]) -> Option<&Vec<u8>> {
+    pub fn get(&self, key: &[u8]) -> Option<&IndexedValue> {
         self.variables.get(key)
     }
 
-    pub fn insert(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<(), WorkspaceError> {
-        self.variables.insert(key.clone(), value.clone());
-
+    pub fn insert(&mut self, key: Vec<u8>, value: IndexedValue) -> Result<(), WorkspaceError> {
         // if the value is an array then we need to add entries for all items
-        let value: tari_bor::Value = decode(&value)?;
         // TODO: support for structs
-        if let Value::Array(items) = value {
+        if let tari_bor::Value::Array(items) = value.value() {
             let key_str = String::from_utf8_lossy(&key);
 
-            for (i, item) in items.iter().enumerate() {
-                let item_value = encode(item)?;
+            for (i, item) in items.clone().into_iter().enumerate() {
+                let item_value = IndexedValue::from_value(item)?;
 
                 // we do not have a way to differentiate tuples from arrays, so we support both
                 let item_tuple_key = format!("{}.{}", key_str, i);
                 let item_array_key = format!("{}[{}]", key_str, i);
-                self.variables.insert(item_tuple_key.into(), item_value.clone());
-                self.variables.insert(item_array_key.into(), item_value);
+                self.insert_internal(item_tuple_key.into(), item_value.clone());
+                self.insert_internal(item_array_key.into(), item_value);
             }
         }
 
+        self.insert_internal(key, value);
+
         Ok(())
+    }
+
+    fn insert_internal(&mut self, key: Vec<u8>, value: IndexedValue) {
+        if !value.proof_ids().is_empty() {
+            self.proofs.extend(value.proof_ids().iter().copied());
+        }
+        self.variables.insert(key, value);
+    }
+
+    pub fn drain_all_proofs(&mut self) -> HashSet<ProofId> {
+        mem::take(&mut self.proofs)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use tari_bor::encode;
+    use tari_engine_types::indexed_value::IndexedValue;
     use tari_utilities::ByteArray;
 
     use super::Workspace;
@@ -56,7 +73,7 @@ mod tests {
     fn tuples() {
         // create the tuple value
         let tuple = ("Foo", 32);
-        let encoded_tuple = encode(&tuple).unwrap();
+        let encoded_tuple = IndexedValue::from_type(&tuple).unwrap();
 
         // add the tuple to the workspace
         let mut workspace = Workspace::default();
@@ -68,11 +85,11 @@ mod tests {
 
         // each tuple item can be addresed individually
         // item 0
-        let expected = encode(&tuple.0).unwrap();
+        let expected = IndexedValue::from_type(&tuple.0).unwrap();
         let value = workspace.get(b"tuple.0").unwrap();
         assert_eq!(*value, expected);
         // item 1
-        let expected = encode(&tuple.1).unwrap();
+        let expected = IndexedValue::from_type(&tuple.1).unwrap();
         let value = workspace.get(b"tuple.1").unwrap();
         assert_eq!(*value, expected);
     }

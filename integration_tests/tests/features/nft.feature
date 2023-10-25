@@ -31,12 +31,12 @@ Feature: NFTs
     # A file-base CLI account must be created to sign future calls
     When I use an account key named K1
 
-    # Create a new BasicNft component
-    When I call function "new" on template "basic_nft" on VN named "NFT"
-
     # Create an account to deposit the minted nfts
     When I create an account ACC1 on VN
     When I create an account ACC2 on VN
+
+    # Create a new BasicNft component
+    When I call function "new" on template "basic_nft" on VN named "NFT"
 
     # Submit a transaction with NFT operations
     When I submit a transaction manifest on VN with inputs "NFT, ACC1, ACC2" named "TX1" signed with key ACC1

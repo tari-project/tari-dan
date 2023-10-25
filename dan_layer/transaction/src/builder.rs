@@ -89,6 +89,10 @@ impl TransactionBuilder {
         })
     }
 
+    pub fn drop_all_proofs_in_workspace(self) -> Self {
+        self.add_instruction(Instruction::DropAllProofsInWorkspace)
+    }
+
     pub fn put_last_instruction_output_on_workspace<T: AsRef<[u8]>>(self, label: T) -> Self {
         self.add_instruction(Instruction::PutLastInstructionOutputOnWorkspace {
             key: label.as_ref().to_vec(),

@@ -6,21 +6,29 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
 };
 use tari_template_lib::{
+    auth::{AccessRule, ResourceAccessRules},
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
+    crypto::RistrettoPublicKeyBytes,
     models::Metadata,
-    prelude::ResourceType,
+    prelude::{OwnerRule, ResourceType},
 };
 
 use crate::state_store::{StateStoreError, StateWriter};
 
 pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStoreError> {
-    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     // Create the resource for badges
     state_db.set_state(
-        &address,
+        &SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS),
         Substate::new(
             0,
-            Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()),
+            Resource::new(
+                ResourceType::NonFungible,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::deny_all(),
+                "ID".to_string(),
+                Default::default(),
+            ),
         ),
     )?;
 
@@ -33,7 +41,16 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
         &address,
         Substate::new(
             0,
-            Resource::new(ResourceType::Confidential, "tXTR2".to_string(), metadata),
+            Resource::new(
+                ResourceType::Confidential,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::new()
+                    .withdrawable(AccessRule::AllowAll)
+                    .depositable(AccessRule::AllowAll),
+                "tXTR2".to_string(),
+                metadata,
+            ),
         ),
     )?;
 

@@ -30,12 +30,7 @@ use std::{
 
 use log::debug;
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{
-    optional::Optional,
-    services::template_provider::TemplateProvider,
-    Epoch,
-    NodeAddressable,
-};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable};
 use tari_engine_types::{
     bucket::Bucket,
     commit_result::{RejectReason, TransactionResult},
@@ -44,9 +39,11 @@ use tari_engine_types::{
     events::Event,
     fee_claim::FeeClaimAddress,
     fees::{FeeReceipt, FeeSource},
+    indexed_value::IndexedValue,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
+    proof::{LockedResource, Proof},
     resource::Resource,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
@@ -54,11 +51,11 @@ use tari_engine_types::{
     vault::Vault,
     TemplateAddress,
 };
-use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::MintArg,
-    auth::AccessRules,
+    auth::{ComponentAccessRules, OwnerRule, ResourceAccessRules},
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+    crypto::RistrettoPublicKeyBytes,
     models::{
         Amount,
         BucketId,
@@ -66,6 +63,7 @@ use tari_template_lib::{
         Metadata,
         NonFungibleAddress,
         NonFungibleIndexAddress,
+        ProofId,
         ResourceAddress,
         UnclaimedConfidentialOutputAddress,
         VaultId,
@@ -76,10 +74,12 @@ use tari_template_lib::{
 use tari_transaction::id_provider::IdProvider;
 
 use crate::{
-    packager::LoadedTemplate,
     runtime::{
         fee_state::FeeState,
+        tracker_auth::Authorization,
         working_state::WorkingState,
+        workspace::Workspace,
+        AuthorizationScope,
         RuntimeError,
         TransactionCommitError,
         VirtualSubstates,
@@ -97,11 +97,10 @@ pub struct FinalizeTracker {
 }
 
 #[derive(Debug, Clone)]
-pub struct StateTracker<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
+pub struct StateTracker {
     working_state: Arc<RwLock<WorkingState>>,
     fee_state: Arc<RwLock<FeeState>>,
     id_provider: IdProvider,
-    template_provider: Arc<TTemplateProvider>,
     fee_checkpoint: Arc<Mutex<Option<WorkingState>>>,
 }
 
@@ -109,23 +108,27 @@ pub struct StateTracker<TTemplateProvider: TemplateProvider<Template = LoadedTem
 pub struct RuntimeState {
     pub template_name: String,
     pub template_address: TemplateAddress,
+    pub transaction_signer_public_key: RistrettoPublicKeyBytes,
     pub component_address: Option<ComponentAddress>,
     pub recursion_depth: usize,
     pub max_recursion_depth: usize,
 }
 
-impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracker<TTemplateProvider> {
+impl StateTracker {
     pub fn new(
         state_store: MemoryStateStore,
         id_provider: IdProvider,
-        template_provider: Arc<TTemplateProvider>,
         virtual_substates: VirtualSubstates,
+        auth_scope: AuthorizationScope,
     ) -> Self {
         Self {
-            working_state: Arc::new(RwLock::new(WorkingState::new(state_store, virtual_substates))),
+            working_state: Arc::new(RwLock::new(WorkingState::new(
+                state_store,
+                virtual_substates,
+                auth_scope,
+            ))),
             fee_state: Arc::new(RwLock::new(FeeState::new())),
             id_provider,
-            template_provider,
             fee_checkpoint: Arc::new(Mutex::new(None)),
         }
     }
@@ -150,26 +153,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         self.write_with(|state| mem::take(&mut state.logs))
     }
 
-    pub fn get_template_provider(&self) -> Arc<TTemplateProvider> {
-        self.template_provider.clone()
-    }
-
-    pub fn get_template_def(&self) -> Result<TemplateDef, RuntimeError> {
-        let runtime_state = self.runtime_state()?;
-        Ok(self
-            .template_provider
-            .get_template_module(&runtime_state.template_address)
-            .map_err(|e| RuntimeError::FailedToLoadTemplate {
-                address: runtime_state.template_address,
-                details: e.to_string(),
-            })?
-            .ok_or(RuntimeError::TemplateNotFound {
-                template_address: runtime_state.template_address,
-            })?
-            .template_def()
-            .clone())
-    }
-
     fn check_amount(&self, amount: Amount) -> Result<(), RuntimeError> {
         if amount.is_negative() {
             return Err(RuntimeError::InvalidAmount {
@@ -181,21 +164,34 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     }
 
     pub fn get_template_address(&self) -> Result<TemplateAddress, RuntimeError> {
-        Ok(self.runtime_state()?.template_address)
+        self.with_runtime_state(|s| Ok(s.template_address))
     }
 
     pub fn new_resource(
         &self,
         resource_type: ResourceType,
+        owner_rule: OwnerRule,
+        access_rules: ResourceAccessRules,
         token_symbol: String,
         metadata: Metadata,
     ) -> Result<ResourceAddress, RuntimeError> {
-        let resource_address = self.id_provider.new_resource_address()?;
-        let resource = Resource::new(resource_type, token_symbol, metadata);
         self.write_with(|state| {
+            let runtime_state = state.runtime_state()?;
+            let resource_address = self.id_provider.new_resource_address()?;
+
+            let resource = Resource::new(
+                resource_type,
+                runtime_state.transaction_signer_public_key,
+                owner_rule,
+                access_rules,
+                token_symbol,
+                metadata,
+            );
+
             state.new_resources.insert(resource_address, resource);
-        });
-        Ok(resource_address)
+
+            Ok(resource_address)
+        })
     }
 
     pub fn mint_resource(
@@ -274,6 +270,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         Ok(bucket)
     }
 
+    pub fn resource_exists(&self, resource_address: &ResourceAddress) -> Result<bool, RuntimeError> {
+        self.read_with(|state| {
+            Ok(state.new_resources.contains_key(resource_address) ||
+                state.substate_exists_in_state_store(*resource_address)?)
+        })
+    }
+
     pub fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError> {
         self.read_with(|state| state.get_resource(address))
     }
@@ -296,11 +299,23 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         })
     }
 
+    pub fn set_resource_access_rules(
+        &self,
+        address: &ResourceAddress,
+        access_rules: ResourceAccessRules,
+    ) -> Result<(), RuntimeError> {
+        self.write_with(|state| {
+            state.borrow_resource_mut(address, move |resource| {
+                resource.set_access_rules(access_rules);
+            })
+        })
+    }
+
     pub fn new_bucket(&self, resource: ResourceContainer) -> Result<BucketId, RuntimeError> {
         self.write_with(|state| {
             let bucket_id = self.id_provider.new_bucket_id();
             debug!(target: LOG_TARGET, "New bucket: {}", bucket_id);
-            let bucket = Bucket::new(resource);
+            let bucket = Bucket::new(bucket_id, resource);
             state.buckets.insert(bucket_id, bucket);
             Ok(bucket_id)
         })
@@ -322,7 +337,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                 ResourceType::NonFungible => ResourceContainer::non_fungible(resource_address, BTreeSet::new()),
                 ResourceType::Confidential => ResourceContainer::confidential(resource_address, None, Amount::zero()),
             };
-            let bucket = Bucket::new(new_state);
+            let bucket = Bucket::new(bucket_id, new_state);
             state.buckets.insert(bucket_id, bucket);
             Ok(bucket_id)
         })
@@ -336,14 +351,32 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         self.read_with(|state| state.buckets.keys().copied().collect())
     }
 
-    pub fn get_bucket(&self, bucket_id: BucketId) -> Result<Bucket, RuntimeError> {
+    pub fn borrow_bucket<F: FnOnce(&Bucket) -> R, R>(&self, bucket_id: BucketId, f: F) -> Result<R, RuntimeError> {
         self.read_with(|state| {
             state
                 .buckets
                 .get(&bucket_id)
-                .cloned()
                 .ok_or(RuntimeError::BucketNotFound { bucket_id })
+                .map(f)
         })
+    }
+
+    pub fn borrow_bucket_mut<F: FnOnce(&mut Bucket) -> R, R>(
+        &self,
+        bucket_id: BucketId,
+        f: F,
+    ) -> Result<R, RuntimeError> {
+        self.write_with(|state| {
+            state
+                .buckets
+                .get_mut(&bucket_id)
+                .ok_or(RuntimeError::BucketNotFound { bucket_id })
+                .map(f)
+        })
+    }
+
+    pub fn bucket_exists(&self, bucket_id: &BucketId) -> bool {
+        self.read_with(|state| state.buckets.contains_key(bucket_id))
     }
 
     pub fn with_bucket_mut<R, F: FnOnce(&mut Bucket) -> R>(
@@ -369,6 +402,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             let resource_address = *bucket.resource_address();
             let burnt_amount = bucket.amount();
             let mut resource = state.get_resource(&resource_address)?;
+            // Burn Non-fungibles (if resource is nf). Fungibles are burnt by removing the bucket from the tracker state
+            // and not depositing it.
             for token_id in bucket.into_non_fungible_ids().into_iter().flatten() {
                 let address = NonFungibleAddress::new(resource_address, token_id);
                 let mut nft = state.get_non_fungible(&address)?;
@@ -387,6 +422,56 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
             resource.decrease_total_supply(burnt_amount);
             state.new_resources.insert(resource_address, resource);
 
+            Ok(())
+        })
+    }
+
+    pub fn new_proof(&self, locked: LockedResource) -> Result<ProofId, RuntimeError> {
+        self.write_with(|state| {
+            let proof_id = self.id_provider.new_proof_id();
+            debug!(target: LOG_TARGET, "New proof: {}", proof_id);
+            state.proofs.insert(proof_id, Proof::new(locked));
+            Ok(proof_id)
+        })
+    }
+
+    pub fn proof_exists(&self, proof_id: &ProofId) -> bool {
+        self.read_with(|state| state.proofs.contains_key(proof_id))
+    }
+
+    pub fn drop_proof(&self, proof_id: ProofId) -> Result<(), RuntimeError> {
+        self.write_with(|state| {
+            debug!(target: LOG_TARGET, "Drop proof: {}", proof_id);
+            state.drop_proof(proof_id)
+        })
+    }
+
+    pub fn borrow_proof<F: FnOnce(&Proof) -> R, R>(&self, proof_id: &ProofId, f: F) -> Result<R, RuntimeError> {
+        self.read_with(|state| {
+            state
+                .proofs
+                .get(proof_id)
+                .ok_or(RuntimeError::ProofNotFound { proof_id: *proof_id })
+                .map(f)
+        })
+    }
+
+    pub fn add_proof_to_auth_scope(&self, proof_id: ProofId) -> Result<(), RuntimeError> {
+        self.write_with(|state| {
+            if !state.proofs.contains_key(&proof_id) {
+                return Err(RuntimeError::ProofNotFound { proof_id });
+            }
+            state.current_auth_scope.add_proof(proof_id);
+            Ok(())
+        })
+    }
+
+    pub fn remove_proof_from_auth_scope(&self, proof_id: &ProofId) -> Result<(), RuntimeError> {
+        self.write_with(|state| {
+            if !state.proofs.contains_key(proof_id) {
+                return Err(RuntimeError::ProofNotFound { proof_id: *proof_id });
+            }
+            state.current_auth_scope.remove_proof(proof_id);
             Ok(())
         })
     }
@@ -424,25 +509,30 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     pub fn new_component(
         &self,
         state: Vec<u8>,
-        access_rules: AccessRules,
+        owner_rule: OwnerRule,
+        access_rules: ComponentAccessRules,
         component_id: Option<Hash>,
     ) -> Result<ComponentAddress, RuntimeError> {
-        let runtime_state = self.runtime_state()?;
-        let template_address = runtime_state.template_address;
-        let module_name = runtime_state.template_name;
+        let (component_address, component) = self.with_runtime_state(move |runtime_state| {
+            let template_address = runtime_state.template_address;
+            let component_address = self
+                .id_provider()
+                .new_component_address(template_address, component_id)?;
+
+            let component = ComponentBody { state };
+            let component = ComponentHeader {
+                template_address: runtime_state.template_address,
+                module_name: runtime_state.template_name.clone(),
+                owner_key: runtime_state.transaction_signer_public_key,
+                access_rules,
+                owner_rule,
+                state: component,
+            };
+
+            Ok((component_address, component))
+        })?;
+
         let tx_hash = self.transaction_hash();
-        let component_address = self
-            .id_provider()
-            .new_component_address(template_address, component_id)?;
-
-        let component = ComponentBody { state };
-        let component = ComponentHeader {
-            template_address: runtime_state.template_address,
-            module_name: module_name.clone(),
-            access_rules,
-            state: component,
-        };
-
         self.write_with(|state| {
             // The template address/component_id combination will not necessarily be unique so we need to check this.
             if state.get_component(&component_address).optional()?.is_some() {
@@ -451,6 +541,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                 });
             }
 
+            let template_address = component.template_address;
+            let module_name = component.module_name.clone();
             state.new_components.insert(component_address, component);
 
             state.events.push(Event::new(
@@ -458,7 +550,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
                 template_address,
                 tx_hash,
                 "component-created".to_string(),
-                Metadata::from([("module_name".to_string(), module_name.to_string())]),
+                Metadata::from([("module_name".to_string(), module_name)]),
             ));
 
             Ok(())
@@ -470,6 +562,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub fn get_component(&self, addr: &ComponentAddress) -> Result<ComponentHeader, RuntimeError> {
         self.read_with(|state| state.get_component(addr))
+    }
+
+    pub fn component_exists(&self, addr: &ComponentAddress) -> Result<bool, RuntimeError> {
+        self.read_with(|state| {
+            Ok(state.new_components.contains_key(addr) || state.substate_exists_in_state_store(*addr)?)
+        })
     }
 
     /// Set the component. This may be called many times during execution but always results in exactly one UP substate
@@ -515,28 +613,44 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     }
 
     pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(&self, vault_id: VaultId, f: F) -> Result<R, RuntimeError> {
-        self.write_with(|state| state.borrow_vault_mut(vault_id, f))
+        self.write_with(|state| state.borrow_vault_mut(&vault_id, f))
     }
 
-    pub fn runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
-        self.read_with(|state| state.runtime_state.clone().ok_or(RuntimeError::IllegalRuntimeState))
+    pub fn vault_exists(&self, vault_id: &VaultId) -> Result<bool, RuntimeError> {
+        self.read_with(|state| {
+            Ok(state.new_vaults.contains_key(vault_id) || state.substate_exists_in_state_store(*vault_id)?)
+        })
     }
 
-    pub fn runtime_state_component_address(&self) -> Result<Option<ComponentAddress>, RuntimeError> {
-        Ok(self.runtime_state()?.component_address)
+    pub fn clone_runtime_state(&self) -> Result<RuntimeState, RuntimeError> {
+        self.with_runtime_state(|state| Ok(state.clone()))
     }
 
-    pub fn set_last_instruction_output(&self, output: Option<Vec<u8>>) {
+    pub fn with_runtime_state<R, F: FnOnce(&RuntimeState) -> Result<R, RuntimeError>>(
+        &self,
+        f: F,
+    ) -> Result<R, RuntimeError> {
+        self.read_with(|state| {
+            let state = state.runtime_state()?;
+            f(state)
+        })
+    }
+
+    pub fn authorization(&self) -> Authorization<'_> {
+        Authorization::new(self)
+    }
+
+    pub fn set_last_instruction_output(&self, output: IndexedValue) {
         self.write_with(|state| {
-            state.last_instruction_output = output;
+            state.last_instruction_output = Some(output);
         });
     }
 
-    pub fn take_last_instruction_output(&self) -> Option<Vec<u8>> {
+    pub fn take_last_instruction_output(&self) -> Option<IndexedValue> {
         self.write_with(|state| state.last_instruction_output.take())
     }
 
-    pub fn get_from_workspace(&self, key: &[u8]) -> Result<Vec<u8>, RuntimeError> {
+    pub fn get_from_workspace(&self, key: &[u8]) -> Result<IndexedValue, RuntimeError> {
         self.read_with(|state| {
             state
                 .workspace
@@ -548,11 +662,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         })
     }
 
-    pub fn put_in_workspace(&self, key: Vec<u8>, value: Vec<u8>) -> Result<(), RuntimeError> {
-        self.write_with(|state| {
-            state.workspace.insert(key.clone(), value)?;
-            Ok(())
-        })
+    pub fn with_workspace<F: FnOnce(&Workspace) -> R, R>(&self, f: F) -> R {
+        self.read_with(|state| f(&state.workspace))
+    }
+
+    pub fn with_workspace_mut<F: FnOnce(&mut Workspace) -> R, R>(&self, f: F) -> R {
+        self.write_with(|state| f(&mut state.workspace))
     }
 
     pub fn pay_fee(&self, resource: ResourceContainer, return_vault: VaultId) -> Result<(), RuntimeError> {
@@ -700,7 +815,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
         Ok(FeeReceipt {
             total_fee_payment,
-            fee_resource,
+            total_fees_paid: fee_resource.amount(),
             cost_breakdown: fee_state.fee_charges.drain(..).collect(),
         })
     }
@@ -709,7 +824,11 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         self.write_with(|current_state| {
             mem::replace(
                 current_state,
-                WorkingState::new(current_state.state_store.clone(), Default::default()),
+                WorkingState::new(
+                    current_state.state_store.clone(),
+                    Default::default(),
+                    AuthorizationScope::new(vec![]),
+                ),
             )
         })
     }
@@ -789,7 +908,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
         Amount::try_from(tx.total_charges()).expect("fee overflowed i64::MAX")
     }
 
-    fn read_with<R, F: FnOnce(&WorkingState) -> R>(&self, f: F) -> R {
+    pub(super) fn read_with<R, F: FnOnce(&WorkingState) -> R>(&self, f: F) -> R {
         f(&self.working_state.read().unwrap())
     }
 
@@ -803,5 +922,20 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
 
     pub(crate) fn id_provider(&self) -> &IdProvider {
         &self.id_provider
+    }
+
+    pub fn push_auth_scope(&self) {
+        self.write_with(|state| {
+            let prev_auth_scope = mem::replace(&mut state.current_auth_scope, AuthorizationScope::new(vec![]));
+            state.auth_scope_stack.push(prev_auth_scope);
+        });
+    }
+
+    pub fn pop_auth_scope(&self) -> Result<(), RuntimeError> {
+        self.write_with(|state| {
+            let prev_auth_scope = state.auth_scope_stack.pop().ok_or(RuntimeError::AuthScopeStackEmpty)?;
+            state.current_auth_scope = prev_auth_scope;
+            Ok(())
+        })
     }
 }

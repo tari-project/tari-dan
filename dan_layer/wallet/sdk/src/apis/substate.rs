@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use log::*;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
-    indexed_value::{IndexedValue, IndexedValueVisitorError},
+    indexed_value::{IndexedValue, IndexedValueError},
     substate::{SubstateAddress, SubstateValue},
     transaction_receipt::TransactionReceiptAddress,
 };
@@ -218,7 +218,7 @@ pub enum SubstateApiError {
     #[error("Substate {address} does not exist")]
     SubstateDoesNotExist { address: SubstateAddress },
     #[error("ValueVisitorError: {0}")]
-    ValueVisitorError(#[from] IndexedValueVisitorError),
+    ValueVisitorError(#[from] IndexedValueError),
 }
 
 impl IsNotFoundError for SubstateApiError {

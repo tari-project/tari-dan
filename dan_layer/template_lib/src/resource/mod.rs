@@ -19,17 +19,28 @@
 //   SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
 mod builder;
-pub use builder::{ResourceBuilder, TOKEN_SYMBOL};
-
+pub use builder::*;
 mod manager;
-pub use manager::ResourceManager;
-use serde::{Deserialize, Serialize};
+pub use manager::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ResourceType {
     Fungible,
     NonFungible,
     Confidential,
+}
+
+impl ResourceType {
+    pub fn is_fungible(&self) -> bool {
+        matches!(self, Self::Fungible)
+    }
+
+    pub fn is_non_fungible(&self) -> bool {
+        matches!(self, Self::NonFungible)
+    }
+
+    pub fn is_confidential(&self) -> bool {
+        matches!(self, Self::Confidential)
+    }
 }
