@@ -35,6 +35,7 @@ use tari_common::{
     SubConfigPath,
 };
 use tari_comms::multiaddr::Multiaddr;
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_app_utilities::template_manager::implementation::TemplateConfig;
 use tari_p2p::{P2pConfig, PeerSeedsConfig};
 
@@ -99,6 +100,8 @@ pub struct ValidatorNodeConfig {
     pub templates: TemplateConfig,
     /// Dont charge fees
     pub no_fees: bool,
+    /// Fee claim public key
+    pub fee_claim_public_key: RistrettoPublicKey,
 }
 
 impl ValidatorNodeConfig {
@@ -149,6 +152,8 @@ impl Default for ValidatorNodeConfig {
             auto_register: true,
             templates: TemplateConfig::default(),
             no_fees: false,
+            // Burn your fees
+            fee_claim_public_key: RistrettoPublicKey::default(),
         }
     }
 }
