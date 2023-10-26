@@ -24,7 +24,8 @@ fn setup() -> (TemplateTest, ComponentAddress, SubstateAddress) {
 fn airdrop() {
     let (mut template_test, airdrop, airdrop_resx) = setup();
 
-    let total_supply: Amount = template_test.call_method(airdrop, "total_supply", args![], vec![]);
+    let total_supply: Amount =
+        template_test.call_method(airdrop, "total_supply", args![], vec![template_test.get_test_proof()]);
     assert_eq!(total_supply, Amount(100));
 
     // Create 100 accounts
@@ -38,7 +39,7 @@ fn airdrop() {
             })
             .take(100)
             .collect(),
-            vec![],
+            vec![template_test.get_test_proof()],
         )
         .unwrap();
 
@@ -49,7 +50,7 @@ fn airdrop() {
         .map(|r| r.decode::<ComponentAddress>().unwrap())
         .collect::<Vec<_>>();
 
-    template_test.call_method::<()>(airdrop, "open_airdrop", args![], vec![]);
+    template_test.call_method::<()>(airdrop, "open_airdrop", args![], vec![template_test.get_test_proof()]);
 
     template_test
         .execute_and_commit(
@@ -63,7 +64,7 @@ fn airdrop() {
                     }]
                 })
                 .collect(),
-            vec![],
+            vec![template_test.get_test_proof()],
         )
         .unwrap();
 
@@ -92,7 +93,9 @@ fn airdrop() {
             ]
         })
         .collect();
-    let result = template_test.execute_and_commit(instructions, vec![]).unwrap();
+    let result = template_test
+        .execute_and_commit(instructions, vec![template_test.get_test_proof()])
+        .unwrap();
 
     for i in 0..100 {
         assert_eq!(

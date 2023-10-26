@@ -29,16 +29,47 @@ pub struct Sparkle {
 #[template]
 mod sparkle_nft_template {
     use super::*;
-
     pub struct SparkleNft {
         resource_address: ResourceAddress,
+        vault: Vault,
     }
 
     impl SparkleNft {
-        pub fn new() -> Self {
-            let resource_address = ResourceBuilder::non_fungible("SPKL").build();
+        pub fn new() -> Component<Self> {
+            let resource_address = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
+                // AllowAll makes testing easier
+                .mintable(AccessRule::AllowAll)
+                .burnable(AccessRule::AllowAll)
+                .build();
+            let vault = Vault::new_empty(resource_address);
 
-            Self { resource_address }
+            Component::new(Self {
+                resource_address,
+                vault,
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
+        }
+
+        pub fn new_with_initial_nft(nft: NonFungibleId) -> Component<Self> {
+            let empty = Metadata::new();
+            let bucket = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
+                .with_non_fungibles(Some((nft, (&(), &empty))))
+                // AllowAll makes testing easier
+                .mintable(AccessRule::AllowAll)
+                .burnable(AccessRule::AllowAll)
+                .build_bucket();
+
+            Component::new(Self {
+                resource_address: bucket.resource_address(),
+                vault: Vault::from_bucket(bucket),
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
+        }
+
+        pub fn take_initial_nft(&mut self) -> Bucket {
+            self.vault.withdraw(Amount(1))
         }
 
         pub fn mint(&mut self, name: String, url: String) -> Bucket {
@@ -48,7 +79,7 @@ mod sparkle_nft_template {
         }
 
         pub fn mint_specific(&mut self, id: NonFungibleId, name: String, url: String) -> Bucket {
-            debug(format!("Minting {}", id));
+            debug!("Minting {}", id);
             // These are characteristic of the NFT and are immutable
             let mut immutable_data = Metadata::new();
             immutable_data.insert("name", name).insert("image_url", url);
@@ -63,7 +94,7 @@ mod sparkle_nft_template {
         }
 
         pub fn inc_brightness(&mut self, id: NonFungibleId, brightness: u32) {
-            debug(format!("Increase brightness on {} by {}", id, brightness));
+            debug!("Increase brightness on {} by {}", id, brightness);
             self.with_sparkle_mut(id, |data| {
                 data.brightness = data.brightness.checked_add(brightness).expect("Brightness overflow");
             });

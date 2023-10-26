@@ -1,6 +1,6 @@
 [package]
 name = "tari_bor"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "The binary object representation (BOR) crate provides a binary encoding for template/engine data types"

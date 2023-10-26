@@ -24,7 +24,7 @@ use serde::de::DeserializeOwned;
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
-    args::{CallAction, CallFunctionArg, CallInvokeArg, InvokeResult},
+    args::{Arg, CallAction, CallFunctionArg, CallInvokeArg, InvokeResult},
     prelude::TemplateAddress,
 };
 
@@ -38,7 +38,7 @@ impl TemplateManager {
         Self { template_address }
     }
 
-    pub fn call<T: DeserializeOwned>(&self, function: String, args: Vec<Vec<u8>>) -> T {
+    pub fn call<T: DeserializeOwned>(&self, function: String, args: Vec<Arg>) -> T {
         self.call_internal(CallFunctionArg {
             template_address: self.template_address,
             function,

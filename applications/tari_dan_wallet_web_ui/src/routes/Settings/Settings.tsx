@@ -27,6 +27,7 @@ import Accounts from '../Wallet/Components/Accounts';
 import Keys from '../Wallet/Components/Keys';
 import AccessTokens from '../Wallet/Components/AccessTokens';
 import SettingsTabs from './Components/SettingsTabs';
+import GeneralSettings from './Components/GeneralSettings';
 
 export interface ISettingsMenu {
   label: string;
@@ -36,6 +37,11 @@ export interface ISettingsMenu {
 
 function SettingsPage() {
   const menuItems = [
+    {
+      label: 'General',
+      title: 'General Settings',
+      content: <GeneralSettings />,
+    },
     {
       label: 'Accounts',
       title: 'Manage Accounts',

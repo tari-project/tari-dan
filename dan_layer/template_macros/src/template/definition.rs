@@ -27,8 +27,6 @@ use crate::template::ast::TemplateAst;
 
 pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
     let template_mod_name = format_ident!("{}_template", ast.template_name);
-    let component_ident = ast.template_name.clone();
-    let component_wrapper_ident = format_ident!("{}Component", ast.template_name);
     let (_, items) = ast.module.content.as_ref().unwrap();
 
     quote! {
@@ -37,28 +35,6 @@ pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
             use ::tari_template_lib::template_dependencies::*;
 
             #(#items)*
-
-            impl ::tari_template_lib::component::interface::ComponentInterface for #component_ident {
-                type Component = #component_wrapper_ident;
-
-                fn create_with_options(self, access_rules: ::tari_template_lib::auth::AccessRules, component_id: Option<::tari_template_lib::Hash>) -> Self::Component {
-                    let address = engine().create_component(self, access_rules, component_id);
-                    #component_wrapper_ident{ address }
-                }
-            }
-
-            #[derive(serde::Serialize, serde::Deserialize)]
-            #[serde(transparent, crate = "self::serde")]
-            pub struct #component_wrapper_ident {
-                address: tari_template_lib::models::ComponentAddress,
-            }
-
-            impl ::tari_template_lib::component::interface::ComponentInstanceInterface for #component_wrapper_ident {
-                fn set_access_rules(self, rules: tari_template_lib::auth::AccessRules) -> Self {
-                    engine().component_manager(self.address).set_access_rules(rules);
-                    self
-                }
-            }
         }
     }
 }
@@ -103,36 +79,33 @@ mod tests {
         let output = generate_definition(&ast);
 
         assert_code_eq(output, quote! {
-                   # [allow (non_snake_case)]
+        #[allow(non_snake_case)]
         pub mod Foo_template {
-            use :: tari_template_lib :: template_dependencies :: * ;
-            # [derive (Debug ,  serde :: Serialize , serde :: Deserialize)] # [serde (crate = "self::serde")] struct Foo { }
-            impl Foo { pub fn no_args_function () -> String { "Hello World!" . to_string () }
-                pub fn some_args_function (a : i8 , b : String) -> u32 { 1_u32 }
-                pub fn no_return_function () { }
-                pub fn constructor () -> Self { Self { } }
-                pub fn method (& self) { }
-                fn private_function () { }
-            }
-            impl :: tari_template_lib :: component :: interface :: ComponentInterface for Foo {
-                type Component = FooComponent ;
-                fn create_with_options (self , access_rules : :: tari_template_lib :: auth :: AccessRules , component_id : Option < :: tari_template_lib :: Hash > ) -> Self :: Component {
-                    let address = engine () . create_component (self , access_rules, component_id) ;
-                    FooComponent { address }
+            use ::tari_template_lib::template_dependencies::*;
+            #[derive(Debug, serde :: Serialize, serde :: Deserialize)]
+            #[serde(crate = "self::serde")]
+            struct Foo {}
+            impl Foo {
+                pub fn no_args_function() -> String {
+                    "Hello World!".to_string()
                 }
-            }
-            # [derive (serde :: Serialize , serde :: Deserialize)] # [serde (transparent , crate = "self::serde")]
-            pub struct FooComponent {
-                address : tari_template_lib :: models :: ComponentAddress ,
-            }
-            impl :: tari_template_lib :: component :: interface :: ComponentInstanceInterface for FooComponent {
-                fn set_access_rules (self , rules : tari_template_lib :: auth :: AccessRules) -> Self {
-                    engine () . component_manager (self . address) . set_access_rules (rules) ;
-                    self
+
+                pub fn some_args_function(a: i8, b: String) -> u32 {
+                    1_u32
                 }
+
+                pub fn no_return_function() {}
+
+                pub fn constructor() -> Self {
+                    Self {}
+                }
+
+                pub fn method(&self) {}
+
+                fn private_function() {}
             }
         }
-                });
+        });
     }
 
     fn assert_code_eq(a: TokenStream, b: TokenStream) {

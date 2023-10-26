@@ -31,17 +31,20 @@ Feature: Account transfers
     When miner MINER mines 15 new blocks
     Then the validator node VN is listed as registered
     Then the template "faucet" is listed as registered by the validator node VN
+    Then VN has scanned to height 32 within 10 seconds
+    Then indexer IDX has scanned to height 32 within 10 seconds
 
     # Create the sender account
     When I create an account ACCOUNT via the wallet daemon WALLET_D with 10000 free coins
 
     # Create a new Faucet component
-    When I call function "mint" on template "faucet" using account ACCOUNT to pay fees via wallet daemon WALLET_D with args "amount_10000" and 3 outputs named "FAUCET"
+    When I call function "mint" on template "faucet" using account ACCOUNT to pay fees via wallet daemon WALLET_D with args "amount_10000" named "FAUCET"
 
     # Burn some tari in the base layer to have funds for fees in the sender account
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACCOUNT, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
     When miner MINER mines 13 new blocks
     Then VN has scanned to height 45 within 10 seconds
+    Then indexer IDX has scanned to height 45 within 10 seconds
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
@@ -51,7 +54,7 @@ Feature: Account transfers
 
     # Fund the sender account with faucet tokens
     When I print the cucumber world
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT" and 5 outputs named "TX1"
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT" named "TX1"
     ```
     let faucet = global!["FAUCET/components/TestFaucet"];
     let mut acc1 = global!["ACCOUNT/components/Account"];
@@ -71,7 +74,7 @@ Feature: Account transfers
     When I transfer 50 tokens of resource FAUCET/resources/0 from account ACCOUNT to public key KEY_ACC_2 via the wallet daemon WALLET_D named TRANSFER
 
     # Check that ACC_2 component was created and has funds
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, TRANSFER" and 1 output named "TX2"
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, TRANSFER" named "TX2"
     ```
     let mut acc2 = global!["TRANSFER/components/Account"];
     let faucet_resource = global!["FAUCET/resources/0"];
@@ -108,17 +111,21 @@ Feature: Account transfers
     Then the validator node VN is listed as registered
     Then the template "faucet" is listed as registered by the validator node VN
 
+    Then VN has scanned to height 32 within 10 seconds
+    Then indexer IDX has scanned to height 32 within 10 seconds
+
     # Create the sender account with some tokens
     When I create an account ACCOUNT_1 via the wallet daemon WALLET_D with 10000 free coins
     When I create an account ACCOUNT_2 via the wallet daemon WALLET_D
 
     # Create a new Faucet component
-    When I call function "mint" on template "faucet" using account ACCOUNT_1 to pay fees via wallet daemon WALLET_D with args "amount_10000" and 3 outputs named "FAUCET"
+    When I call function "mint" on template "faucet" using account ACCOUNT_1 to pay fees via wallet daemon WALLET_D with args "amount_10000" named "FAUCET"
 
     # Burn some tari in the base layer to have funds for fees in the sender account
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACCOUNT_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
     When miner MINER mines 13 new blocks
     Then VN has scanned to height 45 within 10 seconds
+    Then indexer IDX has scanned to height 45 within 10 seconds
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
@@ -128,7 +135,7 @@ Feature: Account transfers
 
     # Fund the sender account with faucet tokens
     When I print the cucumber world
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT_1" and 5 outputs named "TX1"
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT_1" named "TX1"
     ```
     let faucet = global!["FAUCET/components/TestFaucet"];
     let mut acc1 = global!["ACCOUNT_1/components/Account"];
@@ -144,7 +151,7 @@ Feature: Account transfers
     When I transfer 50 tokens of resource FAUCET/resources/0 from account ACCOUNT_1 to public key ACCOUNT_2 via the wallet daemon WALLET_D named TRANSFER
 
     # Check that ACCOUNT_2 component now has funds
-    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT_2" and 1 output named "TX2"
+    When I submit a transaction manifest via wallet daemon WALLET_D with inputs "FAUCET, ACCOUNT_2" named "TX2"
     ```
     let mut acc2 = global!["ACCOUNT_2/components/Account"];
     let faucet_resource = global!["FAUCET/resources/0"];
@@ -173,8 +180,9 @@ Feature: Account transfers
     # Initialize the wallet daemon
     Given a wallet daemon WALLET_D connected to indexer IDX
 
-    # TODO: remove the wait
-    When I wait 5 seconds
+    Then VN has scanned to height 17 within 10 seconds
+    Then indexer IDX has scanned to height 17 within 10 seconds
+
     # Create the sender account
     When I create an account ACC_1 via the wallet daemon WALLET_D with 10000 free coins
 

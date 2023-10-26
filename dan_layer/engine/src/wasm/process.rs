@@ -37,6 +37,7 @@ use tari_template_lib::{
         GenerateRandomInvokeArg,
         LogLevel,
         NonFungibleInvokeArg,
+        ProofInvokeArg,
         ResourceInvokeArg,
         VaultInvokeArg,
         WorkspaceInvokeArg,
@@ -155,6 +156,11 @@ impl WasmProcess {
             EngineOp::CallInvoke => Self::handle(env, arg, |env, arg: CallInvokeArg| {
                 env.state().interface().call_invoke(arg.action, arg.args.into())
             }),
+            EngineOp::ProofInvoke => Self::handle(env, arg, |env, arg: ProofInvokeArg| {
+                env.state()
+                    .interface()
+                    .proof_invoke(arg.proof_ref, arg.action, arg.args.into())
+            }),
         };
 
         result.unwrap_or_else(|err| {
@@ -208,7 +214,7 @@ impl Invokable for WasmProcess {
             .find_func_by_name(name)
             .ok_or_else(|| WasmExecutionError::FunctionNotFound { name: name.into() })?;
 
-        let args = self.env.state().resolve_args(args)?;
+        let args = self.env.state().resolve_args(&args)?;
 
         let call_info = CallInfo {
             abi_context: self.encoded_abi_context(),
@@ -246,16 +252,12 @@ impl Invokable for WasmProcess {
         // Read response from memory
         let raw = self.env.read_memory_with_embedded_len(ptr as u32)?;
 
-        if raw.is_empty() {
-            self.env.state().interface().set_last_instruction_output(None)?;
-        } else {
-            self.env
-                .state()
-                .interface()
-                .set_last_instruction_output(Some(raw.clone()))?;
-        }
-
         let value = IndexedValue::from_raw(&raw)?;
+
+        self.env
+            .state()
+            .interface()
+            .set_last_instruction_output(value.clone())?;
 
         Ok(InstructionResult {
             raw,

@@ -112,7 +112,7 @@ impl TransactionRecord {
                 self.result
             } else {
                 Some(ExecuteResult {
-                    finalize: FinalizeResult::new_rejectted(
+                    finalize: FinalizeResult::new_rejected(
                         self.transaction.id().into_array().into(),
                         RejectReason::ShardRejected(format!(
                             "Validators decided to abort: {}",

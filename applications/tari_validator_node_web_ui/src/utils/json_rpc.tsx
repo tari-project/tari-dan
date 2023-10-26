@@ -25,16 +25,11 @@ import { GetNetworkCommitteesResponse } from "./interfaces";
 async function jsonRpc(method: string, params: any = null) {
   let id = 0;
   id += 1;
-  let address = "127.0.0.1:18010";
+  let address = "http://127.0.0.1:18010";
   try {
-    let text = await (await fetch("/json_rpc_address")).text();
-    if (/^\d+(\.\d+){3}:[0-9]+$/.test(text)) {
-      console.log(`Setting JSON RPC address to ${text}`);
-      address = text;
-    }
+    address = await (await fetch("/json_rpc_address")).text();
   } catch {}
-  console.log(method, params);
-  let response = await fetch(`http://${address}`, {
+  let response = await fetch(address, {
     method: "POST",
     body: JSON.stringify({
       method: method,

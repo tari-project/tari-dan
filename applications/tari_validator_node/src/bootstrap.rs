@@ -20,13 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    fs,
-    io,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
-    ops::DerefMut,
-    sync::Arc,
-};
+use std::{fs, io, ops::DerefMut, sync::Arc};
 
 use anyhow::anyhow;
 use futures::{future, FutureExt};
@@ -40,6 +34,7 @@ use tari_common::{
 };
 use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, types::CommsPublicKey, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_dan_app_utilities::{
     base_layer_scanner,
     consensus_constants::ConsensusConstants,
@@ -64,9 +59,12 @@ use tari_indexer_lib::substate_scanner::SubstateScanner;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::{
+    auth::ResourceAccessRules,
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
+    crypto::RistrettoPublicKeyBytes,
     models::Metadata,
-    prelude::ResourceType,
+    prelude::{OwnerRule, ResourceType},
+    resource::TOKEN_SYMBOL,
 };
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
@@ -85,6 +83,8 @@ use crate::{
             mempool::{
                 ClaimFeeTransactionValidator,
                 FeeTransactionValidator,
+                HasInputs,
+                HasInvolvedShards,
                 InputRefsValidator,
                 MempoolError,
                 MempoolHandle,
@@ -123,10 +123,11 @@ pub async fn spawn_services(
     ensure_directories_exist(config)?;
 
     // Connection to base node
-    let base_node_client = GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.unwrap_or_else(|| {
-        let port = grpc_default_port(ApplicationType::BaseNode, config.network);
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
-    }));
+    let base_node_client =
+        GrpcBaseNodeClient::new(config.validator_node.base_node_grpc_address.clone().unwrap_or_else(|| {
+            let port = grpc_default_port(ApplicationType::BaseNode, config.network);
+            format!("127.0.0.1:{port}")
+        }));
 
     // Initialize comms
     let (comms, message_channels) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
@@ -176,6 +177,9 @@ pub async fn spawn_services(
         shutdown.clone(),
     );
     handles.push(join_handle);
+
+    // Create registration file
+    create_registration_file(config, &epoch_manager, &node_identity).await?;
 
     // Template manager
     let template_manager = TemplateManager::initialize(global_db.clone(), config.validator_node.templates.clone())?;
@@ -298,6 +302,36 @@ pub async fn spawn_services(
     })
 }
 
+async fn create_registration_file(
+    config: &ApplicationConfig,
+    epoch_manager: &EpochManagerHandle,
+    node_identity: &NodeIdentity,
+) -> Result<(), anyhow::Error> {
+    let fee_claim_public_key = config.validator_node.fee_claim_public_key.clone();
+    epoch_manager
+        .set_fee_claim_public_key(fee_claim_public_key.clone())
+        .await?;
+
+    let signature = ValidatorNodeSignature::sign(node_identity.secret_key(), &fee_claim_public_key, b"");
+    #[derive(Serialize)]
+    struct ValidatorRegistrationFile {
+        signature: ValidatorNodeSignature,
+        public_key: PublicKey,
+        claim_public_key: PublicKey,
+    }
+    let registration = ValidatorRegistrationFile {
+        signature,
+        public_key: node_identity.public_key().clone(),
+        claim_public_key: fee_claim_public_key,
+    };
+    fs::write(
+        config.common.base_path.join("registration.json"),
+        serde_json::to_string(&registration)?,
+    )
+    .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
+    Ok(())
+}
+
 fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), ExitError> {
     identity_management::save_as_json(&config.validator_node.identity_file, &*comms.node_identity())
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save node identity: {}", e)))?;
@@ -373,12 +407,21 @@ where
     let genesis_block = Block::<TTx::Addr>::genesis();
     let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
+    let mut metadata: Metadata = Default::default();
+    metadata.insert(TOKEN_SYMBOL, "ID".to_string());
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         // Create the resource for public identity
         SubstateRecord {
             address,
             version: 0,
-            substate_value: Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()).into(),
+            substate_value: Resource::new(
+                ResourceType::NonFungible,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::new(),
+                metadata,
+            )
+            .into(),
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
@@ -392,11 +435,20 @@ where
 
     let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
+    let mut metadata = Metadata::new();
+    metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         SubstateRecord {
             address,
             version: 0,
-            substate_value: Resource::new(ResourceType::Confidential, "tXTR2".to_string(), Metadata::new()).into(),
+            substate_value: Resource::new(
+                ResourceType::Confidential,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::new(),
+                metadata,
+            )
+            .into(),
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
@@ -420,7 +472,11 @@ fn create_mempool_before_execute_validator(
         .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
         .boxed();
     if !config.no_fees {
-        validator = validator.and_then(FeeTransactionValidator).boxed();
+        // A transaction without fee payment may have 0 inputs.
+        validator = HasInputs::new()
+            .and_then(validator)
+            .and_then(FeeTransactionValidator)
+            .boxed();
     }
     validator
 }
@@ -428,5 +484,7 @@ fn create_mempool_before_execute_validator(
 fn create_mempool_after_execute_validator(
     store: SqliteStateStore<CommsPublicKey>,
 ) -> impl Validator<ExecutedTransaction, Error = MempoolError> {
-    InputRefsValidator::new().and_then(OutputsDontExistLocally::new(store))
+    HasInvolvedShards::new()
+        .and_then(InputRefsValidator::new())
+        .and_then(OutputsDontExistLocally::new(store))
 }

@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use d3ne::{Node, OutputValue, Worker};
+use tari_bor::from_value;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 
 use crate::{flow::FlowContext, function_definitions::ArgType, packager::LoadedTemplate};
@@ -30,13 +31,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
         let mut result = HashMap::new();
         match arg_def.arg_type {
             ArgType::String => {
-                result.insert(
-                    "default".to_string(),
-                    OutputValue::String(String::from_utf8(value.clone())?),
-                );
+                result.insert("default".to_string(), OutputValue::String(from_value(value)?));
             },
             ArgType::Bytes => {
-                result.insert("default".to_string(), OutputValue::Bytes(value.clone()));
+                result.insert("default".to_string(), OutputValue::Bytes(from_value(value)?));
             },
         };
         Ok(result)

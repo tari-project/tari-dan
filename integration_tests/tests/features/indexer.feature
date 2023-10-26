@@ -36,14 +36,14 @@ Feature: Indexer node
 
     # Create a new Counter component and increase it to have a version 1
     When I create a component COUNTER_1 of template "counter" on VN using "new"
-    When I invoke on VN on component COUNTER_1/components/Counter the method call "increase" with 1 outputs named "TX1"
+    When I invoke on VN on component COUNTER_1/components/Counter the method call "increase" named "TX1"
 
     # Create an account to deposit minted nfts
     When I create an account ACC1 on VN
 
     # Create a new SparkleNft component and mint an NFT
-    When I call function "new" on template "basic_nft" on VN with 3 outputs named "NFT" with new resource "SPKL"
-    When I submit a transaction manifest on VN with inputs "NFT, ACC1" and 12 outputs named "TX2" signed with key ACC1
+    When I call function "new" on template "basic_nft" on VN named "NFT"
+    When I submit a transaction manifest on VN with inputs "NFT, ACC1" named "TX2" signed with key ACC1
     ```
     // $mint NFT/resources/0 6
     // $nft_index NFT/resources/0 0
@@ -107,18 +107,6 @@ Feature: Indexer node
   Scenario: Indexer GraphQL requests work
     # Initialize a base node, wallet, miner and VN
     Given a base node BASE
-    Given a wallet WALLET connected to base node BASE
-    Given a miner MINER connected to base node BASE and wallet WALLET
-
-    # Initialize a VN
-    Given a validator node VN connected to base node BASE and wallet WALLET
-
-    # The wallet must have some funds before the VN sends transactions
-    When miner MINER mines 6 new blocks
-    When wallet WALLET has at least 2000000000 uT
-
-    # VN registration
-    When validator node VN sends a registration transaction
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
@@ -137,6 +125,9 @@ Feature: Indexer node
     # Initialize a VN
     Given a validator node VN connected to base node BASE and wallet WALLET
 
+    # Initialize an indexer
+    Given an indexer IDX connected to base node BASE
+
     # The wallet must have some funds before the VN sends transactions
     When miner MINER mines 6 new blocks
     When wallet WALLET has at least 2000000000 uT
@@ -145,6 +136,8 @@ Feature: Indexer node
     When validator node VN sends a registration transaction
 
     When miner MINER mines 16 new blocks
+    Then VN has scanned to height 19 within 10 seconds
+    Then indexer IDX has scanned to height 19 within 10 seconds
     Then the validator node VN is listed as registered
 
     # A file-base CLI account must be created to sign future calls
@@ -153,9 +146,6 @@ Feature: Indexer node
     # Creates a new account
     When I create an account ACC_1 on VN
     When I create an account ACC_2 on VN
-
-    # Initialize an indexer
-    Given an indexer IDX connected to base node BASE
 
     # Scan the network for the event emitted on ACC_1 creation
     When indexer IDX scans the network 1 events for account ACC_1 with topics component-created

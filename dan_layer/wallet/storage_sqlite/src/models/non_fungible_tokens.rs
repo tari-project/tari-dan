@@ -20,7 +20,6 @@ pub struct NonFungibleToken {
     pub nft_id: String,
     pub metadata: String,
     pub is_burned: bool,
-    pub token_symbol: String,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -47,7 +46,6 @@ impl NonFungibleToken {
             })?,
             vault_id,
             is_burned: self.is_burned,
-            token_symbol: self.token_symbol.clone(),
         })
     }
 }

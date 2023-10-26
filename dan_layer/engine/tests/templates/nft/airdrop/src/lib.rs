@@ -34,17 +34,20 @@ mod airdrop_template {
     }
 
     impl Airdrop {
-        pub fn new() -> Self {
-            let bucket = ResourceBuilder::non_fungible("AIR")
+        pub fn new() -> Component<Self> {
+            let bucket = ResourceBuilder::non_fungible()
+                .with_token_symbol("AIR")
                 .mint_many_with(1..=100, |n| (NonFungibleId::from_u32(n), (Vec::new(), Vec::new())))
                 .build_bucket();
 
-            Self {
+            Component::new(Self {
                 allow_list: HashSet::new(),
                 is_airdrop_open: false,
                 claimed_count: 0,
                 vault: Vault::from_bucket(bucket),
-            }
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
         }
 
         pub fn add_recipient(&mut self, address: ComponentAddress) {

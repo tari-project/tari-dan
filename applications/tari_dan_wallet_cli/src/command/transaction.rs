@@ -110,16 +110,6 @@ pub struct CommonSubmitArgs {
     pub dump_outputs_into: Option<ComponentAddressOrName>,
     #[clap(long)]
     pub dry_run: bool,
-    #[clap(long, short = 'r', alias = "resource")]
-    pub new_resources: Vec<NewResourceOutput>,
-    #[clap(long, short = 'm', alias = "mint-specific")]
-    pub non_fungible_mint_outputs: Vec<SpecificNonFungibleMintOutput>,
-    /// New non-fungible outputs to mint in the format <resource_address>,<num>
-    #[clap(long, alias = "mint-new")]
-    pub new_non_fungible_outputs: Vec<NewNonFungibleMintOutput>,
-    /// New non-fungible index outputs to mint in the format <resource_address>,<index>
-    #[clap(long, alias = "new-nft-index")]
-    pub new_non_fungible_index_outputs: Vec<NewNonFungibleIndexOutput>,
     #[clap(long)]
     pub fee: Option<u64>,
     #[clap(long, short = 'f', alias = "fee-account")]
@@ -277,27 +267,6 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
         instructions,
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
-        new_outputs: common.num_outputs.unwrap_or(0),
-        specific_non_fungible_outputs: common
-            .non_fungible_mint_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.non_fungible_id))
-            .collect(),
-        new_resources: common
-            .new_resources
-            .into_iter()
-            .map(|r| (r.template_address, r.token_symbol))
-            .collect(),
-        new_non_fungible_outputs: common
-            .new_non_fungible_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.count))
-            .collect(),
-        new_non_fungible_index_outputs: common
-            .new_non_fungible_index_outputs
-            .into_iter()
-            .map(|i| (i.parent_address, i.index))
-            .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
         min_epoch: common.min_epoch.map(Epoch),
@@ -332,27 +301,6 @@ async fn handle_submit_manifest(
         instructions,
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
-        new_outputs: common.num_outputs.unwrap_or(0),
-        specific_non_fungible_outputs: common
-            .non_fungible_mint_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.non_fungible_id))
-            .collect(),
-        new_resources: common
-            .new_resources
-            .into_iter()
-            .map(|r| (r.template_address, r.token_symbol))
-            .collect(),
-        new_non_fungible_outputs: common
-            .new_non_fungible_outputs
-            .into_iter()
-            .map(|m| (m.resource_address, m.count))
-            .collect(),
-        new_non_fungible_index_outputs: common
-            .new_non_fungible_index_outputs
-            .into_iter()
-            .map(|i| (i.parent_address, i.index))
-            .collect(),
         is_dry_run: common.dry_run,
         proof_ids: vec![],
         min_epoch: common.min_epoch.map(Epoch),

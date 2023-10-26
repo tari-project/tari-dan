@@ -72,16 +72,25 @@ mod emoji_id {
     impl EmojiIdMinter {
         // TODO: in this example we need to specify the payment resource, but there should be native support for Thaums
         // TODO: decoding fails if "max_emoji_id_len" is usize instead of u64, we may need to add support for it
-        pub fn new(payment_resource_address: ResourceAddress, max_emoji_id_len: u64, mint_price: Amount) -> Self {
+        pub fn new(
+            payment_resource_address: ResourceAddress,
+            max_emoji_id_len: u64,
+            mint_price: Amount,
+        ) -> Component<Self> {
             // Create the non-fungible resource with empty initial supply
-            let resource_address = ResourceBuilder::non_fungible("emo").build();
+            let resource_address = ResourceBuilder::non_fungible()
+                .with_token_symbol("emo")
+                .mintable(AccessRule::AllowAll)
+                .build();
             let earnings = Vault::new_empty(payment_resource_address);
-            Self {
+            Component::new(Self {
                 max_emoji_id_len,
                 mint_price,
                 resource_address,
                 earnings,
-            }
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
         }
 
         // TODO: return change (or check bucket.value() == required_amount)

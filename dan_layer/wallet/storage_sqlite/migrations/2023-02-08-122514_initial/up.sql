@@ -101,20 +101,20 @@ CREATE UNIQUE INDEX vaults_uniq_address ON vaults (address);
 -- Outputs
 CREATE TABLE outputs
 (
-    id                  INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-    account_id          INTEGER  NOT NULL REFERENCES accounts (id),
-    vault_id            INTEGER  NOT NULL REFERENCES vaults (id),
-    commitment          TEXT     NOT NULL,
-    value               BIGINT   NOT NULL,
-    sender_public_nonce TEXT     NULL,
-    secret_key_index    BIGINT   NOT NULL,
-    public_asset_tag    TEXT     NULL,
+    id                          INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
+    account_id                  INTEGER  NOT NULL REFERENCES accounts (id),
+    vault_id                    INTEGER  NOT NULL REFERENCES vaults (id),
+    commitment                  TEXT     NOT NULL,
+    value                       BIGINT   NOT NULL,
+    sender_public_nonce         TEXT     NULL,
+    encryption_secret_key_index BIGINT   NOT NULL,
+    public_asset_tag            TEXT     NULL,
     -- Status can be "Unspent", "Spent", "Locked", "LockedUnconfirmed", "Invalid"
-    status              TEXT     NOT NULL,
-    locked_at           DATETIME NULL,
-    locked_by_proof     INTEGER  NULL,
-    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    status                      TEXT     NOT NULL,
+    locked_at                   DATETIME NULL,
+    locked_by_proof             INTEGER  NULL,
+    created_at                  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE UNIQUE INDEX outputs_uniq_commitment ON outputs (commitment);

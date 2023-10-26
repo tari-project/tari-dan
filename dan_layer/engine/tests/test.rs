@@ -360,6 +360,7 @@ mod fungible {
 
         assert_eq!(total_supply, initial_supply);
 
+        let owner_proof = template_test.get_test_proof();
         let result = template_test
             .execute_and_commit(
                 vec![
@@ -374,7 +375,7 @@ mod fungible {
                         args: args![],
                     },
                 ],
-                vec![],
+                vec![owner_proof.clone()],
             )
             .unwrap();
 
@@ -397,7 +398,7 @@ mod fungible {
                         args: args![],
                     },
                 ],
-                vec![],
+                vec![owner_proof],
             )
             .unwrap();
 
@@ -443,7 +444,7 @@ mod basic_nft {
 
     #[test]
     fn create_resource_mint_and_deposit() {
-        let (mut template_test, (account_address, _), nft_component, nft_resx) = setup();
+        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
@@ -464,7 +465,7 @@ mod basic_nft {
             account.deposit(nft_bucket);
         "#,
                 vars.clone(),
-                vec![],
+                vec![account_owner],
             )
             .unwrap();
 
@@ -527,7 +528,7 @@ mod basic_nft {
 
     #[test]
     fn change_nft_mutable_data() {
-        let (mut template_test, (account_address, _), nft_component, _nft_resx) = setup();
+        let (mut template_test, (account_address, account_owner), nft_component, _nft_resx) = setup();
 
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(4));
@@ -544,7 +545,7 @@ mod basic_nft {
             account.deposit(nft_bucket);
         "#,
                 vars,
-                vec![],
+                vec![account_owner],
             )
             .unwrap();
 
@@ -628,7 +629,7 @@ mod basic_nft {
 
     #[test]
     fn mint_specific_id() {
-        let (mut template_test, (account_address, _), nft_component, nft_resx) = setup();
+        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
@@ -660,7 +661,7 @@ mod basic_nft {
             sparkle_nft.total_supply();
         "#,
                 vars.clone(),
-                vec![],
+                vec![account_owner],
             )
             .unwrap();
 
@@ -734,7 +735,7 @@ mod basic_nft {
             account.deposit(nft_bucket);
         "#,
                 vars.clone(),
-                vec![],
+                vec![account_owner.clone()],
             )
             .unwrap();
 
@@ -994,22 +995,19 @@ mod tickets {
         let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/tickets"]);
 
         // create an account
-        let (account_address, owner_proof, _) = template_test.create_owned_account();
+        let (account_address, owner_proof, secret) = template_test.create_owned_account();
 
         // create a fungible token faucet, we are going to use those tokens as payments
         // TODO: use Thaums instead when they're implemented
         let faucet_template = template_test.get_template_address("TestFaucet");
         let initial_supply = Amount(1_000_000_000_000);
-        let result = template_test
-            .execute_and_commit(
-                vec![Instruction::CallFunction {
-                    template_address: faucet_template,
-                    function: "mint".to_string(),
-                    args: args![initial_supply],
-                }],
-                vec![],
-            )
-            .unwrap();
+        let result = template_test.execute_expect_success(
+            Transaction::builder()
+                .call_function(faucet_template, "mint", args![initial_supply])
+                .sign(&secret)
+                .build(),
+            vec![],
+        );
         let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let faucet_resource = result
             .finalize
@@ -1024,16 +1022,18 @@ mod tickets {
         let initial_supply: usize = 10;
         let price = Amount(20);
         let event_description = "My music festival".to_string();
-        let result = template_test
-            .execute_and_commit(
-                vec![Instruction::CallFunction {
-                    template_address: ticket_template,
-                    function: "new".to_string(),
-                    args: args![faucet_resource, initial_supply, price, event_description],
-                }],
-                vec![],
-            )
-            .unwrap();
+        let result = template_test.execute_expect_success(
+            Transaction::builder()
+                .call_function(ticket_template, "new", args![
+                    faucet_resource,
+                    initial_supply,
+                    price,
+                    event_description
+                ])
+                .sign(&secret)
+                .build(),
+            vec![owner_proof.clone()],
+        );
         let ticket_seller: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let ticket_resource = result
             .finalize
@@ -1048,42 +1048,28 @@ mod tickets {
         assert_eq!(total_supply, Amount(initial_supply as i64));
 
         // get some funds into the account
-        let vars = vec![
-            ("account", account_address.into()),
-            ("faucet", faucet_component.into()),
-            ("faucet_resource", faucet_resource.into()),
-            ("ticket_seller", ticket_seller.into()),
-        ];
-        template_test
-            .execute_and_commit_manifest(
-                r#"
-            let account = var!["account"];
-            let faucet = var!["faucet"];
-
-            let coins = faucet.take_free_coins();
-            account.deposit(coins);
-        "#,
-                vars.clone(),
-                vec![],
-            )
-            .unwrap();
+        template_test.execute_expect_success(
+            Transaction::builder()
+                .call_method(faucet_component, "take_free_coins", args![])
+                .put_last_instruction_output_on_workspace("coins")
+                .call_method(account_address, "deposit", args![Workspace("coins")])
+                .sign(&secret)
+                .build(),
+            vec![],
+        );
 
         // buy a ticket
-        template_test
-            .execute_and_commit_manifest(
-                r#"
-            let account = var!["account"];
-            let faucet_resource = var!["faucet_resource"];
-            let ticket_seller = var!["ticket_seller"];
-
-            let payment = account.withdraw(faucet_resource, Amount(20));
-            let nft_bucket = ticket_seller.buy_ticket(payment);
-            account.deposit(nft_bucket);
-        "#,
-                vars.clone(),
-                vec![owner_proof],
-            )
-            .unwrap();
+        template_test.execute_expect_success(
+            Transaction::builder()
+                .call_method(account_address, "withdraw", args![faucet_resource, Amount(20)])
+                .put_last_instruction_output_on_workspace("payment")
+                .call_method(ticket_seller, "buy_ticket", args![Workspace("payment")])
+                .put_last_instruction_output_on_workspace("nft_bucket")
+                .call_method(account_address, "deposit", args![Workspace("nft_bucket")])
+                .sign(&secret)
+                .build(),
+            vec![owner_proof],
+        );
 
         // redeem a ticket
         let ticket_ids: Vec<NonFungibleId> =
@@ -1160,7 +1146,7 @@ mod nft_indexes {
 
     #[test]
     fn new_nft_index() {
-        let (mut template_test, (account_address, _), nft_component, nft_resx) = setup();
+        let (mut template_test, (account_address, owner_proof), nft_component, nft_resx) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
@@ -1168,7 +1154,8 @@ mod nft_indexes {
             ("nft_resx", nft_resx.clone().into()),
         ];
 
-        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        let total_supply: Amount =
+            template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof.clone()]);
         assert_eq!(total_supply, Amount(0));
 
         let result = template_test
@@ -1181,7 +1168,7 @@ mod nft_indexes {
             account.deposit(nft_bucket);
         "#,
                 vars.clone(),
-                vec![],
+                vec![owner_proof.clone()],
             )
             .unwrap();
 
@@ -1238,7 +1225,7 @@ mod nft_indexes {
         assert_eq!(nft_addr.to_address_string(), referenced_address.to_string());
 
         // The total supply of the resource is increased
-        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof]);
         assert_eq!(total_supply, Amount(1));
     }
 }

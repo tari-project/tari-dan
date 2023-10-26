@@ -1,6 +1,6 @@
 [package]
 name = "tari_dan_storage_lmdb"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "LMDB implementation of the Tari Storage API"

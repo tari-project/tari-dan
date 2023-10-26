@@ -35,6 +35,7 @@ use tari_common::{
     SubConfigPath,
 };
 use tari_comms::multiaddr::Multiaddr;
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_app_utilities::template_manager::implementation::TemplateConfig;
 use tari_p2p::{P2pConfig, PeerSeedsConfig};
 
@@ -72,7 +73,7 @@ pub struct ValidatorNodeConfig {
     /// The node's publicly-accessible hostname
     pub public_address: Option<Multiaddr>,
     /// The Tari base node's GRPC address
-    pub base_node_grpc_address: Option<SocketAddr>,
+    pub base_node_grpc_address: Option<String>,
     /// The Tari console wallet's GRPC address
     pub wallet_grpc_address: Option<SocketAddr>,
     /// If set to false, there will be no base layer scanning at all
@@ -90,7 +91,7 @@ pub struct ValidatorNodeConfig {
     pub json_rpc_address: Option<SocketAddr>,
     /// The jrpc address where the UI should connect (it can be the same as the json_rpc_address, but doesn't have to
     /// be), if this will be None, then the listen_addr will be used.
-    pub ui_connect_address: Option<SocketAddr>,
+    pub ui_connect_address: Option<String>,
     /// The address of the HTTP UI
     pub http_ui_address: Option<SocketAddr>,
     /// The node will re-register each epoch
@@ -99,6 +100,8 @@ pub struct ValidatorNodeConfig {
     pub templates: TemplateConfig,
     /// Dont charge fees
     pub no_fees: bool,
+    /// Fee claim public key
+    pub fee_claim_public_key: RistrettoPublicKey,
 }
 
 impl ValidatorNodeConfig {
@@ -149,6 +152,8 @@ impl Default for ValidatorNodeConfig {
             auto_register: true,
             templates: TemplateConfig::default(),
             no_fees: false,
+            // Burn your fees
+            fee_claim_public_key: RistrettoPublicKey::default(),
         }
     }
 }

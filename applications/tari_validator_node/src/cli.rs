@@ -39,7 +39,7 @@ pub struct Cli {
     #[clap(long, alias = "rpc-address")]
     pub json_rpc_address: Option<SocketAddr>,
     #[clap(long, env = "TARI_VN_UI_CONNECT_ADDRESS")]
-    pub ui_connect_address: Option<SocketAddr>,
+    pub ui_connect_address: Option<String>,
     /// A replacement of a template address with a local WASM file, in the format <template_address>=<local file path>.
     /// FOR DEBUGGING PURPOSES ONLY
     #[clap(long, short = 'd')]

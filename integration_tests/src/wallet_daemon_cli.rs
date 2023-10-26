@@ -35,7 +35,8 @@ use tari_template_lib::{
     args,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::Amount,
-    prelude::{NonFungibleId, ResourceAddress},
+    prelude::ResourceAddress,
+    resource::TOKEN_SYMBOL,
 };
 use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -223,15 +224,10 @@ pub async fn transfer_confidential(
             args: args![Amount(1)],
         }],
         proof_ids: vec![proof_id],
-        new_resources: vec![],
-        new_non_fungible_index_outputs: vec![],
-        new_non_fungible_outputs: vec![],
-        specific_non_fungible_outputs: vec![],
         is_dry_run: false,
         override_inputs: false,
         instructions,
         inputs: vec![source_account_addr, dest_account_addr],
-        new_outputs: 1,
         min_epoch,
         max_epoch,
     };
@@ -336,9 +332,9 @@ pub async fn mint_new_nft_on_account(
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
-    let token_symbol = "MY_NFT".to_string();
     let metadata = metadata.unwrap_or_else(|| {
         serde_json::json!({
+            TOKEN_SYMBOL: "MY_NFT",
             "name": "TariProject",
             "departure": "Now",
             "landing_on": "Moon"
@@ -348,7 +344,6 @@ pub async fn mint_new_nft_on_account(
     let request = MintAccountNftRequest {
         account: ComponentAddressOrName::Name(account_name.clone()),
         metadata,
-        token_symbol,
         mint_fee: Some(Amount::new(1_000)),
         create_account_nft_fee: None,
     };
@@ -415,7 +410,6 @@ pub async fn submit_manifest_with_signing_keys(
     account_signing_key: String,
     manifest_content: String,
     inputs: String,
-    num_outputs: u64,
     outputs_name: String,
     min_epoch: Option<Epoch>,
     max_epoch: Option<Epoch>,
@@ -433,43 +427,6 @@ pub async fn submit_manifest_with_signing_keys(
                 .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone().into()))
         })
         .collect();
-
-    // parse the minting specific outputs (if any) specified in the manifest as comments
-    let new_non_fungible_outputs = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $mint "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let count = l[1].parse::<u8>().unwrap();
-            (resource_address, count)
-        })
-        .collect::<Vec<_>>();
-
-    let new_non_fungible_index_outputs = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $nft_index "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let parent_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let index = u64::from_str(l[1]).unwrap();
-            (parent_address, index)
-        })
-        .collect::<Vec<_>>();
-
-    let specific_non_fungible_outputs = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $mint_specific "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let non_fungible_id = NonFungibleId::try_from_canonical_string(l[1]).unwrap();
-            (resource_address, non_fungible_id)
-        })
-        .collect::<Vec<_>>();
 
     // Supply the inputs explicitly. If this is empty, the internal component manager
     // will attempt to supply the correct inputs
@@ -497,12 +454,7 @@ pub async fn submit_manifest_with_signing_keys(
         override_inputs: false,
         is_dry_run: false,
         proof_ids: vec![],
-        new_resources: vec![],
-        new_outputs: num_outputs as u8,
-        specific_non_fungible_outputs,
         inputs,
-        new_non_fungible_outputs,
-        new_non_fungible_index_outputs,
         min_epoch,
         max_epoch,
     };
@@ -534,7 +486,6 @@ pub async fn submit_manifest(
     wallet_daemon_name: String,
     manifest_content: String,
     inputs: String,
-    num_outputs: u64,
     outputs_name: String,
     min_epoch: Option<Epoch>,
     max_epoch: Option<Epoch>,
@@ -552,43 +503,6 @@ pub async fn submit_manifest(
                 .map(move |(child_name, addr)| (format!("{}/{}", name, child_name), addr.address.clone().into()))
         })
         .collect();
-
-    // parse the minting specific outputs (if any) specified in the manifest as comments
-    let new_non_fungible_outputs = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $mint "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let count = l[1].parse::<u8>().unwrap();
-            (resource_address, count)
-        })
-        .collect::<Vec<_>>();
-
-    let new_non_fungible_index_outputs = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $nft_index "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let parent_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let index = u64::from_str(l[1]).unwrap();
-            (parent_address, index)
-        })
-        .collect::<Vec<_>>();
-
-    let specific_non_fungible_outputs = manifest_content
-        .lines()
-        .filter(|l| l.starts_with("// $mint_specific "))
-        .map(|l| l.split_whitespace().skip(2).collect::<Vec<&str>>())
-        .map(|l| {
-            let manifest_value = globals.get(l[0]).unwrap();
-            let resource_address = manifest_value.as_address().unwrap().as_resource_address().unwrap();
-            let non_fungible_id = NonFungibleId::try_from_canonical_string(l[1]).unwrap();
-            (resource_address, non_fungible_id)
-        })
-        .collect::<Vec<_>>();
 
     // Supply the inputs explicitly. If this is empty, the internal component manager
     // will attempt to supply the correct inputs
@@ -612,12 +526,7 @@ pub async fn submit_manifest(
         override_inputs: false,
         is_dry_run: false,
         proof_ids: vec![],
-        new_resources: vec![],
-        new_outputs: num_outputs as u8,
-        specific_non_fungible_outputs,
         inputs,
-        new_non_fungible_outputs,
-        new_non_fungible_index_outputs,
         min_epoch,
         max_epoch,
     };
@@ -665,11 +574,6 @@ pub async fn submit_transaction(
         is_dry_run: false,
         inputs,
         proof_ids: vec![],
-        new_resources: vec![],
-        specific_non_fungible_outputs: vec![],
-        new_outputs: 0,
-        new_non_fungible_outputs: vec![],
-        new_non_fungible_index_outputs: vec![],
         min_epoch,
         max_epoch,
     };
@@ -696,7 +600,6 @@ pub async fn create_component(
     wallet_daemon_name: String,
     function_call: String,
     args: Vec<String>,
-    _num_outputs: u64,
     min_epoch: Option<Epoch>,
     max_epoch: Option<Epoch>,
 ) {
@@ -721,12 +624,7 @@ pub async fn create_component(
         override_inputs: false,
         is_dry_run: false,
         proof_ids: vec![],
-        new_resources: vec![],
-        specific_non_fungible_outputs: vec![],
         inputs: vec![],
-        new_outputs: 0,
-        new_non_fungible_outputs: vec![],
-        new_non_fungible_index_outputs: vec![],
         min_epoch,
         max_epoch,
     };

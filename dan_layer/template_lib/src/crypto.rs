@@ -9,7 +9,7 @@ use tari_template_abi::rust::{
     string::String,
 };
 
-use crate::Hash;
+use crate::{models::NonFungibleAddress, Hash};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -46,6 +46,10 @@ impl RistrettoPublicKeyBytes {
 
     pub fn as_hash(&self) -> Hash {
         Hash::from_array(self.0)
+    }
+
+    pub fn to_non_fungible_address(&self) -> NonFungibleAddress {
+        NonFungibleAddress::from_public_key(*self)
     }
 }
 

@@ -64,7 +64,10 @@ pub trait StateReader {
         Ok(value)
     }
 
-    fn exists(&self, key: &[u8]) -> Result<bool, StateStoreError>;
+    fn exists_raw(&self, key: &[u8]) -> Result<bool, StateStoreError>;
+    fn exists<K: Serialize + Debug>(&self, key: &K) -> Result<bool, StateStoreError> {
+        self.exists_raw(&encode(key)?)
+    }
 }
 
 pub trait StateWriter: StateReader {

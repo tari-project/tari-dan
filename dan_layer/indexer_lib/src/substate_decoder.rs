@@ -24,14 +24,14 @@ use std::collections::HashSet;
 
 use log::*;
 use tari_engine_types::{
-    indexed_value::{IndexedValue, IndexedValueVisitorError},
+    indexed_value::{IndexedValue, IndexedValueError},
     substate::{Substate, SubstateAddress, SubstateValue},
 };
 
 const LOG_TARGET: &str = "tari::dan::initializer::substate_decoder";
 
 /// Recursively scan a substate for references to other substates
-pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress>, IndexedValueVisitorError> {
+pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress>, IndexedValueError> {
     match substate.substate_value() {
         SubstateValue::Component(header) => {
             // Look inside the component state for substate references

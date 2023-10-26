@@ -4,7 +4,7 @@ authors = ["The Tari Development Community"]
 description = "The Tari validator node CLI"
 repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 
 [dependencies]

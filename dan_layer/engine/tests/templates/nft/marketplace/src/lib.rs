@@ -79,7 +79,7 @@ mod marketplace {
         pub fn new() -> Self {
             Self {
                 auctions: HashMap::new(),
-                seller_badge_resource: ResourceBuilder::non_fungible("nft").build(),
+                seller_badge_resource: ResourceBuilder::non_fungible().with_token_symbol("nft").build(),
             }
         }
 

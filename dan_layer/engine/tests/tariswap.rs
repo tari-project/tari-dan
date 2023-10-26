@@ -190,8 +190,9 @@ fn add_liquidity(test: &mut TariSwapTest, a_amount: Amount, b_amount: Amount) {
                     args: args![Variable("lp_bucket")],
                 },
             ],
-            // proof needed to withdraw
-            vec![test.account_proof.clone()],
+            // proof needed to withdraw (from account) and mint (the lp_resource owned by the test identity)
+            // respectively
+            vec![test.account_proof.clone(), test.template_test.get_test_proof()],
         )
         .unwrap();
 }
@@ -227,8 +228,9 @@ fn remove_liquidity(test: &mut TariSwapTest, lp_amount: Amount) {
                     args: args![Variable("pool_buckets.1"),],
                 },
             ],
-            // proof needed to withdraw
-            vec![test.account_proof.clone()],
+            // proof needed to withdraw (from account) and burn (the lp_resource owned by the test identity)
+            // respectively
+            vec![test.account_proof.clone(), test.template_test.get_test_proof()],
         )
         .unwrap();
 }
@@ -338,7 +340,7 @@ fn tariswap() {
     let fee = 50; // 5% market fee
     let mut test = setup(fee);
 
-    // save the resource addreses to keep the compiler happy
+    // copy the resource addresses to keep the borrow checker happy
     let a_resource = test.a_resource;
     let b_resource = test.b_resource;
 

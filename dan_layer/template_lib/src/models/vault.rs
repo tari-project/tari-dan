@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::str::FromStr;
+use std::{collections::BTreeSet, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
@@ -33,12 +33,23 @@ use tari_template_abi::{
     EngineOp,
 };
 
-use super::BinaryTag;
+use super::{BinaryTag, Proof};
 use crate::{
-    args::{ConfidentialRevealArg, InvokeResult, PayFeeArg, VaultAction, VaultInvokeArg, VaultWithdrawArg},
+    args::{
+        ConfidentialRevealArg,
+        InvokeResult,
+        PayFeeArg,
+        VaultAction,
+        VaultCreateProofByFungibleAmountArg,
+        VaultCreateProofByNonFungiblesArg,
+        VaultInvokeArg,
+        VaultWithdrawArg,
+    },
     hash::HashParseError,
     models::{Amount, Bucket, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     newtype_struct_serde_impl,
+    prelude::ResourceType,
+    resource::ResourceManager,
     Hash,
 };
 
@@ -171,6 +182,10 @@ impl Vault {
         resp.decode().expect("failed to decode Bucket")
     }
 
+    pub fn withdraw_non_fungible(&mut self, id: NonFungibleId) -> Bucket {
+        self.withdraw_non_fungibles(Some(id))
+    }
+
     pub fn withdraw_non_fungibles<I: IntoIterator<Item = NonFungibleId>>(&mut self, ids: I) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -245,6 +260,10 @@ impl Vault {
             .expect("GetResourceAddress returned invalid resource address")
     }
 
+    pub fn resource_type(&self) -> ResourceType {
+        ResourceManager::get(self.resource_address()).resource_type()
+    }
+
     pub fn reveal_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -279,11 +298,41 @@ impl Vault {
         self.deposit(bucket);
     }
 
+    pub fn create_proof(&self) -> Proof {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::CreateProofByResource,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("CreateProofOfResource failed")
+    }
+
+    pub fn create_proof_by_amount(&self, amount: Amount) -> Proof {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::CreateProofByFungibleAmount,
+            args: invoke_args![VaultCreateProofByFungibleAmountArg { amount }],
+        });
+
+        resp.decode().expect("CreateProofByFungibleAmount failed")
+    }
+
+    pub fn create_proof_by_non_fungible_ids(&self, ids: BTreeSet<NonFungibleId>) -> Proof {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::CreateProofByNonFungibles,
+            args: invoke_args![VaultCreateProofByNonFungiblesArg { ids }],
+        });
+
+        resp.decode().expect("CreateProofByNonFungibles failed")
+    }
+
     pub fn vault_id(&self) -> VaultId {
         self.vault_id
     }
 
-    pub fn vault_ref(&self) -> VaultRef {
+    fn vault_ref(&self) -> VaultRef {
         VaultRef::Ref(self.vault_id)
     }
 

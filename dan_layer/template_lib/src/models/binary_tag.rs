@@ -32,6 +32,7 @@ pub enum BinaryTag {
     BucketId = 133,
     TransactionReceipt = 134,
     FeeClaim = 135,
+    ProofId = 136,
 }
 
 impl BinaryTag {
@@ -45,6 +46,7 @@ impl BinaryTag {
             133 => Some(Self::BucketId),
             134 => Some(Self::TransactionReceipt),
             135 => Some(Self::FeeClaim),
+            136 => Some(Self::ProofId),
             _ => None,
         }
     }
@@ -67,6 +69,9 @@ mod tests {
             BinaryTag::ResourceAddress,
             BinaryTag::VaultId,
             BinaryTag::BucketId,
+            BinaryTag::TransactionReceipt,
+            BinaryTag::FeeClaim,
+            BinaryTag::ProofId,
         ];
 
         for case in cases {

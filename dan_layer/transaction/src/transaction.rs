@@ -103,10 +103,7 @@ impl Transaction {
     }
 
     pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
-        self.inputs()
-            .iter()
-            .chain(self.input_refs())
-            .chain(self.filled_inputs())
+        self.all_inputs_iter()
     }
 
     pub fn num_involved_shards(&self) -> usize {

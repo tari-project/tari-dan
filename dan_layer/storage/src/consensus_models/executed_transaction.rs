@@ -84,7 +84,7 @@ impl ExecutedTransaction {
     }
 
     pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
-        self.transaction.involved_shards_iter().chain(&self.resulting_outputs)
+        self.transaction.all_inputs_iter().chain(&self.resulting_outputs)
     }
 
     pub fn into_final_result(self) -> Option<ExecuteResult> {
@@ -94,7 +94,7 @@ impl ExecutedTransaction {
             } else {
                 // TODO: We preserve the original result mainly for debugging purposes, but this is a little hacky
                 ExecuteResult {
-                    finalize: FinalizeResult::new_rejectted(
+                    finalize: FinalizeResult::new_rejected(
                         self.result.finalize.transaction_hash,
                         RejectReason::ShardRejected(format!(
                             "Validators decided to abort: {}",
@@ -129,7 +129,7 @@ impl ExecutedTransaction {
 
     pub fn to_initial_evidence(&self) -> Evidence {
         self.transaction
-            .involved_shards_iter()
+            .all_inputs_iter()
             .chain(self.resulting_outputs())
             .map(|shard| (*shard, vec![]))
             .collect()

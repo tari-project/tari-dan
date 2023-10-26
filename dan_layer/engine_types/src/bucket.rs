@@ -24,54 +24,93 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 use tari_template_lib::{
-    models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
+    models::{Amount, BucketId, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
 
-use crate::resource_container::{ResourceContainer, ResourceError};
+use crate::{
+    proof::{ContainerRef, LockedResource, Proof},
+    resource_container::{ResourceContainer, ResourceError},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Bucket {
-    resource: ResourceContainer,
+    bucket_id: BucketId,
+    resource_container: ResourceContainer,
 }
 
 impl Bucket {
-    pub fn new(resource: ResourceContainer) -> Self {
-        Self { resource }
+    pub fn new(bucket_id: BucketId, resource: ResourceContainer) -> Self {
+        Self {
+            bucket_id,
+            resource_container: resource,
+        }
     }
 
     pub fn amount(&self) -> Amount {
-        self.resource.amount()
+        self.resource_container.amount()
+    }
+
+    pub fn locked_amount(&self) -> Amount {
+        self.resource_container.locked_amount()
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {
-        self.resource.resource_address()
+        self.resource_container.resource_address()
     }
 
     pub fn resource_type(&self) -> ResourceType {
-        self.resource.resource_type()
+        self.resource_container.resource_type()
     }
 
     pub(crate) fn into_resource(self) -> ResourceContainer {
-        self.resource
+        self.resource_container
     }
 
     pub fn into_non_fungible_ids(self) -> Option<BTreeSet<NonFungibleId>> {
-        self.resource.into_non_fungible_ids()
+        self.resource_container.into_non_fungible_ids()
     }
 
     pub fn take(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
-        self.resource.withdraw(amount)
+        self.resource_container.withdraw(amount)
     }
 
     pub fn take_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Result<ResourceContainer, ResourceError> {
-        self.resource.withdraw_confidential(proof)
+        self.resource_container.withdraw_confidential(proof)
     }
 
     pub fn reveal_confidential(
         &mut self,
         proof: ConfidentialWithdrawProof,
     ) -> Result<ResourceContainer, ResourceError> {
-        self.resource.reveal_confidential(proof)
+        self.resource_container.reveal_confidential(proof)
+    }
+
+    pub fn lock_all(&mut self) -> Result<LockedResource, ResourceError> {
+        let locked_resource = self.resource_container.lock_all()?;
+        Ok(LockedResource::new(
+            ContainerRef::Bucket(self.bucket_id),
+            locked_resource,
+        ))
+    }
+
+    pub fn lock_by_non_fungible_ids(&mut self, ids: BTreeSet<NonFungibleId>) -> Result<LockedResource, ResourceError> {
+        let locked_resource = self.resource_container.lock_by_non_fungible_ids(ids)?;
+        Ok(LockedResource::new(
+            ContainerRef::Bucket(self.bucket_id),
+            locked_resource,
+        ))
+    }
+
+    pub fn lock_by_amount(&mut self, amount: Amount) -> Result<LockedResource, ResourceError> {
+        let locked_resource = self.resource_container.lock_by_amount(amount)?;
+        Ok(LockedResource::new(
+            ContainerRef::Bucket(self.bucket_id),
+            locked_resource,
+        ))
+    }
+
+    pub fn unlock(&mut self, proof: Proof) -> Result<(), ResourceError> {
+        self.resource_container.unlock(proof.into_resource_container())
     }
 }

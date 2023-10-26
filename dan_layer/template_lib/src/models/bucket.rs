@@ -26,7 +26,7 @@ use tari_template_abi::{call_engine, rust::fmt, EngineOp};
 
 use crate::{
     args::{BucketAction, BucketInvokeArg, BucketRef, InvokeResult},
-    models::{Amount, BinaryTag, ConfidentialWithdrawProof, ResourceAddress},
+    models::{Amount, BinaryTag, ConfidentialWithdrawProof, Proof, ResourceAddress},
     prelude::ResourceType,
 };
 
@@ -144,5 +144,15 @@ impl Bucket {
 
         resp.decode()
             .expect("Bucket RevealConfidential returned invalid result")
+    }
+
+    pub fn create_proof(&self) -> Proof {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::CreateProof,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("Bucket CreateProof returned invalid proof")
     }
 }

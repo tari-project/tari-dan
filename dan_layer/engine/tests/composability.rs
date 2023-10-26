@@ -1,7 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_engine::transaction::MAX_CALL_DEPTH;
+mod support;
+
+use tari_dan_engine::{runtime::ActionIdent, transaction::MAX_CALL_DEPTH};
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
     instruction::Instruction,
@@ -13,6 +15,8 @@ use tari_template_lib::{
 };
 use tari_template_test_tooling::TemplateTest;
 use tari_transaction::Transaction;
+
+use crate::support::assert_error::assert_access_denied_for_action;
 
 struct ComposabilityTest {
     template_test: TemplateTest,
@@ -251,7 +255,7 @@ fn it_fails_on_invalid_calls() {
     // the "invalid_state_call" method tries to call a non-existent method in the inner state component
     let result = test
         .template_test
-        .try_execute_and_commit(
+        .try_execute(
             Transaction::builder()
                 .call_method(components.composability_component, "invalid_state_call", args![])
                 .sign(&private_key)
@@ -269,34 +273,41 @@ fn it_fails_on_invalid_calls() {
 #[test]
 fn it_does_not_propagate_permissions() {
     let mut test = setup();
+
+    // Create a component owned by the test identity
     let components = initialize_composability(&mut test);
-    let (account, owner_proof, private_key) = test.template_test.create_owned_account();
+
+    let (attacker_proof, attacker_key) = test.template_test.get_test_proof_and_secret_key();
+    let (victim_account, victim_proof, _) = test.template_test.create_empty_account();
 
     // create_resource_and_fund_account
-    let fungible_resource = create_resource_and_fund_account(&mut test.template_test, account);
+    let fungible_resource = create_resource_and_fund_account(&mut test.template_test, victim_account);
 
-    // try to to an account withdraw inside the composability template, it should fail as the owner proof should not be
-    // propagated
+    // The attacker owns the composability component and so attempts to call another account's withdraw method
+    // hoping that ownership is preserved.
     let result = test
         .template_test
-        .try_execute_and_commit(
+        .try_execute(
             Transaction::builder()
                 .call_method(components.composability_component, "malicious_withdraw", args![
-                    account,
+                    victim_account,
                     fungible_resource,
-                    100
+                    Amount(100)
                 ])
-                .sign(&private_key)
+                .sign(&attacker_key)
                 .build(),
-            // note that we are actually passing a valid proof
-            vec![owner_proof],
+            // note that we are actually passing a valid proof of ownership for the victim. In reality, the engine only
+            // passes the transaction signer proof but we are assuming the attacker was able to somehow
+            // inject into the auth scope so that we can assert that proofs are not propagated in cross-template calls.
+            vec![attacker_proof, victim_proof],
         )
         .unwrap();
     let reason = result.expect_transaction_failure();
 
-    // TODO: inner errors are not properly propagated up, they all end up being "Engine call returned null for op
-    // CallInvoke" we should be able to assert a more specific error cause
-    assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
+    // We expect the component call to withdraw to fail with AccessDenied.
+    assert_access_denied_for_action(reason, ActionIdent::ComponentCallMethod {
+        method: "withdraw".to_string(),
+    });
 }
 
 #[test]
@@ -350,7 +361,7 @@ fn it_fails_when_surpassing_recursion_limit() {
     // se when we do a call that goes from the outermost to the innermost, it must fail
     let result = test
         .template_test
-        .try_execute_and_commit(
+        .try_execute(
             Transaction::builder()
                 .call_method(last_composability_component, "get_nested_value", args![])
                 .sign(&private_key)

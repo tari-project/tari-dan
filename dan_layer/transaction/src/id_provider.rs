@@ -8,7 +8,7 @@ use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
 };
 use tari_template_lib::{
-    models::{BucketId, ComponentAddress, ResourceAddress, TemplateAddress, VaultId},
+    models::{BucketId, ComponentAddress, ProofId, ResourceAddress, TemplateAddress, VaultId},
     Hash,
 };
 
@@ -38,7 +38,7 @@ impl IdProvider {
             max_ids,
             // TODO: these should be ranges
             current_id: Arc::new(AtomicU32::new(0)),
-            bucket_id: Arc::new(AtomicU32::new(1000)),
+            bucket_id: Arc::new(AtomicU32::new(0)),
             uuid: Arc::new(AtomicU32::new(0)),
         }
     }
@@ -62,16 +62,8 @@ impl IdProvider {
         Ok(id)
     }
 
-    pub fn new_resource_address(
-        &self,
-        template_address: &TemplateAddress,
-        token_symbol: &str,
-    ) -> Result<ResourceAddress, IdProviderError> {
-        Ok(hasher(EngineHashDomainLabel::ResourceAddress)
-            .chain(&template_address)
-            .chain(&token_symbol)
-            .result()
-            .into())
+    pub fn new_resource_address(&self) -> Result<ResourceAddress, IdProviderError> {
+        Ok(self.new_id()?.into())
     }
 
     pub fn new_component_address(
@@ -98,6 +90,11 @@ impl IdProvider {
 
     pub fn new_bucket_id(&self) -> BucketId {
         // Buckets are not saved to shards, so should not increment the hashes
+        self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed).into()
+    }
+
+    pub fn new_proof_id(&self) -> ProofId {
+        // Proofs and buckets can share the same ID counter
         self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed).into()
     }
 

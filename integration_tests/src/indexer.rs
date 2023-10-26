@@ -169,8 +169,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
 
     // we need to add all the validator nodes as seed peers
     let peer_seeds: Vec<String> = world
-        .validator_nodes
-        .values()
+        .all_validators_iter()
         .map(|vn| format!("{}::/ip4/127.0.0.1/tcp/{}", vn.public_key, vn.port))
         .collect();
 
@@ -192,7 +191,7 @@ pub async fn spawn_indexer(world: &mut TariWorld, indexer_name: String, base_nod
         config.indexer.data_dir = base_dir.to_path_buf();
         config.indexer.identity_file = base_dir.join("indexer_id.json");
         config.indexer.tor_identity_file = base_dir.join("indexer_tor_id.json");
-        config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port).parse().unwrap());
+        config.indexer.base_node_grpc_address = Some(format!("127.0.0.1:{}", base_node_grpc_port));
         config.indexer.dan_layer_scanning_internal = Duration::from_secs(60);
 
         config.indexer.p2p.transport.transport_type = TransportType::Tcp;

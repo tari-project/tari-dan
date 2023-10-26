@@ -12,8 +12,8 @@ use crate::resource_container::ResourceContainer;
 pub struct FeeReceipt {
     /// The total amount of the fee payment(s)
     pub total_fee_payment: Amount,
-    /// The resource containing the fees deducted excluding refunds
-    pub fee_resource: ResourceContainer,
+    /// Total fees paid after refunds
+    pub total_fees_paid: Amount,
     /// Breakdown of fee costs
     pub cost_breakdown: Vec<(FeeSource, u64)>,
 }
@@ -26,6 +26,7 @@ impl FeeReceipt {
         }
     }
 
+    /// The total amount of fees charged. This may be more than total_fees_paid if the user paid an insufficient amount.
     pub fn total_fees_charged(&self) -> Amount {
         Amount::try_from(self.cost_breakdown.iter().map(|(_, c)| *c).sum::<u64>()).unwrap()
     }
@@ -36,14 +37,14 @@ impl FeeReceipt {
             .unwrap_or_default()
     }
 
-    /// The total amount of fees allocated to the transaction
+    /// The total amount of fees allocated to the transaction, before refunds
     pub fn total_allocated_fee_payments(&self) -> Amount {
         self.total_fee_payment
     }
 
     /// The total amount of fees paid after refunds
     pub fn total_fees_paid(&self) -> Amount {
-        self.fee_resource.amount()
+        self.total_fees_paid
     }
 
     /// The amount of unpaid fees
@@ -72,7 +73,7 @@ pub struct FeeCostBreakdown {
     pub breakdown: Vec<(FeeSource, u64)>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FeePayment {
     pub resource: ResourceContainer,
     pub breakdown: HashMap<VaultId, Amount>,

@@ -6,7 +6,7 @@ use std::{collections::HashMap, sync::Arc};
 use log::*;
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_engine_types::{
-    indexed_value::IndexedValueVisitorError,
+    indexed_value::IndexedValueError,
     substate::{Substate, SubstateAddress},
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -20,7 +20,7 @@ const LOG_TARGET: &str = "tari::indexer::transaction_autofiller";
 #[derive(Debug, thiserror::Error)]
 pub enum TransactionAutofillerError {
     #[error("Could not decode the substate: {0}")]
-    IndexedValueVisitorError(#[from] IndexedValueVisitorError),
+    IndexedValueVisitorError(#[from] IndexedValueError),
     #[error("Indexer error: {0}")]
     IndexerError(#[from] IndexerError),
 }

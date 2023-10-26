@@ -52,7 +52,7 @@ pub struct WalletDaemonConfig {
     pub json_rpc_address: Option<SocketAddr>,
     /// The jrpc address where the UI should connect (it can be the same as the json_rpc_addr, but doesn't have to be),
     /// if this will be None, then the listen_addr will be used.
-    pub ui_connect_address: Option<SocketAddr>,
+    pub ui_connect_address: Option<String>,
     /// The signaling server address for the webrtc
     pub signaling_server_address: Option<SocketAddr>,
     /// The validator nodes jrpc endpoint url

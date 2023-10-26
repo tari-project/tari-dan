@@ -12,5 +12,4 @@ pub struct NonFungibleToken {
     pub nft_id: NonFungibleId,
     pub metadata: Metadata,
     pub is_burned: bool,
-    pub token_symbol: String,
 }

@@ -24,17 +24,21 @@ use tari_template_lib::prelude::*;
 
 #[template]
 mod state_template {
+    use super::*;
+
     pub struct State {
         value: u32,
     }
 
     impl State {
-        pub fn new() -> Self {
-            Self { value: 0 }
+        pub fn new() -> Component<Self> {
+            Component::new(Self { value: 0 })
+                .with_access_rules(AccessRules::allow_all())
+                .create()
         }
 
         pub fn set(&mut self, value: u32) {
-            debug(format!("Changing value from {} to {}", self.value, value));
+            debug!("Changing value from {} to {}", self.value, value);
             self.value = value;
         }
 

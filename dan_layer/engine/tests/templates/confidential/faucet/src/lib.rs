@@ -31,14 +31,17 @@ mod faucet_template {
     }
 
     impl ConfidentialFaucet {
-        pub fn mint(confidential_proof: ConfidentialOutputProof) -> Self {
-            let coins = ResourceBuilder::confidential("testconf")
+        pub fn mint(confidential_proof: ConfidentialOutputProof) -> Component<Self> {
+            let coins = ResourceBuilder::confidential()
+                .with_token_symbol("testconf")
                 .initial_supply(confidential_proof)
                 .build_bucket();
 
-            Self {
+            Component::new(Self {
                 vault: Vault::from_bucket(coins),
-            }
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
         }
 
         pub fn take_free_coins(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {

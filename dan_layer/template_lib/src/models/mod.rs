@@ -50,6 +50,9 @@ pub use non_fungible::{NonFungible, NonFungibleAddress, NonFungibleAddressConten
 mod resource;
 pub use resource::ResourceAddress;
 
+mod proof;
+pub use proof::*;
+
 mod system;
 pub use system::SystemAddress;
 

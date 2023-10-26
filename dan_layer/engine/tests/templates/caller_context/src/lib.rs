@@ -31,9 +31,11 @@ mod caller_context_template {
     }
 
     impl CallerContextTest {
-        pub fn create() -> Self {
-            let caller_pub_key = CallerContext::caller();
-            Self { caller_pub_key }
+        pub fn create() -> Component<Self> {
+            let caller_pub_key = CallerContext::transaction_signer_public_key();
+            Component::new(Self { caller_pub_key })
+                .with_access_rules(AccessRules::allow_all())
+                .create()
         }
 
         pub fn caller_pub_key(&self) -> RistrettoPublicKeyBytes {

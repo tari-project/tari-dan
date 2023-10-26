@@ -43,6 +43,9 @@ pub struct Cli {
     /// Bind address for JSON-rpc server
     #[clap(long, short = 'r', alias = "rpc-address")]
     pub json_rpc_address: Option<SocketAddr>,
+
+    #[clap(long, env = "TARI_INDEXER_UI_CONNECT_ADDRESS")]
+    pub ui_connect_address: Option<String>,
 }
 
 impl Cli {
@@ -64,6 +67,9 @@ impl ConfigOverrideProvider for Cli {
         }
         if let Some(seconds) = self.dan_layer_scanning_internal {
             overrides.push(("indexer.dan_layer_scanning_interval".to_string(), seconds.to_string()));
+        }
+        if let Some(ref ui_connect_address) = self.ui_connect_address {
+            overrides.push(("indexer.ui_connect_address".to_string(), ui_connect_address.to_string()));
         }
         overrides
     }

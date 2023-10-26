@@ -36,11 +36,10 @@ use tari_engine_types::{
     instruction_result::InstructionResult,
     serde_with,
     substate::SubstateAddress,
-    TemplateAddress,
 };
 use tari_template_lib::{
     args::Arg,
-    auth::AccessRules,
+    auth::ComponentAccessRules,
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
     prelude::{ConfidentialWithdrawProof, ResourceType},
 };
@@ -66,14 +65,6 @@ pub struct CallInstructionRequest {
     #[serde(default)]
     pub new_outputs: Option<u8>,
     #[serde(default)]
-    pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
-    #[serde(default)]
-    pub new_resources: Vec<(TemplateAddress, String)>,
-    #[serde(default)]
-    pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
-    #[serde(default)]
-    pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
-    #[serde(default)]
     pub is_dry_run: bool,
     #[serde(default)]
     pub proof_ids: Vec<ConfidentialProofId>,
@@ -90,14 +81,6 @@ pub struct TransactionSubmitRequest {
     pub instructions: Vec<Instruction>,
     pub inputs: Vec<SubstateRequirement>,
     pub override_inputs: bool,
-
-    // TODO: all of these are ignored
-    pub new_outputs: u8,
-    pub specific_non_fungible_outputs: Vec<(ResourceAddress, NonFungibleId)>,
-    pub new_resources: Vec<(TemplateAddress, String)>,
-    pub new_non_fungible_outputs: Vec<(ResourceAddress, u8)>,
-    pub new_non_fungible_index_outputs: Vec<(ResourceAddress, u64)>,
-
     pub is_dry_run: bool,
     pub proof_ids: Vec<ConfidentialProofId>,
     pub min_epoch: Option<Epoch>,
@@ -210,7 +193,7 @@ pub struct KeysCreateResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateRequest {
     pub account_name: Option<String>,
-    pub custom_access_rules: Option<AccessRules>,
+    pub custom_access_rules: Option<ComponentAccessRules>,
     pub fee: Option<Amount>,
     pub is_default: bool,
     pub key_id: Option<u64>,
@@ -516,7 +499,6 @@ pub struct AuthRevokeTokenResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MintAccountNftRequest {
     pub account: ComponentAddressOrName,
-    pub token_symbol: String,
     pub metadata: serde_json::Value,
     pub mint_fee: Option<Amount>,
     pub create_account_nft_fee: Option<Amount>,
@@ -537,7 +519,6 @@ pub struct GetAccountNftRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountNftInfo {
-    pub token_symbol: String,
     pub metadata: serde_json::Value,
     pub is_burned: bool,
 }

@@ -1,6 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+mod support;
+
+use tari_dan_engine::runtime::ActionIdent;
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
@@ -8,6 +11,8 @@ use tari_template_lib::{
 };
 use tari_template_test_tooling::TemplateTest;
 use tari_transaction::Transaction;
+
+use crate::support::assert_error::assert_access_denied_for_action;
 
 #[test]
 fn basic_faucet_transfer() {
@@ -23,7 +28,7 @@ fn basic_faucet_transfer() {
                 function: "mint".to_string(),
                 args: args![initial_supply],
             }],
-            vec![],
+            vec![template_test.get_test_proof()],
         )
         .unwrap();
     let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
@@ -56,7 +61,7 @@ fn basic_faucet_transfer() {
                     args: args![Variable("free_coins")],
                 },
             ],
-            vec![],
+            vec![template_test.get_test_proof()],
         )
         .unwrap();
 
@@ -110,7 +115,7 @@ fn withdraw_from_account_prevented() {
                 function: "mint".to_string(),
                 args: args![initial_supply],
             }],
-            vec![],
+            vec![template_test.get_test_proof()],
         )
         .unwrap();
     let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
@@ -142,28 +147,22 @@ fn withdraw_from_account_prevented() {
         )
         .unwrap();
 
-    let (dest_address, non_owning_token, _) = template_test.create_owned_account();
+    let (dest_address, non_owning_token, non_owning_key) = template_test.create_owned_account();
 
-    let err = template_test
-        .execute_and_commit_manifest(
-            r#"
-                let source_account = var!["source_account"];
-                let dest_account = var!["dest_account"];
-                let resource = var!["resource"];
-                let stolen_coins = source_account.withdraw(resource, 100);
-                dest_account.deposit(stolen_coins);
-            "#,
-            [
-                ("source_account", source_account.into()),
-                ("dest_account", dest_address.into()),
-                ("resource", faucet_resource.into()),
-            ],
-            // VNs provide the token that signed the transaction, which in this case is the non_owning_token
-            vec![non_owning_token],
-        )
-        .unwrap_err();
+    let reason = template_test.execute_expect_failure(
+        Transaction::builder()
+            .call_method(source_account, "withdraw", args![faucet_resource, Amount(100)])
+            .put_last_instruction_output_on_workspace("stolen_coins")
+            .call_method(source_account, "deposit", args![Workspace("stolen_coins")])
+            .sign(&non_owning_key)
+            .build(),
+        // VNs provide the token that signed the transaction, which in this case is the non_owning_token
+        vec![non_owning_token],
+    );
 
-    assert!(err.to_string().contains("Access Denied: template.Account.withdraw"));
+    assert_access_denied_for_action(reason, ActionIdent::ComponentCallMethod {
+        method: "withdraw".to_string(),
+    });
 
     let result = template_test
         .execute_and_commit_manifest(
@@ -194,9 +193,8 @@ fn attempt_to_overwrite_account() {
     let (source_account, source_account_proof, source_account_sk) = template_test.create_owned_account();
 
     template_test.enable_fees();
-    let overwriting_tx = template_test
-        .try_execute_and_commit(
-            Transaction::builder()
+    let overwriting_tx = template_test.execute_expect_commit(
+        Transaction::builder()
                 .fee_transaction_pay_from_component(source_account, Amount(1000))
                 .call_function(template_test.get_template_address("Account"), "create", args![
                     &source_account_proof
@@ -204,23 +202,19 @@ fn attempt_to_overwrite_account() {
                 // Signed by source account so that it can pay the fees for the new account creation
                 .sign(&source_account_sk)
                 .build(),
-            vec![source_account_proof],
-        )
-        .unwrap();
+        vec![source_account_proof],
+    );
 
     template_test.disable_fees();
 
-    let result = template_test
-        .try_execute_and_commit(
-            Transaction::builder()
-                .call_method(source_account, "get_balances", args![])
-                .sign(&source_account_sk)
-                .build(),
-            vec![],
-        )
-        .unwrap();
+    let result = template_test.execute_expect_success(
+        Transaction::builder()
+            .call_method(source_account, "get_balances", args![])
+            .sign(&source_account_sk)
+            .build(),
+        vec![],
+    );
 
-    result.expect_success();
     let balances = result.finalize.execution_results[0]
         .decode::<Vec<(ResourceAddress, Amount)>>()
         .unwrap();

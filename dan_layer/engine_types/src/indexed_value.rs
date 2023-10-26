@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, BorError, FromTagAndValue, ValueVisitor};
 use tari_template_lib::{
-    models::{BinaryTag, BucketId, NonFungibleAddressContents, ResourceAddress, VaultId},
+    models::{BinaryTag, BucketId, NonFungibleAddressContents, ProofId, ResourceAddress, VaultId},
     prelude::{ComponentAddress, Metadata, NonFungibleAddress},
     Hash,
 };
@@ -18,9 +18,10 @@ use crate::{
     transaction_receipt::TransactionReceiptAddress,
 };
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IndexedValue {
-    buckets: Vec<BucketId>,
+    bucket_ids: Vec<BucketId>,
+    proof_ids: Vec<ProofId>,
     #[serde(with = "serde_with::hex::vec")]
     component_addresses: Vec<ComponentAddress>,
     #[serde(with = "serde_with::hex::vec")]
@@ -31,22 +32,37 @@ pub struct IndexedValue {
     #[serde(with = "serde_with::hex::vec")]
     vault_ids: Vec<VaultId>,
     metadata: Vec<Metadata>,
+    value: tari_bor::Value,
 }
 
 impl IndexedValue {
-    pub fn from_raw(bytes: &[u8]) -> Result<Self, IndexedValueVisitorError> {
-        let mut visitor = IndexedValueVisitor::new();
+    pub fn from_type<T: Serialize + ?Sized>(v: &T) -> Result<Self, IndexedValueError> {
+        let value = tari_bor::to_value(v)?;
+        Self::from_value(value)
+    }
+
+    pub fn from_raw(bytes: &[u8]) -> Result<Self, IndexedValueError> {
+        if bytes.is_empty() {
+            return Ok(Self::default());
+        }
         let value: tari_bor::Value = decode(bytes)?;
+        Self::from_value(value)
+    }
+
+    pub fn from_value(value: tari_bor::Value) -> Result<Self, IndexedValueError> {
+        let mut visitor = IndexedValueVisitor::new();
         tari_bor::walk_all(&value, &mut visitor)?;
 
         Ok(Self {
-            buckets: visitor.buckets,
+            bucket_ids: visitor.buckets,
+            proof_ids: visitor.proofs,
             resource_addresses: visitor.resource_addresses,
             component_addresses: visitor.component_addresses,
             transaction_receipt_addresses: visitor.transaction_receipt_addresses,
             non_fungible_addresses: visitor.non_fungible_addresses,
             vault_ids: visitor.vault_ids,
             metadata: visitor.metadata,
+            value,
         })
     }
 
@@ -73,8 +89,12 @@ impl IndexedValue {
             .chain(self.vault_ids.iter().map(|a| (*a).into()))
     }
 
-    pub fn buckets(&self) -> &[BucketId] {
-        &self.buckets
+    pub fn bucket_ids(&self) -> &[BucketId] {
+        &self.bucket_ids
+    }
+
+    pub fn proof_ids(&self) -> &[ProofId] {
+        &self.proof_ids
     }
 
     pub fn component_addresses(&self) -> &[ComponentAddress] {
@@ -96,6 +116,26 @@ impl IndexedValue {
     pub fn metadata(&self) -> &[Metadata] {
         &self.metadata
     }
+
+    pub fn value(&self) -> &tari_bor::Value {
+        &self.value
+    }
+}
+
+impl Default for IndexedValue {
+    fn default() -> Self {
+        Self {
+            bucket_ids: vec![],
+            proof_ids: vec![],
+            component_addresses: vec![],
+            resource_addresses: vec![],
+            transaction_receipt_addresses: vec![],
+            non_fungible_addresses: vec![],
+            vault_ids: vec![],
+            metadata: vec![],
+            value: tari_bor::Value::Null,
+        }
+    }
 }
 
 pub enum TariValue {
@@ -107,14 +147,15 @@ pub enum TariValue {
     Metadata(Metadata),
     VaultId(VaultId),
     FeeClaim(FeeClaimAddress),
+    ProofId(ProofId),
 }
 
 impl FromTagAndValue for TariValue {
-    type Error = IndexedValueVisitorError;
+    type Error = IndexedValueError;
 
     fn try_from_tag_and_value(tag: u64, value: &tari_bor::Value) -> Result<Self, Self::Error>
     where Self: Sized {
-        let tag = BinaryTag::from_u64(tag).ok_or(IndexedValueVisitorError::InvalidTag(tag))?;
+        let tag = BinaryTag::from_u64(tag).ok_or(IndexedValueError::InvalidTag(tag))?;
         match tag {
             BinaryTag::ComponentAddress => {
                 let component_address: Hash = value.deserialized().map_err(BorError::from)?;
@@ -148,6 +189,10 @@ impl FromTagAndValue for TariValue {
                 let value: Hash = value.deserialized().map_err(BorError::from)?;
                 Ok(Self::FeeClaim(value.into()))
             },
+            BinaryTag::ProofId => {
+                let value: u32 = value.deserialized().map_err(BorError::from)?;
+                Ok(Self::ProofId(value.into()))
+            },
         }
     }
 }
@@ -155,6 +200,7 @@ impl FromTagAndValue for TariValue {
 #[derive(Debug, Clone, Default)]
 pub struct IndexedValueVisitor {
     buckets: Vec<BucketId>,
+    proofs: Vec<ProofId>,
     component_addresses: Vec<ComponentAddress>,
     resource_addresses: Vec<ResourceAddress>,
     transaction_receipt_addresses: Vec<TransactionReceiptAddress>,
@@ -167,6 +213,7 @@ impl IndexedValueVisitor {
     pub fn new() -> Self {
         Self {
             buckets: vec![],
+            proofs: vec![],
             component_addresses: vec![],
             resource_addresses: vec![],
             transaction_receipt_addresses: vec![],
@@ -178,7 +225,7 @@ impl IndexedValueVisitor {
 }
 
 impl ValueVisitor<TariValue> for IndexedValueVisitor {
-    type Error = IndexedValueVisitorError;
+    type Error = IndexedValueError;
 
     fn visit(&mut self, value: TariValue) -> Result<(), Self::Error> {
         match value {
@@ -206,13 +253,16 @@ impl ValueVisitor<TariValue> for IndexedValueVisitor {
             TariValue::FeeClaim(_) => {
                 // Do nothing
             },
+            TariValue::ProofId(proof_id) => {
+                self.proofs.push(proof_id);
+            },
         }
         Ok(())
     }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum IndexedValueVisitorError {
+pub enum IndexedValueError {
     #[error("Bor error: {0}")]
     BorError(#[from] tari_bor::BorError),
     #[error("Invalid tag: {0}")]
@@ -251,6 +301,12 @@ mod tests {
         vault_ids: Vec<VaultId>,
         non_fungible_id: Option<NonFungibleAddress>,
         metadata: Metadata,
+    }
+
+    #[test]
+    fn it_returns_empty_indexed_value_for_empty_bytes() {
+        let value = IndexedValue::from_raw(&[]).unwrap();
+        assert_eq!(value, IndexedValue::default());
     }
 
     #[test]
@@ -296,8 +352,8 @@ mod tests {
         assert_eq!(indexed.vault_ids.len(), 1);
         assert_eq!(indexed.metadata.len(), 1);
 
-        assert!(indexed.buckets.contains(&1.into()));
-        assert!(indexed.buckets.contains(&2.into()));
-        assert_eq!(indexed.buckets.len(), 6);
+        assert!(indexed.bucket_ids.contains(&1.into()));
+        assert!(indexed.bucket_ids.contains(&2.into()));
+        assert_eq!(indexed.bucket_ids.len(), 6);
     }
 }
