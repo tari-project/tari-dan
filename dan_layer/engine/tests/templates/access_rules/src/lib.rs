@@ -4,7 +4,7 @@
 use tari_template_lib::prelude::*;
 
 pub fn create_badge_resource() -> Bucket {
-    ResourceBuilder::non_fungible("badge")
+    ResourceBuilder::non_fungible()
         .with_non_fungible(NonFungibleId::from_string("mint"), &(), &())
         .with_non_fungible(NonFungibleId::from_string("burn"), &(), &())
         .with_non_fungible(NonFungibleId::from_string("withdraw"), &(), &())
@@ -28,7 +28,7 @@ mod access_rules_template {
             component_access_rule: ComponentAccessRules,
             resource_rules: ResourceAccessRules,
         ) -> Component<AccessRulesTest> {
-            let tokens = ResourceBuilder::fungible("tokens")
+            let tokens = ResourceBuilder::fungible()
                 .with_owner_rule(owner_rule.clone())
                 .with_access_rules(resource_rules)
                 .initial_supply(1000)
@@ -49,7 +49,7 @@ mod access_rules_template {
         pub fn default_rules() -> Component<AccessRulesTest> {
             let badges = create_badge_resource();
 
-            let tokens = ResourceBuilder::fungible("tokens").initial_supply(1000).build_bucket();
+            let tokens = ResourceBuilder::fungible().initial_supply(1000).build_bucket();
 
             Component::create(Self {
                 value: 0,
@@ -62,7 +62,7 @@ mod access_rules_template {
             let badges = create_badge_resource();
 
             let badge_resource = badges.resource_address();
-            let tokens = ResourceBuilder::fungible("tokens")
+            let tokens = ResourceBuilder::fungible()
                 .initial_supply(1000)
                 .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
                     RequireRule::Require(
@@ -99,7 +99,7 @@ mod access_rules_template {
             let badges = create_badge_resource();
 
             let badge_resource = badges.resource_address();
-            let tokens = ResourceBuilder::fungible("tokens")
+            let tokens = ResourceBuilder::fungible()
                 .initial_supply(1000)
                 .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
                     RequireRule::Require(badge_resource.into()),
