@@ -36,6 +36,7 @@ use tari_template_lib::{
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::Amount,
     prelude::ResourceAddress,
+    resource::TOKEN_SYMBOL,
 };
 use tari_transaction::SubstateRequirement;
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
@@ -331,9 +332,9 @@ pub async fn mint_new_nft_on_account(
 ) {
     let mut client = get_auth_wallet_daemon_client(world, &wallet_daemon_name).await;
 
-    let token_symbol = "MY_NFT".to_string();
     let metadata = metadata.unwrap_or_else(|| {
         serde_json::json!({
+            TOKEN_SYMBOL: "MY_NFT",
             "name": "TariProject",
             "departure": "Now",
             "landing_on": "Moon"
@@ -343,7 +344,6 @@ pub async fn mint_new_nft_on_account(
     let request = MintAccountNftRequest {
         account: ComponentAddressOrName::Name(account_name.clone()),
         metadata,
-        token_symbol,
         mint_fee: Some(Amount::new(1_000)),
         create_account_nft_fee: None,
     };

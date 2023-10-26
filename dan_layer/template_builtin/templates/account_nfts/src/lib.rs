@@ -31,7 +31,7 @@ mod account_non_fungible_template {
     }
 
     impl AccountNonFungible {
-        pub fn create(owner_token: NonFungibleAddress, token_symbol: String) -> AccountNonFungibleComponent {
+        pub fn create(owner_token: NonFungibleAddress) -> AccountNonFungibleComponent {
             // extract the public key from the token
             // we only allow owner tokens that correspond to public keys
             let public_key = owner_token
@@ -41,7 +41,7 @@ mod account_non_fungible_template {
             let component_id = public_key.as_hash();
 
             // create the resource address
-            let resource_address = ResourceBuilder::non_fungible(token_symbol).build();
+            let resource_address = ResourceBuilder::non_fungible().build();
 
             // only the owner of the token will be able to withdraw funds from the account
             let mint_rule = AccessRule::Restricted(Require(owner_token));

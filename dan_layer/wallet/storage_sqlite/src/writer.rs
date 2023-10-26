@@ -752,7 +752,6 @@ impl WalletStoreWriter for WriteTransaction<'_> {
                 non_fungible_tokens::metadata.eq(metadata),
                 non_fungible_tokens::vault_id.eq(vault_id),
                 non_fungible_tokens::is_burned.eq(non_fungible_token.is_burned),
-                non_fungible_tokens::token_symbol.eq(non_fungible_token.token_symbol.clone()),
             ))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("non_fungible_token_insert", e))?;

@@ -304,16 +304,12 @@ where
                         continue;
                     },
                 };
-                let resource_address = vault.resource_address();
-                let resource = self.fetch_resource(*resource_address).await?;
-                let token_symbol = resource.token_symbol();
 
                 let non_fungible = NonFungibleToken {
                     is_burned,
                     vault_id: *vault.vault_id(),
                     nft_id: id.clone(),
                     metadata,
-                    token_symbol: String::from(token_symbol),
                 };
 
                 non_fungibles_api.store_new_nft(&non_fungible)?;

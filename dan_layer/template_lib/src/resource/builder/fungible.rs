@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use super::TOKEN_SYMBOL;
 use crate::{
     args::MintArg,
     models::{Amount, Bucket, Metadata, ResourceAddress},
@@ -8,18 +9,21 @@ use crate::{
 };
 
 pub struct FungibleResourceBuilder {
-    token_symbol: String,
     initial_supply: Amount,
     metadata: Metadata,
 }
 
 impl FungibleResourceBuilder {
-    pub(super) fn new<S: Into<String>>(token_symbol: S) -> Self {
+    pub(super) fn new() -> Self {
         Self {
-            token_symbol: token_symbol.into(),
             initial_supply: Amount::zero(),
             metadata: Metadata::new(),
         }
+    }
+
+    pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
+        self.metadata.insert(TOKEN_SYMBOL, symbol);
+        self
     }
 
     pub fn add_metadata<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
@@ -38,7 +42,7 @@ impl FungibleResourceBuilder {
             self.initial_supply.is_zero(),
             "call build_bucket when initial supply set"
         );
-        let (address, _) = Self::build_internal(self.token_symbol, self.metadata, None);
+        let (address, _) = Self::build_internal(self.metadata, None);
         address
     }
 
@@ -47,15 +51,11 @@ impl FungibleResourceBuilder {
             amount: self.initial_supply,
         };
 
-        let (_, bucket) = Self::build_internal(self.token_symbol, self.metadata, Some(mint_args));
+        let (_, bucket) = Self::build_internal(self.metadata, Some(mint_args));
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
-    fn build_internal(
-        token_symbol: String,
-        metadata: Metadata,
-        mint_args: Option<MintArg>,
-    ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::Fungible, token_symbol, metadata, mint_args)
+    fn build_internal(metadata: Metadata, mint_args: Option<MintArg>) -> (ResourceAddress, Option<Bucket>) {
+        ResourceManager::new().create(ResourceType::Fungible, metadata, mint_args)
     }
 }

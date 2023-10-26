@@ -62,6 +62,7 @@ use tari_template_lib::{
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
     models::Metadata,
     prelude::ResourceType,
+    resource::TOKEN_SYMBOL,
 };
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
@@ -404,12 +405,14 @@ where
     let genesis_block = Block::<TTx::Addr>::genesis();
     let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
+    let mut metadata: Metadata = Default::default();
+    metadata.insert(TOKEN_SYMBOL, "ID".to_string());
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         // Create the resource for public identity
         SubstateRecord {
             address,
             version: 0,
-            substate_value: Resource::new(ResourceType::NonFungible, "ID".to_string(), Default::default()).into(),
+            substate_value: Resource::new(ResourceType::NonFungible, metadata).into(),
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
@@ -423,11 +426,13 @@ where
 
     let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
+    let mut metadata = Metadata::new();
+    metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         SubstateRecord {
             address,
             version: 0,
-            substate_value: Resource::new(ResourceType::Confidential, "tXTR2".to_string(), Metadata::new()).into(),
+            substate_value: Resource::new(ResourceType::Confidential, metadata).into(),
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),

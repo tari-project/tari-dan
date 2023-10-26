@@ -74,7 +74,7 @@ mod emoji_id {
         // TODO: decoding fails if "max_emoji_id_len" is usize instead of u64, we may need to add support for it
         pub fn new(payment_resource_address: ResourceAddress, max_emoji_id_len: u64, mint_price: Amount) -> Self {
             // Create the non-fungible resource with empty initial supply
-            let resource_address = ResourceBuilder::non_fungible("emo").build();
+            let resource_address = ResourceBuilder::non_fungible().with_token_symbol("emo").build();
             let earnings = Vault::new_empty(payment_resource_address);
             Self {
                 max_emoji_id_len,

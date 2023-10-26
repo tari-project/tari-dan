@@ -187,11 +187,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> StateTracke
     pub fn new_resource(
         &self,
         resource_type: ResourceType,
-        token_symbol: String,
         metadata: Metadata,
     ) -> Result<ResourceAddress, RuntimeError> {
         let resource_address = self.id_provider.new_resource_address()?;
-        let resource = Resource::new(resource_type, token_symbol, metadata);
+        let resource = Resource::new(resource_type, metadata);
         self.write_with(|state| {
             state.new_resources.insert(resource_address, resource);
         });

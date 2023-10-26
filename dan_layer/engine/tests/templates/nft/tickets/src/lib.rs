@@ -50,7 +50,7 @@ mod tickets {
         ) -> Self {
             // Create the non-fungible resource
             // TODO: restrict minting to only the owner
-            let resource_address = ResourceBuilder::non_fungible("tix")
+            let resource_address = ResourceBuilder::non_fungible().with_token_symbol("tix")
                 // The event description is common for all tickets
                 .add_metadata("event", event_description)
                 .build();
