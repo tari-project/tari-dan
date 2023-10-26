@@ -5,7 +5,6 @@ use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
-    commit_result::RejectReason,
     indexed_value::{IndexedValue, IndexedValueError},
     substate::SubstateDiff,
 };
