@@ -1,6 +1,6 @@
 [package]
 name = "tari_wallet_daemon_client"
-version = "0.0.2"
+version = "0.0.3"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Tari wallet daemon client library"
