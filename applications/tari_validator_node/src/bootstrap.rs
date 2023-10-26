@@ -64,6 +64,7 @@ use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     models::Metadata,
     prelude::{OwnerRule, ResourceType},
+    resource::TOKEN_SYMBOL,
 };
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
@@ -406,6 +407,8 @@ where
     let genesis_block = Block::<TTx::Addr>::genesis();
     let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
+    let mut metadata: Metadata = Default::default();
+    metadata.insert(TOKEN_SYMBOL, "ID".to_string());
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         // Create the resource for public identity
         SubstateRecord {
@@ -416,8 +419,7 @@ where
                 RistrettoPublicKeyBytes::default(),
                 OwnerRule::None,
                 ResourceAccessRules::new(),
-                "ID".to_string(),
-                Default::default(),
+                metadata,
             )
             .into(),
             state_hash: Default::default(),
@@ -433,6 +435,8 @@ where
 
     let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let shard_id = ShardId::from_address(&address, 0);
+    let mut metadata = Metadata::new();
+    metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
     if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
         SubstateRecord {
             address,
@@ -442,8 +446,7 @@ where
                 RistrettoPublicKeyBytes::default(),
                 OwnerRule::None,
                 ResourceAccessRules::new(),
-                "tXTR2".to_string(),
-                Metadata::new(),
+                metadata,
             )
             .into(),
             state_hash: Default::default(),

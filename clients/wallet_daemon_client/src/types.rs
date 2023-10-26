@@ -499,7 +499,6 @@ pub struct AuthRevokeTokenResponse {}
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct MintAccountNftRequest {
     pub account: ComponentAddressOrName,
-    pub token_symbol: String,
     pub metadata: serde_json::Value,
     pub mint_fee: Option<Amount>,
     pub create_account_nft_fee: Option<Amount>,
@@ -520,7 +519,6 @@ pub struct GetAccountNftRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountNftInfo {
-    pub token_symbol: String,
     pub metadata: serde_json::Value,
     pub is_burned: bool,
 }

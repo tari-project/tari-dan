@@ -36,7 +36,7 @@ mod sparkle_nft_template {
 
     impl SparkleNft {
         pub fn new() -> Component<Self> {
-            let resource_address = ResourceBuilder::non_fungible("SPKL")
+            let resource_address = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
                 // AllowAll makes testing easier
                 .mintable(AccessRule::AllowAll)
                 .burnable(AccessRule::AllowAll)
@@ -53,7 +53,7 @@ mod sparkle_nft_template {
 
         pub fn new_with_initial_nft(nft: NonFungibleId) -> Component<Self> {
             let empty = Metadata::new();
-            let bucket = ResourceBuilder::non_fungible("SPKL")
+            let bucket = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
                 .with_non_fungibles(Some((nft, (&(), &empty))))
                 // AllowAll makes testing easier
                 .mintable(AccessRule::AllowAll)

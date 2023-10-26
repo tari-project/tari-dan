@@ -347,13 +347,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             ResourceAction::Create => {
                 let arg: CreateResourceArg = args.get(0)?;
 
-                let resource_address = self.tracker.new_resource(
-                    arg.resource_type,
-                    arg.owner_rule,
-                    arg.access_rules,
-                    arg.token_symbol.clone(),
-                    arg.metadata,
-                )?;
+                let resource_address =
+                    self.tracker
+                        .new_resource(arg.resource_type, arg.owner_rule, arg.access_rules, arg.metadata)?;
 
                 let mut output_bucket = None;
                 if let Some(mint_arg) = arg.mint_arg {

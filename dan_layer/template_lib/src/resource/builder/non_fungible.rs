@@ -5,6 +5,7 @@ use serde::Serialize;
 use tari_bor::encode;
 use tari_template_abi::rust::{collections::HashMap, fmt, ops::RangeInclusive};
 
+use super::TOKEN_SYMBOL;
 use crate::{
     args::MintArg,
     auth::{AccessRule, OwnerRule, ResourceAccessRules},
@@ -13,7 +14,6 @@ use crate::{
 };
 
 pub struct NonFungibleResourceBuilder {
-    token_symbol: String,
     owner_rule: OwnerRule,
     metadata: Metadata,
     access_rules: ResourceAccessRules,
@@ -21,14 +21,18 @@ pub struct NonFungibleResourceBuilder {
 }
 
 impl NonFungibleResourceBuilder {
-    pub(super) fn new<S: Into<String>>(symbol: S) -> Self {
+    pub(super) fn new() -> Self {
         Self {
-            token_symbol: symbol.into(),
             owner_rule: OwnerRule::default(),
             metadata: Metadata::new(),
             access_rules: ResourceAccessRules::new(),
             tokens_ids: HashMap::new(),
         }
+    }
+
+    pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
+        self.metadata.insert(TOKEN_SYMBOL, symbol);
+        self
     }
 
     pub fn with_owner_rule(mut self, rule: OwnerRule) -> Self {
@@ -108,13 +112,7 @@ impl NonFungibleResourceBuilder {
     pub fn build(self) -> ResourceAddress {
         // TODO: Improve API
         assert!(self.tokens_ids.is_empty(), "call build_bucket with initial tokens set");
-        let (address, _) = Self::build_internal(
-            self.token_symbol,
-            self.owner_rule,
-            self.access_rules,
-            self.metadata,
-            None,
-        );
+        let (address, _) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, None);
         address
     }
 
@@ -123,30 +121,16 @@ impl NonFungibleResourceBuilder {
             tokens: self.tokens_ids,
         };
 
-        let (_, bucket) = Self::build_internal(
-            self.token_symbol,
-            self.owner_rule,
-            self.access_rules,
-            self.metadata,
-            Some(mint_args),
-        );
+        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(mint_args));
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
     fn build_internal(
-        token_symbol: String,
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
         metadata: Metadata,
         mint_args: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(
-            ResourceType::NonFungible,
-            owner_rule,
-            access_rules,
-            token_symbol,
-            metadata,
-            mint_args,
-        )
+        ResourceManager::new().create(ResourceType::NonFungible, owner_rule, access_rules, metadata, mint_args)
     }
 }

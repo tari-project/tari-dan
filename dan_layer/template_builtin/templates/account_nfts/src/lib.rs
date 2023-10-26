@@ -31,7 +31,7 @@ mod account_non_fungible_template {
     }
 
     impl AccountNonFungible {
-        pub fn create(owner_token: NonFungibleAddress, token_symbol: String) -> Component<AccountNonFungible> {
+        pub fn create(owner_token: NonFungibleAddress) -> Component<AccountNonFungible> {
             // extract the public key from the token
             // we only allow owner tokens that correspond to public keys
             let public_key = owner_token
@@ -44,9 +44,7 @@ mod account_non_fungible_template {
             let mint_rule =
                 AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(owner_token.into())));
             // create the resource
-            let resource_address = ResourceBuilder::non_fungible(token_symbol)
-                .mintable(mint_rule.clone())
-                .build();
+            let resource_address = ResourceBuilder::non_fungible().mintable(mint_rule.clone()).build();
 
             let rules = AccessRules::new()
                 .add_method_rule("non_fungible_token_get_resource_address", AccessRule::AllowAll)

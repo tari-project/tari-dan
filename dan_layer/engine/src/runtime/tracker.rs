@@ -172,7 +172,6 @@ impl StateTracker {
         resource_type: ResourceType,
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
-        token_symbol: String,
         metadata: Metadata,
     ) -> Result<ResourceAddress, RuntimeError> {
         self.write_with(|state| {
@@ -184,7 +183,6 @@ impl StateTracker {
                 runtime_state.transaction_signer_public_key,
                 owner_rule,
                 access_rules,
-                token_symbol,
                 metadata,
             );
 

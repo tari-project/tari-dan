@@ -81,7 +81,6 @@ impl ResourceManager {
         resource_type: ResourceType,
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
-        token_symbol: String,
         metadata: Metadata,
         mint_arg: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
@@ -92,7 +91,6 @@ impl ResourceManager {
                 resource_type,
                 owner_rule,
                 access_rules,
-                token_symbol,
                 metadata,
                 mint_arg
             }],

@@ -25,7 +25,7 @@ use tari_template_lib::{
     auth::{OwnerRule, Ownership, ResourceAccessRules},
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, Metadata},
-    resource::ResourceType,
+    resource::{ResourceType, TOKEN_SYMBOL},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -34,7 +34,6 @@ pub struct Resource {
     owner_rule: OwnerRule,
     owner_key: RistrettoPublicKeyBytes,
     access_rules: ResourceAccessRules,
-    token_symbol: String,
     metadata: Metadata,
     total_supply: Amount,
 }
@@ -45,7 +44,6 @@ impl Resource {
         owner_key: RistrettoPublicKeyBytes,
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
-        token_symbol: String,
         metadata: Metadata,
     ) -> Self {
         Self {
@@ -54,7 +52,6 @@ impl Resource {
             owner_key,
             access_rules,
             metadata,
-            token_symbol,
             total_supply: 0.into(),
         }
     }
@@ -118,7 +115,7 @@ impl Resource {
         &self.metadata
     }
 
-    pub fn token_symbol(&self) -> &str {
-        &self.token_symbol
+    pub fn token_symbol(&self) -> Option<&str> {
+        self.metadata.get(TOKEN_SYMBOL).map(|s| s.as_str())
     }
 }

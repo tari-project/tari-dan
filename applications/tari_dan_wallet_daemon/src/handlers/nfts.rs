@@ -57,14 +57,9 @@ pub async fn handle_get_nft(
     let non_fungible = non_fungible_api
         .non_fungible_token_get_by_nft_id(req.nft_id)
         .map_err(|e| anyhow!("Failed to get non fungible token, with error: {}", e))?;
-    let token_symbol = non_fungible.token_symbol.clone();
     let is_burned = non_fungible.is_burned;
     let metadata = serde_json::to_value(&non_fungible.metadata)?;
-    let resp = GetAccountNftResponse {
-        token_symbol,
-        metadata,
-        is_burned,
-    };
+    let resp = GetAccountNftResponse { metadata, is_burned };
 
     Ok(resp)
 }
@@ -88,7 +83,6 @@ pub async fn handle_list_nfts(
         .map(|n| {
             let metadata = serde_json::to_value(&n.metadata).expect("failed to parse metadata to JSON format");
             AccountNftInfo {
-                token_symbol: n.token_symbol.clone(),
                 is_burned: n.is_burned,
                 metadata,
             }
@@ -138,7 +132,6 @@ pub async fn handle_mint_account_nft(
             &account,
             &signing_key.key,
             owner_token,
-            &req.token_symbol,
             req.create_account_nft_fee.unwrap_or(DEFAULT_FEE),
             token.clone(),
         )
@@ -266,7 +259,6 @@ async fn create_account_nft(
     account: &Account,
     owner_sk: &RistrettoSecretKey,
     owner_token: NonFungibleAddress,
-    token_symbol: &str,
     fee: Amount,
     token: Option<String>,
 ) -> Result<Amount, anyhow::Error> {
@@ -285,10 +277,7 @@ async fn create_account_nft(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), fee)
         .with_inputs(inputs)
-        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![
-            owner_token,
-            token_symbol
-        ])
+        .call_function(*ACCOUNT_NFT_TEMPLATE_ADDRESS, "create", args![owner_token,])
         .sign(owner_sk)
         .build();
 

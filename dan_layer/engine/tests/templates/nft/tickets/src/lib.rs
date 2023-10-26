@@ -50,7 +50,7 @@ mod tickets {
         ) -> Component<Self> {
             let owner = CallerContext::transaction_signer_public_key().to_non_fungible_address();
             // Create the non-fungible resource
-            let resource_address = ResourceBuilder::non_fungible("tix")
+            let resource_address = ResourceBuilder::non_fungible().with_token_symbol("tix")
                 // The event description is common for all tickets
                 .add_metadata("event", event_description)
                 .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(owner.into()))))

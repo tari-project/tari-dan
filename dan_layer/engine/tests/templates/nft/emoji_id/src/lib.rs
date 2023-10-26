@@ -78,7 +78,8 @@ mod emoji_id {
             mint_price: Amount,
         ) -> Component<Self> {
             // Create the non-fungible resource with empty initial supply
-            let resource_address = ResourceBuilder::non_fungible("emo")
+            let resource_address = ResourceBuilder::non_fungible()
+                .with_token_symbol("emo")
                 .mintable(AccessRule::AllowAll)
                 .build();
             let earnings = Vault::new_empty(payment_resource_address);

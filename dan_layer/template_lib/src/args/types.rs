@@ -205,7 +205,6 @@ pub struct CreateResourceArg {
     pub resource_type: ResourceType,
     pub owner_rule: OwnerRule,
     pub access_rules: ResourceAccessRules,
-    pub token_symbol: String,
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
 }

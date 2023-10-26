@@ -32,7 +32,8 @@ mod faucet_template {
 
     impl ConfidentialFaucet {
         pub fn mint(confidential_proof: ConfidentialOutputProof) -> Component<Self> {
-            let coins = ResourceBuilder::confidential("testconf")
+            let coins = ResourceBuilder::confidential()
+                .with_token_symbol("testconf")
                 .initial_supply(confidential_proof)
                 .build_bucket();
 

@@ -44,7 +44,7 @@ mod sparkle_nft_template {
                 (NonFungibleId::from_string("Sparkle1"), (&(), &())),
                 (NonFungibleId::from_u256([0u8; 32]), (&(), &())),
             ];
-            let bucket = ResourceBuilder::non_fungible("SPKL")
+            let bucket = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
                 .with_non_fungibles(tokens)
                 // Allow minting and burning for tests
                 .mintable(AccessRule::AllowAll)
