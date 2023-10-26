@@ -41,6 +41,9 @@ async function internalJsonRpc(
   let address = import.meta.env.VITE_DAEMON_JRPC_ADDRESS || 'http://localhost:9000';
   try {
     address = await (await fetch('/json_rpc_address')).text();
+    if (!address.startsWith("http")) {
+        address = "http://" + address;
+    }
   } catch {}
   let headers: { [key: string]: string } = {
     'Content-Type': 'application/json',
