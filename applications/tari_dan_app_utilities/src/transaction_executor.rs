@@ -48,8 +48,7 @@ impl<TTemplateProvider> TariDanTransactionProcessor<TTemplateProvider> {
 }
 
 impl<TTemplateProvider> TransactionExecutor for TariDanTransactionProcessor<TTemplateProvider>
-where
-    TTemplateProvider: TemplateProvider<Template = LoadedTemplate>,
+where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
 {
     type Error = TransactionProcessorError;
 
