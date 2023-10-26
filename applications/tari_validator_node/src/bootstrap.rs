@@ -34,6 +34,7 @@ use tari_common::{
 };
 use tari_common_types::types::PublicKey;
 use tari_comms::{protocol::rpc::RpcServer, types::CommsPublicKey, CommsNode, NodeIdentity, UnspawnedCommsNode};
+use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_dan_app_utilities::{
     base_layer_scanner,
     consensus_constants::ConsensusConstants,
@@ -174,6 +175,9 @@ pub async fn spawn_services(
     );
     handles.push(join_handle);
 
+    // Create registration file
+    create_registration_file(config, &epoch_manager, &node_identity).await?;
+
     // Template manager
     let template_manager = TemplateManager::initialize(global_db.clone(), config.validator_node.templates.clone())?;
     let (template_manager_service, join_handle) =
@@ -293,6 +297,36 @@ pub async fn spawn_services(
         handles,
         validator_node_client_factory,
     })
+}
+
+async fn create_registration_file(
+    config: &ApplicationConfig,
+    epoch_manager: &EpochManagerHandle,
+    node_identity: &NodeIdentity,
+) -> Result<(), anyhow::Error> {
+    let fee_claim_public_key = config.validator_node.fee_claim_public_key.clone();
+    epoch_manager
+        .set_fee_claim_public_key(fee_claim_public_key.clone())
+        .await?;
+
+    let signature = ValidatorNodeSignature::sign(node_identity.secret_key(), &fee_claim_public_key, b"");
+    #[derive(Serialize)]
+    struct ValidatorRegistrationFile {
+        signature: ValidatorNodeSignature,
+        public_key: PublicKey,
+        claim_public_key: PublicKey,
+    }
+    let registration = ValidatorRegistrationFile {
+        signature,
+        public_key: node_identity.public_key().clone(),
+        claim_public_key: fee_claim_public_key,
+    };
+    fs::write(
+        config.common.base_path.join("registration.json"),
+        serde_json::to_string(&registration)?,
+    )
+    .map_err(|e| ExitError::new(ExitCode::UnknownError, e))?;
+    Ok(())
 }
 
 fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), ExitError> {
