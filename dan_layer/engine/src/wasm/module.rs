@@ -20,25 +20,21 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 
-use tari_template_abi::{FunctionDef, TemplateDef};
+use tari_template_abi::{FunctionDef, TemplateDef, ABI_TEMPLATE_DEF_GLOBAL_NAME};
 use wasmer::{
     BaseTunables,
     CompilerConfig,
     Cranelift,
     CraneliftOptLevel,
     Engine,
-    Extern,
+    ExportError,
     Function,
     Instance,
     Module,
     Store,
     Universal,
-    Val,
     WasmerEnv,
 };
 
@@ -60,11 +56,8 @@ impl WasmModule {
     pub fn load_template_from_code(code: &[u8]) -> Result<LoadedTemplate, PackageError> {
         let store = Self::create_store();
         let module = Module::new(&store, code)?;
-        let violation_flag = Arc::new(AtomicBool::new(false));
-        let mut env = WasmEnv::new(violation_flag.clone());
-
-        fn stub(env: &WasmEnv<Arc<AtomicBool>>, _op: i32, _arg_ptr: i32, _arg_len: i32) -> i32 {
-            env.state().store(true, Ordering::Relaxed);
+        let mut env = WasmEnv::new(());
+        fn stub(_env: &WasmEnv<()>, _op: i32, _arg_ptr: i32, _arg_len: i32) -> i32 {
             0
         }
 
@@ -76,9 +69,6 @@ impl WasmModule {
         validate_environment(&env)?;
 
         let template = initialize_and_load_template_abi(&instance, &env)?;
-        if violation_flag.load(Ordering::Relaxed) {
-            return Err(PackageError::TemplateCalledEngineDuringInitialization);
-        }
         Ok(LoadedWasmTemplate::new(template, module, code.len()).into())
     }
 
@@ -103,25 +93,17 @@ impl TemplateModuleLoader for WasmModule {
     }
 }
 
-fn initialize_and_load_template_abi(
+fn initialize_and_load_template_abi<T: Clone + Send + Sync + 'static>(
     instance: &Instance,
-    env: &WasmEnv<Arc<AtomicBool>>,
+    env: &WasmEnv<T>,
 ) -> Result<TemplateDef, WasmExecutionError> {
-    let abi_func = instance
+    let ptr = instance
         .exports
-        .iter()
-        .find_map(|(name, export)| match export {
-            Extern::Function(f) if name.ends_with("_abi") && f.param_arity() == 0 && f.result_arity() == 1 => Some(f),
-            _ => None,
-        })
-        .ok_or(WasmExecutionError::NoAbiDefinition)?;
-
-    // Initialize ABI memory
-    let ret = abi_func.call(&[])?;
-    let ptr = match ret.get(0) {
-        Some(Val::I32(ptr)) => *ptr as u32,
-        Some(_) | None => return Err(WasmExecutionError::InvalidReturnTypeFromAbiFunc),
-    };
+        .get_global(ABI_TEMPLATE_DEF_GLOBAL_NAME)?
+        .get()
+        .i32()
+        .ok_or(WasmExecutionError::ExportError(ExportError::IncompatibleType))?;
+    let ptr = u32::try_from(ptr).map_err(|_| WasmExecutionError::ExportError(ExportError::IncompatibleType))?;
 
     // Load ABI from memory
     let data = env.read_memory_with_embedded_len(ptr)?;
@@ -150,7 +132,7 @@ impl LoadedWasmTemplate {
     }
 
     pub fn template_name(&self) -> &str {
-        &self.template_def.template_name
+        self.template_def.template_name()
     }
 
     pub fn template_def(&self) -> &TemplateDef {
@@ -158,7 +140,7 @@ impl LoadedWasmTemplate {
     }
 
     pub fn find_func_by_name(&self, function_name: &str) -> Option<&FunctionDef> {
-        self.template_def.functions.iter().find(|f| f.name == *function_name)
+        self.template_def.functions().iter().find(|f| f.name == *function_name)
     }
 
     pub fn code_size(&self) -> usize {
@@ -166,7 +148,7 @@ impl LoadedWasmTemplate {
     }
 }
 
-fn validate_environment(env: &WasmEnv<Arc<AtomicBool>>) -> Result<(), WasmExecutionError> {
+fn validate_environment<T: Clone + Send + Sync + 'static>(env: &WasmEnv<T>) -> Result<(), WasmExecutionError> {
     const MAX_MEM_SIZE: usize = 2 * 1024 * 1024;
     let mem_size = env.mem_size();
     if mem_size.bytes().0 > MAX_MEM_SIZE {
@@ -187,9 +169,16 @@ fn validate_instance(instance: &Instance) -> Result<(), WasmExecutionError> {
         return Err(WasmExecutionError::UnexpectedAbiFunction { name: name.to_string() });
     }
 
+    instance
+        .exports
+        .get_global(ABI_TEMPLATE_DEF_GLOBAL_NAME)?
+        .get()
+        .i32()
+        .ok_or(WasmExecutionError::ExportError(ExportError::IncompatibleType))?;
+
     Ok(())
 }
 
 fn is_func_permitted(name: &str) -> bool {
-    name.ends_with("_abi") || name.ends_with("_main") || name == "tari_alloc" || name == "tari_free"
+    name.ends_with("_main") || name == "tari_alloc" || name == "tari_free"
 }

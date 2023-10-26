@@ -48,10 +48,6 @@ pub enum WasmExecutionError {
     MaxMemorySizeExceeded,
     #[error("Failed to decode ABI: {0:?}")]
     AbiDecodeError(BorError),
-    #[error("package ABI function returned an invalid type")]
-    InvalidReturnTypeFromAbiFunc,
-    #[error("package did not contain an ABI definition")]
-    NoAbiDefinition,
     #[error("Unexpected ABI function {name}")]
     UnexpectedAbiFunction { name: String },
     #[error("Panic! {message}")]

@@ -136,10 +136,10 @@ impl TemplateManagerService {
             .get_template_module(&address)?
             .ok_or(TemplateManagerError::TemplateNotFound { address })?;
         Ok(TemplateAbi {
-            template_name: loaded.template_def().template_name.clone(),
+            template_name: loaded.template_def().template_name().to_string(),
             functions: loaded
                 .template_def()
-                .functions
+                .functions()
                 .iter()
                 .map(|f| FunctionDef {
                     name: f.name.clone(),

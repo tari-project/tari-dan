@@ -20,6 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::fmt::{Debug, Formatter};
+
 use syn::{
     parse::{Parse, ParseStream},
     punctuated::Punctuated,
@@ -216,11 +218,12 @@ pub enum TypeAst {
     Tuple(TypeTuple),
 }
 
-impl TypeAst {
-    pub fn is_mut(&self) -> bool {
+impl Debug for TypeAst {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            TypeAst::Receiver { mutability } => *mutability,
-            _ => false,
+            TypeAst::Receiver { mutability } => write!(f, "Receiver {{ mutability: {} }}", mutability),
+            TypeAst::Typed { name, type_path } => write!(f, "Typed {{ name: {:?}, type_path: {:?} }}", name, type_path),
+            TypeAst::Tuple(tuple) => write!(f, "Tuple {{ tuple: {:?} }}", tuple),
         }
     }
 }
