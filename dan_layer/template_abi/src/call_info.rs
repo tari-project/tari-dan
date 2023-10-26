@@ -27,6 +27,6 @@ use crate::rust::{string::String, vec::Vec};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CallInfo {
     pub func_name: String,
-    pub args: Vec<Vec<u8>>,
+    pub args: Vec<tari_bor::Value>,
     pub abi_context: Vec<u8>,
 }

@@ -5,13 +5,15 @@ use std::{
     collections::{HashMap, HashSet},
     path::Path,
     sync::Arc,
+    time::Instant,
 };
 
 use anyhow::anyhow;
 use serde::de::DeserializeOwned;
 use tari_bor::encode;
 use tari_crypto::{
-    ristretto::RistrettoSecretKey,
+    keys::PublicKey,
+    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
     tari_utilities::{hex::Hex, ByteArray},
 };
 use tari_dan_common_types::crypto::create_key_pair;
@@ -31,7 +33,7 @@ use tari_dan_engine::{
     wasm::{compile::compile_template, LoadedWasmTemplate, WasmModule},
 };
 use tari_engine_types::{
-    commit_result::ExecuteResult,
+    commit_result::{ExecuteResult, RejectReason},
     component::{ComponentBody, ComponentHeader},
     hashing::template_hasher,
     instruction::Instruction,
@@ -44,9 +46,10 @@ use tari_template_builtin::{get_template_builtin, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args,
     args::Arg,
+    auth::OwnerRule,
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, ComponentAddress, NonFungibleAddress, TemplateAddress},
-    prelude::{AccessRules, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
+    prelude::{ComponentAccessRules, CONFIDENTIAL_TARI_RESOURCE_ADDRESS},
     Hash,
 };
 use tari_transaction::{id_provider::IdProvider, Transaction};
@@ -62,6 +65,7 @@ pub struct TemplateTest {
     package: Arc<Package>,
     track_calls: TrackCallsModule,
     secret_key: RistrettoSecretKey,
+    public_key: RistrettoPublicKey,
     last_outputs: HashSet<SubstateAddress>,
     name_to_template: HashMap<String, TemplateAddress>,
     state_store: MemoryStateStore,
@@ -74,6 +78,7 @@ impl TemplateTest {
     pub fn new<I: IntoIterator<Item = P>, P: AsRef<Path>>(template_paths: I) -> Self {
         let secret_key =
             RistrettoSecretKey::from_hex("7e100429f979d37999f051e65b94734e206925e9346759fd73caafb2f3232578").unwrap();
+        let public_key = RistrettoPublicKey::from_secret_key(&secret_key);
 
         let mut name_to_template = HashMap::new();
         let mut builder = Package::builder();
@@ -105,7 +110,12 @@ impl TemplateTest {
         {
             let mut tx = state_store.write_access().unwrap();
             bootstrap_state(&mut tx).unwrap();
-            Self::initial_tari_faucet_supply(&mut tx, Amount::from(100_000), test_faucet_template_address);
+            Self::initial_tari_faucet_supply(
+                &mut tx,
+                &public_key,
+                Amount::from(100_000),
+                test_faucet_template_address,
+            );
             tx.commit().unwrap();
         }
 
@@ -115,6 +125,7 @@ impl TemplateTest {
         Self {
             package: Arc::new(package),
             track_calls: TrackCallsModule::new(),
+            public_key,
             secret_key,
             name_to_template,
             last_outputs: HashSet::new(),
@@ -127,16 +138,16 @@ impl TemplateTest {
 
     fn initial_tari_faucet_supply(
         tx: &mut MemoryWriteTransaction<'_>,
+        signer_public_key: &RistrettoPublicKey,
         initial_supply: Amount,
         test_faucet_template_address: TemplateAddress,
     ) {
         let id_provider = IdProvider::new(Hash::default(), 10);
         let vault_id = id_provider.new_vault_id().unwrap();
-        let vault = Vault::new(vault_id, ResourceContainer::Confidential {
-            address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            commitments: Default::default(),
-            revealed_amount: initial_supply,
-        });
+        let vault = Vault::new(
+            vault_id,
+            ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, vec![], initial_supply),
+        );
         tx.set_state(&SubstateAddress::Vault(vault_id), Substate::new(0, vault))
             .unwrap();
 
@@ -154,7 +165,9 @@ impl TemplateTest {
             Substate::new(0, ComponentHeader {
                 template_address: test_faucet_template_address,
                 module_name: "TestFaucet".to_string(),
-                access_rules: AccessRules::with_default_allow(),
+                owner_key: RistrettoPublicKeyBytes::from_bytes(signer_public_key.as_bytes()).unwrap(),
+                owner_rule: OwnerRule::None,
+                access_rules: ComponentAccessRules::allow_all(),
                 state: ComponentBody { state },
             }),
         )
@@ -300,6 +313,14 @@ impl TemplateTest {
         }]
     }
 
+    pub fn get_test_proof_and_secret_key(&self) -> (NonFungibleAddress, RistrettoSecretKey) {
+        (self.get_test_proof(), self.secret_key.clone())
+    }
+
+    pub fn get_test_proof(&self) -> NonFungibleAddress {
+        NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(self.public_key.as_bytes()).unwrap())
+    }
+
     pub fn create_empty_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
         let (owner_proof, secret_key) = self.create_owner_proof();
         let old_fail_fees = self.enable_fees;
@@ -313,22 +334,18 @@ impl TemplateTest {
         let (owner_proof, secret_key) = self.create_owner_proof();
         let old_fail_fees = self.enable_fees;
         self.enable_fees = false;
-        let result = self
-            .try_execute_and_commit(
-                Transaction::builder()
-                    .call_method(test_faucet_component(), "take_free_coins", args![])
-                    .put_last_instruction_output_on_workspace("bucket")
-                    .call_function(self.get_template_address("Account"), "create_with_bucket", args![
-                        &owner_proof,
-                        Workspace("bucket")
-                    ])
-                    .sign(&secret_key)
-                    .build(),
-                vec![owner_proof.clone()],
-            )
-            .unwrap();
-
-        result.expect_success();
+        let result = self.execute_expect_success(
+            Transaction::builder()
+                .call_method(test_faucet_component(), "take_free_coins", args![])
+                .put_last_instruction_output_on_workspace("bucket")
+                .call_function(self.get_template_address("Account"), "create_with_bucket", args![
+                    &owner_proof,
+                    Workspace("bucket")
+                ])
+                .sign(&secret_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
 
         let component = result.finalize.execution_results[2]
             .decode::<ComponentAddress>()
@@ -365,7 +382,7 @@ impl TemplateTest {
         transaction: Transaction,
         proofs: Vec<NonFungibleAddress>,
     ) -> Result<ExecuteResult, TransactionError> {
-        let mut modules: Vec<Arc<dyn RuntimeModule<Package>>> = vec![Arc::new(self.track_calls.clone())];
+        let mut modules: Vec<Arc<dyn RuntimeModule>> = vec![Arc::new(self.track_calls.clone())];
 
         if self.enable_fees {
             modules.push(Arc::new(FeeModule::new(0, self.fee_table.clone())));
@@ -382,10 +399,14 @@ impl TemplateTest {
             modules,
         );
 
+        let tx_id = *transaction.id();
+        eprintln!("START Transaction id = \"{}\"", tx_id);
+
         let result = processor.execute(transaction)?;
 
         if self.enable_fees {
             if let Some(ref fee) = result.fee_receipt {
+                eprintln!("Initial payment: {}", fee.total_allocated_fee_payments());
                 eprintln!("Fee: {}", fee.total_fees_charged());
                 eprintln!("Paid: {}", fee.total_fees_paid());
                 eprintln!("Refund: {}", fee.total_refunded());
@@ -396,19 +417,59 @@ impl TemplateTest {
             }
         }
 
+        let timer = Instant::now();
+        eprintln!("Finished Transaction \"{}\" in {:.2?}", tx_id, timer.elapsed());
+        eprintln!();
+
         Ok(result)
     }
 
-    pub fn try_execute_and_commit(
+    pub fn execute_and_commit_on_success(
         &mut self,
         transaction: Transaction,
         proofs: Vec<NonFungibleAddress>,
-    ) -> Result<ExecuteResult, TransactionError> {
-        let result = self.try_execute(transaction, proofs)?;
+    ) -> ExecuteResult {
+        let result = self.try_execute(transaction, proofs).unwrap();
         if let Some(diff) = result.finalize.result.accept() {
             self.commit_diff(diff);
         }
-        Ok(result)
+
+        result
+    }
+
+    /// Executes a transaction. Panics if the transaction is not finalized (fee transaction fails). Does not panic if
+    /// the main instructions fails (use execute_expect_success for that).
+    pub fn execute_expect_commit(
+        &mut self,
+        transaction: Transaction,
+        proofs: Vec<NonFungibleAddress>,
+    ) -> ExecuteResult {
+        let result = self.try_execute(transaction, proofs).unwrap();
+        let diff = result.expect_finalization_success();
+        self.commit_diff(diff);
+
+        result
+    }
+
+    /// Executes a transaction. Panics if the transaction fails.
+    pub fn execute_expect_success(
+        &mut self,
+        transaction: Transaction,
+        proofs: Vec<NonFungibleAddress>,
+    ) -> ExecuteResult {
+        let result = self.execute_expect_commit(transaction, proofs);
+        result.expect_success();
+        result
+    }
+
+    /// Executes a transaction. Panics if the transaction succeeds.
+    pub fn execute_expect_failure(
+        &mut self,
+        transaction: Transaction,
+        proofs: Vec<NonFungibleAddress>,
+    ) -> RejectReason {
+        let result = self.try_execute(transaction, proofs).unwrap();
+        result.expect_transaction_failure().clone()
     }
 
     pub fn execute_and_commit(

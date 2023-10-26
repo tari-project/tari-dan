@@ -30,6 +30,8 @@ use tari_template_abi::rust::{
 };
 
 use crate::{
+    args::Arg,
+    auth::{OwnerRule, ResourceAccessRules},
     models::{
         Amount,
         BucketId,
@@ -38,10 +40,11 @@ use crate::{
         Metadata,
         NonFungibleAddress,
         NonFungibleId,
+        ProofId,
         ResourceAddress,
         VaultRef,
     },
-    prelude::{AccessRules, ConfidentialOutputProof, TemplateAddress},
+    prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
     resource::ResourceType,
     Hash,
 };
@@ -105,7 +108,7 @@ pub struct ComponentInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ComponentAction {
     Get,
     Create,
@@ -131,7 +134,8 @@ impl ComponentRef {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateComponentArg {
     pub encoded_state: Vec<u8>,
-    pub access_rules: AccessRules,
+    pub owner_rule: OwnerRule,
+    pub access_rules: ComponentAccessRules,
     pub component_id: Option<Hash>,
 }
 
@@ -174,12 +178,13 @@ impl From<ResourceAddress> for ResourceRef {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum ResourceAction {
-    GetTotalSupply,
-    GetResourceType,
-    GetNonFungible,
     Create,
     Mint,
     UpdateNonFungibleData,
+    GetTotalSupply,
+    GetResourceType,
+    GetNonFungible,
+    UpdateAccessRules,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -198,6 +203,8 @@ pub enum MintArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateResourceArg {
     pub resource_type: ResourceType,
+    pub owner_rule: OwnerRule,
+    pub access_rules: ResourceAccessRules,
     pub metadata: Metadata,
     pub mint_arg: Option<MintArg>,
 }
@@ -238,6 +245,10 @@ pub enum VaultAction {
     GetCommitmentCount,
     ConfidentialReveal,
     PayFee,
+    CreateProofByResource,
+    CreateProofByFungibleAmount,
+    CreateProofByNonFungibles,
+    CreateProofByConfidentialResource,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -292,7 +303,6 @@ impl BucketRef {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum BucketAction {
-    Create,
     GetResourceAddress,
     GetResourceType,
     GetAmount,
@@ -300,6 +310,7 @@ pub enum BucketAction {
     TakeConfidential,
     RevealConfidential,
     Burn,
+    CreateProof,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -310,10 +321,10 @@ pub struct BucketBurnArg {
 // -------------------------------- Workspace -------------------------------- //
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum WorkspaceAction {
-    Put,
     PutLastInstructionOutput,
     Get,
     ListBuckets,
+    DropAllProofs,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -367,6 +378,7 @@ pub struct CallerContextInvokeArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum CallerContextAction {
     GetCallerPublicKey,
+    GetComponentAddress,
 }
 
 // -------------------------------- CallInvoke -------------------------------- //
@@ -376,7 +388,7 @@ pub struct CallInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum CallAction {
     CallFunction,
     CallMethod,
@@ -386,12 +398,68 @@ pub enum CallAction {
 pub struct CallFunctionArg {
     pub template_address: TemplateAddress,
     pub function: String,
-    pub args: Vec<Vec<u8>>,
+    pub args: Vec<Arg>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CallMethodArg {
     pub component_address: ComponentAddress,
     pub method: String,
+    pub args: Vec<Arg>,
+}
+
+// -------------------------------- ProofInvoke -------------------------------- //
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ProofInvokeArg {
+    pub proof_ref: ProofRef,
+    pub action: ProofAction,
     pub args: Vec<Vec<u8>>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum ProofRef {
+    Proof(ResourceAddress),
+    Ref(ProofId),
+}
+
+impl ProofRef {
+    pub fn resource_address(&self) -> Option<ResourceAddress> {
+        match self {
+            ProofRef::Proof(addr) => Some(*addr),
+            ProofRef::Ref(_) => None,
+        }
+    }
+
+    pub fn proof_id(&self) -> Option<ProofId> {
+        match self {
+            ProofRef::Proof(_) => None,
+            ProofRef::Ref(id) => Some(*id),
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ProofAction {
+    GetAmount,
+    GetResourceAddress,
+    GetResourceType,
+    Authorize,
+    DropAuthorize,
+    Drop,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VaultCreateProofByFungibleAmountArg {
+    pub amount: Amount,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VaultCreateProofByNonFungiblesArg {
+    pub ids: BTreeSet<NonFungibleId>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CreateProofOfResourceByConfidentialArg {
+    // TODO: confidential. zero knowledge proof of commitment factors
+    // pub proof: ConfidentialProofOfKnowledge
 }

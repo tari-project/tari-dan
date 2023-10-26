@@ -21,9 +21,9 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_template_lib::prelude::*;
-
 #[template]
 mod hello_world {
+    use super::*;
     pub struct HelloWorld {
         greeting: String,
     }
@@ -33,8 +33,10 @@ mod hello_world {
             "Hello World!".to_string()
         }
 
-        pub fn new(greeting: String) -> Self {
-            Self { greeting }
+        pub fn new(greeting: String) -> Component<Self> {
+            Component::new(Self { greeting })
+                .with_access_rules(AccessRules::allow_all())
+                .create()
         }
 
         pub fn custom_greeting(&self, name: String) -> String {

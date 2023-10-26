@@ -21,18 +21,15 @@ fn deducts_fees_from_payments_and_refunds_the_rest() {
 
     test.enable_fees();
 
-    let result = test
-        .try_execute_and_commit(
-            Transaction::builder()
-                .fee_transaction_pay_from_component(account, Amount(1000))
-                .call_function(test.get_template_address("State"), "new", args![])
-                .sign(&private_key)
-                .build(),
-            vec![owner_token],
-        )
-        .unwrap();
+    let result = test.execute_expect_success(
+        Transaction::builder()
+            .fee_transaction_pay_from_component(account, Amount(1000))
+            .call_function(test.get_template_address("State"), "new", args![])
+            .sign(&private_key)
+            .build(),
+        vec![owner_token],
+    );
 
-    result.expect_success();
     test.disable_fees();
 
     // Check difference was refunded
@@ -52,16 +49,14 @@ fn deducts_fees_when_transaction_fails() {
 
     test.enable_fees();
 
-    let result = test
-        .try_execute_and_commit(
-            Transaction::builder()
-                .fee_transaction_pay_from_component(account, Amount(1000))
-                .call_function(test.get_template_address("State"), "this_doesnt_exist", args![])
-                .sign(&private_key)
-                .build(),
-            vec![owner_token],
-        )
-        .unwrap();
+    let result = test.execute_and_commit_on_success(
+        Transaction::builder()
+            .fee_transaction_pay_from_component(account, Amount(1000))
+            .call_function(test.get_template_address("State"), "this_doesnt_exist", args![])
+            .sign(&private_key)
+            .build(),
+        vec![owner_token],
+    );
 
     let reason = result.expect_transaction_failure();
     result.expect_finalization_success();
@@ -71,7 +66,8 @@ fn deducts_fees_when_transaction_fails() {
     // Check the fee was still paid
     let payment = result.fee_receipt.unwrap();
     let new_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
-    assert_eq!(orig_balance - new_balance, payment.total_fees_charged());
+    assert!(!payment.total_fees_paid().is_zero());
+    assert_eq!(orig_balance - new_balance, payment.total_fees_paid());
 }
 
 #[test]
@@ -81,37 +77,34 @@ fn deposit_from_faucet_then_pay() {
     let (account, owner_token, private_key) = test.create_empty_account();
 
     test.enable_fees();
-    let result = test
-        .try_execute_and_commit(
-            Transaction::builder()
-                .with_fee_instructions(vec![
-                    Instruction::CallMethod {
-                        component_address: test_faucet_component(),
-                        method: "take_free_coins".to_string(),
-                        args: args![],
-                    },
-                    Instruction::PutLastInstructionOutputOnWorkspace {
-                        key: b"bucket".to_vec(),
-                    },
-                    Instruction::CallMethod {
-                        component_address: account,
-                        method: "deposit".to_string(),
-                        args: args![Workspace("bucket")],
-                    },
-                    Instruction::CallMethod {
-                        component_address: account,
-                        method: "pay_fee".to_string(),
-                        args: args![Amount(1000)],
-                    },
-                ])
-                .call_function(test.get_template_address("State"), "new", args![])
-                .sign(&private_key)
-                .build(),
-            vec![owner_token],
-        )
-        .unwrap();
+    let result = test.execute_expect_success(
+        Transaction::builder()
+            .with_fee_instructions(vec![
+                Instruction::CallMethod {
+                    component_address: test_faucet_component(),
+                    method: "take_free_coins".to_string(),
+                    args: args![],
+                },
+                Instruction::PutLastInstructionOutputOnWorkspace {
+                    key: b"bucket".to_vec(),
+                },
+                Instruction::CallMethod {
+                    component_address: account,
+                    method: "deposit".to_string(),
+                    args: args![Workspace("bucket")],
+                },
+                Instruction::CallMethod {
+                    component_address: account,
+                    method: "pay_fee".to_string(),
+                    args: args![Amount(1000)],
+                },
+            ])
+            .call_function(test.get_template_address("State"), "new", args![])
+            .sign(&private_key)
+            .build(),
+        vec![owner_token],
+    );
 
-    result.expect_success();
     test.disable_fees();
 
     let payment = result.fee_receipt.unwrap();
@@ -137,9 +130,8 @@ fn another_account_pays_partially_for_fees() {
 
     test.enable_fees();
 
-    let result = test
-        .try_execute_and_commit(
-            Transaction::builder()
+    let result = test.execute_expect_success(
+        Transaction::builder()
                 // Faucet pays a little
                 .fee_transaction_pay_from_component(test_faucet_component(), Amount(200))
                 // Account pays the rest
@@ -149,11 +141,9 @@ fn another_account_pays_partially_for_fees() {
                 .call_method(account, "deposit", args![Workspace("bucket")])
                 .sign(&private_key)
                 .build(),
-            vec![owner_token_fee, owner_token],
-        )
-        .unwrap();
+        vec![owner_token_fee, owner_token],
+    );
 
-    result.expect_success();
     test.disable_fees();
 
     // Check difference was refunded
@@ -183,7 +173,7 @@ fn failed_fee_transaction() {
 
     test.enable_fees();
     let result = test
-        .try_execute_and_commit(
+        .try_execute(
             Transaction::builder()
                 .with_fee_instructions(vec![Instruction::CallMethod {
                     component_address: account,
@@ -218,9 +208,8 @@ fn fail_partial_paid_fees() {
 
     test.enable_fees();
 
-    let result = test
-        .try_execute_and_commit(
-            Transaction::builder()
+    let result = test.execute_expect_commit(
+        Transaction::builder()
                 // Pay less fees than the cost of the main transaction
                 .fee_transaction_pay_from_component(account, Amount(10))
                 // These instructions should not be applied
@@ -232,13 +221,11 @@ fn fail_partial_paid_fees() {
                 .call_method(account, "deposit", args![Workspace("bucket")])
                 .sign(&private_key)
                 .build(),
-            vec![owner_token, owner_token2],
-        )
-        .unwrap();
+        vec![owner_token, owner_token2],
+    );
 
     test.disable_fees();
 
-    result.expect_finalization_success();
     let reason = result.expect_transaction_failure();
     assert!(matches!(reason, RejectReason::FeesNotPaid(_)));
 
@@ -261,7 +248,7 @@ fn fail_pay_less_fees_than_fee_transaction() {
     test.enable_fees();
 
     let result = test
-        .try_execute_and_commit(
+        .try_execute(
             Transaction::builder()
                 .with_fee_instructions(
                     // Run up a bill to push it up over the loan
@@ -320,7 +307,7 @@ fn fail_pay_too_little_no_fee_instruction() {
     test.enable_fees();
 
     let result = test
-        .try_execute_and_commit(
+        .try_execute(
             Transaction::builder()
                 // These instructions should not be applied
                 .call_method(account2, "withdraw", args![
@@ -356,25 +343,21 @@ fn success_pay_fee_in_main_instructions() {
 
     test.enable_fees();
 
-    let result = test
-        .try_execute_and_commit(
-            Transaction::builder()
-                .call_method(account2, "withdraw", args![
-                    CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-                    Amount(500)
-                ])
-                .put_last_instruction_output_on_workspace("bucket")
-                .call_method(account, "deposit", args![Workspace("bucket")])
-                .call_method(account, "pay_fee", args![Amount(1000)])
-                .sign(&private_key)
-                .build(),
-            vec![owner_token, owner_token2],
-        )
-        .unwrap();
+    let result = test.execute_expect_success(
+        Transaction::builder()
+            .call_method(account2, "withdraw", args![
+                CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+                Amount(500)
+            ])
+            .put_last_instruction_output_on_workspace("bucket")
+            .call_method(account, "deposit", args![Workspace("bucket")])
+            .call_method(account, "pay_fee", args![Amount(1000)])
+            .sign(&private_key)
+            .build(),
+        vec![owner_token, owner_token2],
+    );
 
     test.disable_fees();
-
-    result.expect_success();
 
     let fees = result.expect_fees_paid_in_full();
 

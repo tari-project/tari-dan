@@ -14,7 +14,7 @@ use crate::{
     flow::{FlowContext, FlowEngineError, FlowInstance},
     function_definitions::{FlowFunctionDefinition, FunctionArgDefinition},
     packager::LoadedTemplate,
-    runtime::{AuthorizationScope, Runtime},
+    runtime::Runtime,
 };
 
 #[derive(Debug, Clone)]
@@ -69,7 +69,6 @@ impl FlowFactory {
         &self,
         template_provider: Arc<TTemplateProvider>,
         runtime: Runtime,
-        auth_scope: AuthorizationScope,
         // In future we might allow calling different functions in a flow
         _function: &str,
         args: Vec<Arg>,
@@ -83,7 +82,6 @@ impl FlowFactory {
         new_instance.invoke(
             template_provider,
             runtime,
-            auth_scope,
             &args,
             &self.args,
             recursion_depth,

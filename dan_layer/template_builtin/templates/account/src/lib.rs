@@ -26,22 +26,21 @@ use tari_template_lib::prelude::*;
 #[template]
 mod account_template {
     use super::*;
-
     pub struct Account {
         // TODO: Lazy key value map/store
         vaults: BTreeMap<ResourceAddress, Vault>,
     }
 
     impl Account {
-        pub fn create(owner_token: NonFungibleAddress) -> AccountComponent {
+        pub fn create(owner_token: NonFungibleAddress) -> Component<Account> {
             Self::internal_create(owner_token, None)
         }
 
-        pub fn create_with_bucket(owner_token: NonFungibleAddress, bucket: Bucket) -> AccountComponent {
+        pub fn create_with_bucket(owner_token: NonFungibleAddress, bucket: Bucket) -> Component<Account> {
             Self::internal_create(owner_token, Some(bucket))
         }
 
-        fn internal_create(owner_token: NonFungibleAddress, bucket: Option<Bucket>) -> AccountComponent {
+        fn internal_create(owner_token: NonFungibleAddress, bucket: Option<Bucket>) -> Component<Account> {
             // extract the public key from the token
             // we only allow owner tokens that correspond to public keys
             let public_key = owner_token
@@ -52,7 +51,8 @@ mod account_template {
             let component_id = public_key.as_hash();
 
             // only the owner of the token will be able to withdraw funds from the account
-            let withdraw_rule = AccessRule::Restricted(Require(owner_token));
+            let withdraw_rule =
+                AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(owner_token.into())));
             let rules = AccessRules::new()
                 .add_method_rule("balance", AccessRule::AllowAll)
                 .add_method_rule("get_balances", AccessRule::AllowAll)
@@ -67,7 +67,10 @@ mod account_template {
                 vaults.insert(b.resource_address(), Vault::from_bucket(b));
             }
 
-            Self { vaults }.create_with_options(rules, Some(component_id))
+            Component::new(Self { vaults })
+                .with_access_rules(rules)
+                .with_component_id(component_id)
+                .create()
         }
 
         // #[access_rule(allow_all)]
@@ -101,6 +104,18 @@ mod account_template {
             ]);
             let v = self.get_vault_mut(resource);
             v.withdraw_non_fungibles([nf_id])
+        }
+
+        pub fn withdraw_many_non_fungibles(&mut self, resource: ResourceAddress, nf_ids: Vec<NonFungibleId>) -> Bucket {
+            emit_event("withdraw_many_non_fungibles", [
+                ("resource", resource.to_string()),
+                (
+                    "ids",
+                    nf_ids.iter().map(ToString::to_string).collect::<Vec<_>>().join(","),
+                ),
+            ]);
+            let v = self.get_vault_mut(resource);
+            v.withdraw_non_fungibles(nf_ids)
         }
 
         // #[access_rules(requires(owner_badge))]
@@ -190,6 +205,34 @@ mod account_template {
             emit_event("pay_fee_confidential", [("num_inputs", proof.inputs.len().to_string())]);
             self.get_vault_mut(CONFIDENTIAL_TARI_RESOURCE_ADDRESS)
                 .pay_fee_confidential(proof);
+        }
+
+        pub fn create_proof_for_resource(&mut self, resource: ResourceAddress) -> Proof {
+            emit_event("create_proof_for_resource", [("resource", resource.to_string())]);
+            let v = self.get_vault_mut(resource);
+            v.create_proof()
+        }
+
+        pub fn create_proof_by_non_fungible_ids(
+            &mut self,
+            resource: ResourceAddress,
+            ids: Vec<NonFungibleId>,
+        ) -> Proof {
+            emit_event("create_proof_by_non_fungible_ids", [
+                ("resource", resource.to_string()),
+                ("ids", ids.iter().map(ToString::to_string).collect::<Vec<_>>().join(",")),
+            ]);
+            let v = self.get_vault_mut(resource);
+            v.create_proof_by_non_fungible_ids(ids.into_iter().collect())
+        }
+
+        pub fn create_proof_by_amount(&mut self, resource: ResourceAddress, amount: Amount) -> Proof {
+            emit_event("create_proof_by_amount", [
+                ("resource", resource.to_string()),
+                ("amount", amount.to_string()),
+            ]);
+            let v = self.get_vault_mut(resource);
+            v.create_proof_by_amount(amount)
         }
     }
 }

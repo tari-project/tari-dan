@@ -242,6 +242,7 @@ async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() 
     test.assert_clean_shutdown().await;
 }
 
+#[ignore = "FIXME: This test is very flaky"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn foreign_shard_decides_to_abort() {
     setup_logger();

@@ -8,7 +8,7 @@ use tari_engine_types::{
     hashing::{hasher, EngineHashDomainLabel},
 };
 use tari_template_lib::{
-    models::{BucketId, ComponentAddress, ResourceAddress, TemplateAddress, VaultId},
+    models::{BucketId, ComponentAddress, ProofId, ResourceAddress, TemplateAddress, VaultId},
     Hash,
 };
 
@@ -38,7 +38,7 @@ impl IdProvider {
             max_ids,
             // TODO: these should be ranges
             current_id: Arc::new(AtomicU32::new(0)),
-            bucket_id: Arc::new(AtomicU32::new(1000)),
+            bucket_id: Arc::new(AtomicU32::new(0)),
             uuid: Arc::new(AtomicU32::new(0)),
         }
     }
@@ -90,6 +90,11 @@ impl IdProvider {
 
     pub fn new_bucket_id(&self) -> BucketId {
         // Buckets are not saved to shards, so should not increment the hashes
+        self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed).into()
+    }
+
+    pub fn new_proof_id(&self) -> ProofId {
+        // Proofs and buckets can share the same ID counter
         self.bucket_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed).into()
     }
 

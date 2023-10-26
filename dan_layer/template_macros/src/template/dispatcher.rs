@@ -34,7 +34,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
     let output = quote! {
         #[no_mangle]
         pub unsafe extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
-            use ::tari_template_lib::{template_dependencies::{decode_exact, encode_with_len, CallInfo, wrap_ptr},init_context, panic_hook::register_panic_hook};
+            use ::tari_template_lib::{template_dependencies::{decode_exact, from_value, encode_with_len, CallInfo, wrap_ptr},init_context, panic_hook::register_panic_hook};
 
             register_panic_hook();
 
@@ -97,7 +97,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                 vec![
                     parse_quote! {
                     let component_address =
-                        decode_exact::<::tari_template_lib::models::ComponentAddress>(&call_info.args[#i])
+                        from_value::<::tari_template_lib::models::ComponentAddress>(&call_info.args[#i])
                         .unwrap_or_else(|e| panic!("failed to decode component instance for function '{}': {}",  #func_name, e));
                     },
                     parse_quote! {
@@ -112,14 +112,14 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
             TypeAst::Typed { type_path, .. } => {
                 args.push(parse_quote! { #arg_ident });
                 vec![parse_quote! {
-                    let #arg_ident = decode_exact::<#type_path>(&call_info.args[#i])
+                    let #arg_ident = from_value::<#type_path>(&call_info.args[#i])
                         .unwrap_or_else(|e| panic!("failed to decode argument at position {} for function '{}': {}", #i, #func_name, e));
                 }]
             },
             TypeAst::Tuple(tuple) => {
                 args.push(parse_quote! { #arg_ident });
                 vec![parse_quote! {
-                    let #arg_ident = decode_exact::<#tuple>(&call_info.args[#i])
+                    let #arg_ident = from_value::<#tuple>(&call_info.args[#i])
                         .unwrap_or_else(|e| panic!("failed to decode tuple argument at position {} for function '{}'.", #i, #func_name, e));
                 }]
             },
@@ -185,9 +185,9 @@ fn replace_self_in_single_value(type_path: &TypePath) -> Option<Stmt> {
     let type_ident = &type_path.path.segments[0].ident;
 
     if type_ident == "Self" {
-        // TODO: AccessRules - currently we allow all calls for functions that return Self.
+        // When we return self we use default rules - which only permit the owner of the component to call methods
         return Some(parse_quote! {
-            let rtn = engine().create_component(rtn, ::tari_template_lib::auth::AccessRules::with_default_allow(), None);
+            let rtn = engine().create_component(rtn, ::tari_template_lib::auth::OwnerRule::default(), ::tari_template_lib::auth::ComponentAccessRules::new(), None);
         });
     }
 
@@ -205,9 +205,9 @@ fn replace_self_in_tuple(type_tuple: &TypeTuple) -> Stmt {
                 let ident = path.path.segments[0].ident.clone();
                 let field_expr = build_tuple_field_expr("rtn".to_string(), i as u32);
                 if ident == "Self" {
-                    // TODO: AccessRules - currently we allow all calls for functions that return Self.
+                    // When we return self we use default rules - which only permit the owner of the component to call methods
                     parse_quote! {
-                        engine().create_component(#field_expr, ::tari_template_lib::auth::AccessRules::with_default_allow(), None)
+                        engine().create_component(#field_expr, ::tari_template_lib::auth::OwnerRule::default(), ::tari_template_lib::auth::ComponentAccessRules::new(), None)
                     }
                 } else {
                     field_expr

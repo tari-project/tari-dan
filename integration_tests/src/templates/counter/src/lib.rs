@@ -24,13 +24,17 @@ use tari_template_lib::prelude::*;
 
 #[template]
 mod counter {
+    use super::*;
+
     pub struct Counter {
         value: u32,
     }
 
     impl Counter {
-        pub fn new() -> Self {
-            Self { value: 0 }
+        pub fn new() -> Component<Self> {
+            Component::new(Self { value: 0 })
+                .with_access_rules(AccessRules::allow_all())
+                .create()
         }
 
         pub fn value(&self) -> u32 {

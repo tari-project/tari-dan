@@ -36,7 +36,7 @@ mod sparkle_nft_template {
     }
 
     impl SparkleNft {
-        pub fn new() -> Self {
+        pub fn new() -> Component<Self> {
             // Create the non-fungible resource with 1 token (optional)
             let tokens = [
                 (NonFungibleId::from_u32(1), (&(), &())),
@@ -46,12 +46,17 @@ mod sparkle_nft_template {
             ];
             let bucket = ResourceBuilder::non_fungible().with_token_symbol("SPKL")
                 .with_non_fungibles(tokens)
+                // Allow minting and burning for tests
+                .mintable(AccessRule::AllowAll)
+                .burnable(AccessRule::AllowAll)
                 .build_bucket();
 
-            Self {
+            Component::new(Self {
                 address: bucket.resource_address(),
                 vault: Vault::from_bucket(bucket),
-            }
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
         }
 
         pub fn mint(&mut self) -> Bucket {
@@ -61,7 +66,7 @@ mod sparkle_nft_template {
         }
 
         pub fn mint_specific(&mut self, id: NonFungibleId) -> Bucket {
-            debug(format!("Minting {}", id));
+            debug!("Minting {}", id);
             // These are characteristic of the NFT and are immutable
             let mut immutable_data = Metadata::new();
             immutable_data
@@ -77,14 +82,14 @@ mod sparkle_nft_template {
         }
 
         pub fn inc_brightness(&mut self, id: NonFungibleId, brightness: u32) {
-            debug(format!("Increase brightness on {} by {}", id, brightness));
+            debug!("Increase brightness on {} by {}", id, brightness);
             self.with_sparkle_mut(id, |data| {
                 data.brightness = data.brightness.checked_add(brightness).expect("Brightness overflow");
             });
         }
 
         pub fn dec_brightness(&mut self, id: NonFungibleId, brightness: u32) {
-            debug(format!("Decrease brightness on {} by {}", id, brightness));
+            debug!("Decrease brightness on {} by {}", id, brightness);
             self.with_sparkle_mut(id, |data| {
                 data.brightness = data
                     .brightness

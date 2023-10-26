@@ -31,7 +31,7 @@ mod account_non_fungible_template {
     }
 
     impl AccountNonFungible {
-        pub fn create(owner_token: NonFungibleAddress) -> AccountNonFungibleComponent {
+        pub fn create(owner_token: NonFungibleAddress) -> Component<AccountNonFungible> {
             // extract the public key from the token
             // we only allow owner tokens that correspond to public keys
             let public_key = owner_token
@@ -40,16 +40,20 @@ mod account_non_fungible_template {
             // the account component will be addressed using the public key
             let component_id = public_key.as_hash();
 
-            // create the resource address
-            let resource_address = ResourceBuilder::non_fungible().build();
-
             // only the owner of the token will be able to withdraw funds from the account
-            let mint_rule = AccessRule::Restricted(Require(owner_token));
+            let mint_rule =
+                AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(owner_token.into())));
+            // create the resource
+            let resource_address = ResourceBuilder::non_fungible().mintable(mint_rule.clone()).build();
+
             let rules = AccessRules::new()
                 .add_method_rule("non_fungible_token_get_resource_address", AccessRule::AllowAll)
                 .default(mint_rule);
 
-            Self { resource_address }.create_with_options(rules, Some(component_id))
+            Component::new(Self { resource_address })
+                .with_access_rules(rules)
+                .with_component_id(component_id)
+                .create()
         }
 
         pub fn mint(&mut self, metadata: Metadata) -> Bucket {
@@ -59,14 +63,11 @@ mod account_non_fungible_template {
         }
 
         pub fn mint_specific(&mut self, id: NonFungibleId, metadata: Metadata) -> Bucket {
-            emit_event(
-                "mint",
-                [
-                    ("id".to_string(), id.to_string()),
-                    ("metadata".to_string(), metadata.to_string()),
-                    ("resource_address".to_string(), self.resource_address.to_string()),
-                ],
-            );
+            emit_event("mint", [
+                ("id".to_string(), id.to_string()),
+                ("metadata".to_string(), metadata.to_string()),
+                ("resource_address".to_string(), self.resource_address.to_string()),
+            ]);
 
             // Mint the NFT, this will fail if the token ID already exists
             ResourceManager::get(self.resource_address).mint_non_fungible(id, &metadata, &{})

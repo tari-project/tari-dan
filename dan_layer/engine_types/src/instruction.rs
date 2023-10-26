@@ -46,6 +46,7 @@ pub enum Instruction {
         epoch: u64,
         validator_public_key: PublicKey,
     },
+    DropAllProofsInWorkspace,
     #[cfg(feature = "debugging")]
     CreateFreeTestCoins {
         revealed_amount: Amount,
@@ -102,6 +103,9 @@ impl Display for Instruction {
             },
             Self::CreateFreeTestCoins { .. } => {
                 write!(f, "CreateFreeTestCoins")
+            },
+            Self::DropAllProofsInWorkspace => {
+                write!(f, "DropAllProofsInWorkspace")
             },
         }
     }

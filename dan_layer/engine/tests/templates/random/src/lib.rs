@@ -33,15 +33,17 @@ mod random_template {
     }
 
     impl RandomTest {
-        pub fn create() -> Self {
+        pub fn create() -> Component<Self> {
             let random: u32 = rand::random_u32();
             let random_bytes = rand::random_bytes(32);
             let random_long_bytes = rand::random_bytes(300);
-            Self {
+            Component::new(Self {
                 random,
                 random_bytes,
                 random_long_bytes,
-            }
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
         }
 
         pub fn get_random(&self) -> u32 {

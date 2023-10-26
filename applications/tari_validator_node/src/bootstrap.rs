@@ -59,9 +59,11 @@ use tari_indexer_lib::substate_scanner::SubstateScanner;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_template_lib::{
+    auth::ResourceAccessRules,
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
+    crypto::RistrettoPublicKeyBytes,
     models::Metadata,
-    prelude::ResourceType,
+    prelude::{OwnerRule, ResourceType},
     resource::TOKEN_SYMBOL,
 };
 use tari_transaction::Transaction;
@@ -412,7 +414,14 @@ where
         SubstateRecord {
             address,
             version: 0,
-            substate_value: Resource::new(ResourceType::NonFungible, metadata).into(),
+            substate_value: Resource::new(
+                ResourceType::NonFungible,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::new(),
+                metadata,
+            )
+            .into(),
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
@@ -432,7 +441,14 @@ where
         SubstateRecord {
             address,
             version: 0,
-            substate_value: Resource::new(ResourceType::Confidential, metadata).into(),
+            substate_value: Resource::new(
+                ResourceType::Confidential,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::new(),
+                metadata,
+            )
+            .into(),
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),

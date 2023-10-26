@@ -21,7 +21,13 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{auth::AccessRules, models::TemplateAddress, prelude::ComponentAddress, Hash};
+use tari_template_lib::{
+    auth::{ComponentAccessRules, OwnerRule, Ownership},
+    crypto::RistrettoPublicKeyBytes,
+    models::TemplateAddress,
+    prelude::ComponentAddress,
+    Hash,
+};
 
 use crate::{
     hashing::{hasher, EngineHashDomainLabel},
@@ -41,8 +47,9 @@ pub struct ComponentHeader {
     #[serde(with = "serde_with::hex")]
     pub template_address: TemplateAddress,
     pub module_name: String,
-    // TODO: Access rules should be a separate substate?
-    pub access_rules: AccessRules,
+    pub owner_key: RistrettoPublicKeyBytes,
+    pub owner_rule: OwnerRule,
+    pub access_rules: ComponentAccessRules,
     // TODO: Split the state from the header
     pub state: ComponentBody,
 }
@@ -54,6 +61,17 @@ impl ComponentHeader {
 
     pub fn state(&self) -> &[u8] {
         &self.state.state
+    }
+
+    pub fn as_ownership(&self) -> Ownership<'_> {
+        Ownership {
+            owner_key: &self.owner_key,
+            owner_rule: &self.owner_rule,
+        }
+    }
+
+    pub fn access_rules(&self) -> &ComponentAccessRules {
+        &self.access_rules
     }
 }
 

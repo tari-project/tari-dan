@@ -79,9 +79,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
         }
 
         let exec_result = TransactionProcessor::call_method(
-            context.template_provider.clone(),
+            &*context.template_provider,
             &context.runtime,
-            context.auth_scope.clone(),
             &component_address,
             method_name,
             // TODO: put in rest of args

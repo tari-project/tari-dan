@@ -20,9 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
+use tari_common_types::types::PublicKey;
 use tari_template_lib::{
     models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId},
     prelude::ResourceType,
@@ -31,6 +32,7 @@ use tari_template_lib::{
 use crate::{
     bucket::Bucket,
     confidential::ConfidentialOutput,
+    proof::{ContainerRef, LockedResource, Proof},
     resource_container::{ResourceContainer, ResourceError},
     serde_with,
 };
@@ -85,12 +87,16 @@ impl Vault {
         self.resource_container.amount()
     }
 
+    pub fn locked_balance(&self) -> Amount {
+        self.resource_container.locked_amount()
+    }
+
     pub fn get_commitment_count(&self) -> u32 {
         self.resource_container.get_commitment_count()
     }
 
-    pub fn get_confidential_outputs(&self) -> Option<Vec<&ConfidentialOutput>> {
-        self.resource_container.get_confidential_outputs()
+    pub fn get_confidential_commitments(&self) -> Option<&BTreeMap<PublicKey, ConfidentialOutput>> {
+        self.resource_container.get_confidential_commitments()
     }
 
     pub fn resource_address(&self) -> &ResourceAddress {
@@ -101,7 +107,7 @@ impl Vault {
         self.resource_container.resource_type()
     }
 
-    pub fn get_non_fungible_ids(&self) -> Option<&BTreeSet<NonFungibleId>> {
+    pub fn get_non_fungible_ids(&self) -> &BTreeSet<NonFungibleId> {
         self.resource_container.non_fungible_token_ids()
     }
 
@@ -114,5 +120,24 @@ impl Vault {
 
     pub fn resource_container_mut(&mut self) -> &mut ResourceContainer {
         &mut self.resource_container
+    }
+
+    pub fn lock_all(&mut self) -> Result<LockedResource, ResourceError> {
+        let locked_resource = self.resource_container.lock_all()?;
+        Ok(LockedResource::new(ContainerRef::Vault(self.vault_id), locked_resource))
+    }
+
+    pub fn lock_by_non_fungible_ids(&mut self, ids: BTreeSet<NonFungibleId>) -> Result<LockedResource, ResourceError> {
+        let locked_resource = self.resource_container.lock_by_non_fungible_ids(ids)?;
+        Ok(LockedResource::new(ContainerRef::Vault(self.vault_id), locked_resource))
+    }
+
+    pub fn lock_by_amount(&mut self, amount: Amount) -> Result<LockedResource, ResourceError> {
+        let locked_resource = self.resource_container.lock_by_amount(amount)?;
+        Ok(LockedResource::new(ContainerRef::Vault(self.vault_id), locked_resource))
+    }
+
+    pub fn unlock(&mut self, proof: Proof) -> Result<(), ResourceError> {
+        self.resource_container.unlock(proof.into_resource_container())
     }
 }

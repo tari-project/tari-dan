@@ -9,7 +9,6 @@ use tari_dan_storage::consensus_models::{Decision, ExecutedTransaction};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     fees::{FeeCostBreakdown, FeeReceipt},
-    resource_container::ResourceContainer,
     substate::SubstateDiff,
 };
 use tari_transaction::Transaction;
@@ -43,13 +42,7 @@ pub fn build_transaction_from(
             transaction_failure: None,
             fee_receipt: Some(FeeReceipt {
                 total_fee_payment: fee.try_into().unwrap(),
-                fee_resource: ResourceContainer::Confidential {
-                    address: "resource_0000000000000000000000000000000000000000000000000000000000000000"
-                        .parse()
-                        .unwrap(),
-                    commitments: Default::default(),
-                    revealed_amount: fee.try_into().unwrap(),
-                },
+                total_fees_paid: fee.try_into().unwrap(),
                 cost_breakdown: vec![],
             }),
         },
@@ -75,19 +68,14 @@ pub fn build_transaction(decision: Decision, fee: u64, num_shards: usize, num_co
 }
 
 pub fn change_decision(tx: ExecutedTransaction, new_decision: Decision) -> ExecutedTransaction {
-    let total_fees_charged = tx
+    let total_fees_paid = tx
         .result()
         .fee_receipt
         .as_ref()
         .unwrap()
-        .total_fees_paid()
+        .total_allocated_fee_payments()
         .as_u64_checked()
         .unwrap();
     let resulting_outputs = tx.resulting_outputs().to_vec();
-    build_transaction_from(
-        tx.into_transaction(),
-        new_decision,
-        total_fees_charged,
-        resulting_outputs,
-    )
+    build_transaction_from(tx.into_transaction(), new_decision, total_fees_paid, resulting_outputs)
 }

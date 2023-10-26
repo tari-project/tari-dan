@@ -39,7 +39,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::{
     args::Arg,
-    auth::AccessRules,
+    auth::ComponentAccessRules,
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
     prelude::{ConfidentialWithdrawProof, ResourceType},
 };
@@ -193,7 +193,7 @@ pub struct KeysCreateResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateRequest {
     pub account_name: Option<String>,
-    pub custom_access_rules: Option<AccessRules>,
+    pub custom_access_rules: Option<ComponentAccessRules>,
     pub fee: Option<Amount>,
     pub is_default: bool,
     pub key_id: Option<u64>,

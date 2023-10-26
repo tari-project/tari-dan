@@ -11,9 +11,11 @@ use tari_engine_types::{
     confidential::UnclaimedConfidentialOutput,
     events::Event,
     fee_claim::{FeeClaim, FeeClaimAddress},
+    indexed_value::IndexedValue,
     logs::LogEntry,
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
+    proof::{ContainerRef, Proof},
     resource::Resource,
     substate::{Substate, SubstateAddress},
     vault::Vault,
@@ -24,6 +26,7 @@ use tari_template_lib::models::{
     ComponentAddress,
     NonFungibleAddress,
     NonFungibleIndexAddress,
+    ProofId,
     ResourceAddress,
     UnclaimedConfidentialOutputAddress,
     VaultId,
@@ -31,7 +34,7 @@ use tari_template_lib::models::{
 
 use super::workspace::Workspace;
 use crate::{
-    runtime::{RuntimeError, RuntimeState, TransactionCommitError, VirtualSubstates},
+    runtime::{AuthorizationScope, RuntimeError, RuntimeState, TransactionCommitError, VirtualSubstates},
     state_store::{memory::MemoryStateStore, AtomicDb, StateReader},
 };
 
@@ -40,6 +43,7 @@ pub(super) struct WorkingState {
     pub events: Vec<Event>,
     pub logs: Vec<LogEntry>,
     pub buckets: HashMap<BucketId, Bucket>,
+    pub proofs: HashMap<ProofId, Proof>,
     // These could be "new_substates"
     pub new_resources: HashMap<ResourceAddress, Resource>,
     pub new_components: HashMap<ComponentAddress, ComponentHeader>,
@@ -49,19 +53,26 @@ pub(super) struct WorkingState {
     pub claimed_confidential_outputs: Vec<UnclaimedConfidentialOutputAddress>,
     pub new_fee_claims: HashMap<FeeClaimAddress, FeeClaim>,
     pub virtual_substates: VirtualSubstates,
+    pub current_auth_scope: AuthorizationScope,
+    pub auth_scope_stack: Vec<AuthorizationScope>,
 
     pub runtime_state: Option<RuntimeState>,
-    pub last_instruction_output: Option<Vec<u8>>,
+    pub last_instruction_output: Option<IndexedValue>,
     pub workspace: Workspace,
     pub state_store: MemoryStateStore,
 }
 
 impl WorkingState {
-    pub fn new(state_store: MemoryStateStore, virtual_substates: VirtualSubstates) -> Self {
+    pub fn new(
+        state_store: MemoryStateStore,
+        virtual_substates: VirtualSubstates,
+        auth_scope: AuthorizationScope,
+    ) -> Self {
         Self {
             events: Vec::new(),
             logs: Vec::new(),
             buckets: HashMap::new(),
+            proofs: HashMap::new(),
             new_resources: HashMap::new(),
             new_components: HashMap::new(),
             new_vaults: HashMap::new(),
@@ -70,11 +81,18 @@ impl WorkingState {
             new_non_fungible_indexes: HashMap::new(),
             runtime_state: None,
             last_instruction_output: None,
+            current_auth_scope: auth_scope,
+            auth_scope_stack: Vec::new(),
             workspace: Workspace::default(),
             state_store,
             virtual_substates,
             new_fee_claims: HashMap::default(),
         }
+    }
+
+    pub fn substate_exists_in_state_store<T: Into<SubstateAddress>>(&self, address: T) -> Result<bool, RuntimeError> {
+        let tx = self.state_store.read_access()?;
+        Ok(tx.exists(&address.into())?)
     }
 
     pub fn get_resource(&self, address: &ResourceAddress) -> Result<Resource, RuntimeError> {
@@ -214,10 +232,10 @@ impl WorkingState {
 
     pub fn borrow_vault_mut<R, F: FnOnce(&mut Vault) -> R>(
         &mut self,
-        vault_id: VaultId,
+        vault_id: &VaultId,
         f: F,
     ) -> Result<R, RuntimeError> {
-        let vault_mut = self.new_vaults.get_mut(&vault_id);
+        let vault_mut = self.new_vaults.get_mut(vault_id);
         match vault_mut {
             Some(vault_mut) => Ok(f(vault_mut)),
             None => {
@@ -225,16 +243,16 @@ impl WorkingState {
                     .state_store
                     .read_access()
                     .unwrap()
-                    .get_state::<_, Substate>(&SubstateAddress::Vault(vault_id))
+                    .get_state::<_, Substate>(&SubstateAddress::Vault(*vault_id))
                     .optional()?
-                    .ok_or(RuntimeError::VaultNotFound { vault_id })?;
+                    .ok_or(RuntimeError::VaultNotFound { vault_id: *vault_id })?;
 
                 let mut vault = substate
                     .into_substate_value()
                     .into_vault()
                     .expect("Substate was not a vault type at vault address");
                 let ret = f(&mut vault);
-                self.new_vaults.insert(vault_id, vault);
+                self.new_vaults.insert(*vault_id, vault);
                 Ok(ret)
             },
         }
@@ -316,6 +334,53 @@ impl WorkingState {
             return Err(TransactionCommitError::DanglingBuckets {
                 count: self.buckets.len(),
             });
+        }
+
+        if !self.proofs.is_empty() {
+            return Err(TransactionCommitError::DanglingProofs {
+                count: self.proofs.len(),
+            });
+        }
+
+        for vault in self.new_vaults.values() {
+            if !vault.locked_balance().is_zero() {
+                return Err(TransactionCommitError::DanglingLockedValueInVault {
+                    vault_id: *vault.vault_id(),
+                    locked_amount: vault.locked_balance(),
+                });
+            }
+        }
+
+        // TODO: Check for dangling vaults and resources
+        // This can happen when you create e.g a vault and don't store it in your component
+
+        Ok(())
+    }
+
+    pub fn runtime_state(&self) -> Result<&RuntimeState, RuntimeError> {
+        self.runtime_state.as_ref().ok_or(RuntimeError::IllegalRuntimeState)
+    }
+
+    pub fn drop_proof(&mut self, proof_id: ProofId) -> Result<(), RuntimeError> {
+        // Fetch the proof
+        let proof = self
+            .proofs
+            .remove(&proof_id)
+            .ok_or(RuntimeError::ProofNotFound { proof_id })?;
+        // Remove it from the auth scope if is in scope
+        self.current_auth_scope.remove_proof(&proof_id);
+
+        // Unlock funds
+        match *proof.container() {
+            ContainerRef::Bucket(bucket_id) => {
+                self.buckets
+                    .get_mut(&bucket_id)
+                    .ok_or(RuntimeError::BucketNotFound { bucket_id })?
+                    .unlock(proof)?;
+            },
+            ContainerRef::Vault(vault_id) => {
+                self.borrow_vault_mut(&vault_id, |vault| vault.unlock(proof))??;
+            },
         }
 
         Ok(())

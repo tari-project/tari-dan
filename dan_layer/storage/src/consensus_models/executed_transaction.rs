@@ -94,7 +94,7 @@ impl ExecutedTransaction {
             } else {
                 // TODO: We preserve the original result mainly for debugging purposes, but this is a little hacky
                 ExecuteResult {
-                    finalize: FinalizeResult::new_rejectted(
+                    finalize: FinalizeResult::new_rejected(
                         self.result.finalize.transaction_hash,
                         RejectReason::ShardRejected(format!(
                             "Validators decided to abort: {}",

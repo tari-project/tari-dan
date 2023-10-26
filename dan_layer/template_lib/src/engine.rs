@@ -26,11 +26,12 @@ use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
     args::{ComponentAction, ComponentInvokeArg, ComponentRef, CreateComponentArg, EmitLogArg, InvokeResult, LogLevel},
+    auth::OwnerRule,
     component::ComponentManager,
     context::Context,
     get_context,
     models::ComponentAddress,
-    prelude::AccessRules,
+    prelude::ComponentAccessRules,
     Hash,
 };
 
@@ -52,7 +53,8 @@ impl TariEngine {
     pub fn create_component<T: Serialize>(
         &self,
         initial_state: T,
-        access_rules: AccessRules,
+        owner_rule: OwnerRule,
+        access_rules: ComponentAccessRules,
         component_id: Option<Hash>,
     ) -> ComponentAddress {
         let encoded_state = encode(&initial_state).unwrap();
@@ -62,6 +64,7 @@ impl TariEngine {
             action: ComponentAction::Create,
             args: invoke_args![CreateComponentArg {
                 encoded_state,
+                owner_rule,
                 access_rules,
                 component_id,
             }],

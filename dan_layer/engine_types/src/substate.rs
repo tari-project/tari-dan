@@ -459,6 +459,13 @@ impl SubstateValue {
         }
     }
 
+    pub fn as_resource(&self) -> Option<&Resource> {
+        match self {
+            SubstateValue::Resource(resource) => Some(resource),
+            _ => None,
+        }
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         encode(self).unwrap()
     }

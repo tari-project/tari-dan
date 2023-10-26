@@ -6,9 +6,11 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
 };
 use tari_template_lib::{
+    auth::{AccessRule, ResourceAccessRules},
     constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
+    crypto::RistrettoPublicKeyBytes,
     models::Metadata,
-    prelude::ResourceType,
+    prelude::{OwnerRule, ResourceType},
     resource::TOKEN_SYMBOL,
 };
 
@@ -21,7 +23,16 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
     // Create the resource for badges
     state_db.set_state(
         &address,
-        Substate::new(0, Resource::new(ResourceType::NonFungible, Default::default())),
+        Substate::new(
+            0,
+            Resource::new(
+                ResourceType::NonFungible,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::deny_all(),
+                metadata,
+            ),
+        ),
     )?;
 
     // Create the second layer tari resource
@@ -31,7 +42,18 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
     metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
     state_db.set_state(
         &address,
-        Substate::new(0, Resource::new(ResourceType::Confidential, metadata)),
+        Substate::new(
+            0,
+            Resource::new(
+                ResourceType::Confidential,
+                RistrettoPublicKeyBytes::default(),
+                OwnerRule::None,
+                ResourceAccessRules::new()
+                    .withdrawable(AccessRule::AllowAll)
+                    .depositable(AccessRule::AllowAll),
+                metadata,
+            ),
+        ),
     )?;
 
     Ok(())

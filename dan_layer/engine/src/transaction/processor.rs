@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use log::*;
 use tari_bor::encode;
-use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
+use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch, NodeAddressable};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     indexed_value::IndexedValue,
@@ -35,6 +35,7 @@ use tari_template_abi::Type;
 use tari_template_lib::{
     arg,
     args::{Arg, WorkspaceAction},
+    crypto::RistrettoPublicKeyBytes,
     invoke_args,
     models::ComponentAddress,
     prelude::TemplateAddress,
@@ -46,7 +47,6 @@ use crate::{
     runtime::{
         AuthParams,
         AuthorizationScope,
-        FunctionIdent,
         Runtime,
         RuntimeInterfaceImpl,
         RuntimeModule,
@@ -65,12 +65,11 @@ const LOG_TARGET: &str = "tari::dan::engine::instruction_processor";
 pub const MAX_CALL_DEPTH: usize = 10;
 
 pub struct TransactionProcessor<TTemplateProvider> {
-    // package: Package,
     template_provider: Arc<TTemplateProvider>,
     state_db: MemoryStateStore,
     auth_params: AuthParams,
     virtual_substates: VirtualSubstates,
-    modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
+    modules: Vec<Arc<dyn RuntimeModule>>,
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> TransactionProcessor<TTemplateProvider> {
@@ -79,7 +78,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         state_db: MemoryStateStore,
         auth_params: AuthParams,
         virtual_substates: VirtualSubstates,
-        modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
+        modules: Vec<Arc<dyn RuntimeModule>>,
     ) -> Self {
         Self {
             template_provider,
@@ -100,33 +99,29 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             modules,
         } = self;
 
-        let tracker = StateTracker::new(state_db, id_provider, template_provider.clone(), virtual_substates);
-        let initial_proofs = auth_params.initial_ownership_proofs.clone();
-        let runtime_interface =
-            RuntimeInterfaceImpl::initialize(tracker, auth_params, transaction.signer_public_key().clone(), modules)?;
+        let auth_scope = AuthorizationScope::new(auth_params.initial_ownership_proofs);
+        let tracker = StateTracker::new(state_db, id_provider, virtual_substates, auth_scope);
+        let runtime_interface = RuntimeInterfaceImpl::initialize(
+            tracker,
+            template_provider.clone(),
+            transaction.signer_public_key().clone(),
+            modules,
+        )?;
 
-        let auth_scope = AuthorizationScope::new(Arc::new(initial_proofs));
         let runtime = Runtime::new(Arc::new(runtime_interface));
         let transaction_hash = transaction.hash();
 
         let (fee_instructions, instructions) = transaction.into_instructions();
 
-        let fee_exec_results = Self::process_instructions(
-            template_provider.clone(),
-            &runtime,
-            auth_scope.clone(),
-            fee_instructions,
-        );
+        let fee_exec_results = Self::process_instructions(&template_provider, &runtime, fee_instructions);
 
         let fee_exec_result = match fee_exec_results {
             Ok(execution_results) => {
                 // Checkpoint the tracker state after the fee instructions have been executed in case of transaction
                 // failure.
                 if let Err(err) = runtime.interface().fee_checkpoint() {
-                    let mut finalize = FinalizeResult::new_rejectted(
-                        transaction_hash,
-                        RejectReason::ExecutionFailure(err.to_string()),
-                    );
+                    let mut finalize =
+                        FinalizeResult::new_rejected(transaction_hash, RejectReason::ExecutionFailure(err.to_string()));
                     finalize.execution_results = execution_results;
                     return Ok(ExecuteResult {
                         fee_receipt: None,
@@ -139,7 +134,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             Err(err) => {
                 return Ok(ExecuteResult {
                     fee_receipt: None,
-                    finalize: FinalizeResult::new_rejectted(
+                    finalize: FinalizeResult::new_rejected(
                         transaction_hash,
                         RejectReason::ExecutionFailure(err.to_string()),
                     ),
@@ -148,7 +143,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             },
         };
 
-        let instruction_result = Self::process_instructions(template_provider, &runtime, auth_scope, instructions);
+        let instruction_result = Self::process_instructions(&*template_provider, &runtime, instructions);
 
         match instruction_result {
             Ok(execution_results) => {
@@ -198,29 +193,19 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
     }
 
     fn process_instructions(
-        template_provider: Arc<TTemplateProvider>,
+        template_provider: &TTemplateProvider,
         runtime: &Runtime,
-        auth_scope: AuthorizationScope,
         instructions: Vec<Instruction>,
     ) -> Result<Vec<InstructionResult>, TransactionError> {
         instructions
             .into_iter()
-            .map(|instruction| {
-                Self::process_instruction(
-                    template_provider.clone(),
-                    runtime,
-                    auth_scope.clone(),
-                    instruction,
-                    MAX_CALL_DEPTH,
-                )
-            })
+            .map(|instruction| Self::process_instruction(template_provider, runtime, instruction, MAX_CALL_DEPTH))
             .collect()
     }
 
     fn process_instruction(
-        template_provider: Arc<TTemplateProvider>,
+        template_provider: &TTemplateProvider,
         runtime: &Runtime,
-        auth_scope: AuthorizationScope,
         instruction: Instruction,
         max_recursion_depth: usize,
     ) -> Result<InstructionResult, TransactionError> {
@@ -233,7 +218,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             } => Self::call_function(
                 template_provider,
                 runtime,
-                auth_scope,
                 &template_address,
                 &function,
                 args,
@@ -247,7 +231,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             } => Self::call_method(
                 template_provider,
                 runtime,
-                auth_scope,
                 &component_address,
                 &method,
                 args,
@@ -258,6 +241,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             // Arg::Variable
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
                 Self::put_output_on_workspace_with_name(runtime, key)?;
+                Ok(InstructionResult::empty())
+            },
+            Instruction::DropAllProofsInWorkspace => {
+                Self::drop_all_proofs_in_workspace(runtime)?;
                 Ok(InstructionResult::empty())
             },
             Instruction::EmitLog { level, message } => {
@@ -302,10 +289,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         Ok(())
     }
 
+    pub fn drop_all_proofs_in_workspace(runtime: &Runtime) -> Result<(), TransactionError> {
+        runtime
+            .interface()
+            .workspace_invoke(WorkspaceAction::DropAllProofs, invoke_args![].into())?;
+        Ok(())
+    }
+
     pub fn call_function(
-        template_provider: Arc<TTemplateProvider>,
+        template_provider: &TTemplateProvider,
         runtime: &Runtime,
-        auth_scope: AuthorizationScope,
         template_address: &TemplateAddress,
         function: &str,
         args: Vec<Arg>,
@@ -321,63 +314,54 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             .ok_or(TransactionError::TemplateNotFound {
                 address: *template_address,
             })?;
+        let transaction_signer_public_key =
+            RistrettoPublicKeyBytes::from_bytes(runtime.interface().get_transaction_signer_public_key()?.as_bytes())
+                .expect("RistrettoPublicKey::as_bytes did not return 32 bytes");
 
         runtime.interface().set_current_runtime_state(RuntimeState {
             template_name: template.template_name().to_string(),
             template_address: *template_address,
+            transaction_signer_public_key,
             component_address: None,
             recursion_depth,
             max_recursion_depth,
         })?;
 
-        let result = Self::invoke_template(
-            template,
-            template_provider,
-            runtime.clone(),
-            auth_scope,
-            function,
-            args,
-            0,
-            1,
-        )?;
+        let result = Self::invoke_template(template, template_provider, runtime.clone(), function, args, 0, 1)?;
         Ok(result)
     }
 
     pub fn call_method(
-        template_provider: Arc<TTemplateProvider>,
+        template_provider: &TTemplateProvider,
         runtime: &Runtime,
-        auth_scope: AuthorizationScope,
         component_address: &ComponentAddress,
         method: &str,
         args: Vec<Arg>,
         recursion_depth: usize,
         max_recursion_depth: usize,
     ) -> Result<InstructionResult, TransactionError> {
-        let component = runtime.interface().get_component(component_address)?;
-        // TODO: In this very basic auth system, you can only call on owned objects (because
-        // initial_ownership_proofs is       usually set to include the owner token).
-        auth_scope.check_access_rules(
-            &FunctionIdent::Template {
-                module_name: component.module_name.clone(),
-                function: method.to_string(),
-            },
-            &component.access_rules,
-        )?;
+        let header = runtime.interface().get_component(component_address)?;
+        runtime.interface().check_component_access_rules(method, &header)?;
 
         let template = template_provider
-            .get_template_module(&component.template_address)
+            .get_template_module(&header.template_address)
             .map_err(|e| TransactionError::FailedToLoadTemplate {
-                address: component.template_address,
+                address: header.template_address,
                 details: e.to_string(),
             })?
             .ok_or(TransactionError::TemplateNotFound {
-                address: component.template_address,
+                address: header.template_address,
             })?;
+
+        let transaction_signer_public_key =
+            RistrettoPublicKeyBytes::from_bytes(runtime.interface().get_transaction_signer_public_key()?.as_bytes())
+                .expect("RistrettoPublicKey::as_bytes did not return 32 bytes");
 
         runtime.interface().set_current_runtime_state(RuntimeState {
             template_name: template.template_name().to_string(),
-            template_address: component.template_address,
+            template_address: header.template_address,
             component_address: Some(*component_address),
+            transaction_signer_public_key,
             recursion_depth,
             max_recursion_depth,
         })?;
@@ -390,7 +374,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             template,
             template_provider,
             runtime.clone(),
-            auth_scope,
             method,
             final_args,
             recursion_depth,
@@ -401,9 +384,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
 
     fn invoke_template(
         module: LoadedTemplate,
-        template_provider: Arc<TTemplateProvider>,
+        template_provider: &TTemplateProvider,
         runtime: Runtime,
-        auth_scope: AuthorizationScope,
         function: &str,
         args: Vec<Arg>,
         recursion_depth: usize,
@@ -418,9 +400,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 process.invoke_by_name(function, args)?
             },
             LoadedTemplate::Flow(flow_factory) => flow_factory.run_new_instance(
-                template_provider,
+                Arc::new(template_provider.clone()),
                 runtime,
-                auth_scope,
                 function,
                 args,
                 recursion_depth,

@@ -4,17 +4,13 @@
 use std::{collections::HashMap, io};
 
 use tari_bor::encode_into;
-use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::{
     fees::FeeSource,
     substate::{SubstateAddress, SubstateValue},
 };
 
 use super::FeeTable;
-use crate::{
-    packager::LoadedTemplate,
-    runtime::{RuntimeModule, RuntimeModuleError, StateTracker},
-};
+use crate::runtime::{RuntimeModule, RuntimeModuleError, StateTracker};
 
 pub struct FeeModule {
     initial_cost: u64,
@@ -30,24 +26,20 @@ impl FeeModule {
     }
 }
 
-impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeModule<TTemplateProvider> for FeeModule {
-    fn on_initialize(&self, track: &StateTracker<TTemplateProvider>) -> Result<(), RuntimeModuleError> {
+impl RuntimeModule for FeeModule {
+    fn on_initialize(&self, track: &StateTracker) -> Result<(), RuntimeModuleError> {
         track.add_fee_charge(FeeSource::Initial, self.initial_cost);
         Ok(())
     }
 
-    fn on_runtime_call(
-        &self,
-        track: &StateTracker<TTemplateProvider>,
-        _call: &'static str,
-    ) -> Result<(), RuntimeModuleError> {
+    fn on_runtime_call(&self, track: &StateTracker, _call: &'static str) -> Result<(), RuntimeModuleError> {
         track.add_fee_charge(FeeSource::RuntimeCall, self.fee_table.per_module_call_cost());
         Ok(())
     }
 
     fn on_before_finalize(
         &self,
-        track: &StateTracker<TTemplateProvider>,
+        track: &StateTracker,
         changes: &HashMap<SubstateAddress, SubstateValue>,
     ) -> Result<(), RuntimeModuleError> {
         let total_storage = changes

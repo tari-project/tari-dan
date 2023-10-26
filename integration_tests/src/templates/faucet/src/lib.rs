@@ -31,14 +31,17 @@ mod faucet_template {
     }
 
     impl TestFaucet {
-        pub fn mint(initial_supply: Amount) -> Self {
-            let coins = ResourceBuilder::fungible().with_token_symbol("test")
+        pub fn mint(initial_supply: Amount) -> Component<Self> {
+            let coins = ResourceBuilder::fungible()
+                .with_token_symbol("test")
                 .initial_supply(initial_supply)
                 .build_bucket();
 
-            Self {
+            Component::new(Self {
                 vault: Vault::from_bucket(coins),
-            }
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
         }
 
         pub fn take_free_coins(&mut self) -> Bucket {

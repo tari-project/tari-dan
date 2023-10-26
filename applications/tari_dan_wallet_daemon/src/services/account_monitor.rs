@@ -19,7 +19,7 @@ use tari_dan_wallet_sdk::{
     DanWalletSdk,
 };
 use tari_engine_types::{
-    indexed_value::{IndexedValue, IndexedValueVisitorError},
+    indexed_value::{IndexedValue, IndexedValueError},
     non_fungible::NonFungibleContainer,
     resource::Resource,
     substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
@@ -261,59 +261,57 @@ where
             account_addr,
             balance
         );
-        if let Some(outputs) = vault.get_confidential_outputs() {
+        if let Some(commitments) = vault.get_confidential_commitments() {
             info!(
                 target: LOG_TARGET,
-                "🔒️ vault {} in account {} has {} confidential outputs",
+                "🔒️ vault {} in account {} has {} confidential commitments",
                 vault.vault_id(),
                 account_addr,
-                outputs.len()
+                commitments.len()
             );
             self.wallet_sdk
                 .confidential_outputs_api()
-                .verify_and_update_confidential_outputs(account_addr, &vault_addr, outputs)?;
+                .verify_and_update_confidential_outputs(account_addr, &vault_addr, commitments.values())?;
         }
 
-        if let Some(nft_ids) = vault.get_non_fungible_ids() {
-            for id in nft_ids {
-                let nft = match nfts.get(id) {
-                    Some(nft) => *nft,
-                    None => {
-                        error!(
-                            target: LOG_TARGET,
-                            "NonFungible ID {} is found in the vault, but not found in substate diff", id
-                        );
-                        continue;
-                    },
-                };
-
-                let is_burned = nft.contents().is_none();
-                let nft_contents = if let Some(contents) = nft.contents() {
-                    contents
-                } else {
-                    // TODO: in this case, we are burning an nft, make sure to update the database in that case`
+        for id in vault.get_non_fungible_ids() {
+            let nft = match nfts.get(id) {
+                Some(nft) => *nft,
+                None => {
+                    error!(
+                        target: LOG_TARGET,
+                        "NonFungible ID {} is found in the vault, but not found in substate diff", id
+                    );
                     continue;
-                };
-                let metadata = match nft_contents.decode_data() {
-                    Ok(data) => data,
-                    Err(e) => {
-                        error!(
-                            target: LOG_TARGET,
-                            "Failed to decode non fungible metadata, with error: {}", e
-                        );
-                        continue;
-                    },
-                };
+                },
+            };
 
-                let non_fungible = NonFungibleToken {
-                    is_burned,
-                    vault_id: *vault.vault_id(),
-                    nft_id: id.clone(),
-                    metadata,
-                };
+            let is_burned = nft.contents().is_none();
+            let nft_contents = if let Some(contents) = nft.contents() {
+                contents
+            } else {
+                // TODO: in this case, we are burning an nft, make sure to update the database in that case`
+                continue;
+            };
+            let metadata = match nft_contents.decode_data() {
+                Ok(data) => data,
+                Err(e) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to decode non fungible metadata, with error: {}", e
+                    );
+                    continue;
+                },
+            };
 
-                non_fungibles_api.store_new_nft(&non_fungible)?;
-            }
+            let non_fungible = NonFungibleToken {
+                is_burned,
+                vault_id: *vault.vault_id(),
+                nft_id: id.clone(),
+                metadata,
+            };
+
+            non_fungibles_api.store_new_nft(&non_fungible)?;
         }
         Ok(())
     }
@@ -539,7 +537,7 @@ pub enum AccountMonitorError {
     #[error("Non Fungibles API error: {0}")]
     NonFungibleTokens(#[from] NonFungibleTokensApiError),
     #[error("Failed to decode binary value: {0}")]
-    DecodeValueFailed(#[from] IndexedValueVisitorError),
+    DecodeValueFailed(#[from] IndexedValueError),
     #[error("Unexpected substate: {0}")]
     UnexpectedSubstate(String),
     #[error("Monitor service is not running")]

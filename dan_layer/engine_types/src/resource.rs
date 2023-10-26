@@ -22,21 +22,35 @@
 
 use serde::{Deserialize, Serialize};
 use tari_template_lib::{
+    auth::{OwnerRule, Ownership, ResourceAccessRules},
+    crypto::RistrettoPublicKeyBytes,
     models::{Amount, Metadata},
-    resource::ResourceType,
+    resource::{ResourceType, TOKEN_SYMBOL},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Resource {
     resource_type: ResourceType,
+    owner_rule: OwnerRule,
+    owner_key: RistrettoPublicKeyBytes,
+    access_rules: ResourceAccessRules,
     metadata: Metadata,
     total_supply: Amount,
 }
 
 impl Resource {
-    pub fn new(resource_type: ResourceType, metadata: Metadata) -> Self {
+    pub fn new(
+        resource_type: ResourceType,
+        owner_key: RistrettoPublicKeyBytes,
+        owner_rule: OwnerRule,
+        access_rules: ResourceAccessRules,
+        metadata: Metadata,
+    ) -> Self {
         Self {
             resource_type,
+            owner_rule,
+            owner_key,
+            access_rules,
             metadata,
             total_supply: 0.into(),
         }
@@ -44,6 +58,29 @@ impl Resource {
 
     pub fn resource_type(&self) -> ResourceType {
         self.resource_type
+    }
+
+    pub fn owner_rule(&self) -> &OwnerRule {
+        &self.owner_rule
+    }
+
+    pub fn owner_key(&self) -> &RistrettoPublicKeyBytes {
+        &self.owner_key
+    }
+
+    pub fn as_ownership(&self) -> Ownership<'_> {
+        Ownership {
+            owner_key: &self.owner_key,
+            owner_rule: &self.owner_rule,
+        }
+    }
+
+    pub fn access_rules(&self) -> &ResourceAccessRules {
+        &self.access_rules
+    }
+
+    pub fn set_access_rules(&mut self, access_rules: ResourceAccessRules) {
+        self.access_rules = access_rules;
     }
 
     pub fn increase_total_supply(&mut self, amount: Amount) {
@@ -76,5 +113,9 @@ impl Resource {
 
     pub fn metadata(&self) -> &Metadata {
         &self.metadata
+    }
+
+    pub fn token_symbol(&self) -> Option<&str> {
+        self.metadata.get(TOKEN_SYMBOL).map(|s| s.as_str())
     }
 }

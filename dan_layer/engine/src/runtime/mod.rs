@@ -32,8 +32,8 @@ pub use crate::runtime::engine_args::EngineArgs;
 mod error;
 pub use error::{RuntimeError, TransactionCommitError};
 
-mod functions;
-pub use functions::FunctionIdent;
+mod actions;
+pub use actions::*;
 
 mod module;
 pub use module::{RuntimeModule, RuntimeModuleError};
@@ -44,16 +44,20 @@ mod tracker;
 mod virtual_substate;
 pub use virtual_substate::VirtualSubstates;
 
+mod tracker_auth;
 mod working_state;
 mod workspace;
 
 use std::{fmt::Debug, sync::Arc};
 
+use tari_bor::decode;
 use tari_common_types::types::PublicKey;
+use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::Epoch;
 use tari_engine_types::{
     component::ComponentHeader,
     confidential::{ConfidentialClaim, ConfidentialOutput},
+    indexed_value::IndexedValue,
 };
 use tari_template_lib::{
     args::{
@@ -69,6 +73,8 @@ use tari_template_lib::{
         InvokeResult,
         LogLevel,
         NonFungibleAction,
+        ProofAction,
+        ProofRef,
         ResourceAction,
         ResourceRef,
         VaultAction,
@@ -116,6 +122,12 @@ pub trait RuntimeInterface: Send + Sync {
         args: EngineArgs,
     ) -> Result<InvokeResult, RuntimeError>;
 
+    fn proof_invoke(
+        &self,
+        proof_ref: ProofRef,
+        action: ProofAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError>;
     fn workspace_invoke(&self, action: WorkspaceAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
 
     fn non_fungible_invoke(
@@ -131,7 +143,7 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn generate_uuid(&self) -> Result<[u8; 32], RuntimeError>;
 
-    fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError>;
+    fn set_last_instruction_output(&self, value: IndexedValue) -> Result<(), RuntimeError>;
 
     fn claim_burn(&self, claim: ConfidentialClaim) -> Result<(), RuntimeError>;
 
@@ -149,6 +161,10 @@ pub trait RuntimeInterface: Send + Sync {
     fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError>;
 
     fn call_invoke(&self, action: CallAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
+
+    fn get_transaction_signer_public_key(&self) -> Result<RistrettoPublicKey, RuntimeError>;
+
+    fn check_component_access_rules(&self, method: &str, component: &ComponentHeader) -> Result<(), RuntimeError>;
 }
 
 #[derive(Clone)]
@@ -157,7 +173,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub(crate) fn resolve_args(&self, args: Vec<Arg>) -> Result<Vec<Vec<u8>>, RuntimeError> {
+    pub(crate) fn resolve_args(&self, args: &[Arg]) -> Result<Vec<tari_bor::Value>, RuntimeError> {
         let mut resolved = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
@@ -167,7 +183,7 @@ impl Runtime {
                         .workspace_invoke(WorkspaceAction::Get, invoke_args![key].into())?;
                     resolved.push(value.decode()?);
                 },
-                Arg::Literal(v) => resolved.push(v),
+                Arg::Literal(v) => resolved.push(decode(v)?),
             }
         }
         Ok(resolved)

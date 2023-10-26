@@ -4,12 +4,15 @@
 use super::TOKEN_SYMBOL;
 use crate::{
     args::MintArg,
+    auth::{AccessRule, OwnerRule, ResourceAccessRules},
     models::{Amount, Bucket, Metadata, ResourceAddress},
     resource::{ResourceManager, ResourceType},
 };
 
 pub struct FungibleResourceBuilder {
     initial_supply: Amount,
+    owner_rule: OwnerRule,
+    access_rules: ResourceAccessRules,
     metadata: Metadata,
 }
 
@@ -17,12 +20,44 @@ impl FungibleResourceBuilder {
     pub(super) fn new() -> Self {
         Self {
             initial_supply: Amount::zero(),
+            owner_rule: OwnerRule::default(),
+            access_rules: ResourceAccessRules::new(),
             metadata: Metadata::new(),
         }
     }
 
     pub fn with_token_symbol<S: Into<String>>(mut self, symbol: S) -> Self {
         self.metadata.insert(TOKEN_SYMBOL, symbol);
+        self
+    }
+
+    pub fn with_owner_rule(mut self, rule: OwnerRule) -> Self {
+        self.owner_rule = rule;
+        self
+    }
+
+    pub fn with_access_rules(mut self, rules: ResourceAccessRules) -> Self {
+        self.access_rules = rules;
+        self
+    }
+
+    pub fn mintable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.mintable(rule);
+        self
+    }
+
+    pub fn burnable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.burnable(rule);
+        self
+    }
+
+    pub fn withdrawable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.withdrawable(rule);
+        self
+    }
+
+    pub fn depositable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.depositable(rule);
         self
     }
 
@@ -42,7 +77,7 @@ impl FungibleResourceBuilder {
             self.initial_supply.is_zero(),
             "call build_bucket when initial supply set"
         );
-        let (address, _) = Self::build_internal(self.metadata, None);
+        let (address, _) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, None);
         address
     }
 
@@ -51,11 +86,16 @@ impl FungibleResourceBuilder {
             amount: self.initial_supply,
         };
 
-        let (_, bucket) = Self::build_internal(self.metadata, Some(mint_args));
+        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(mint_args));
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
-    fn build_internal(metadata: Metadata, mint_args: Option<MintArg>) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::Fungible, metadata, mint_args)
+    fn build_internal(
+        owner_rule: OwnerRule,
+        access_rules: ResourceAccessRules,
+        metadata: Metadata,
+        mint_args: Option<MintArg>,
+    ) -> (ResourceAddress, Option<Bucket>) {
+        ResourceManager::new().create(ResourceType::Fungible, owner_rule, access_rules, metadata, mint_args)
     }
 }

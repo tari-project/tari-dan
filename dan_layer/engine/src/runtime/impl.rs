@@ -20,20 +20,12 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use log::warn;
-use tari_bor::encode;
 use tari_common_types::types::PublicKey;
-use tari_crypto::{
-    range_proof::RangeProofService,
-    ristretto::{RistrettoPublicKey, RistrettoSecretKey},
-    tari_utilities::ByteArray,
-};
-use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
+use tari_crypto::{range_proof::RangeProofService, ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
+use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     base_layer_hashing::ownership_proof_hasher,
     commit_result::FinalizeResult,
@@ -41,14 +33,15 @@ use tari_engine_types::{
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
     events::Event,
     fees::FeeReceipt,
+    indexed_value::IndexedValue,
     logs::LogEntry,
     resource_container::ResourceContainer,
     substate::{SubstateAddress, SubstateValue},
+    TemplateAddress,
 };
 use tari_template_abi::TemplateDef;
 use tari_template_lib::{
     args::{
-        Arg,
         BucketAction,
         BucketRef,
         CallAction,
@@ -67,27 +60,30 @@ use tari_template_lib::{
         MintResourceArg,
         NonFungibleAction,
         PayFeeArg,
+        ProofAction,
+        ProofRef,
         ResourceAction,
         ResourceGetNonFungibleArg,
         ResourceRef,
         ResourceUpdateNonFungibleDataArg,
         VaultAction,
+        VaultCreateProofByFungibleAmountArg,
+        VaultCreateProofByNonFungiblesArg,
         VaultWithdrawArg,
         WorkspaceAction,
     },
-    auth::AccessRules,
+    auth::{ComponentAccessRules, ResourceAccessRules, ResourceAuthAction},
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     crypto::RistrettoPublicKeyBytes,
-    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, VaultRef},
+    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, NotAuthorized, VaultRef},
 };
 
-use super::{tracker::FinalizeTracker, AuthorizationScope, Runtime};
+use super::{tracker::FinalizeTracker, Runtime};
 use crate::{
     packager::LoadedTemplate,
     runtime::{
         engine_args::EngineArgs,
         tracker::StateTracker,
-        AuthParams,
         RuntimeError,
         RuntimeInterface,
         RuntimeModule,
@@ -98,11 +94,11 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::engine::runtime::impl";
 
-pub struct RuntimeInterfaceImpl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
-    tracker: StateTracker<TTemplateProvider>,
-    _auth_params: AuthParams,
+pub struct RuntimeInterfaceImpl<TTemplateProvider> {
+    tracker: StateTracker,
+    template_provider: Arc<TTemplateProvider>,
     sender_public_key: RistrettoPublicKey,
-    modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
+    modules: Vec<Arc<dyn RuntimeModule>>,
 }
 
 pub struct StateFinalize {
@@ -112,28 +108,20 @@ pub struct StateFinalize {
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterfaceImpl<TTemplateProvider> {
     pub fn initialize(
-        tracker: StateTracker<TTemplateProvider>,
-        auth_params: AuthParams,
+        tracker: StateTracker,
+        template_provider: Arc<TTemplateProvider>,
         sender_public_key: RistrettoPublicKey,
-        modules: Vec<Arc<dyn RuntimeModule<TTemplateProvider>>>,
+        modules: Vec<Arc<dyn RuntimeModule>>,
     ) -> Result<Self, RuntimeError> {
         let runtime = Self {
             tracker,
-            _auth_params: auth_params,
+            template_provider,
             sender_public_key,
             modules,
         };
         runtime.invoke_modules_on_initialize()?;
         Ok(runtime)
     }
-
-    // TODO: this will be needed when we restrict Resources
-    // fn check_access_rules(&self, function: FunctionIdent, access_rules: &AccessRules) -> Result<(), RuntimeError> {
-    //     // TODO: In this very basic auth system, you can only call on owned objects (because initial_ownership_proofs
-    // is     //       usually set to include the owner token).
-    //     let auth_zone = AuthorizationScope::new(&self.auth_params.initial_ownership_proofs);
-    //     auth_zone.check_access_rules(&function, access_rules)
-    // }
 
     fn invoke_modules_on_initialize(&self) -> Result<(), RuntimeError> {
         for module in &self.modules {
@@ -158,6 +146,59 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         }
         Ok(())
     }
+
+    pub fn get_template_def(&self, template_address: &TemplateAddress) -> Result<TemplateDef, RuntimeError> {
+        let loaded = self
+            .template_provider
+            .get_template_module(template_address)
+            .map_err(|e| RuntimeError::FailedToLoadTemplate {
+                address: *template_address,
+                details: e.to_string(),
+            })?
+            .ok_or(RuntimeError::TemplateNotFound {
+                template_address: *template_address,
+            })?;
+
+        Ok(loaded.template_def().clone())
+    }
+
+    fn validate_return_value(&self, value: &IndexedValue) -> Result<(), RuntimeError> {
+        for bucket_id in value.bucket_ids() {
+            if !self.tracker.bucket_exists(bucket_id) {
+                return Err(RuntimeError::BucketNotFound { bucket_id: *bucket_id });
+            }
+        }
+
+        for proof_id in value.proof_ids() {
+            if !self.tracker.proof_exists(proof_id) {
+                return Err(RuntimeError::ProofNotFound { proof_id: *proof_id });
+            }
+        }
+
+        for vault_id in value.vault_ids() {
+            if !self.tracker.vault_exists(vault_id)? {
+                return Err(RuntimeError::VaultNotFound { vault_id: *vault_id });
+            }
+        }
+
+        for resource_address in value.resource_addresses() {
+            if !self.tracker.resource_exists(resource_address)? {
+                return Err(RuntimeError::ResourceNotFound {
+                    resource_address: *resource_address,
+                });
+            }
+        }
+
+        for component_address in value.component_addresses() {
+            if !self.tracker.component_exists(component_address)? {
+                return Err(RuntimeError::ComponentNotFound {
+                    address: *component_address,
+                });
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInterface
@@ -172,7 +213,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn emit_event(&self, topic: String, payload: Metadata) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("emit_event")?;
 
-        let component_address = self.tracker.runtime_state_component_address()?;
+        let component_address = self.tracker.with_runtime_state(|s| Ok(s.component_address))?;
         let tx_hash = self.tracker.transaction_hash();
         let template_address = self.tracker.get_template_address()?;
 
@@ -206,12 +247,19 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError> {
         self.invoke_modules_on_runtime_call("caller_context_invoke")?;
 
-        let sender_public_key = RistrettoPublicKeyBytes::from_bytes(self.sender_public_key.as_bytes()).expect(
-            "RistrettoPublicKeyBytes::from_bytes should be infallible when called with RistrettoPublicKey bytes",
-        );
-
         match action {
-            CallerContextAction::GetCallerPublicKey => Ok(InvokeResult::encode(&sender_public_key)?),
+            CallerContextAction::GetCallerPublicKey => {
+                let sender_public_key = RistrettoPublicKeyBytes::from_bytes(self.sender_public_key.as_bytes()).expect(
+                    "RistrettoPublicKeyBytes::from_bytes should be infallible when called with RistrettoPublicKey \
+                     bytes",
+                );
+
+                Ok(InvokeResult::encode(&sender_public_key)?)
+            },
+            CallerContextAction::GetComponentAddress => {
+                let component_address = self.tracker.with_runtime_state(|s| Ok(s.component_address))?;
+                Ok(InvokeResult::encode(&component_address)?)
+            },
         }
     }
 
@@ -226,11 +274,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         match action {
             ComponentAction::Create => {
                 let arg: CreateComponentArg = args.get(0)?;
-                let template_def = self.tracker.get_template_def()?;
-                validate_access_rules(&arg.access_rules, &template_def)?;
-                let component_address =
-                    self.tracker
-                        .new_component(arg.encoded_state, arg.access_rules, arg.component_id)?;
+                let template_def = self
+                    .tracker
+                    .with_runtime_state(|runtime_state| self.get_template_def(&runtime_state.template_address))?;
+                validate_component_access_rule_methods(&arg.access_rules, &template_def)?;
+                let component_address = self.tracker.new_component(
+                    arg.encoded_state,
+                    arg.owner_rule,
+                    arg.access_rules,
+                    arg.component_id,
+                )?;
                 Ok(InvokeResult::encode(&component_address)?)
             },
 
@@ -266,8 +319,13 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         argument: "component_ref",
                         reason: "SetAccessRules component action requires a component address".to_string(),
                     })?;
-                let access_rules: AccessRules = args.get(0)?;
+
+                let access_rules: ComponentAccessRules = args.get(0)?;
                 let mut component = self.tracker.get_component(&address)?;
+
+                self.tracker
+                    .authorization()
+                    .require_ownership(ComponentAction::SetAccessRules, component.as_ownership())?;
 
                 component.access_rules = access_rules;
                 self.tracker.set_component(address, component)?;
@@ -276,6 +334,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn resource_invoke(
         &self,
         resource_ref: ResourceRef,
@@ -288,7 +347,9 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             ResourceAction::Create => {
                 let arg: CreateResourceArg = args.get(0)?;
 
-                let resource_address = self.tracker.new_resource(arg.resource_type, arg.metadata)?;
+                let resource_address =
+                    self.tracker
+                        .new_resource(arg.resource_type, arg.owner_rule, arg.access_rules, arg.metadata)?;
 
                 let mut output_bucket = None;
                 if let Some(mint_arg) = arg.mint_arg {
@@ -308,11 +369,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                             reason: "GetResourceType resource action requires a resource address".to_string(),
                         })?;
                 let resource = self.tracker.get_resource(&resource_address)?;
-                // TODO: access check
-                // self.check_access_rules(
-                //     FunctionIdent::Native(NativeFunctionCall::Resource(ResourceAction::GetTotalSupply)),
-                //     &component.access_rules,
-                // )?;
                 let total_supply = resource.total_supply();
                 Ok(InvokeResult::encode(&total_supply)?)
             },
@@ -325,7 +381,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                             reason: "GetResourceType resource action requires a resource address".to_string(),
                         })?;
                 let resource = self.tracker.get_resource(&resource_address)?;
-                // TODO: access check
                 let resource_type = resource.resource_type();
                 Ok(InvokeResult::encode(&resource_type)?)
             },
@@ -338,7 +393,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                             reason: "Mint resource action requires a resource address".to_string(),
                         })?;
                 let mint_resource: MintResourceArg = args.get(0)?;
-                // TODO: access check
+
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Mint, &resource)?;
+
                 let bucket_id = self.tracker.mint_resource(resource_address, mint_resource.mint_arg)?;
                 let bucket = tari_template_lib::models::Bucket::from_id(bucket_id);
                 Ok(InvokeResult::encode(&bucket)?)
@@ -355,7 +415,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 let nf_container = self
                     .tracker
                     .get_non_fungible(&NonFungibleAddress::new(resource_address, arg.id.clone()))?;
-                // TODO: access check
+
                 if nf_container.is_burnt() {
                     return Err(RuntimeError::InvalidOpNonFungibleBurnt {
                         op: "GetNonFungible",
@@ -376,10 +436,34 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                             reason: "UpdateNonFungibleData resource action requires a resource address".to_string(),
                         })?;
                 let arg: ResourceUpdateNonFungibleDataArg = args.get(0)?;
-                // TODO: access check
+
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::UpdateNonFungibleData, &resource)?;
+
                 self.tracker
                     .set_non_fungible_data(&NonFungibleAddress::new(resource_address, arg.id), arg.data)?;
 
+                Ok(InvokeResult::unit())
+            },
+            ResourceAction::UpdateAccessRules => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "UpdateAccessRules resource action requires a resource address".to_string(),
+                        })?;
+                let access_rules: ResourceAccessRules = args.get(0)?;
+
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .require_ownership(ResourceAuthAction::UpdateAccessRules, resource.as_ownership())?;
+
+                self.tracker
+                    .set_resource_access_rules(&resource_address, access_rules)?;
                 Ok(InvokeResult::unit())
             },
         }
@@ -402,6 +486,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                         argument: "vault_ref",
                         reason: "Create vault action requires a resource address".to_string(),
                     })?;
+                args.assert_is_empty("CreateVault")?;
+
                 let resource = self.tracker.get_resource(resource_address)?;
 
                 let vault_id = self.tracker.new_vault(*resource_address, resource.resource_type())?;
@@ -412,28 +498,51 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     argument: "vault_ref",
                     reason: "Put vault action requires a vault id".to_string(),
                 })?;
-                let bucket_id: BucketId = args.get(0)?;
-                // TODO: access check
 
+                let bucket_id: BucketId = args.assert_one_arg()?;
+
+                let resource_address = self.tracker.borrow_vault(vault_id, |vault| *vault.resource_address())?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Deposit, &resource)?;
+
+                // It is invalid to deposit a bucket that has locked funds
+                self.tracker.borrow_bucket(bucket_id, |bucket| {
+                    if !bucket.locked_amount().is_zero() {
+                        return Err(RuntimeError::InvalidOpDepositLockedBucket {
+                            bucket_id,
+                            locked_amount: bucket.locked_amount(),
+                        });
+                    }
+                    Ok(())
+                })??;
                 let bucket = self.tracker.take_bucket(bucket_id)?;
+
                 self.tracker
                     .borrow_vault_mut(vault_id, |vault| vault.deposit(bucket))??;
+
                 Ok(InvokeResult::unit())
             },
             VaultAction::Withdraw => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "vault_ref",
-                    reason: "WithdrawFungible vault action requires a vault id".to_string(),
+                    reason: "Withdraw vault action requires a vault id".to_string(),
                 })?;
-                let arg: VaultWithdrawArg = args.get(0)?;
+                let arg: VaultWithdrawArg = args.assert_one_arg()?;
 
-                // TODO: access check
-                let resource = self.tracker.borrow_vault_mut(vault_id, |vault| match arg {
+                let resource_address = self.tracker.borrow_vault(vault_id, |vault| *vault.resource_address())?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource)?;
+
+                let resource_container = self.tracker.borrow_vault_mut(vault_id, |vault| match arg {
                     VaultWithdrawArg::Fungible { amount } => vault.withdraw(amount),
                     VaultWithdrawArg::NonFungible { ids } => vault.withdraw_non_fungibles(&ids),
                     VaultWithdrawArg::Confidential { proof } => vault.withdraw_confidential(*proof),
                 })??;
-                let bucket = self.tracker.new_bucket(resource)?;
+                let bucket = self.tracker.new_bucket(resource_container)?;
                 Ok(InvokeResult::encode(&bucket)?)
             },
             VaultAction::WithdrawAll => {
@@ -441,6 +550,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     argument: "vault_ref",
                     reason: "WithdrawAll vault action requires a vault id".to_string(),
                 })?;
+
+                args.assert_is_empty("Vault::WithdrawAll")?;
+
+                let resource_address = self.tracker.borrow_vault(vault_id, |vault| *vault.resource_address())?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource)?;
 
                 // TODO: access check
                 let resource = self
@@ -454,7 +571,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     argument: "vault_ref",
                     reason: "GetBalance vault action requires a vault id".to_string(),
                 })?;
-                // TODO: access check
+                args.assert_is_empty("Vault::GetBalance")?;
 
                 let balance = self.tracker.borrow_vault(vault_id, |v| v.balance())?;
                 Ok(InvokeResult::encode(&balance)?)
@@ -464,8 +581,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     argument: "vault_ref",
                     reason: "vault action requires a vault id".to_string(),
                 })?;
+                args.assert_is_empty("Vault::GetResourceAddress")?;
 
-                // TODO: access check
                 let address = self
                     .tracker
                     .borrow_vault_mut(vault_id, |vault| *vault.resource_address())?;
@@ -476,11 +593,10 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     argument: "vault_ref",
                     reason: "vault action requires a vault id".to_string(),
                 })?;
+                args.assert_is_empty("Vault::GetNonFungibleIds")?;
 
-                // TODO: access check
                 let resp = self.tracker.borrow_vault(vault_id, |vault| {
-                    let empty = BTreeSet::new();
-                    let ids = vault.get_non_fungible_ids().unwrap_or(&empty);
+                    let ids = vault.get_non_fungible_ids();
                     // NOTE: A BTreeSet does not decode when received in the WASM
                     InvokeResult::encode(&ids.iter().collect::<Vec<_>>())
                 })??;
@@ -493,6 +609,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     reason: "vault action requires a vault id".to_string(),
                 })?;
 
+                args.assert_is_empty("Vault::GetCommitmentCount")?;
+
                 self.tracker.borrow_vault(vault_id, |vault| {
                     let count = vault.get_commitment_count();
                     Ok(InvokeResult::encode(&count)?)
@@ -501,10 +619,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             VaultAction::ConfidentialReveal => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "vault_ref",
-                    reason: "vault action requires a vault id".to_string(),
+                    reason: "Vault::ConfidentialReveal action requires a vault id".to_string(),
                 })?;
 
-                let arg: ConfidentialRevealArg = args.get(0)?;
+                let arg: ConfidentialRevealArg = args.assert_one_arg()?;
+
+                let resource_address = self.tracker.borrow_vault(vault_id, |vault| *vault.resource_address())?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource)?;
 
                 // TODO: access check
                 let resource = self
@@ -517,16 +641,22 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             VaultAction::PayFee => {
                 let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "vault_ref",
-                    reason: "vault action requires a vault id".to_string(),
+                    reason: "PayFee vault action requires a vault id".to_string(),
                 })?;
 
-                let arg: PayFeeArg = args.get(0)?;
+                let arg: PayFeeArg = args.assert_one_arg()?;
                 if arg.amount.is_negative() {
                     return Err(RuntimeError::InvalidArgument {
                         argument: "amount",
                         reason: "Amount must be positive".to_string(),
                     });
                 }
+
+                let resource_address = self.tracker.borrow_vault(vault_id, |vault| *vault.resource_address())?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource)?;
 
                 let resource = self.tracker.borrow_vault_mut(vault_id, |vault| {
                     let mut resource = ResourceContainer::confidential(*vault.resource_address(), None, Amount::zero());
@@ -550,6 +680,65 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.pay_fee(resource, vault_id)?;
                 Ok(InvokeResult::unit())
             },
+            VaultAction::CreateProofByResource => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "CreateProofByResource vault action requires a vault id".to_string(),
+                })?;
+                args.assert_is_empty("CreateProofByResource")?;
+
+                let resource_address = self.tracker.borrow_vault(vault_id, |vault| *vault.resource_address())?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource)?;
+
+                let locked = self.tracker.borrow_vault_mut(vault_id, |vault| vault.lock_all())??;
+                let proof_id = self.tracker.new_proof(locked)?;
+                self.tracker.add_proof_to_auth_scope(proof_id)?;
+                Ok(InvokeResult::encode(&proof_id)?)
+            },
+            VaultAction::CreateProofByFungibleAmount => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "CreateProofByFungibleAmount vault action requires a vault id".to_string(),
+                })?;
+                let arg: VaultCreateProofByFungibleAmountArg = args.assert_one_arg()?;
+
+                let resource_address = self.tracker.borrow_vault(vault_id, |vault| *vault.resource_address())?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource)?;
+
+                let locked = self
+                    .tracker
+                    .borrow_vault_mut(vault_id, |vault| vault.lock_by_amount(arg.amount))??;
+                let proof_id = self.tracker.new_proof(locked)?;
+                self.tracker.add_proof_to_auth_scope(proof_id)?;
+                Ok(InvokeResult::encode(&proof_id)?)
+            },
+            VaultAction::CreateProofByNonFungibles => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "CreateProofByNonFungibles vault action requires a vault id".to_string(),
+                })?;
+                let arg: VaultCreateProofByNonFungiblesArg = args.assert_one_arg()?;
+
+                let resource_address = self.tracker.borrow_vault(vault_id, |vault| *vault.resource_address())?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Withdraw, &resource)?;
+
+                let locked = self
+                    .tracker
+                    .borrow_vault_mut(vault_id, |vault| vault.lock_by_non_fungible_ids(arg.ids))??;
+                let proof_id = self.tracker.new_proof(locked)?;
+                self.tracker.add_proof_to_auth_scope(proof_id)?;
+                Ok(InvokeResult::encode(&proof_id)?)
+            },
+            VaultAction::CreateProofByConfidentialResource => todo!("CreateProofByConfidentialResource"),
         }
     }
 
@@ -562,42 +751,30 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         self.invoke_modules_on_runtime_call("bucket_invoke")?;
 
         match action {
-            BucketAction::Create => {
-                let resource_address = bucket_ref
-                    .resource_address()
-                    .ok_or_else(|| RuntimeError::InvalidArgument {
-                        argument: "bucket_ref",
-                        reason: "Create bucket action requires a resource address".to_string(),
-                    })?;
-                let resource = self.tracker.get_resource(&resource_address)?;
-                let bucket_id = self
-                    .tracker
-                    .new_empty_bucket(resource_address, resource.resource_type())?;
-                Ok(InvokeResult::encode(&bucket_id)?)
-            },
             BucketAction::GetResourceAddress => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "bucket_ref",
                     reason: "GetResourceAddress action requires a bucket id".to_string(),
                 })?;
-                let bucket = self.tracker.get_bucket(bucket_id)?;
-                Ok(InvokeResult::encode(bucket.resource_address())?)
+
+                self.tracker
+                    .borrow_bucket(bucket_id, |bucket| Ok(InvokeResult::encode(bucket.resource_address())?))?
             },
             BucketAction::GetResourceType => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "bucket_ref",
                     reason: "GetResourceType action requires a bucket id".to_string(),
                 })?;
-                let bucket = self.tracker.get_bucket(bucket_id)?;
-                Ok(InvokeResult::encode(&bucket.resource_type())?)
+                self.tracker
+                    .borrow_bucket(bucket_id, |bucket| Ok(InvokeResult::encode(&bucket.resource_type())?))?
             },
             BucketAction::GetAmount => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
                     argument: "bucket_ref",
                     reason: "GetAmount bucket action requires a bucket id".to_string(),
                 })?;
-                let bucket = self.tracker.get_bucket(bucket_id)?;
-                Ok(InvokeResult::encode(&bucket.amount())?)
+                self.tracker
+                    .borrow_bucket(bucket_id, |bucket| Ok(InvokeResult::encode(&bucket.amount())?))?
             },
             BucketAction::Take => {
                 let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
@@ -640,7 +817,106 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     argument: "bucket_ref",
                     reason: "Burn bucket action requires a bucket id".to_string(),
                 })?;
+
+                // Check access
+                let resource_address = self
+                    .tracker
+                    .borrow_bucket(bucket_id, |bucket| *bucket.resource_address())?;
+                let resource = self.tracker.get_resource(&resource_address)?;
+                self.tracker
+                    .authorization()
+                    .check_resource_access_rules(ResourceAuthAction::Burn, &resource)?;
+
                 self.tracker.burn_bucket(bucket_id)?;
+                Ok(InvokeResult::unit())
+            },
+            BucketAction::CreateProof => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "CreateProof bucket action requires a bucket id".to_string(),
+                })?;
+
+                args.assert_is_empty("Bucket::CreateProof")?;
+
+                let locked = self
+                    .tracker
+                    .borrow_bucket_mut(bucket_id, |bucket| bucket.lock_all())??;
+                let proof_id = self.tracker.new_proof(locked)?;
+                self.tracker.add_proof_to_auth_scope(proof_id)?;
+                Ok(InvokeResult::encode(&proof_id)?)
+            },
+        }
+    }
+
+    fn proof_invoke(
+        &self,
+        proof_ref: ProofRef,
+        action: ProofAction,
+        args: EngineArgs,
+    ) -> Result<InvokeResult, RuntimeError> {
+        match action {
+            ProofAction::GetAmount => {
+                let proof_id = proof_ref.proof_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "proof_ref",
+                    reason: "GetAmount proof action requires a proof id".to_string(),
+                })?;
+                args.assert_is_empty("Proof.GetAmount")?;
+                self.tracker
+                    .borrow_proof(&proof_id, |proof| Ok(InvokeResult::encode(&proof.amount())?))?
+            },
+            ProofAction::GetResourceAddress => {
+                let proof_id = proof_ref.proof_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "proof_ref",
+                    reason: "GetResourceAddress proof action requires a proof id".to_string(),
+                })?;
+                args.assert_is_empty("Proof.GetResourceAddress")?;
+                self.tracker
+                    .borrow_proof(&proof_id, |proof| Ok(InvokeResult::encode(proof.resource_address())?))?
+            },
+            ProofAction::GetResourceType => {
+                let proof_id = proof_ref.proof_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "proof_ref",
+                    reason: "GetResourceType proof action requires a proof id".to_string(),
+                })?;
+
+                args.assert_is_empty("Proof.GetResourceType")?;
+
+                self.tracker
+                    .borrow_proof(&proof_id, |proof| Ok(InvokeResult::encode(&proof.resource_type())?))?
+            },
+            ProofAction::Authorize => {
+                let proof_id = proof_ref.proof_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "proof_ref",
+                    reason: "Authorize proof action requires a proof id".to_string(),
+                })?;
+                args.assert_is_empty("Proof.CreateAccess")?;
+
+                if self.tracker.add_proof_to_auth_scope(proof_id).optional()?.is_some() {
+                    Ok(InvokeResult::encode(&Ok::<_, NotAuthorized>(()))?)
+                } else {
+                    Ok(InvokeResult::encode(&Err::<(), _>(NotAuthorized))?)
+                }
+            },
+            ProofAction::DropAuthorize => {
+                let proof_id = proof_ref.proof_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "proof_ref",
+                    reason: "DropAuthorize proof action requires a proof id".to_string(),
+                })?;
+                args.assert_is_empty("Proof.DropAuthorize")?;
+
+                self.tracker.remove_proof_from_auth_scope(&proof_id)?;
+
+                Ok(InvokeResult::unit())
+            },
+            ProofAction::Drop => {
+                let proof_id = proof_ref.proof_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "proof_ref",
+                    reason: "Drop proof action requires a proof id".to_string(),
+                })?;
+                args.assert_is_empty("Proof.Drop")?;
+
+                self.tracker.drop_proof(proof_id)?;
+
                 Ok(InvokeResult::unit())
             },
         }
@@ -653,7 +929,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 let bucket_ids = self.tracker.list_buckets();
                 Ok(InvokeResult::encode(&bucket_ids)?)
             },
-            WorkspaceAction::Put => todo!(),
             // Basically names an output on the workspace so that you can refer to it as an
             // Arg::Variable
             WorkspaceAction::PutLastInstructionOutput => {
@@ -662,13 +937,29 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     .tracker
                     .take_last_instruction_output()
                     .ok_or(RuntimeError::NoLastInstructionOutput)?;
-                self.tracker.put_in_workspace(key, last_output)?;
+
+                self.validate_return_value(&last_output)?;
+
+                self.tracker
+                    .with_workspace_mut(|workspace| workspace.insert(key, last_output))?;
                 Ok(InvokeResult::unit())
             },
             WorkspaceAction::Get => {
                 let key: Vec<u8> = args.get(0)?;
                 let value = self.tracker.get_from_workspace(&key)?;
-                Ok(InvokeResult::encode(&value)?)
+                Ok(InvokeResult::encode(value.value())?)
+            },
+
+            WorkspaceAction::DropAllProofs => {
+                let proofs = self
+                    .tracker
+                    .with_workspace_mut(|workspace| workspace.drain_all_proofs());
+
+                for proof_id in proofs {
+                    self.tracker.drop_proof(proof_id)?;
+                }
+
+                Ok(InvokeResult::unit())
             },
         }
     }
@@ -734,38 +1025,30 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         self.invoke_modules_on_runtime_call("call_invoke")?;
 
         // we are initializing a new runtime for the nested call
-        let call_runtime_interface = RuntimeInterfaceImpl::initialize(
+        // Push current auth scopes out of scope, so that they do not apply to the cross-template call
+        self.tracker.push_auth_scope();
+        let call_runtime = Runtime::new(Arc::new(RuntimeInterfaceImpl::initialize(
             self.tracker.clone(),
-            // for safety reasons we are not going to propagate proofs to the call component or template
-            AuthParams {
-                initial_ownership_proofs: vec![],
-            },
+            self.template_provider.clone(),
             self.sender_public_key.clone(),
             self.modules.clone(),
-        )?;
-
-        // for safety reasons, we explicitly avoid propagating any auth scope to the template/component we are calling
-        // so all nested calls can only be done to not auth restricted template methods.
-        // this prevents, for example, to withdraw from an account in a nested call
-        let auth_scope = AuthorizationScope::new(Arc::new(vec![]));
+        )?));
 
         // extract all the common required information for both types of calls
-        let template_provider = self.tracker.get_template_provider();
-        let current_runtime_state = self.tracker.runtime_state()?;
-        let max_recursion_depth = current_runtime_state.max_recursion_depth;
+        // the runtime state will be overridden by the call so we store a copy to revert back afterwards
+        let caller_runtime_state = self.tracker.clone_runtime_state()?;
+        let max_recursion_depth = caller_runtime_state.max_recursion_depth;
 
         // a nested call starts with an increased recursion depth
-        let new_recursion_depth = current_runtime_state.recursion_depth + 1;
-
-        // the runtime state will be overriden by the call so we store a copy to revert back afterwards
-        let caller_runtime_state = self.tracker.runtime_state()?;
+        let new_recursion_depth = caller_runtime_state.recursion_depth + 1;
 
         let exec_result = match action {
             CallAction::CallFunction => {
                 // extract the args from the invoke operation
                 let arg: CallFunctionArg = args.get(0)?;
                 let template_address = arg.template_address;
-                let template_name = template_provider
+                let template_name = self
+                    .template_provider
                     .get_template_module(&template_address)
                     .map_err(|e| RuntimeError::FailedToLoadTemplate {
                         address: template_address,
@@ -775,22 +1058,21 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     .template_name()
                     .to_string();
                 let function = arg.function;
-                let args = arg.args.into_iter().map(Arg::Literal).collect();
+                let args = arg.args;
 
                 let new_state = RuntimeState {
                     template_name,
                     template_address,
+                    transaction_signer_public_key: caller_runtime_state.transaction_signer_public_key,
                     component_address: None,
                     recursion_depth: new_recursion_depth,
                     max_recursion_depth,
                 };
-                call_runtime_interface.set_current_runtime_state(new_state)?;
-                let call_runtime = Runtime::new(Arc::new(call_runtime_interface));
+                call_runtime.interface().set_current_runtime_state(new_state)?;
 
                 TransactionProcessor::call_function(
-                    template_provider,
+                    &*self.template_provider,
                     &call_runtime,
-                    auth_scope,
                     &template_address,
                     &function,
                     // TODO: put in rest of args
@@ -812,22 +1094,21 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 let template_name = component_header.module_name;
                 let template_address = component_header.template_address;
                 let method = arg.method;
-                let args = arg.args.into_iter().map(Arg::Literal).collect();
+                let args = arg.args;
 
                 let new_state = RuntimeState {
                     template_name,
                     template_address,
+                    transaction_signer_public_key: caller_runtime_state.transaction_signer_public_key,
                     component_address: Some(component_address),
                     recursion_depth: new_recursion_depth,
                     max_recursion_depth,
                 };
-                call_runtime_interface.set_current_runtime_state(new_state)?;
-                let call_runtime = Runtime::new(Arc::new(call_runtime_interface));
+                call_runtime.interface().set_current_runtime_state(new_state)?;
 
                 TransactionProcessor::call_method(
-                    template_provider,
+                    &*self.template_provider,
                     &call_runtime,
-                    auth_scope,
                     &component_address,
                     &method,
                     args,
@@ -842,7 +1123,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             },
         };
 
-        // the runtime state was overriden by the call so we revert
+        self.tracker.pop_auth_scope()?;
+        // the runtime state was overridden by the call so we revert
         self.tracker.set_current_runtime_state(caller_runtime_state);
 
         Ok(InvokeResult::raw(exec_result.raw))
@@ -854,7 +1136,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         Ok(uuid)
     }
 
-    fn set_last_instruction_output(&self, value: Option<Vec<u8>>) -> Result<(), RuntimeError> {
+    fn set_last_instruction_output(&self, value: IndexedValue) -> Result<(), RuntimeError> {
         self.invoke_modules_on_runtime_call("set_last_instruction_output")?;
         self.tracker.set_last_instruction_output(value);
         Ok(())
@@ -877,11 +1159,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
             .chain_update(&self.sender_public_key)
             .result();
 
-        if !proof_of_knowledge.verify(
-            &unclaimed_output.commitment,
-            &RistrettoSecretKey::from_bytes(&challenge).map_err(|_e| RuntimeError::InvalidClaimingSignature)?,
-            get_commitment_factory(),
-        ) {
+        if !proof_of_knowledge.verify_challenge(&unclaimed_output.commitment, &challenge, get_commitment_factory()) {
             warn!(target: LOG_TARGET, "Claim burn failed - Invalid signature");
             return Err(RuntimeError::InvalidClaimingSignature);
         }
@@ -915,15 +1193,16 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         }
 
         let bucket_id = self.tracker.new_bucket(resource)?;
-
-        self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
+        self.tracker
+            .set_last_instruction_output(IndexedValue::from_type(&bucket_id)?);
         Ok(())
     }
 
     fn claim_validator_fees(&self, epoch: Epoch, validator_public_key: PublicKey) -> Result<(), RuntimeError> {
         let resource = self.tracker.claim_fee(epoch, validator_public_key)?;
         let bucket_id = self.tracker.new_bucket(resource)?;
-        self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
+        self.tracker
+            .set_last_instruction_output(IndexedValue::from_type(&bucket_id)?);
         Ok(())
     }
 
@@ -939,7 +1218,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         );
 
         let bucket_id = self.tracker.new_bucket(resource)?;
-        self.tracker.set_last_instruction_output(Some(encode(&bucket_id)?));
+        self.tracker
+            .set_last_instruction_output(IndexedValue::from_type(&bucket_id)?);
         Ok(bucket_id)
     }
 
@@ -987,9 +1267,22 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
         Ok(StateFinalize { finalized, fee_receipt })
     }
+
+    fn get_transaction_signer_public_key(&self) -> Result<RistrettoPublicKey, RuntimeError> {
+        Ok(self.sender_public_key.clone())
+    }
+
+    fn check_component_access_rules(&self, method: &str, component: &ComponentHeader) -> Result<(), RuntimeError> {
+        self.tracker
+            .authorization()
+            .check_component_access_rules(method, component)
+    }
 }
 
-fn validate_access_rules(access_rules: &AccessRules, template_def: &TemplateDef) -> Result<(), RuntimeError> {
+fn validate_component_access_rule_methods(
+    access_rules: &ComponentAccessRules,
+    template_def: &TemplateDef,
+) -> Result<(), RuntimeError> {
     for (name, _) in access_rules.method_access_rules_iter() {
         if template_def.functions.iter().all(|f| f.name != *name) {
             return Err(RuntimeError::InvalidMethodAccessRule {

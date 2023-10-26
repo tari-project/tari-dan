@@ -29,16 +29,20 @@ pub struct Sparkle {
 #[template]
 mod sparkle_nft_template {
     use super::*;
-
     pub struct SparkleNft {
         resource_address: ResourceAddress,
     }
 
     impl SparkleNft {
-        pub fn new() -> Self {
-            let resource_address = ResourceBuilder::non_fungible().with_token_symbol("sparkle").build();
+        pub fn new() -> Component<Self> {
+            let resource_address = ResourceBuilder::non_fungible()
+                .with_token_symbol("sparkle")
+                .mintable(AccessRule::AllowAll)
+                .build();
 
-            Self { resource_address }
+            Component::new(Self { resource_address })
+                .with_access_rules(AccessRules::allow_all())
+                .create()
         }
 
         pub fn mint(&mut self) -> Bucket {
