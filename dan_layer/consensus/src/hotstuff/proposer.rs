@@ -45,8 +45,9 @@ where
         let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
         let validator = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
         let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
-        let mut tx = self.store.create_read_tx()?;
-        let non_local_buckets = get_non_local_buckets(&mut tx, block, num_committees, local_bucket)?;
+        let non_local_buckets = self
+            .store
+            .with_read_tx(|tx| get_non_local_buckets(tx, block, num_committees, local_bucket))?;
         let non_local_committees = self
             .epoch_manager
             .get_committees_by_buckets(block.epoch(), non_local_buckets)

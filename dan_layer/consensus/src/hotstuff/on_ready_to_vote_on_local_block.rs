@@ -19,7 +19,10 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::Transaction;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{
+    broadcast,
+    mpsc::{self},
+};
 
 use super::proposer::Proposer;
 use crate::{
@@ -84,6 +87,7 @@ where
             .epoch_manager
             .get_committee_shard_by_validator_address(valid_block.epoch(), valid_block.proposed_by())
             .await?;
+        let mut locked_blocks = Vec::new();
 
         let maybe_decision = self.store.with_write_tx(|tx| {
             let maybe_decision = self.decide_on_block(tx, &local_committee_shard, valid_block.block())?;
@@ -92,8 +96,9 @@ where
             if maybe_decision.map(|d| d.is_accept()).unwrap_or(false) {
                 let high_qc = valid_block.block().update_nodes(
                     tx,
-                    |tx, locked, block| self.on_lock_block(tx, locked, block),
+                    |tx, locked, block, locked_blocks| self.on_lock_block(tx, locked, block, locked_blocks),
                     |tx, last_exec, commit_block| self.on_commit(tx, last_exec, commit_block, &local_committee_shard),
+                    &mut locked_blocks,
                 )?;
 
                 // If we have a new high QC, we'll process the block it justifies
@@ -105,6 +110,7 @@ where
             }
             Ok::<_, HotStuffError>(maybe_decision)
         })?;
+        self.propose_newly_locked_blocks(locked_blocks).await?;
 
         if let Some(decision) = maybe_decision {
             let is_registered = self
@@ -863,11 +869,13 @@ where
         Ok(())
     }
 
+    // Returns the number processed blocks
     fn on_lock_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         locked: &LockedBlock,
         block: &Block<TConsensusSpec::Addr>,
+        locked_blocks: &mut Vec<Block<TConsensusSpec::Addr>>,
     ) -> Result<(), HotStuffError> {
         if locked.height < block.height() {
             info!(
@@ -878,9 +886,8 @@ where
             );
 
             let parent = block.get_parent(tx.deref_mut())?;
-            self.on_lock_block(tx, locked, &parent)?;
-
-            // self.proposer.handle_on_lock_block(block).await?;
+            locked_blocks.push(block.clone());
+            self.on_lock_block(tx, locked, &parent, locked_blocks)?;
 
             // self.processed_locked_commands(tx, local_committee_shard, block)?;
             // This moves the stage update from pending to current for all transactions on on the locked block
@@ -890,6 +897,20 @@ where
                 &block.as_locked_block(),
                 block.all_transaction_ids(),
             )?;
+        }
+        Ok(())
+    }
+
+    async fn propose_newly_locked_blocks(&self, blocks: Vec<Block<TConsensusSpec::Addr>>) -> Result<(), HotStuffError> {
+        for block in blocks {
+            let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
+            let is_leader = self
+                .leader_strategy
+                .is_leader(&self.validator_addr, &local_committee, block.height());
+            // TODO: This will be changed to different strategy where not only leader is responsible for foreign block proposal.
+            if is_leader {
+                self.proposer.handle_on_lock_block(&block).await?;
+            }
         }
         Ok(())
     }

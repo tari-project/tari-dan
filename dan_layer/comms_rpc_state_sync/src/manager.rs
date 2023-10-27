@@ -11,17 +11,10 @@ use tari_consensus::traits::{SyncManager, SyncStatus};
 use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{
-        Block,
-        HighQc,
-        LastExecuted,
-        LockedBlock,
-        QuorumCertificate,
-        SubstateUpdate,
-        TransactionPoolRecord,
+        Block, HighQc, LastExecuted, LockedBlock, QuorumCertificate, SubstateUpdate, TransactionPoolRecord,
         TransactionRecord,
     },
-    StateStore,
-    StateStoreWriteTransaction,
+    StateStore, StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::Transaction;
@@ -259,7 +252,7 @@ where
             }
             block.update_nodes(
                 tx,
-                |_, _, _| Ok(()),
+                |_, _, _, _| Ok(()),
                 |tx, last_executed, block| {
                     let new_last_exec = block.as_last_executed();
                     Self::mark_block_committed(tx, last_executed, block)?;
@@ -272,6 +265,7 @@ where
 
                     Ok::<_, CommsRpcConsensusSyncError>(())
                 },
+                &mut Vec::new(),
             )?;
             block.as_last_voted().set(tx)?;
             let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
