@@ -4,6 +4,8 @@
 mod block;
 mod command;
 mod executed_transaction;
+mod foreign_receive_counters;
+mod foreign_send_counters;
 mod high_qc;
 mod last_executed;
 mod last_proposed;
@@ -26,6 +28,8 @@ mod vote_signature;
 pub use block::*;
 pub use command::*;
 pub use executed_transaction::*;
+pub use foreign_receive_counters::*;
+pub use foreign_send_counters::*;
 pub use high_qc::*;
 pub use last_executed::*;
 pub use last_proposed::*;

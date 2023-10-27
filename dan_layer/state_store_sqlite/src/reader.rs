@@ -17,6 +17,7 @@ use diesel::{
     ExpressionMethods,
     JoinOnDsl,
     NullableExpressionMethods,
+    OptionalExtension,
     QueryDsl,
     QueryableByName,
     RunQueryDsl,
@@ -30,6 +31,8 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
+        ForeignReceiveCounters,
+        ForeignSendCounters,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -367,6 +370,44 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             })?;
 
         high_qc.try_into()
+    }
+
+    fn foreign_send_counters_get(&mut self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError> {
+        use crate::schema::foreign_send_counters;
+
+        let counter = foreign_send_counters::table
+            .filter(foreign_send_counters::block_id.eq(serialize_hex(block_id)))
+            .first::<sql_models::ForeignSendCounters>(self.connection())
+            .optional()
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_send_counters_get",
+                source: e,
+            })?;
+
+        if let Some(counter) = counter {
+            counter.try_into()
+        } else {
+            Ok(ForeignSendCounters::default())
+        }
+    }
+
+    fn foreign_receive_counters_get(&mut self) -> Result<ForeignReceiveCounters, StorageError> {
+        use crate::schema::foreign_receive_counters;
+
+        let counter = foreign_receive_counters::table
+            .order_by(foreign_receive_counters::id.desc())
+            .first::<sql_models::ForeignReceiveCounters>(self.connection())
+            .optional()
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_receive_counters_get",
+                source: e,
+            })?;
+
+        if let Some(counter) = counter {
+            counter.try_into()
+        } else {
+            Ok(ForeignReceiveCounters::default())
+        }
     }
 
     fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError> {

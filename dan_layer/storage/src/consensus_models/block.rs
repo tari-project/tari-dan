@@ -2,15 +2,25 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeSet, HashMap, HashSet},
     fmt::{Debug, Display, Formatter},
+    hash::Hash,
     ops::{DerefMut, RangeInclusive},
 };
 
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
-use tari_dan_common_types::{hashing, optional::Optional, serde_with, Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{
+    hashing,
+    optional::Optional,
+    serde_with,
+    shard_bucket::ShardBucket,
+    Epoch,
+    NodeAddressable,
+    NodeHeight,
+    ShardId,
+};
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
 
@@ -59,6 +69,8 @@ pub struct Block<TAddr> {
     is_processed: bool,
     /// Flag that indicates that the block has been committed.
     is_committed: bool,
+    /// Counter for each foreign shard for reliable broadcast.
+    foreign_indexes: HashMap<ShardBucket, u64>,
     /// Timestamp when was this stored.
     stored_at: Option<PrimitiveDateTime>,
 }
@@ -72,6 +84,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         proposed_by: TAddr,
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
+        foreign_indexes: HashMap<ShardBucket, u64>,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
@@ -87,6 +100,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             is_dummy: false,
             is_processed: false,
             is_committed: false,
+            foreign_indexes,
             stored_at: None,
         };
         block.id = block.calculate_hash().into();
@@ -105,6 +119,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         is_dummy: bool,
         is_processed: bool,
         is_committed: bool,
+        foreign_indexes: HashMap<ShardBucket, u64>,
         created_at: PrimitiveDateTime,
     ) -> Self {
         Self {
@@ -121,6 +136,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             is_dummy,
             is_processed,
             is_committed,
+            foreign_indexes,
             stored_at: Some(created_at),
         }
     }
@@ -134,6 +150,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             TAddr::zero(),
             Default::default(),
             0,
+            HashMap::new(),
         )
     }
 
@@ -152,6 +169,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             is_dummy: false,
             is_processed: false,
             is_committed: true,
+            foreign_indexes: HashMap::new(),
             stored_at: None,
         }
     }
@@ -163,7 +181,16 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         high_qc: QuorumCertificate<TAddr>,
         epoch: Epoch,
     ) -> Self {
-        let mut block = Self::new(parent, high_qc, node_height, epoch, proposed_by, Default::default(), 0);
+        let mut block = Self::new(
+            parent,
+            high_qc,
+            node_height,
+            epoch,
+            proposed_by,
+            Default::default(),
+            0,
+            HashMap::new(),
+        );
         block.is_dummy = true;
         block.is_processed = false;
         block
@@ -178,6 +205,13 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
             .chain(&self.commands)
+            .chain(
+                &self
+                    .foreign_indexes
+                    .iter()
+                    .collect::<Vec<(&ShardBucket, &u64)>>()
+                    .sort(),
+            )
             .result()
     }
 }
@@ -280,6 +314,14 @@ impl<TAddr> Block<TAddr> {
 
     pub fn is_committed(&self) -> bool {
         self.is_committed
+    }
+
+    pub fn get_foreign_index(&self, bucket: &ShardBucket) -> Option<&u64> {
+        self.foreign_indexes.get(bucket)
+    }
+
+    pub fn get_foreign_indexes(&self) -> &HashMap<ShardBucket, u64> {
+        &self.foreign_indexes
     }
 }
 

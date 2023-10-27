@@ -3,9 +3,9 @@
 use std::ops::DerefMut;
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, NodeHeight};
+use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, shard_bucket::ShardBucket, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, LeafBlock, TransactionPool, TransactionPoolStage},
+    consensus_models::{Block, ForeignReceiveCounters, LeafBlock, TransactionPool, TransactionPoolStage},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -23,6 +23,7 @@ pub struct OnReceiveForeignProposalHandler<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     pacemaker: PaceMakerHandle,
+    foreign_receive_counter: ForeignReceiveCounters,
 }
 
 impl<TConsensusSpec> OnReceiveForeignProposalHandler<TConsensusSpec>
@@ -33,17 +34,19 @@ where TConsensusSpec: ConsensusSpec
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         pacemaker: PaceMakerHandle,
+        foreign_receive_counter: ForeignReceiveCounters,
     ) -> Self {
         Self {
             store,
             epoch_manager,
             transaction_pool,
             pacemaker,
+            foreign_receive_counter,
         }
     }
 
     pub async fn handle(
-        &self,
+        &mut self,
         from: TConsensusSpec::Addr,
         message: ProposalMessage<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
@@ -63,9 +66,14 @@ where TConsensusSpec: ConsensusSpec
             .epoch_manager
             .get_committee_shard(block.epoch(), vn.shard_key)
             .await?;
-        self.validate_proposed_block(&from, &block)?;
-        self.store
-            .with_write_tx(|tx| self.on_receive_foreign_block(tx, &block, &committee_shard))?;
+        let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
+        self.validate_proposed_block(&from, &block, committee_shard.bucket(), local_shard.bucket())?;
+        // Is this ok? Can foreign node send invalid block that should still increment the counter?
+        self.foreign_receive_counter.increment(&committee_shard.bucket());
+        self.store.with_write_tx(|tx| {
+            self.foreign_receive_counter.save(tx)?;
+            self.on_receive_foreign_block(tx, &block, &committee_shard)
+        })?;
 
         // We could have ready transactions at this point, so if we're the leader for the next block we can propose
         self.pacemaker.beat();
@@ -141,7 +149,28 @@ where TConsensusSpec: ConsensusSpec
         &self,
         from: &TConsensusSpec::Addr,
         candidate_block: &Block<TConsensusSpec::Addr>,
+        foreign_bucket: ShardBucket,
+        local_bucket: ShardBucket,
     ) -> Result<(), ProposalValidationError> {
+        let incoming_index = match candidate_block.get_foreign_index(&local_bucket) {
+            Some(i) => *i,
+            None => {
+                debug!(target:LOG_TARGET, "Our bucket {local_bucket:?} is missing reliability index in the proposed block {candidate_block:?}");
+                return Err(ProposalValidationError::MissingForeignCounters {
+                    proposed_by: from.to_string(),
+                    hash: *candidate_block.id(),
+                });
+            },
+        };
+        let current_index = self.foreign_receive_counter.get_index(&foreign_bucket);
+        if current_index + 1 != incoming_index {
+            debug!(target:LOG_TARGET, "We were expecting the index to be {expected_index}, but the index was
+        {incoming_index}", expected_index = current_index + 1);
+            return Err(ProposalValidationError::InvalidForeignCounters {
+                proposed_by: from.to_string(),
+                hash: *candidate_block.id(),
+            });
+        }
         if candidate_block.height() == NodeHeight::zero() || candidate_block.id().is_genesis() {
             return Err(ProposalValidationError::ProposingGenesisBlock {
                 proposed_by: from.to_string(),
