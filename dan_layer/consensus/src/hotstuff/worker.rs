@@ -154,7 +154,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 state_store.clone(),
                 epoch_manager.clone(),
                 transaction_pool.clone(),
-                proposer,
+                tx_broadcast,
             ),
 
             on_sync_request: OnSyncRequest::new(state_store.clone(), tx_leader),

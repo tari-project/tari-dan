@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
+use std::{collections::BTreeSet, num::NonZeroU64};
 
 use log::*;
 use tari_dan_common_types::{
@@ -16,21 +16,23 @@ use tari_dan_storage::{
     StateStore, StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
+use tokio::sync::mpsc;
 
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError},
+    messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
 
-use super::proposer::{self, Proposer};
+use super::common::CommitteeAndMessage;
 
-const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose";
+const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
 
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-    proposer: Proposer<TConsensusSpec>,
+    tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
@@ -41,13 +43,13 @@ where
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        proposer: Proposer<TConsensusSpec>,
+        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
     ) -> Self {
         Self {
             store,
             epoch_manager,
             transaction_pool,
-            proposer,
+            tx_broadcast,
         }
     }
 
@@ -63,29 +65,19 @@ where
                 // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
                 // Re-broadcast the previous proposal
                 if is_newview_propose {
-                    let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
-                    let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
-                    let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
-
                     if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
-                        let non_local_buckets = self.store.with_read_tx(|tx| {
-                            proposer::get_non_local_buckets(tx, &next_block, num_committees, local_bucket)
-                        })?;
                         info!(
                             target: LOG_TARGET,
-                            "🌿 RE-BROADCASTING block {}({}) to {} validators. {} command(s), {} foreign shards, justify: {} ({}), parent: {}",
+                            "🌿 RE-BROADCASTING locally block {}({}) to {} validators. {} command(s), justify: {} ({}), parent: {}",
                             next_block.id(),
                             next_block.height(),
                             local_committee.len(),
                             next_block.commands().len(),
-                            non_local_buckets.len(),
                             next_block.justify().block_id(),
                             next_block.justify().block_height(),
                             next_block.parent(),
                         );
-                        self.proposer
-                            .broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
-                            .await?;
+                        self.broadcast_proposal_locally(next_block, local_committee).await?;
                         return Ok(());
                     }
                 }
@@ -103,11 +95,8 @@ where
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
-        let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
-        let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
         // the non-Send tx could be used after the await point, which is not possible.
-        let non_local_buckets;
         let next_block;
         {
             let mut tx = self.store.create_write_tx()?;
@@ -133,25 +122,48 @@ where
             // LocalPrepared.
             // TODO: we should never broadcast to foreign shards here. The soonest we can broadcast is once we have
             //       locked the block
-            non_local_buckets =
-                proposer::get_non_local_buckets(tx.deref_mut(), &next_block, num_committees, local_bucket)?;
             tx.commit()?;
         }
 
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING new block {} to {} validators. {} foreign shards, justify: {} ({}), parent: {}",
+            "🌿 PROPOSING locally new block {} to {} validators. justify: {} ({}), parent: {}",
             next_block,
             local_committee.len(),
-            non_local_buckets.len(),
             next_block.justify().block_id(),
             next_block.justify().block_height(),
             next_block.parent()
         );
 
-        self.proposer
-            .broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
-            .await?;
+        self.broadcast_proposal_locally(next_block, local_committee).await?;
+
+        Ok(())
+    }
+
+    pub async fn broadcast_proposal_locally(
+        &self,
+        next_block: Block<TConsensusSpec::Addr>,
+        local_committee: Committee<TConsensusSpec::Addr>,
+    ) -> Result<(), HotStuffError> {
+        info!(
+            target: LOG_TARGET,
+            "🌿 Broadcasting locally proposal {} to {} local committees",
+            next_block,
+            local_committee.len(),
+        );
+
+        // Broadcast to local and foreign committees
+        self.tx_broadcast
+            .send((
+                local_committee,
+                HotstuffMessage::Proposal(ProposalMessage {
+                    block: next_block.clone(),
+                }),
+            ))
+            .await
+            .map_err(|_| HotStuffError::InternalChannelClosed {
+                context: "proposing a new block",
+            })?;
 
         Ok(())
     }

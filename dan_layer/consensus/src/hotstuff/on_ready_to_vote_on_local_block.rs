@@ -909,7 +909,7 @@ where
                 .is_leader(&self.validator_addr, &local_committee, block.height());
             // TODO: This will be changed to different strategy where not only leader is responsible for foreign block proposal.
             if is_leader {
-                self.proposer.handle_on_lock_block(&block).await?;
+                self.proposer.broadcast_proposal_foreignly(&block).await?;
             }
         }
         Ok(())
