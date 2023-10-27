@@ -11,23 +11,9 @@ use tari_dan_common_types::{
 };
 use tari_dan_storage::{
     consensus_models::{
-        Block,
-        BlockId,
-        Command,
-        Decision,
-        ExecutedTransaction,
-        HighQc,
-        LastExecuted,
-        LastSentVote,
-        LastVoted,
-        LockedBlock,
-        LockedOutput,
-        QuorumDecision,
-        SubstateLockFlag,
-        SubstateRecord,
-        TransactionPool,
-        TransactionPoolStage,
-        ValidBlock,
+        Block, BlockId, Command, Decision, ExecutedTransaction, HighQc, LastExecuted, LastSentVote, LastVoted,
+        LockedBlock, LockedOutput, QuorumDecision, SubstateLockFlag, SubstateRecord, TransactionPool,
+        TransactionPoolStage, ValidBlock,
     },
     StateStore,
 };
@@ -35,6 +21,7 @@ use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::Transaction;
 use tokio::sync::{broadcast, mpsc};
 
+use super::proposer::Proposer;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, event::HotstuffEvent, ProposalValidationError},
     messages::{HotstuffMessage, VoteMessage},
@@ -53,10 +40,12 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
     tx_events: broadcast::Sender<HotstuffEvent>,
+    proposer: Proposer<TConsensusSpec>,
 }
 
 impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
-where TConsensusSpec: ConsensusSpec
+where
+    TConsensusSpec: ConsensusSpec,
 {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
@@ -68,6 +57,7 @@ where TConsensusSpec: ConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
+        proposer: Proposer<TConsensusSpec>,
     ) -> Self {
         Self {
             validator_addr,
@@ -79,6 +69,7 @@ where TConsensusSpec: ConsensusSpec
             transaction_pool,
             tx_leader,
             tx_events,
+            proposer,
         }
     }
 
@@ -888,6 +879,8 @@ where TConsensusSpec: ConsensusSpec
 
             let parent = block.get_parent(tx.deref_mut())?;
             self.on_lock_block(tx, locked, &parent)?;
+
+            // self.proposer.handle_on_lock_block(block).await?;
 
             // self.processed_locked_commands(tx, local_committee_shard, block)?;
             // This moves the stage update from pending to current for all transactions on on the locked block

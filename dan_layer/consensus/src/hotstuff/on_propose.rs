@@ -1,47 +1,28 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{BTreeSet, HashSet},
-    num::NonZeroU64,
-    ops::DerefMut,
-};
+use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    shard_bucket::ShardBucket,
-    Epoch,
-    NodeHeight,
+    Epoch, NodeHeight,
 };
 use tari_dan_storage::{
     consensus_models::{
-        Block,
-        Command,
-        ExecutedTransaction,
-        HighQc,
-        LastProposed,
-        LeafBlock,
-        QuorumCertificate,
-        TransactionPool,
-        TransactionPoolStage,
+        Block, Command, HighQc, LastProposed, LeafBlock, QuorumCertificate, TransactionPool, TransactionPoolStage,
     },
-    StateStore,
-    StateStoreReadTransaction,
-    StateStoreWriteTransaction,
+    StateStore, StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tokio::sync::mpsc;
 
 use crate::{
-    hotstuff::{
-        common::{CommitteeAndMessage, EXHAUST_DIVISOR},
-        error::HotStuffError,
-    },
-    messages::{HotstuffMessage, ProposalMessage},
+    hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError},
     traits::ConsensusSpec,
 };
+
+use super::proposer::{self, Proposer};
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose";
 
@@ -49,23 +30,24 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-    tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+    proposer: Proposer<TConsensusSpec>,
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
-where TConsensusSpec: ConsensusSpec
+where
+    TConsensusSpec: ConsensusSpec,
 {
     pub fn new(
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+        proposer: Proposer<TConsensusSpec>,
     ) -> Self {
         Self {
             store,
             epoch_manager,
             transaction_pool,
-            tx_broadcast,
+            proposer,
         }
     }
 
@@ -86,9 +68,9 @@ where TConsensusSpec: ConsensusSpec
                     let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
 
                     if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
-                        let non_local_buckets = self
-                            .store
-                            .with_read_tx(|tx| get_non_local_buckets(tx, &next_block, num_committees, local_bucket))?;
+                        let non_local_buckets = self.store.with_read_tx(|tx| {
+                            proposer::get_non_local_buckets(tx, &next_block, num_committees, local_bucket)
+                        })?;
                         info!(
                             target: LOG_TARGET,
                             "🌿 RE-BROADCASTING block {}({}) to {} validators. {} command(s), {} foreign shards, justify: {} ({}), parent: {}",
@@ -101,7 +83,8 @@ where TConsensusSpec: ConsensusSpec
                             next_block.justify().block_height(),
                             next_block.parent(),
                         );
-                        self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
+                        self.proposer
+                            .broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
                             .await?;
                         return Ok(());
                     }
@@ -150,7 +133,8 @@ where TConsensusSpec: ConsensusSpec
             // LocalPrepared.
             // TODO: we should never broadcast to foreign shards here. The soonest we can broadcast is once we have
             //       locked the block
-            non_local_buckets = get_non_local_buckets(tx.deref_mut(), &next_block, num_committees, local_bucket)?;
+            non_local_buckets =
+                proposer::get_non_local_buckets(tx.deref_mut(), &next_block, num_committees, local_bucket)?;
             tx.commit()?;
         }
 
@@ -165,64 +149,9 @@ where TConsensusSpec: ConsensusSpec
             next_block.parent()
         );
 
-        self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
+        self.proposer
+            .broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
             .await?;
-
-        Ok(())
-    }
-
-    async fn broadcast_proposal(
-        &self,
-        epoch: Epoch,
-        next_block: Block<TConsensusSpec::Addr>,
-        non_local_buckets: HashSet<ShardBucket>,
-        local_committee: Committee<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
-        // Find non-local shard committees to include in the broadcast
-        debug!(
-            target: LOG_TARGET,
-            "non_local_buckets : [{}]",
-            non_local_buckets.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","),
-        );
-
-        let non_local_committees = self
-            .epoch_manager
-            .get_committees_by_buckets(epoch, non_local_buckets)
-            .await?;
-
-        info!(
-            target: LOG_TARGET,
-            "🌿 Broadcasting proposal {} to committees ({} local, {} foreign)",
-            next_block,
-            local_committee.len(),
-            non_local_committees.len(),
-        );
-
-        // Broadcast to local and foreign committees
-        self.tx_broadcast
-            .send((
-                local_committee,
-                HotstuffMessage::Proposal(ProposalMessage {
-                    block: next_block.clone(),
-                }),
-            ))
-            .await
-            .map_err(|_| HotStuffError::InternalChannelClosed {
-                context: "proposing a new block",
-            })?;
-
-        // TODO: only broadcast to f + 1 foreign committee members. They can gossip the proposal around from there.
-        if !non_local_committees.is_empty() {
-            self.tx_broadcast
-                .send((
-                    non_local_committees.into_values().collect(),
-                    HotstuffMessage::ForeignProposal(ProposalMessage { block: next_block }),
-                ))
-                .await
-                .map_err(|_| HotStuffError::InternalChannelClosed {
-                    context: "proposing a new block",
-                })?;
-        }
 
         Ok(())
     }
@@ -299,25 +228,4 @@ where TConsensusSpec: ConsensusSpec
 
         Ok(next_block)
     }
-}
-
-fn get_non_local_buckets<TTx: StateStoreReadTransaction>(
-    tx: &mut TTx,
-    next_block: &Block<TTx::Addr>,
-    num_committees: u32,
-    local_bucket: ShardBucket,
-) -> Result<HashSet<ShardBucket>, HotStuffError> {
-    let prepared_iter = next_block
-        .commands()
-        .iter()
-        .filter_map(|cmd| cmd.local_prepared())
-        .map(|t| &t.id);
-    let prepared_txs = ExecutedTransaction::get_involved_shards(tx, prepared_iter)?;
-    let non_local_buckets = prepared_txs
-        .into_iter()
-        .flat_map(|(_, shards)| shards)
-        .map(|shard| shard.to_committee_bucket(num_committees))
-        .filter(|bucket| *bucket != local_bucket)
-        .collect();
-    Ok(non_local_buckets)
 }

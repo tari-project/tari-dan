@@ -17,22 +17,10 @@ use time::PrimitiveDateTime;
 use super::QuorumCertificate;
 use crate::{
     consensus_models::{
-        Command,
-        HighQc,
-        LastExecuted,
-        LastProposed,
-        LastVoted,
-        LeafBlock,
-        LockedBlock,
-        SubstateCreatedProof,
-        SubstateUpdate,
-        TransactionRecord,
-        Vote,
+        Command, HighQc, LastExecuted, LastProposed, LastVoted, LeafBlock, LockedBlock, SubstateCreatedProof,
+        SubstateUpdate, TransactionRecord, Vote,
     },
-    Ordering,
-    StateStoreReadTransaction,
-    StateStoreWriteTransaction,
-    StorageError,
+    Ordering, StateStoreReadTransaction, StateStoreWriteTransaction, StorageError,
 };
 
 const LOG_TARGET: &str = "tari::dan::storage::consensus_models::block";
