@@ -57,7 +57,7 @@ pub struct CallInstructionRequest {
     pub fee_account: ComponentAddressOrName,
     #[serde(default, deserialize_with = "opt_string_or_struct")]
     pub dump_outputs_into: Option<ComponentAddressOrName>,
-    pub fee: u64,
+    pub max_fee: u64,
     #[serde(default)]
     pub inputs: Vec<SubstateRequirement>,
     #[serde(default)]
@@ -194,7 +194,7 @@ pub struct KeysCreateResponse {
 pub struct AccountsCreateRequest {
     pub account_name: Option<String>,
     pub custom_access_rules: Option<ComponentAccessRules>,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
     pub is_default: bool,
     pub key_id: Option<u64>,
 }
@@ -212,7 +212,7 @@ pub struct AccountsInvokeRequest {
     pub account: Option<ComponentAddressOrName>,
     pub method: String,
     pub args: Vec<Arg>,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -319,7 +319,7 @@ pub struct TransferRequest {
     pub amount: Amount,
     pub resource_address: ResourceAddress,
     pub destination_public_key: PublicKey,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -378,7 +378,7 @@ pub struct ConfidentialTransferRequest {
     pub amount: Amount,
     pub resource_address: ResourceAddress,
     pub destination_public_key: PublicKey,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -393,7 +393,7 @@ pub struct ClaimBurnRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
     pub claim_proof: serde_json::Value,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -416,7 +416,7 @@ pub struct RevealFundsRequest {
     /// Pay fee from revealed funds. If false, previously revealed funds in the account are used.
     pub pay_fee_from_reveal: bool,
     /// The amount of fees to add to the transaction. Any fees not charged are refunded.
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -430,7 +430,7 @@ pub struct RevealFundsResponse {
 pub struct AccountsCreateFreeTestCoinsRequest {
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
     pub key_id: Option<u64>,
 }
 
@@ -559,7 +559,7 @@ pub struct GetValidatorFeesResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimValidatorFeesRequest {
     pub account: Option<ComponentAddressOrName>,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
     pub validator_public_key: PublicKey,
     pub epoch: Epoch,
 }
