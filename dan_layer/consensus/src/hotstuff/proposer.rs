@@ -1,11 +1,13 @@
+//   Copyright 2023 The Tari Project
+//   SPDX-License-Identifier: BSD-3-Clause
+
 use std::collections::HashSet;
 
 use log::{debug, info};
 use tari_dan_common_types::shard_bucket::ShardBucket;
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction},
-    StateStore,
-    StateStoreReadTransaction,
+    StateStore, StateStoreReadTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
@@ -26,7 +28,8 @@ pub struct Proposer<TConsensusSpec: ConsensusSpec> {
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_foreignly";
 
 impl<TConsensusSpec> Proposer<TConsensusSpec>
-where TConsensusSpec: ConsensusSpec
+where
+    TConsensusSpec: ConsensusSpec,
 {
     pub fn new(
         store: TConsensusSpec::StateStore,
