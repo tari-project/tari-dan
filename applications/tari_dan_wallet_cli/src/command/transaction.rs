@@ -111,7 +111,7 @@ pub struct CommonSubmitArgs {
     #[clap(long)]
     pub dry_run: bool,
     #[clap(long)]
-    pub fee: Option<u64>,
+    pub max_fee: Option<u64>,
     #[clap(long, short = 'f', alias = "fee-account")]
     pub fee_account: Option<ComponentAddressOrName>,
     #[clap(long)]
@@ -258,7 +258,7 @@ pub async fn handle_submit(args: SubmitArgs, client: &mut WalletDaemonClient) ->
     let fee_instructions = vec![Instruction::CallMethod {
         component_address: fee_account.address.as_component_address().unwrap(),
         method: "pay_fee".to_string(),
-        args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
+        args: args![Amount::try_from(common.max_fee.unwrap_or(1000))?],
     }];
 
     let request = TransactionSubmitRequest {
@@ -296,7 +296,7 @@ async fn handle_submit_manifest(
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.fee.unwrap_or(1000))?],
+            args: args![Amount::try_from(common.max_fee.unwrap_or(1000))?],
         }],
         instructions,
         inputs: common.inputs,
@@ -323,14 +323,14 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
     let destination_public_key =
         PublicKey::from_bytes(&destination_public_key.into_inner()).map_err(anyhow::Error::msg)?;
 
-    let fee = common.fee.map(|f| f.try_into()).transpose()?;
+    let fee = common.max_fee.map(|f| f.try_into()).transpose()?;
     let resp = client
         .accounts_transfer(TransferRequest {
             account: source_account_name,
             amount: Amount::try_from(amount)?,
             resource_address,
             destination_public_key,
-            fee,
+            max_fee: fee,
         })
         .await?;
 
@@ -363,7 +363,7 @@ pub async fn handle_confidential_transfer(
             amount: Amount::try_from(amount)?,
             resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
             destination_public_key,
-            fee: common.fee.map(|f| f.try_into()).transpose()?,
+            max_fee: common.max_fee.map(|f| f.try_into()).transpose()?,
         })
         .await?;
 

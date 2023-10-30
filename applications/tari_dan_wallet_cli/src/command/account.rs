@@ -66,7 +66,7 @@ pub enum AccountsSubcommand {
         method: String,
         #[clap(long, short = 'a')]
         args: Vec<CliArg>,
-        fee: Option<u32>,
+        max_fee: Option<u32>,
     },
     Get(GetArgs),
     ClaimBurn(ClaimBurnArgs),
@@ -126,7 +126,7 @@ pub struct RevealFundsArgs {
     account: Option<ComponentAddressOrName>,
     /// The fee to pay for the reveal transaction
     #[clap(long, short = 'f')]
-    fee: Option<u32>,
+    max_fee: Option<u32>,
     /// If set, the fee will be paid from the revealed funds instead of from the account resulting in less revealed
     /// funds than requested.
     #[clap(long, default_value_t = true)]
@@ -160,8 +160,8 @@ impl AccountsSubcommand {
                 account,
                 method,
                 args,
-                fee,
-            } => hande_invoke(account, method, args, fee, &mut client).await?,
+                max_fee,
+            } => handle_invoke(account, method, args, max_fee, &mut client).await?,
             AccountsSubcommand::Get(args) => handle_get(args, &mut client).await?,
             AccountsSubcommand::ClaimBurn(args) => handle_claim_burn(args, &mut client).await?,
             AccountsSubcommand::RevealFunds(args) => handle_reveal_funds(args, &mut client).await?,
@@ -179,7 +179,7 @@ async fn handle_create(args: CreateArgs, client: &mut WalletDaemonClient) -> Res
             account_name: args.account_name,
             custom_access_rules: None,
             is_default: args.is_default,
-            fee: args.fee.map(|u| Amount::new(u.into())),
+            max_fee: args.fee.map(|u| Amount::new(u.into())),
             key_id: args.key_id,
         })
         .await?;
@@ -198,11 +198,11 @@ async fn handle_set_default(args: SetDefaultArgs, client: &mut WalletDaemonClien
     Ok(())
 }
 
-async fn hande_invoke(
+async fn handle_invoke(
     account: Option<ComponentAddressOrName>,
     method: String,
     args: Vec<CliArg>,
-    fee: Option<u32>,
+    max_fee: Option<u32>,
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
     println!("Submitted invoke transaction for account...",);
@@ -211,7 +211,7 @@ async fn hande_invoke(
             account,
             method,
             args: args.into_iter().map(|a| a.into_arg()).collect(),
-            fee: fee.map(|u| Amount::new(u.into())),
+            max_fee: max_fee.map(|u| Amount::new(u.into())),
         })
         .await?;
 
@@ -285,7 +285,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
     let req = ClaimBurnRequest {
         account,
         claim_proof,
-        fee: fee.map(|f| f.try_into()).transpose()?,
+        max_fee: fee.map(|f| f.try_into()).transpose()?,
     };
 
     let resp = client
@@ -309,7 +309,7 @@ async fn handle_create_free_test_coins(
         .create_free_test_coins(AccountsCreateFreeTestCoinsRequest {
             account: args.account,
             amount: Amount::new(args.amount.unwrap_or(100000) as i64),
-            fee: args.fee.map(|u| u.try_into()).transpose()?,
+            max_fee: args.fee.map(|u| u.try_into()).transpose()?,
             key_id: args.key_id,
         })
         .await?;
@@ -361,7 +361,7 @@ pub async fn handle_reveal_funds(args: RevealFundsArgs, client: &mut WalletDaemo
     let RevealFundsArgs {
         account,
         reveal_amount,
-        fee,
+        max_fee,
         pay_from_reveal,
     } = args;
 
@@ -370,7 +370,7 @@ pub async fn handle_reveal_funds(args: RevealFundsArgs, client: &mut WalletDaemo
         .accounts_reveal_funds(RevealFundsRequest {
             account,
             amount_to_reveal: Amount::try_from(reveal_amount).expect("Reveal amount too large"),
-            fee: fee.map(|f| f.try_into()).transpose()?,
+            max_fee: max_fee.map(|f| f.try_into()).transpose()?,
             pay_fee_from_reveal: pay_from_reveal,
         })
         .await?;

@@ -48,11 +48,12 @@ impl TransactionBuilder {
     /// Adds a fee instruction that calls the "take_fee" method on a component.
     /// This method must exist and return a Bucket with containing revealed confidential XTR resource.
     /// This allows the fee to originate from sources other than the transaction sender's account.
-    pub fn fee_transaction_pay_from_component(mut self, component_address: ComponentAddress, fee: Amount) -> Self {
+    /// The fee instruction will lock up the "max_fee" amount for the duration of the transaction.
+    pub fn fee_transaction_pay_from_component(mut self, component_address: ComponentAddress, max_fee: Amount) -> Self {
         self.fee_instructions.push(Instruction::CallMethod {
             component_address,
             method: "pay_fee".to_string(),
-            args: args![fee],
+            args: args![max_fee],
         });
         self
     }
