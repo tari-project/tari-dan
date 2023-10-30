@@ -4,17 +4,17 @@ use log::{debug, info};
 use tari_dan_common_types::shard_bucket::ShardBucket;
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction},
-    StateStore, StateStoreReadTransaction,
+    StateStore,
+    StateStoreReadTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
+use super::{common::CommitteeAndMessage, HotStuffError};
 use crate::{
     messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
-
-use super::{common::CommitteeAndMessage, HotStuffError};
 
 #[derive(Clone)]
 pub struct Proposer<TConsensusSpec: ConsensusSpec> {
@@ -26,8 +26,7 @@ pub struct Proposer<TConsensusSpec: ConsensusSpec> {
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_foreignly";
 
 impl<TConsensusSpec> Proposer<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         store: TConsensusSpec::StateStore,

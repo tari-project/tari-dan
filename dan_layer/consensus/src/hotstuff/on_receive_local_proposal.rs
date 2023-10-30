@@ -17,8 +17,11 @@ use tokio::sync::{broadcast, mpsc};
 use super::proposer::Proposer;
 use crate::{
     hotstuff::{
-        error::HotStuffError, on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
-        pacemaker_handle::PaceMakerHandle, HotstuffEvent, ProposalValidationError,
+        error::HotStuffError,
+        on_ready_to_vote_on_local_block::OnReadyToVoteOnLocalBlock,
+        pacemaker_handle::PaceMakerHandle,
+        HotstuffEvent,
+        ProposalValidationError,
     },
     messages::{HotstuffMessage, ProposalMessage},
     traits::{ConsensusSpec, LeaderStrategy},

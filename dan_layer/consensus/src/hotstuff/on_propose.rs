@@ -7,24 +7,32 @@ use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    Epoch, NodeHeight,
+    Epoch,
+    NodeHeight,
 };
 use tari_dan_storage::{
     consensus_models::{
-        Block, Command, HighQc, LastProposed, LeafBlock, QuorumCertificate, TransactionPool, TransactionPoolStage,
+        Block,
+        Command,
+        HighQc,
+        LastProposed,
+        LeafBlock,
+        QuorumCertificate,
+        TransactionPool,
+        TransactionPoolStage,
     },
-    StateStore, StateStoreWriteTransaction,
+    StateStore,
+    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
+use super::common::CommitteeAndMessage;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError},
     messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
-
-use super::common::CommitteeAndMessage;
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
 
@@ -36,8 +44,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         store: TConsensusSpec::StateStore,

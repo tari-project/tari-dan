@@ -11,7 +11,8 @@ use log::*;
 use tari_dan_common_types::{optional::Optional, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
-    StateStore, StateStoreWriteTransaction,
+    StateStore,
+    StateStoreWriteTransaction,
 };
 use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
@@ -171,8 +172,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     }
 }
 impl<TConsensusSpec> HotstuffWorker<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
+where TConsensusSpec: ConsensusSpec
 {
     pub async fn start(&mut self) -> Result<(), HotStuffError> {
         self.create_genesis_block_if_required()?;

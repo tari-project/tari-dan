@@ -11,9 +11,23 @@ use tari_dan_common_types::{
 };
 use tari_dan_storage::{
     consensus_models::{
-        Block, BlockId, Command, Decision, ExecutedTransaction, HighQc, LastExecuted, LastSentVote, LastVoted,
-        LockedBlock, LockedOutput, QuorumDecision, SubstateLockFlag, SubstateRecord, TransactionPool,
-        TransactionPoolStage, ValidBlock,
+        Block,
+        BlockId,
+        Command,
+        Decision,
+        ExecutedTransaction,
+        HighQc,
+        LastExecuted,
+        LastSentVote,
+        LastVoted,
+        LockedBlock,
+        LockedOutput,
+        QuorumDecision,
+        SubstateLockFlag,
+        SubstateRecord,
+        TransactionPool,
+        TransactionPoolStage,
+        ValidBlock,
     },
     StateStore,
 };
@@ -47,8 +61,7 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
 }
 
 impl<TConsensusSpec> OnReadyToVoteOnLocalBlock<TConsensusSpec>
-where
-    TConsensusSpec: ConsensusSpec,
+where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
@@ -907,7 +920,8 @@ where
             let is_leader = self
                 .leader_strategy
                 .is_leader(&self.validator_addr, &local_committee, block.height());
-            // TODO: This will be changed to different strategy where not only leader is responsible for foreign block proposal.
+            // TODO: This will be changed to different strategy where not only leader is responsible for foreign block
+            // proposal.
             if is_leader {
                 self.proposer.broadcast_proposal_foreignly(&block).await?;
             }
