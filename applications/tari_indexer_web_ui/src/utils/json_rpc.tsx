@@ -26,6 +26,9 @@ async function jsonRpc(method: string, params: any = null) {
   let address = 'http://localhost:3333';
   try {
     address = await (await fetch('/json_rpc_address')).text();
+    if (!address.startsWith("http")) {
+      address = "http://" + address;
+    }
   } catch {}
   let response = await fetch(address, {
     method: 'POST',
