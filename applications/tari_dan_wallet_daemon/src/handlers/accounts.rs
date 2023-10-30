@@ -121,9 +121,9 @@ pub async fn handle_create(
         default_account.address
     );
 
-    let fee = req.fee.unwrap_or(DEFAULT_FEE);
+    let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
     let transaction = Transaction::builder()
-        .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), fee)
+        .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
         .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
         .with_inputs(
             inputs
@@ -227,7 +227,7 @@ pub async fn handle_invoke(
 
     let account_address = account.address.as_component_address().unwrap();
     let transaction = Transaction::builder()
-        .fee_transaction_pay_from_component(account_address, req.fee.unwrap_or(DEFAULT_FEE))
+        .fee_transaction_pay_from_component(account_address, req.max_fee.unwrap_or(DEFAULT_FEE))
         .call_method(account_address, &req.method, req.args)
         .with_inputs(inputs)
         .sign(&signing_key.key)
@@ -343,8 +343,8 @@ pub async fn handle_reveal_funds(
             .accounts_api()
             .get_vault_by_resource(&account.address, &CONFIDENTIAL_TARI_RESOURCE_ADDRESS)?;
 
-        let fee = req.fee.unwrap_or(DEFAULT_FEE);
-        let amount_to_reveal = req.amount_to_reveal + if req.pay_fee_from_reveal { fee } else { 0.into() };
+        let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
+        let amount_to_reveal = req.amount_to_reveal + if req.pay_fee_from_reveal { max_fee } else { 0.into() };
 
         let proof_id = sdk.confidential_outputs_api().add_proof(&vault.address)?;
 
@@ -414,12 +414,12 @@ pub async fn handle_reveal_funds(
                 Instruction::CallMethod {
                     component_address: account_address,
                     method: "pay_fee".to_string(),
-                    args: args![fee],
+                    args: args![max_fee],
                 },
             ]);
         } else {
             builder = builder
-                .fee_transaction_pay_from_component(account_address, fee)
+                .fee_transaction_pay_from_component(account_address, max_fee)
                 .call_method(account_address, "withdraw_confidential", args![
                     CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
                     reveal_proof
@@ -479,11 +479,11 @@ pub async fn handle_claim_burn(
     let ClaimBurnRequest {
         account,
         claim_proof,
-        fee,
+        max_fee,
     } = req;
 
-    let fee = fee.unwrap_or(DEFAULT_FEE);
-    if fee.is_negative() {
+    let max_fee = max_fee.unwrap_or(DEFAULT_FEE);
+    if max_fee.is_negative() {
         return Err(invalid_params("fee", Some("cannot be negative")));
     }
 
@@ -611,11 +611,11 @@ pub async fn handle_claim_burn(
     let mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
     let (nonce, output_public_nonce) = PublicKey::random_keypair(&mut OsRng);
 
-    let final_amount = Amount::try_from(unmasked_output.value)? - fee;
+    let final_amount = Amount::try_from(unmasked_output.value)? - max_fee;
     if final_amount.is_negative() {
         return Err(anyhow::anyhow!(
             "Fee ({}) is greater than the claimed output amount ({})",
-            fee,
+            max_fee,
             unmasked_output.value
         ));
     }
@@ -633,7 +633,7 @@ pub async fn handle_claim_burn(
         sender_public_nonce: output_public_nonce,
         minimum_value_promise: 0,
         encrypted_data,
-        reveal_amount: fee,
+        reveal_amount: max_fee,
     };
 
     let reveal_proof =
@@ -665,7 +665,7 @@ pub async fn handle_claim_burn(
             Instruction::CallMethod {
                 component_address: account.address.clone().as_component_address().unwrap(),
                 method: "pay_fee".to_string(),
-                args: args![fee],
+                args: args![max_fee],
             },
         ])
         .with_inputs(inputs)
@@ -795,11 +795,11 @@ pub async fn handle_create_free_test_coins(
     }
 
     // Pay fees from the account
-    let fee = req.fee.unwrap_or(DEFAULT_FEE);
+    let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
     instructions.push(Instruction::CallMethod {
         component_address: account_component_address,
         method: "pay_fee".to_string(),
-        args: args![fee],
+        args: args![max_fee],
     });
 
     // Add all versioned account child addresses as inputs unless the account is new
@@ -841,7 +841,7 @@ pub async fn handle_create_free_test_coins(
     Ok(AccountsCreateFreeTestCoinsResponse {
         transaction_id: tx_id,
         amount: req.amount,
-        fee,
+        fee: max_fee,
         result: finalized.finalize,
         public_key: account_public_key,
     })
@@ -887,7 +887,7 @@ pub async fn handle_transfer(
         get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
     // build the transaction
-    let fee = req.fee.unwrap_or(DEFAULT_FEE);
+    let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
     instructions.append(&mut vec![
         Instruction::CallMethod {
             component_address: source_account_address,
@@ -905,7 +905,7 @@ pub async fn handle_transfer(
         Instruction::CallMethod {
             component_address: source_account_address,
             method: "pay_fee".to_string(),
-            args: args![fee],
+            args: args![max_fee],
         },
     ]);
 
@@ -953,7 +953,7 @@ pub async fn handle_transfer(
     Ok(TransferResponse {
         transaction_id: tx_id,
         fee: finalized.final_fee,
-        fee_refunded: fee - finalized.final_fee,
+        fee_refunded: max_fee - finalized.final_fee,
         result: finalized.finalize,
     })
 }
@@ -1052,7 +1052,7 @@ pub async fn handle_confidential_transfer(
             get_or_create_account_address(&sdk, &req.destination_public_key, &mut inputs, &mut instructions).await?;
 
         // -------------------------------- Lock outputs for spending -------------------------------- //
-        let total_amount = req.fee.unwrap_or(DEFAULT_FEE) + req.amount;
+        let total_amount = req.max_fee.unwrap_or(DEFAULT_FEE) + req.amount;
         let proof_id = outputs_api.add_proof(&src_vault.address)?;
         let (confidential_inputs, total_input_value) =
             outputs_api.lock_outputs_by_amount(&src_vault.address, total_amount, proof_id)?;
@@ -1139,7 +1139,7 @@ pub async fn handle_confidential_transfer(
         ]);
 
         let transaction = Transaction::builder()
-            .fee_transaction_pay_from_component(source_component_address, req.fee.unwrap_or(DEFAULT_FEE))
+            .fee_transaction_pay_from_component(source_component_address, req.max_fee.unwrap_or(DEFAULT_FEE))
             .with_instructions(instructions)
             .sign(&account_secret.key)
             .build();
