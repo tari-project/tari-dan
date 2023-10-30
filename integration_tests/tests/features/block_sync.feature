@@ -23,8 +23,8 @@ Feature: Block Sync
     When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
     When miner MINER mines 16 new blocks
-    Then VN has scanned to height 17 within 10 seconds
-    And indexer IDX has scanned to height 17 within 10 seconds
+    Then VN has scanned to height 17
+    And indexer IDX has scanned to height 17
     Then the validator node VN is listed as registered
 
     When indexer IDX connects to all other validators
@@ -44,8 +44,8 @@ Feature: Block Sync
 
     When validator node VN2 sends a registration transaction allowing fee claims from wallet WALLET_D using key K1
     When miner MINER mines 20 new blocks
-    Then VN has scanned to height 37 within 20 seconds
-    Then VN2 has scanned to height 37 within 10 seconds
+    Then VN has scanned to height 37
+    Then VN2 has scanned to height 37
     Then the validator node VN2 is listed as registered
 
     When I wait for validator VN2 has leaf block height of at least 20

@@ -24,7 +24,7 @@ Feature: NFTs
     # Register the "basic_nft" template
     When validator node VN registers the template "basic_nft"
     When miner MINER mines 13 new blocks
-    Then VN has scanned to height 17 within 10 seconds
+    Then VN has scanned to height 17
     Then the validator node VN is listed as registered
     Then the template "basic_nft" is listed as registered by the validator node VN
 
@@ -90,7 +90,7 @@ Feature: NFTs
     # Register the "basic_nft" template
     When validator node VN registers the template "basic_nft"
     When miner MINER mines 13 new blocks
-    Then VN has scanned to height 17 within 10 seconds
+    Then VN has scanned to height 17
     Then the validator node VN is listed as registered
     Then the template "basic_nft" is listed as registered by the validator node VN
 

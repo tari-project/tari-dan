@@ -37,20 +37,41 @@ async fn given_validator_connects_to_other_vns(world: &mut TariWorld, name: Stri
     }
 }
 
-#[then(expr = "indexer {word} has scanned to height {int} within {int} seconds")]
-async fn indexer_has_scanned_to_height(world: &mut TariWorld, name: String, block_height: u64, seconds: usize) {
+#[then(expr = "indexer {word} has scanned to height {int}")]
+async fn indexer_has_scanned_to_height(world: &mut TariWorld, name: String, block_height: u64) {
     let indexer = world.get_indexer(&name);
     let mut client = indexer.get_jrpc_indexer_client();
-    for _ in 0..seconds {
+    let mut last_block_height = 0;
+    let mut remaining = 10;
+    loop {
         let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
         if stats.current_block_height == block_height {
             return;
         }
+
+        assert!(
+            stats.current_block_height <= block_height,
+            "Indexer {} has scanned past block height {} to height {}",
+            name,
+            block_height,
+            stats.current_block_height
+        );
+
+        if stats.current_block_height != last_block_height {
+            last_block_height = stats.current_block_height;
+            // Reset the timer each time the scanned height changes
+            remaining = 10;
+        }
+
+        if remaining == 0 {
+            panic!(
+                "Indexer {} did not scan to block height {}. Current height: {}",
+                name, block_height, stats.current_block_height
+            );
+        }
+        remaining -= 1;
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
     }
-
-    let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
-    assert_eq!(stats.current_block_height, block_height);
 }
 
 #[given(expr = "an indexer {word} connected to base node {word}")]

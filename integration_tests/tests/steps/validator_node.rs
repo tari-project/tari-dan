@@ -319,30 +319,50 @@ async fn vn_has_scanned_to_epoch(world: &mut TariWorld, vn_name: String, epoch: 
     assert_eq!(stats.current_epoch, epoch);
 }
 
-#[then(expr = "{word} has scanned to height {int} within {int} seconds")]
-async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_height: u64, seconds: usize) {
+#[then(expr = "{word} has scanned to height {int}")]
+async fn vn_has_scanned_to_height(world: &mut TariWorld, vn_name: String, block_height: u64) {
     let vn = world.get_validator_node(&vn_name);
     let mut client = vn.create_client();
-    for _ in 0..seconds {
+    let mut last_block_height = 0;
+    let mut remaining = 10;
+    loop {
         let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
         if stats.current_block_height == block_height {
             return;
         }
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
+        assert!(
+            stats.current_block_height <= block_height,
+            "Validator {} has scanned past the target height {}. Current height: {}",
+            vn_name,
+            block_height,
+            stats.current_block_height
+        );
 
-    let stats = client.get_epoch_manager_stats().await.expect("Failed to get stats");
-    assert_eq!(stats.current_block_height, block_height);
+        if stats.current_block_height != last_block_height {
+            last_block_height = stats.current_block_height;
+            // Reset the timer each time the scanned height changes
+            remaining = 10;
+        }
+
+        if remaining == 0 {
+            panic!(
+                "Validator {} has not scanned to height {}. Current height: {}",
+                vn_name, block_height, stats.current_block_height
+            );
+        }
+        remaining -= 1;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
 }
 
-#[then(expr = "all validators have scanned to height {int} within {int} seconds")]
-async fn all_vns_have_scanned_to_height(world: &mut TariWorld, block_height: u64, seconds: usize) {
+#[then(expr = "all validators have scanned to height {int}")]
+async fn all_vns_have_scanned_to_height(world: &mut TariWorld, block_height: u64) {
     let all_names = world
         .all_validators_iter()
         .map(|vn| vn.name.clone())
         .collect::<Vec<_>>();
     for vn in all_names {
-        vn_has_scanned_to_height(world, vn, block_height, seconds).await;
+        vn_has_scanned_to_height(world, vn, block_height).await;
     }
 }
 
