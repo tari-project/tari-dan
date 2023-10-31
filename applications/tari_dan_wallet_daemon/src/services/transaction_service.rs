@@ -112,7 +112,7 @@ where
         notify: Notify<WalletEvent>,
     ) -> Result<(), TransactionServiceError> {
         let transaction_api = wallet_sdk.transaction_api();
-        let pending_transactions = transaction_api.fetch_all_by_status(TransactionStatus::Pending)?;
+        let pending_transactions = transaction_api.fetch_all(Some(TransactionStatus::Pending), None)?;
         let log_level = if pending_transactions.is_empty() {
             Level::Debug
         } else {

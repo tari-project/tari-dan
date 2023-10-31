@@ -38,7 +38,7 @@ import { Link } from 'react-router-dom';
 import FetchStatusCheck from '../../Components/FetchStatusCheck';
 import StatusChip from '../../Components/StatusChip';
 import { DataTableCell } from '../../Components/StyledComponents';
-import { useGetAllTransactionsByStatus } from '../../api/hooks/useTransactions';
+import { useGetAllTransactions } from '../../api/hooks/useTransactions';
 import {
   emptyRows,
   handleChangePage,
@@ -49,7 +49,7 @@ export default function Transactions() {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const { data, isLoading, error, isError } =
-    useGetAllTransactionsByStatus(null);
+    useGetAllTransactions(null, null);
   const theme = useTheme();
 
   return (

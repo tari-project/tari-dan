@@ -42,9 +42,9 @@ async function internalJsonRpc(
   try {
     address = await (await fetch('/json_rpc_address')).text();
     if (!address.startsWith("http")) {
-        address = "http://" + address;
+      address = "http://" + address;
     }
-  } catch {}
+  } catch { }
   let headers: { [key: string]: string } = {
     'Content-Type': 'application/json',
   };
@@ -213,8 +213,8 @@ export const confidentialCancel = (proofId: number) =>
 export const confidentialCreateOutputProof = (amount: number) =>
   jsonRpc('confidential.create_output_proof', [amount]);
 
-export const getAllTransactionByStatus = (status: string | null | undefined) =>
-  jsonRpc('transactions.get_all_by_status', [status]);
+export const getAllTransaction = (status: string | null | undefined, component: string | null | undefined) =>
+  jsonRpc('transactions.get_all', [status, component]);
 
 export const webrtc = (
   signalingServerToken: string,

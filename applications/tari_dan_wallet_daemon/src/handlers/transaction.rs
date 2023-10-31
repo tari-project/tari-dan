@@ -195,7 +195,7 @@ pub async fn handle_get(
     })
 }
 
-pub async fn handle_get_all_by_status(
+pub async fn handle_get_all(
     context: &HandlerContext,
     token: Option<String>,
     req: TransactionGetAllRequest,
@@ -204,10 +204,10 @@ pub async fn handle_get_all_by_status(
         .wallet_sdk()
         .jwt_api()
         .check_auth(token, &[JrpcPermission::TransactionGet])?;
-    let transactions = match req.status {
-        Some(status) => context.wallet_sdk().transaction_api().fetch_all_by_status(status)?,
-        None => context.wallet_sdk().transaction_api().fetch_all()?,
-    };
+    let transactions = context
+        .wallet_sdk()
+        .transaction_api()
+        .fetch_all(req.status, req.component)?;
     Ok(TransactionGetAllResponse {
         transactions: transactions
             .into_iter()

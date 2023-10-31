@@ -115,7 +115,7 @@ async fn handler(
             "get" => call_handler(context, value, token, transaction::handle_get).await,
             "get_result" => call_handler(context, value, token, transaction::handle_get_result).await,
             "wait_result" => call_handler(context, value, token, transaction::handle_wait_result).await,
-            "get_all_by_status" => call_handler(context, value, token, transaction::handle_get_all_by_status).await,
+            "get_all" => call_handler(context, value, token, transaction::handle_get_all).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("accounts", method)) => match method {
