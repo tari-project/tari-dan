@@ -29,27 +29,13 @@ pub use tari_template_abi::{tari_alloc, tari_free};
 static ALLOC: lol_alloc::AssumeSingleThreaded<lol_alloc::FreeListAllocator> =
     unsafe { lol_alloc::AssumeSingleThreaded::new(lol_alloc::FreeListAllocator::new()) };
 
-#[cfg(any(feature = "call_engine_in_abi", feature = "unexpected_export_function"))]
-#[no_mangle]
-pub extern "C" fn Buggy_abi() -> *mut u8 {
-    use tari_bor::encode_with_len;
-    use tari_template_abi::*;
-    // Call the engine in the ABI code, you aren't allowed to do that *shakes head*
-    #[cfg(feature = "call_engine_in_abi")]
-    unsafe {
-        tari_engine(123, ptr::null_mut(), 0)
-    };
-    wrap_ptr(encode_with_len(&TemplateDef {
-        template_name: "".to_string(),
-        functions: vec![],
-    }))
-}
-
 #[cfg(feature = "return_null_abi")]
 #[no_mangle]
-pub extern "C" fn Buggy_abi() -> *mut u8 {
-    ptr::null_mut()
-}
+pub static _ABI_TEMPLATE_DEF: [u8; 0] = [];
+
+#[cfg(feature = "return_empty_abi")]
+#[no_mangle]
+pub static _ABI_TEMPLATE_DEF: [u8; 4] = [0, 0, 0, 0];
 
 #[no_mangle]
 pub extern "C" fn Buggy_main(_call_info: *mut u8, _call_info_len: usize) -> *mut u8 {

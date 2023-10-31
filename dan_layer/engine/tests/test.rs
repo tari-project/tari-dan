@@ -41,6 +41,7 @@ use tari_template_test_tooling::{SubstateType, TemplateTest};
 use tari_transaction::Transaction;
 use tari_transaction_manifest::ManifestValue;
 use tari_utilities::hex::to_hex;
+use wasmer::ExportError;
 
 #[test]
 fn test_hello_world() {
@@ -91,7 +92,7 @@ fn test_composed() {
     let functions = template_test
         .get_module("HelloWorld")
         .template_def()
-        .functions
+        .functions()
         .iter()
         .map(|f| f.name.as_str())
         .collect::<Vec<_>>();
@@ -100,7 +101,7 @@ fn test_composed() {
     let functions = template_test
         .get_module("State")
         .template_def()
-        .functions
+        .functions()
         .iter()
         .map(|f| f.name.as_str())
         .collect::<Vec<_>>();
@@ -124,19 +125,13 @@ fn test_composed() {
 
 #[test]
 fn test_buggy_template() {
-    let err = compile_template("tests/templates/buggy", &["call_engine_in_abi"])
-        .unwrap()
-        .load_template()
-        .unwrap_err();
-    assert!(matches!(err, PackageError::TemplateCalledEngineDuringInitialization));
-
     let err = compile_template("tests/templates/buggy", &["return_null_abi"])
         .unwrap()
         .load_template()
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::AbiDecodeError(_))
+        PackageError::WasmModuleError(WasmExecutionError::MemoryPointerOutOfRange { .. })
     ));
 
     let err = compile_template("tests/templates/buggy", &["unexpected_export_function"])
@@ -146,6 +141,24 @@ fn test_buggy_template() {
     assert!(matches!(
         err,
         PackageError::WasmModuleError(WasmExecutionError::UnexpectedAbiFunction { .. })
+    ));
+
+    let err = compile_template("tests/templates/buggy", &["return_empty_abi"])
+        .unwrap()
+        .load_template()
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        PackageError::WasmModuleError(WasmExecutionError::AbiDecodeError(_))
+    ));
+
+    let err = compile_template("tests/templates/buggy", &[])
+        .unwrap()
+        .load_template()
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        PackageError::WasmModuleError(WasmExecutionError::ExportError(ExportError::Missing(_)))
     ));
 }
 
@@ -158,7 +171,7 @@ fn test_private_function() {
     let functions = template_test
         .get_module("PrivateCounter")
         .template_def()
-        .functions
+        .functions()
         .iter()
         .map(|f| f.name.as_str())
         .collect::<Vec<_>>();

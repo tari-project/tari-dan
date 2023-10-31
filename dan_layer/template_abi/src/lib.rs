@@ -40,3 +40,6 @@ pub mod rust;
 
 mod types;
 pub use types::*;
+
+/// The name of the global export that defines the template definition
+pub const ABI_TEMPLATE_DEF_GLOBAL_NAME: &str = "_ABI_TEMPLATE_DEF";

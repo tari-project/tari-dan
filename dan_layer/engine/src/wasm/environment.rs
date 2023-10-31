@@ -129,8 +129,9 @@ impl<T: Clone + Sync + Send + 'static> WasmEnv<T> {
 
     pub(super) fn read_from_memory(&self, ptr: u32, len: u32) -> Result<Vec<u8>, WasmExecutionError> {
         let memory = self.get_memory()?;
-        let size = memory.data_size();
-        if u64::from(ptr) >= size || u64::from(ptr + len) >= memory.data_size() {
+        let mem_size = memory.data_size();
+        let ptr_plus_len = ptr.checked_add(len).ok_or(WasmExecutionError::MaxMemorySizeExceeded)?;
+        if u64::from(ptr) >= mem_size || u64::from(ptr_plus_len) >= mem_size {
             return Err(WasmExecutionError::MemoryPointerOutOfRange {
                 size: memory.data_size(),
                 pointer: u64::from(ptr),

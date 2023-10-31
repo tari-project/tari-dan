@@ -1284,9 +1284,9 @@ fn validate_component_access_rule_methods(
     template_def: &TemplateDef,
 ) -> Result<(), RuntimeError> {
     for (name, _) in access_rules.method_access_rules_iter() {
-        if template_def.functions.iter().all(|f| f.name != *name) {
+        if template_def.functions().iter().all(|f| f.name != *name) {
             return Err(RuntimeError::InvalidMethodAccessRule {
-                template_name: template_def.template_name.clone(),
+                template_name: template_def.template_name().to_string(),
                 details: format!("No method '{}' found in template", name),
             });
         }
