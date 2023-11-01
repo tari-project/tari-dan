@@ -65,6 +65,14 @@ where
         ConfigApi::new(&self.store)
     }
 
+    pub fn get_config(&self) -> &WalletSdkConfig {
+        &self.config
+    }
+
+    pub fn get_network_interface(&mut self) -> &mut TNetworkInterface {
+        &mut self.network_interface
+    }
+
     pub fn key_manager_api(&self) -> KeyManagerApi<'_, TStore> {
         KeyManagerApi::new(&self.store, &self.cipher_seed)
     }

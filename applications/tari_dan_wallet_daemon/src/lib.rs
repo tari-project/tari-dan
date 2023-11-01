@@ -33,7 +33,15 @@ mod webrtc;
 use std::{fs, panic, process};
 
 use log::*;
-use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
+use tari_dan_common_types::optional::Optional;
+use tari_dan_wallet_sdk::{
+    apis::{
+        config::{ConfigApi, ConfigKey},
+        key_manager,
+    },
+    DanWalletSdk,
+    WalletSdkConfig,
+};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::models::Amount;
@@ -69,7 +77,13 @@ pub async fn run_tari_dan_wallet_daemon(
         jwt_expiry: config.dan_wallet_daemon.jwt_expiry.unwrap(),
         jwt_secret_key: config.dan_wallet_daemon.jwt_secret_key.unwrap(),
     };
-    let indexer = IndexerJsonRpcNetworkInterface::new(&sdk_config.indexer_jrpc_endpoint);
+    let config_api = ConfigApi::new(&store);
+    let indexer_jrpc_endpoint = if let Some(indexer_url) = config_api.get(ConfigKey::IndexerUrl).optional()? {
+        indexer_url
+    } else {
+        sdk_config.indexer_jrpc_endpoint.clone()
+    };
+    let indexer = IndexerJsonRpcNetworkInterface::new(indexer_jrpc_endpoint);
     let wallet_sdk = DanWalletSdk::initialize(store, indexer, sdk_config)?;
     wallet_sdk
         .key_manager_api()
