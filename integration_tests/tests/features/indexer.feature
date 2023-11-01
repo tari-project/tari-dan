@@ -26,7 +26,7 @@ Feature: Indexer node
     When validator node VN registers the template "counter"
     When validator node VN registers the template "basic_nft"
     When miner MINER mines 10 new blocks
-    Then VN has scanned to height 13 within 10 seconds
+    Then VN has scanned to height 13
     Then the validator node VN is listed as registered
     Then the template "counter" is listed as registered by the validator node VN
     Then the template "basic_nft" is listed as registered by the validator node VN
@@ -72,7 +72,7 @@ Feature: Indexer node
 
     # Initialize an indexer
     Given an indexer IDX connected to base node BASE
-    Then indexer IDX has scanned to height 13 within 10 seconds
+    Then indexer IDX has scanned to height 13
 
     # Track a component
     When the indexer IDX tracks the address ACC1/components/Account
@@ -136,8 +136,8 @@ Feature: Indexer node
     When validator node VN sends a registration transaction
 
     When miner MINER mines 16 new blocks
-    Then VN has scanned to height 19 within 10 seconds
-    Then indexer IDX has scanned to height 19 within 10 seconds
+    Then VN has scanned to height 19
+    Then indexer IDX has scanned to height 19
     Then the validator node VN is listed as registered
 
     # A file-base CLI account must be created to sign future calls

@@ -24,7 +24,7 @@ Feature: Counter template
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
     When miner MINER mines 13 new blocks
-    Then VAL_1 has scanned to height 16 within 10 seconds
+    Then VAL_1 has scanned to height 16
     Then the validator node VAL_1 is listed as registered
     Then the template "counter" is listed as registered by the validator node VAL_1
 

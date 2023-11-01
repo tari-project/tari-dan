@@ -28,8 +28,8 @@ Feature: Committee scenarios
     # Register the "counter" template
     When validator node VAL_1 registers the template "counter"
     When miner MINER mines 15 new blocks
-    Then VAL_1 has scanned to height 18 within 10 seconds
-    Then VAL_2 has scanned to height 18 within 10 seconds
+    Then VAL_1 has scanned to height 18
+    Then VAL_2 has scanned to height 18
     Then the validator node VAL_1 is listed as registered
     Then the validator node VAL_2 is listed as registered
     Then the template "counter" is listed as registered by the validator node VAL_1
@@ -84,7 +84,7 @@ Feature: Committee scenarios
 #    # Register the "counter" template
 #    When validator node VAL_1 registers the template "counter"
 #    When miner MINER mines 23 new blocks
-#    Then all validators have scanned to height 29 within 10 seconds
+#    Then all validators have scanned to height 29
 #    Then all validator nodes are listed as registered
 #    Then the template "counter" is listed as registered by all validator nodes
 #

@@ -15,7 +15,7 @@ Feature: Claim Burn
     When wallet WALLET has at least 5000 T
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
-    Then VN has scanned to height 17 within 10 seconds
+    Then VN has scanned to height 17
     Then the validator node VN is listed as registered
 
     # Initialize an indexer
@@ -32,7 +32,7 @@ Feature: Claim Burn
     # unfortunately have to wait for this to get into the mempool....
     Then there is 1 transaction in the mempool of BASE within 10 seconds
     When miner MINER mines 13 new blocks
-    Then VN has scanned to height 30 within 10 seconds
+    Then VN has scanned to height 30
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
@@ -53,7 +53,7 @@ Feature: Claim Burn
     When wallet WALLET has at least 10000 T
     When validator node VN sends a registration transaction
     When miner MINER mines 16 new blocks
-    Then VN has scanned to height 17 within 10 seconds
+    Then VN has scanned to height 17
     Then the validator node VN is listed as registered
 
     # Initialize an indexer
@@ -70,7 +70,7 @@ Feature: Claim Burn
     # unfortunately have to wait for this to get into the mempool....
     Then there is 1 transaction in the mempool of BASE within 10 seconds
     When miner MINER mines 13 new blocks
-    Then VN has scanned to height 30 within 10 seconds
+    Then VN has scanned to height 30
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
