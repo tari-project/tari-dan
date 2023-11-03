@@ -52,7 +52,7 @@ export default function Transactions({ accountName }: { accountName: string }) {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const { data, isLoading, error, isError } = useGetAllTransactions(
     null,
-    accountsData?.account.address.Component
+    accountsData?.account.address.Component || null
   );
   const theme = useTheme();
 
