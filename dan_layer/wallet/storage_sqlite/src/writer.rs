@@ -32,11 +32,7 @@ use tari_dan_wallet_sdk::{
     },
     storage::{WalletStorageError, WalletStoreReader, WalletStoreWriter},
 };
-use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectReason},
-    substate::SubstateAddress,
-    TemplateAddress,
-};
+use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress, TemplateAddress};
 use tari_template_lib::models::{Amount, EncryptedData};
 use tari_transaction::{Transaction, TransactionId};
 use tari_utilities::hex::Hex;
@@ -277,7 +273,6 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         &mut self,
         transaction_id: TransactionId,
         result: Option<&FinalizeResult>,
-        transaction_failure: Option<&RejectReason>,
         final_fee: Option<Amount>,
         qcs: Option<&[QuorumCertificate<PublicKey>]>,
         new_status: TransactionStatus,
@@ -287,7 +282,6 @@ impl WalletStoreWriter for WriteTransaction<'_> {
         let num_rows = diesel::update(transactions::table)
             .set((
                 transactions::result.eq(result.map(serialize_json).transpose()?),
-                transactions::transaction_failure.eq(transaction_failure.map(serialize_json).transpose()?),
                 transactions::status.eq(new_status.as_key_str()),
                 transactions::final_fee.eq(final_fee.map(|v| v.value())),
                 transactions::qcs.eq(qcs.map(serialize_json).transpose()?),

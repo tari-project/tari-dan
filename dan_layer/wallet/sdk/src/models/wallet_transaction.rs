@@ -7,7 +7,7 @@ use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tari_dan_storage::consensus_models::QuorumCertificate;
-use tari_engine_types::commit_result::{FinalizeResult, RejectReason};
+use tari_engine_types::commit_result::FinalizeResult;
 use tari_template_lib::models::Amount;
 use tari_transaction::Transaction;
 
@@ -16,7 +16,6 @@ pub struct WalletTransaction<TAddr> {
     pub transaction: Transaction,
     pub status: TransactionStatus,
     pub finalize: Option<FinalizeResult>,
-    pub transaction_failure: Option<RejectReason>,
     pub final_fee: Option<Amount>,
     pub qcs: Vec<QuorumCertificate<TAddr>>,
     pub json_result: Option<Vec<Value>>,
@@ -32,6 +31,7 @@ pub enum TransactionStatus {
     Accepted,
     Rejected,
     InvalidTransaction,
+    OnlyFeeAccepted,
 }
 
 impl TransactionStatus {
@@ -43,6 +43,7 @@ impl TransactionStatus {
             TransactionStatus::Accepted => "Accepted",
             TransactionStatus::Rejected => "Rejected",
             TransactionStatus::InvalidTransaction => "InvalidTransaction",
+            TransactionStatus::OnlyFeeAccepted => "OnlyFeeAccepted",
         }
     }
 }
@@ -58,6 +59,7 @@ impl FromStr for TransactionStatus {
             "Accepted" => Ok(TransactionStatus::Accepted),
             "Rejected" => Ok(TransactionStatus::Rejected),
             "InvalidTransaction" => Ok(TransactionStatus::InvalidTransaction),
+            "OnlyFeeAccepted" => Ok(TransactionStatus::OnlyFeeAccepted),
             _ => Err(anyhow!("Invalid TransactionStatus: {}", s)),
         }
     }

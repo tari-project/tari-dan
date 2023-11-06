@@ -38,8 +38,6 @@ use crate::{
 pub struct ExecuteResult {
     /// The finalized result to commit. If the fee transaction succeeds but the transaction fails, this will be accept.
     pub finalize: FinalizeResult,
-    /// If the fee transaction passes but the transaction fails, this will be the reason for the transaction failure.
-    pub transaction_failure: Option<RejectReason>,
     /// The fee payment summary including the Resource containing the fees taken during execution.
     pub fee_receipt: Option<FeeReceipt>,
 }
@@ -48,7 +46,7 @@ impl ExecuteResult {
     pub fn expect_success(&self) -> &SubstateDiff {
         let diff = self.expect_finalization_success();
 
-        if let Some(ref reason) = self.transaction_failure {
+        if let Some(reason) = self.finalize.reject() {
             panic!("Transaction failed: {}", reason);
         }
 
@@ -58,12 +56,13 @@ impl ExecuteResult {
     pub fn expect_failure(&self) -> &RejectReason {
         match self.finalize.result {
             TransactionResult::Accept(_) => panic!("Expected transaction to fail but it succeeded"),
+            TransactionResult::AcceptFeeRejectRest(_, ref reason) => reason,
             TransactionResult::Reject(ref reason) => reason,
         }
     }
 
     pub fn expect_transaction_failure(&self) -> &RejectReason {
-        if let Some(ref reason) = self.transaction_failure {
+        if let Some(reason) = self.finalize.full_reject() {
             reason
         } else {
             panic!("Transaction succeeded but it was expected to fail");
@@ -73,6 +72,7 @@ impl ExecuteResult {
     pub fn expect_finalization_success(&self) -> &SubstateDiff {
         match self.finalize.result {
             TransactionResult::Accept(ref diff) => diff,
+            TransactionResult::AcceptFeeRejectRest(ref diff, _) => diff,
             TransactionResult::Reject(ref reason) => panic!("Transaction failed: {}", reason),
         }
     }
@@ -127,12 +127,28 @@ impl FinalizeResult {
     pub fn reject(&self) -> Option<&RejectReason> {
         match self.result {
             TransactionResult::Accept(_) => None,
+            TransactionResult::AcceptFeeRejectRest(_, _) => None,
+            TransactionResult::Reject(ref reason) => Some(reason),
+        }
+    }
+
+    pub fn full_reject(&self) -> Option<&RejectReason> {
+        match self.result {
+            TransactionResult::Accept(_) => None,
+            TransactionResult::AcceptFeeRejectRest(_, ref reason) => Some(reason),
             TransactionResult::Reject(ref reason) => Some(reason),
         }
     }
 
     pub fn is_accept(&self) -> bool {
-        matches!(self.result, TransactionResult::Accept(_))
+        matches!(
+            self.result,
+            TransactionResult::Accept(_) | TransactionResult::AcceptFeeRejectRest(_, _)
+        )
+    }
+
+    pub fn is_fee_only(&self) -> bool {
+        matches!(self.result, TransactionResult::AcceptFeeRejectRest(_, _))
     }
 
     pub fn is_reject(&self) -> bool {
@@ -143,12 +159,13 @@ impl FinalizeResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TransactionResult {
     Accept(SubstateDiff),
+    AcceptFeeRejectRest(SubstateDiff, RejectReason),
     Reject(RejectReason),
 }
 
 impl TransactionResult {
     pub fn is_accept(&self) -> bool {
-        matches!(self, Self::Accept(_))
+        matches!(self, Self::Accept(_) | Self::AcceptFeeRejectRest(_, _))
     }
 
     pub fn is_reject(&self) -> bool {
@@ -158,6 +175,7 @@ impl TransactionResult {
     pub fn accept(&self) -> Option<&SubstateDiff> {
         match self {
             Self::Accept(substate_diff) => Some(substate_diff),
+            Self::AcceptFeeRejectRest(substate_diff, _) => Some(substate_diff),
             Self::Reject(_) => None,
         }
     }
@@ -165,6 +183,15 @@ impl TransactionResult {
     pub fn reject(&self) -> Option<&RejectReason> {
         match self {
             Self::Accept(_) => None,
+            Self::AcceptFeeRejectRest(_, _) => None,
+            Self::Reject(reject_result) => Some(reject_result),
+        }
+    }
+
+    pub fn full_reject(&self) -> Option<&RejectReason> {
+        match self {
+            Self::Accept(_) => None,
+            Self::AcceptFeeRejectRest(_, reject_result) => Some(reject_result),
             Self::Reject(reject_result) => Some(reject_result),
         }
     }
@@ -172,6 +199,7 @@ impl TransactionResult {
     pub fn expect(self, msg: &str) -> SubstateDiff {
         match self {
             Self::Accept(substate_diff) => substate_diff,
+            Self::AcceptFeeRejectRest(substate_diff, _) => substate_diff,
             Self::Reject(reject_result) => {
                 panic!("{}: {:?}", msg, reject_result);
             },
@@ -183,6 +211,13 @@ impl Display for TransactionResult {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::Accept(diff) => write!(f, "Accept({} up, {} down)", diff.up_len(), diff.down_len()),
+            Self::AcceptFeeRejectRest(diff, reason) => write!(
+                f,
+                "Accept({} up, {} down), Reject {}",
+                diff.up_len(),
+                diff.down_len(),
+                reason
+            ),
             Self::Reject(reason) => write!(f, "Reject: {}", reason),
         }
     }

@@ -107,7 +107,6 @@ table! {
         meta -> Text,
         result -> Nullable<Text>,
         json_result -> Nullable<Text>,
-        transaction_failure -> Nullable<Text>,
         qcs -> Nullable<Text>,
         final_fee -> Nullable<BigInt>,
         status -> Text,

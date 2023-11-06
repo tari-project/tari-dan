@@ -188,7 +188,6 @@ impl JsonRpcHandlers {
                         dry_run_result: Some(DryRunTransactionFinalizeResult {
                             decision: QuorumDecision::Accept,
                             finalize: exec_result.finalize,
-                            transaction_failure: exec_result.transaction_failure,
                             fee_breakdown: exec_result.fee_receipt.map(|f| f.to_cost_breakdown()),
                         }),
                     };

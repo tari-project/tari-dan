@@ -73,7 +73,7 @@ pub async fn create_account(world: &mut TariWorld, account_name: String, validat
         .await
         .unwrap();
 
-    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
+    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
         panic!("Transaction failed: {:?}", failure);
     }
 
@@ -123,7 +123,7 @@ pub async fn create_component(
     let mut client = world.get_validator_node(&vn_name).get_client();
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
-    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
+    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
         panic!("Transaction failed: {:?}", failure);
     }
     // store the account component address and other substate addresses for later reference
@@ -256,7 +256,7 @@ pub async fn call_method(
     let mut client = world.get_validator_node(&vn_name).get_client();
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
-    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
+    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
         panic!("Transaction failed: {:?}", failure);
     }
     // store the account component address and other substate addresses for later reference
@@ -351,7 +351,7 @@ pub async fn submit_manifest(
         .await
         .unwrap();
 
-    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().transaction_failure {
+    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
         panic!("Transaction failed: {:?}", failure);
     }
 
