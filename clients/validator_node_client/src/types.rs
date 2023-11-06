@@ -32,7 +32,7 @@ use tari_dan_storage::{
     Ordering,
 };
 use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    commit_result::{ExecuteResult, FinalizeResult},
     fees::FeeCostBreakdown,
     serde_with,
     substate::{SubstateAddress, SubstateValue},
@@ -138,7 +138,6 @@ pub struct DryRunTransactionFinalizeResult {
     // TODO: we should not return the whole state but only the addresses and perhaps a hash of the state
     pub decision: QuorumDecision,
     pub finalize: FinalizeResult,
-    pub transaction_failure: Option<RejectReason>,
     pub fee_breakdown: Option<FeeCostBreakdown>,
 }
 

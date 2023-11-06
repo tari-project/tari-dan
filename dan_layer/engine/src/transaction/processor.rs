@@ -26,7 +26,7 @@ use log::*;
 use tari_bor::encode;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch, NodeAddressable};
 use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     indexed_value::IndexedValue,
     instruction::Instruction,
     instruction_result::InstructionResult,
@@ -126,7 +126,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     return Ok(ExecuteResult {
                         fee_receipt: None,
                         finalize,
-                        transaction_failure: Some(RejectReason::FeeTransactionFailed),
                     });
                 }
                 execution_results
@@ -138,7 +137,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                         transaction_hash,
                         RejectReason::ExecutionFailure(err.to_string()),
                     ),
-                    transaction_failure: Some(RejectReason::FeeTransactionFailed),
                 });
             },
         };
@@ -153,13 +151,23 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 } = runtime.interface().finalize()?;
 
                 if !fee_receipt.is_paid_in_full() {
+                    let reason = RejectReason::FeesNotPaid(format!(
+                        "Required fees {} but {} paid",
+                        fee_receipt.total_fees_charged(),
+                        fee_receipt.total_fees_paid()
+                    ));
+                    finalized.result = if let Some(accept) = finalized.result.accept() {
+                        TransactionResult::AcceptFeeRejectRest(accept.clone(), reason)
+                    } else {
+                        TransactionResult::Reject(reason)
+                    };
                     return Ok(ExecuteResult {
                         finalize: finalized,
-                        transaction_failure: Some(RejectReason::FeesNotPaid(format!(
-                            "Required fees {} but {} paid",
-                            fee_receipt.total_fees_charged(),
-                            fee_receipt.total_fees_paid()
-                        ))),
+                        // transaction_failure: Some(RejectReason::FeesNotPaid(format!(
+                        //     "Required fees {} but {} paid",
+                        //     fee_receipt.total_fees_charged(),
+                        //     fee_receipt.total_fees_paid()
+                        // ))),
                         fee_receipt: Some(fee_receipt),
                     });
                 }
@@ -168,7 +176,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 Ok(ExecuteResult {
                     finalize: finalized,
                     fee_receipt: Some(fee_receipt),
-                    transaction_failure: None,
                 })
             },
             // This can happen e.g if you have dangling buckets after running the instructions
@@ -182,11 +189,18 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                     fee_receipt,
                 } = runtime.interface().finalize()?;
                 finalized.execution_results = fee_exec_result;
-
+                finalized.result = TransactionResult::AcceptFeeRejectRest(
+                    finalized
+                        .result
+                        .accept()
+                        .cloned()
+                        .expect("The fee transaction should be there"),
+                    RejectReason::ExecutionFailure(err.to_string()),
+                );
                 Ok(ExecuteResult {
                     finalize: finalized,
                     fee_receipt: Some(fee_receipt),
-                    transaction_failure: Some(RejectReason::ExecutionFailure(err.to_string())),
+                    // transaction_failure: Some(RejectReason::ExecutionFailure(err.to_string())),
                 })
             },
         }

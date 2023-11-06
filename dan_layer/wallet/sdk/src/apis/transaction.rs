@@ -5,7 +5,6 @@ use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
-    commit_result::RejectReason,
     indexed_value::{IndexedValue, IndexedValueError},
     substate::SubstateDiff,
 };
@@ -59,7 +58,7 @@ where
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
         self.store.with_write_tx(|tx| {
-            tx.transactions_set_result_and_status(transaction_id, None, None, None, None, TransactionStatus::Pending)
+            tx.transactions_set_result_and_status(transaction_id, None, None, None, TransactionStatus::Pending)
         })?;
 
         Ok(transaction_id)
@@ -90,7 +89,6 @@ where
                     tx.transactions_set_result_and_status(
                         query.transaction_id,
                         execution_result.as_ref().map(|e| &e.finalize),
-                        execution_result.as_ref().and_then(|e| e.transaction_failure.as_ref()),
                         execution_result
                             .as_ref()
                             .and_then(|e| e.fee_receipt.as_ref())
@@ -144,11 +142,20 @@ where
             TransactionFinalizedResult::Finalized {
                 final_decision,
                 execution_result,
-                abort_details,
+                abort_details: _,
                 json_results,
             } => {
                 let new_status = if final_decision.is_commit() {
-                    TransactionStatus::Accepted
+                    match execution_result.as_ref() {
+                        Some(execution_result) => {
+                            if execution_result.finalize.is_fee_only() {
+                                TransactionStatus::OnlyFeeAccepted
+                            } else {
+                                TransactionStatus::Accepted
+                            }
+                        },
+                        None => TransactionStatus::Accepted,
+                    }
                 } else {
                     TransactionStatus::Rejected
                 };
@@ -173,14 +180,9 @@ where
                         self.commit_result(tx, transaction_id, diff)?;
                     }
 
-                    let transaction_failure = execution_result
-                        .as_ref()
-                        .and_then(|e| e.transaction_failure.clone())
-                        .or_else(|| abort_details.map(RejectReason::ExecutionFailure));
                     tx.transactions_set_result_and_status(
                         transaction_id,
                         execution_result.as_ref().map(|e| &e.finalize),
-                        transaction_failure.as_ref(),
                         execution_result
                             .as_ref()
                             .and_then(|e| e.fee_receipt.as_ref())
@@ -210,7 +212,6 @@ where
                     transaction: transaction.transaction,
                     status: new_status,
                     finalize: execution_result.as_ref().map(|e| e.finalize.clone()),
-                    transaction_failure: execution_result.as_ref().and_then(|e| e.transaction_failure.clone()),
                     final_fee: execution_result
                         .as_ref()
                         .and_then(|e| e.fee_receipt.as_ref())

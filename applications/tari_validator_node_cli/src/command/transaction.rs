@@ -33,11 +33,11 @@ use tari_crypto::tari_utilities::hex::to_hex;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, TransactionResult},
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
     instruction::Instruction,
     instruction_result::InstructionResult,
     parse_template_address,
-    substate::{SubstateAddress, SubstateValue},
+    substate::{SubstateAddress, SubstateDiff, SubstateValue},
     TemplateAddress,
 };
 use tari_template_lib::{
@@ -286,7 +286,6 @@ pub async fn submit_transaction(
                 QuorumDecision::Reject
             },
             finalize: result.finalize,
-            transaction_failure: result.transaction_failure,
             fee_breakdown: result.fee_receipt.map(|f| f.to_cost_breakdown()),
         });
     }
@@ -361,60 +360,65 @@ fn summarize(result: &ExecuteResult, time_taken: Duration) {
     println!();
     println!("Time taken: {:?}", time_taken);
     println!();
-    if let Some(tx_failure) = &result.transaction_failure {
-        println!("Transaction failure: {:?}", tx_failure);
-    }
     println!("OVERALL DECISION: {}", result.finalize.result);
+}
+
+fn print_substate_diff(diff: &SubstateDiff) {
+    for (address, substate) in diff.up_iter() {
+        println!("️🌲 UP substate {} (v{})", address, substate.version(),);
+        println!("      🧩 Shard: {}", ShardId::from_address(address, substate.version()));
+        match substate.substate_value() {
+            SubstateValue::Component(component) => {
+                println!("      ▶ component ({}): {}", component.module_name, address,);
+            },
+            SubstateValue::Resource(_) => {
+                println!("      ▶ resource: {}", address);
+            },
+            SubstateValue::TransactionReceipt(_) => {
+                println!("      ▶ transaction_receipt: {}", address);
+            },
+            SubstateValue::Vault(vault) => {
+                println!("      ▶ vault: {} {}", address, vault.resource_address());
+            },
+            SubstateValue::NonFungible(_) => {
+                println!("      ▶ NFT: {}", address);
+            },
+            SubstateValue::UnclaimedConfidentialOutput(_hash) => {
+                println!("     ! layer one commitment: Should never happen");
+            },
+            SubstateValue::NonFungibleIndex(index) => {
+                let referenced_address = SubstateAddress::from(index.referenced_address().clone());
+                println!("      ▶ NFT index {} referencing {}", address, referenced_address);
+            },
+            SubstateValue::FeeClaim(fee_claim) => {
+                println!("      ▶ fee_claim: {}", address);
+                println!("        ▶ amount: {}", fee_claim.amount);
+                println!("        ▶ recipient: {}", fee_claim.validator_public_key);
+            },
+        }
+        println!();
+    }
+    for (address, version) in diff.down_iter() {
+        println!("🗑️ DOWN substate {} v{}", address, version,);
+        println!("      🧩 Shard: {}", ShardId::from_address(address, *version));
+        println!();
+    }
+}
+
+fn print_reject_reason(reason: &RejectReason) {
+    println!("❌️ Transaction rejected: {}", reason);
 }
 
 #[allow(clippy::too_many_lines)]
 fn summarize_finalize_result(finalize: &FinalizeResult) {
     println!("========= Substates =========");
     match finalize.result {
-        TransactionResult::Accept(ref diff) => {
-            for (address, substate) in diff.up_iter() {
-                println!("️🌲 UP substate {} (v{})", address, substate.version(),);
-                println!("      🧩 Shard: {}", ShardId::from_address(address, substate.version()));
-                match substate.substate_value() {
-                    SubstateValue::Component(component) => {
-                        println!("      ▶ component ({}): {}", component.module_name, address,);
-                    },
-                    SubstateValue::Resource(_) => {
-                        println!("      ▶ resource: {}", address);
-                    },
-                    SubstateValue::TransactionReceipt(_) => {
-                        println!("      ▶ transaction_receipt: {}", address);
-                    },
-                    SubstateValue::Vault(vault) => {
-                        println!("      ▶ vault: {} {}", address, vault.resource_address());
-                    },
-                    SubstateValue::NonFungible(_) => {
-                        println!("      ▶ NFT: {}", address);
-                    },
-                    SubstateValue::UnclaimedConfidentialOutput(_hash) => {
-                        println!("     ! layer one commitment: Should never happen");
-                    },
-                    SubstateValue::NonFungibleIndex(index) => {
-                        let referenced_address = SubstateAddress::from(index.referenced_address().clone());
-                        println!("      ▶ NFT index {} referencing {}", address, referenced_address);
-                    },
-                    SubstateValue::FeeClaim(fee_claim) => {
-                        println!("      ▶ fee_claim: {}", address);
-                        println!("        ▶ amount: {}", fee_claim.amount);
-                        println!("        ▶ recipient: {}", fee_claim.validator_public_key);
-                    },
-                }
-                println!();
-            }
-            for (address, version) in diff.down_iter() {
-                println!("🗑️ DOWN substate {} v{}", address, version,);
-                println!("      🧩 Shard: {}", ShardId::from_address(address, *version));
-                println!();
-            }
+        TransactionResult::Accept(ref diff) => print_substate_diff(diff),
+        TransactionResult::AcceptFeeRejectRest(ref diff, ref reason) => {
+            print_substate_diff(diff);
+            print_reject_reason(reason);
         },
-        TransactionResult::Reject(ref reason) => {
-            println!("❌️ Transaction rejected: {}", reason);
-        },
+        TransactionResult::Reject(ref reason) => print_reject_reason(reason),
     }
 
     println!("========= Return Values =========");

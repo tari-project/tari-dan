@@ -96,7 +96,7 @@ pub async fn handle_claim_validator_fees(
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.transaction_failure {
+    if let Some(reason) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!(
             "Fee transaction succeeded (fees charged) however the transaction failed: {}",
             reason

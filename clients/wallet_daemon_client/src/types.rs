@@ -31,7 +31,7 @@ use tari_dan_wallet_sdk::{
     models::{Account, ConfidentialProofId, TransactionStatus},
 };
 use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    commit_result::{ExecuteResult, FinalizeResult},
     instruction::Instruction,
     instruction_result::InstructionResult,
     serde_with,
@@ -105,7 +105,6 @@ pub struct TransactionGetResponse {
     pub transaction: Transaction,
     pub result: Option<FinalizeResult>,
     pub status: TransactionStatus,
-    pub transaction_failure: Option<RejectReason>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -116,12 +115,7 @@ pub struct TransactionGetAllRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetAllResponse {
-    pub transactions: Vec<(
-        Transaction,
-        Option<FinalizeResult>,
-        TransactionStatus,
-        Option<RejectReason>,
-    )>,
+    pub transactions: Vec<(Transaction, Option<FinalizeResult>, TransactionStatus)>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -149,7 +143,6 @@ pub struct TransactionWaitResultResponse {
     pub result: Option<FinalizeResult>,
     pub json_result: Option<Vec<Value>>,
     pub status: TransactionStatus,
-    pub transaction_failure: Option<RejectReason>,
     pub final_fee: Amount,
     pub timed_out: bool,
 }

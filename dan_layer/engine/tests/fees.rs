@@ -190,7 +190,7 @@ fn failed_fee_transaction() {
     let reason = result.expect_failure();
     assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
     let reason = result.expect_transaction_failure();
-    assert!(matches!(reason, RejectReason::FeeTransactionFailed));
+    assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
     test.disable_fees();
 
     assert!(result.fee_receipt.is_none());
@@ -205,7 +205,7 @@ fn fail_partial_paid_fees() {
     let (account, owner_token, private_key) = test.create_owned_account();
     let (account2, owner_token2, _) = test.create_owned_account();
     let orig_balance: Amount = test.call_method(account, "balance", args![CONFIDENTIAL_TARI_RESOURCE_ADDRESS], vec![]);
-
+    println!("{:?}", orig_balance);
     test.enable_fees();
 
     let result = test.execute_expect_commit(

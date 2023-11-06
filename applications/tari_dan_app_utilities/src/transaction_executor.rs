@@ -80,7 +80,6 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
             Ok(result) => result,
             Err(err) => ExecuteResult {
                 finalize: FinalizeResult::new_rejected(tx_id, RejectReason::ExecutionFailure(err.to_string())),
-                transaction_failure: None,
                 fee_receipt: None,
             },
         };
@@ -95,7 +94,6 @@ where TTemplateProvider: TemplateProvider<Template = LoadedTemplate>
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-
         Ok(ExecutedTransaction::new(transaction, result, outputs, timer.elapsed()))
     }
 }

@@ -220,7 +220,7 @@ async fn mint_account_nft(
             reject
         ));
     }
-    if let Some(reason) = event.transaction_failure {
+    if let Some(reason) = event.finalize.reject() {
         return Err(anyhow!(
             "Mint new NFT using account {}, failed: {}",
             account.name,
@@ -296,7 +296,7 @@ async fn create_account_nft(
             reject
         ));
     }
-    if let Some(reason) = event.transaction_failure {
+    if let Some(reason) = event.finalize.reject() {
         return Err(anyhow!(
             "Create NFT resource address transaction, from account {}, failed: {}",
             account.name,
