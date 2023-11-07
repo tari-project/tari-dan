@@ -30,11 +30,9 @@ function AssetVault() {
 
   const { data: dataAccountsList } = useAccountsList(0, 10);
 
-  useAccountStore.subscribe(() => {
-    if (!accountName && dataAccountsList?.accounts?.length > 0) {
-      setAccountName(dataAccountsList.accounts[0].account.name);
-    }
-  });
+  if (!accountName && dataAccountsList?.accounts?.length > 0) {
+    setAccountName(dataAccountsList.accounts[0].account.name);
+  }
 
   return (
     <>

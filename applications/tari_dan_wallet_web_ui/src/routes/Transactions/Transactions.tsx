@@ -44,12 +44,16 @@ import {
   handleChangePage,
   handleChangeRowsPerPage,
 } from '../../utils/helpers';
+import { useAccountsGet } from '../../api/hooks/useAccounts';
 
-export default function Transactions() {
+export default function Transactions({ accountName }: { accountName: string }) {
+  const { data: accountsData } = useAccountsGet(accountName);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const { data, isLoading, error, isError } =
-    useGetAllTransactions(null, null);
+  const { data, isLoading, error, isError } = useGetAllTransactions(
+    null,
+    accountsData?.account.address.Component || null
+  );
   const theme = useTheme();
 
   return (

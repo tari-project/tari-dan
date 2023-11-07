@@ -29,8 +29,10 @@ import Grid from '@mui/material/Grid';
 import SecondaryHeading from '../../Components/SecondaryHeading';
 import Transactions from '../Transactions/Transactions';
 import AccessTokens from './Components/AccessTokens';
+import useAccountStore from '../../store/accountStore';
 
 function Wallet() {
+  const accountName = useAccountStore((state) => state.accountName);
   const [error, setError] = useState('');
   if (error !== '') {
     return <div className="error">{error}</div>;
@@ -50,7 +52,7 @@ function Wallet() {
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
-          <Transactions />
+          <Transactions accountName={accountName} />
         </StyledPaper>
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
