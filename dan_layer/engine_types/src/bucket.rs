@@ -71,6 +71,10 @@ impl Bucket {
         self.resource_container.into_non_fungible_ids()
     }
 
+    pub fn non_fungible_ids(&self) -> &BTreeSet<NonFungibleId> {
+        self.resource_container.non_fungible_token_ids()
+    }
+
     pub fn take(&mut self, amount: Amount) -> Result<ResourceContainer, ResourceError> {
         self.resource_container.withdraw(amount)
     }

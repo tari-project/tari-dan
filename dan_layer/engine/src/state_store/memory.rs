@@ -68,6 +68,15 @@ pub struct MemoryTransaction<T> {
     guard: T,
 }
 
+impl MemoryTransaction<RwLockReadGuard<'_, InnerKvMap>> {
+    pub fn iter_raw(&self) -> impl Iterator<Item = (&[u8], &[u8])> {
+        self.pending
+            .iter()
+            .map(|(k, v)| (k.as_slice(), v.as_slice()))
+            .chain(self.guard.iter().map(|(k, v)| (k.as_slice(), v.as_slice())))
+    }
+}
+
 impl<'a> AtomicDb<'a> for MemoryStateStore {
     type Error = anyhow::Error;
     type ReadAccess = MemoryReadTransaction<'a>;

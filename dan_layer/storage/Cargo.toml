@@ -17,6 +17,7 @@ tari_core = { git = "https://github.com/tari-project/tari.git", branch = "featur
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_crypto = "0.19"
 tari_utilities = "0.6"
+tari_bor = { path = "../tari_bor" }
 
 anyhow = "1.0"
 chrono = "0.4.23"

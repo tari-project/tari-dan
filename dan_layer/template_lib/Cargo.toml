@@ -14,10 +14,10 @@ tari_bor = { path = "../tari_bor", default-features = false }
 
 newtype-ops = "0.1.4"
 serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
-serde-big-array = "0.5.1"
+serde-byte-array = "0.1.2"
 
 [dev-dependencies]
-serde_json = "1.0.73"
+serde_json = "1.0"
 
 [features]
 default = ["macro", "std"]

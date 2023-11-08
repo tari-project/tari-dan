@@ -218,6 +218,7 @@ mod component_access_rules {
 }
 
 mod resource_access_rules {
+
     use super::*;
 
     #[test]
@@ -401,7 +402,7 @@ mod resource_access_rules {
             vec![owner_proof.clone()],
         );
 
-        let component_address = result.finalize.execution_results[0]
+        let access_rules_component = result.finalize.execution_results[0]
             .decode::<ComponentAddress>()
             .unwrap();
         // Find the resource address for the badge from the output substates
@@ -420,7 +421,7 @@ mod resource_access_rules {
         // User cannot get the tokens
         let reason = test.execute_expect_failure(
             Transaction::builder()
-                .call_method(component_address, "take_tokens", args![Amount(10)])
+                .call_method(access_rules_component, "take_tokens", args![Amount(10)])
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(user_account, "deposit", args![Workspace("tokens")])
                 .sign(&user_key)
@@ -433,7 +434,7 @@ mod resource_access_rules {
         // Give the user a withdraw and deposit badge
         test.execute_expect_success(
             Transaction::builder()
-                .call_method(component_address, "mint_new_badge", args![])
+                .call_method(access_rules_component, "mint_new_badge", args![])
                 .put_last_instruction_output_on_workspace("permission")
                 .call_method(user_account, "deposit", args![Workspace("permission")])
                 .sign(&owner_key)
@@ -446,7 +447,7 @@ mod resource_access_rules {
             Transaction::builder()
                 .call_method(user_account, "create_proof_by_amount", args![badge_resource, Amount(1)])
                 .put_last_instruction_output_on_workspace("proof")
-                .call_method(component_address, "take_tokens_using_proof", args![
+                .call_method(access_rules_component, "take_tokens_using_proof", args![
                     Workspace("proof"),
                     Amount(10)
                 ])
@@ -455,7 +456,7 @@ mod resource_access_rules {
                 .drop_all_proofs_in_workspace()
                 .sign(&user_key)
                 .build(),
-            vec![user_proof],
+            vec![user_proof.clone()],
         );
     }
 
@@ -602,9 +603,12 @@ mod resource_access_rules {
                 .call_method(owner_account, "deposit", args![Workspace("badge")])
                 .call_method(owner_account, "create_proof_for_resource", args![badge_resource])
                 .put_last_instruction_output_on_workspace("proof")
-                .call_function(cross_call_template, "call_component_with_args", args![
+                // This is quite interesting: we have to pass in the proof to call_component_with_args_using_proof to bring it into scope so that the cross template call can use it.
+                // Another way would be for the arguments to resolve recursively at the "base" call site, rather than resolving workspace args in invoke_call. This requires indexing the Args type.
+                .call_function(cross_call_template, "call_component_with_args_using_proof", args![
                     component_address,
                     "take_tokens_using_proof",
+                    Workspace("proof"),
                     args![Workspace("proof"), Amount(10)],
                 ])
                 .put_last_instruction_output_on_workspace("tokens")

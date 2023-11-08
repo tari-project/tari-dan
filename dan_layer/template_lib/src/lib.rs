@@ -67,7 +67,7 @@ pub mod prelude;
 #[cfg(feature = "macro")]
 pub use prelude::template;
 // Re-export for macro
-pub use tari_bor::encode;
+pub use tari_bor::to_value;
 
 pub mod constants;
 #[cfg(target_arch = "wasm32")]

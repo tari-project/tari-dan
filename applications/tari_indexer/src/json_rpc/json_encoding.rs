@@ -23,17 +23,6 @@ pub enum JsonEncodingError {
     Unexpected(String),
 }
 
-pub fn cbor_to_json(raw: &[u8]) -> Result<json::Value, JsonEncodingError> {
-    if raw.is_empty() {
-        return Ok(json::Value::Null);
-    }
-    let decoded_cbor: CborValue = tari_bor::decode(raw)?;
-    let decoded_cbor = fix_invalid_object_keys(&decoded_cbor);
-    let result = serde_json::to_value(decoded_cbor)?;
-
-    Ok(result)
-}
-
 pub fn encode_finalized_result_into_json(result: &FinalizedResult) -> Result<Vec<json::Value>, JsonEncodingError> {
     match &result.execute_result {
         Some(res) => encode_execute_result_into_json(res),
@@ -42,17 +31,16 @@ pub fn encode_finalized_result_into_json(result: &FinalizedResult) -> Result<Vec
 }
 
 pub fn encode_execute_result_into_json(result: &ExecuteResult) -> Result<Vec<json::Value>, JsonEncodingError> {
-    let encoded_results = result
+    result
         .finalize
         .execution_results
         .iter()
-        .map(|r| cbor_to_json(&r.raw))
-        .collect::<Result<_, JsonEncodingError>>()?;
-    Ok(encoded_results)
+        .map(|r| serde_json::to_value(r.indexed.value()).map_err(JsonEncodingError::Serde))
+        .collect()
 }
 
 pub fn encode_substate_into_json(substate: &Substate) -> Result<json::Value, JsonEncodingError> {
-    let substate_cbor = tari_bor::decode(&substate.to_bytes())?;
+    let substate_cbor = tari_bor::to_value(&substate)?;
     let substate_cbor = fix_invalid_object_keys(&substate_cbor);
     let mut result = json::to_value(substate_cbor)?;
 
@@ -110,7 +98,15 @@ fn decode_cbor_field_into_json(
     field_name: &str,
 ) -> Result<(), JsonEncodingError> {
     let cbor_value = tari_bor::decode(bytes)?;
-    let cbor_value = fix_invalid_object_keys(&cbor_value);
+    fix_cbor_value_for_json(&cbor_value, parent_object, field_name)
+}
+
+fn fix_cbor_value_for_json(
+    cbor_value: &tari_bor::Value,
+    parent_object: &mut JsonObject,
+    field_name: &str,
+) -> Result<(), JsonEncodingError> {
+    let cbor_value = fix_invalid_object_keys(cbor_value);
     let json_value = serde_json::to_value(cbor_value)?;
     parent_object.insert(field_name.to_owned(), json_value);
 
@@ -123,7 +119,7 @@ fn encode_component_into_json(
 ) -> Result<(), JsonEncodingError> {
     let component_field = get_mut_json_field(substate_json_field, "Component")?;
     let component_object = json_value_as_object(component_field)?;
-    decode_cbor_field_into_json(header.state(), component_object, "state")?;
+    fix_cbor_value_for_json(header.state(), component_object, "state")?;
 
     Ok(())
 }
@@ -161,7 +157,7 @@ fn fix_invalid_object_keys(value: &CborValue) -> CborValue {
                 .iter()
                 .map(|(k, v)| {
                     let fixed_value = fix_invalid_object_keys(v);
-                    (k.to_owned(), fixed_value)
+                    (k.clone(), fixed_value)
                 })
                 .collect();
             CborValue::Map(fixed_entries)
@@ -184,7 +180,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn it_decodes_confidential_vaults() {
+    fn it_encodes_confidential_vaults() {
         let address = ResourceAddress::new(Hash::default());
 
         let public_key = PublicKey::default();

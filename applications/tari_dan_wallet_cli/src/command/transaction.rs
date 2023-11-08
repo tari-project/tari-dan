@@ -32,6 +32,7 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
+use tari_bor::decode_exact;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_engine::abi::Type;
@@ -48,7 +49,7 @@ use tari_template_lib::{
     args,
     args::Arg,
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-    models::{Amount, NonFungibleAddress, NonFungibleId},
+    models::{Amount, BucketId, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
 use tari_transaction::{SubstateRequirement, TransactionId};
@@ -599,7 +600,7 @@ fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &InstructionRes
             )?;
         },
         Type::Other { .. } => {
-            write!(writer, "{}", to_hex(&result.raw))?;
+            write!(writer, "{}", serde_json::to_string_pretty(&result.indexed).unwrap())?;
         },
     }
     Ok(())
@@ -660,8 +661,11 @@ pub fn print_execution_results(results: &[InstructionResult]) {
             Type::Other { ref name } if name == "Amount" => {
                 println!("{}: {}", name, result.decode::<Amount>().unwrap());
             },
+            Type::Other { ref name } if name == "Bucket" => {
+                println!("{}: {}", name, result.decode::<BucketId>().unwrap());
+            },
             Type::Other { ref name } => {
-                println!("{}: {}", name, to_hex(&result.raw));
+                println!("{}: {}", name, serde_json::to_string_pretty(&result.indexed).unwrap());
             },
         }
     }
@@ -679,7 +683,7 @@ pub enum CliArg {
     I16(i16),
     I8(i8),
     Bool(bool),
-    Blob(Vec<u8>),
+    Blob(tari_bor::Value),
     NonFungibleId(NonFungibleId),
     SubstateAddress(SubstateAddress),
     TemplateAddress(TemplateAddress),
@@ -691,7 +695,7 @@ impl FromStr for CliArg {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(file) = s.strip_prefix('@') {
             let base64_data = fs::read_to_string(file).map_err(|e| anyhow!("Failed to read file {}: {}", file, e))?;
-            return Ok(CliArg::Blob(base64::decode(base64_data)?));
+            return Ok(CliArg::Blob(decode_exact(&base64::decode(base64_data)?)?));
         }
 
         if let Ok(v) = s.parse::<u64>() {
@@ -760,7 +764,7 @@ impl CliArg {
             CliArg::I16(v) => arg!(v),
             CliArg::I8(v) => arg!(v),
             CliArg::Bool(v) => arg!(v),
-            CliArg::Blob(v) => Arg::Literal(v),
+            CliArg::Blob(v) => Arg::literal(v).unwrap(),
             CliArg::SubstateAddress(v) => match v {
                 SubstateAddress::Component(v) => arg!(v),
                 SubstateAddress::Resource(v) => arg!(v),
@@ -901,7 +905,7 @@ fn parse_globals(globals: Vec<String>) -> Result<HashMap<String, ManifestValue>,
                 },
                 scheme => anyhow::bail!("Unsupported scheme '{}'", scheme),
             };
-            result.insert(name.to_string(), ManifestValue::Value(blob));
+            result.insert(name.to_string(), ManifestValue::Value(decode_exact(&blob)?));
         } else {
             let value = value
                 .parse()

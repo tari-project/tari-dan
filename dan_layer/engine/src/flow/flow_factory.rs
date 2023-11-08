@@ -8,7 +8,6 @@ use serde_json::Value as JsValue;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::instruction_result::InstructionResult;
 use tari_template_abi::{ArgDef, FunctionDef, TemplateDef, TemplateDefV1, Type};
-use tari_template_lib::args::Arg;
 
 use crate::{
     flow::{FlowContext, FlowEngineError, FlowInstance},
@@ -70,10 +69,10 @@ impl FlowFactory {
         template_provider: Arc<TTemplateProvider>,
         runtime: Runtime,
         // In future we might allow calling different functions in a flow
-        _function: &str,
-        args: Vec<Arg>,
-        recursion_depth: usize,
-        max_recursion_depth: usize,
+        _function: &FunctionDef,
+        args: Vec<tari_bor::Value>,
+        call_depth: usize,
+        max_call_depth: usize,
     ) -> Result<InstructionResult, FlowEngineError> {
         let new_instance = FlowInstance::try_build::<TTemplateProvider>(
             self.flow_definition.clone(),
@@ -84,8 +83,8 @@ impl FlowFactory {
             runtime,
             &args,
             &self.args,
-            recursion_depth,
-            max_recursion_depth,
+            call_depth,
+            max_call_depth,
         )
     }
 }

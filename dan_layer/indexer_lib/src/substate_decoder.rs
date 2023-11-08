@@ -24,7 +24,7 @@ use std::collections::HashSet;
 
 use log::*;
 use tari_engine_types::{
-    indexed_value::{IndexedValue, IndexedValueError},
+    indexed_value::{IndexedValue, IndexedValueError, IndexedWellKnownTypes},
     substate::{Substate, SubstateAddress, SubstateValue},
 };
 
@@ -35,7 +35,7 @@ pub fn find_related_substates(substate: &Substate) -> Result<Vec<SubstateAddress
     match substate.substate_value() {
         SubstateValue::Component(header) => {
             // Look inside the component state for substate references
-            let value = IndexedValue::from_raw(header.state())?;
+            let value = IndexedWellKnownTypes::from_value(header.state())?;
             info!(target: LOG_TARGET, "Found indexed value: {:?}", &value);
             info!(
                 target: LOG_TARGET,

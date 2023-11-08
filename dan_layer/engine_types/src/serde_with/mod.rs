@@ -21,5 +21,6 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod base64;
+pub mod cbor_value;
 pub mod hex;
 pub mod string;

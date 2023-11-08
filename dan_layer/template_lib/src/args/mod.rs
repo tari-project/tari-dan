@@ -47,7 +47,7 @@ macro_rules! arg {
         $crate::args::Arg::workspace($arg)
     };
     (Literal($arg:expr)) => {
-        $crate::args::Arg::Literal($crate::encode(&$arg).unwrap())
+        $crate::args::Arg::from_type(&$arg).unwrap()
     };
 
     ($arg:expr) => {
@@ -154,7 +154,7 @@ mod tests {
     #[test]
     fn args_macro() {
         let args = args![Variable("foo")];
-        assert_eq!(args[0], Arg::Workspace("foo".into()));
+        assert_eq!(args[0], Arg::workspace("foo"));
 
         let args = args!["foo".to_string()];
         assert!(matches!(args[0], Arg::Literal(_)));
@@ -164,12 +164,18 @@ mod tests {
         assert!(matches!(args[1], Arg::Literal(_)));
 
         let args = args![Variable("foo"), "bar".to_string()];
-        assert_eq!(args[0], Arg::Workspace("foo".into()));
-        assert_eq!(args[1], Arg::Literal(tari_bor::encode(&"bar".to_string()).unwrap()));
+        assert_eq!(args[0], Arg::workspace("foo"));
+        assert_eq!(
+            args[1],
+            Arg::literal(tari_bor::to_value(&"bar".to_string()).unwrap()).unwrap()
+        );
 
         let args = args!["foo".to_string(), Variable("bar"), 123u64];
-        assert_eq!(args[0], Arg::Literal(tari_bor::encode(&"foo".to_string()).unwrap()));
-        assert_eq!(args[1], Arg::Workspace("bar".into()));
-        assert_eq!(args[2], Arg::Literal(tari_bor::encode(&123u64).unwrap()));
+        assert_eq!(
+            args[0],
+            Arg::literal(tari_bor::to_value(&"foo".to_string()).unwrap()).unwrap()
+        );
+        assert_eq!(args[1], Arg::workspace("bar"));
+        assert_eq!(args[2], Arg::literal(tari_bor::to_value(&123u64).unwrap()).unwrap());
     }
 }

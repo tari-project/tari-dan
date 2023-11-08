@@ -109,6 +109,12 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn with_fee_instructions_builder<F: FnOnce(TransactionBuilder) -> TransactionBuilder>(mut self, f: F) -> Self {
+        let builder = f(TransactionBuilder::new());
+        self.fee_instructions = builder.instructions;
+        self
+    }
+
     pub fn add_instruction(mut self, instruction: Instruction) -> Self {
         self.instructions.push(instruction);
         // Reset the signature as it is no longer valid

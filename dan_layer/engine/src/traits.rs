@@ -21,10 +21,10 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_engine_types::instruction_result::InstructionResult;
-use tari_template_lib::args::Arg;
+use tari_template_abi::FunctionDef;
 
 pub trait Invokable {
     type Error;
 
-    fn invoke_by_name(&self, name: &str, args: Vec<Arg>) -> Result<InstructionResult, Self::Error>;
+    fn invoke(&self, def: &FunctionDef, args: Vec<tari_bor::Value>) -> Result<InstructionResult, Self::Error>;
 }

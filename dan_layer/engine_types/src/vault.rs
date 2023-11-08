@@ -34,12 +34,10 @@ use crate::{
     confidential::ConfidentialOutput,
     proof::{ContainerRef, LockedResource, Proof},
     resource_container::{ResourceContainer, ResourceError},
-    serde_with,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Vault {
-    #[serde(with = "serde_with::string")]
     vault_id: VaultId,
     resource_container: ResourceContainer,
 }

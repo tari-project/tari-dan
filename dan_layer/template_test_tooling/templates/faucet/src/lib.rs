@@ -38,12 +38,12 @@ mod faucet_template {
         }
 
         pub fn take_free_coins(&mut self) -> Bucket {
-            debug("Withdrawing 1000 coins from faucet");
+            debug!("Withdrawing 1000 coins from faucet");
             self.vault.withdraw(Amount(1000))
         }
 
         pub fn take_free_coins_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
-            debug("Withdrawing <unknown> coins from faucet");
+            debug!("Withdrawing <unknown> coins from faucet");
             self.vault.withdraw_confidential(proof)
         }
 
@@ -52,12 +52,12 @@ mod faucet_template {
         }
 
         pub fn pay_fee(&mut self, amount: Amount) {
-            debug("Paying fee from faucet");
+            debug!("Paying fee from faucet");
             self.vault.pay_fee(amount);
         }
 
         pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
-            debug("Paying fee from faucet");
+            debug!("Paying fee from faucet");
             self.vault.pay_fee_confidential(proof);
         }
     }

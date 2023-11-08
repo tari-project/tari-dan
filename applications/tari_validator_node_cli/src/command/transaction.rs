@@ -29,7 +29,6 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_crypto::tari_utilities::hex::to_hex;
 use tari_dan_common_types::{optional::Optional, ShardId};
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
@@ -43,7 +42,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     arg,
     args::Arg,
-    models::{Amount, NonFungibleAddress, NonFungibleId},
+    models::{Amount, BucketId, NonFungibleAddress, NonFungibleId},
     prelude::ResourceAddress,
 };
 use tari_transaction::{Transaction, TransactionId};
@@ -476,8 +475,11 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
             Type::Other { ref name } if name == "Amount" => {
                 println!("{}: {}", name, result.decode::<Amount>().unwrap());
             },
+            Type::Other { ref name } if name == "Bucket" => {
+                println!("{}: {}", name, result.decode::<BucketId>().unwrap());
+            },
             Type::Other { ref name } => {
-                println!("{}: {}", name, to_hex(&result.raw));
+                println!("{}: {}", name, serde_json::to_string(&result.indexed).unwrap());
             },
         }
     }
@@ -555,7 +557,7 @@ fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &InstructionRes
             )?;
         },
         Type::Other { .. } => {
-            write!(writer, "{}", to_hex(&result.raw))?;
+            write!(writer, "{}", serde_json::to_string(&result.indexed).unwrap())?;
         },
     }
     Ok(())

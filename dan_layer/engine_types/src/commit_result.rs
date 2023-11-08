@@ -46,7 +46,7 @@ impl ExecuteResult {
     pub fn expect_success(&self) -> &SubstateDiff {
         let diff = self.expect_finalization_success();
 
-        if let Some(reason) = self.finalize.reject() {
+        if let Some(reason) = self.finalize.full_reject() {
             panic!("Transaction failed: {}", reason);
         }
 
@@ -54,6 +54,14 @@ impl ExecuteResult {
     }
 
     pub fn expect_failure(&self) -> &RejectReason {
+        if let Some(reason) = self.finalize.result.full_reject() {
+            reason
+        } else {
+            panic!("Transaction succeeded but it was expected to fail");
+        }
+    }
+
+    pub fn expect_finalization_failure(&self) -> &RejectReason {
         match self.finalize.result {
             TransactionResult::Accept(_) => panic!("Expected transaction to fail but it succeeded"),
             TransactionResult::AcceptFeeRejectRest(_, ref reason) => reason,

@@ -12,3 +12,4 @@ pub const PUBLIC_IDENTITY_RESOURCE_ADDRESS: ResourceAddress = ResourceAddress::n
 ]));
 
 pub const CONFIDENTIAL_TARI_RESOURCE_ADDRESS: ResourceAddress = ResourceAddress::new(Hash::from_array([1u8; 32]));
+pub const XTR2: ResourceAddress = CONFIDENTIAL_TARI_RESOURCE_ADDRESS;

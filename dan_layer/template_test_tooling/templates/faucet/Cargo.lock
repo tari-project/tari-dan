@@ -73,10 +73,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-big-array"
-version = "0.5.1"
+name = "serde-byte-array"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
+checksum = "63213ee4ed648dbd87db6fa993d4275b46bfb4ddfd95b3756045007c2b28f742"
 dependencies = [
  "serde",
 ]
@@ -126,7 +126,7 @@ version = "0.0.3"
 dependencies = [
  "newtype-ops",
  "serde",
- "serde-big-array",
+ "serde-byte-array",
  "tari_bor",
  "tari_template_abi",
  "tari_template_macros",

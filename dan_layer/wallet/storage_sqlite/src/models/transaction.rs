@@ -73,10 +73,11 @@ impl Transaction {
                 item: "status",
                 details: e.to_string(),
             })?,
-            finalize: self.result.map(|r| deserialize_json(&r)).transpose()?,
+            finalize: self.result.as_deref().map(deserialize_json).transpose()?,
             final_fee: self.final_fee.map(|f| f.into()),
             qcs: self.qcs.map(|q| deserialize_json(&q)).transpose()?.unwrap_or_default(),
             is_dry_run: self.is_dry_run,
+            // TODO: This is always None
             json_result: self
                 .json_result
                 .map(|r| deserialize_json(&r))

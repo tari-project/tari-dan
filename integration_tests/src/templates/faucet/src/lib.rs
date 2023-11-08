@@ -45,7 +45,7 @@ mod faucet_template {
         }
 
         pub fn take_free_coins(&mut self) -> Bucket {
-            debug("Withdrawing 1000 coins from faucet");
+            debug!("Withdrawing 1000 coins from faucet");
             self.vault.withdraw(Amount(1000))
         }
     }

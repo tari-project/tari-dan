@@ -18,8 +18,8 @@ tari_utilities = "0.6"
 # Just used for QuorumCertificate
 tari_dan_storage = { path = "../../storage" }
 
-serde = "1.0.126"
-serde_json = "1.0.92"
+serde = "1.0"
+serde_json = "1.0"
 diesel = { version = "2", features = ["sqlite", "chrono"] }
 diesel_migrations = "2"
 log = "0.4.17"

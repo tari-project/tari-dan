@@ -6,6 +6,7 @@ use std::sync::{atomic::AtomicU32, Arc, Mutex};
 use tari_engine_types::{
     component::new_component_address_from_parts,
     hashing::{hasher32, EngineHashDomainLabel},
+    transaction_receipt::TransactionReceiptAddress,
 };
 use tari_template_lib::{
     models::{BucketId, ComponentAddress, ProofId, ResourceAddress, TemplateAddress, VaultId},
@@ -71,13 +72,17 @@ impl IdProvider {
         template_address: TemplateAddress,
         component_id: Option<Hash>,
     ) -> Result<ComponentAddress, IdProviderError> {
-        // if the component_id is not specified by the caller, then it will be random
+        // if the component_id is not specified by the caller, then it will be derived from the transaction hash
         let component_id = match component_id {
             Some(hash) => hash,
             None => self.new_id()?,
         };
         let address = new_component_address_from_parts(&template_address, &component_id);
         Ok(address)
+    }
+
+    pub fn transaction_receipt_address(&self) -> TransactionReceiptAddress {
+        TransactionReceiptAddress::new(self.transaction_hash)
     }
 
     pub fn new_address_hash(&self) -> Result<Hash, IdProviderError> {

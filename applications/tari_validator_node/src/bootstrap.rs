@@ -191,7 +191,12 @@ pub async fn spawn_services(
     let fee_table = if config.validator_node.no_fees {
         FeeTable::zero_rated()
     } else {
-        FeeTable::new(1, 1)
+        FeeTable {
+            per_module_call_cost: 1,
+            per_byte_storage_cost: 1,
+            per_event_cost: 1,
+            per_log_cost: 1,
+        }
     };
     let payload_processor = TariDanTransactionProcessor::new(template_manager.clone(), fee_table);
 

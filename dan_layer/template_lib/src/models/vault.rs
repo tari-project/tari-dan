@@ -20,15 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::BTreeSet, str::FromStr};
-
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{
     call_engine,
     rust::{
+        collections::BTreeSet,
         fmt,
         fmt::{Display, Formatter},
+        str::FromStr,
     },
     EngineOp,
 };
@@ -134,6 +134,15 @@ impl VaultRef {
     }
 }
 
+impl Display for VaultRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            VaultRef::Vault { address, .. } => write!(f, "Vaults({})", address),
+            VaultRef::Ref(id) => write!(f, "Ref({})", id),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Vault {
@@ -209,13 +218,14 @@ impl Vault {
     }
 
     pub fn withdraw_all(&mut self) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::WithdrawAll,
-            args: invoke_args![],
-        });
-
-        resp.decode().expect("failed to decode Bucket")
+        self.withdraw(self.balance())
+        // let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+        //     vault_ref: self.vault_ref(),
+        //     action: VaultAction::WithdrawAll,
+        //     args: invoke_args![],
+        // });
+        //
+        // resp.decode().expect("failed to decode Bucket")
     }
 
     pub fn balance(&self) -> Amount {

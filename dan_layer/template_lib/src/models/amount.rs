@@ -59,11 +59,11 @@ impl Amount {
         self.0
     }
 
-    pub fn checked_add(&self, other: &Self) -> Option<Self> {
+    pub fn checked_add(&self, other: Self) -> Option<Self> {
         self.0.checked_add(other.0).map(Amount)
     }
 
-    pub fn saturating_add(&self, other: &Self) -> Self {
+    pub fn saturating_add(&self, other: Self) -> Self {
         Amount(self.0.saturating_add(other.0))
     }
 

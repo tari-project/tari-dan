@@ -32,28 +32,23 @@ pub fn write_transactions<W: Write>(
             let owner_token = NonFungibleAddress::from_public_key(owner_pk);
 
             let transaction = Transaction::builder()
-                .with_fee_instructions(vec![
-                    Instruction::CreateFreeTestCoins {
-                        revealed_amount: Amount::new(1000),
-                        output: None,
-                    },
-                    Instruction::PutLastInstructionOutputOnWorkspace {
-                        key: b"free_coins".to_vec(),
-                    },
-                    Instruction::CallFunction {
-                        template_address: *ACCOUNT_TEMPLATE_ADDRESS,
-                        function: "create_with_bucket".to_string(),
-                        args: args![owner_token, Workspace("free_coins")],
-                    },
-                    Instruction::CallMethod {
-                        component_address: new_component_address_from_parts(
-                            &ACCOUNT_TEMPLATE_ADDRESS,
-                            &owner_pk.into_array().into(),
-                        ),
-                        method: "pay_fee".to_string(),
-                        args: args![fee_amount],
-                    },
-                ])
+                .with_fee_instructions_builder(|builder| {
+                    builder
+                        .add_instruction(Instruction::CreateFreeTestCoins {
+                            revealed_amount: Amount::new(1000),
+                            output: None,
+                        })
+                        .put_last_instruction_output_on_workspace(b"free_coins")
+                        .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create_with_bucket", args![
+                            owner_token,
+                            Workspace("free_coins")
+                        ])
+                        .call_method(
+                            new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &owner_pk.into_array().into()),
+                            "pay_fee",
+                            args![fee_amount],
+                        )
+                })
                 .sign(&signer_secret_key)
                 .build();
 

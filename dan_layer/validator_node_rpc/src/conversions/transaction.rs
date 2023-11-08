@@ -23,6 +23,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
+use tari_bor::decode_exact;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_dan_common_types::Epoch;
@@ -313,7 +314,7 @@ impl TryFrom<proto::transaction::Arg> for Arg {
     fn try_from(request: proto::transaction::Arg) -> Result<Self, Self::Error> {
         let data = request.data;
         let arg = match request.arg_type {
-            0 => Arg::Literal(data),
+            0 => Arg::Literal(decode_exact(&data)?),
             1 => Arg::Workspace(data),
             _ => return Err(anyhow!("invalid arg_type")),
         };
@@ -329,7 +330,7 @@ impl From<Arg> for proto::transaction::Arg {
         match arg {
             Arg::Literal(data) => {
                 result.arg_type = 0;
-                result.data = data;
+                result.data = tari_bor::encode(&data).unwrap();
             },
             Arg::Workspace(data) => {
                 result.arg_type = 1;

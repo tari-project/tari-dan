@@ -212,6 +212,15 @@ pub struct FunctionAst {
     pub is_public: bool,
 }
 
+impl FunctionAst {
+    /// Returns true if the any argument is a &mut Self receiver
+    pub fn is_mut(&self) -> bool {
+        self.input_types
+            .iter()
+            .any(|t| matches!(t, TypeAst::Receiver { mutability: true }))
+    }
+}
+
 pub enum TypeAst {
     Receiver { mutability: bool },
     Typed { name: Option<String>, type_path: TypePath },

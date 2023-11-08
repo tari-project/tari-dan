@@ -4,18 +4,23 @@
 use std::str::FromStr;
 
 use syn::{parse2, Lit};
+use tari_bor::{BorError, Serialize};
 use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::models::NonFungibleId;
+use tari_template_lib::{models::NonFungibleId, to_value};
 
 #[derive(Debug, Clone)]
 pub enum ManifestValue {
     SubstateAddress(SubstateAddress),
     Literal(Lit),
     NonFungibleId(NonFungibleId),
-    Value(Vec<u8>),
+    Value(tari_bor::Value),
 }
 
 impl ManifestValue {
+    pub fn new_value<T: Serialize>(value: &T) -> Result<Self, BorError> {
+        Ok(Self::Value(to_value(value)?))
+    }
+
     pub fn as_address(&self) -> Option<&SubstateAddress> {
         match self {
             Self::SubstateAddress(addr) => Some(addr),

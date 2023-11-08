@@ -177,7 +177,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- Transactions -------------------------------- //
-    fn transaction_get(
+    fn transactions_get(
         &mut self,
         transaction_id: TransactionId,
     ) -> Result<WalletTransaction<PublicKey>, WalletStorageError> {

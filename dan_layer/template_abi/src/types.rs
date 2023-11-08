@@ -75,9 +75,9 @@ pub struct ArgDef {
     pub arg_type: Type,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-//#[serde(tag = "type", content = "subtype")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum Type {
+    #[default]
     Unit,
     Bool,
     I8,
@@ -92,7 +92,9 @@ pub enum Type {
     U128,
     String,
     Vec(Box<Type>),
-    Other { name: String },
+    Other {
+        name: String,
+    },
 }
 
 #[cfg(feature = "std")]

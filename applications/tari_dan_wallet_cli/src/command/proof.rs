@@ -23,7 +23,8 @@
 use std::str::FromStr;
 
 use clap::{Args, Subcommand};
-use tari_template_lib::{encode, models::Amount};
+use tari_bor::encode;
+use tari_template_lib::models::Amount;
 use tari_wallet_daemon_client::{types::ConfidentialCreateOutputProofRequest, WalletDaemonClient};
 
 #[derive(Debug, Subcommand, Clone)]

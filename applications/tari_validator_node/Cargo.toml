@@ -39,7 +39,7 @@ tari_epoch_manager = { path = "../../dan_layer/epoch_manager", features = [
 ] }
 tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
 tari_comms_rpc_state_sync = { path = "../../dan_layer/comms_rpc_state_sync" }
-
+tari_bor = { path = "../../dan_layer/tari_bor" }
 tari_consensus = { path = "../../dan_layer/consensus" }
 tari_state_store_sqlite = { path = "../../dan_layer/state_store_sqlite" }
 
@@ -66,8 +66,8 @@ log4rs = { version = "1.1.1", features = [
 prost = "0.9"
 rand = "0.8"
 reqwest = "0.11.11"
-serde = { version = "1.0.126", features = ["derive"] }
-serde_json = "1.0.64"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 thiserror = "^1.0.20"
 time = "0.3.15"
 tokio = { version = "1.10", features = [

@@ -20,8 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-//! Public types that are available to all template authors.
-pub use tari_bor::{decode, decode_exact, encode_with_len, from_value, serde};
-pub use tari_template_abi::{call_debug as debug, wrap_ptr, CallInfo};
+//! Public types that are available to internal template code.
 
-pub use crate::{args::LogLevel, engine, get_context as context};
+pub use tari_bor::{decode, decode_exact, encode_with_len, from_value, serde};
+pub use tari_template_abi::{wrap_ptr, CallInfo};
+
+pub use crate::{args::LogLevel, debug, engine, get_context as context, init_context, panic_hook::register_panic_hook};

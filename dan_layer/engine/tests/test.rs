@@ -59,7 +59,6 @@ fn test_state() {
     // constructor
     let component_address1: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
     template_test.assert_calls(&[
-        "set_current_runtime_state",
         "emit_log",
         "component_invoke",
         "set_last_instruction_output",
@@ -211,8 +210,8 @@ fn test_engine_errors() {
     // call returned null for op VaultInvoke)
     assert_eq!(
         reason,
-        "Runtime error: Resource not found with address \
-         resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+        "Runtime error: Substate not found with address \
+         'resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b'"
     );
 }
 
@@ -1241,5 +1240,46 @@ mod nft_indexes {
         // The total supply of the resource is increased
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof]);
         assert_eq!(total_supply, Amount(1));
+    }
+}
+
+// TODO: these tests can be removed when create free test coins is removed
+mod free_test_coins {
+    use tari_transaction::id_provider::IdProvider;
+
+    use super::*;
+    #[test]
+    fn it_creates_free_test_coins() {
+        let mut test = TemplateTest::new(Vec::<&str>::new());
+        test.enable_fees();
+        let account_template = test.get_template_address("Account");
+        let (other, _) = test.create_owner_proof();
+
+        let owner_token = test.get_test_proof();
+        let future_account_component = IdProvider::new(Default::default(), 1)
+            .new_component_address(account_template, Some(owner_token.id().as_u256().unwrap().into()))
+            .unwrap();
+
+        test.execute_expect_success(
+            Transaction::builder()
+                .with_fee_instructions_builder(|builder| {
+                    builder
+                        .add_instruction(Instruction::CreateFreeTestCoins {
+                            revealed_amount: Amount(1000),
+                            output: None,
+                        })
+                        .put_last_instruction_output_on_workspace("free")
+                        .call_function(account_template, "create_with_bucket", args![
+                            owner_token.clone(),
+                            Workspace("free")
+                        ])
+                        .call_method(future_account_component, "pay_fee", args![Amount(1000)])
+                })
+                // Checking we can create an account for another user in this transaction
+                .call_function(account_template, "create", args![other])
+                .sign(test.get_test_secret_key())
+                .build(),
+            vec![owner_token],
+        );
     }
 }
