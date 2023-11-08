@@ -5,7 +5,7 @@ use std::sync::{atomic::AtomicU32, Arc, Mutex};
 
 use tari_engine_types::{
     component::new_component_address_from_parts,
-    hashing::{hasher, EngineHashDomainLabel},
+    hashing::{hasher32, EngineHashDomainLabel},
 };
 use tari_template_lib::{
     models::{BucketId, ComponentAddress, ProofId, ResourceAddress, TemplateAddress, VaultId},
@@ -100,7 +100,7 @@ impl IdProvider {
 
     pub fn new_uuid(&self) -> Result<[u8; 32], IdProviderError> {
         let n = self.uuid.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let id = hasher(EngineHashDomainLabel::UuidOutput)
+        let id = hasher32(EngineHashDomainLabel::UuidOutput)
             .chain(&self.transaction_hash)
             .chain(&n)
             .result();
@@ -113,7 +113,9 @@ impl IdProvider {
         })?;
         let mut result = Vec::with_capacity(len as usize);
         while result.len() < len as usize {
-            let new_random = hasher(EngineHashDomainLabel::RandomBytes).chain(&*last_random).result();
+            let new_random = hasher32(EngineHashDomainLabel::RandomBytes)
+                .chain(&*last_random)
+                .result();
             result.extend_from_slice(&new_random);
             *last_random = new_random;
         }
@@ -126,7 +128,7 @@ impl IdProvider {
 }
 
 fn generate_output_id(hash: &Hash, n: u32) -> Hash {
-    hasher(EngineHashDomainLabel::Output).chain(hash).chain(&n).result()
+    hasher32(EngineHashDomainLabel::Output).chain(hash).chain(&n).result()
 }
 
 #[cfg(test)]

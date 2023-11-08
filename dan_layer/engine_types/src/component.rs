@@ -30,12 +30,12 @@ use tari_template_lib::{
 };
 
 use crate::{
-    hashing::{hasher, EngineHashDomainLabel},
+    hashing::{hasher32, EngineHashDomainLabel},
     serde_with,
 };
 
 pub fn new_component_address_from_parts(template_address: &TemplateAddress, component_id: &Hash) -> ComponentAddress {
-    let address = hasher(EngineHashDomainLabel::ComponentAddress)
+    let address = hasher32(EngineHashDomainLabel::ComponentAddress)
         .chain(template_address)
         .chain(component_id)
         .result();

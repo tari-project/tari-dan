@@ -421,7 +421,7 @@ pub mod utilities {
         let secret_excess = input_mask - output_mask - change_mask.unwrap_or(&PrivateKey::default());
         let excess = PublicKey::from_secret_key(&secret_excess);
         let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
-        let challenge = challenges::confidential_withdraw(&excess, &public_nonce, revealed_amount);
+        let challenge = challenges::confidential_withdraw64(&excess, &public_nonce, revealed_amount);
 
         let sig = Signature::sign_raw_uniform(&secret_excess, nonce, &challenge).unwrap();
         BalanceProofSignature::try_from_parts(sig.get_public_nonce().as_bytes(), sig.get_signature().as_bytes())

@@ -12,9 +12,9 @@ use anyhow::anyhow;
 use serde::de::DeserializeOwned;
 use tari_bor::encode;
 use tari_crypto::{
-    keys::{PublicKey, SecretKey},
+    keys::PublicKey,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
-    tari_utilities::ByteArray,
+    tari_utilities::{message_format::MessageFormat, ByteArray},
 };
 use tari_dan_common_types::crypto::create_key_pair;
 use tari_dan_engine::{
@@ -35,7 +35,7 @@ use tari_dan_engine::{
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
     component::{ComponentBody, ComponentHeader},
-    hashing::template_hasher,
+    hashing::template_hasher32,
     instruction::Instruction,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateAddress, SubstateDiff},
@@ -60,8 +60,6 @@ use crate::track_calls::TrackCallsModule;
 pub fn test_faucet_component() -> ComponentAddress {
     ComponentAddress::new(Hash::from_array([0xfau8; 32]))
 }
-use rand::rngs::OsRng;
-
 pub struct TemplateTest {
     package: Arc<Package>,
     track_calls: TrackCallsModule,
@@ -77,7 +75,9 @@ pub struct TemplateTest {
 
 impl TemplateTest {
     pub fn new<I: IntoIterator<Item = P>, P: AsRef<Path>>(template_paths: I) -> Self {
-        let secret_key = RistrettoSecretKey::random(&mut OsRng);
+        let secret_key =
+            RistrettoSecretKey::from_json("\"8a39567509bf2f7074e5fd153337405292cdc9f574947313b62fbf8fb4cffc02\"")
+                .unwrap();
         let public_key = RistrettoPublicKey::from_secret_key(&secret_key);
 
         let mut name_to_template = HashMap::new();
@@ -90,7 +90,7 @@ impl TemplateTest {
         name_to_template.insert("Account".to_string(), *ACCOUNT_TEMPLATE_ADDRESS);
         // Add test Faucet
         let wasm = compile_template(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/faucet"), &[]).unwrap();
-        let test_faucet_template_address = template_hasher().chain(wasm.code()).result();
+        let test_faucet_template_address = template_hasher32().chain(wasm.code()).result();
         builder.add_template(test_faucet_template_address, wasm.load_template().unwrap());
         name_to_template.insert("TestFaucet".to_string(), test_faucet_template_address);
 
@@ -99,7 +99,7 @@ impl TemplateTest {
             .map(|path| compile_template(path, &[]).unwrap());
 
         for wasm in wasms {
-            let template_addr = template_hasher().chain(wasm.code()).result();
+            let template_addr = template_hasher32().chain(wasm.code()).result();
             let wasm = wasm.load_template().unwrap();
             let name = wasm.template_name().to_string();
             name_to_template.insert(name, template_addr);

@@ -34,22 +34,42 @@ pub mod challenges {
     use tari_common_types::types::{Commitment, PublicKey};
     use tari_template_lib::{models::Amount, Hash};
 
-    use crate::hashing::{hasher, EngineHashDomainLabel};
+    use crate::hashing::{hasher32, hasher64, EngineHashDomainLabel};
 
-    pub fn confidential_commitment_proof(
+    pub fn confidential_commitment_proof64(
         public_key: &PublicKey,
         public_nonce: &PublicKey,
         commitment: &Commitment,
-    ) -> Hash {
-        hasher(EngineHashDomainLabel::ConfidentialProof)
+    ) -> [u8; 64] {
+        hasher64(EngineHashDomainLabel::ConfidentialProof)
             .chain(&public_key)
             .chain(&public_nonce)
             .chain(commitment.as_public_key())
             .result()
     }
 
-    pub fn confidential_withdraw(excess: &PublicKey, public_nonce: &PublicKey, revealed_amount: Amount) -> Hash {
-        hasher(EngineHashDomainLabel::ConfidentialTransfer)
+    pub fn confidential_withdraw64(excess: &PublicKey, public_nonce: &PublicKey, revealed_amount: Amount) -> [u8; 64] {
+        hasher64(EngineHashDomainLabel::ConfidentialTransfer)
+            .chain(excess)
+            .chain(public_nonce)
+            .chain(&revealed_amount)
+            .result()
+    }
+
+    pub fn confidential_commitment_proof32(
+        public_key: &PublicKey,
+        public_nonce: &PublicKey,
+        commitment: &Commitment,
+    ) -> Hash {
+        hasher32(EngineHashDomainLabel::ConfidentialProof)
+            .chain(&public_key)
+            .chain(&public_nonce)
+            .chain(commitment.as_public_key())
+            .result()
+    }
+
+    pub fn confidential_withdraw32(excess: &PublicKey, public_nonce: &PublicKey, revealed_amount: Amount) -> Hash {
+        hasher32(EngineHashDomainLabel::ConfidentialTransfer)
             .chain(excess)
             .chain(public_nonce)
             .chain(&revealed_amount)

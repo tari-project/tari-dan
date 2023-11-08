@@ -62,7 +62,7 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
             .unwrap_or(&PublicKey::default());
 
     let challenge =
-        challenges::confidential_withdraw(&public_excess, balance_proof.get_public_nonce(), revealed_amount);
+        challenges::confidential_withdraw64(&public_excess, balance_proof.get_public_nonce(), revealed_amount);
 
     if !balance_proof.verify_raw_uniform(&public_excess, &challenge) {
         return Err(ResourceError::InvalidBalanceProof {

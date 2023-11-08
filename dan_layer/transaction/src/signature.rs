@@ -9,7 +9,7 @@ use tari_crypto::{
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
 use tari_engine_types::{
-    hashing::{hasher, EngineHashDomainLabel},
+    hashing::{hasher64, EngineHashDomainLabel},
     instruction::Instruction,
 };
 
@@ -26,7 +26,7 @@ impl TransactionSignature {
 
     pub fn sign(secret_key: &RistrettoSecretKey, instructions: &[Instruction]) -> Self {
         let public_key = RistrettoPublicKey::from_secret_key(secret_key);
-        let challenge = hasher(EngineHashDomainLabel::InstructionSignature)
+        let challenge = hasher64(EngineHashDomainLabel::InstructionSignature)
             .chain(instructions)
             .result();
 

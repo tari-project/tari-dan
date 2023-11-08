@@ -277,10 +277,10 @@ mod tests {
     use tari_template_lib::models::NonFungibleId;
 
     use super::*;
-    use crate::hashing::{hasher, EngineHashDomainLabel};
+    use crate::hashing::{hasher32, EngineHashDomainLabel};
 
     fn new_hash() -> Hash {
-        hasher(EngineHashDomainLabel::ComponentAddress)
+        hasher32(EngineHashDomainLabel::ComponentAddress)
             .chain(&OsRng.next_u32())
             .result()
     }
