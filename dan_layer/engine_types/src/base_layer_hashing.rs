@@ -24,7 +24,10 @@ use std::{io, io::Write};
 
 use blake2::Blake2b;
 use borsh::BorshSerialize;
-use digest::{consts::U32, typenum::U64, Digest};
+use digest::{
+    consts::{U32, U64},
+    Digest,
+};
 use tari_crypto::{
     hash_domain,
     hashing::{DomainSeparatedHasher, DomainSeparation},
@@ -39,8 +42,12 @@ hash_domain!(
     1
 );
 
-fn confidential_hasher(label: &'static str) -> TariBaseLayerHasher {
-    TariBaseLayerHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
+fn confidential_hasher32(label: &'static str) -> TariBaseLayerHasher32 {
+    TariBaseLayerHasher32::new_with_label::<ConfidentialOutputHashDomain>(label)
+}
+
+fn confidential_hasher64(label: &'static str) -> TariBaseLayerHasher64 {
+    TariBaseLayerHasher64::new_with_label::<ConfidentialOutputHashDomain>(label)
 }
 
 type WalletOutputEncryptionKeysDomainHasher = DomainSeparatedHasher<Blake2b<U64>, WalletOutputEncryptionKeysDomain>;
@@ -48,16 +55,20 @@ pub fn encrypted_data_hasher() -> WalletOutputEncryptionKeysDomainHasher {
     WalletOutputEncryptionKeysDomainHasher::new_with_label("")
 }
 
-pub fn ownership_proof_hasher() -> TariBaseLayerHasher {
-    confidential_hasher("commitment_signature")
+pub fn ownership_proof_hasher32() -> TariBaseLayerHasher32 {
+    confidential_hasher32("commitment_signature")
+}
+
+pub fn ownership_proof_hasher64() -> TariBaseLayerHasher64 {
+    confidential_hasher64("commitment_signature")
 }
 
 #[derive(Debug, Clone)]
-pub struct TariBaseLayerHasher {
+pub struct TariBaseLayerHasher32 {
     hasher: Blake2b<U32>,
 }
 
-impl TariBaseLayerHasher {
+impl TariBaseLayerHasher32 {
     pub fn new_with_label<TDomain: DomainSeparation>(label: &'static str) -> Self {
         let mut hasher = Blake2b::<U32>::new();
         TDomain::add_domain_separation_tag(&mut hasher, label);
@@ -93,6 +104,60 @@ impl TariBaseLayerHasher {
 
     fn hash_writer(&mut self) -> impl Write + '_ {
         struct HashWriter<'a>(&'a mut Blake2b<U32>);
+        impl Write for HashWriter<'_> {
+            fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+                self.0.update(buf);
+                Ok(buf.len())
+            }
+
+            fn flush(&mut self) -> io::Result<()> {
+                Ok(())
+            }
+        }
+        HashWriter(&mut self.hasher)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct TariBaseLayerHasher64 {
+    hasher: Blake2b<U64>,
+}
+
+impl TariBaseLayerHasher64 {
+    pub fn new_with_label<TDomain: DomainSeparation>(label: &'static str) -> Self {
+        let mut hasher = Blake2b::<U64>::new();
+        TDomain::add_domain_separation_tag(&mut hasher, label);
+        Self { hasher }
+    }
+
+    pub fn update<T: BorshSerialize>(&mut self, data: &T) {
+        BorshSerialize::serialize(data, &mut self.hash_writer())
+            .expect("Incorrect implementation of BorshSerialize encountered. Implementations MUST be infallible.");
+    }
+
+    pub fn chain<T: BorshSerialize>(mut self, data: &T) -> Self {
+        self.update(data);
+        self
+    }
+
+    pub fn chain_update<T: BorshSerialize>(self, data: &T) -> Self {
+        self.chain(data)
+    }
+
+    pub fn digest<T: BorshSerialize>(self, data: &T) -> [u8; 64] {
+        self.chain(data).result()
+    }
+
+    pub fn result(self) -> [u8; 64] {
+        self.hasher.finalize().into()
+    }
+
+    pub fn finalize_into(self, output: &mut digest::Output<Blake2b<U64>>) {
+        digest::FixedOutput::finalize_into(self.hasher, output)
+    }
+
+    fn hash_writer(&mut self) -> impl Write + '_ {
+        struct HashWriter<'a>(&'a mut Blake2b<U64>);
         impl Write for HashWriter<'_> {
             fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
                 self.0.update(buf);

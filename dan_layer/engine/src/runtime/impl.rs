@@ -27,7 +27,7 @@ use tari_common_types::types::PublicKey;
 use tari_crypto::{range_proof::RangeProofService, ristretto::RistrettoPublicKey, tari_utilities::ByteArray};
 use tari_dan_common_types::{optional::Optional, services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
-    base_layer_hashing::ownership_proof_hasher,
+    base_layer_hashing::ownership_proof_hasher64,
     commit_result::FinalizeResult,
     component::ComponentHeader,
     confidential::{get_commitment_factory, get_range_proof_service, ConfidentialClaim, ConfidentialOutput},
@@ -1153,7 +1153,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         // 1. Must exist
         let unclaimed_output = self.tracker.take_unclaimed_confidential_output(output_address)?;
         // 2. owner_sig must be valid
-        let challenge = ownership_proof_hasher()
+        let challenge = ownership_proof_hasher64()
             .chain_update(proof_of_knowledge.public_nonce())
             .chain_update(&unclaimed_output.commitment)
             .chain_update(&self.sender_public_key)
