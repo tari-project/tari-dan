@@ -21,6 +21,7 @@ mod on_sync_request;
 // mod on_sync_response;
 mod pacemaker;
 mod pacemaker_handle;
+mod proposer;
 mod state_machine;
 mod vote_receiver;
 mod worker;

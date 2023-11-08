@@ -533,11 +533,12 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
         on_lock_block: TFnOnLock,
         on_commit: TFnOnCommit,
+        locked_blocks: &mut Vec<Block<TAddr>>,
     ) -> Result<HighQc, E>
     where
         TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
         TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
-        TFnOnLock: FnOnce(&mut TTx, &LockedBlock, &Block<TAddr>) -> Result<(), E>,
+        TFnOnLock: FnOnce(&mut TTx, &LockedBlock, &Block<TAddr>, &mut Vec<Block<TAddr>>) -> Result<(), E>,
         TFnOnCommit: FnOnce(&mut TTx, &LastExecuted, &Block<TAddr>) -> Result<(), E>,
         E: From<StorageError>,
     {
@@ -555,7 +556,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
 
         let locked_block = LockedBlock::get(tx.deref_mut())?;
         if precommit_node.height() > locked_block.height {
-            on_lock_block(tx, &locked_block, &precommit_node)?;
+            on_lock_block(tx, &locked_block, &precommit_node, locked_blocks)?;
             precommit_node.as_locked_block().set(tx)?;
         }
 
