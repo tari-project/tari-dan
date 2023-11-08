@@ -33,6 +33,7 @@ use crate::handlers::{
     keys,
     nfts,
     rpc,
+    settings,
     transaction,
     validator,
     webrtc,
@@ -101,6 +102,11 @@ async fn handler(
             "get_all_jwt" => call_handler(context, value, token, rpc::handle_get_all_jwt).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
+        Some(("settings", method)) => match method {
+            "get" => call_handler(context, value, token, settings::handle_get).await,
+            "set" => call_handler(context, value, token, settings::handle_set).await,
+            _ => Ok(value.method_not_found(&value.method)),
+        },
         Some(("webrtc", "start")) => webrtc::handle_start(context, value, token, shutdown_signal, addresses),
         Some(("rpc", "discover")) => call_handler(context, value, token, rpc::handle_discover).await,
         Some(("keys", method)) => match method {
@@ -115,7 +121,7 @@ async fn handler(
             "get" => call_handler(context, value, token, transaction::handle_get).await,
             "get_result" => call_handler(context, value, token, transaction::handle_get_result).await,
             "wait_result" => call_handler(context, value, token, transaction::handle_wait_result).await,
-            "get_all_by_status" => call_handler(context, value, token, transaction::handle_get_all_by_status).await,
+            "get_all" => call_handler(context, value, token, transaction::handle_get_all).await,
             _ => Ok(value.method_not_found(&value.method)),
         },
         Some(("accounts", method)) => match method {

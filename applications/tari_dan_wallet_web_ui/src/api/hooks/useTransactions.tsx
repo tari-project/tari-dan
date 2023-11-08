@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import { useQuery } from '@tanstack/react-query';
-import { jsonRpc } from '../../utils/json_rpc';
+import { getAllTransaction, jsonRpc } from '../../utils/json_rpc';
 import { apiError } from '../helpers/types';
 
 const useTransactionDetails = (hash: string) => {
@@ -36,12 +36,10 @@ const useTransactionDetails = (hash: string) => {
   });
 };
 
-const useGetAllTransactionsByStatus = (status: string | null | undefined) => {
+const useGetAllTransactions = (status: string | null | undefined, component: string | null | undefined) => {
   return useQuery({
     queryKey: ['transactions'],
-    queryFn: () => {
-      return jsonRpc('transactions.get_all_by_status', [status]);
-    },
+    queryFn: () => getAllTransaction(status, component),
     onError: (error: apiError) => {
       error;
     },
@@ -50,4 +48,4 @@ const useGetAllTransactionsByStatus = (status: string | null | undefined) => {
   });
 };
 
-export { useTransactionDetails, useGetAllTransactionsByStatus };
+export { useTransactionDetails, useGetAllTransactions };

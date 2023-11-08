@@ -79,32 +79,32 @@ mod tests {
         let output = generate_definition(&ast);
 
         assert_code_eq(output, quote! {
-        #[allow(non_snake_case)]
-        pub mod Foo_template {
-            use ::tari_template_lib::template_dependencies::*;
-            #[derive(Debug, serde :: Serialize, serde :: Deserialize)]
-            #[serde(crate = "self::serde")]
-            struct Foo {}
-            impl Foo {
-                pub fn no_args_function() -> String {
-                    "Hello World!".to_string()
+            #[allow(non_snake_case)]
+            pub mod Foo_template {
+                use ::tari_template_lib::template_dependencies::*;
+                #[derive(Debug, serde :: Serialize, serde :: Deserialize)]
+                #[serde(crate = "self::serde")]
+                struct Foo {}
+                impl Foo {
+                    pub fn no_args_function() -> String {
+                        "Hello World!".to_string()
+                    }
+
+                    pub fn some_args_function(a: i8, b: String) -> u32 {
+                        1_u32
+                    }
+
+                    pub fn no_return_function() {}
+
+                    pub fn constructor() -> Self {
+                        Self {}
+                    }
+
+                    pub fn method(&self) {}
+
+                    fn private_function() {}
                 }
-
-                pub fn some_args_function(a: i8, b: String) -> u32 {
-                    1_u32
-                }
-
-                pub fn no_return_function() {}
-
-                pub fn constructor() -> Self {
-                    Self {}
-                }
-
-                pub fn method(&self) {}
-
-                fn private_function() {}
             }
-        }
         });
     }
 

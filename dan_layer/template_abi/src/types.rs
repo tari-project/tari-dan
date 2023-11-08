@@ -25,12 +25,37 @@ use serde::{Deserialize, Serialize};
 use crate::rust::{boxed::Box, string::String, vec::Vec};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TemplateDef {
+pub enum TemplateDef {
+    V1(TemplateDefV1),
+}
+
+impl TemplateDef {
+    pub fn template_name(&self) -> &str {
+        match self {
+            TemplateDef::V1(def) => def.template_name.as_str(),
+        }
+    }
+
+    pub fn get_function(&self, name: &str) -> Option<&FunctionDef> {
+        match self {
+            TemplateDef::V1(def) => def.get_function(name),
+        }
+    }
+
+    pub fn functions(&self) -> &[FunctionDef] {
+        match self {
+            TemplateDef::V1(def) => &def.functions,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TemplateDefV1 {
     pub template_name: String,
     pub functions: Vec<FunctionDef>,
 }
 
-impl TemplateDef {
+impl TemplateDefV1 {
     pub fn get_function(&self, name: &str) -> Option<&FunctionDef> {
         self.functions.iter().find(|f| f.name.as_str() == name)
     }

@@ -16,6 +16,6 @@ lol_alloc = "0.4.0"
 crate-type = ["cdylib", "lib"]
 
 [features]
-call_engine_in_abi = []
 return_null_abi = []
+return_empty_abi = []
 unexpected_export_function = []

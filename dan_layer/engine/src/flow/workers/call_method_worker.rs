@@ -58,7 +58,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             .get_template_module(&template_address)?
             .ok_or_else(|| anyhow::anyhow!("could not find template {}", template_address))?
             .template_def()
-            .functions
+            .functions()
             .iter()
             .find(|f| f.name == *method_name)
             .ok_or_else(|| anyhow::anyhow!("could not find method"))?

@@ -48,7 +48,7 @@ pub async fn handle_claim_validator_fees(
     let account_address = account.address.as_component_address().unwrap();
 
     // build the transaction
-    let fee = req.fee.unwrap_or(DEFAULT_FEE);
+    let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
     fee_instructions.extend([
         Instruction::ClaimValidatorFees {
             validator_public_key: req.validator_public_key.clone(),
@@ -65,7 +65,7 @@ pub async fn handle_claim_validator_fees(
         Instruction::CallMethod {
             component_address: account_address,
             method: "pay_fee".to_string(),
-            args: args![fee],
+            args: args![max_fee],
         },
     ]);
 
@@ -96,7 +96,7 @@ pub async fn handle_claim_validator_fees(
     if let Some(reject) = finalized.finalize.result.reject() {
         return Err(anyhow::anyhow!("Fee transaction rejected: {}", reject));
     }
-    if let Some(reason) = finalized.transaction_failure {
+    if let Some(reason) = finalized.finalize.reject() {
         return Err(anyhow::anyhow!(
             "Fee transaction succeeded (fees charged) however the transaction failed: {}",
             reason

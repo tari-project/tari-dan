@@ -1,17 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{
-    collections::{BTreeSet, HashSet},
-    num::NonZeroU64,
-    ops::DerefMut,
-};
+use std::{collections::BTreeSet, num::NonZeroU64};
 
 use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    shard_bucket::ShardBucket,
     Epoch,
     NodeHeight,
 };
@@ -19,7 +14,6 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
-        ExecutedTransaction,
         HighQc,
         LastProposed,
         LeafBlock,
@@ -28,22 +22,19 @@ use tari_dan_storage::{
         TransactionPoolStage,
     },
     StateStore,
-    StateStoreReadTransaction,
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
+use super::common::CommitteeAndMessage;
 use crate::{
-    hotstuff::{
-        common::{CommitteeAndMessage, EXHAUST_DIVISOR},
-        error::HotStuffError,
-    },
+    hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError},
     messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
 
-const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose";
+const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
 
 pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
@@ -81,28 +72,19 @@ where TConsensusSpec: ConsensusSpec
                 // is_newview_propose means that a NEWVIEW has reached quorum and nodes are expecting us to propose.
                 // Re-broadcast the previous proposal
                 if is_newview_propose {
-                    let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
-                    let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
-                    let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
-
                     if let Some(next_block) = self.store.with_read_tx(|tx| last_proposed.get_block(tx)).optional()? {
-                        let non_local_buckets = self
-                            .store
-                            .with_read_tx(|tx| get_non_local_buckets(tx, &next_block, num_committees, local_bucket))?;
                         info!(
                             target: LOG_TARGET,
-                            "🌿 RE-BROADCASTING block {}({}) to {} validators. {} command(s), {} foreign shards, justify: {} ({}), parent: {}",
+                            "🌿 RE-BROADCASTING locally block {}({}) to {} validators. {} command(s), justify: {} ({}), parent: {}",
                             next_block.id(),
                             next_block.height(),
                             local_committee.len(),
                             next_block.commands().len(),
-                            non_local_buckets.len(),
                             next_block.justify().block_id(),
                             next_block.justify().block_height(),
                             next_block.parent(),
                         );
-                        self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
-                            .await?;
+                        self.broadcast_proposal_locally(next_block, local_committee).await?;
                         return Ok(());
                     }
                 }
@@ -120,11 +102,8 @@ where TConsensusSpec: ConsensusSpec
 
         let validator = self.epoch_manager.get_our_validator_node(epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
-        let num_committees = self.epoch_manager.get_num_committees(epoch).await?;
-        let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
         // The scope here is due to a shortcoming of rust. The tx is dropped at tx.commit() but it still complains that
         // the non-Send tx could be used after the await point, which is not possible.
-        let non_local_buckets;
         let next_block;
         {
             let mut tx = self.store.create_write_tx()?;
@@ -150,52 +129,34 @@ where TConsensusSpec: ConsensusSpec
             // LocalPrepared.
             // TODO: we should never broadcast to foreign shards here. The soonest we can broadcast is once we have
             //       locked the block
-            non_local_buckets = get_non_local_buckets(tx.deref_mut(), &next_block, num_committees, local_bucket)?;
             tx.commit()?;
         }
 
         info!(
             target: LOG_TARGET,
-            "🌿 PROPOSING new block {} to {} validators. {} foreign shards, justify: {} ({}), parent: {}",
+            "🌿 PROPOSING locally new block {} to {} validators. justify: {} ({}), parent: {}",
             next_block,
             local_committee.len(),
-            non_local_buckets.len(),
             next_block.justify().block_id(),
             next_block.justify().block_height(),
             next_block.parent()
         );
 
-        self.broadcast_proposal(epoch, next_block, non_local_buckets, local_committee)
-            .await?;
+        self.broadcast_proposal_locally(next_block, local_committee).await?;
 
         Ok(())
     }
 
-    async fn broadcast_proposal(
+    pub async fn broadcast_proposal_locally(
         &self,
-        epoch: Epoch,
         next_block: Block<TConsensusSpec::Addr>,
-        non_local_buckets: HashSet<ShardBucket>,
         local_committee: Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
-        // Find non-local shard committees to include in the broadcast
-        debug!(
-            target: LOG_TARGET,
-            "non_local_buckets : [{}]",
-            non_local_buckets.iter().map(|s|s.to_string()).collect::<Vec<_>>().join(","),
-        );
-
-        let non_local_committees = self
-            .epoch_manager
-            .get_committees_by_buckets(epoch, non_local_buckets)
-            .await?;
-
         info!(
             target: LOG_TARGET,
-            "🌿 Broadcasting proposal {} to committees ({} local, {} foreign)",
+            "🌿 Broadcasting locally proposal {} to {} local committees",
             next_block,
             local_committee.len(),
-            non_local_committees.len(),
         );
 
         // Broadcast to local and foreign committees
@@ -210,19 +171,6 @@ where TConsensusSpec: ConsensusSpec
             .map_err(|_| HotStuffError::InternalChannelClosed {
                 context: "proposing a new block",
             })?;
-
-        // TODO: only broadcast to f + 1 foreign committee members. They can gossip the proposal around from there.
-        if !non_local_committees.is_empty() {
-            self.tx_broadcast
-                .send((
-                    non_local_committees.into_values().collect(),
-                    HotstuffMessage::ForeignProposal(ProposalMessage { block: next_block }),
-                ))
-                .await
-                .map_err(|_| HotStuffError::InternalChannelClosed {
-                    context: "proposing a new block",
-                })?;
-        }
 
         Ok(())
     }
@@ -299,25 +247,4 @@ where TConsensusSpec: ConsensusSpec
 
         Ok(next_block)
     }
-}
-
-fn get_non_local_buckets<TTx: StateStoreReadTransaction>(
-    tx: &mut TTx,
-    next_block: &Block<TTx::Addr>,
-    num_committees: u32,
-    local_bucket: ShardBucket,
-) -> Result<HashSet<ShardBucket>, HotStuffError> {
-    let prepared_iter = next_block
-        .commands()
-        .iter()
-        .filter_map(|cmd| cmd.local_prepared())
-        .map(|t| &t.id);
-    let prepared_txs = ExecutedTransaction::get_involved_shards(tx, prepared_iter)?;
-    let non_local_buckets = prepared_txs
-        .into_iter()
-        .flat_map(|(_, shards)| shards)
-        .map(|shard| shard.to_committee_bucket(num_committees))
-        .filter(|bucket| *bucket != local_bucket)
-        .collect();
-    Ok(non_local_buckets)
 }

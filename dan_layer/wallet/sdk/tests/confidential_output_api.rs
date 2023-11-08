@@ -266,4 +266,9 @@ impl WalletNetworkInterface for PanicIndexer {
     ) -> Result<TransactionQueryResult, Self::Error> {
         panic!("PanicIndexer called")
     }
+
+    #[allow(clippy::diverging_sub_expression)]
+    fn set_endpoint(&mut self, _endpoint: &str) -> Result<(), Self::Error> {
+        panic!("PanicIndexer called")
+    }
 }

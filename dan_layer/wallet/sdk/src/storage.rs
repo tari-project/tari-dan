@@ -6,14 +6,10 @@ use std::ops::{Deref, DerefMut};
 use tari_common_types::types::{Commitment, PublicKey};
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_dan_storage::consensus_models::QuorumCertificate;
-use tari_engine_types::{
-    commit_result::{FinalizeResult, RejectReason},
-    substate::SubstateAddress,
-    TemplateAddress,
-};
+use tari_engine_types::{commit_result::FinalizeResult, substate::SubstateAddress, TemplateAddress};
 use tari_template_lib::{
     models::Amount,
-    prelude::{NonFungibleId, ResourceAddress},
+    prelude::{ComponentAddress, NonFungibleId, ResourceAddress},
 };
 use tari_transaction::{Transaction, TransactionId};
 
@@ -122,11 +118,11 @@ pub trait WalletStoreReader {
         &mut self,
         transaction_id: TransactionId,
     ) -> Result<WalletTransaction<PublicKey>, WalletStorageError>;
-    fn transactions_fetch_all_by_status(
+    fn transactions_fetch_all(
         &mut self,
-        status: TransactionStatus,
+        status: Option<TransactionStatus>,
+        component: Option<ComponentAddress>,
     ) -> Result<Vec<WalletTransaction<PublicKey>>, WalletStorageError>;
-    fn transactions_fetch_all(&mut self) -> Result<Vec<WalletTransaction<PublicKey>>, WalletStorageError>;
     // Substates
     fn substates_get(&mut self, address: &SubstateAddress) -> Result<SubstateModel, WalletStorageError>;
     fn substates_get_children(&mut self, parent: &SubstateAddress) -> Result<Vec<SubstateModel>, WalletStorageError>;
@@ -217,7 +213,6 @@ pub trait WalletStoreWriter {
         &mut self,
         transaction_id: TransactionId,
         result: Option<&FinalizeResult>,
-        transaction_failure: Option<&RejectReason>,
         final_fee: Option<Amount>,
         qcs: Option<&[QuorumCertificate<PublicKey>]>,
         new_status: TransactionStatus,

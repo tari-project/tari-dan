@@ -31,8 +31,8 @@ Feature: Account transfers
     When miner MINER mines 15 new blocks
     Then the validator node VN is listed as registered
     Then the template "faucet" is listed as registered by the validator node VN
-    Then VN has scanned to height 32 within 10 seconds
-    Then indexer IDX has scanned to height 32 within 10 seconds
+    Then VN has scanned to height 32
+    Then indexer IDX has scanned to height 32
 
     # Create the sender account
     When I create an account ACCOUNT via the wallet daemon WALLET_D with 10000 free coins
@@ -43,8 +43,8 @@ Feature: Account transfers
     # Burn some tari in the base layer to have funds for fees in the sender account
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACCOUNT, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
     When miner MINER mines 13 new blocks
-    Then VN has scanned to height 45 within 10 seconds
-    Then indexer IDX has scanned to height 45 within 10 seconds
+    Then VN has scanned to height 45
+    Then indexer IDX has scanned to height 45
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
@@ -111,8 +111,8 @@ Feature: Account transfers
     Then the validator node VN is listed as registered
     Then the template "faucet" is listed as registered by the validator node VN
 
-    Then VN has scanned to height 32 within 10 seconds
-    Then indexer IDX has scanned to height 32 within 10 seconds
+    Then VN has scanned to height 32
+    Then indexer IDX has scanned to height 32
 
     # Create the sender account with some tokens
     When I create an account ACCOUNT_1 via the wallet daemon WALLET_D with 10000 free coins
@@ -124,8 +124,8 @@ Feature: Account transfers
     # Burn some tari in the base layer to have funds for fees in the sender account
     When I burn 10T on wallet WALLET with wallet daemon WALLET_D into commitment COMMITMENT with proof PROOF for ACCOUNT_1, range proof RANGEPROOF and claim public key CLAIM_PUBKEY
     When miner MINER mines 13 new blocks
-    Then VN has scanned to height 45 within 10 seconds
-    Then indexer IDX has scanned to height 45 within 10 seconds
+    Then VN has scanned to height 45
+    Then indexer IDX has scanned to height 45
 
     When I convert commitment COMMITMENT into COMM_ADDRESS address
     Then validator node VN has state at COMM_ADDRESS
@@ -180,8 +180,8 @@ Feature: Account transfers
     # Initialize the wallet daemon
     Given a wallet daemon WALLET_D connected to indexer IDX
 
-    Then VN has scanned to height 17 within 10 seconds
-    Then indexer IDX has scanned to height 17 within 10 seconds
+    Then VN has scanned to height 17
+    Then indexer IDX has scanned to height 17
 
     # Create the sender account
     When I create an account ACC_1 via the wallet daemon WALLET_D with 10000 free coins

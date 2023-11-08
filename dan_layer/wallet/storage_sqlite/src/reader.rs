@@ -4,7 +4,16 @@
 use std::{collections::HashMap, str::FromStr, sync::MutexGuard};
 
 use bigdecimal::{BigDecimal, ToPrimitive};
-use diesel::{dsl::sum, sql_query, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
+use diesel::{
+    dsl::sum,
+    sql_query,
+    BoolExpressionMethods,
+    OptionalExtension,
+    QueryDsl,
+    RunQueryDsl,
+    SqliteConnection,
+    TextExpressionMethods,
+};
 use log::error;
 use serde::de::DeserializeOwned;
 use tari_common_types::types::{Commitment, PublicKey};
@@ -26,7 +35,7 @@ use tari_dan_wallet_sdk::{
 use tari_engine_types::substate::{InvalidSubstateAddressFormat, SubstateAddress};
 use tari_template_lib::{
     models::{ResourceAddress, VaultId},
-    prelude::NonFungibleId,
+    prelude::{ComponentAddress, NonFungibleId},
 };
 use tari_transaction::TransactionId;
 use tari_utilities::hex::Hex;
@@ -188,26 +197,25 @@ impl WalletStoreReader for ReadTransaction<'_> {
         Ok(transaction)
     }
 
-    fn transactions_fetch_all_by_status(
+    fn transactions_fetch_all(
         &mut self,
-        status: TransactionStatus,
+        status: Option<TransactionStatus>,
+        component: Option<ComponentAddress>,
     ) -> Result<Vec<WalletTransaction<PublicKey>>, WalletStorageError> {
         use crate::schema::transactions;
 
-        let rows = transactions::table
-            .filter(transactions::status.eq(status.as_key_str()))
-            .filter(transactions::dry_run.eq(false))
-            .load::<models::Transaction>(self.connection())
-            .map_err(|e| WalletStorageError::general("transactions_fetch_all_by_status", e))?;
-
-        rows.into_iter().map(|row| row.try_into_wallet_transaction()).collect()
-    }
-
-    fn transactions_fetch_all(&mut self) -> Result<Vec<WalletTransaction<PublicKey>>, WalletStorageError> {
-        use crate::schema::transactions;
-
-        let rows = transactions::table
-            .filter(transactions::dry_run.eq(false))
+        let mut rows = transactions::table.into_boxed().filter(transactions::dry_run.eq(false));
+        if let Some(status) = status {
+            rows = rows.filter(transactions::status.eq(status.as_key_str()));
+        }
+        if let Some(component) = component {
+            rows = rows.filter(
+                transactions::instructions
+                    .like(format!("%{}%", component))
+                    .or(transactions::fee_instructions.like(format!("%{}%", component))),
+            );
+        }
+        let rows = rows
             .load::<models::Transaction>(self.connection())
             .map_err(|e| WalletStorageError::general("transactions_fetch_all", e))?;
 
@@ -222,7 +230,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             .filter(substates::address.eq(address.to_string()))
             .first::<models::Substate>(self.connection())
             .optional()
-            .map_err(|e| WalletStorageError::general("transactions_fetch_all_by_status", e))?
+            .map_err(|e| WalletStorageError::general("substates_get", e))?
             .ok_or_else(|| WalletStorageError::NotFound {
                 operation: "substates_get_root",
                 entity: "substate".to_string(),
@@ -239,7 +247,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         let rows = substates::table
             .filter(substates::parent_address.eq(parent.to_string()))
             .get_results::<models::Substate>(self.connection())
-            .map_err(|e| WalletStorageError::general("transactions_fetch_all_by_status", e))?;
+            .map_err(|e| WalletStorageError::general("substates_get_children", e))?;
 
         rows.into_iter().map(|rec| rec.try_to_record()).collect()
     }

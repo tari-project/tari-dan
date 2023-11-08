@@ -31,7 +31,7 @@ use tari_dan_wallet_sdk::{
     models::{Account, ConfidentialProofId, TransactionStatus},
 };
 use tari_engine_types::{
-    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    commit_result::{ExecuteResult, FinalizeResult},
     instruction::Instruction,
     instruction_result::InstructionResult,
     serde_with,
@@ -41,7 +41,7 @@ use tari_template_lib::{
     args::Arg,
     auth::ComponentAccessRules,
     models::{Amount, ConfidentialOutputProof, NonFungibleId, ResourceAddress},
-    prelude::{ConfidentialWithdrawProof, ResourceType},
+    prelude::{ComponentAddress, ConfidentialWithdrawProof, ResourceType},
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
@@ -57,7 +57,7 @@ pub struct CallInstructionRequest {
     pub fee_account: ComponentAddressOrName,
     #[serde(default, deserialize_with = "opt_string_or_struct")]
     pub dump_outputs_into: Option<ComponentAddressOrName>,
-    pub fee: u64,
+    pub max_fee: u64,
     #[serde(default)]
     pub inputs: Vec<SubstateRequirement>,
     #[serde(default)]
@@ -105,22 +105,17 @@ pub struct TransactionGetResponse {
     pub transaction: Transaction,
     pub result: Option<FinalizeResult>,
     pub status: TransactionStatus,
-    pub transaction_failure: Option<RejectReason>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetAllRequest {
     pub status: Option<TransactionStatus>,
+    pub component: Option<ComponentAddress>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetAllResponse {
-    pub transactions: Vec<(
-        Transaction,
-        Option<FinalizeResult>,
-        TransactionStatus,
-        Option<RejectReason>,
-    )>,
+    pub transactions: Vec<(Transaction, Option<FinalizeResult>, TransactionStatus)>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -148,7 +143,6 @@ pub struct TransactionWaitResultResponse {
     pub result: Option<FinalizeResult>,
     pub json_result: Option<Vec<Value>>,
     pub status: TransactionStatus,
-    pub transaction_failure: Option<RejectReason>,
     pub final_fee: Amount,
     pub timed_out: bool,
 }
@@ -194,7 +188,7 @@ pub struct KeysCreateResponse {
 pub struct AccountsCreateRequest {
     pub account_name: Option<String>,
     pub custom_access_rules: Option<ComponentAccessRules>,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
     pub is_default: bool,
     pub key_id: Option<u64>,
 }
@@ -212,7 +206,7 @@ pub struct AccountsInvokeRequest {
     pub account: Option<ComponentAddressOrName>,
     pub method: String,
     pub args: Vec<Arg>,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -319,7 +313,7 @@ pub struct TransferRequest {
     pub amount: Amount,
     pub resource_address: ResourceAddress,
     pub destination_public_key: PublicKey,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -378,7 +372,7 @@ pub struct ConfidentialTransferRequest {
     pub amount: Amount,
     pub resource_address: ResourceAddress,
     pub destination_public_key: PublicKey,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -393,7 +387,7 @@ pub struct ClaimBurnRequest {
     #[serde(deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
     pub claim_proof: serde_json::Value,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -416,7 +410,7 @@ pub struct RevealFundsRequest {
     /// Pay fee from revealed funds. If false, previously revealed funds in the account are used.
     pub pay_fee_from_reveal: bool,
     /// The amount of fees to add to the transaction. Any fees not charged are refunded.
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -430,7 +424,7 @@ pub struct RevealFundsResponse {
 pub struct AccountsCreateFreeTestCoinsRequest {
     pub account: Option<ComponentAddressOrName>,
     pub amount: Amount,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
     pub key_id: Option<u64>,
 }
 
@@ -559,7 +553,7 @@ pub struct GetValidatorFeesResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimValidatorFeesRequest {
     pub account: Option<ComponentAddressOrName>,
-    pub fee: Option<Amount>,
+    pub max_fee: Option<Amount>,
     pub validator_public_key: PublicKey,
     pub epoch: Epoch,
 }
@@ -569,4 +563,17 @@ pub struct ClaimValidatorFeesResponse {
     pub transaction_id: TransactionId,
     pub fee: Amount,
     pub result: FinalizeResult,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SettingsSetRequest {
+    pub indexer_url: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SettingsSetResponse {}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SettingsGetResponse {
+    pub indexer_url: String,
 }

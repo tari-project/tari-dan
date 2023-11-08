@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::sync::{Arc, Mutex};
+
 use axum::async_trait;
 use reqwest::{IntoUrl, Url};
 use tari_dan_common_types::optional::IsNotFoundError;
@@ -22,23 +24,26 @@ use tari_indexer_client::{
     },
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
+use url::ParseError;
 
 #[derive(Debug, Clone)]
 pub struct IndexerJsonRpcNetworkInterface {
-    indexer_jrpc_address: Url,
+    indexer_jrpc_address: Arc<Mutex<Url>>,
 }
 
 impl IndexerJsonRpcNetworkInterface {
     pub fn new<T: IntoUrl>(indexer_jrpc_address: T) -> Self {
         Self {
-            indexer_jrpc_address: indexer_jrpc_address
-                .into_url()
-                .expect("Malformed indexer JSON-RPC address"),
+            indexer_jrpc_address: Arc::new(Mutex::new(
+                indexer_jrpc_address
+                    .into_url()
+                    .expect("Malformed indexer JSON-RPC address"),
+            )),
         }
     }
 
     fn get_client(&self) -> Result<IndexerJsonRpcClient, IndexerJrpcError> {
-        let client = IndexerJsonRpcClient::connect(self.indexer_jrpc_address.clone())?;
+        let client = IndexerJsonRpcClient::connect((*self.indexer_jrpc_address.lock().unwrap()).clone())?;
         Ok(client)
     }
 }
@@ -119,18 +124,26 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
             result: convert_indexer_result_to_wallet_result(resp.result),
         })
     }
+
+    fn set_endpoint(&mut self, endpoint: &str) -> Result<(), Self::Error> {
+        *self.indexer_jrpc_address.lock().unwrap() = Url::parse(endpoint)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum IndexerJrpcError {
     #[error("Indexer client error: {0}")]
     IndexerClientError(#[from] IndexerClientError),
+    #[error("Indexer parse error : {0}")]
+    IndexerParseError(#[from] ParseError),
 }
 
 impl IsNotFoundError for IndexerJrpcError {
     fn is_not_found_error(&self) -> bool {
         match self {
             IndexerJrpcError::IndexerClientError(err) => err.is_not_found_error(),
+            _ => false,
         }
     }
 }

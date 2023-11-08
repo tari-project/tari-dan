@@ -71,7 +71,7 @@ pub async fn handle_submit_instruction(
         fee_instructions: vec![Instruction::CallMethod {
             component_address: fee_account.address.as_component_address().unwrap(),
             method: "pay_fee".to_string(),
-            args: args![Amount::try_from(req.fee)?],
+            args: args![Amount::try_from(req.max_fee)?],
         }],
         instructions,
         inputs: req.inputs,
@@ -191,11 +191,10 @@ pub async fn handle_get(
         transaction: transaction.transaction,
         result: transaction.finalize,
         status: transaction.status,
-        transaction_failure: transaction.transaction_failure,
     })
 }
 
-pub async fn handle_get_all_by_status(
+pub async fn handle_get_all(
     context: &HandlerContext,
     token: Option<String>,
     req: TransactionGetAllRequest,
@@ -204,14 +203,14 @@ pub async fn handle_get_all_by_status(
         .wallet_sdk()
         .jwt_api()
         .check_auth(token, &[JrpcPermission::TransactionGet])?;
-    let transactions = match req.status {
-        Some(status) => context.wallet_sdk().transaction_api().fetch_all_by_status(status)?,
-        None => context.wallet_sdk().transaction_api().fetch_all()?,
-    };
+    let transactions = context
+        .wallet_sdk()
+        .transaction_api()
+        .fetch_all(req.status, req.component)?;
     Ok(TransactionGetAllResponse {
         transactions: transactions
             .into_iter()
-            .map(|tx| (tx.transaction, tx.finalize, tx.status, tx.transaction_failure))
+            .map(|tx| (tx.transaction, tx.finalize, tx.status))
             .collect(),
     })
 }
@@ -264,7 +263,6 @@ pub async fn handle_wait_result(
             status: transaction.status,
             final_fee: transaction.final_fee.unwrap_or_default(),
             timed_out: false,
-            transaction_failure: transaction.transaction_failure,
             json_result: transaction.json_result,
         });
     }
@@ -292,7 +290,6 @@ pub async fn handle_wait_result(
                     transaction_id: req.transaction_id,
                     result: Some(event.finalize),
                     status: event.status,
-                    transaction_failure: event.transaction_failure,
                     final_fee: event.final_fee,
                     timed_out: false,
                     json_result: event.json_result,
@@ -303,7 +300,6 @@ pub async fn handle_wait_result(
                     transaction_id: req.transaction_id,
                     result: event.finalize,
                     status: event.status,
-                    transaction_failure: event.transaction_failure,
                     final_fee: event.final_fee.unwrap_or_default(),
                     timed_out: false,
                     json_result: None,
@@ -315,7 +311,6 @@ pub async fn handle_wait_result(
                     transaction_id: req.transaction_id,
                     result: None,
                     status: transaction.status,
-                    transaction_failure: transaction.transaction_failure,
                     final_fee: Amount::zero(),
                     timed_out: true,
                     json_result: None,

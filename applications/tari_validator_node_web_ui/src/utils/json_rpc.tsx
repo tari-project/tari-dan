@@ -28,6 +28,9 @@ async function jsonRpc(method: string, params: any = null) {
   let address = "http://127.0.0.1:18010";
   try {
     address = await (await fetch("/json_rpc_address")).text();
+    if (!address.startsWith("http")) {
+      address = "http://" + address;
+    }
   } catch {}
   let response = await fetch(address, {
     method: "POST",

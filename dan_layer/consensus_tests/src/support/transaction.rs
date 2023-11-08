@@ -39,7 +39,6 @@ pub fn build_transaction_from(
                     breakdown: vec![],
                 },
             ),
-            transaction_failure: None,
             fee_receipt: Some(FeeReceipt {
                 total_fee_payment: fee.try_into().unwrap(),
                 total_fees_paid: fee.try_into().unwrap(),

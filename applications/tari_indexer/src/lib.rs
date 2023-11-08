@@ -121,8 +121,8 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
 
     // Run the JSON-RPC API
     let jrpc_address = config.indexer.json_rpc_address;
-    if let Some(address) = jrpc_address {
-        info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", address);
+    if let Some(jrpc_address) = jrpc_address {
+        info!(target: LOG_TARGET, "🌐 Started JSON-RPC server on {}", jrpc_address);
         let consensus_constants = services
             .epoch_manager
             .get_base_layer_consensus_constants()
@@ -136,12 +136,15 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
             transaction_manager,
             dry_run_transaction_processor,
         );
-        task::spawn(run_json_rpc(address, handlers));
+        task::spawn(run_json_rpc(jrpc_address, handlers));
         // Run the http ui
         if let Some(address) = config.indexer.http_ui_address {
             task::spawn(run_http_ui_server(
                 address,
-                config.indexer.ui_connect_address.unwrap_or(address.to_string()),
+                config
+                    .indexer
+                    .ui_connect_address
+                    .unwrap_or_else(|| jrpc_address.to_string()),
             ));
         }
     }

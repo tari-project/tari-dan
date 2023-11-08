@@ -121,7 +121,7 @@ function MyAssets() {
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
           <InnerHeading>Transactions</InnerHeading>
-          <Transactions />
+          <Transactions accountName={accountName} />
         </StyledPaper>
       </Grid>
     </>

@@ -26,6 +26,7 @@ import { useTheme } from '@mui/material/styles';
 import { useAccountsCreateFreeTestCoins } from '../../../api/hooks/useAccounts';
 import ClaimBurn from './ClaimBurn';
 import useAccountStore from '../../../store/accountStore';
+import SendMoney from './SendMoney';
 
 function ActionMenu() {
   const { mutate } = useAccountsCreateFreeTestCoins();
@@ -48,6 +49,7 @@ function ActionMenu() {
         marginBottom: theme.spacing(2),
       }}
     >
+      <SendMoney/>
       <Button variant="outlined" onClick={onClaimFreeCoins}>
         Claim Free Testnet Coins
       </Button>

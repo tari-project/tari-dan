@@ -21,7 +21,7 @@ Feature: Wallet Daemon
         # VN registration
         When validator node VAL_1 sends a registration transaction
         When miner MINER mines 16 new blocks
-        Then VAL_1 has scanned to height 17 within 10 seconds
+        Then VAL_1 has scanned to height 17
         Then the validator node VAL_1 is listed as registered
 
         # Initialize an indexer
@@ -35,8 +35,8 @@ Feature: Wallet Daemon
 
         # Mine some blocks until the UTXOs are scanned
         When miner MINER mines 5 new blocks
-        Then VAL_1 has scanned to height 22 within 10 seconds
-        Then indexer IDX has scanned to height 22 within 10 seconds
+        Then VAL_1 has scanned to height 22
+        Then indexer IDX has scanned to height 22
         Then the template "faucet" is listed as registered by the validator node VAL_1
 
         # Create two accounts to test sending the tokens
@@ -116,7 +116,7 @@ Feature: Wallet Daemon
         # unfortunately have to wait for this to get into the mempool....
         Then there is 1 transaction in the mempool of BASE within 10 seconds
         When miner MINER mines 13 new blocks
-        Then VN has scanned to height 30 within 10 seconds
+        Then VN has scanned to height 30
 
         When I convert commitment COMMITMENT into COMM_ADDRESS address
         Then validator node VN has state at COMM_ADDRESS

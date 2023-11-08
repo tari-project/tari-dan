@@ -12,7 +12,7 @@ pub struct ConfigApi<'a, TStore> {
 }
 
 impl<'a, TStore: WalletStore> ConfigApi<'a, TStore> {
-    pub(crate) fn new(store: &'a TStore) -> Self {
+    pub fn new(store: &'a TStore) -> Self {
         Self { store }
     }
 
@@ -34,12 +34,14 @@ impl<'a, TStore: WalletStore> ConfigApi<'a, TStore> {
 
 pub enum ConfigKey {
     CipherSeed,
+    IndexerUrl,
 }
 
 impl ConfigKey {
     pub fn as_key_str(&self) -> &'static str {
         match self {
             ConfigKey::CipherSeed => "cipher_seed",
+            ConfigKey::IndexerUrl => "indexer_url",
         }
     }
 }

@@ -152,7 +152,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
                     .validator_node
                     .ui_connect_address
                     .clone()
-                    .unwrap_or(jrpc_address.to_string()),
+                    .unwrap_or_else(|| jrpc_address.to_string()),
             ));
         }
     }

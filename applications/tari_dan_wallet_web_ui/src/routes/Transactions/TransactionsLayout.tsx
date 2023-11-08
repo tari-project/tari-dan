@@ -24,8 +24,10 @@ import PageHeading from '../../Components/PageHeading';
 import Grid from '@mui/material/Grid';
 import { StyledPaper } from '../../Components/StyledComponents';
 import Transactions from './Transactions';
+import useAccountStore from '../../store/accountStore';
 
 function TransactionsLayout() {
+  const accountName = useAccountStore((state) => state.accountName);
   return (
     <>
       <Grid item xs={12} md={12} lg={12}>
@@ -33,7 +35,7 @@ function TransactionsLayout() {
       </Grid>
       <Grid item xs={12} md={12} lg={12}>
         <StyledPaper>
-          <Transactions />
+          <Transactions accountName={accountName} />
         </StyledPaper>
       </Grid>
     </>

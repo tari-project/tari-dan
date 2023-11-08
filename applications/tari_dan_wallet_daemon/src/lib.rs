@@ -33,7 +33,15 @@ mod webrtc;
 use std::{fs, panic, process};
 
 use log::*;
-use tari_dan_wallet_sdk::{apis::key_manager, DanWalletSdk, WalletSdkConfig};
+use tari_dan_common_types::optional::Optional;
+use tari_dan_wallet_sdk::{
+    apis::{
+        config::{ConfigApi, ConfigKey},
+        key_manager,
+    },
+    DanWalletSdk,
+    WalletSdkConfig,
+};
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
 use tari_shutdown::ShutdownSignal;
 use tari_template_lib::models::Amount;
@@ -69,7 +77,13 @@ pub async fn run_tari_dan_wallet_daemon(
         jwt_expiry: config.dan_wallet_daemon.jwt_expiry.unwrap(),
         jwt_secret_key: config.dan_wallet_daemon.jwt_secret_key.unwrap(),
     };
-    let indexer = IndexerJsonRpcNetworkInterface::new(&sdk_config.indexer_jrpc_endpoint);
+    let config_api = ConfigApi::new(&store);
+    let indexer_jrpc_endpoint = if let Some(indexer_url) = config_api.get(ConfigKey::IndexerUrl).optional()? {
+        indexer_url
+    } else {
+        sdk_config.indexer_jrpc_endpoint.clone()
+    };
+    let indexer = IndexerJsonRpcNetworkInterface::new(indexer_jrpc_endpoint);
     let wallet_sdk = DanWalletSdk::initialize(store, indexer, sdk_config)?;
     wallet_sdk
         .key_manager_api()
@@ -78,10 +92,10 @@ pub async fn run_tari_dan_wallet_daemon(
 
     let services = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());
 
-    let address = config.dan_wallet_daemon.json_rpc_address.unwrap();
+    let jrpc_address = config.dan_wallet_daemon.json_rpc_address.unwrap();
     let signaling_server_address = config.dan_wallet_daemon.signaling_server_address.unwrap();
     let handlers = HandlerContext::new(wallet_sdk.clone(), notify, services.account_monitor_handle.clone());
-    let listen_fut = jrpc_server::listen(address, signaling_server_address, handlers, shutdown_signal);
+    let listen_fut = jrpc_server::listen(jrpc_address, signaling_server_address, handlers, shutdown_signal);
 
     // Run the http ui
     if let Some(http_address) = config.dan_wallet_daemon.http_ui_address {
@@ -90,7 +104,7 @@ pub async fn run_tari_dan_wallet_daemon(
             config
                 .dan_wallet_daemon
                 .ui_connect_address
-                .unwrap_or(address.to_string()),
+                .unwrap_or_else(|| jrpc_address.to_string()),
         ));
     }
 

@@ -103,8 +103,8 @@ function RowData({ info, state }: any, index: number) {
 }
 
 export default function Substates({ data }: { data: any }) {
-  const down = data.Accept.down_substates;
-  const up = data.Accept.up_substates;
+  const down = data.Accept?.down_substates || data.AcceptFeeRejectRest?.[0]?.down_substates;
+  const up = data.Accept?.up_substates || data.AcceptFeeRejectRest?.[0]?.up_substates;
 
   return (
     <TableContainer>

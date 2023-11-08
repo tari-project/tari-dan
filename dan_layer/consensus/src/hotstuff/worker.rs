@@ -19,7 +19,7 @@ use tari_shutdown::ShutdownSignal;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{broadcast, mpsc};
 
-use super::on_receive_requested_transactions::OnReceiveRequestedTransactions;
+use super::{on_receive_requested_transactions::OnReceiveRequestedTransactions, proposer::Proposer};
 use crate::{
     hotstuff::{
         common::CommitteeAndMessage,
@@ -96,6 +96,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
             signing_service.clone(),
             pacemaker.clone_handle(),
         );
+        let proposer =
+            Proposer::<TConsensusSpec>::new(state_store.clone(), epoch_manager.clone(), tx_broadcast.clone());
         Self {
             validator_addr: validator_addr.clone(),
             tx_events: tx_events.clone(),
@@ -128,6 +130,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 state_manager,
                 transaction_pool.clone(),
                 tx_events,
+                proposer.clone(),
             ),
             on_receive_foreign_proposal: OnReceiveForeignProposalHandler::new(
                 state_store.clone(),

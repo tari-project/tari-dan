@@ -14,6 +14,7 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::{broadcast, mpsc};
 
+use super::proposer::Proposer;
 use crate::{
     hotstuff::{
         error::HotStuffError,
@@ -48,6 +49,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,
+        proposer: Proposer<TConsensusSpec>,
     ) -> Self {
         Self {
             store: store.clone(),
@@ -64,6 +66,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
                 transaction_pool,
                 tx_leader,
                 tx_events,
+                proposer,
             ),
         }
     }
