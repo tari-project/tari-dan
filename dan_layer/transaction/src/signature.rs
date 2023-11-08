@@ -31,7 +31,7 @@ impl TransactionSignature {
             .result();
 
         Self {
-            signature: Signature::sign_message(secret_key, challenge, &mut OsRng).unwrap(),
+            signature: Signature::sign(secret_key, challenge, &mut OsRng).unwrap(),
             public_key,
         }
     }

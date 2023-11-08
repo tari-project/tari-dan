@@ -37,7 +37,7 @@ use zeroize::Zeroizing;
 
 use crate::{
     byte_utils::copy_fixed,
-    confidential::{error::ConfidentialProofError, kdfs::EncryptedDataKey},
+    confidential::{error::ConfidentialProofError, kdfs::EncryptedDataKey32},
 };
 
 lazy_static! {
@@ -117,8 +117,8 @@ pub fn generate_confidential_proof(
     })
 }
 
-fn inner_encrypted_data_kdf_aead(encryption_key: &PrivateKey, commitment: &Commitment) -> EncryptedDataKey {
-    let mut aead_key = EncryptedDataKey::from(SafeArray::default());
+fn inner_encrypted_data_kdf_aead(encryption_key: &PrivateKey, commitment: &Commitment) -> EncryptedDataKey32 {
+    let mut aead_key = EncryptedDataKey32::from(SafeArray::default());
     // This has to be the same as the base layer so that burn claims are spendable
     hash_domain!(
         TransactionSecureNonceKdfDomain,
@@ -193,7 +193,7 @@ pub fn decrypt_data_and_mask(
     value_bytes.clone_from_slice(&bytes[0..SIZE_VALUE]);
     Ok((
         u64::from_le_bytes(value_bytes),
-        PrivateKey::from_bytes(&bytes[SIZE_VALUE..]).expect("The length of bytes is exactly SIZE_MASK"),
+        PrivateKey::from_canonical_bytes(&bytes[SIZE_VALUE..]).expect("The length of bytes is exactly SIZE_MASK"),
     ))
 }
 

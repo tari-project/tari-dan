@@ -488,7 +488,7 @@ pub async fn handle_claim_burn(
         return Err(invalid_params("fee", Some("cannot be negative")));
     }
 
-    let reciprocal_claim_public_key = PublicKey::from_bytes(
+    let reciprocal_claim_public_key = PublicKey::from_canonical_bytes(
         &base64::decode(
             claim_proof["reciprocal_claim_public_key"]
                 .as_str()
@@ -511,7 +511,7 @@ pub async fn handle_claim_burn(
     )
     .map_err(|e| invalid_params("range_proof", Some(e)))?;
 
-    let public_nonce = PublicKey::from_bytes(
+    let public_nonce = PublicKey::from_canonical_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["public_nonce"]
                 .as_str()
@@ -520,7 +520,7 @@ pub async fn handle_claim_burn(
         .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?,
     )
     .map_err(|e| invalid_params("ownership_proof.public_nonce", Some(e)))?;
-    let u = PrivateKey::from_bytes(
+    let u = PrivateKey::from_canonical_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["u"]
                 .as_str()
@@ -529,7 +529,7 @@ pub async fn handle_claim_burn(
         .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?,
     )
     .map_err(|e| invalid_params("ownership_proof.u", Some(e)))?;
-    let v = PrivateKey::from_bytes(
+    let v = PrivateKey::from_canonical_bytes(
         &base64::decode(
             claim_proof["ownership_proof"]["v"]
                 .as_str()

@@ -16,7 +16,7 @@ tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "featu
 tari_dan_storage = { path = "../storage" }
 tari_dan_storage_sqlite = { path = "../storage_sqlite", optional = true }
 tari_base_node_client = { path = "../../clients/base_node_client", optional = true }
-tari_crypto = "0.18"
+tari_crypto = "0.19"
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", optional = true }
 tokio = { version = "1", default-features = false, features = ["sync"] }
 
@@ -26,4 +26,10 @@ thiserror = "1.0"
 log = { version = "0.4", optional = true }
 
 [features]
-base_layer = ["log", "tari_base_node_client", "tari_comms", "tari_dan_storage_sqlite", "tari_mmr"]
+base_layer = [
+  "log",
+  "tari_base_node_client",
+  "tari_comms",
+  "tari_dan_storage_sqlite",
+  "tari_mmr",
+]

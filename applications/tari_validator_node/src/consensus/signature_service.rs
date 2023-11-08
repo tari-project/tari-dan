@@ -22,7 +22,7 @@ impl TariSignatureService {
 
 impl ValidatorSignatureService<PublicKey> for TariSignatureService {
     fn sign<M: AsRef<[u8]>>(&self, message: M) -> ValidatorSchnorrSignature {
-        ValidatorSchnorrSignature::sign_message(self.node_identity.secret_key(), message, &mut OsRng).unwrap()
+        ValidatorSchnorrSignature::sign(self.node_identity.secret_key(), message, &mut OsRng).unwrap()
     }
 
     fn public_key(&self) -> &PublicKey {

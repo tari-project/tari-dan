@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use blake2::Blake2b;
-use digest::consts::U32;
+use digest::consts::U64;
 use tari_common_types::types::PublicKey;
 use tari_crypto::keys::PublicKey as PublicKeyTrait;
 //
@@ -15,7 +15,7 @@ use tari_key_manager::{
 
 use crate::storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter};
 
-pub type WalletKeyManager = KeyManager<RistrettoPublicKey, Blake2b<U32>>;
+pub type WalletKeyManager = KeyManager<RistrettoPublicKey, Blake2b<U64>>;
 
 pub const TRANSACTION_BRANCH: &str = "transactions";
 

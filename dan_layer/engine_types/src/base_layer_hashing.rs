@@ -24,7 +24,7 @@ use std::{io, io::Write};
 
 use blake2::Blake2b;
 use borsh::BorshSerialize;
-use digest::{consts::U32, Digest};
+use digest::{consts::U32, typenum::U64, Digest};
 use tari_crypto::{
     hash_domain,
     hashing::{DomainSeparatedHasher, DomainSeparation},
@@ -43,7 +43,7 @@ fn confidential_hasher(label: &'static str) -> TariBaseLayerHasher {
     TariBaseLayerHasher::new_with_label::<ConfidentialOutputHashDomain>(label)
 }
 
-type WalletOutputEncryptionKeysDomainHasher = DomainSeparatedHasher<Blake2b<U32>, WalletOutputEncryptionKeysDomain>;
+type WalletOutputEncryptionKeysDomainHasher = DomainSeparatedHasher<Blake2b<U64>, WalletOutputEncryptionKeysDomain>;
 pub fn encrypted_data_hasher() -> WalletOutputEncryptionKeysDomainHasher {
     WalletOutputEncryptionKeysDomainHasher::new_with_label("")
 }

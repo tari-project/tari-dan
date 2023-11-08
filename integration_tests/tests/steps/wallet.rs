@@ -59,15 +59,15 @@ async fn when_i_burn_on_wallet(
     world.commitment_ownership_proofs.insert(
         proof,
         RistrettoComSig::new(
-            Commitment::from_public_key(&PublicKey::from_bytes(&ownership_proof.public_nonce).unwrap()),
-            PrivateKey::from_bytes(&ownership_proof.u).unwrap(),
-            PrivateKey::from_bytes(&ownership_proof.v).unwrap(),
+            Commitment::from_public_key(&PublicKey::from_canonical_bytes(&ownership_proof.public_nonce).unwrap()),
+            PrivateKey::from_canonical_bytes(&ownership_proof.u).unwrap(),
+            PrivateKey::from_canonical_bytes(&ownership_proof.v).unwrap(),
         ),
     );
     world.rangeproofs.insert(range_proof, resp.range_proof);
     world.claim_public_keys.insert(
         claim_public_key_name,
-        PublicKey::from_bytes(&resp.reciprocal_claim_public_key).unwrap(),
+        PublicKey::from_canonical_bytes(&resp.reciprocal_claim_public_key).unwrap(),
     );
 }
 

@@ -5,11 +5,11 @@ use std::fmt::{Display, Formatter};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
+use tari_crypto::tari_utilities::hex::Hex;
 use tari_template_lib::{
     args::{Arg, LogLevel},
     models::{Amount, ComponentAddress, TemplateAddress},
 };
-use tari_utilities::hex::Hex;
 
 use crate::{
     confidential::{ConfidentialClaim, ConfidentialOutput},

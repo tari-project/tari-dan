@@ -15,8 +15,8 @@ tari_engine_types = { path = "../engine_types" }
 tari_transaction = { path = "../transaction" }
 tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = "0.18"
-tari_utilities = "0.4.10"
+tari_crypto = "0.19"
+tari_utilities = "0.6"
 
 anyhow = "1.0"
 chrono = "0.4.23"

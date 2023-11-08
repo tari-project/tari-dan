@@ -64,7 +64,7 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
     let challenge =
         challenges::confidential_withdraw(&public_excess, balance_proof.get_public_nonce(), revealed_amount);
 
-    if !balance_proof.verify_challenge(&public_excess, &challenge) {
+    if !balance_proof.verify_raw_uniform(&public_excess, &challenge) {
         return Err(ResourceError::InvalidBalanceProof {
             details: "Balance proof was invalid".to_string(),
         });
@@ -84,7 +84,7 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
 }
 
 fn try_decode_to_signature(balance_proof: &BalanceProofSignature) -> Option<Signature> {
-    let public_nonce = PublicKey::from_bytes(balance_proof.as_public_nonce()).ok()?;
-    let signature = PrivateKey::from_bytes(balance_proof.as_signature()).ok()?;
+    let public_nonce = PublicKey::from_canonical_bytes(balance_proof.as_public_nonce()).ok()?;
+    let signature = PrivateKey::from_canonical_bytes(balance_proof.as_signature()).ok()?;
     Some(Signature::new(public_nonce, signature))
 }

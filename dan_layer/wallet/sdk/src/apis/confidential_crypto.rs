@@ -183,7 +183,7 @@ fn generate_balance_proof(
     let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
     let challenge = challenges::confidential_withdraw(&excess, &public_nonce, reveal_amount);
 
-    let sig = Signature::sign_raw(&secret_excess, nonce, &challenge).unwrap();
+    let sig = Signature::sign_raw_uniform(&secret_excess, nonce, &challenge).unwrap();
     BalanceProofSignature::try_from_parts(sig.get_public_nonce().as_bytes(), sig.get_signature().as_bytes()).unwrap()
 }
 

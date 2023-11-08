@@ -262,15 +262,15 @@ async fn when_i_burn_funds_with_wallet_daemon(
     world.commitment_ownership_proofs.insert(
         ownership_proof_name,
         RistrettoComSig::new(
-            Commitment::from_public_key(&PublicKey::from_bytes(&ownership_proof.public_nonce).unwrap()),
-            PrivateKey::from_bytes(&ownership_proof.u).unwrap(),
-            PrivateKey::from_bytes(&ownership_proof.v).unwrap(),
+            Commitment::from_public_key(&PublicKey::from_canonical_bytes(&ownership_proof.public_nonce).unwrap()),
+            PrivateKey::from_canonical_bytes(&ownership_proof.u).unwrap(),
+            PrivateKey::from_canonical_bytes(&ownership_proof.v).unwrap(),
         ),
     );
     world.rangeproofs.insert(rangeproof_name, resp.range_proof);
     world.claim_public_keys.insert(
         claim_pubkey_name,
-        PublicKey::from_bytes(&resp.reciprocal_claim_public_key).unwrap(),
+        PublicKey::from_canonical_bytes(&resp.reciprocal_claim_public_key).unwrap(),
     );
 }
 

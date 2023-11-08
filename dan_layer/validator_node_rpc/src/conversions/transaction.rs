@@ -200,7 +200,7 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
             },
             InstructionType::ClaimBurn => Instruction::ClaimBurn {
                 claim: Box::new(ConfidentialClaim {
-                    public_key: PublicKey::from_bytes(&request.claim_burn_public_key)
+                    public_key: PublicKey::from_canonical_bytes(&request.claim_burn_public_key)
                         .map_err(|e| anyhow!("claim_burn_public_key: {}", e))?,
                     output_address: request
                         .claim_burn_commitment_address
@@ -218,8 +218,10 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
             },
             InstructionType::ClaimValidatorFees => Instruction::ClaimValidatorFees {
                 epoch: request.claim_validator_fees_epoch,
-                validator_public_key: PublicKey::from_bytes(&request.claim_validator_fees_validator_public_key)
-                    .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
+                validator_public_key: PublicKey::from_canonical_bytes(
+                    &request.claim_validator_fees_validator_public_key,
+                )
+                .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
             },
             InstructionType::DropAllProofsInWorkspace => Instruction::DropAllProofsInWorkspace,
             InstructionType::CreateFreeTestCoins => Instruction::CreateFreeTestCoins {
@@ -375,9 +377,9 @@ impl TryFrom<proto::transaction::CommitmentSignature> for RistrettoComSig {
     type Error = anyhow::Error;
 
     fn try_from(val: proto::transaction::CommitmentSignature) -> Result<Self, Self::Error> {
-        let u = PrivateKey::from_bytes(&val.signature_u).map_err(anyhow::Error::msg)?;
-        let v = PrivateKey::from_bytes(&val.signature_v).map_err(anyhow::Error::msg)?;
-        let public_nonce = PublicKey::from_bytes(&val.public_nonce_commitment).map_err(anyhow::Error::msg)?;
+        let u = PrivateKey::from_canonical_bytes(&val.signature_u).map_err(anyhow::Error::msg)?;
+        let v = PrivateKey::from_canonical_bytes(&val.signature_v).map_err(anyhow::Error::msg)?;
+        let public_nonce = PublicKey::from_canonical_bytes(&val.public_nonce_commitment).map_err(anyhow::Error::msg)?;
 
         Ok(RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v))
     }
