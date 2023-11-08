@@ -29,7 +29,9 @@ async function jsonRpc(method: string, params: any = null) {
     if (!address.startsWith("http")) {
       address = "http://" + address;
     }
-  } catch {}
+  } catch (e) {
+    console.warn("Failed to fetch address", e);
+  }
   let response = await fetch(address, {
     method: 'POST',
     body: JSON.stringify({

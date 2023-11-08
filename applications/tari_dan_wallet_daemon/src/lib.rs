@@ -92,10 +92,10 @@ pub async fn run_tari_dan_wallet_daemon(
 
     let services = spawn_services(shutdown_signal.clone(), notify.clone(), wallet_sdk.clone());
 
-    let address = config.dan_wallet_daemon.json_rpc_address.unwrap();
+    let jrpc_address = config.dan_wallet_daemon.json_rpc_address.unwrap();
     let signaling_server_address = config.dan_wallet_daemon.signaling_server_address.unwrap();
     let handlers = HandlerContext::new(wallet_sdk.clone(), notify, services.account_monitor_handle.clone());
-    let listen_fut = jrpc_server::listen(address, signaling_server_address, handlers, shutdown_signal);
+    let listen_fut = jrpc_server::listen(jrpc_address, signaling_server_address, handlers, shutdown_signal);
 
     // Run the http ui
     if let Some(http_address) = config.dan_wallet_daemon.http_ui_address {
@@ -104,7 +104,7 @@ pub async fn run_tari_dan_wallet_daemon(
             config
                 .dan_wallet_daemon
                 .ui_connect_address
-                .unwrap_or(address.to_string()),
+                .unwrap_or_else(|| jrpc_address.to_string()),
         ));
     }
 
