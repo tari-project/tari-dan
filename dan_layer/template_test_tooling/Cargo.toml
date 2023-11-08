@@ -21,3 +21,4 @@ tari_bor = { path = "../tari_bor" }
 
 anyhow = "1.0.68"
 serde = { version = "1.0.144", features = ["derive"] }
+rand = "0.8"

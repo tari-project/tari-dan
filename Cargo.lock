@@ -8755,6 +8755,7 @@ name = "tari_template_test_tooling"
 version = "0.0.3"
 dependencies = [
  "anyhow",
+ "rand",
  "serde",
  "tari_bor",
  "tari_crypto",

@@ -12,9 +12,9 @@ use anyhow::anyhow;
 use serde::de::DeserializeOwned;
 use tari_bor::encode;
 use tari_crypto::{
-    keys::PublicKey,
+    keys::{PublicKey, SecretKey},
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
-    tari_utilities::{hex::Hex, ByteArray},
+    tari_utilities::ByteArray,
 };
 use tari_dan_common_types::crypto::create_key_pair;
 use tari_dan_engine::{
@@ -60,6 +60,7 @@ use crate::track_calls::TrackCallsModule;
 pub fn test_faucet_component() -> ComponentAddress {
     ComponentAddress::new(Hash::from_array([0xfau8; 32]))
 }
+use rand::rngs::OsRng;
 
 pub struct TemplateTest {
     package: Arc<Package>,
@@ -76,8 +77,7 @@ pub struct TemplateTest {
 
 impl TemplateTest {
     pub fn new<I: IntoIterator<Item = P>, P: AsRef<Path>>(template_paths: I) -> Self {
-        let secret_key =
-            RistrettoSecretKey::from_hex("7e100429f979d37999f051e65b94734e206925e9346759fd73caafb2f3232578").unwrap();
+        let secret_key = RistrettoSecretKey::random(&mut OsRng);
         let public_key = RistrettoPublicKey::from_secret_key(&secret_key);
 
         let mut name_to_template = HashMap::new();
