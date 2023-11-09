@@ -35,42 +35,41 @@ pub fn validate_confidential_proof(
         });
     }
 
-    let output_commitment = Commitment::from_bytes(&proof.output_statement.commitment).map_err(|_| {
+    let output_commitment = Commitment::from_canonical_bytes(&proof.output_statement.commitment).map_err(|_| {
         ResourceError::InvalidConfidentialProof {
             details: "Invalid commitment".to_string(),
         }
     })?;
 
-    let output_public_nonce =
-        PublicKey::from_bytes(proof.output_statement.sender_public_nonce.as_bytes()).map_err(|_| {
-            ResourceError::InvalidConfidentialProof {
-                details: "Invalid sender public nonce".to_string(),
-            }
+    let output_public_nonce = PublicKey::from_canonical_bytes(proof.output_statement.sender_public_nonce.as_bytes())
+        .map_err(|_| ResourceError::InvalidConfidentialProof {
+            details: "Invalid sender public nonce".to_string(),
         })?;
 
-    let change = proof
-        .change_statement
-        .as_ref()
-        .map(|stmt| {
-            let commitment =
-                Commitment::from_bytes(&stmt.commitment).map_err(|_| ResourceError::InvalidConfidentialProof {
-                    details: "Invalid commitment".to_string(),
+    let change =
+        proof
+            .change_statement
+            .as_ref()
+            .map(|stmt| {
+                let commitment = Commitment::from_canonical_bytes(&stmt.commitment).map_err(|_| {
+                    ResourceError::InvalidConfidentialProof {
+                        details: "Invalid commitment".to_string(),
+                    }
                 })?;
 
-            let stealth_public_nonce = PublicKey::from_bytes(stmt.sender_public_nonce.as_bytes()).map_err(|_| {
-                ResourceError::InvalidConfidentialProof {
-                    details: "Invalid sender public nonce".to_string(),
-                }
-            })?;
+                let stealth_public_nonce = PublicKey::from_canonical_bytes(stmt.sender_public_nonce.as_bytes())
+                    .map_err(|_| ResourceError::InvalidConfidentialProof {
+                        details: "Invalid sender public nonce".to_string(),
+                    })?;
 
-            Ok(ConfidentialOutput {
-                commitment,
-                stealth_public_nonce,
-                encrypted_data: stmt.encrypted_data.clone(),
-                minimum_value_promise: stmt.minimum_value_promise,
+                Ok(ConfidentialOutput {
+                    commitment,
+                    stealth_public_nonce,
+                    encrypted_data: stmt.encrypted_data.clone(),
+                    minimum_value_promise: stmt.minimum_value_promise,
+                })
             })
-        })
-        .transpose()?;
+            .transpose()?;
 
     validate_bullet_proof(proof)?;
 
@@ -90,10 +89,11 @@ fn validate_bullet_proof(proof: &ConfidentialOutputProof) -> Result<(), Resource
         .chain(proof.change_statement.as_ref())
         .cloned()
         .map(|stmt| {
-            let commitment =
-                Commitment::from_bytes(&stmt.commitment).map_err(|_| ResourceError::InvalidConfidentialProof {
+            let commitment = Commitment::from_canonical_bytes(&stmt.commitment).map_err(|_| {
+                ResourceError::InvalidConfidentialProof {
                     details: "Invalid commitment".to_string(),
-                })?;
+                }
+            })?;
             Ok(Statement {
                 commitment,
                 minimum_value_promise: stmt.minimum_value_promise,

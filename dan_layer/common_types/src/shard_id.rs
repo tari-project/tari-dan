@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_crypto::tari_utilities::hex::{from_hex, Hex};
 use tari_engine_types::{
-    hashing::{hasher, EngineHashDomainLabel},
+    hashing::{hasher32, EngineHashDomainLabel},
     serde_with,
     substate::SubstateAddress,
 };
@@ -30,7 +30,7 @@ impl ShardId {
     }
 
     pub fn from_hash(hash: &[u8], version: u32) -> Self {
-        let new_addr = hasher(EngineHashDomainLabel::ShardId)
+        let new_addr = hasher32(EngineHashDomainLabel::ShardId)
             .chain(&hash)
             .chain(&version)
             .result();

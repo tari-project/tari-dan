@@ -28,13 +28,13 @@ impl<TAddr: NodeAddressable> ValidatorSignature<TAddr> {
 
 impl ValidatorSignature<PublicKey> {
     pub fn sign<M: AsRef<[u8]>>(secret_key: &PrivateKey, message: M) -> Self {
-        let signature = ValidatorSchnorrSignature::sign_message(secret_key, message, &mut OsRng)
-            .expect("sign_message is infallible");
+        let signature =
+            ValidatorSchnorrSignature::sign(secret_key, message, &mut OsRng).expect("sign_message is infallible");
         let public_key = PublicKey::from_secret_key(secret_key);
         Self::new(public_key, signature)
     }
 
     pub fn verify<M: AsRef<[u8]>>(&self, message: M) -> bool {
-        self.signature.verify_message(&self.public_key, message)
+        self.signature.verify(&self.public_key, message)
     }
 }

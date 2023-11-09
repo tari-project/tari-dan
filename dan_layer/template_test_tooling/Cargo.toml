@@ -10,7 +10,7 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 tari_dan_engine = { path = "../engine" }
-tari_crypto = "0.18"
+tari_crypto = "0.19"
 tari_template_lib = { path = "../template_lib" }
 tari_engine_types = { path = "../engine_types" }
 tari_transaction_manifest = { path = "../transaction_manifest" }
@@ -21,3 +21,4 @@ tari_bor = { path = "../tari_bor" }
 
 anyhow = "1.0.68"
 serde = { version = "1.0.144", features = ["derive"] }
+rand = "0.8"

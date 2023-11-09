@@ -43,6 +43,6 @@ impl NodeAddressable for PublicKey {
     }
 
     fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        ByteArray::from_bytes(bytes).ok()
+        ByteArray::from_canonical_bytes(bytes).ok()
     }
 }

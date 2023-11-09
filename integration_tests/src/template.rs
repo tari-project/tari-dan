@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use tari_dan_engine::wasm::compile::compile_template;
-use tari_engine_types::{hashing::template_hasher, TemplateAddress};
+use tari_engine_types::{hashing::template_hasher32, TemplateAddress};
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{TemplateRegistrationRequest, TemplateRegistrationResponse};
 
@@ -57,7 +57,7 @@ pub fn compile_wasm_template(template_name: String) -> Result<Hash, anyhow::Erro
     template_path.push(template_name);
     let wasm_module = compile_template(template_path.as_path(), &[])?;
     let wasm_code = wasm_module.code();
-    Ok(template_hasher().chain(&wasm_code).result())
+    Ok(template_hasher32().chain(&wasm_code).result())
 }
 
 pub fn get_template_wasm_path(template_name: String) -> PathBuf {

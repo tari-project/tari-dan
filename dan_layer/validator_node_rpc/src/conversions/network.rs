@@ -88,7 +88,7 @@ impl<T: ByteArray> TryFrom<proto::network::NetworkAnnounce> for NetworkAnnounce<
 
     fn try_from(value: proto::network::NetworkAnnounce) -> Result<Self, Self::Error> {
         Ok(NetworkAnnounce {
-            identity: T::from_bytes(&value.identity).map_err(anyhow::Error::msg)?,
+            identity: T::from_canonical_bytes(&value.identity).map_err(anyhow::Error::msg)?,
             claim: value
                 .claim
                 .ok_or_else(|| anyhow!("claim not provided in NetworkAnnounce"))?

@@ -9,12 +9,12 @@ use std::{collections::BTreeMap, iter, mem};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
+use tari_crypto::tari_utilities::ByteArray;
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
     models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
-use tari_utilities::ByteArray;
 
 use crate::{
     confidential::{validate_confidential_proof, validate_confidential_withdraw, ConfidentialOutput},
@@ -315,10 +315,11 @@ impl ResourceContainer {
                     .inputs
                     .iter()
                     .map(|input| {
-                        let commitment =
-                            PublicKey::from_bytes(input).map_err(|_| ResourceError::InvalidConfidentialProof {
+                        let commitment = PublicKey::from_canonical_bytes(input).map_err(|_| {
+                            ResourceError::InvalidConfidentialProof {
                                 details: "Invalid input commitment".to_string(),
-                            })?;
+                            }
+                        })?;
                         match commitments.remove(&commitment) {
                             Some(_) => Ok(commitment),
                             None => Err(ResourceError::InvalidConfidentialProof {

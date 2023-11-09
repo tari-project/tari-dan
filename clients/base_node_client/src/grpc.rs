@@ -31,7 +31,7 @@ use minotari_node_grpc_client::BaseNodeGrpcClient;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeTemplateRegistration};
 use tari_dan_common_types::ShardId;
-use tari_utilities::byte_array::ByteArray;
+use tari_utilities::ByteArray;
 
 use crate::{
     types::{BaseLayerConsensusConstants, BaseLayerMetadata, BlockInfo, SideChainUtxos, ValidatorNode},
@@ -125,7 +125,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
             match stream.message().await {
                 Ok(Some(val)) => {
                     vns.push(ValidatorNode {
-                        public_key: PublicKey::from_bytes(&val.public_key).map_err(|_| {
+                        public_key: PublicKey::from_canonical_bytes(&val.public_key).map_err(|_| {
                             BaseNodeClientError::InvalidPeerMessage("public_key was not a valid public key".to_string())
                         })?,
                         shard_key: ShardId::from_bytes(&val.shard_key).map_err(|_| {
@@ -160,7 +160,7 @@ impl BaseNodeClient for GrpcBaseNodeClient {
         let inner = self.connection().await?;
         let request = GetShardKeyRequest {
             height,
-            public_key: public_key.to_vec(),
+            public_key: public_key.as_bytes().to_vec(),
         };
         let result = inner.get_shard_key(request).await?.into_inner();
         if result.shard_key.is_empty() {

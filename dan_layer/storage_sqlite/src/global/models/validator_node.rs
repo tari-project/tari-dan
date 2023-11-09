@@ -45,13 +45,13 @@ impl TryFrom<DbValidatorNode> for ValidatorNode<PublicKey> {
             shard_key: ShardId::try_from(vn.shard_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!("Invalid shard id in validator node record id={}", vn.id))
             })?,
-            address: PublicKey::from_bytes(&vn.public_key).map_err(|_| {
+            address: PublicKey::from_canonical_bytes(&vn.public_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!("Invalid public key in validator node record id={}", vn.id))
             })?,
             epoch: Epoch(vn.epoch as u64),
             committee_bucket: vn.committee_bucket.map(|v| v as u32).map(ShardBucket::from),
 
-            fee_claim_public_key: PublicKey::from_bytes(&vn.fee_claim_public_key).map_err(|_| {
+            fee_claim_public_key: PublicKey::from_canonical_bytes(&vn.fee_claim_public_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!(
                     "Invalid fee claim public key in validator node record id={}",
                     vn.id

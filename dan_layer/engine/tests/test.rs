@@ -246,7 +246,7 @@ fn test_caller_context() {
     let value: RistrettoPublicKeyBytes = template_test.call_method(component, "caller_pub_key", args![], vec![]);
     assert_eq!(
         to_hex(value.as_bytes()),
-        "66cad05f12652276f0656288f60963753f50a7947c54a640aa1e1c62097a406d"
+        "d884dd886cc7464402a04920485aebe6dd657b98072de655c46ec6179a52cd0d"
     );
 }
 

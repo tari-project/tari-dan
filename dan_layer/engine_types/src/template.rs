@@ -24,7 +24,7 @@ use std::str::FromStr;
 
 use tari_common_types::types::FixedHash;
 
-use crate::hashing::{hasher, EngineHashDomainLabel};
+use crate::hashing::{hasher32, EngineHashDomainLabel};
 
 /// Package (template) identifier
 pub type TemplateAddress = tari_template_lib::Hash;
@@ -41,6 +41,6 @@ pub fn parse_template_address(s: String) -> Option<TemplateAddress> {
 }
 
 pub fn calculate_template_binary_hash(wasm_code: &[u8]) -> FixedHash {
-    let hash = hasher(EngineHashDomainLabel::Template).chain(wasm_code).result();
+    let hash = hasher32(EngineHashDomainLabel::Template).chain(wasm_code).result();
     FixedHash::from(hash.into_array())
 }

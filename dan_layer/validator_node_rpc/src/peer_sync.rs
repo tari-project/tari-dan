@@ -58,7 +58,7 @@ impl<TPeerProvider: PeerProvider<Addr = CommsPublicKey>> PeerSyncProtocol<TPeerP
         let mut count = 0usize;
         while let Some(resp) = stream.next().await {
             let resp = resp?;
-            let identity = CommsPublicKey::from_bytes(&resp.identity).map_err(anyhow::Error::msg)?;
+            let identity = CommsPublicKey::from_canonical_bytes(&resp.identity).map_err(anyhow::Error::msg)?;
             if self.our_identity == identity {
                 continue;
             }

@@ -154,7 +154,7 @@ impl ValidatorNodeRpcClient for TariCommsValidatorNodeRpcClient {
                     .map(|a| PeerIdentityClaim::try_from(a).map_err(ValidatorNodeRpcClientError::InvalidResponse))
                     .collect::<Result<Vec<_>, _>>()?;
                 Result::<_, ValidatorNodeRpcClientError>::Ok(DanPeer {
-                    identity: ByteArray::from_bytes(&p.identity)
+                    identity: ByteArray::from_canonical_bytes(&p.identity)
                         .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Invalid identity")))?,
                     claims,
                 })

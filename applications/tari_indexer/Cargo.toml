@@ -13,7 +13,7 @@ tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feat
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_crypto = "0.18"
+tari_crypto = "0.19"
 tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
@@ -44,20 +44,33 @@ async-graphql-axum = "5.0.7"
 axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
 clap = { version = "3.2.22", features = ["derive", "env"] }
 config = "0.13.0"
-diesel = { version = "2", default-features = false, features = ["sqlite", "chrono"] }
+diesel = { version = "2", default-features = false, features = [
+    "sqlite",
+    "chrono",
+] }
 diesel_migrations = "2"
 futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
 lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
-log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
+log4rs = { version = "1.1.1", features = [
+    "rolling_file_appender",
+    "compound_policy",
+    "size_trigger",
+    "fixed_window_roller",
+] }
 prost = "0.9"
 rand = "0.8"
 reqwest = "0.11.11"
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0.64"
 thiserror = "^1.0.20"
-tokio = { version = "1.10", features = ["macros", "time", "sync", "rt-multi-thread"] }
+tokio = { version = "1.10", features = [
+    "macros",
+    "time",
+    "sync",
+    "rt-multi-thread",
+] }
 tonic = "0.6.2"
 tower = "0.4"
 tower-layer = "0.3"

@@ -44,7 +44,7 @@ use crate::{
     component::ComponentHeader,
     confidential::UnclaimedConfidentialOutput,
     fee_claim::{FeeClaim, FeeClaimAddress},
-    hashing::{hasher, EngineHashDomainLabel},
+    hashing::{hasher32, EngineHashDomainLabel},
     non_fungible::NonFungibleContainer,
     non_fungible_index::NonFungibleIndex,
     resource::Resource,
@@ -136,11 +136,11 @@ impl SubstateAddress {
             SubstateAddress::Resource(address) => *address.hash(),
             SubstateAddress::Vault(id) => *id.hash(),
             SubstateAddress::UnclaimedConfidentialOutput(address) => *address.hash(),
-            SubstateAddress::NonFungible(address) => hasher(EngineHashDomainLabel::NonFungibleId)
+            SubstateAddress::NonFungible(address) => hasher32(EngineHashDomainLabel::NonFungibleId)
                 .chain(address.resource_address().hash())
                 .chain(address.id())
                 .result(),
-            SubstateAddress::NonFungibleIndex(address) => hasher(EngineHashDomainLabel::NonFungibleIndex)
+            SubstateAddress::NonFungibleIndex(address) => hasher32(EngineHashDomainLabel::NonFungibleIndex)
                 .chain(address.resource_address().hash())
                 .chain(&address.index())
                 .result(),
