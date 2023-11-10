@@ -101,7 +101,7 @@ pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: Shu
     let node_identity = setup_node_identity(
         &config.validator_node.identity_file,
         config.validator_node.public_address.iter().cloned().collect::<Vec<_>>(),
-        config.validator_node.create_id,
+        !config.validator_node.dont_create_id,
         DAN_PEER_FEATURES,
     )?;
 
