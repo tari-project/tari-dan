@@ -258,6 +258,12 @@ impl From<FeeClaimAddress> for SubstateAddress {
     }
 }
 
+impl From<TransactionReceiptAddress> for SubstateAddress {
+    fn from(address: TransactionReceiptAddress) -> Self {
+        Self::TransactionReceipt(address)
+    }
+}
+
 impl Display for SubstateAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

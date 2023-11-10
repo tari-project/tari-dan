@@ -16,6 +16,7 @@ use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     serde_with,
     substate::SubstateAddress,
+    transaction_receipt::TransactionReceiptAddress,
 };
 
 use crate::{shard_bucket::ShardBucket, uint::U256};
@@ -27,6 +28,10 @@ impl ShardId {
     /// Defines the mapping of SubstateAddress to ShardId
     pub fn from_address(addr: &SubstateAddress, version: u32) -> Self {
         Self::from_hash(&addr.to_canonical_hash(), version)
+    }
+
+    pub fn for_transaction_receipt(tx_receipt: TransactionReceiptAddress) -> Self {
+        Self::from_address(&tx_receipt.into(), 0)
     }
 
     pub fn from_hash(hash: &[u8], version: u32) -> Self {
