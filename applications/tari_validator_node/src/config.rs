@@ -102,6 +102,8 @@ pub struct ValidatorNodeConfig {
     pub no_fees: bool,
     /// Fee claim public key
     pub fee_claim_public_key: RistrettoPublicKey,
+    /// Create identity file if not exists
+    pub create_id: bool,
 }
 
 impl ValidatorNodeConfig {
@@ -154,6 +156,7 @@ impl Default for ValidatorNodeConfig {
             no_fees: false,
             // Burn your fees
             fee_claim_public_key: RistrettoPublicKey::default(),
+            create_id: true,
         }
     }
 }
