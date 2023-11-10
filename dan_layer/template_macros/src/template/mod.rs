@@ -51,9 +51,9 @@ pub fn generate_template(input: TokenStream) -> Result<TokenStream> {
 
         #definition
 
-        #abi
-
         #dispatcher
+
+        #abi
     };
 
     // eprintln!("output = {}", output);

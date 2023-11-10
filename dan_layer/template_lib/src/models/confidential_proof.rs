@@ -18,6 +18,7 @@ pub struct ConfidentialOutputProof {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialStatement {
+    #[serde(with = "serde_byte_array")]
     pub commitment: [u8; 32],
     /// Public nonce (R) that was used to generate the commitment mask
     // #[cfg_attr(feature = "serde", serde(with = "hex::serde"))]
@@ -40,7 +41,7 @@ pub struct ConfidentialWithdrawProof {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct EncryptedData(#[serde(with = "serde_big_array::BigArray")] pub [u8; EncryptedData::size()]);
+pub struct EncryptedData(#[serde(with = "serde_byte_array")] pub [u8; EncryptedData::size()]);
 
 impl EncryptedData {
     pub const fn size() -> usize {

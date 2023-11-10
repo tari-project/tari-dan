@@ -340,13 +340,13 @@ fn it_allows_multiple_recursion_levels() {
 fn it_fails_when_surpassing_recursion_limit() {
     let mut test = setup();
     let (_, _, private_key) = test.template_test.create_owned_account();
-    let max_recursion_depth = MAX_CALL_DEPTH;
+    let max_call_depth = MAX_CALL_DEPTH;
 
     // innermost composability component
     let mut components = initialize_composability(&mut test);
     let mut last_composability_component = components.composability_component;
 
-    for _ in 0..max_recursion_depth {
+    for _ in 0..max_call_depth {
         components = initialize_composability(&mut test);
         test.template_test.call_method::<()>(
             components.composability_component,

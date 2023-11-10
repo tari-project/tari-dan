@@ -3,7 +3,10 @@
 
 use std::fmt::{Display, Formatter};
 
-use tari_template_lib::{args::ComponentAction, auth::ResourceAuthAction};
+use tari_template_lib::{
+    args::{ComponentAction, VaultAction},
+    auth::ResourceAuthAction,
+};
 
 #[derive(Debug, Clone)]
 pub enum ActionIdent {
@@ -29,6 +32,12 @@ impl From<ResourceAuthAction> for ActionIdent {
     }
 }
 
+impl From<VaultAction> for ActionIdent {
+    fn from(action: VaultAction) -> Self {
+        Self::Native(NativeAction::Vault(action))
+    }
+}
+
 impl Display for ActionIdent {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -44,6 +53,7 @@ impl Display for ActionIdent {
 pub enum NativeAction {
     Component(ComponentAction),
     Resource(ResourceAuthAction),
+    Vault(VaultAction),
 }
 
 impl Display for NativeAction {
@@ -51,6 +61,7 @@ impl Display for NativeAction {
         match self {
             NativeAction::Component(action) => write!(f, "component.call_method.{:?}", action),
             NativeAction::Resource(action) => write!(f, "resource.{:?}", action),
+            NativeAction::Vault(action) => write!(f, "vault.{:?}", action),
         }
     }
 }

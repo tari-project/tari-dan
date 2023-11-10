@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use log::*;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
-    indexed_value::{IndexedValue, IndexedValueError},
+    indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::{SubstateAddress, SubstateValue},
     transaction_receipt::TransactionReceiptAddress,
 };
@@ -84,7 +84,7 @@ where
 
                     match substate {
                         SubstateValue::Component(data) => {
-                            let value = IndexedValue::from_raw(&data.state.state)?;
+                            let value = IndexedWellKnownTypes::from_value(&data.body.state)?;
                             for addr in value.referenced_substates() {
                                 if substate_addresses.contains_key(&addr) {
                                     continue;

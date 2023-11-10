@@ -34,7 +34,10 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
     let output = quote! {
         #[no_mangle]
         pub unsafe extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
-            use ::tari_template_lib::{template_dependencies::{decode_exact, from_value, encode_with_len, CallInfo, wrap_ptr},init_context, panic_hook::register_panic_hook};
+            use ::tari_template_lib::template_dependencies::*;
+
+            #[cfg(not(target_arch = "wasm32"))]
+            compile_error!("Must compile template with --target wasm32-unknown-unknown");
 
             register_panic_hook();
 
@@ -46,8 +49,7 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
             let call_info: CallInfo = decode_exact(&call_data).expect("Failed to decode CallArgs");
 
             init_context(&call_info);
-            // TODO: wrap this in a nice macro
-            engine().emit_log(LogLevel::Debug, format!("Dispatcher called with function {}", call_info.func_name));
+            engine().emit_log(LogLevel::Info, format!("Dispatcher called with function {}", call_info.func_name));
 
             let result;
             match call_info.func_name.as_str() {
@@ -76,28 +78,35 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     let mut args: Vec<Expr> = vec![];
     let expected_num_args = ast.input_types.len();
     let mut stmts = vec![];
-    let mut should_set_state = false;
     stmts.push(parse_quote! {
-        assert_eq!(call_info.args.len(), #expected_num_args, "Call had unexpected number of args. Got = {} expected = {}", call_info.args.len(), #expected_num_args);
+        assert_eq!(
+            call_info.args.len(),
+            #expected_num_args,
+            "Call \"{}\" had unexpected number of args. Got = {} expected = {}",
+            call_info.func_name,
+            call_info.args.len(),
+            #expected_num_args,
+        );
     });
     let func_name = &ast.name;
+    let mut is_mutable_call = false;
     // encode all arguments of the functions
     for (i, input_type) in ast.input_types.iter().enumerate() {
         let arg_ident = format_ident!("arg_{}", i);
 
-        let stmt = match input_type {
+        match input_type {
             // "self" argument
             TypeAst::Receiver { mutability } => {
-                should_set_state = *mutability;
-                if should_set_state {
+                is_mutable_call = *mutability;
+                if is_mutable_call {
                     args.push(parse_quote! { &mut state });
                 } else {
                     args.push(parse_quote! { &state });
                 }
-                vec![
+                stmts.extend(
+                [
                     parse_quote! {
-                    let component_address =
-                        from_value::<::tari_template_lib::models::ComponentAddress>(&call_info.args[#i])
+                    let component_address = from_value::<::tari_template_lib::models::ComponentAddress>(&call_info.args[#i])
                         .unwrap_or_else(|e| panic!("failed to decode component instance for function '{}': {}",  #func_name, e));
                     },
                     parse_quote! {
@@ -106,25 +115,24 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                     parse_quote! {
                         let mut state = component_manager.get_state::<#template_mod_name::#template_ident>();
                     },
-                ]
+                ]);
             },
             // non-self argument
             TypeAst::Typed { type_path, .. } => {
                 args.push(parse_quote! { #arg_ident });
-                vec![parse_quote! {
+                stmts.push(parse_quote! {
                     let #arg_ident = from_value::<#type_path>(&call_info.args[#i])
                         .unwrap_or_else(|e| panic!("failed to decode argument at position {} for function '{}': {}", #i, #func_name, e));
-                }]
+                })
             },
             TypeAst::Tuple(tuple) => {
                 args.push(parse_quote! { #arg_ident });
-                vec![parse_quote! {
+                stmts.push(parse_quote! {
                     let #arg_ident = from_value::<#tuple>(&call_info.args[#i])
                         .unwrap_or_else(|e| panic!("failed to decode tuple argument at position {} for function '{}'.", #i, #func_name, e));
-                }]
+                });
             },
-        };
-        stmts.extend(stmt);
+        }
     }
 
     // call the user defined function in the template
@@ -142,7 +150,7 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
     });
 
     // after user function invocation, update the component state
-    if should_set_state {
+    if is_mutable_call {
         stmts.push(parse_quote! {
             component_manager.set_state(state);
         });

@@ -15,7 +15,7 @@ tari_crypto = { version = "0.19", features = ["borsh"] }
 tari_template_lib = { path = "../template_lib" }
 
 rand = "0.8"
-serde = "1.0.126"
+serde = "1.0"
 thiserror = "1"
 
 #siphasher = "0.3.1"

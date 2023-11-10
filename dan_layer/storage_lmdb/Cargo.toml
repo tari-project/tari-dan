@@ -15,7 +15,7 @@ tari_storage = {  git = "https://github.com/tari-project/tari.git", branch = "fe
 
 lmdb-zero = "0.4.4"
 hex = "0.4.3"
-serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 
 [dev-dependencies]
 tempfile = "3.3.0"

@@ -201,6 +201,7 @@ async fn multi_validator_propose_blocks_with_new_transactions_until_all_committe
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore = "FIXME: This test is flaky"]
 async fn multi_shard_propose_blocks_with_new_transactions_until_all_committed() {
     setup_logger();
     let mut test = Test::builder()

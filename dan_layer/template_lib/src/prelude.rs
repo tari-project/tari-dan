@@ -23,7 +23,7 @@
 //! The prelude contains all the commonly used types and functions that are used. To use it, add the import `use
 //! tari_template_lib::prelude::*;`
 
-pub use tari_bor;
+// pub use tari_bor;
 #[cfg(feature = "macro")]
 pub use tari_template_macros::template;
 

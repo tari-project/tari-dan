@@ -2,8 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{Deserialize, Serialize};
-// #[cfg(not(feature = "hex"))]
-use serde_big_array::BigArray;
 use tari_template_abi::rust::{
     fmt::{Display, Formatter},
     string::String,
@@ -13,10 +11,7 @@ use crate::{models::NonFungibleAddress, Hash};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct RistrettoPublicKeyBytes(
-    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
-    [u8; RistrettoPublicKeyBytes::length()],
-);
+pub struct RistrettoPublicKeyBytes(#[serde(with = "serde_byte_array")] [u8; RistrettoPublicKeyBytes::length()]);
 
 impl RistrettoPublicKeyBytes {
     pub const fn length() -> usize {
@@ -103,11 +98,7 @@ impl std::error::Error for InvalidByteLengthError {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct BalanceProofSignature(
-    // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
-    //#[cfg_attr(not(feature = "hex"), serde(with = "BigArray"))]
-    #[serde(with = "BigArray")] [u8; BalanceProofSignature::length()],
-);
+pub struct BalanceProofSignature(#[serde(with = "serde_byte_array")] [u8; BalanceProofSignature::length()]);
 
 impl BalanceProofSignature {
     pub const fn length() -> usize {

@@ -7,7 +7,6 @@ use d3ne::{Engine, Node, Workers, WorkersBuilder};
 use serde_json::Value as JsValue;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_engine_types::instruction_result::InstructionResult;
-use tari_template_lib::args::Arg;
 
 use crate::{
     flow::{
@@ -48,13 +47,12 @@ impl FlowInstance {
         &self,
         template_provider: Arc<TTemplateProvider>,
         runtime: Runtime,
-        args: &[Arg],
+        args: &[tari_bor::Value],
         arg_defs: &[FunctionArgDefinition],
-        recursion_depth: usize,
-        max_recursion_depth: usize,
+        call_depth: usize,
+        max_call_depth: usize,
     ) -> Result<InstructionResult, FlowEngineError> {
         let engine = Engine::new("tari@0.1.0".to_string(), load_workers());
-        let args = runtime.resolve_args(args)?;
         let mut args_map = HashMap::new();
         for (i, arg_def) in arg_defs.iter().enumerate() {
             if i >= args.len() {
@@ -69,8 +67,8 @@ impl FlowInstance {
             template_provider,
             runtime,
             args: args_map,
-            recursion_depth,
-            max_recursion_depth,
+            call_depth,
+            max_call_depth,
         };
         let result = engine.process(&context, &self.nodes, self.start_node)?;
         if result.is_empty() {

@@ -37,6 +37,7 @@ use tari_template_lib::{
         UnclaimedConfidentialOutputAddress,
         VaultId,
     },
+    prelude::PUBLIC_IDENTITY_RESOURCE_ADDRESS,
     Hash,
 };
 
@@ -184,6 +185,16 @@ impl SubstateAddress {
         matches!(self, Self::Component(_))
     }
 
+    pub fn is_root(&self) -> bool {
+        // A component is a "root" substate i.e. it may not have a parent node. NOTE: this concept isn't well-defined
+        // right now, this is simply used to prevent components being detected as dangling.
+        matches!(self, Self::Component(_) | Self::NonFungibleIndex(_))
+    }
+
+    pub fn is_public_key_identity(&self) -> bool {
+        matches!(self, Self::NonFungible(addr) if *addr.resource_address() == PUBLIC_IDENTITY_RESOURCE_ADDRESS)
+    }
+
     pub fn is_vault(&self) -> bool {
         matches!(self, Self::Vault(_))
     }
@@ -238,6 +249,12 @@ impl From<NonFungibleIndexAddress> for SubstateAddress {
 impl From<UnclaimedConfidentialOutputAddress> for SubstateAddress {
     fn from(address: UnclaimedConfidentialOutputAddress) -> Self {
         Self::UnclaimedConfidentialOutput(address)
+    }
+}
+
+impl From<FeeClaimAddress> for SubstateAddress {
+    fn from(address: FeeClaimAddress) -> Self {
+        Self::FeeClaim(address)
     }
 }
 
@@ -347,6 +364,7 @@ impl_partial_eq!(VaultId, Vault);
 impl_partial_eq!(UnclaimedConfidentialOutputAddress, UnclaimedConfidentialOutput);
 impl_partial_eq!(NonFungibleAddress, NonFungible);
 impl_partial_eq!(TransactionReceiptAddress, TransactionReceipt);
+impl_partial_eq!(FeeClaimAddress, FeeClaim);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SubstateValue {
@@ -466,6 +484,48 @@ impl SubstateValue {
         }
     }
 
+    pub fn as_resource_mut(&mut self) -> Option<&mut Resource> {
+        match self {
+            SubstateValue::Resource(resource) => Some(resource),
+            _ => None,
+        }
+    }
+
+    pub fn as_vault(&self) -> Option<&Vault> {
+        match self {
+            SubstateValue::Vault(vault) => Some(vault),
+            _ => None,
+        }
+    }
+
+    pub fn as_vault_mut(&mut self) -> Option<&mut Vault> {
+        match self {
+            SubstateValue::Vault(vault) => Some(vault),
+            _ => None,
+        }
+    }
+
+    pub fn as_non_fungible(&self) -> Option<&NonFungibleContainer> {
+        match self {
+            SubstateValue::NonFungible(nft) => Some(nft),
+            _ => None,
+        }
+    }
+
+    pub fn as_non_fungible_mut(&mut self) -> Option<&mut NonFungibleContainer> {
+        match self {
+            SubstateValue::NonFungible(nft) => Some(nft),
+            _ => None,
+        }
+    }
+
+    pub fn as_unclaimed_confidential_output(&self) -> Option<&UnclaimedConfidentialOutput> {
+        match self {
+            SubstateValue::UnclaimedConfidentialOutput(output) => Some(output),
+            _ => None,
+        }
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
         encode(self).unwrap()
     }
@@ -508,6 +568,22 @@ impl From<NonFungibleIndex> for SubstateValue {
 impl From<FeeClaim> for SubstateValue {
     fn from(fee_claim: FeeClaim) -> Self {
         Self::FeeClaim(fee_claim)
+    }
+}
+
+impl Display for SubstateValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // TODO: improve output
+        match self {
+            SubstateValue::Component(component) => write!(f, "{:?}", component.state()),
+            SubstateValue::Resource(resource) => write!(f, "{:?}", resource,),
+            SubstateValue::Vault(vault) => write!(f, "{:?}", vault),
+            SubstateValue::NonFungible(nft) => write!(f, "{:?}", nft),
+            SubstateValue::NonFungibleIndex(index) => write!(f, "{:?}", index),
+            SubstateValue::UnclaimedConfidentialOutput(commitment) => write!(f, "{:?}", commitment),
+            SubstateValue::TransactionReceipt(tx_receipt) => write!(f, "{:?}", tx_receipt),
+            SubstateValue::FeeClaim(fee_claim) => write!(f, "{:?}", fee_claim),
+        }
     }
 }
 

@@ -83,12 +83,15 @@ impl Resource {
         self.access_rules = access_rules;
     }
 
-    pub fn increase_total_supply(&mut self, amount: Amount) {
+    pub fn increase_total_supply(&mut self, amount: Amount) -> bool {
         assert!(
             amount.is_positive(),
             "Invariant violation in increase_total_supply: amount must be positive"
         );
-        self.total_supply += amount;
+        self.total_supply.checked_add(amount).map_or(false, |new_total| {
+            self.total_supply = new_total;
+            true
+        })
     }
 
     /// Decreases the total supply.

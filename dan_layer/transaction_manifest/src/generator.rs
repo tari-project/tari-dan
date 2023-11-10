@@ -147,7 +147,7 @@ impl ManifestInstructionGenerator {
                             },
                             ManifestValue::Literal(lit) => lit_to_arg(lit),
                             ManifestValue::NonFungibleId(id) => Ok(arg!(id.clone())),
-                            ManifestValue::Value(blob) => Ok(Arg::Literal(blob.clone())),
+                            ManifestValue::Value(blob) => Ok(Arg::literal(blob.clone()).unwrap()),
                         })
                         .or_else(|| {
                             // Or is it a variable on the worktop?

@@ -94,6 +94,7 @@ impl Proof {
         resp.decode().expect("Proof GetAmount returned invalid amount")
     }
 
+    #[must_use = "ProofAccess must used"]
     pub fn authorize(&self) -> ProofAccess {
         self.try_authorize().expect("Proof authorization failed")
     }

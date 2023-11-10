@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::anyhow;
 use serde::de::DeserializeOwned;
-use tari_bor::encode;
+use tari_bor::{decode_exact, to_value};
 use tari_crypto::{
     keys::PublicKey,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
@@ -132,7 +132,12 @@ impl TemplateTest {
             state_store,
             virtual_substates,
             enable_fees: false,
-            fee_table: FeeTable::new(1, 1),
+            fee_table: FeeTable {
+                per_module_call_cost: 1,
+                per_byte_storage_cost: 1,
+                per_event_cost: 1,
+                per_log_cost: 1,
+            },
         }
     }
 
@@ -156,7 +161,7 @@ impl TemplateTest {
         struct Faucet {
             vault: tari_template_lib::models::Vault,
         }
-        let state = encode(&Faucet {
+        let state = to_value(&Faucet {
             vault: tari_template_lib::models::Vault::for_test(vault_id),
         })
         .unwrap();
@@ -168,7 +173,7 @@ impl TemplateTest {
                 owner_key: RistrettoPublicKeyBytes::from_bytes(signer_public_key.as_bytes()).unwrap(),
                 owner_rule: OwnerRule::None,
                 access_rules: ComponentAccessRules::allow_all(),
-                state: ComponentBody { state },
+                body: ComponentBody { state },
             }),
         )
         .unwrap();
@@ -321,6 +326,10 @@ impl TemplateTest {
         NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(self.public_key.as_bytes()).unwrap())
     }
 
+    pub fn get_test_secret_key(&self) -> &RistrettoSecretKey {
+        &self.secret_key
+    }
+
     pub fn create_empty_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
         let (owner_proof, secret_key) = self.create_owner_proof();
         let old_fail_fees = self.enable_fees;
@@ -469,7 +478,7 @@ impl TemplateTest {
         proofs: Vec<NonFungibleAddress>,
     ) -> RejectReason {
         let result = self.try_execute(transaction, proofs).unwrap();
-        result.expect_transaction_failure().clone()
+        result.expect_failure().clone()
     }
 
     pub fn execute_and_commit(
@@ -524,6 +533,16 @@ impl TemplateTest {
         )
         .unwrap();
         self.execute_and_commit(instructions, proofs)
+    }
+
+    pub fn print_state(&self) {
+        let tx = self.state_store.read_access().unwrap();
+        for (k, v) in tx.iter_raw() {
+            let k: SubstateAddress = decode_exact(k).unwrap();
+            let v: Substate = decode_exact(v).unwrap();
+
+            eprintln!("[{}]: {}", k, v.into_substate_value());
+        }
     }
 }
 

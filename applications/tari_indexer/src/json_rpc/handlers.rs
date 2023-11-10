@@ -68,11 +68,14 @@ use tari_indexer_client::types::{
 };
 use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory, TransactionResultStatus};
 
-use super::json_encoding::{encode_execute_result_into_json, encode_finalized_result_into_json};
+use super::json_encoding::{
+    encode_execute_result_into_json,
+    encode_finalized_result_into_json,
+    encode_substate_into_json,
+};
 use crate::{
     bootstrap::Services,
     dry_run::processor::DryRunTransactionProcessor,
-    json_rpc::json_encoding::encode_substate_into_json,
     substate_manager::SubstateManager,
     transaction_manager::TransactionManager,
 };

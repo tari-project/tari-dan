@@ -45,6 +45,11 @@ impl Metadata {
     pub fn get(&self, key: &str) -> Option<&String> {
         self.0.get(key)
     }
+
+    pub fn merge(&mut self, other: Metadata) -> &mut Self {
+        self.0.extend(other.0.into_inner());
+        self
+    }
 }
 
 impl From<BTreeMap<String, String>> for Metadata {

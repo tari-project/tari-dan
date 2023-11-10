@@ -38,10 +38,10 @@ impl TemplateManager {
         Self { template_address }
     }
 
-    pub fn call<T: DeserializeOwned>(&self, function: String, args: Vec<Arg>) -> T {
+    pub fn call<F: Into<String>, T: DeserializeOwned>(&self, function: F, args: Vec<Arg>) -> T {
         self.call_internal(CallFunctionArg {
             template_address: self.template_address,
-            function,
+            function: function.into(),
             args,
         })
     }

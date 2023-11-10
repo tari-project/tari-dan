@@ -16,7 +16,7 @@ use crate::{
     serde_with,
 };
 
-#[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub enum Instruction {
     CallFunction {
         #[serde(with = "serde_with::hex")]

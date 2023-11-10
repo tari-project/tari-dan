@@ -11,6 +11,10 @@ impl BorError {
     pub fn new(str: String) -> Self {
         Self(str)
     }
+
+    pub fn into_string(self) -> String {
+        self.0
+    }
 }
 
 #[cfg(feature = "std")]

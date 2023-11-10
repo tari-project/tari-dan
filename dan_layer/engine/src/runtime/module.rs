@@ -1,8 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashMap;
-
+use indexmap::IndexMap;
 use tari_engine_types::substate::{SubstateAddress, SubstateValue};
 
 use crate::runtime::StateTracker;
@@ -19,7 +18,7 @@ pub trait RuntimeModule: Send + Sync {
     fn on_before_finalize(
         &self,
         _track: &StateTracker,
-        _changes: &HashMap<SubstateAddress, SubstateValue>,
+        _changes: &IndexMap<SubstateAddress, SubstateValue>,
     ) -> Result<(), RuntimeModuleError> {
         Ok(())
     }

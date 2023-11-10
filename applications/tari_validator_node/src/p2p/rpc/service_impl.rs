@@ -23,6 +23,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use log::*;
+use tari_bor::{decode_exact, encode};
 use tari_common_types::types::PublicKey;
 use tari_comms::protocol::rpc::{Request, Response, RpcStatus, Streaming};
 use tari_dan_common_types::{optional::Optional, NodeAddressable, ShardId};
@@ -34,7 +35,6 @@ use tari_dan_storage::{
 use tari_engine_types::virtual_substate::VirtualSubstateAddress;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_template_lib::{encode, prelude::tari_bor::decode_exact};
 use tari_transaction::{Transaction, TransactionId};
 use tari_validator_node_rpc::{
     proto,

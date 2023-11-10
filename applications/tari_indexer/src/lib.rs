@@ -164,7 +164,8 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         tokio::select! {
             _ = time::sleep(config.indexer.dan_layer_scanning_internal) => {
                 match substate_manager.scan_and_update_substates().await {
-                    Ok(_) => info!(target: LOG_TARGET, "Substate auto-scan succeded"),
+                    Ok(0) => {},
+                    Ok(cnt) => info!(target: LOG_TARGET, "Scanned {} substate(s) successfully", cnt),
                     Err(e) =>  error!(target: LOG_TARGET, "Substate auto-scan failed: {}", e),
                 }
             },

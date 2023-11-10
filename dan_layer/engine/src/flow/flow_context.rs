@@ -11,6 +11,6 @@ pub struct FlowContext<TTemplateProvider: TemplateProvider<Template = LoadedTemp
     pub template_provider: Arc<TTemplateProvider>,
     pub runtime: Runtime,
     pub args: HashMap<String, (tari_bor::Value, FunctionArgDefinition)>,
-    pub recursion_depth: usize,
-    pub max_recursion_depth: usize,
+    pub call_depth: usize,
+    pub max_call_depth: usize,
 }

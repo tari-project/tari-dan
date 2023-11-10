@@ -110,8 +110,8 @@ pub struct ComponentInvokeArg {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ComponentAction {
-    Get,
     Create,
+    GetState,
     SetState,
     SetAccessRules,
 }
@@ -131,9 +131,18 @@ impl ComponentRef {
     }
 }
 
+impl Display for ComponentRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ComponentRef::Component => write!(f, "Component"),
+            ComponentRef::Ref(addr) => write!(f, "Ref({})", addr),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreateComponentArg {
-    pub encoded_state: Vec<u8>,
+    pub encoded_state: tari_bor::Value,
     pub owner_rule: OwnerRule,
     pub access_rules: ComponentAccessRules,
     pub component_id: Option<Hash>,
@@ -173,6 +182,15 @@ impl ResourceRef {
 impl From<ResourceAddress> for ResourceRef {
     fn from(addr: ResourceAddress) -> Self {
         ResourceRef::Ref(addr)
+    }
+}
+
+impl Display for ResourceRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResourceRef::Resource => write!(f, "Resource"),
+            ResourceRef::Ref(addr) => write!(f, "Ref({})", addr),
+        }
     }
 }
 
@@ -233,12 +251,11 @@ pub struct VaultInvokeArg {
     pub args: Vec<Vec<u8>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum VaultAction {
     Create,
     Deposit,
     Withdraw,
-    WithdrawAll,
     GetBalance,
     GetResourceAddress,
     GetNonFungibleIds,
@@ -297,6 +314,15 @@ impl BucketRef {
         match self {
             BucketRef::Bucket(_) => None,
             BucketRef::Ref(id) => Some(*id),
+        }
+    }
+}
+
+impl Display for BucketRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BucketRef::Bucket(addr) => write!(f, "Bucket({})", addr),
+            BucketRef::Ref(id) => write!(f, "Ref({})", id),
         }
     }
 }
@@ -438,6 +464,16 @@ impl ProofRef {
         }
     }
 }
+
+impl Display for ProofRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProofRef::Proof(addr) => write!(f, "Proof({})", addr),
+            ProofRef::Ref(id) => write!(f, "Ref({})", id),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProofAction {
     GetAmount,

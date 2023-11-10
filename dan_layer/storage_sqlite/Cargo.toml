@@ -18,7 +18,7 @@ diesel_migrations = "2"
 thiserror = "1.0.30"
 chrono = "0.4.19"
 log = { version = "0.4.8", features = ["std"] }
-serde_json = "1.0.85"
+serde_json = "1.0"
 serde = "1.0"
 
 [dev-dependencies]

@@ -14,10 +14,11 @@ ciborium-io = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a6
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 
 [dev-dependencies]
-serde_json = "1.0.96"
+serde_json = "1.0"
 
 [features]
 default = ["std"]
 std = ["ciborium/std", "serde/std"]
 alloc = ["serde/alloc", "ciborium-io/alloc"]
+json_encoding = []
 

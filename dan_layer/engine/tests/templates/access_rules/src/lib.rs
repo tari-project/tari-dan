@@ -128,7 +128,7 @@ mod access_rules_template {
             self.badges.withdraw_non_fungible(NonFungibleId::from_string(&name))
         }
 
-        pub fn mint_new_badge(&mut self) -> Bucket {
+        pub fn mint_new_badge(&self) -> Bucket {
             ResourceManager::get(self.badges.resource_address()).mint_non_fungible(NonFungibleId::random(), &(), &())
         }
 

@@ -303,7 +303,7 @@ impl EpochManagerReader for EpochManagerHandle {
             .await
             .map_err(|_| EpochManagerError::SendError)?;
 
-        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+        Ok(rx.await.map_err(|_| EpochManagerError::ReceiveError).unwrap().unwrap())
     }
 
     async fn current_epoch(&self) -> Result<Epoch, EpochManagerError> {

@@ -65,6 +65,8 @@ pub enum FeeSource {
     Initial,
     RuntimeCall,
     Storage,
+    Events,
+    Logs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

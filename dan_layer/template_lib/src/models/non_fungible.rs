@@ -23,7 +23,7 @@ const DELIM: char = ':';
 
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum NonFungibleId {
-    U256([u8; 32]),
+    U256(#[serde(with = "serde_byte_array")] [u8; 32]),
     String(String),
     Uint32(u32),
     Uint64(u64),
@@ -143,6 +143,34 @@ impl NonFungibleId {
                 id.parse().map_err(|_| ParseNonFungibleIdError::InvalidUint64)?,
             )),
             _ => Err(ParseNonFungibleIdError::InvalidType),
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            NonFungibleId::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_u32(&self) -> Option<u32> {
+        match self {
+            NonFungibleId::Uint32(i) => Some(*i),
+            _ => None,
+        }
+    }
+
+    pub fn as_u64(&self) -> Option<u64> {
+        match self {
+            NonFungibleId::Uint64(i) => Some(*i),
+            _ => None,
+        }
+    }
+
+    pub fn as_u256(&self) -> Option<[u8; 32]> {
+        match self {
+            NonFungibleId::U256(i) => Some(*i),
+            _ => None,
         }
     }
 }
@@ -384,15 +412,12 @@ mod tests {
         fn string_serialization_and_deserialization() {
             let resx_str = "resource_0000000000000000000000000000000000000000000000000000000000000000";
             let resource = ResourceAddress::from_str(resx_str).unwrap();
-            let v = NonFungibleAddressContents {
-                resource_address: resource,
-                id: NonFungibleId::Uint32(123),
-            };
+            let v = NonFungibleAddress::new(resource, NonFungibleId::String("hello".to_string()));
             let json = serde_json::to_string_pretty(&v).unwrap();
             assert!(json.contains(resx_str));
 
             // Deserialize from JSON
-            let r = serde_json::from_str::<NonFungibleAddressContents>(&json).unwrap();
+            let r = serde_json::from_str::<NonFungibleAddress>(&json).unwrap();
             assert_eq!(r, v);
 
             // Check that CBOR does not include the string
@@ -403,7 +428,7 @@ mod tests {
             );
 
             // Deserialize from CBOR
-            let r = tari_bor::decode::<NonFungibleAddressContents>(&cbor).unwrap();
+            let r = tari_bor::decode::<NonFungibleAddress>(&cbor).unwrap();
             assert_eq!(r, v);
         }
     }

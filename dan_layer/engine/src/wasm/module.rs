@@ -32,7 +32,6 @@ use wasmer::{
     ExportError,
     Function,
     Instance,
-    Module,
     Store,
     Universal,
     WasmerEnv,
@@ -55,7 +54,7 @@ impl WasmModule {
 
     pub fn load_template_from_code(code: &[u8]) -> Result<LoadedTemplate, PackageError> {
         let store = Self::create_store();
-        let module = Module::new(&store, code)?;
+        let module = wasmer::Module::new(&store, code)?;
         let mut env = WasmEnv::new(());
         fn stub(_env: &WasmEnv<()>, _op: i32, _arg_ptr: i32, _arg_len: i32) -> i32 {
             0

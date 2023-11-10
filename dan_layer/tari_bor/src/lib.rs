@@ -13,8 +13,11 @@ mod tag;
 pub use tag::*;
 
 mod error;
+#[cfg(feature = "json_encoding")]
+pub mod json_encoding;
 mod walker;
-pub use ciborium::value::Value;
+
+pub use ciborium::{cbor, value::Value};
 use ciborium::{de::from_reader, ser::into_writer};
 pub use error::BorError;
 pub use serde::{self, de::DeserializeOwned, Deserialize, Serialize};

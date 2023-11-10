@@ -1,7 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_bor::encode;
 use tari_engine_types::substate::SubstateAddress;
 use tari_template_lib::{
     args,
@@ -53,7 +52,7 @@ fn transfer_confidential_amounts_between_accounts() {
     let vars = [
         ("faucet", faucet.into()),
         ("account1", account1.into()),
-        ("proof", ManifestValue::Value(encode(&proof.proof).unwrap())),
+        ("proof", ManifestValue::new_value(&proof.proof).unwrap()),
     ];
     let result = template_test
         .execute_and_commit_manifest(
@@ -86,9 +85,9 @@ fn transfer_confidential_amounts_between_accounts() {
         ("account2", account2.into()),
         (
             "withdraw_proof",
-            ManifestValue::Value(encode(&withdraw_proof.proof).unwrap()),
+            ManifestValue::new_value(&withdraw_proof.proof).unwrap(),
         ),
-        ("split_proof", ManifestValue::Value(encode(&split_proof.proof).unwrap())),
+        ("split_proof", ManifestValue::new_value(&split_proof.proof).unwrap()),
     ];
     let result = template_test
         .execute_and_commit_manifest(
@@ -134,7 +133,7 @@ fn transfer_confidential_fails_with_invalid_balance() {
     let vars = [
         ("faucet", faucet.into()),
         ("account1", account1.into()),
-        ("proof", ManifestValue::Value(encode(&proof.proof).unwrap())),
+        ("proof", ManifestValue::new_value(&proof.proof).unwrap()),
     ];
     let _err = template_test
         .execute_and_commit_manifest(
@@ -175,14 +174,11 @@ fn reveal_confidential_and_transfer() {
         ("resource", faucet_resx.into()),
         ("account1", account1.into()),
         ("account2", account2.into()),
-        ("proof", ManifestValue::Value(encode(&proof.proof).unwrap())),
-        (
-            "reveal_proof",
-            ManifestValue::Value(encode(&reveal_proof.proof).unwrap()),
-        ),
+        ("proof", ManifestValue::new_value(&proof.proof).unwrap()),
+        ("reveal_proof", ManifestValue::new_value(&reveal_proof.proof).unwrap()),
         (
             "reveal_bucket_proof",
-            ManifestValue::Value(encode(&reveal_bucket_proof.proof).unwrap()),
+            ManifestValue::new_value(&reveal_bucket_proof.proof).unwrap(),
         ),
     ];
     let result = template_test
@@ -249,11 +245,8 @@ fn attempt_to_reveal_with_unbalanced_proof() {
         ("resource", faucet_resx.into()),
         ("account1", account1.into()),
         ("account2", account2.into()),
-        ("proof", ManifestValue::Value(encode(&proof.proof).unwrap())),
-        (
-            "reveal_proof",
-            ManifestValue::Value(encode(&reveal_proof.proof).unwrap()),
-        ),
+        ("proof", ManifestValue::new_value(&proof.proof).unwrap()),
+        ("reveal_proof", ManifestValue::new_value(&reveal_proof.proof).unwrap()),
     ];
 
     // TODO: Propagate error messages from runtime
@@ -318,13 +311,13 @@ fn multi_commitment_join() {
         ("account1", account1.into()),
         (
             "withdraw_proof1",
-            ManifestValue::Value(encode(&withdraw_proof1.proof).unwrap()),
+            ManifestValue::new_value(&withdraw_proof1.proof).unwrap(),
         ),
         (
             "withdraw_proof2",
-            ManifestValue::Value(encode(&withdraw_proof2.proof).unwrap()),
+            ManifestValue::new_value(&withdraw_proof2.proof).unwrap(),
         ),
-        ("join_proof", ManifestValue::Value(encode(&join_proof.proof).unwrap())),
+        ("join_proof", ManifestValue::new_value(&join_proof.proof).unwrap()),
     ];
     let result = template_test
         .execute_and_commit_manifest(

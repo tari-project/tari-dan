@@ -157,7 +157,6 @@ where
     type Error = SubstateResolverError;
 
     async fn resolve(&self, transaction: &Transaction, out: &MemoryStateStore) -> Result<(), Self::Error> {
-        // Extend<(SubstateAddress, Substate)> + Send {
         let missing_shards = self.resolve_local_substates(transaction, out)?;
 
         // TODO: If any of the missing shards are local we should error early here rather than asking the local

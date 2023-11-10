@@ -42,6 +42,7 @@ pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
         functions: ast
             .get_functions()
             .map(|func| {
+                let is_mut = func.is_mut();
                 Ok::<_, syn::Error>(FunctionDef {
                     name: func.name,
                     arguments: func
@@ -54,19 +55,19 @@ pub fn generate_abi(ast: &TemplateAst) -> Result<TokenStream> {
                         .as_ref()
                         .map(|ty| convert_to_arg_type(&template_name_as_str, ty))
                         .unwrap_or(ArgType::Unit),
-                    is_mut: false,
+                    is_mut,
                 })
             })
             .collect::<Result<_>>()?,
     });
 
-    let template_def_data_as_slice = tari_bor::encode_with_len(&template_def);
-    let len = template_def_data_as_slice.len();
+    let template_def_data = tari_bor::encode_with_len(&template_def);
+    let len = template_def_data.len();
     let template_def_name = format_ident!("{ABI_TEMPLATE_DEF_GLOBAL_NAME}");
 
     let output = quote! {
         #[no_mangle]
-        pub static #template_def_name: [u8;#len] = [#(#template_def_data_as_slice),*];
+        pub static #template_def_name: [u8;#len] = [#(#template_def_data),*];
     };
 
     Ok(output)

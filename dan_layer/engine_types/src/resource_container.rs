@@ -12,32 +12,36 @@ use tari_common_types::types::PublicKey;
 use tari_crypto::tari_utilities::ByteArray;
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
-    models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
+    models::{
+        Amount,
+        ConfidentialOutputProof,
+        ConfidentialWithdrawProof,
+        NonFungibleAddress,
+        NonFungibleId,
+        ResourceAddress,
+    },
     prelude::ResourceType,
 };
 
 use crate::{
     confidential::{validate_confidential_proof, validate_confidential_withdraw, ConfidentialOutput},
-    serde_with,
+    substate::SubstateAddress,
 };
 
 /// Instances of a single resource kept in Buckets and Vaults
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResourceContainer {
     Fungible {
-        #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         amount: Amount,
         locked_amount: Amount,
     },
     NonFungible {
-        #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         token_ids: BTreeSet<NonFungibleId>,
         locked_token_ids: BTreeSet<NonFungibleId>,
     },
     Confidential {
-        #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         commitments: BTreeMap<PublicKey, ConfidentialOutput>,
         revealed_amount: Amount,
@@ -157,6 +161,12 @@ impl ResourceContainer {
             ResourceContainer::NonFungible { token_ids, .. } => Some(token_ids),
             _ => None,
         }
+    }
+
+    pub fn child_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.non_fungible_token_ids()
+            .iter()
+            .map(|id| SubstateAddress::NonFungible(NonFungibleAddress::new(*self.resource_address(), id.clone())))
     }
 
     pub fn deposit(&mut self, other: ResourceContainer) -> Result<(), ResourceError> {

@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::Arc;
+use std::{fmt::Display, sync::Arc};
 
 use tari_template_lib::models::{NonFungibleAddress, ProofId};
 
@@ -37,7 +37,6 @@ impl AuthorizationScope {
     }
 
     pub fn add_proof(&mut self, proof_id: ProofId) {
-        // unwrap: if the RwLock is poisoned, then another panic occurred
         self.proofs.push(proof_id);
     }
 
@@ -46,5 +45,19 @@ impl AuthorizationScope {
             .iter()
             .position(|p| p == proof_id)
             .map(|i| self.proofs.remove(i))
+    }
+}
+
+impl Display for AuthorizationScope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Virtual: [")?;
+        for proof in self.virtual_proofs.iter() {
+            write!(f, "{}", proof)?;
+        }
+        write!(f, "], Proofs: [")?;
+        for proof in &self.proofs {
+            write!(f, "{}", proof)?;
+        }
+        write!(f, "]")
     }
 }

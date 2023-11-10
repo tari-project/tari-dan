@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 tari_template_lib = { path = "../../../../../template_lib" }
-serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 
 
 [lib]

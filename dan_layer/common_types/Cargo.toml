@@ -18,7 +18,7 @@ newtype-ops = "0.1.4"
 rand = "0.8"
 prost = "0.9"
 prost-types = "0.9"
-serde = "1.0.126"
+serde = "1.0"
 ruint = "1.8.0"
 
 [build-dependencies]

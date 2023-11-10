@@ -113,7 +113,12 @@ where
         // simulate fees if the transaction requires it
         let fee_table = if Self::transaction_includes_fees(transaction) {
             // TODO: should match the VN fee table, should the fee table values be a consensus constant?
-            FeeTable::new(1, 1)
+            FeeTable {
+                per_module_call_cost: 1,
+                per_byte_storage_cost: 1,
+                per_event_cost: 1,
+                per_log_cost: 1,
+            }
         } else {
             FeeTable::zero_rated()
         };

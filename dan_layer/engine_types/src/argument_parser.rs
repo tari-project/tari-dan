@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn struct_test() {
-        #[derive(PartialEq, Eq, Deserialize, Debug, Serialize)]
+        #[derive(PartialEq, Deserialize, Debug, Serialize)]
         struct SomeArgs {
             #[serde(deserialize_with = "json_deserialize")]
             args: Vec<Arg>,

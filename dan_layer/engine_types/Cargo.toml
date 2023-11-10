@@ -8,7 +8,7 @@ repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 
 [dependencies]
-tari_bor = { path = "../tari_bor" }
+tari_bor = { path = "../tari_bor", features = ["json_encoding"] }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_crypto = { version = "0.19", features = ["borsh"] }
 tari_template_abi = { path = "../template_abi", features = ["std"] }
@@ -22,9 +22,10 @@ rand = "0.8"
 digest = "0.10"
 hex = { version = "0.4", features = ["serde"] }
 lazy_static = "1.4.0"
-serde = "1.0.126"
+serde = "1.0"
 serde_json = "1.0"
 thiserror = "1"
+
 
 [features]
 default = ["debugging"]

@@ -19,7 +19,7 @@ use tari_dan_wallet_sdk::{
     DanWalletSdk,
 };
 use tari_engine_types::{
-    indexed_value::{IndexedValue, IndexedValueError},
+    indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     non_fungible::NonFungibleContainer,
     resource::Resource,
     substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
@@ -170,7 +170,7 @@ where
 
         substate_api.save_root(created_by_tx, versioned_account_address.clone())?;
 
-        let vaults_value = IndexedValue::from_raw(&account_value.component().unwrap().state.state)?;
+        let vaults_value = IndexedWellKnownTypes::from_value(account_value.component().unwrap().state())?;
         let known_child_vaults = substate_api
             .load_dependent_substates(&[&account_substate.address.address])?
             .into_iter()
@@ -345,8 +345,8 @@ where
         let accounts = diff
             .up_iter()
             .filter(|(_, s)| is_account(s))
-            .filter_map(
-                |(a, s)| match IndexedValue::from_raw(&s.substate_value().component().unwrap().state.state) {
+            .filter_map(|(a, s)| {
+                match IndexedWellKnownTypes::from_value(s.substate_value().component().unwrap().state()) {
                     Ok(value) => Some((a, value)),
                     Err(e) => {
                         error!(
@@ -355,8 +355,8 @@ where
                         );
                         None
                     },
-                },
-            )
+                }
+            })
             .collect::<Vec<_>>();
 
         let nfts = diff
@@ -392,7 +392,7 @@ where
             };
 
             let Some(account_addr) = vault_substate.parent_address else {
-                warn!(target: LOG_TARGET, "👁️‍🗨️ Vault {} has no parent component. Assuming", vault_addr);
+                warn!(target: LOG_TARGET, "👁️‍🗨️ Vault {} has no parent component.", vault_addr);
                 continue;
             };
 

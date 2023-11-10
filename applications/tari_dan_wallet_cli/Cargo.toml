@@ -17,6 +17,7 @@ tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
+tari_bor = { path = "../../dan_layer/tari_bor" }
 # Needed for VersionedSubstateAddress
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
 
@@ -26,7 +27,7 @@ clap = { version = "3.2.22", features = ["derive", "env"] }
 log = "0.4.17"
 multiaddr = "0.14.0"
 reqwest = { version = "0.11.11", features = ["json"] }
-serde_json = "1.0.85"
+serde_json = "1.0"
 time = "0.3.15"
 thiserror = "1.0.36"
 tokio = { version = "1", features = ["macros"] }
