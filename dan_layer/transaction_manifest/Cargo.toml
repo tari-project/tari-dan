@@ -1,6 +1,6 @@
 [package]
 name = "tari_transaction_manifest"
-version = "0.0.3"
+version = "0.0.6"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Tari transaction manifest"

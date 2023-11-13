@@ -3,7 +3,7 @@ name = "tari_dan_wallet_storage_sqlite"
 authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet library"
 repository = "https://github.com/tari-project/tari-dan"
-version = "0.0.3"
+version = "0.0.6"
 edition = "2021"
 license = "BSD-3-Clause"
 
