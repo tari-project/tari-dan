@@ -320,7 +320,7 @@ where
             warn!(target: LOG_TARGET, "⚠ No involved shards for payload");
         }
 
-        let tx_shard_id = ShardId::from(transaction.id().into_array());
+        let tx_shard_id = ShardId::for_transaction_receipt(transaction.id().into_array().into());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
 
