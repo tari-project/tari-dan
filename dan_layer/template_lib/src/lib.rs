@@ -55,16 +55,14 @@ pub mod template;
 
 // ---------------------------------------- WASM target exports ------------------------------------------------
 
-#[cfg(target_arch = "wasm32")]
 pub mod template_dependencies;
 
 mod engine;
 pub use engine::engine;
 
-#[cfg(target_arch = "wasm32")]
 pub mod panic_hook;
 pub mod prelude;
-#[cfg(feature = "macro")]
+#[cfg(all(feature = "macro", target_arch = "wasm32"))]
 pub use prelude::template;
 // Re-export for macro
 pub use tari_bor::to_value;

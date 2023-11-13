@@ -20,14 +20,26 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-mod error;
-pub use error::PackageError;
+use wasmer::InstantiationError;
 
-mod package;
-pub use package::{Package, PackageBuilder};
+use crate::wasm::WasmExecutionError;
 
-mod template;
-pub use template::LoadedTemplate;
+#[derive(Debug, thiserror::Error)]
+pub enum TemplateLoaderError {
+    #[error(transparent)]
+    WasmModuleError(#[from] WasmExecutionError),
+    #[error(transparent)]
+    CompileError(#[from] wasmer::CompileError),
+    #[error(transparent)]
+    InstantiationError(Box<wasmer::InstantiationError>),
+    #[error(transparent)]
+    HostEnvInitError(#[from] wasmer::HostEnvInitError),
+    #[error("Runtime error: {0}")]
+    RuntimeError(#[from] wasmer::RuntimeError),
+}
 
-mod template_loader;
-pub use template_loader::TemplateModuleLoader;
+impl From<wasmer::InstantiationError> for TemplateLoaderError {
+    fn from(value: InstantiationError) -> Self {
+        Self::InstantiationError(Box::new(value))
+    }
+}

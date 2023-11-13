@@ -15,8 +15,8 @@ use crate::{
         FlowEngineError,
     },
     function_definitions::FunctionArgDefinition,
-    packager::LoadedTemplate,
     runtime::Runtime,
+    template::LoadedTemplate,
 };
 
 #[derive(Clone, Debug)]

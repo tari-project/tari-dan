@@ -1,8 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-mod support;
-
 use tari_dan_engine::runtime::{LockError, RuntimeError};
 use tari_engine_types::indexed_value::IndexedWellKnownTypes;
 use tari_template_lib::{
@@ -11,10 +9,8 @@ use tari_template_lib::{
     constants::XTR2,
     models::{Amount, ComponentAddress, ResourceAddress},
 };
-use tari_template_test_tooling::TemplateTest;
+use tari_template_test_tooling::{assert_error::assert_reject_reason, TemplateTest};
 use tari_transaction::Transaction;
-
-use crate::support::assert_error::assert_reject_reason;
 
 #[test]
 fn it_rejects_dangling_vaults_in_constructor() {

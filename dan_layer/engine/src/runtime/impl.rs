@@ -85,7 +85,6 @@ use tari_template_lib::{
 
 use super::{tracker::FinalizeData, Runtime};
 use crate::{
-    packager::LoadedTemplate,
     runtime::{
         engine_args::EngineArgs,
         locking::{LockError, LockedSubstate},
@@ -97,6 +96,7 @@ use crate::{
         RuntimeModule,
     },
     state_store::AtomicDb,
+    template::LoadedTemplate,
     transaction::TransactionProcessor,
 };
 

@@ -9,7 +9,7 @@ use std::{fs, path::Path};
 use convert_case::{Case, Casing};
 use liquid::model::Value;
 use tari_dan_engine::{
-    packager::{LoadedTemplate, TemplateModuleLoader},
+    template::{LoadedTemplate, TemplateModuleLoader},
     wasm::compile::compile_template,
 };
 
