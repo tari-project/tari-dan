@@ -1,6 +1,6 @@
 [package]
 name = "tari_template_lib"
-version = "0.0.6"
+version = "0.0.7"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Tari template library provides abstrations that interface with the Tari validator engine"
