@@ -8,6 +8,7 @@ use tari_template_lib::{
     prelude::ConfidentialOutputProof,
 };
 use tari_template_test_tooling::{SubstateType, TemplateTest};
+use tari_transaction::Transaction;
 use tari_transaction_manifest::ManifestValue;
 
 use self::utilities::*;
@@ -33,7 +34,31 @@ fn mint_initial_commitment() {
 
     let total_supply: Amount = template_test.call_method(faucet, "total_supply", args![], vec![]);
     // The number of commitments
+    // TODO: the total supply should be corrected for confidential resources. When minting, we could use the
+    //       minimum_value_promise and an excess sig.
     assert_eq!(total_supply, Amount(0));
+}
+
+#[test]
+fn mint_more_later() {
+    let (confidential_proof, _mask, _change) = generate_confidential_proof(Amount(0), None);
+    let (mut template_test, faucet, _faucet_resx) = setup(confidential_proof);
+
+    let (confidential_proof, mask, _change) = generate_confidential_proof(Amount(100), None);
+    template_test.call_method::<()>(faucet, "mint_more", args![confidential_proof], vec![]);
+
+    let (user_account, user_proof, user_key) = template_test.create_empty_account();
+
+    let withdraw_proof = generate_withdraw_proof(&mask, Amount(100), None, Amount(0));
+    template_test.execute_expect_success(
+        Transaction::builder()
+            .call_method(faucet, "take_free_coins", args![withdraw_proof.proof])
+            .put_last_instruction_output_on_workspace("coins")
+            .call_method(user_account, "deposit", args![Workspace("coins")])
+            .sign(&user_key)
+            .build(),
+        vec![user_proof],
+    );
 }
 
 #[test]
@@ -165,8 +190,7 @@ fn reveal_confidential_and_transfer() {
     // Reveal 90 tokens and 10 confidentially
     let reveal_proof = generate_withdraw_proof(&proof.output_mask, Amount(10), Some(Amount(900)), Amount(90));
     // Then reveal the rest
-    let reveal_bucket_proof =
-        generate_withdraw_proof(&reveal_proof.output_mask, Amount(0), Some(Amount(0)), Amount(10));
+    let reveal_bucket_proof = generate_withdraw_proof(&reveal_proof.output_mask, Amount(0), None, Amount(10));
 
     // Transfer faucet funds into account 1
     let vars = [
@@ -357,7 +381,7 @@ fn multi_commitment_join() {
 }
 
 /// These would live in the wallet
-pub mod utilities {
+mod utilities {
     use rand::rngs::OsRng;
     use tari_common_types::types::{BulletRangeProof, PrivateKey, PublicKey, Signature};
     use tari_crypto::{
@@ -440,7 +464,6 @@ pub mod utilities {
         let balance_proof = generate_balance_proof(input_mask, &output_mask, change_mask.as_ref(), revealed_amount);
 
         let output_statement = output_proof.output_statement;
-        let change_statement = output_proof.change_statement.unwrap();
 
         WithdrawProofOutput {
             output_mask,
@@ -455,11 +478,11 @@ pub mod utilities {
                         minimum_value_promise: output_statement.minimum_value_promise,
                         revealed_amount,
                     },
-                    change_statement: Some(ConfidentialStatement {
-                        commitment: change_statement.commitment,
+                    change_statement: output_proof.change_statement.map(|statement| ConfidentialStatement {
+                        commitment: statement.commitment,
                         sender_public_nonce: Default::default(),
                         encrypted_data: EncryptedData::default(),
-                        minimum_value_promise: change_statement.minimum_value_promise,
+                        minimum_value_promise: statement.minimum_value_promise,
                         revealed_amount: Amount::zero(),
                     }),
                     range_proof: output_proof.range_proof,
