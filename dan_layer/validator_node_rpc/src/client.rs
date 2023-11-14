@@ -108,6 +108,7 @@ impl TariCommsValidatorNodeRpcClient {
                 return Ok(client.clone());
             }
         }
+
         let mut conn = self
             .connectivity
             .dial_peer(NodeId::from_public_key(&self.address))
