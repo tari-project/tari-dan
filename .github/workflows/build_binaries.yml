@@ -101,13 +101,11 @@ jobs:
           echo "S3DESTOVERRIDE=daily/" >> $GITHUB_ENV
 
       - name: Setup Rust toolchain
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           components: rustfmt, clippy
           toolchain: ${{ matrix.builds.rust }}
-          target: ${{ matrix.builds.target }}
-          override: true
+          targets: ${{ matrix.builds.target }}
 
       - uses: rui314/setup-mold@v1
 
@@ -164,7 +162,7 @@ jobs:
           # choco upgrade strawberryperl -y
 
       - name: Set environment variables - Nix
-        if: "!startsWith(runner.os,'Windows')"
+        if: ${{ ! startsWith(runner.os,'Windows') }}
         run: |
           echo "SHARUN=shasum --algorithm 256" >> $GITHUB_ENV
           echo "CC=gcc" >> $GITHUB_ENV
@@ -205,27 +203,12 @@ jobs:
           echo "LIBCLANG_PATH=C:\Program Files\LLVM\bin" >> $GITHUB_ENV
           echo "C:\Strawberry\perl\bin" >> $GITHUB_PATH
 
+      # Don't use caches for binary builds. Start from a clean slate - on release
       - name: Cache cargo files and outputs
+        if: ${{ ! startsWith(github.ref, 'refs/tags/v') }}
         uses: Swatinem/rust-cache@v2
 
-        # Fix me soon!
-      - name: Build rust binaries - hardcoded (linux-arm64)
-        if: ${{ matrix.builds.name == 'linux-arm64' }}
-        shell: bash
-        run: |
-          export RUSTFLAGS="-C target_cpu=generic"
-          export ROARING_ARCH=generic
-          export BUILD_TARGET="aarch64-unknown-linux-gnu/"
-          export RUST_TARGET="--target=aarch64-unknown-linux-gnu"
-          export ARCH=generic
-          export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
-          export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
-          export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
-          export BINDGEN_EXTRA_CLANG_ARGS="--sysroot /usr/aarch64-linux-gnu/include/"
-          cargo build --release --target ${{ matrix.builds.target }} ${{ matrix.builds.target_bins }}
-
       - name: Build rust binaries - Normal
-        if: ${{ matrix.builds.name != 'linux-arm64' }}
         shell: bash
         run: |
           if [ "${{ matrix.builds.cross }}" != "true" ]; then
