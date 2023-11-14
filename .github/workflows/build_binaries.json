@@ -16,7 +16,7 @@
     "cross": true,
     "target_cpu": "generic",
     "features": "",
-    "build_enabled": true
+    "build_enabled": false
   },
   {
     "name": "macos-x86_64",
