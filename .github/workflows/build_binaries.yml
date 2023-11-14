@@ -113,7 +113,7 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
 
       - name: Install Linux dependencies - Ubuntu
-        if: startsWith(runner.os,'Linux') && ${{ matrix.builds.cross }} != "true"
+        if: ${{ startsWith(runner.os,'Linux') && matrix.builds.cross != 'true' }}
         run: |
           sudo apt-get update
           sudo apt-get -y install \
