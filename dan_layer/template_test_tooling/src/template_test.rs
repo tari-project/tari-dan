@@ -330,11 +330,19 @@ impl TemplateTest {
     }
 
     pub fn get_test_proof(&self) -> NonFungibleAddress {
-        NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(self.public_key.as_bytes()).unwrap())
+        NonFungibleAddress::from_public_key(self.get_test_public_key_bytes())
     }
 
     pub fn get_test_secret_key(&self) -> &RistrettoSecretKey {
         &self.secret_key
+    }
+
+    pub fn get_test_public_key(&self) -> &RistrettoPublicKey {
+        &self.public_key
+    }
+
+    pub fn get_test_public_key_bytes(&self) -> RistrettoPublicKeyBytes {
+        RistrettoPublicKeyBytes::from_bytes(self.public_key.as_bytes()).unwrap()
     }
 
     pub fn create_empty_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
