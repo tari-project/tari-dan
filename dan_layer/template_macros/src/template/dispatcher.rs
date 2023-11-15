@@ -30,11 +30,13 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
     let dispatcher_function_name = format_ident!("{}_main", ast.template_name);
     let function_names = get_function_names(ast);
     let function_blocks = get_function_blocks(ast);
+    let uses = &ast.uses;
 
     let output = quote! {
         #[no_mangle]
         pub unsafe extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
             use ::tari_template_lib::template_dependencies::*;
+            #( #uses )*
 
             #[cfg(not(target_arch = "wasm32"))]
             compile_error!("Must compile template with --target wasm32-unknown-unknown");

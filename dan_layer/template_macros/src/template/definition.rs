@@ -27,7 +27,7 @@ use crate::template::ast::TemplateAst;
 
 pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
     let template_mod_name = format_ident!("{}_template", ast.template_name);
-    let (_, items) = ast.module.content.as_ref().expect("Module must contain content");
+    let items = &ast.module_content;
 
     quote! {
         #[allow(non_snake_case)]
