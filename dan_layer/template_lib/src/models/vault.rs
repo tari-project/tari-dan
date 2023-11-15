@@ -33,7 +33,7 @@ use tari_template_abi::{
     EngineOp,
 };
 
-use super::{BinaryTag, Proof};
+use super::{BinaryTag, Proof, ProofAuth};
 use crate::{
     args::{
         ConfidentialRevealArg,
@@ -306,6 +306,11 @@ impl Vault {
     pub fn join_confidential(&mut self, proof: ConfidentialWithdrawProof) {
         let bucket = self.withdraw_confidential(proof);
         self.deposit(bucket);
+    }
+
+    pub fn authorize(&self) -> ProofAuth {
+        let proof = self.create_proof();
+        ProofAuth { id: proof.id() }
     }
 
     pub fn create_proof(&self) -> Proof {

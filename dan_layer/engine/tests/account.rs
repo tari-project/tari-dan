@@ -1,22 +1,18 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-mod support;
-
 use tari_dan_engine::runtime::ActionIdent;
 use tari_engine_types::instruction::Instruction;
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress, ResourceAddress},
 };
-use tari_template_test_tooling::TemplateTest;
+use tari_template_test_tooling::{assert_error::assert_access_denied_for_action, TemplateTest};
 use tari_transaction::Transaction;
-
-use crate::support::assert_error::assert_access_denied_for_action;
 
 #[test]
 fn basic_faucet_transfer() {
-    let mut template_test = TemplateTest::new(vec!["tests/templates/faucet"]);
+    let mut template_test = TemplateTest::new(Vec::<&str>::new());
 
     let faucet_template = template_test.get_template_address("TestFaucet");
 
@@ -103,7 +99,7 @@ fn basic_faucet_transfer() {
 
 #[test]
 fn withdraw_from_account_prevented() {
-    let mut template_test = TemplateTest::new(vec!["tests/templates/faucet"]);
+    let mut template_test = TemplateTest::new(Vec::<&str>::new());
 
     let faucet_template = template_test.get_template_address("TestFaucet");
 
@@ -195,13 +191,15 @@ fn attempt_to_overwrite_account() {
     template_test.enable_fees();
     let overwriting_tx = template_test.execute_expect_commit(
         Transaction::builder()
-                .fee_transaction_pay_from_component(source_account, Amount(1000))
-                .call_function(template_test.get_template_address("Account"), "create", args![
-                    &source_account_proof
-                ])
-                // Signed by source account so that it can pay the fees for the new account creation
-                .sign(&source_account_sk)
-                .build(),
+            .fee_transaction_pay_from_component(source_account, Amount(1000))
+            .call_function(
+                template_test.get_template_address("Account"),
+                "create",
+                args![&source_account_proof],
+            )
+            // Signed by source account so that it can pay the fees for the new account creation
+            .sign(&source_account_sk)
+            .build(),
         vec![source_account_proof],
     );
 

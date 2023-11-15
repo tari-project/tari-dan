@@ -42,7 +42,6 @@ use tari_template_lib::{
 use tari_transaction::{id_provider::IdProvider, Transaction};
 
 use crate::{
-    packager::LoadedTemplate,
     runtime::{
         scope::PushCallFrame,
         AuthParams,
@@ -55,6 +54,7 @@ use crate::{
         VirtualSubstates,
     },
     state_store::memory::MemoryStateStore,
+    template::LoadedTemplate,
     traits::Invokable,
     transaction::TransactionError,
     wasm::WasmProcess,

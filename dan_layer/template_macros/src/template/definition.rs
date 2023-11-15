@@ -27,7 +27,7 @@ use crate::template::ast::TemplateAst;
 
 pub fn generate_definition(ast: &TemplateAst) -> TokenStream {
     let template_mod_name = format_ident!("{}_template", ast.template_name);
-    let (_, items) = ast.module.content.as_ref().unwrap();
+    let items = &ast.module_content;
 
     quote! {
         #[allow(non_snake_case)]
@@ -55,6 +55,8 @@ mod tests {
     fn test_codegen() {
         let input = TokenStream::from_str(indoc! {"
             mod foo {
+                use std::collections::HashMap as _;
+
                 struct Foo {}
                 impl Foo {
                     pub fn no_args_function() -> String {
@@ -82,6 +84,7 @@ mod tests {
             #[allow(non_snake_case)]
             pub mod Foo_template {
                 use ::tari_template_lib::template_dependencies::*;
+                use std::collections::HashMap as _;
                 #[derive(Debug, serde :: Serialize, serde :: Deserialize)]
                 #[serde(crate = "self::serde")]
                 struct Foo {}

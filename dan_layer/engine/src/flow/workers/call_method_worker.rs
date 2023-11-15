@@ -11,7 +11,7 @@ use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
 };
 
-use crate::{flow::FlowContext, packager::LoadedTemplate, transaction::TransactionProcessor};
+use crate::{flow::FlowContext, template::LoadedTemplate, transaction::TransactionProcessor};
 
 pub struct CallMethodWorker {}
 

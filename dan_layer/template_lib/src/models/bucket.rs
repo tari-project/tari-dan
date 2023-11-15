@@ -105,7 +105,7 @@ impl Bucket {
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
 
-    pub fn burn(&mut self) {
+    pub fn burn(&self) {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
             action: BucketAction::Burn,

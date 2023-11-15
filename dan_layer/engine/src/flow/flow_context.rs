@@ -5,7 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 
-use crate::{function_definitions::FunctionArgDefinition, packager::LoadedTemplate, runtime::Runtime};
+use crate::{function_definitions::FunctionArgDefinition, runtime::Runtime, template::LoadedTemplate};
 
 pub struct FlowContext<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
     pub template_provider: Arc<TTemplateProvider>,

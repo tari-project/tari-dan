@@ -127,6 +127,7 @@ impl Proof {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NotAuthorized;
 
+// TODO: Clean this up
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofAccess {
     pub id: ProofId,
@@ -137,6 +138,24 @@ impl Drop for ProofAccess {
         let resp: InvokeResult = call_engine(EngineOp::ProofInvoke, &ProofInvokeArg {
             proof_ref: ProofRef::Ref(self.id),
             action: ProofAction::DropAuthorize,
+            args: invoke_args![],
+        });
+
+        resp.decode()
+            .unwrap_or_else(|_| panic!("Drop failed for proof {}", self.id));
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProofAuth {
+    pub id: ProofId,
+}
+
+impl Drop for ProofAuth {
+    fn drop(&mut self) {
+        let resp: InvokeResult = call_engine(EngineOp::ProofInvoke, &ProofInvokeArg {
+            proof_ref: ProofRef::Ref(self.id),
+            action: ProofAction::Drop,
             args: invoke_args![],
         });
 

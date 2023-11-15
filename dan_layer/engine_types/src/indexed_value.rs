@@ -95,6 +95,14 @@ impl IndexedValue {
     pub fn into_value(self) -> tari_bor::Value {
         self.value
     }
+
+    pub fn get_value<T>(&self, path: &str) -> Result<Option<T>, IndexedValueError>
+    where for<'a> T: serde::Deserialize<'a> {
+        get_value_by_path(&self.value, path)
+            .map(tari_bor::from_value)
+            .transpose()
+            .map_err(Into::into)
+    }
 }
 
 impl Default for IndexedValue {
@@ -396,6 +404,29 @@ impl From<&str> for IndexedValueError {
     }
 }
 
+fn get_value_by_path<'a>(value: &'a tari_bor::Value, path: &str) -> Option<&'a tari_bor::Value> {
+    let mut value = value;
+    for part in path.split('.') {
+        if part == "$" {
+            continue;
+        }
+        match value {
+            tari_bor::Value::Map(map) => {
+                value = &map
+                    .iter()
+                    .find(|(k, _)| k.as_text().map(|s| s == part).unwrap_or(false))?
+                    .1;
+            },
+            tari_bor::Value::Array(list) => {
+                let index: usize = part.parse().expect("invalid index");
+                value = list.get(index)?;
+            },
+            _ => return None,
+        }
+    }
+    Some(value)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -482,5 +513,8 @@ mod tests {
         assert!(indexed.bucket_ids().contains(&1.into()));
         assert!(indexed.bucket_ids().contains(&2.into()));
         assert_eq!(indexed.bucket_ids().len(), 6);
+
+        let buckets: Vec<BucketId> = indexed.get_value("$.sub_structs.1.buckets").unwrap().unwrap();
+        assert_eq!(buckets, vec![1.into(), 2.into()]);
     }
 }

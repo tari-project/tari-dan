@@ -1,8 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-mod support;
-
 use tari_dan_engine::{runtime::ActionIdent, transaction::MAX_CALL_DEPTH};
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
@@ -13,10 +11,8 @@ use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
     prelude::{Amount, ResourceAddress},
 };
-use tari_template_test_tooling::TemplateTest;
+use tari_template_test_tooling::{assert_error::assert_access_denied_for_action, TemplateTest};
 use tari_transaction::Transaction;
-
-use crate::support::assert_error::assert_access_denied_for_action;
 
 struct ComposabilityTest {
     template_test: TemplateTest,
@@ -30,11 +26,7 @@ struct ComposabilityComponentInfo {
 }
 
 fn setup() -> ComposabilityTest {
-    let template_test = TemplateTest::new(vec![
-        "tests/templates/composability",
-        "tests/templates/state",
-        "tests/templates/faucet",
-    ]);
+    let template_test = TemplateTest::new(vec!["tests/templates/composability", "tests/templates/state"]);
 
     let composability_template = template_test.get_template_address("Composability");
     let state_template = template_test.get_template_address("State");

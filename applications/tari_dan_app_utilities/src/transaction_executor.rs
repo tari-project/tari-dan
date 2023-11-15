@@ -9,9 +9,9 @@ use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_common_types::{services::template_provider::TemplateProvider, ShardId};
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
-    packager::LoadedTemplate,
     runtime::{AuthParams, RuntimeModule, VirtualSubstates},
     state_store::{memory::MemoryStateStore, StateStoreError},
+    template::LoadedTemplate,
     transaction::{TransactionError, TransactionProcessor},
 };
 use tari_dan_storage::consensus_models::ExecutedTransaction;
