@@ -36,7 +36,11 @@ pub fn generate_dispatcher(ast: &TemplateAst) -> Result<TokenStream> {
         #[no_mangle]
         pub unsafe extern "C" fn #dispatcher_function_name(call_info: *mut u8, call_info_len: usize) -> *mut u8 {
             use ::tari_template_lib::template_dependencies::*;
-            #( #uses )*
+            // include all use statements from the template module here as these may be used in the function arguments.
+            #(
+                #[allow(unused_imports)]
+                #uses
+            )*
 
             #[cfg(not(target_arch = "wasm32"))]
             compile_error!("Must compile template with --target wasm32-unknown-unknown");
