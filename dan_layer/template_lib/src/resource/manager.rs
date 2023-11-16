@@ -37,7 +37,7 @@ use crate::{
         ResourceUpdateNonFungibleDataArg,
     },
     auth::{OwnerRule, ResourceAccessRules},
-    models::{Amount, Bucket, Metadata, NonFungible, NonFungibleId, ResourceAddress},
+    models::{Amount, Bucket, ConfidentialOutputProof, Metadata, NonFungible, NonFungibleId, ResourceAddress},
     prelude::ResourceType,
 };
 
@@ -98,6 +98,12 @@ impl ResourceManager {
 
         resp.decode()
             .expect("[register_non_fungible] Failed to decode ResourceAddress, Option<Bucket> tuple")
+    }
+
+    pub fn mint_confidential(&mut self, proof: ConfidentialOutputProof) -> Bucket {
+        self.mint_internal(MintResourceArg {
+            mint_arg: MintArg::Confidential { proof: Box::new(proof) },
+        })
     }
 
     pub fn mint_non_fungible<T: Serialize, U: Serialize>(
