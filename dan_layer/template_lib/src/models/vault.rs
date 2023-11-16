@@ -313,6 +313,11 @@ impl Vault {
         ProofAuth { id: proof.id() }
     }
 
+    pub fn authorize_with<F: FnOnce() -> R, R>(&self, f: F) -> R {
+        let _auth = self.authorize();
+        f()
+    }
+
     pub fn create_proof(&self) -> Proof {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),

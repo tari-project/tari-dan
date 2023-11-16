@@ -3,3 +3,4 @@
 
 pub mod assert_error;
 pub mod confidential;
+pub mod crypto;

@@ -114,6 +114,7 @@ pub enum ComponentAction {
     GetState,
     SetState,
     SetAccessRules,
+    GetTemplateAddress,
 }
 
 #[derive(Clone, Copy, Hash, Debug, Serialize, Deserialize)]

@@ -11,7 +11,7 @@ use tari_template_lib::{
     models::{ComponentAddress, TemplateAddress},
     prelude::{Amount, ResourceAddress},
 };
-use tari_template_test_tooling::{assert_error::assert_access_denied_for_action, TemplateTest};
+use tari_template_test_tooling::{support::assert_error::assert_access_denied_for_action, TemplateTest};
 use tari_transaction::Transaction;
 
 struct ComposabilityTest {
