@@ -58,8 +58,7 @@ fn test_state() {
     let store = template_test.read_only_state_store();
 
     // constructor
-    let component_address1: ComponentAddress =
-        template_test.call_function("State", "new", args![], vec![]);
+    let component_address1: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
     template_test.assert_calls(&[
         "emit_log",
         "component_invoke",
@@ -67,8 +66,7 @@ fn test_state() {
         "finalize",
     ]);
 
-    let component_address2: ComponentAddress =
-        template_test.call_function("State", "new", args![], vec![]);
+    let component_address2: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
     assert_ne!(component_address1, component_address2);
 
     let component = store.get_component(component_address1).unwrap();
@@ -89,8 +87,7 @@ fn test_state() {
 
 #[test]
 fn test_composed() {
-    let mut template_test =
-        TemplateTest::new(vec!["tests/templates/state", "tests/templates/hello_world"]);
+    let mut template_test = TemplateTest::new(vec!["tests/templates/state", "tests/templates/hello_world"]);
 
     let functions = template_test
         .get_module("HelloWorld")
@@ -110,13 +107,10 @@ fn test_composed() {
         .collect::<Vec<_>>();
     assert_eq!(functions, vec!["new", "set", "get"]);
 
-    let component_state: ComponentAddress =
-        template_test.call_function("State", "new", args![], vec![]);
-    let component_hw: ComponentAddress =
-        template_test.call_function("HelloWorld", "new", args!["أهلا"], vec![]);
+    let component_state: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
+    let component_hw: ComponentAddress = template_test.call_function("HelloWorld", "new", args!["أهلا"], vec![]);
 
-    let result: String =
-        template_test.call_method(component_hw, "custom_greeting", args!["Wasm"], vec![]);
+    let result: String = template_test.call_method(component_hw, "custom_greeting", args!["Wasm"], vec![]);
     assert_eq!(result, "أهلا Wasm!");
 
     // call the "set" method to update the instance value
@@ -164,9 +158,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        TemplateLoaderError::WasmModuleError(WasmExecutionError::ExportError(
-            ExportError::Missing(_)
-        ))
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::ExportError(ExportError::Missing(_)))
     ));
 }
 
@@ -186,8 +178,7 @@ fn test_private_function() {
     assert_eq!(functions, vec!["new", "get", "increase"]);
 
     // check that public methods can still internally call private ones
-    let component: ComponentAddress =
-        template_test.call_function("PrivateCounter", "new", args![], vec![]);
+    let component: ComponentAddress = template_test.call_function("PrivateCounter", "new", args![], vec![]);
     template_test.call_method::<()>(component, "increase", args![], vec![]);
     let value: u32 = template_test.call_method(component, "get", args![], vec![]);
     assert_eq!(value, 1);
@@ -202,19 +193,14 @@ fn test_engine_errors() {
     let result = test
         .try_execute(
             Transaction::builder()
-                .call_function(
-                    test.get_template_address("Errors"),
-                    "invalid_engine_call",
-                    args![],
-                )
+                .call_function(test.get_template_address("Errors"), "invalid_engine_call", args![])
                 .sign(&Default::default())
                 .build(),
             vec![],
         )
         .unwrap();
 
-    let RejectReason::ExecutionFailure(reason) = result.finalize.result.full_reject().unwrap()
-    else {
+    let RejectReason::ExecutionFailure(reason) = result.finalize.result.full_reject().unwrap() else {
         panic!(
             "Unexpected transaction reject reason: {}",
             result.finalize.result.reject().unwrap()
@@ -235,8 +221,7 @@ fn test_tuples() {
     let mut template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
 
     // tuples returned in a regular function
-    let (message, number): (String, u32) =
-        template_test.call_function("Tuple", "tuple_output", args![], vec![]);
+    let (message, number): (String, u32) = template_test.call_function("Tuple", "tuple_output", args![], vec![]);
     assert_eq!(message, "Hello World!");
     assert_eq!(number, 100);
 
@@ -271,10 +256,8 @@ fn test_caller_context() {
     let mut template_test = TemplateTest::new(vec!["tests/templates/caller_context"]);
 
     // tuples returned in a regular function
-    let component: ComponentAddress =
-        template_test.call_function("CallerContextTest", "create", args![], vec![]);
-    let value: RistrettoPublicKeyBytes =
-        template_test.call_method(component, "caller_pub_key", args![], vec![]);
+    let component: ComponentAddress = template_test.call_function("CallerContextTest", "create", args![], vec![]);
+    let value: RistrettoPublicKeyBytes = template_test.call_method(component, "caller_pub_key", args![], vec![]);
     assert_eq!(
         to_hex(value.as_bytes()),
         "d884dd886cc7464402a04920485aebe6dd657b98072de655c46ec6179a52cd0d"
@@ -284,18 +267,15 @@ fn test_caller_context() {
 #[test]
 fn test_random() {
     let mut template_test = TemplateTest::new(vec!["tests/templates/random"]);
-    let component_address: ComponentAddress =
-        template_test.call_function("RandomTest", "create", args![], vec![]);
+    let component_address: ComponentAddress = template_test.call_function("RandomTest", "create", args![], vec![]);
     let value: u32 = template_test.call_method(component_address, "get_random", args![], vec![]);
     assert_ne!(value, 0);
 
-    let value: Vec<u8> =
-        template_test.call_method(component_address, "get_random_bytes", args![], vec![]);
+    let value: Vec<u8> = template_test.call_method(component_address, "get_random_bytes", args![], vec![]);
     assert_eq!(value.len(), 32);
     assert_ne!(value, vec![0; 32]);
 
-    let value: Vec<u8> =
-        template_test.call_method(component_address, "get_random_long_bytes", args![], vec![]);
+    let value: Vec<u8> = template_test.call_method(component_address, "get_random_long_bytes", args![], vec![]);
     assert_eq!(value.len(), 300);
     assert_ne!(value, vec![0; 300]);
 }
@@ -325,7 +305,7 @@ mod errors {
                     message,
                     "Panic! This error message should be included in the execution result"
                 );
-            }
+            },
             reason => panic!("Unexpected transaction reject reason: {}", reason),
         }
     }
@@ -352,7 +332,7 @@ mod errors {
                 assert!(message.starts_with(
                     "Panic! failed to decode argument at position 0 for function 'please_pass_invalid_args':"
                 ),);
-            }
+            },
             reason => panic!("Unexpected failure reason: {}", reason),
         }
     }
@@ -367,18 +347,13 @@ mod consensus {
         let mut template_test = TemplateTest::new(vec!["tests/templates/consensus"]);
 
         // the default value for a current epoch in the mocks is 0
-        let result: u64 =
-            template_test.call_function("TestConsensus", "current_epoch", args![], vec![]);
+        let result: u64 = template_test.call_function("TestConsensus", "current_epoch", args![], vec![]);
         assert_eq!(result, 0);
 
         // set the value of current epoch to "1" and call the template function again to check that it reads the new
         // value
-        template_test.set_virtual_substate(
-            VirtualSubstateAddress::CurrentEpoch,
-            VirtualSubstate::CurrentEpoch(1),
-        );
-        let result: u64 =
-            template_test.call_function("TestConsensus", "current_epoch", args![], vec![]);
+        template_test.set_virtual_substate(VirtualSubstateAddress::CurrentEpoch, VirtualSubstate::CurrentEpoch(1));
+        let result: u64 = template_test.call_function("TestConsensus", "current_epoch", args![], vec![]);
         assert_eq!(result, 1);
     }
 }
@@ -409,8 +384,7 @@ mod fungible {
             .as_component_address()
             .unwrap();
 
-        let total_supply: Amount =
-            template_test.call_method(faucet_component, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(faucet_component, "total_supply", args![], vec![]);
 
         assert_eq!(total_supply, initial_supply);
 
@@ -434,9 +408,7 @@ mod fungible {
             .unwrap();
 
         assert_eq!(
-            result.finalize.execution_results[1]
-                .decode::<Amount>()
-                .unwrap(),
+            result.finalize.execution_results[1].decode::<Amount>().unwrap(),
             initial_supply - Amount(500)
         );
 
@@ -459,9 +431,7 @@ mod fungible {
             .unwrap();
 
         assert_eq!(
-            result.finalize.execution_results[1]
-                .decode::<Amount>()
-                .unwrap(),
+            result.finalize.execution_results[1].decode::<Amount>().unwrap(),
             Amount(0)
         );
 
@@ -492,25 +462,18 @@ mod basic_nft {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
 
         let (account_address, owner_token, _) = template_test.create_owned_account();
-        let nft_component: ComponentAddress =
-            template_test.call_function("SparkleNft", "new", args![], vec![]);
+        let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![], vec![]);
 
         let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
 
         // TODO: cleanup
-        (
-            template_test,
-            (account_address, owner_token),
-            nft_component,
-            nft_resx,
-        )
+        (template_test, (account_address, owner_token), nft_component, nft_resx)
     }
 
     #[test]
     #[allow(clippy::too_many_lines)]
     fn create_resource_mint_and_deposit() {
-        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) =
-            setup();
+        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
@@ -518,8 +481,7 @@ mod basic_nft {
             ("nft_resx", nft_resx.into()),
         ];
 
-        let total_supply: Amount =
-            template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(4));
 
         let result = template_test
@@ -539,59 +501,22 @@ mod basic_nft {
         let diff = result.finalize.result.expect("execution failed");
 
         // Resource is changed
-        assert_eq!(
-            diff.down_iter()
-                .filter(|(addr, _)| addr.is_resource())
-                .count(),
-            1
-        );
-        assert_eq!(
-            diff.up_iter()
-                .filter(|(addr, _)| addr.is_resource())
-                .count(),
-            1
-        );
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
 
         // NFT and account components changed
-        assert_eq!(
-            diff.down_iter()
-                .filter(|(addr, _)| addr.is_component())
-                .count(),
-            2
-        );
-        assert_eq!(
-            diff.up_iter()
-                .filter(|(addr, _)| addr.is_component())
-                .count(),
-            2
-        );
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
 
         // One new vault created
-        assert_eq!(
-            diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(),
-            0
-        );
-        assert_eq!(
-            diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(),
-            1
-        );
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(), 1);
 
         // One new NFT minted
-        assert_eq!(
-            diff.down_iter()
-                .filter(|(addr, _)| addr.is_non_fungible())
-                .count(),
-            0
-        );
-        assert_eq!(
-            diff.up_iter()
-                .filter(|(addr, _)| addr.is_non_fungible())
-                .count(),
-            1
-        );
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
 
-        let total_supply: Amount =
-            template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(5));
 
         let result = template_test
@@ -615,40 +540,29 @@ mod basic_nft {
         result.finalize.result.expect("execution failed");
         // sparkle_nft.inner_vault_balance()
         assert_eq!(
-            result.finalize.execution_results[3]
-                .decode::<Amount>()
-                .unwrap(),
+            result.finalize.execution_results[3].decode::<Amount>().unwrap(),
             Amount(0)
         );
         // account.balance(nft_resx)
         assert_eq!(
-            result.finalize.execution_results[4]
-                .decode::<Amount>()
-                .unwrap(),
+            result.finalize.execution_results[4].decode::<Amount>().unwrap(),
             Amount(5)
         );
         // sparkle_nft.total_supply()
         assert_eq!(
-            result.finalize.execution_results[5]
-                .decode::<Amount>()
-                .unwrap(),
+            result.finalize.execution_results[5].decode::<Amount>().unwrap(),
             Amount(5)
         );
     }
 
     #[test]
     fn change_nft_mutable_data() {
-        let (mut template_test, (account_address, account_owner), nft_component, _nft_resx) =
-            setup();
+        let (mut template_test, (account_address, account_owner), nft_component, _nft_resx) = setup();
 
-        let total_supply: Amount =
-            template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(4));
 
-        let vars = [
-            ("account", account_address.into()),
-            ("nft", nft_component.into()),
-        ];
+        let vars = [("account", account_address.into()), ("nft", nft_component.into())];
 
         let result = template_test
             .execute_and_commit_manifest(
@@ -665,10 +579,7 @@ mod basic_nft {
             .unwrap();
 
         let diff = result.finalize.result.expect("execution failed");
-        let (_, state) = diff
-            .up_iter()
-            .find(|(addr, _)| addr.is_non_fungible())
-            .unwrap();
+        let (_, state) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible()).unwrap();
 
         #[derive(Debug, Clone, Serialize, Deserialize)]
         pub struct Sparkle {
@@ -693,13 +604,7 @@ mod basic_nft {
             ("nft_resx", (*nft_addr.resource_address()).into()),
             (
                 "nft_id",
-                ManifestValue::NonFungibleId(
-                    substate_addr
-                        .as_non_fungible_address()
-                        .unwrap()
-                        .id()
-                        .clone(),
-                ),
+                ManifestValue::NonFungibleId(substate_addr.as_non_fungible_address().unwrap().id().clone()),
             ),
         ];
 
@@ -753,8 +658,7 @@ mod basic_nft {
 
     #[test]
     fn mint_specific_id() {
-        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) =
-            setup();
+        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
@@ -762,8 +666,7 @@ mod basic_nft {
             ("nft_resx", nft_resx.into()),
         ];
 
-        let total_supply: Amount =
-            template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(4));
 
         let result = template_test
@@ -805,30 +708,18 @@ mod basic_nft {
                 .count(),
             1
         );
+        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u32:123").count(), 1);
+        assert_eq!(nfts.iter().filter(|n| n.to_canonical_string() == "u64:456").count(), 1);
         assert_eq!(
             nfts.iter()
-                .filter(|n| n.to_canonical_string() == "u32:123")
-                .count(),
-            1
-        );
-        assert_eq!(
-            nfts.iter()
-                .filter(|n| n.to_canonical_string() == "u64:456")
-                .count(),
-            1
-        );
-        assert_eq!(
-            nfts.iter()
-                .filter(|n| n.to_canonical_string()
-                    == "uuid:746869732077696c6c20626520696e7465727072657465642061732075756964")
+                .filter(|n| n.to_canonical_string() ==
+                    "uuid:746869732077696c6c20626520696e7465727072657465642061732075756964")
                 .count(),
             1
         );
         assert_eq!(nfts.len(), 4);
         assert_eq!(
-            result.finalize.execution_results[12]
-                .decode::<Amount>()
-                .unwrap(),
+            result.finalize.execution_results[12].decode::<Amount>().unwrap(),
             Amount(8)
         );
 
@@ -852,8 +743,7 @@ mod basic_nft {
 
     #[test]
     fn burn_nft() {
-        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) =
-            setup();
+        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) = setup();
 
         let vars = vec![
             ("account", account_address.into()),
@@ -861,8 +751,7 @@ mod basic_nft {
             ("nft_resx", nft_resx.into()),
         ];
 
-        let total_supply: Amount =
-            template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(4));
 
         template_test
@@ -879,8 +768,7 @@ mod basic_nft {
             )
             .unwrap();
 
-        let total_supply: Amount =
-            template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(5));
 
         let result = template_test
@@ -901,14 +789,11 @@ mod basic_nft {
             .unwrap();
 
         assert_eq!(
-            result.finalize.execution_results[3]
-                .decode::<Amount>()
-                .unwrap(),
+            result.finalize.execution_results[3].decode::<Amount>().unwrap(),
             Amount(4)
         );
 
-        let total_supply: Amount =
-            template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(4));
 
         // Cannot mint it again
@@ -1006,8 +891,7 @@ mod emoji_id {
                 vec![],
             )
             .unwrap();
-        let faucet_component: ComponentAddress =
-            result.finalize.execution_results[0].decode().unwrap();
+        let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let faucet_resource = result
             .finalize
             .result
@@ -1030,8 +914,7 @@ mod emoji_id {
                 vec![],
             )
             .unwrap();
-        let emoji_id_minter: ComponentAddress =
-            result.finalize.execution_results[0].decode().unwrap();
+        let emoji_id_minter: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let emoji_id_resource = result
             .finalize
             .result
@@ -1041,8 +924,7 @@ mod emoji_id {
             .unwrap();
 
         // at the beggining we don't have any emojis minted
-        let total_supply: Amount =
-            template_test.call_method(emoji_id_minter, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(0));
 
         // get some funds into the account
@@ -1084,8 +966,7 @@ mod emoji_id {
         assert_eq!(nft_balance, Amount(1));
 
         // the supply of emoji ids should have increased
-        let total_supply: Amount =
-            template_test.call_method(emoji_id_minter, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(emoji_id_minter, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(1));
 
         // emoji id are unique, so minting the same emojis again must fail
@@ -1100,9 +981,7 @@ mod emoji_id {
         .unwrap_err();
 
         // emoji ids with invalid length must fail
-        let too_long_emoji_id = iter::repeat(Emoji::Smile)
-            .take(max_emoji_id_len as usize + 1)
-            .collect();
+        let too_long_emoji_id = iter::repeat(Emoji::Smile).take(max_emoji_id_len as usize + 1).collect();
         let emoji_id = EmojiId(too_long_emoji_id);
         mint_emoji_id(
             &mut template_test,
@@ -1158,8 +1037,7 @@ mod tickets {
                 .build(),
             vec![],
         );
-        let faucet_component: ComponentAddress =
-            result.finalize.execution_results[0].decode().unwrap();
+        let faucet_component: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let faucet_resource = result
             .finalize
             .result
@@ -1175,17 +1053,17 @@ mod tickets {
         let event_description = "My music festival".to_string();
         let result = template_test.execute_expect_success(
             Transaction::builder()
-                .call_function(
-                    ticket_template,
-                    "new",
-                    args![faucet_resource, initial_supply, price, event_description],
-                )
+                .call_function(ticket_template, "new", args![
+                    faucet_resource,
+                    initial_supply,
+                    price,
+                    event_description
+                ])
                 .sign(&secret)
                 .build(),
             vec![owner_proof.clone()],
         );
-        let ticket_seller: ComponentAddress =
-            result.finalize.execution_results[0].decode().unwrap();
+        let ticket_seller: ComponentAddress = result.finalize.execution_results[0].decode().unwrap();
         let ticket_resource = result
             .finalize
             .result
@@ -1195,8 +1073,7 @@ mod tickets {
             .unwrap();
 
         // at the beggining we have the initial supply of tickeds
-        let total_supply: Amount =
-            template_test.call_method(ticket_seller, "total_supply", args![], vec![]);
+        let total_supply: Amount = template_test.call_method(ticket_seller, "total_supply", args![], vec![]);
         assert_eq!(total_supply, Amount(initial_supply as i64));
 
         // get some funds into the account
@@ -1213,11 +1090,7 @@ mod tickets {
         // buy a ticket
         template_test.execute_expect_success(
             Transaction::builder()
-                .call_method(
-                    account_address,
-                    "withdraw",
-                    args![faucet_resource, Amount(20)],
-                )
+                .call_method(account_address, "withdraw", args![faucet_resource, Amount(20)])
                 .put_last_instruction_output_on_workspace("payment")
                 .call_method(ticket_seller, "buy_ticket", args![Workspace("payment")])
                 .put_last_instruction_output_on_workspace("nft_bucket")
@@ -1228,12 +1101,8 @@ mod tickets {
         );
 
         // redeem a ticket
-        let ticket_ids: Vec<NonFungibleId> = template_test.call_method(
-            account_address,
-            "get_non_fungible_ids",
-            args![ticket_resource],
-            vec![],
-        );
+        let ticket_ids: Vec<NonFungibleId> =
+            template_test.call_method(account_address, "get_non_fungible_ids", args![ticket_resource], vec![]);
         assert_eq!(ticket_ids.len(), 1);
         let ticket_id = ticket_ids.first().unwrap().clone();
 
@@ -1242,10 +1111,7 @@ mod tickets {
             ("ticket_seller", ticket_seller.into()),
             // TODO: it's weird that the "redeem_ticket" method accepts a NonFungibleId, but we are passing a
             // SubstateAddress variable
-            (
-                "ticket_addr",
-                ManifestValue::NonFungibleId(ticket_id.clone()),
-            ),
+            ("ticket_addr", ManifestValue::NonFungibleId(ticket_id.clone())),
         ];
 
         template_test
@@ -1267,8 +1133,7 @@ mod tickets {
             pub is_redeemed: bool,
         }
 
-        let ticket_substate_addr =
-            SubstateAddress::NonFungible(NonFungibleAddress::new(ticket_resource, ticket_id));
+        let ticket_substate_addr = SubstateAddress::NonFungible(NonFungibleAddress::new(ticket_resource, ticket_id));
         let ticket_nft = template_test
             .read_only_state_store()
             .get_substate(&ticket_substate_addr)
@@ -1300,18 +1165,12 @@ mod nft_indexes {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/nft_list"]);
 
         let (account_address, owner_token, _) = template_test.create_owned_account();
-        let nft_component: ComponentAddress =
-            template_test.call_function("SparkleNft", "new", args![], vec![]);
+        let nft_component: ComponentAddress = template_test.call_function("SparkleNft", "new", args![], vec![]);
 
         let nft_resx = template_test.get_previous_output_address(SubstateType::Resource);
 
         // TODO: cleanup
-        (
-            template_test,
-            (account_address, owner_token),
-            nft_component,
-            nft_resx,
-        )
+        (template_test, (account_address, owner_token), nft_component, nft_resx)
     }
 
     #[test]
@@ -1325,12 +1184,8 @@ mod nft_indexes {
             ("nft_resx", nft_resx.clone().into()),
         ];
 
-        let total_supply: Amount = template_test.call_method(
-            nft_component,
-            "total_supply",
-            args![],
-            vec![owner_proof.clone()],
-        );
+        let total_supply: Amount =
+            template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof.clone()]);
         assert_eq!(total_supply, Amount(0));
 
         let result = template_test
@@ -1350,74 +1205,25 @@ mod nft_indexes {
         let diff = result.finalize.result.expect("execution failed");
 
         // Resource is changed
-        assert_eq!(
-            diff.down_iter()
-                .filter(|(addr, _)| addr.is_resource())
-                .count(),
-            1
-        );
-        assert_eq!(
-            diff.up_iter()
-                .filter(|(addr, _)| addr.is_resource())
-                .count(),
-            1
-        );
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_resource()).count(), 1);
 
         // NFT and account components changed
-        assert_eq!(
-            diff.down_iter()
-                .filter(|(addr, _)| addr.is_component())
-                .count(),
-            2
-        );
-        assert_eq!(
-            diff.up_iter()
-                .filter(|(addr, _)| addr.is_component())
-                .count(),
-            2
-        );
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_component()).count(), 2);
 
         // One new vault created
-        assert_eq!(
-            diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(),
-            0
-        );
-        assert_eq!(
-            diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(),
-            1
-        );
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_vault()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_vault()).count(), 1);
 
         // One new NFT minted
-        assert_eq!(
-            diff.down_iter()
-                .filter(|(addr, _)| addr.is_non_fungible())
-                .count(),
-            0
-        );
-        assert_eq!(
-            diff.up_iter()
-                .filter(|(addr, _)| addr.is_non_fungible())
-                .count(),
-            1
-        );
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
 
         // One new NFT minted
-        assert_eq!(
-            diff.down_iter()
-                .filter(|(addr, _)| addr.is_non_fungible())
-                .count(),
-            0
-        );
-        assert_eq!(
-            diff.up_iter()
-                .filter(|(addr, _)| addr.is_non_fungible())
-                .count(),
-            1
-        );
-        let (nft_addr, _) = diff
-            .up_iter()
-            .find(|(addr, _)| addr.is_non_fungible())
-            .unwrap();
+        assert_eq!(diff.down_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 0);
+        assert_eq!(diff.up_iter().filter(|(addr, _)| addr.is_non_fungible()).count(), 1);
+        let (nft_addr, _) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible()).unwrap();
 
         // One new NFT index
         assert_eq!(
@@ -1427,15 +1233,10 @@ mod nft_indexes {
             0
         );
         assert_eq!(
-            diff.up_iter()
-                .filter(|(addr, _)| addr.is_non_fungible_index())
-                .count(),
+            diff.up_iter().filter(|(addr, _)| addr.is_non_fungible_index()).count(),
             1
         );
-        let (index_addr, index) = diff
-            .up_iter()
-            .find(|(addr, _)| addr.is_non_fungible_index())
-            .unwrap();
+        let (index_addr, index) = diff.up_iter().find(|(addr, _)| addr.is_non_fungible_index()).unwrap();
         // The nft index address is composed of the resource address
         assert_eq!(
             nft_resx.as_resource_address().unwrap(),
@@ -1454,8 +1255,7 @@ mod nft_indexes {
         assert_eq!(nft_addr.to_address_string(), referenced_address.to_string());
 
         // The total supply of the resource is increased
-        let total_supply: Amount =
-            template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof]);
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof]);
         assert_eq!(total_supply, Amount(1));
     }
 }
@@ -1474,10 +1274,7 @@ mod free_test_coins {
 
         let owner_token = test.get_test_proof();
         let future_account_component = IdProvider::new(Default::default(), 1)
-            .new_component_address(
-                account_template,
-                Some(owner_token.id().as_u256().unwrap().into()),
-            )
+            .new_component_address(account_template, Some(owner_token.id().as_u256().unwrap().into()))
             .unwrap();
 
         test.execute_expect_success(
