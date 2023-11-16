@@ -38,7 +38,7 @@ use wasmer::{
 };
 
 use crate::{
-    packager::{LoadedTemplate, PackageError, TemplateModuleLoader},
+    template::{LoadedTemplate, TemplateLoaderError, TemplateModuleLoader},
     wasm::{environment::WasmEnv, metering, WasmExecutionError},
 };
 
@@ -52,7 +52,7 @@ impl WasmModule {
         Self { code }
     }
 
-    pub fn load_template_from_code(code: &[u8]) -> Result<LoadedTemplate, PackageError> {
+    pub fn load_template_from_code(code: &[u8]) -> Result<LoadedTemplate, TemplateLoaderError> {
         let store = Self::create_store();
         let module = wasmer::Module::new(&store, code)?;
         let mut env = WasmEnv::new(());
@@ -87,7 +87,7 @@ impl WasmModule {
 }
 
 impl TemplateModuleLoader for WasmModule {
-    fn load_template(&self) -> Result<LoadedTemplate, PackageError> {
+    fn load_template(&self) -> Result<LoadedTemplate, TemplateLoaderError> {
         Self::load_template_from_code(&self.code)
     }
 }

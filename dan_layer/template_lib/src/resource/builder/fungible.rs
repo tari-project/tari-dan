@@ -66,6 +66,11 @@ impl FungibleResourceBuilder {
         self
     }
 
+    pub fn with_metadata(mut self, metadata: Metadata) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
     pub fn initial_supply<A: Into<Amount>>(mut self, initial_supply: A) -> Self {
         self.initial_supply = initial_supply.into();
         self

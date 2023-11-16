@@ -20,12 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use proc_macro2::TokenStream;
-use quote::quote;
+mod error;
+pub use error::TemplateLoaderError;
 
-/// Returns code that contains global functions and types implicitly available to contract authors
-pub fn generate_dependencies() -> TokenStream {
-    quote! {
-        use tari_template_lib::template_dependencies::*;
-    }
-}
+mod loaded_template;
+pub use loaded_template::LoadedTemplate;
+
+mod template_loader;
+pub use template_loader::TemplateModuleLoader;

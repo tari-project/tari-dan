@@ -25,7 +25,7 @@ use std::string::FromUtf8Error;
 use serde_json;
 use tari_common_types::types::FixedHashSizeError;
 use tari_dan_common_types::optional::IsNotFoundError;
-use tari_dan_engine::packager::PackageError;
+use tari_dan_engine::template::TemplateLoaderError;
 use tari_dan_storage::StorageError;
 use tari_dan_storage_sqlite::error::SqliteStorageError;
 use tari_template_lib::models::TemplateAddress;
@@ -46,7 +46,7 @@ pub enum TemplateManagerError {
     #[error("The template is unavailable for use")]
     TemplateUnavailable,
     #[error(transparent)]
-    PackageError(#[from] PackageError),
+    TemplateLoaderError(#[from] TemplateLoaderError),
     #[error("Unsupported template type")]
     UnsupportedTemplateType,
     #[error("The template is not valid UTF-8: {0}")]

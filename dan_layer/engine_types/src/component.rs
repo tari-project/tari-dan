@@ -66,6 +66,10 @@ impl ComponentHeader {
         &self.body.state
     }
 
+    pub fn into_state(self) -> tari_bor::Value {
+        self.body.state
+    }
+
     pub fn as_ownership(&self) -> Ownership<'_> {
         Ownership {
             owner_key: &self.owner_key,

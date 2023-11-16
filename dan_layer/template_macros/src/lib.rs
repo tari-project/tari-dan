@@ -24,9 +24,19 @@ mod template;
 
 use proc_macro::TokenStream;
 
+/// Generates Tari template definition and dispatcher code from annotated template code.
 #[proc_macro_attribute]
 pub fn template(_attr: TokenStream, item: TokenStream) -> TokenStream {
     template::generate_template(proc_macro2::TokenStream::from(item))
+        .unwrap_or_else(|err| err.to_compile_error())
+        .into()
+}
+
+/// Returns the template code without the wasm ABI code. This allows the code to compile for non-WASM targets and allows
+/// "intellisense" to work in IDEs.
+#[proc_macro_attribute]
+pub fn template_non_wasm(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    template::generate_template_non_wasm(proc_macro2::TokenStream::from(item))
         .unwrap_or_else(|err| err.to_compile_error())
         .into()
 }

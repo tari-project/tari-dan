@@ -4,9 +4,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-mod support;
-
-use support::assert_error::assert_access_denied_for_action;
 use tari_dan_engine::runtime::{ActionIdent, RuntimeError};
 use tari_template_lib::{
     args,
@@ -22,10 +19,11 @@ use tari_template_lib::{
     },
     models::{Amount, ComponentAddress, NonFungibleId},
 };
-use tari_template_test_tooling::TemplateTest;
+use tari_template_test_tooling::{
+    assert_error::{assert_access_denied_for_action, assert_insufficient_funds_for_action, assert_reject_reason},
+    TemplateTest,
+};
 use tari_transaction::Transaction;
-
-use crate::support::assert_error::{assert_insufficient_funds_for_action, assert_reject_reason};
 
 mod component_access_rules {
 
@@ -601,16 +599,24 @@ mod resource_access_rules {
                 .call_method(component_address, "mint_new_badge", args![])
                 .put_last_instruction_output_on_workspace("badge")
                 .call_method(owner_account, "deposit", args![Workspace("badge")])
-                .call_method(owner_account, "create_proof_for_resource", args![badge_resource])
+                .call_method(
+                    owner_account,
+                    "create_proof_for_resource",
+                    args![badge_resource],
+                )
                 .put_last_instruction_output_on_workspace("proof")
                 // This is quite interesting: we have to pass in the proof to call_component_with_args_using_proof to bring it into scope so that the cross template call can use it.
                 // Another way would be for the arguments to resolve recursively at the "base" call site, rather than resolving workspace args in invoke_call. This requires indexing the Args type.
-                .call_function(cross_call_template, "call_component_with_args_using_proof", args![
-                    component_address,
-                    "take_tokens_using_proof",
-                    Workspace("proof"),
-                    args![Workspace("proof"), Amount(10)],
-                ])
+                .call_function(
+                    cross_call_template,
+                    "call_component_with_args_using_proof",
+                    args![
+                        component_address,
+                        "take_tokens_using_proof",
+                        Workspace("proof"),
+                        args![Workspace("proof"), Amount(10)],
+                    ],
+                )
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(owner_account, "deposit", args![Workspace("tokens")])
                 .drop_all_proofs_in_workspace()
@@ -620,6 +626,7 @@ mod resource_access_rules {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn it_creates_a_proof_from_bucket() {
         let mut test = TemplateTest::new(["tests/templates/access_rules"]);
@@ -684,20 +691,30 @@ mod resource_access_rules {
         // Side case: we try deposit back the badges before we drop the proof. This is invalid.
         let reason = test.execute_expect_failure(
             Transaction::builder()
-                .call_method(user_account, "withdraw_many_non_fungibles", args![badge_resource, vec![
-                    NonFungibleId::from_string("withdraw"),
-                    NonFungibleId::from_string("deposit")
-                ]])
+                .call_method(
+                    user_account,
+                    "withdraw_many_non_fungibles",
+                    args![
+                        badge_resource,
+                        vec![
+                            NonFungibleId::from_string("withdraw"),
+                            NonFungibleId::from_string("deposit")
+                        ]
+                    ],
+                )
                 .put_last_instruction_output_on_workspace("badges")
                 // TODO: this perhaps should be a native instruction
-                .call_function(access_rules_template, "create_proof_from_bucket", args![Workspace(
-                    "badges"
-                )])
+                .call_function(
+                    access_rules_template,
+                    "create_proof_from_bucket",
+                    args![Workspace("badges")],
+                )
                 .put_last_instruction_output_on_workspace("proof")
-                .call_method(component_address, "take_tokens_using_proof", args![
-                    Workspace("proof"),
-                    Amount(10)
-                ])
+                .call_method(
+                    component_address,
+                    "take_tokens_using_proof",
+                    args![Workspace("proof"), Amount(10)],
+                )
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(user_account, "deposit", args![Workspace("tokens")])
                 // Deposit before dropping the proof
@@ -717,20 +734,30 @@ mod resource_access_rules {
         // User can take tokens, using a proof obtained from a bucket
         test.execute_expect_success(
             Transaction::builder()
-                .call_method(user_account, "withdraw_many_non_fungibles", args![badge_resource, vec![
-                    NonFungibleId::from_string("withdraw"),
-                    NonFungibleId::from_string("deposit")
-                ]])
+                .call_method(
+                    user_account,
+                    "withdraw_many_non_fungibles",
+                    args![
+                        badge_resource,
+                        vec![
+                            NonFungibleId::from_string("withdraw"),
+                            NonFungibleId::from_string("deposit")
+                        ]
+                    ],
+                )
                 .put_last_instruction_output_on_workspace("badges")
                 // TODO: this perhaps should be a native instruction
-                .call_function(access_rules_template, "create_proof_from_bucket", args![Workspace(
-                    "badges"
-                )])
+                .call_function(
+                    access_rules_template,
+                    "create_proof_from_bucket",
+                    args![Workspace("badges")],
+                )
                 .put_last_instruction_output_on_workspace("proof")
-                .call_method(component_address, "take_tokens_using_proof", args![
-                    Workspace("proof"),
-                    Amount(10)
-                ])
+                .call_method(
+                    component_address,
+                    "take_tokens_using_proof",
+                    args![Workspace("proof"), Amount(10)],
+                )
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(user_account, "deposit", args![Workspace("tokens")])
                 .drop_all_proofs_in_workspace()

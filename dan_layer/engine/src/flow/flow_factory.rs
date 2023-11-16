@@ -12,8 +12,8 @@ use tari_template_abi::{ArgDef, FunctionDef, TemplateDef, TemplateDefV1, Type};
 use crate::{
     flow::{FlowContext, FlowEngineError, FlowInstance},
     function_definitions::{FlowFunctionDefinition, FunctionArgDefinition},
-    packager::LoadedTemplate,
     runtime::Runtime,
+    template::LoadedTemplate,
 };
 
 #[derive(Debug, Clone)]

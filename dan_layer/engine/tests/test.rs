@@ -22,7 +22,7 @@
 use std::iter;
 
 use tari_dan_engine::{
-    packager::{PackageError, TemplateModuleLoader},
+    template::{TemplateLoaderError, TemplateModuleLoader},
     wasm::{compile::compile_template, WasmExecutionError},
 };
 use tari_engine_types::{
@@ -130,7 +130,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::MemoryPointerOutOfRange { .. })
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::MemoryPointerOutOfRange { .. })
     ));
 
     let err = compile_template("tests/templates/buggy", &["unexpected_export_function"])
@@ -139,7 +139,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::UnexpectedAbiFunction { .. })
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::UnexpectedAbiFunction { .. })
     ));
 
     let err = compile_template("tests/templates/buggy", &["return_empty_abi"])
@@ -148,7 +148,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::AbiDecodeError(_))
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::AbiDecodeError(_))
     ));
 
     let err = compile_template("tests/templates/buggy", &[])
@@ -157,7 +157,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::ExportError(ExportError::Missing(_)))
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::ExportError(ExportError::Missing(_)))
     ));
 }
 
@@ -348,7 +348,7 @@ mod fungible {
 
     #[test]
     fn fungible_mint_and_burn() {
-        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet"]);
+        let mut template_test = TemplateTest::new(Vec::<&str>::new());
 
         let faucet_template = template_test.get_template_address("TestFaucet");
 
@@ -456,6 +456,7 @@ mod basic_nft {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn create_resource_mint_and_deposit() {
         let (mut template_test, (account_address, account_owner), nft_component, nft_resx) = setup();
 
@@ -856,7 +857,7 @@ mod emoji_id {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn mint_emoji_ids() {
-        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/emoji_id"]);
+        let mut template_test = TemplateTest::new(vec!["tests/templates/nft/emoji_id"]);
 
         // create an account
         let (account_address, owner_proof, _) = template_test.create_owned_account();
@@ -1005,7 +1006,7 @@ mod tickets {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn buy_and_redeem_ticket() {
-        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/tickets"]);
+        let mut template_test = TemplateTest::new(vec!["tests/templates/nft/tickets"]);
 
         // create an account
         let (account_address, owner_proof, secret) = template_test.create_owned_account();
@@ -1158,6 +1159,7 @@ mod nft_indexes {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn new_nft_index() {
         let (mut template_test, (account_address, owner_proof), nft_component, nft_resx) = setup();
 
@@ -1269,10 +1271,11 @@ mod free_test_coins {
                             output: None,
                         })
                         .put_last_instruction_output_on_workspace("free")
-                        .call_function(account_template, "create_with_bucket", args![
-                            owner_token.clone(),
-                            Workspace("free")
-                        ])
+                        .call_function(
+                            account_template,
+                            "create_with_bucket",
+                            args![owner_token.clone(), Workspace("free")],
+                        )
                         .call_method(future_account_component, "pay_fee", args![Amount(1000)])
                 })
                 // Checking we can create an account for another user in this transaction

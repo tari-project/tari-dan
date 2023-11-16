@@ -28,9 +28,9 @@ use tari_dan_app_utilities::transaction_executor::TransactionExecutor;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_dan_engine::{
     fees::{FeeModule, FeeTable},
-    packager::LoadedTemplate,
     runtime::{AuthParams, ConsensusContext, RuntimeModule},
     state_store::{memory::MemoryStateStore, StateStoreError},
+    template::LoadedTemplate,
     transaction::{TransactionError, TransactionProcessor},
 };
 use tari_dan_storage::consensus_models::ExecutedTransaction;

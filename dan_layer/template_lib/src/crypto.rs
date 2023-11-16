@@ -68,6 +68,12 @@ impl From<[u8; 32]> for RistrettoPublicKeyBytes {
     }
 }
 
+impl Display for RistrettoPublicKeyBytes {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_hash())
+    }
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct InvalidByteLengthError {
     size: usize,

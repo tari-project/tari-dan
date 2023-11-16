@@ -31,10 +31,21 @@ mod faucet_template {
     }
 
     impl TestFaucet {
-        pub fn new(bucket: Bucket) -> Self {
-            Self {
-                vault: Vault::from_bucket(bucket),
-            }
+        pub fn mint(initial_supply: Amount) -> Component<Self> {
+            Self::mint_with_symbol(initial_supply, "faucets".to_string())
+        }
+
+        pub fn mint_with_symbol(initial_supply: Amount, symbol: String) -> Component<Self> {
+            let coins = ResourceBuilder::fungible()
+                .with_token_symbol(symbol)
+                .initial_supply(initial_supply)
+                .build_bucket();
+
+            Component::new(Self {
+                vault: Vault::from_bucket(coins),
+            })
+            .with_access_rules(AccessRules::allow_all())
+            .create()
         }
 
         pub fn take_free_coins(&mut self) -> Bucket {
@@ -45,6 +56,11 @@ mod faucet_template {
         pub fn take_free_coins_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
             debug!("Withdrawing <unknown> coins from faucet");
             self.vault.withdraw_confidential(proof)
+        }
+
+        pub fn burn_coins(&mut self, amount: Amount) {
+            let mut bucket = self.vault.withdraw(amount);
+            bucket.burn();
         }
 
         pub fn total_supply(&self) -> Amount {

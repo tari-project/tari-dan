@@ -67,6 +67,11 @@ impl ConfidentialResourceBuilder {
         self
     }
 
+    pub fn with_metadata(mut self, metadata: Metadata) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
     pub fn initial_supply(mut self, initial_supply: ConfidentialOutputProof) -> Self {
         self.initial_supply_proof = Some(initial_supply);
         self

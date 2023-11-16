@@ -82,6 +82,7 @@ use crate::{
             mempool,
             mempool::{
                 ClaimFeeTransactionValidator,
+                EpochRangeValidator,
                 FeeTransactionValidator,
                 HasInputs,
                 HasInvolvedShards,
@@ -474,6 +475,7 @@ fn create_mempool_before_execute_validator(
     epoch_manager: EpochManagerHandle,
 ) -> impl Validator<Transaction, Error = MempoolError> {
     let mut validator = TemplateExistsValidator::new(template_manager)
+        .and_then(EpochRangeValidator::new(epoch_manager.clone()))
         .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
         .boxed();
     if !config.no_fees {

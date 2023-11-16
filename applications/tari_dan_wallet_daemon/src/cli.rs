@@ -38,7 +38,7 @@ pub struct Cli {
     pub ui_connect_address: Option<String>,
     #[clap(long, env = "SIGNALING_SERVER_ADDRESS")]
     pub signaling_server_address: Option<SocketAddr>,
-    #[clap(long, alias = "indexer_url")]
+    #[clap(long, alias = "indexer-url")]
     pub indexer_node_json_rpc_url: Option<String>,
 }
 

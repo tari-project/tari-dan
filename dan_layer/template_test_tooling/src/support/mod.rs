@@ -2,3 +2,4 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 pub mod assert_error;
+pub mod confidential;
