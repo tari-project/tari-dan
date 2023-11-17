@@ -47,6 +47,11 @@ impl ConfidentialResourceBuilder {
         self
     }
 
+    pub fn recallable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.recallable(rule);
+        self
+    }
+
     pub fn withdrawable(mut self, rule: AccessRule) -> Self {
         self.access_rules = self.access_rules.withdrawable(rule);
         self
@@ -88,14 +93,14 @@ impl ConfidentialResourceBuilder {
     }
 
     pub fn build_bucket(self) -> Bucket {
-        let mint_args = MintArg::Confidential {
+        let resource = MintArg::Confidential {
             proof: Box::new(
                 self.initial_supply_proof
                     .expect("[build_bucket] initial supply not set"),
             ),
         };
 
-        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(mint_args));
+        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(resource));
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
@@ -103,14 +108,8 @@ impl ConfidentialResourceBuilder {
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
         metadata: Metadata,
-        mint_args: Option<MintArg>,
+        resource: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(
-            ResourceType::Confidential,
-            owner_rule,
-            access_rules,
-            metadata,
-            mint_args,
-        )
+        ResourceManager::new().create(ResourceType::Confidential, owner_rule, access_rules, metadata, resource)
     }
 }

@@ -216,6 +216,9 @@ mod component_access_rules {
 }
 
 mod resource_access_rules {
+    use std::collections::BTreeMap;
+
+    use tari_template_lib::models::{ResourceAddress, VaultId};
 
     use super::*;
 
@@ -297,8 +300,9 @@ mod resource_access_rules {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
-    fn it_allows_resource_access_with_badge() {
+    fn it_allows_resource_access_with_badge_then_recall() {
         let mut test = TemplateTest::new(["tests/templates/access_rules"]);
 
         // Create sender and receiver accounts
@@ -318,18 +322,19 @@ mod resource_access_rules {
         let component_address = result.finalize.execution_results[0]
             .decode::<ComponentAddress>()
             .unwrap();
+        let vault: VaultId = test.extract_component_value(component_address, "$.badges");
         // Find the resource address for the badge from the output substates
-        let badge_resource = result
-            .finalize
-            .result
-            .accept()
+        let badge_resource = *test
+            .read_only_state_store()
+            .get_vault(&vault)
             .unwrap()
-            .up_iter()
-            .filter_map(|(addr, s)| s.substate_value().as_resource().map(|r| (addr, r)))
-            .filter(|(_, r)| r.resource_type().is_non_fungible())
-            .map(|(addr, _)| addr.as_resource_address().unwrap())
-            .next()
-            .unwrap();
+            .resource_address();
+        let vault: VaultId = test.extract_component_value(component_address, "$.tokens");
+        let token_resource = *test
+            .read_only_state_store()
+            .get_vault(&vault)
+            .unwrap()
+            .resource_address();
 
         // User cannot get the tokens
         let reason = test.execute_expect_failure(
@@ -378,8 +383,39 @@ mod resource_access_rules {
                 .drop_all_proofs_in_workspace()
                 .sign(&user_key)
                 .build(),
+            vec![user_proof.clone()],
+        );
+
+        let vaults: BTreeMap<ResourceAddress, VaultId> = test.extract_component_value(user_account, "$.vaults");
+        let user_badge_vault_id = vaults[&badge_resource];
+
+        // Recall badge
+        test.execute_expect_success(
+            Transaction::builder()
+                .call_method(component_address, "recall_badge", args![
+                    user_badge_vault_id,
+                    "withdraw"
+                ])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        // User can no longer withdraw tokens
+        let reason = test.execute_expect_failure(
+            Transaction::builder()
+                .call_method(user_account, "create_proof_for_resource", args![badge_resource])
+                .put_last_instruction_output_on_workspace("proof")
+                .call_method(user_account, "withdraw", args![token_resource, Amount(10)])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(user_account, "deposit", args![Workspace("tokens")])
+                .drop_all_proofs_in_workspace()
+                .sign(&user_key)
+                .build(),
             vec![user_proof],
         );
+
+        assert_access_denied_for_action(reason, ResourceAuthAction::Withdraw);
     }
 
     #[test]

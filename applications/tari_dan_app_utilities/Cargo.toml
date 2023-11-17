@@ -32,7 +32,6 @@ anyhow = "1.0.53"
 bytes = "1"
 chrono = "0.4.22"
 futures = { version = "^0.3.1" }
-lazy_static = "1.4.0"
 log = { version = "0.4.8", features = ["std"] }
 mini-moka = "0.10.0"
 dashmap = "5.5.0"

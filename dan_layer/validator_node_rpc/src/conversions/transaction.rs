@@ -35,7 +35,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::{
     args::Arg,
-    crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
+    crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData},
     Hash,
 };
@@ -405,7 +405,9 @@ impl TryFrom<proto::transaction::ConfidentialWithdrawProof> for ConfidentialWith
             inputs: val
                 .inputs
                 .into_iter()
-                .map(|v| checked_copy_fixed(&v).ok_or_else(|| anyhow!("Invalid length of input commitment bytes")))
+                .map(|v| {
+                    PedersonCommitmentBytes::from_bytes(&v).map_err(|e| anyhow!("Invalid input commitment bytes: {e}"))
+                })
                 .collect::<Result<_, _>>()?,
             output_proof: val
                 .output_proof
@@ -420,7 +422,7 @@ impl TryFrom<proto::transaction::ConfidentialWithdrawProof> for ConfidentialWith
 impl From<ConfidentialWithdrawProof> for proto::transaction::ConfidentialWithdrawProof {
     fn from(val: ConfidentialWithdrawProof) -> Self {
         Self {
-            inputs: val.inputs.iter().map(|v| v.to_vec()).collect(),
+            inputs: val.inputs.iter().map(|v| v.as_bytes().to_vec()).collect(),
             output_proof: Some(val.output_proof.into()),
             balance_proof: val.balance_proof.as_bytes().to_vec(),
         }
