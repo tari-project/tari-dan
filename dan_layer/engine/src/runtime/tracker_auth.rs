@@ -65,7 +65,10 @@ impl<'a> Authorization<'a> {
     ) -> Result<(), RuntimeError> {
         let resource = self.state.get_resource(locked)?;
         let scope = self.state.current_call_scope()?.auth_scope();
-        if check_ownership(self.state, scope, resource.as_ownership())? {
+
+        // Check ownership.
+        // A resource is only recallable by explicit access rules
+        if !action.is_recall() && check_ownership(self.state, scope, resource.as_ownership())? {
             // Owner can invoke any resource method
             return Ok(());
         }

@@ -134,6 +134,12 @@ pub enum ResourceAuthAction {
     UpdateAccessRules,
 }
 
+impl ResourceAuthAction {
+    pub fn is_recall(&self) -> bool {
+        matches!(self, Self::Recall)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceAccessRules {
     mintable: AccessRule,

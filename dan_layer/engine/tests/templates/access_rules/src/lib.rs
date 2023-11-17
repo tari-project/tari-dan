@@ -28,6 +28,7 @@ mod access_rules_template {
             owner_rule: OwnerRule,
             component_access_rule: ComponentAccessRules,
             resource_rules: ResourceAccessRules,
+            recall_rule: AccessRule,
         ) -> Component<AccessRulesTest> {
             let tokens = ResourceBuilder::fungible()
                 .with_owner_rule(owner_rule.clone())
@@ -35,7 +36,7 @@ mod access_rules_template {
                 .initial_supply(1000)
                 .build_bucket();
 
-            let badges = create_badge_resource(AccessRule::DenyAll);
+            let badges = create_badge_resource(recall_rule);
 
             Component::new(Self {
                 value: 0,

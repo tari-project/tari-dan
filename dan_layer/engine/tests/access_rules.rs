@@ -1,32 +1,28 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-//   Copyright 2023 The Tari Project
-//   SPDX-License-Identifier: BSD-3-Clause
-
+use std::collections::BTreeMap;
 use tari_dan_engine::runtime::{ActionIdent, RuntimeError};
 use tari_template_lib::{
     args,
     args::ComponentAction,
     auth::{
-        AccessRule,
-        ComponentAccessRules,
-        OwnerRule,
-        RequireRule,
-        ResourceAccessRules,
-        ResourceAuthAction,
-        RestrictedAccessRule,
+        AccessRule, ComponentAccessRules, OwnerRule, RequireRule, ResourceAccessRules,
+        ResourceAuthAction, RestrictedAccessRule,
     },
     models::{Amount, ComponentAddress, NonFungibleId},
 };
 use tari_template_test_tooling::{
-    assert_error::{assert_access_denied_for_action, assert_insufficient_funds_for_action, assert_reject_reason},
+    assert_error::{
+        assert_access_denied_for_action, assert_insufficient_funds_for_action, assert_reject_reason,
+    },
     TemplateTest,
 };
 use tari_transaction::Transaction;
 
-mod component_access_rules {
+use tari_template_lib::models::{ResourceAddress, VaultId};
 
+mod component_access_rules {
     use super::*;
 
     #[test]
@@ -51,14 +47,20 @@ mod component_access_rules {
 
         let result = test.execute_expect_success(
             Transaction::builder()
-                .call_function(access_rules_template, "with_configured_rules", args![
-                    // Owner
-                    OwnerRule::ByAccessRule(owner_rule),
-                    // Component
-                    component_rules,
-                    // Resource
-                    ResourceAccessRules::deny_all()
-                ])
+                .call_function(
+                    access_rules_template,
+                    "with_configured_rules",
+                    args![
+                        // Owner
+                        OwnerRule::ByAccessRule(owner_rule),
+                        // Component
+                        component_rules,
+                        // Resource
+                        ResourceAccessRules::deny_all(),
+                        // Badge recall rule
+                        AccessRule::DenyAll,
+                    ],
+                )
                 .sign(&owner1_key)
                 .build(),
             // Because we deny_all on deposits, we need to supply the owner proof to be able to deposit the initial
@@ -88,9 +90,12 @@ mod component_access_rules {
             vec![unauth_proof],
         );
 
-        assert_access_denied_for_action(reason, ActionIdent::ComponentCallMethod {
-            method: "set_value".to_string(),
-        });
+        assert_access_denied_for_action(
+            reason,
+            ActionIdent::ComponentCallMethod {
+                method: "set_value".to_string(),
+            },
+        );
     }
 
     #[test]
@@ -105,14 +110,20 @@ mod component_access_rules {
 
         let result = test.execute_expect_success(
             Transaction::builder()
-                .call_function(access_rules_template, "with_configured_rules", args![
-                    // Owner
-                    OwnerRule::OwnedBySigner,
-                    // Component
-                    ComponentAccessRules::new().default(AccessRule::DenyAll),
-                    // Resource
-                    ResourceAccessRules::deny_all(),
-                ])
+                .call_function(
+                    access_rules_template,
+                    "with_configured_rules",
+                    args![
+                        // Owner
+                        OwnerRule::OwnedBySigner,
+                        // Component
+                        ComponentAccessRules::new().default(AccessRule::DenyAll),
+                        // Resource
+                        ResourceAccessRules::deny_all(),
+                        // Badge recall rule
+                        AccessRule::DenyAll
+                    ],
+                )
                 .sign(&owner_key)
                 .build(),
             vec![owner_proof.clone()],
@@ -131,23 +142,28 @@ mod component_access_rules {
             vec![user_proof.clone()],
         );
 
-        assert_access_denied_for_action(reason, ActionIdent::ComponentCallMethod {
-            method: "set_value".to_string(),
-        });
+        assert_access_denied_for_action(
+            reason,
+            ActionIdent::ComponentCallMethod {
+                method: "set_value".to_string(),
+            },
+        );
 
         // Allow user to call set_value
         test.execute_expect_success(
             Transaction::builder()
-                .call_method(component_address, "set_component_access_rules", args![
-                    ComponentAccessRules::new()
+                .call_method(
+                    component_address,
+                    "set_component_access_rules",
+                    args![ComponentAccessRules::new()
                         .add_method_rule(
                             "set_value",
-                            AccessRule::Restricted(RestrictedAccessRule::Require(RequireRule::Require(
-                                user_proof.clone().into()
-                            )))
+                            AccessRule::Restricted(RestrictedAccessRule::Require(
+                                RequireRule::Require(user_proof.clone().into())
+                            ))
                         )
-                        .default(AccessRule::DenyAll)
-                ])
+                        .default(AccessRule::DenyAll)],
+                )
                 .sign(&owner_key)
                 .build(),
             vec![owner_proof],
@@ -163,9 +179,11 @@ mod component_access_rules {
 
         test.execute_expect_failure(
             Transaction::builder()
-                .call_method(component_address, "set_component_access_rules", args![
-                    ComponentAccessRules::new().default(AccessRule::AllowAll)
-                ])
+                .call_method(
+                    component_address,
+                    "set_component_access_rules",
+                    args![ComponentAccessRules::new().default(AccessRule::AllowAll)],
+                )
                 .sign(&user_key)
                 .build(),
             vec![user_proof],
@@ -183,14 +201,20 @@ mod component_access_rules {
 
         let result = test.execute_expect_success(
             Transaction::builder()
-                .call_function(access_rules_template, "with_configured_rules", args![
-                    // Owner
-                    OwnerRule::None,
-                    // Component
-                    ComponentAccessRules::new().default(AccessRule::AllowAll),
-                    // Resource
-                    ResourceAccessRules::new()
-                ])
+                .call_function(
+                    access_rules_template,
+                    "with_configured_rules",
+                    args![
+                        // Owner
+                        OwnerRule::None,
+                        // Component
+                        ComponentAccessRules::new().default(AccessRule::AllowAll),
+                        // Resource
+                        ResourceAccessRules::new(),
+                        // Badge recall rule
+                        AccessRule::DenyAll,
+                    ],
+                )
                 .sign(&owner_key)
                 .build(),
             vec![owner_proof.clone()],
@@ -203,9 +227,11 @@ mod component_access_rules {
         // Owner cannot set access rules
         let reason = test.execute_expect_failure(
             Transaction::builder()
-                .call_method(component_address, "set_component_access_rules", args![
-                    ComponentAccessRules::new().default(AccessRule::AllowAll)
-                ])
+                .call_method(
+                    component_address,
+                    "set_component_access_rules",
+                    args![ComponentAccessRules::new().default(AccessRule::AllowAll)],
+                )
                 .sign(&owner_key)
                 .build(),
             vec![owner_proof],
@@ -216,11 +242,8 @@ mod component_access_rules {
 }
 
 mod resource_access_rules {
-    use std::collections::BTreeMap;
-
-    use tari_template_lib::models::{ResourceAddress, VaultId};
-
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn it_denies_actions_on_resource() {
@@ -234,14 +257,20 @@ mod resource_access_rules {
 
         let result = test.execute_expect_success(
             Transaction::builder()
-                .call_function(access_rules_template, "with_configured_rules", args![
-                    // Owner
-                    OwnerRule::OwnedBySigner,
-                    // Component
-                    ComponentAccessRules::new().default(AccessRule::AllowAll),
-                    // Resource
-                    ResourceAccessRules::new().withdrawable(AccessRule::DenyAll)
-                ])
+                .call_function(
+                    access_rules_template,
+                    "with_configured_rules",
+                    args![
+                        // Owner
+                        OwnerRule::OwnedBySigner,
+                        // Component
+                        ComponentAccessRules::new().default(AccessRule::AllowAll),
+                        // Resource
+                        ResourceAccessRules::new().withdrawable(AccessRule::DenyAll),
+                        // Badge recall rule
+                        AccessRule::DenyAll,
+                    ],
+                )
                 .sign(&owner_key)
                 .build(),
             vec![owner_proof.clone()],
@@ -278,11 +307,17 @@ mod resource_access_rules {
         // Owner gives user permission to withdraw tokens
         test.execute_expect_success(
             Transaction::builder()
-                .call_method(component_address, "set_tokens_access_rules", args![
-                    ResourceAccessRules::new().withdrawable(AccessRule::Restricted(RestrictedAccessRule::Require(
-                        RequireRule::Require(user_proof.clone().into())
-                    )))
-                ])
+                .call_method(
+                    component_address,
+                    "set_tokens_access_rules",
+                    args![
+                        ResourceAccessRules::new().withdrawable(AccessRule::Restricted(
+                            RestrictedAccessRule::Require(RequireRule::Require(
+                                user_proof.clone().into()
+                            ))
+                        ))
+                    ],
+                )
                 .sign(&owner_key)
                 .build(),
             vec![owner_proof],
@@ -298,6 +333,86 @@ mod resource_access_rules {
                 .build(),
             vec![user_proof],
         );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[test]
+    fn it_denies_recall_for_owner() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        // Create sender and receiver accounts
+        let (owner_proof, owner_key) = test.create_owner_proof();
+        let (user_account, user_proof, _) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(
+                    access_rules_template,
+                    "with_configured_rules",
+                    args![
+                        // Owner - Everyone!
+                        OwnerRule::ByAccessRule(AccessRule::AllowAll),
+                        // Component
+                        ComponentAccessRules::new().default(AccessRule::AllowAll),
+                        // Resource
+                        ResourceAccessRules::new().withdrawable(AccessRule::Restricted(
+                            RestrictedAccessRule::Require(RequireRule::Require(
+                                user_proof.clone().into()
+                            ))
+                        )),
+                        // Badge recall rule
+                        AccessRule::DenyAll
+                    ],
+                )
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+
+        // Give the user a withdraw and deposit badge
+        test.execute_expect_success(
+            Transaction::builder()
+                .call_method(component_address, "take_badge_by_name", args!["withdraw"])
+                .put_last_instruction_output_on_workspace("withdraw_perm")
+                .call_method(component_address, "take_badge_by_name", args!["deposit"])
+                .put_last_instruction_output_on_workspace("deposit_perm")
+                .call_method(user_account, "deposit", args![Workspace("withdraw_perm")])
+                .call_method(user_account, "deposit", args![Workspace("deposit_perm")])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let badge_vault: VaultId = test.extract_component_value(component_address, "$.badges");
+        let badge_resource = *test
+            .read_only_state_store()
+            .get_vault(&badge_vault)
+            .unwrap()
+            .resource_address();
+        let vaults: HashMap<ResourceAddress, VaultId> =
+            test.extract_component_value(user_account, "$.vaults");
+        let user_badge_vault_id = vaults[&badge_resource];
+
+        // Now try recall them. This won't succeed because recall only respects access rules not ownership, so the call is denied for the owner.
+        let reason = test.execute_expect_failure(
+            Transaction::builder()
+                .call_method(
+                    component_address,
+                    "recall_badge",
+                    args![user_badge_vault_id, "withdraw"],
+                )
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        assert_access_denied_for_action(reason, ResourceAuthAction::Recall);
     }
 
     #[allow(clippy::too_many_lines)]
@@ -366,18 +481,23 @@ mod resource_access_rules {
         // User can take tokens
         test.execute_expect_success(
             Transaction::builder()
-                .call_method(user_account, "create_proof_by_non_fungible_ids", args![
-                    badge_resource,
-                    vec![
-                        NonFungibleId::from_string("withdraw"),
-                        NonFungibleId::from_string("deposit")
-                    ]
-                ])
+                .call_method(
+                    user_account,
+                    "create_proof_by_non_fungible_ids",
+                    args![
+                        badge_resource,
+                        vec![
+                            NonFungibleId::from_string("withdraw"),
+                            NonFungibleId::from_string("deposit")
+                        ]
+                    ],
+                )
                 .put_last_instruction_output_on_workspace("proof")
-                .call_method(component_address, "take_tokens_using_proof", args![
-                    Workspace("proof"),
-                    Amount(10)
-                ])
+                .call_method(
+                    component_address,
+                    "take_tokens_using_proof",
+                    args![Workspace("proof"), Amount(10)],
+                )
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(user_account, "deposit", args![Workspace("tokens")])
                 .drop_all_proofs_in_workspace()
@@ -386,16 +506,18 @@ mod resource_access_rules {
             vec![user_proof.clone()],
         );
 
-        let vaults: BTreeMap<ResourceAddress, VaultId> = test.extract_component_value(user_account, "$.vaults");
+        let vaults: BTreeMap<ResourceAddress, VaultId> =
+            test.extract_component_value(user_account, "$.vaults");
         let user_badge_vault_id = vaults[&badge_resource];
 
         // Recall badge
         test.execute_expect_success(
             Transaction::builder()
-                .call_method(component_address, "recall_badge", args![
-                    user_badge_vault_id,
-                    "withdraw"
-                ])
+                .call_method(
+                    component_address,
+                    "recall_badge",
+                    args![user_badge_vault_id, "withdraw"],
+                )
                 .sign(&owner_key)
                 .build(),
             vec![owner_proof.clone()],
@@ -404,7 +526,11 @@ mod resource_access_rules {
         // User can no longer withdraw tokens
         let reason = test.execute_expect_failure(
             Transaction::builder()
-                .call_method(user_account, "create_proof_for_resource", args![badge_resource])
+                .call_method(
+                    user_account,
+                    "create_proof_for_resource",
+                    args![badge_resource],
+                )
                 .put_last_instruction_output_on_workspace("proof")
                 .call_method(user_account, "withdraw", args![token_resource, Amount(10)])
                 .put_last_instruction_output_on_workspace("tokens")
@@ -479,12 +605,17 @@ mod resource_access_rules {
         // User can take tokens
         test.execute_expect_success(
             Transaction::builder()
-                .call_method(user_account, "create_proof_by_amount", args![badge_resource, Amount(1)])
+                .call_method(
+                    user_account,
+                    "create_proof_by_amount",
+                    args![badge_resource, Amount(1)],
+                )
                 .put_last_instruction_output_on_workspace("proof")
-                .call_method(access_rules_component, "take_tokens_using_proof", args![
-                    Workspace("proof"),
-                    Amount(10)
-                ])
+                .call_method(
+                    access_rules_component,
+                    "take_tokens_using_proof",
+                    args![Workspace("proof"), Amount(10)],
+                )
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(user_account, "deposit", args![Workspace("tokens")])
                 .drop_all_proofs_in_workspace()
@@ -505,14 +636,20 @@ mod resource_access_rules {
 
         let result = test.execute_expect_success(
             Transaction::builder()
-                .call_function(access_rules_template, "with_configured_rules", args![
-                    // Owner
-                    OwnerRule::OwnedBySigner,
-                    // Component
-                    ComponentAccessRules::new(),
-                    // Resource
-                    ResourceAccessRules::new(),
-                ])
+                .call_function(
+                    access_rules_template,
+                    "with_configured_rules",
+                    args![
+                        // Owner
+                        OwnerRule::OwnedBySigner,
+                        // Component
+                        ComponentAccessRules::new(),
+                        // Resource
+                        ResourceAccessRules::new(),
+                        // Badge recall rule
+                        AccessRule::DenyAll
+                    ],
+                )
                 .sign(&owner_key)
                 .build(),
             vec![owner_proof.clone()],
@@ -540,12 +677,17 @@ mod resource_access_rules {
                 .call_method(component_address, "take_tokens", args![Amount(1000)])
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(owner_account, "deposit", args![Workspace("tokens")])
-                .call_method(owner_account, "create_proof_by_amount", args![
-                    token_resource,
-                    Amount(1000)
-                ])
+                .call_method(
+                    owner_account,
+                    "create_proof_by_amount",
+                    args![token_resource, Amount(1000)],
+                )
                 .put_last_instruction_output_on_workspace("proof")
-                .call_method(owner_account, "withdraw", args![token_resource, Amount(1000)])
+                .call_method(
+                    owner_account,
+                    "withdraw",
+                    args![token_resource, Amount(1000)],
+                )
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(owner_account, "deposit", args![Workspace("tokens")])
                 .sign(&owner_key)
@@ -561,13 +703,18 @@ mod resource_access_rules {
                 .call_method(component_address, "take_tokens", args![Amount(1000)])
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(owner_account, "deposit", args![Workspace("tokens")])
-                .call_method(owner_account, "create_proof_by_amount", args![
-                    token_resource,
-                    Amount(1000)
-                ])
+                .call_method(
+                    owner_account,
+                    "create_proof_by_amount",
+                    args![token_resource, Amount(1000)],
+                )
                 .put_last_instruction_output_on_workspace("proof")
                 .drop_all_proofs_in_workspace()
-                .call_method(owner_account, "withdraw", args![token_resource, Amount(1000)])
+                .call_method(
+                    owner_account,
+                    "withdraw",
+                    args![token_resource, Amount(1000)],
+                )
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(owner_account, "deposit", args![Workspace("tokens")])
                 .sign(&owner_key)
@@ -578,7 +725,10 @@ mod resource_access_rules {
 
     #[test]
     fn it_permits_cross_template_calls_using_proofs() {
-        let mut test = TemplateTest::new(["tests/templates/access_rules", "tests/templates/composability"]);
+        let mut test = TemplateTest::new([
+            "tests/templates/access_rules",
+            "tests/templates/composability",
+        ]);
 
         // Create sender and receiver accounts
         let (owner_account, owner_proof, owner_key) = test.create_empty_account();
@@ -614,11 +764,11 @@ mod resource_access_rules {
         // when cross-template calls are made.
         let reason = test.execute_expect_failure(
             Transaction::builder()
-                .call_function(cross_call_template, "call_component_with_args", args![
-                    component_address,
-                    "take_tokens",
-                    args![Amount(10)],
-                ])
+                .call_function(
+                    cross_call_template,
+                    "call_component_with_args",
+                    args![component_address, "take_tokens", args![Amount(10)],],
+                )
                 .put_last_instruction_output_on_workspace("tokens")
                 .call_method(owner_account, "deposit", args![Workspace("tokens")])
                 .drop_all_proofs_in_workspace()
@@ -761,11 +911,14 @@ mod resource_access_rules {
             vec![user_proof.clone()],
         );
 
-        assert_reject_reason(reason, RuntimeError::InvalidOpDepositLockedBucket {
-            // badges is the 1st bucket
-            bucket_id: 0.into(),
-            locked_amount: Amount(2),
-        });
+        assert_reject_reason(
+            reason,
+            RuntimeError::InvalidOpDepositLockedBucket {
+                // badges is the 1st bucket
+                bucket_id: 0.into(),
+                locked_amount: Amount(2),
+            },
+        );
 
         // User can take tokens, using a proof obtained from a bucket
         test.execute_expect_success(
