@@ -53,10 +53,10 @@ pub struct TransactionManager<TEpochManager, TClientFactory> {
 
 impl<TEpochManager, TClientFactory, TAddr> TransactionManager<TEpochManager, TClientFactory>
 where
-    TAddr: NodeAddressable,
-    TEpochManager: EpochManagerReader<Addr = TAddr>,
-    TClientFactory: ValidatorNodeClientFactory<Addr = TAddr>,
-    <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
+    TAddr: NodeAddressable + 'static,
+    TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,
+    TClientFactory: ValidatorNodeClientFactory<Addr = TAddr> + 'static,
+    <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError + 'static,
 {
     pub fn new(
         epoch_manager: TEpochManager,

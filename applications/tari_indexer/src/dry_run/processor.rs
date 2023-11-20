@@ -59,8 +59,8 @@ pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory> {
 
 impl<TEpochManager, TClientFactory> DryRunTransactionProcessor<TEpochManager, TClientFactory>
 where
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
-    TClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
+    TEpochManager: EpochManagerReader<Addr = CommsPublicKey> + 'static,
+    TClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey> + 'static,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
 {
     pub fn new(
