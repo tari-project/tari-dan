@@ -78,7 +78,6 @@ where
 
         for _i in 0..MAX_RECURSION {
             // add all substates related to the inputs
-            // TODO: perform this loop concurrently by spawning a tokio task for each scan
             // TODO: we are going to only check the first level of recursion, for composability we may want to do it
             // recursively (with a recursion limit)
             let mut autofilled_inputs = vec![];
