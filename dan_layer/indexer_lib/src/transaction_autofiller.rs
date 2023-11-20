@@ -61,8 +61,8 @@ where
             let handle = tokio::spawn(get_substate_requirement(substate_scanner_ref.clone(), transaction_ref.clone(), requirement.clone()));
             handles.push(handle);
         }
-        for job in handles {
-            let res = job.await??;
+        for handle in handles {
+            let res = handle.await??;
             if let Some((address, substate)) = res {
                 let shard = ShardId::from_address(&address, substate.version());
                 input_shards.push(shard);
@@ -94,13 +94,17 @@ where
                 .flatten()
                 .filter(|s| !substate_requirements.iter().any(|r| r.address() == s));
 
+            // we need to fetch (in parallel) the latest version of all the related substates
+            let mut handles = HashMap::new();
+            let substate_scanner_ref = self.substate_scanner.clone();
             for address in related_addresses {
-                info!(target: LOG_TARGET, "✏️️️ Found {} related substate", address);
-
-                // we need to fetch the latest version of all the related substates
-                // note that if the version specified is "None", the scanner will fetch the latest version
-                let scan_res = self.substate_scanner.get_substate(&address, None).await?;
-
+                info!(target: LOG_TARGET, "✏️️️ Found {} related substates", address);
+                let handle = tokio::spawn( get_substate(substate_scanner_ref.clone(), address.clone(), None));
+                handles.insert(address.clone(), handle);
+            }
+            for (address, handle) in handles {
+                let scan_res = handle.await??;
+                
                 if let SubstateResult::Up { substate, address, .. } = scan_res {
                     info!(
                         target: LOG_TARGET,
@@ -185,4 +189,17 @@ where
         );
         return Ok(None);
     }
+}
+
+pub async fn get_substate<TEpochManager, TVnClient, TAddr>(
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient>>,
+    substate_address: SubstateAddress,
+    version_hint: Option<u32>,
+) -> Result<SubstateResult, IndexerError>
+where
+    TEpochManager: EpochManagerReader<Addr = TAddr>,
+    TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
+    TAddr: NodeAddressable,
+{ 
+    substate_scanner.get_substate(&substate_address, version_hint).await
 }
