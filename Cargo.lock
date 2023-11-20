@@ -9140,6 +9140,7 @@ dependencies = [
  "tari_core",
  "tari_crypto",
  "tari_engine_types",
+ "tari_hash_domains",
  "tari_mmr",
 ]
 
@@ -9333,6 +9334,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_dan_wallet_storage_sqlite",
  "tari_engine_types",
+ "tari_hash_domains",
  "tari_key_manager",
  "tari_template_lib",
  "tari_transaction",
@@ -9380,6 +9382,7 @@ dependencies = [
  "tari_bor",
  "tari_common_types",
  "tari_crypto",
+ "tari_hash_domains",
  "tari_template_abi",
  "tari_template_lib",
  "tari_utilities",
@@ -9409,6 +9412,14 @@ dependencies = [
 name = "tari_features"
 version = "0.53.0-dan.0"
 source = "git+https://github.com/tari-project/tari.git?branch=feature-dan2#9a871656e4ce1464d54107a4e3fc52181ed13e02"
+
+[[package]]
+name = "tari_hash_domains"
+version = "0.1.0"
+source = "git+https://github.com/tari-project/tari_hash_domains.git#2ccb81e2ce5dbfb213192b67af15aed3f3d0bc03"
+dependencies = [
+ "tari_crypto",
+]
 
 [[package]]
 name = "tari_indexer"

@@ -15,6 +15,7 @@ tari_mmr = { workspace = true }
 tari_core = { workspace = true, default-features = false, features = [
   "transactions",
 ] }
+tari_hash_domains = { git = "https://github.com/tari-project/tari_hash_domains.git" }
 
 libp2p-identity = { workspace = true, features = [
   "sr25519",

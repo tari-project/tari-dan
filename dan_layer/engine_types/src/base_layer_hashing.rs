@@ -28,19 +28,9 @@ use digest::{
     consts::{U32, U64},
     Digest,
 };
-use tari_crypto::{
-    hash_domain,
-    hashing::{DomainSeparatedHasher, DomainSeparation},
-};
+use tari_crypto::hashing::{DomainSeparatedHasher, DomainSeparation};
+use tari_hash_domains::{ConfidentialOutputHashDomain, WalletOutputEncryptionKeysDomain};
 use tari_template_lib::Hash;
-
-hash_domain!(ConfidentialOutputHashDomain, "com.tari.dan.confidential_output", 1);
-
-hash_domain!(
-    WalletOutputEncryptionKeysDomain,
-    "com.tari.base_layer.wallet.output_encryption_keys",
-    1
-);
 
 fn confidential_hasher32(label: &'static str) -> TariBaseLayerHasher32 {
     TariBaseLayerHasher32::new_with_label::<ConfidentialOutputHashDomain>(label)
