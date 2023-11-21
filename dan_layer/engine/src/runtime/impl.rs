@@ -448,6 +448,30 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 Ok(InvokeResult::unit())
             },
+            ComponentAction::GetTemplateAddress => {
+                let component_address =
+                    component_ref
+                        .as_component_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "component_ref",
+                            reason: "SetAccessRules component action requires a component address".to_string(),
+                        })?;
+
+                args.assert_no_args("Component::GetTemplateAddress")?;
+
+                // The template can never change so we'll just fetch the component
+                self.tracker.read_with(|state| {
+                    let substate = state.store().get_unmodified_substate(&component_address.into())?;
+                    let component = substate
+                        .substate_value()
+                        .component()
+                        .ok_or(RuntimeError::ComponentNotFound {
+                            address: component_address,
+                        })?;
+
+                    Ok(InvokeResult::encode(&component.template_address)?)
+                })
+            },
         }
     }
 
@@ -1457,7 +1481,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     &function,
                     args,
                 )
-                .map_err(|e| RuntimeError::CallFunctionError {
+                .map_err(|e| RuntimeError::CrossTemplateCallFunctionError {
                     template_address,
                     function,
                     details: e.to_string(),
@@ -1478,7 +1502,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     &method,
                     args,
                 )
-                .map_err(|e| RuntimeError::CallMethodError {
+                .map_err(|e| RuntimeError::CrossTemplateCallMethodError {
                     component_address,
                     method,
                     details: e.to_string(),

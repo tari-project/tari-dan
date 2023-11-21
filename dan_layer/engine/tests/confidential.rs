@@ -8,7 +8,11 @@ use tari_template_lib::{
     prelude::ConfidentialOutputProof,
 };
 use tari_template_test_tooling::{
-    confidential::{generate_confidential_proof, generate_withdraw_proof, generate_withdraw_proof_with_inputs},
+    support::confidential::{
+        generate_confidential_proof,
+        generate_withdraw_proof,
+        generate_withdraw_proof_with_inputs,
+    },
     SubstateType,
     TemplateTest,
 };

@@ -19,7 +19,11 @@ use tari_template_lib::{
     models::{Amount, ComponentAddress, NonFungibleId, ResourceAddress, VaultId},
 };
 use tari_template_test_tooling::{
-    assert_error::{assert_access_denied_for_action, assert_insufficient_funds_for_action, assert_reject_reason},
+    support::assert_error::{
+        assert_access_denied_for_action,
+        assert_insufficient_funds_for_action,
+        assert_reject_reason,
+    },
     TemplateTest,
 };
 use tari_transaction::Transaction;

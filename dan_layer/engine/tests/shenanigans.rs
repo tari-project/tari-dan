@@ -9,7 +9,7 @@ use tari_template_lib::{
     constants::XTR2,
     models::{Amount, ComponentAddress, ResourceAddress},
 };
-use tari_template_test_tooling::{assert_error::assert_reject_reason, TemplateTest};
+use tari_template_test_tooling::{support::assert_error::assert_reject_reason, TemplateTest};
 use tari_transaction::Transaction;
 
 #[test]

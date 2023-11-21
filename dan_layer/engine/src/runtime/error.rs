@@ -169,14 +169,14 @@ pub enum RuntimeError {
     TransactionReceiptNotFound,
     #[error("Component already exists {address}")]
     ComponentAlreadyExists { address: ComponentAddress },
-    #[error("Call function error of function '{function}' on template '{template_address}': {details}")]
-    CallFunctionError {
+    #[error("Cross-template call function error of function '{function}' on template '{template_address}': {details}")]
+    CrossTemplateCallFunctionError {
         template_address: TemplateAddress,
         function: String,
         details: String,
     },
-    #[error("Call failed for method '{method}' on component '{component_address}': {details}")]
-    CallMethodError {
+    #[error("Cross-template call failed for method '{method}' on component '{component_address}': {details}")]
+    CrossTemplateCallMethodError {
         component_address: ComponentAddress,
         method: String,
         details: String,

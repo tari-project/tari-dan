@@ -8,7 +8,7 @@ use tari_template_lib::{
     models::{Amount, NonFungibleId, ResourceAddress, VaultId},
 };
 use tari_template_test_tooling::{
-    confidential::{generate_confidential_proof, generate_withdraw_proof},
+    support::confidential::{generate_confidential_proof, generate_withdraw_proof},
     TemplateTest,
 };
 use tari_transaction::Transaction;
