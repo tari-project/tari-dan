@@ -1,6 +1,6 @@
 [package]
 name = "tari_dan_storage_sqlite"
-version = "0.0.7"
+version = "0.1.0"
 edition = "2021"
 license = "BSD-3-Clause"
 
