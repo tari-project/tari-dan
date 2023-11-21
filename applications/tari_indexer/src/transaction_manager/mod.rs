@@ -32,7 +32,7 @@ use tari_dan_common_types::{
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_epoch_manager::EpochManagerReader;
-use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller};
+use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller, substate_cache::SubstateCache};
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tari_validator_node_rpc::client::{
     SubstateResult,
@@ -45,23 +45,24 @@ use crate::transaction_manager::error::TransactionManagerError;
 
 const LOG_TARGET: &str = "tari::indexer::transaction_manager";
 
-pub struct TransactionManager<TEpochManager, TClientFactory> {
+pub struct TransactionManager<TEpochManager, TClientFactory, TSubstateCache> {
     epoch_manager: TEpochManager,
     client_provider: TClientFactory,
-    transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory>,
+    transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory, TSubstateCache>,
 }
 
-impl<TEpochManager, TClientFactory, TAddr> TransactionManager<TEpochManager, TClientFactory>
+impl<TEpochManager, TClientFactory, TAddr, TSubstateCache> TransactionManager<TEpochManager, TClientFactory, TSubstateCache>
 where
     TAddr: NodeAddressable + 'static,
     TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,
     TClientFactory: ValidatorNodeClientFactory<Addr = TAddr> + 'static,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError + 'static,
+    TSubstateCache: SubstateCache + 'static,
 {
     pub fn new(
         epoch_manager: TEpochManager,
         client_provider: TClientFactory,
-        substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory>>,
+        substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory, TSubstateCache>>,
     ) -> Self {
         Self {
             epoch_manager,

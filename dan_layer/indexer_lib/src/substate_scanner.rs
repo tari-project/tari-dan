@@ -36,26 +36,29 @@ use tari_template_lib::{
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
-use crate::{error::IndexerError, NonFungibleSubstate};
+use crate::{error::IndexerError, NonFungibleSubstate, substate_cache::SubstateCache};
 
 const LOG_TARGET: &str = "tari::indexer::dan_layer_scanner";
 
 #[derive(Debug, Clone)]
-pub struct SubstateScanner<TEpochManager, TVnClient> {
+pub struct SubstateScanner<TEpochManager, TVnClient, TSubstateCache> {
     committee_provider: TEpochManager,
     validator_node_client_factory: TVnClient,
+    substate_cache: TSubstateCache,
 }
 
-impl<TEpochManager, TVnClient, TAddr> SubstateScanner<TEpochManager, TVnClient>
+impl<TEpochManager, TVnClient, TAddr, TSubstateCache> SubstateScanner<TEpochManager, TVnClient, TSubstateCache>
 where
     TAddr: NodeAddressable,
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
+    TSubstateCache: SubstateCache
 {
-    pub fn new(committee_provider: TEpochManager, validator_node_client_factory: TVnClient) -> Self {
+    pub fn new(committee_provider: TEpochManager, validator_node_client_factory: TVnClient, substate_cache: TSubstateCache) -> Self {
         Self {
             committee_provider,
             validator_node_client_factory,
+            substate_cache,
         }
     }
 

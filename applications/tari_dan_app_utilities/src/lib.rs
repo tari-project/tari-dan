@@ -22,5 +22,6 @@
 
 pub mod base_layer_scanner;
 pub mod consensus_constants;
+pub mod substate_file_cache;
 pub mod template_manager;
 pub mod transaction_executor;

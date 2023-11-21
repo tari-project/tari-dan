@@ -15,6 +15,7 @@ tari_transaction = { path = "../transaction" }
 tari_template_lib = { path = "../template_lib" }
 tari_validator_node_rpc = { path = "../validator_node_rpc" }
 
+async-trait = "0.1.74"
 log = "0.4"
 serde = "1.0"
 rand = "0.8.5"

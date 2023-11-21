@@ -25,7 +25,7 @@ use tari_common_types::types::PublicKey;
 use tari_comms::protocol::rpc::RpcStatus;
 use tari_dan_app_utilities::{
     template_manager::implementation::TemplateManager,
-    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor, TransactionProcessorError},
+    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor, TransactionProcessorError}, substate_file_cache::SubstateFileCache,
 };
 use tari_dan_engine::{
     bootstrap_state,
@@ -72,7 +72,7 @@ pub enum DryRunTransactionProcessorError {
 #[derive(Clone, Debug)]
 pub struct DryRunTransactionProcessor {
     substate_resolver:
-        TariSubstateResolver<SqliteStateStore<PublicKey>, EpochManagerHandle, TariCommsValidatorNodeClientFactory>,
+        TariSubstateResolver<SqliteStateStore<PublicKey>, EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
     epoch_manager: EpochManagerHandle,
     payload_processor: TariDanTransactionProcessor<TemplateManager>,
 }
@@ -85,6 +85,7 @@ impl DryRunTransactionProcessor {
             SqliteStateStore<PublicKey>,
             EpochManagerHandle,
             TariCommsValidatorNodeClientFactory,
+            SubstateFileCache,
         >,
     ) -> Self {
         Self {

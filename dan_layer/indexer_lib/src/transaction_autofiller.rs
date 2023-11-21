@@ -14,7 +14,7 @@ use tari_transaction::{SubstateRequirement, Transaction};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
 use tokio::task::JoinError;
 
-use crate::{error::IndexerError, substate_decoder::find_related_substates, substate_scanner::SubstateScanner};
+use crate::{error::IndexerError, substate_decoder::find_related_substates, substate_scanner::SubstateScanner, substate_cache::SubstateCache};
 
 const LOG_TARGET: &str = "tari::indexer::transaction_autofiller";
 
@@ -28,17 +28,18 @@ pub enum TransactionAutofillerError {
     JoinError(#[from] JoinError),
 }
 
-pub struct TransactionAutofiller<TEpochManager, TVnClient> {
-    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient>>,
+pub struct TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache> {
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
 }
 
-impl<TEpochManager, TVnClient, TAddr> TransactionAutofiller<TEpochManager, TVnClient>
+impl<TEpochManager, TVnClient, TAddr, TSubstateCache> TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache>
 where
     TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr> + 'static,
     TAddr: NodeAddressable + 'static,
+    TSubstateCache: SubstateCache + 'static,
 {
-    pub fn new(substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient>>) -> Self {
+    pub fn new(substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>) -> Self {
         Self { substate_scanner }
     }
 
@@ -139,8 +140,8 @@ where
 
 }
 
-pub async fn get_substate_requirement<TEpochManager, TVnClient, TAddr>(
-    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient>>,
+pub async fn get_substate_requirement<TEpochManager, TVnClient, TAddr, TSubstateCache>(
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
     transaction: Arc<Transaction>,
     req: SubstateRequirement,
 ) -> Result<Option<(SubstateAddress, Substate)>, IndexerError>
@@ -148,6 +149,7 @@ where
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
     TAddr: NodeAddressable,
+    TSubstateCache: SubstateCache
 {
     let scan_res = match req.version() {
         Some(version) => {
@@ -190,8 +192,8 @@ where
     }
 }
 
-pub async fn get_substate<TEpochManager, TVnClient, TAddr>(
-    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient>>,
+pub async fn get_substate<TEpochManager, TVnClient, TAddr, TSubstateCache>(
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
     substate_address: SubstateAddress,
     version_hint: Option<u32>,
 ) -> Result<SubstateResult, IndexerError>
@@ -199,6 +201,7 @@ where
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
     TAddr: NodeAddressable,
+    TSubstateCache: SubstateCache
 { 
     substate_scanner.get_substate(&substate_address, version_hint).await
 }
