@@ -214,6 +214,15 @@ impl TemplateTest {
         ReadOnlyStateStore::new(self.state_store.clone())
     }
 
+    pub fn extract_component_value<T: DeserializeOwned>(&self, component_address: ComponentAddress, path: &str) -> T {
+        self.read_only_state_store()
+            .inspect_component(component_address)
+            .unwrap()
+            .get_value(path)
+            .unwrap()
+            .unwrap()
+    }
+
     pub fn default_signing_key(&self) -> &RistrettoSecretKey {
         &self.secret_key
     }

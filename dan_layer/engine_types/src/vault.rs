@@ -23,8 +23,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::Commitment;
 use tari_template_lib::{
+    crypto::PedersonCommitmentBytes,
     models::{Amount, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress, VaultId},
     prelude::ResourceType,
 };
@@ -77,8 +78,17 @@ impl Vault {
         self.resource_container.withdraw_confidential(proof)
     }
 
-    pub fn withdraw_all(&mut self) -> Result<ResourceContainer, ResourceError> {
-        self.resource_container.withdraw(self.resource_container.amount())
+    pub fn recall_all(&mut self) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container.recall_all()
+    }
+
+    pub fn recall_confidential(
+        &mut self,
+        commitments: BTreeSet<PedersonCommitmentBytes>,
+        revealed_amount: Amount,
+    ) -> Result<ResourceContainer, ResourceError> {
+        self.resource_container
+            .recall_confidential_commitments(commitments, revealed_amount)
     }
 
     pub fn balance(&self) -> Amount {
@@ -93,7 +103,7 @@ impl Vault {
         self.resource_container.get_commitment_count()
     }
 
-    pub fn get_confidential_commitments(&self) -> Option<&BTreeMap<PublicKey, ConfidentialOutput>> {
+    pub fn get_confidential_commitments(&self) -> Option<&BTreeMap<Commitment, ConfidentialOutput>> {
         self.resource_container.get_confidential_commitments()
     }
 

@@ -66,6 +66,7 @@ use tari_template_lib::{
         PayFeeArg,
         ProofAction,
         ProofRef,
+        RecallResourceArg,
         ResourceAction,
         ResourceGetNonFungibleArg,
         ResourceRef,
@@ -586,6 +587,39 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     Ok(InvokeResult::encode(&bucket)?)
                 })
             },
+            ResourceAction::Recall => {
+                let resource_address =
+                    resource_ref
+                        .as_resource_address()
+                        .ok_or_else(|| RuntimeError::InvalidArgument {
+                            argument: "resource_ref",
+                            reason: "Recall resource action requires a resource address".to_string(),
+                        })?;
+                let arg: RecallResourceArg = args.assert_one_arg()?;
+
+                self.tracker.write_with(|state| {
+                    let resource_lock =
+                        state.lock_substate(&SubstateAddress::Resource(resource_address), LockFlag::Write)?;
+
+                    state
+                        .authorization()
+                        .check_resource_access_rules(ResourceAuthAction::Recall, &resource_lock)?;
+
+                    let vault_lock = state.lock_substate(&arg.vault_id.into(), LockFlag::Write)?;
+
+                    let resource = state.recall_resource_from_vault(&vault_lock, arg.resource)?;
+
+                    let bucket_id = self.tracker.id_provider().new_bucket_id();
+                    state.new_bucket(bucket_id, resource)?;
+
+                    state.unlock_substate(vault_lock)?;
+                    state.unlock_substate(resource_lock)?;
+
+                    Ok(InvokeResult::encode(&tari_template_lib::models::Bucket::from_id(
+                        bucket_id,
+                    ))?)
+                })
+            },
             ResourceAction::GetNonFungible => {
                 let resource_address =
                     resource_ref
@@ -809,8 +843,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     let bucket_id = self.tracker.id_provider().new_bucket_id();
                     state.new_bucket(bucket_id, resource_container)?;
 
-                    state.unlock_substate(resource_lock)?;
                     state.unlock_substate(vault_lock)?;
+                    state.unlock_substate(resource_lock)?;
 
                     let bucket = tari_template_lib::models::Bucket::from_id(bucket_id);
                     Ok(InvokeResult::encode(&bucket)?)
@@ -1524,15 +1558,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
         // 4. Create the confidential resource
         let mut resource = ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            Some((
-                unclaimed_output.commitment.as_public_key().clone(),
-                ConfidentialOutput {
-                    commitment: unclaimed_output.commitment,
-                    stealth_public_nonce: diffie_hellman_public_key,
-                    encrypted_data: unclaimed_output.encrypted_data,
-                    minimum_value_promise: 0,
-                },
-            )),
+            Some((unclaimed_output.commitment.clone(), ConfidentialOutput {
+                commitment: unclaimed_output.commitment,
+                stealth_public_nonce: diffie_hellman_public_key,
+                encrypted_data: unclaimed_output.encrypted_data,
+                minimum_value_promise: 0,
+            })),
             Amount::zero(),
         );
 
@@ -1572,7 +1603,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     ) -> Result<BucketId, RuntimeError> {
         let resource = ResourceContainer::confidential(
             CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
-            output.map(|o| (o.commitment.as_public_key().clone(), o)),
+            output.map(|o| (o.commitment.clone(), o)),
             revealed_amount,
         );
 

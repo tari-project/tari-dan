@@ -11,7 +11,7 @@ use tari_crypto::{
 };
 use tari_engine_types::confidential::{challenges, ConfidentialOutput};
 use tari_template_lib::{
-    crypto::BalanceProofSignature,
+    crypto::{BalanceProofSignature, PedersonCommitmentBytes},
     models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, EncryptedData},
 };
 
@@ -53,7 +53,7 @@ impl ConfidentialCryptoApi {
         let output_proof = generate_confidential_proof(output_statement, change_statement)?;
         let input_commitments = inputs
             .iter()
-            .map(|input| copy_fixed(input.commitment.as_bytes()))
+            .map(|input| PedersonCommitmentBytes::from(copy_fixed(input.commitment.as_bytes())))
             .collect();
 
         let agg_input_mask = inputs

@@ -20,11 +20,10 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use tari_template_abi::rust::{
-    collections::HashMap,
     fmt::{Display, Formatter},
     str::FromStr,
 };
@@ -32,6 +31,7 @@ use tari_template_abi::rust::{
 use crate::{
     args::Arg,
     auth::{OwnerRule, ResourceAccessRules},
+    crypto::PedersonCommitmentBytes,
     models::{
         Amount,
         BucketId,
@@ -42,6 +42,7 @@ use crate::{
         NonFungibleId,
         ProofId,
         ResourceAddress,
+        VaultId,
         VaultRef,
     },
     prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
@@ -199,6 +200,7 @@ impl Display for ResourceRef {
 pub enum ResourceAction {
     Create,
     Mint,
+    Recall,
     UpdateNonFungibleData,
     GetTotalSupply,
     GetResourceType,
@@ -212,7 +214,7 @@ pub enum MintArg {
         amount: Amount,
     },
     NonFungible {
-        tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
+        tokens: BTreeMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
     },
     Confidential {
         proof: Box<ConfidentialOutputProof>,
@@ -244,6 +246,26 @@ pub struct ResourceUpdateNonFungibleDataArg {
     pub data: Vec<u8>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum ResourceDiscriminator {
+    Everything,
+    Fungible {
+        amount: Amount,
+    },
+    NonFungible {
+        tokens: BTreeSet<NonFungibleId>,
+    },
+    Confidential {
+        commitments: BTreeSet<PedersonCommitmentBytes>,
+        revealed_amount: Amount,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RecallResourceArg {
+    pub vault_id: VaultId,
+    pub resource: ResourceDiscriminator,
+}
 // -------------------------------- Vault -------------------------------- //
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VaultInvokeArg {

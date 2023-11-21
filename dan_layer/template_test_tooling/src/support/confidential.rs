@@ -14,7 +14,7 @@ use tari_crypto::{
 };
 use tari_engine_types::confidential::{challenges, get_commitment_factory, get_range_proof_service};
 use tari_template_lib::{
-    crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
+    crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{Amount, ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData},
 };
 
@@ -70,6 +70,13 @@ pub struct WithdrawProofOutput {
     pub proof: ConfidentialWithdrawProof,
 }
 
+impl WithdrawProofOutput {
+    pub fn to_commitment_bytes_for_output(&self, amount: Amount) -> PedersonCommitmentBytes {
+        let commitment = get_commitment_factory().commit_value(&self.output_mask, amount.value() as u64);
+        PedersonCommitmentBytes::from(copy_fixed(commitment.as_bytes()))
+    }
+}
+
 pub fn generate_withdraw_proof(
     input_mask: &PrivateKey,
     output_amount: Amount,
@@ -79,7 +86,7 @@ pub fn generate_withdraw_proof(
     let (output_proof, output_mask, change_mask) = generate_confidential_proof(output_amount, change_amount);
     let total_amount = output_amount + change_amount.unwrap_or_else(Amount::zero) + revealed_amount;
     let input_commitment = get_commitment_factory().commit_value(input_mask, total_amount.value() as u64);
-    let input_commitment = copy_fixed(input_commitment.as_bytes());
+    let input_commitment = PedersonCommitmentBytes::from(copy_fixed(input_commitment.as_bytes()));
     let balance_proof = generate_balance_proof(input_mask, &output_mask, change_mask.as_ref(), revealed_amount);
 
     let output_statement = output_proof.output_statement;
@@ -122,7 +129,7 @@ pub fn generate_withdraw_proof_with_inputs(
         .iter()
         .map(|(input_mask, amount)| {
             let input_commitment = get_commitment_factory().commit_value(input_mask, amount.value() as u64);
-            copy_fixed(input_commitment.as_bytes())
+            PedersonCommitmentBytes::from(copy_fixed(input_commitment.as_bytes()))
         })
         .collect();
     let input_private_excess = input
