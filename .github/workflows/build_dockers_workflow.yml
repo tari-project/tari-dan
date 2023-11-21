@@ -1,0 +1,125 @@
+---
+name: Build docker image - workflow_call/on-demand
+
+'on':
+  workflow_call:
+    secrets:
+      DOCKER_PROVIDER:
+        required: true
+      DOCKER_USERNAME:
+        required: true
+      DOCKER_PASSWORD:
+        required: true
+      DOCKER_REPO:
+        required: true
+    inputs:
+      arch:
+        type: string
+        default: x86-64
+      features:
+        type: string
+        default: safe
+      version:
+        type: string
+        description: 'build tag/version'
+      tag_alias:
+        type: string
+        description: 'build tag alias'
+      platforms:
+        type: string
+        # linux/arm64, linux/amd64
+        default: linux/amd64
+
+env:
+  IMAGE_NAME: tari-dan
+
+jobs:
+  docker_build:
+    # runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
+    permissions:
+      packages: write
+
+    steps:
+      - name: checkout tari-dan
+        uses: actions/checkout@v4
+
+      - name: environment setup
+        shell: bash
+        run: |
+          if [ -z "${{ inputs.version }}" ]; then
+            echo "Get current version"
+            TVN_VERSION=$(awk -F ' = ' '$1 ~ /version/ { gsub(/["]/, "", $2); printf("%s",$2) }' "${GITHUB_WORKSPACE}/applications/tari_validator_node/Cargo.toml")
+            TARI_SOURCE_ROOT="."
+            VBRANCH=$(git --git-dir ${TARI_SOURCE_ROOT}/.git branch --show-current)
+            VSHA_SHORT=$(git --git-dir ${TARI_SOURCE_ROOT}/.git rev-parse --short HEAD)
+            VERSION="v${TVN_VERSION}-${VBRANCH}_$(date -u '+%Y%m%d')_${VSHA_SHORT}"
+          else
+            VERSION=${{ inputs.version }}
+          fi
+          echo "Setting ${VERSION} as docker tag"
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          if [ ! -z "${{ inputs.tag_alias }}" ]; then
+            echo "Setup tag_alias"
+            echo "TAG_ALIAS=${{ secrets.DOCKER_PROVIDER }}/${{ secrets.DOCKER_REPO }}/${{ env.IMAGE_NAME }}:${{ inputs.tag_alias }}" >> $GITHUB_ENV
+          fi
+
+      - name: Set up QEMU for Docker
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            #name/${{ env.IMAGE_NAME }}
+            #ghcr.io/${{ github.repository }}
+            ghcr.io/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          #username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Image Provider
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.DOCKER_PROVIDER }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Docker image build and push
+        id: docker_build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker_rig/${{ env.IMAGE_NAME }}.Dockerfile
+          platforms: ${{ inputs.platforms }}
+          push: true
+          provenance: false
+          # cache-from: type=gha
+          # cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            ARCH=${{ inputs.arch }}
+            ${{ env.DOCKER_SUBTAG }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}
+            ${{ secrets.DOCKER_PROVIDER }}/${{ secrets.DOCKER_REPO }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}
+            ${{ env.TAG_ALIAS }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Image digest
+        run: echo ${{ steps.docker_build.outputs.digest }}
