@@ -37,7 +37,7 @@ impl SubstateFileCache {
             .into_string()
             .map_err(|_| SubstateCacheError("Invalid substate cache path".to_string()))?;
 
-        fs::create_dir_all(&cache_dir_path).map_err(|e| SubstateCacheError(format!("Error creating the cache directory: {}", e.to_string())))?;
+        fs::create_dir_all(&cache_dir_path).map_err(|e| SubstateCacheError(format!("Error creating the cache directory: {}", e)))?;
 
         Ok(Self {
             cache_dir_path

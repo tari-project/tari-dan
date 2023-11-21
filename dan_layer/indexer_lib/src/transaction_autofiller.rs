@@ -176,19 +176,19 @@ where
             address,
             substate.version()
         );
-        let shard = ShardId::from_address(&address, substate.version());
+        let shard = ShardId::from_address(address, substate.version());
         if transaction.all_inputs_iter().any(|s| *s == shard) {
             // Shard is already an input (TODO: what a waste)
             return Ok(None);
         }
 
-        return Ok(Some((address.clone(), substate.clone())));
+        Ok(Some((address.clone(), substate.clone())))
     } else {
         warn!(
             target: LOG_TARGET,
             "🖋️ The substate for input requirement {} is not in UP status, skipping", req
         );
-        return Ok(None);
+        Ok(None)
     }
 }
 
