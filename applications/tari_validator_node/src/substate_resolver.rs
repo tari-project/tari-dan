@@ -15,7 +15,7 @@ use tari_engine_types::{
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
-use tari_indexer_lib::{error::IndexerError, substate_scanner::SubstateScanner, substate_cache::SubstateCache};
+use tari_indexer_lib::{error::IndexerError, substate_cache::SubstateCache, substate_scanner::SubstateScanner};
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
 

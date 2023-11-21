@@ -86,7 +86,9 @@ pub struct SubstateManager {
 
 impl SubstateManager {
     pub fn new(
-        dan_layer_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>>,
+        dan_layer_scanner: Arc<
+            SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
+        >,
         substate_store: SqliteSubstateStore,
     ) -> Self {
         Self {

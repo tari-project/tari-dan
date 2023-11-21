@@ -38,9 +38,10 @@ use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_dan_app_utilities::{
     base_layer_scanner,
     consensus_constants::ConsensusConstants,
+    substate_file_cache::SubstateFileCache,
     template_manager,
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
-    transaction_executor::TariDanTransactionProcessor, substate_file_cache::SubstateFileCache,
+    transaction_executor::TariDanTransactionProcessor,
 };
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_engine::fees::FeeTable;
@@ -225,7 +226,11 @@ pub async fn spawn_services(
 
     // Mempool
     let virtual_substate_manager = VirtualSubstateManager::new(state_store.clone(), epoch_manager.clone());
-    let scanner = SubstateScanner::new(epoch_manager.clone(), validator_node_client_factory.clone(), substate_cache);
+    let scanner = SubstateScanner::new(
+        epoch_manager.clone(),
+        validator_node_client_factory.clone(),
+        substate_cache,
+    );
     let substate_resolver = TariSubstateResolver::new(
         state_store.clone(),
         scanner,

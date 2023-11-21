@@ -41,7 +41,11 @@ use tari_engine_types::{
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller, substate_cache::SubstateCache};
+use tari_indexer_lib::{
+    substate_cache::SubstateCache,
+    substate_scanner::SubstateScanner,
+    transaction_autofiller::TransactionAutofiller,
+};
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 use tokio::task;
@@ -57,7 +61,8 @@ pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory, TSubstateCa
     template_manager: TemplateManager,
 }
 
-impl<TEpochManager, TClientFactory, TSubstateCache> DryRunTransactionProcessor<TEpochManager, TClientFactory, TSubstateCache>
+impl<TEpochManager, TClientFactory, TSubstateCache>
+    DryRunTransactionProcessor<TEpochManager, TClientFactory, TSubstateCache>
 where
     TEpochManager: EpochManagerReader<Addr = CommsPublicKey> + 'static,
     TClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey> + 'static,

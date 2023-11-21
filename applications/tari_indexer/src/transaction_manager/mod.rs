@@ -32,7 +32,11 @@ use tari_dan_common_types::{
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_epoch_manager::EpochManagerReader;
-use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller, substate_cache::SubstateCache};
+use tari_indexer_lib::{
+    substate_cache::SubstateCache,
+    substate_scanner::SubstateScanner,
+    transaction_autofiller::TransactionAutofiller,
+};
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 use tari_validator_node_rpc::client::{
     SubstateResult,
@@ -51,7 +55,8 @@ pub struct TransactionManager<TEpochManager, TClientFactory, TSubstateCache> {
     transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory, TSubstateCache>,
 }
 
-impl<TEpochManager, TClientFactory, TAddr, TSubstateCache> TransactionManager<TEpochManager, TClientFactory, TSubstateCache>
+impl<TEpochManager, TClientFactory, TAddr, TSubstateCache>
+    TransactionManager<TEpochManager, TClientFactory, TSubstateCache>
 where
     TAddr: NodeAddressable + 'static,
     TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,

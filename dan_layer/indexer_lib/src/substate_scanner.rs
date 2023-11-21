@@ -36,7 +36,11 @@ use tari_template_lib::{
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
-use crate::{error::IndexerError, NonFungibleSubstate, substate_cache::{SubstateCache, SubstateCacheEntry}};
+use crate::{
+    error::IndexerError,
+    substate_cache::{SubstateCache, SubstateCacheEntry},
+    NonFungibleSubstate,
+};
 
 const LOG_TARGET: &str = "tari::indexer::dan_layer_scanner";
 
@@ -52,9 +56,13 @@ where
     TAddr: NodeAddressable,
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
-    TSubstateCache: SubstateCache
+    TSubstateCache: SubstateCache,
 {
-    pub fn new(committee_provider: TEpochManager, validator_node_client_factory: TVnClient, substate_cache: TSubstateCache) -> Self {
+    pub fn new(
+        committee_provider: TEpochManager,
+        validator_node_client_factory: TVnClient,
+        substate_cache: TSubstateCache,
+    ) -> Self {
         Self {
             committee_provider,
             validator_node_client_factory,
@@ -188,7 +196,9 @@ where
                         version: substate.version(),
                         substate_result: substate_result.clone(),
                     };
-                    self.substate_cache.write(substate_address.to_address_string(), &entry).await?;
+                    self.substate_cache
+                        .write(substate_address.to_address_string(), &entry)
+                        .await?;
                 };
             }
             Ok(substate_result.clone())

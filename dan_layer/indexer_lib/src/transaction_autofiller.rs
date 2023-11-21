@@ -14,7 +14,12 @@ use tari_transaction::{SubstateRequirement, Transaction};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
 use tokio::task::JoinError;
 
-use crate::{error::IndexerError, substate_decoder::find_related_substates, substate_scanner::SubstateScanner, substate_cache::SubstateCache};
+use crate::{
+    error::IndexerError,
+    substate_cache::SubstateCache,
+    substate_decoder::find_related_substates,
+    substate_scanner::SubstateScanner,
+};
 
 const LOG_TARGET: &str = "tari::indexer::transaction_autofiller";
 
@@ -59,7 +64,11 @@ where
         let transaction_ref = Arc::new(autofilled_transaction.clone());
         let mut handles = Vec::new();
         for requirement in &substate_requirements {
-            let handle = tokio::spawn(get_substate_requirement(substate_scanner_ref.clone(), transaction_ref.clone(), requirement.clone()));
+            let handle = tokio::spawn(get_substate_requirement(
+                substate_scanner_ref.clone(),
+                transaction_ref.clone(),
+                requirement.clone(),
+            ));
             handles.push(handle);
         }
         for handle in handles {
@@ -99,12 +108,12 @@ where
             let substate_scanner_ref = self.substate_scanner.clone();
             for address in related_addresses {
                 info!(target: LOG_TARGET, "✏️️️ Found {} related substates", address);
-                let handle = tokio::spawn( get_substate(substate_scanner_ref.clone(), address.clone(), None));
+                let handle = tokio::spawn(get_substate(substate_scanner_ref.clone(), address.clone(), None));
                 handles.insert(address.clone(), handle);
             }
             for (address, handle) in handles {
                 let scan_res = handle.await??;
-                
+
                 if let SubstateResult::Up { substate, address, .. } = scan_res {
                     info!(
                         target: LOG_TARGET,
@@ -136,8 +145,6 @@ where
 
         Ok((autofilled_transaction, found_substates))
     }
-
-
 }
 
 pub async fn get_substate_requirement<TEpochManager, TVnClient, TAddr, TSubstateCache>(
@@ -149,7 +156,7 @@ where
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
     TAddr: NodeAddressable,
-    TSubstateCache: SubstateCache
+    TSubstateCache: SubstateCache,
 {
     let scan_res = match req.version() {
         Some(version) => {
@@ -160,7 +167,8 @@ where
             }
 
             // if the client specified a version, we need to retrieve it
-            substate_scanner.get_specific_substate_from_committee(req.address(), version)
+            substate_scanner
+                .get_specific_substate_from_committee(req.address(), version)
                 .await?
         },
         None => {
@@ -201,7 +209,7 @@ where
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
     TAddr: NodeAddressable,
-    TSubstateCache: SubstateCache
-{ 
+    TSubstateCache: SubstateCache,
+{
     substate_scanner.get_substate(&substate_address, version_hint).await
 }

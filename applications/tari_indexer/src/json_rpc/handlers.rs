@@ -41,7 +41,7 @@ use tari_comms::{
 };
 use tari_crypto::tari_utilities::hex::Hex;
 use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
-use tari_dan_common_types::{Epoch, optional::Optional};
+use tari_dan_common_types::{optional::Optional, Epoch};
 use tari_dan_storage::consensus_models::Decision;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_client::types::{
@@ -105,7 +105,8 @@ pub struct JsonRpcHandlers {
     substate_manager: Arc<SubstateManager>,
     epoch_manager: EpochManagerHandle,
     transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
-    dry_run_transaction_processor: DryRunTransactionProcessor<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
+    dry_run_transaction_processor:
+        DryRunTransactionProcessor<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
 }
 
 impl JsonRpcHandlers {
@@ -114,7 +115,11 @@ impl JsonRpcHandlers {
         services: &Services,
         base_node_client: GrpcBaseNodeClient,
         substate_manager: Arc<SubstateManager>,
-        transaction_manager: TransactionManager<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
+        transaction_manager: TransactionManager<
+            EpochManagerHandle,
+            TariCommsValidatorNodeClientFactory,
+            SubstateFileCache,
+        >,
         dry_run_transaction_processor: DryRunTransactionProcessor<
             EpochManagerHandle,
             TariCommsValidatorNodeClientFactory,

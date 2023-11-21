@@ -40,6 +40,7 @@ mod substate_storage_sqlite;
 mod transaction_manager;
 
 use std::{fs, sync::Arc};
+
 use http_ui::server::run_http_ui_server;
 use log::*;
 use minotari_app_utilities::identity_management::setup_node_identity;

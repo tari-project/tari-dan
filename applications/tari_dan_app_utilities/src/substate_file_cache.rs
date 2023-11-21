@@ -20,14 +20,15 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{path::PathBuf, fs};
+use std::{fs, path::PathBuf};
+
 use async_trait::async_trait;
-use tari_bor::{encode, decode};
-use tari_indexer_lib::substate_cache::{SubstateCacheError, SubstateCache, SubstateCacheEntry};
+use tari_bor::{decode, encode};
+use tari_indexer_lib::substate_cache::{SubstateCache, SubstateCacheEntry, SubstateCacheError};
 
 #[derive(Debug, Clone)]
 pub struct SubstateFileCache {
-    cache_dir_path: String
+    cache_dir_path: String,
 }
 
 impl SubstateFileCache {
@@ -37,11 +38,10 @@ impl SubstateFileCache {
             .into_string()
             .map_err(|_| SubstateCacheError("Invalid substate cache path".to_string()))?;
 
-        fs::create_dir_all(&cache_dir_path).map_err(|e| SubstateCacheError(format!("Error creating the cache directory: {}", e)))?;
+        fs::create_dir_all(&cache_dir_path)
+            .map_err(|e| SubstateCacheError(format!("Error creating the cache directory: {}", e)))?;
 
-        Ok(Self {
-            cache_dir_path
-        })
+        Ok(Self { cache_dir_path })
     }
 }
 
@@ -52,8 +52,7 @@ impl SubstateCache for SubstateFileCache {
         match res {
             Ok(value) => {
                 // cache hit
-                let entry = decode::<SubstateCacheEntry>(&value)
-                    .map_err(|e| SubstateCacheError(e.to_string()))?;
+                let entry = decode::<SubstateCacheEntry>(&value).map_err(|e| SubstateCacheError(e.to_string()))?;
                 return Ok(Some(entry));
             },
             Err(e) => {
@@ -62,15 +61,16 @@ impl SubstateCache for SubstateFileCache {
                     return Ok(None);
                 // cache error
                 } else {
-                    return Err(SubstateCacheError(format!("{}", e)))}
+                    return Err(SubstateCacheError(format!("{}", e)));
                 }
+            },
         }
     }
 
     async fn write(&self, address: String, entry: &SubstateCacheEntry) -> Result<(), SubstateCacheError> {
-        let encoded_entry = encode(&entry)
-            .map_err(|e| SubstateCacheError(e.to_string()))?;
-        cacache::write(&self.cache_dir_path, address, encoded_entry).await
+        let encoded_entry = encode(&entry).map_err(|e| SubstateCacheError(e.to_string()))?;
+        cacache::write(&self.cache_dir_path, address, encoded_entry)
+            .await
             .map_err(|e| SubstateCacheError(format!("{}", e)))?;
         Ok(())
     }
