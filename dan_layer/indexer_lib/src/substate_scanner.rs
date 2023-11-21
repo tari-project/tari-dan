@@ -36,7 +36,7 @@ use tari_template_lib::{
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 
-use crate::{error::IndexerError, NonFungibleSubstate, substate_cache::SubstateCache};
+use crate::{error::IndexerError, NonFungibleSubstate, substate_cache::{SubstateCache, SubstateCacheEntry}};
 
 const LOG_TARGET: &str = "tari::indexer::dan_layer_scanner";
 
@@ -136,9 +136,22 @@ where
         substate_address: &SubstateAddress,
         lowest_version: u32,
     ) -> Result<SubstateResult, IndexerError> {
-        // we keep asking from version 0 upwards
         let mut version = lowest_version;
         let mut last_result = None;
+        let mut cached_version = None;
+
+        // start from the latest cached version of the substate (if cached previously)
+        let cache_res = self.substate_cache.read(substate_address.to_address_string()).await?;
+        if let Some(entry) = cache_res {
+            if entry.version > version {
+                info!(target: LOG_TARGET, "Substate cache hit for {} with version {}", entry.version, substate_address.to_address_string());
+                cached_version = Some(entry.version);
+                // we will request newer versions of the cached substate
+                version = entry.version + 1;
+                last_result = Some(entry.substate_result);
+            }
+        }
+
         loop {
             let substate_result = self
                 .get_specific_substate_from_committee(substate_address, version)
@@ -149,11 +162,38 @@ where
                     last_result = Some(result);
                     version += 1;
                 },
+                // stop if the current version does not exist
                 SubstateResult::DoesNotExist => {
-                    return Ok(last_result.unwrap_or(SubstateResult::DoesNotExist));
+                    break;
                 },
-                _ => return Ok(substate_result),
+                // stop and upgrade the last result if the substate is UP, as it's the latest
+                _ => {
+                    last_result = Some(substate_result);
+                    break;
+                },
             }
+        }
+
+        if let Some(substate_result) = &last_result {
+            // update the substate cache if the substate exists and the version is newer than the cached one
+            if let SubstateResult::Up { substate, .. } = &substate_result {
+                let should_update_cache = match cached_version {
+                    Some(v) => v < substate.version(),
+                    None => true,
+                };
+
+                if should_update_cache {
+                    info!(target: LOG_TARGET, "Updating cached substate {} with version {}", substate_address.to_address_string(), substate.version());
+                    let entry = SubstateCacheEntry {
+                        version: substate.version(),
+                        substate_result: substate_result.clone(),
+                    };
+                    self.substate_cache.write(substate_address.to_address_string(), &entry).await?;
+                };
+            }
+            Ok(substate_result.clone())
+        } else {
+            Ok(SubstateResult::DoesNotExist)
         }
     }
 

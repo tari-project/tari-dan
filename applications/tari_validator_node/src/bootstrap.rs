@@ -219,7 +219,7 @@ pub async fn spawn_services(
     handles.push(consensus_join_handle);
 
     // substate cache
-    let substate_cache_dir = config.common.base_path.join("/substate_cache");
+    let substate_cache_dir = config.common.base_path.join("substate_cache");
     let substate_cache = SubstateFileCache::new(substate_cache_dir)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Substate cache error: {}", e)))?;
 
