@@ -4,7 +4,7 @@ authors = ["The Tari Development Community"]
 description = "The Tari DAN indexer implementation"
 repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
-version = "0.0.7"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
@@ -32,7 +32,6 @@ tari_indexer_client = { path = "../../clients/tari_indexer_client" }
 tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
-tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
 tari_dan_p2p = { path = "../../dan_layer/p2p" }
 
@@ -60,7 +59,6 @@ log4rs = { version = "1.1.1", features = [
     "fixed_window_roller",
 ] }
 prost = "0.9"
-rand = "0.8"
 reqwest = "0.11.11"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

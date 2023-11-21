@@ -217,15 +217,10 @@ impl Vault {
         resp.decode().expect("failed to decode Bucket")
     }
 
+    /// Withdraws all fungible, non-fungible and revealed confidential amounts from the vault.
+    /// NOTE: blinded confidential amounts are not withdrawn as these require a ConfidentialWithdrawProof.
     pub fn withdraw_all(&mut self) -> Bucket {
         self.withdraw(self.balance())
-        // let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-        //     vault_ref: self.vault_ref(),
-        //     action: VaultAction::WithdrawAll,
-        //     args: invoke_args![],
-        // });
-        //
-        // resp.decode().expect("failed to decode Bucket")
     }
 
     pub fn balance(&self) -> Amount {
@@ -311,6 +306,11 @@ impl Vault {
     pub fn authorize(&self) -> ProofAuth {
         let proof = self.create_proof();
         ProofAuth { id: proof.id() }
+    }
+
+    pub fn authorize_with<F: FnOnce() -> R, R>(&self, f: F) -> R {
+        let _auth = self.authorize();
+        f()
     }
 
     pub fn create_proof(&self) -> Proof {

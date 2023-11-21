@@ -37,7 +37,7 @@ use crate::{
     },
     auth::ComponentAccessRules,
     caller_context::CallerContext,
-    models::ComponentAddress,
+    models::{ComponentAddress, TemplateAddress},
 };
 
 pub struct ComponentManager {
@@ -103,5 +103,17 @@ impl ComponentManager {
             action: ComponentAction::SetAccessRules,
             args: invoke_args![access_rules],
         });
+    }
+
+    pub fn get_template_address(&self) -> TemplateAddress {
+        let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
+            component_ref: ComponentRef::Ref(self.address),
+            action: ComponentAction::GetTemplateAddress,
+            args: invoke_args![],
+        });
+
+        result
+            .decode()
+            .expect("failed to decode component template address from engine")
     }
 }

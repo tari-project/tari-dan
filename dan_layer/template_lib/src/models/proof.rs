@@ -99,6 +99,11 @@ impl Proof {
         self.try_authorize().expect("Proof authorization failed")
     }
 
+    pub fn authorize_with<F: FnOnce() -> R, R>(&self, f: F) -> R {
+        let _auth = self.try_authorize().expect("Proof authorization failed");
+        f()
+    }
+
     /// Try to authorize the proof. If the proof cannot be authorized, this will return an error.
     pub fn try_authorize(&self) -> Result<ProofAccess, NotAuthorized> {
         let resp: InvokeResult = call_engine(EngineOp::ProofInvoke, &ProofInvokeArg {
@@ -121,6 +126,14 @@ impl Proof {
         });
 
         resp.decode().expect("Proof drop error")
+    }
+
+    pub fn assert_resource(&self, resource_address: ResourceAddress) {
+        assert_eq!(
+            self.resource_address(),
+            resource_address,
+            "Proof of resource did not match {resource_address}"
+        );
     }
 }
 

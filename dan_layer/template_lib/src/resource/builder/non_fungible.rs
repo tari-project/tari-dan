@@ -1,9 +1,11 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
 use tari_bor::encode;
-use tari_template_abi::rust::{collections::HashMap, fmt, ops::RangeInclusive};
+use tari_template_abi::rust::{fmt, ops::RangeInclusive};
 
 use super::TOKEN_SYMBOL;
 use crate::{
@@ -17,7 +19,7 @@ pub struct NonFungibleResourceBuilder {
     owner_rule: OwnerRule,
     metadata: Metadata,
     access_rules: ResourceAccessRules,
-    tokens_ids: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
+    tokens_ids: BTreeMap<NonFungibleId, (Vec<u8>, Vec<u8>)>,
 }
 
 impl NonFungibleResourceBuilder {
@@ -26,7 +28,7 @@ impl NonFungibleResourceBuilder {
             owner_rule: OwnerRule::default(),
             metadata: Metadata::new(),
             access_rules: ResourceAccessRules::new(),
-            tokens_ids: HashMap::new(),
+            tokens_ids: BTreeMap::new(),
         }
     }
 
@@ -52,6 +54,11 @@ impl NonFungibleResourceBuilder {
 
     pub fn burnable(mut self, rule: AccessRule) -> Self {
         self.access_rules = self.access_rules.burnable(rule);
+        self
+    }
+
+    pub fn recallable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.recallable(rule);
         self
     }
 
@@ -117,11 +124,11 @@ impl NonFungibleResourceBuilder {
     }
 
     pub fn build_bucket(self) -> Bucket {
-        let mint_args = MintArg::NonFungible {
+        let resource = MintArg::NonFungible {
             tokens: self.tokens_ids,
         };
 
-        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(mint_args));
+        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(resource));
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
@@ -129,8 +136,8 @@ impl NonFungibleResourceBuilder {
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
         metadata: Metadata,
-        mint_args: Option<MintArg>,
+        resource: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::NonFungible, owner_rule, access_rules, metadata, mint_args)
+        ResourceManager::new().create(ResourceType::NonFungible, owner_rule, access_rules, metadata, resource)
     }
 }

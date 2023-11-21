@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
+    crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::Amount,
 };
 
@@ -33,7 +33,7 @@ pub struct ConfidentialStatement {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialWithdrawProof {
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
-    pub inputs: Vec<[u8; 32]>,
+    pub inputs: Vec<PedersonCommitmentBytes>,
     pub output_proof: ConfidentialOutputProof,
     /// Balance proof
     pub balance_proof: BalanceProofSignature,

@@ -30,6 +30,7 @@ use tari_engine_types::{
     instruction::Instruction,
     substate::SubstateAddress,
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    TemplateAddress,
 };
 use tari_template_lib::{
     args,
@@ -234,6 +235,20 @@ fn test_tuples() {
     template_test.call_method::<()>(component_id, "set", args![new_value], vec![]);
     let value: u32 = template_test.call_method(component_id, "get", args![], vec![]);
     assert_eq!(value, new_value);
+}
+
+#[test]
+fn test_get_template_address() {
+    let mut template_test = TemplateTest::new(vec!["tests/templates/component_manager"]);
+    let (account, _, _) = template_test.create_empty_account();
+
+    let addr: TemplateAddress = template_test.call_function(
+        "ComponentManagerTest",
+        "get_template_address_for_component",
+        args![account],
+        vec![],
+    );
+    assert_eq!(addr, template_test.get_template_address("Account"));
 }
 
 #[test]

@@ -33,7 +33,7 @@ impl ConsensusConstants {
     pub const fn devnet() -> Self {
         Self {
             base_layer_confirmations: 3,
-            committee_size: 7,
+            committee_size: 1,
             hotstuff_rounds: 4,
         }
     }

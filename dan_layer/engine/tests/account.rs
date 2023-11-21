@@ -7,7 +7,7 @@ use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress, ResourceAddress},
 };
-use tari_template_test_tooling::{assert_error::assert_access_denied_for_action, TemplateTest};
+use tari_template_test_tooling::{support::assert_error::assert_access_denied_for_action, TemplateTest};
 use tari_transaction::Transaction;
 
 #[test]

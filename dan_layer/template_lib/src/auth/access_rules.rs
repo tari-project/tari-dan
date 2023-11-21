@@ -127,16 +127,24 @@ impl Default for ComponentAccessRules {
 pub enum ResourceAuthAction {
     Mint,
     Burn,
+    Recall,
     Withdraw,
     Deposit,
     UpdateNonFungibleData,
     UpdateAccessRules,
 }
 
+impl ResourceAuthAction {
+    pub fn is_recall(&self) -> bool {
+        matches!(self, Self::Recall)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceAccessRules {
     mintable: AccessRule,
     burnable: AccessRule,
+    recallable: AccessRule,
     withdrawable: AccessRule,
     depositable: AccessRule,
     update_non_fungible_data: AccessRule,
@@ -148,6 +156,7 @@ impl ResourceAccessRules {
             // User should explicitly enable minting and/or burning
             mintable: AccessRule::DenyAll,
             burnable: AccessRule::DenyAll,
+            recallable: AccessRule::DenyAll,
             // But explicitly disable withdrawing, updating and/or depositing
             withdrawable: AccessRule::AllowAll,
             depositable: AccessRule::AllowAll,
@@ -159,6 +168,7 @@ impl ResourceAccessRules {
         Self {
             mintable: AccessRule::DenyAll,
             burnable: AccessRule::DenyAll,
+            recallable: AccessRule::DenyAll,
             withdrawable: AccessRule::DenyAll,
             depositable: AccessRule::DenyAll,
             update_non_fungible_data: AccessRule::DenyAll,
@@ -172,6 +182,11 @@ impl ResourceAccessRules {
 
     pub fn burnable(mut self, rule: AccessRule) -> Self {
         self.burnable = rule;
+        self
+    }
+
+    pub fn recallable(mut self, rule: AccessRule) -> Self {
+        self.recallable = rule;
         self
     }
 
@@ -194,6 +209,7 @@ impl ResourceAccessRules {
         match action {
             ResourceAuthAction::Mint => &self.mintable,
             ResourceAuthAction::Burn => &self.burnable,
+            ResourceAuthAction::Recall => &self.recallable,
             ResourceAuthAction::Withdraw => &self.withdrawable,
             ResourceAuthAction::Deposit => &self.depositable,
             ResourceAuthAction::UpdateNonFungibleData => &self.update_non_fungible_data,

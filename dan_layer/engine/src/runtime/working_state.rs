@@ -33,7 +33,7 @@ use tari_engine_types::{
     TemplateAddress,
 };
 use tari_template_lib::{
-    args::MintArg,
+    args::{MintArg, ResourceDiscriminator},
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{
         Amount,
@@ -498,10 +498,11 @@ impl WorkingState {
                             token_id: nft_address.id().clone(),
                         });
                     }
-                    self.new_substate(addr.clone(), NonFungibleContainer::new(data, mut_data))?;
                     if !token_ids.insert(id.clone()) {
+                        // Can't happen
                         return Err(RuntimeError::DuplicateNonFungibleId { token_id: id });
                     }
+                    self.new_substate(addr.clone(), NonFungibleContainer::new(data, mut_data))?;
 
                     // for each new nft we also create an index to be allow resource scanning
                     let index_address = NonFungibleIndexAddress::new(resource_address, index);
@@ -526,6 +527,96 @@ impl WorkingState {
             let resource_mut = self.get_resource_mut(locked_resource)?;
             resource_mut.increase_total_supply(resource_container.amount());
         }
+
+        Ok(resource_container)
+    }
+
+    pub fn recall_resource_from_vault(
+        &mut self,
+        vault_lock: &LockedSubstate,
+        resource_discriminator: ResourceDiscriminator,
+    ) -> Result<ResourceContainer, RuntimeError> {
+        let vault_id = vault_lock
+            .address()
+            .as_vault_id()
+            .ok_or_else(|| RuntimeError::InvariantError {
+                function: "recall_resource_from_vault",
+                details: "LockedSubstate address is not a VaultId".to_string(),
+            })?;
+
+        let vault_mut = self.get_vault_mut(vault_lock)?;
+        let resource_address = *vault_mut.resource_address();
+
+        let resource_container = match resource_discriminator {
+            ResourceDiscriminator::Everything => vault_mut.recall_all()?,
+            ResourceDiscriminator::Fungible { amount } => {
+                if amount.is_negative() {
+                    return Err(RuntimeError::InvalidAmount {
+                        amount,
+                        reason: "Amount must be positive".to_string(),
+                    });
+                }
+
+                if !vault_mut.resource_type().is_fungible() {
+                    return Err(RuntimeError::InvalidArgument {
+                        argument: "resource",
+                        reason: format!(
+                            "Vault {} contains a {} resource but a fungible was requested",
+                            vault_id,
+                            vault_mut.resource_type()
+                        ),
+                    });
+                }
+
+                debug!(
+                    target: LOG_TARGET,
+                    "Recalling {} fungible tokens on resource: {}", amount, resource_address
+                );
+                vault_mut.withdraw(amount)?
+            },
+            ResourceDiscriminator::NonFungible { tokens } => {
+                debug!(
+                    target: LOG_TARGET,
+                    "Recalling {} NFT token(s) on vault: {}",
+                    tokens.len(),
+                    vault_id
+                );
+
+                if !vault_mut.resource_type().is_non_fungible() {
+                    return Err(RuntimeError::InvalidArgument {
+                        argument: "resource",
+                        reason: format!(
+                            "Vault {} contains a {} resource but a non-fungible was requested",
+                            vault_id,
+                            vault_mut.resource_type()
+                        ),
+                    });
+                }
+
+                vault_mut.withdraw_non_fungibles(&tokens)?
+            },
+            ResourceDiscriminator::Confidential {
+                commitments,
+                revealed_amount,
+            } => {
+                debug!(
+                    target: LOG_TARGET,
+                    "Recalling confidential tokens on vault: {}", vault_id
+                );
+
+                if !vault_mut.resource_type().is_confidential() {
+                    return Err(RuntimeError::InvalidArgument {
+                        argument: "resource",
+                        reason: format!(
+                            "Vault contains a {} resource but a confidential was requested",
+                            vault_mut.resource_type()
+                        ),
+                    });
+                }
+
+                vault_mut.recall_confidential(commitments, revealed_amount)?
+            },
+        };
 
         Ok(resource_container)
     }
@@ -711,7 +802,7 @@ impl WorkingState {
                 .expect("invariant: vault that made fee payment not in changeset")
                 .as_vault_mut()
                 .expect("invariant: substate address for fee refund is not a vault");
-            vault_mut.resource_container_mut().deposit(resx.withdraw_all()?)?;
+            vault_mut.resource_container_mut().deposit(resx.recall_all()?)?;
         }
 
         Ok(TransactionReceipt {
