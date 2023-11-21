@@ -20,8 +20,11 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::packager::{template::LoadedTemplate, PackageError};
+mod error;
+pub use error::TemplateLoaderError;
 
-pub trait TemplateModuleLoader {
-    fn load_template(&self) -> Result<LoadedTemplate, PackageError>;
-}
+mod loaded_template;
+pub use loaded_template::LoadedTemplate;
+
+mod template_loader;
+pub use template_loader::TemplateModuleLoader;

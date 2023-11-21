@@ -58,7 +58,7 @@ async fn main_inner() -> Result<(), ExitError> {
     let config_path = cli.common.config_path();
     let cfg = load_configuration(config_path, true, &cli)?;
     let config = ApplicationConfig::load_from(&cfg)?;
-    println!("Starting validator node on network {}", config.network);
+    println!("Starting indexer node on network {}", config.network);
     // Remove the file if it was left behind by a previous run
     let _file = fs::remove_file(config.common.base_path.join("pid"));
     let mut shutdown = Shutdown::new();

@@ -34,7 +34,7 @@ use tari_dan_common_types::{optional::Optional, services::template_provider::Tem
 use tari_dan_engine::{
     flow::FlowFactory,
     function_definitions::FlowFunctionDefinition,
-    packager::{LoadedTemplate, TemplateModuleLoader},
+    template::{LoadedTemplate, TemplateModuleLoader},
     wasm::WasmModule,
 };
 use tari_dan_storage::global::{DbTemplate, DbTemplateType, DbTemplateUpdate, GlobalDb, TemplateStatus};

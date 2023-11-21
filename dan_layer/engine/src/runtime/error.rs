@@ -28,6 +28,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{optional::IsNotFoundError, Epoch};
 use tari_engine_types::{
     indexed_value::IndexedValueError,
+    lock::LockId,
     resource_container::ResourceError,
     substate::SubstateAddress,
     transaction_receipt::TransactionReceiptAddress,
@@ -48,7 +49,7 @@ use tari_transaction::id_provider::IdProviderError;
 
 use super::workspace::WorkspaceError;
 use crate::{
-    runtime::{ActionIdent, RuntimeModuleError},
+    runtime::{locking::LockError, ActionIdent, RuntimeModuleError},
     state_store::StateStoreError,
 };
 
@@ -58,6 +59,7 @@ pub enum RuntimeError {
     EncodingError(#[from] BorError),
     #[error("Indexed value error: {0}")]
     IndexedValueError(#[from] IndexedValueError),
+    // TODO: proper error
     #[error("State DB error: {0}")]
     StateDbError(#[from] anyhow::Error),
     #[error("State storage error: {0}")]
@@ -66,6 +68,28 @@ pub enum RuntimeError {
     WorkspaceError(#[from] WorkspaceError),
     #[error("Substate not found with address '{address}'")]
     SubstateNotFound { address: SubstateAddress },
+    #[error("Substate not in scope with address '{address}'")]
+    SubstateOutOfScope { address: SubstateAddress },
+    #[error("Substate {address} is not owned by {requested_owner}")]
+    SubstateNotOwned {
+        address: SubstateAddress,
+        requested_owner: SubstateAddress,
+    },
+    #[error("Expected lock {lock_id} to lock {expected_type} but it locks {address}")]
+    LockSubstateMismatch {
+        lock_id: LockId,
+        expected_type: &'static str,
+        address: SubstateAddress,
+    },
+    #[error("Component {component} referenced an unknown substate {address}")]
+    ComponentReferencedUnknownSubstate {
+        component: ComponentAddress,
+        address: SubstateAddress,
+    },
+    #[error("Encountered unknown or out of scope bucket {bucket_id}")]
+    ValidationFailedBucketNotInScope { bucket_id: BucketId },
+    #[error("Encountered unknown or out of scope proof {proof_id}")]
+    ValidationFailedProofNotInScope { proof_id: ProofId },
     #[error("Component not found with address '{address}'")]
     ComponentNotFound { address: ComponentAddress },
     #[error("Layer one commitment not found with address '{address}'")]
@@ -76,8 +100,8 @@ pub enum RuntimeError {
     InvalidArgument { argument: &'static str, reason: String },
     #[error("Invalid amount '{amount}': {reason}")]
     InvalidAmount { amount: Amount, reason: String },
-    #[error("Illegal runtime state")]
-    IllegalRuntimeState,
+    #[error("Call frame error: {details}")]
+    CurrentFrameError { details: String },
     #[error("Vault not found with id ({vault_id})")]
     VaultNotFound { vault_id: VaultId },
     #[error("Non-fungible token not found with address {resource_address} and id {nft_id}")]
@@ -145,14 +169,14 @@ pub enum RuntimeError {
     TransactionReceiptNotFound,
     #[error("Component already exists {address}")]
     ComponentAlreadyExists { address: ComponentAddress },
-    #[error("Call function error of function '{function}' on template '{template_address}': {details}")]
-    CallFunctionError {
+    #[error("Cross-template call function error of function '{function}' on template '{template_address}': {details}")]
+    CrossTemplateCallFunctionError {
         template_address: TemplateAddress,
         function: String,
         details: String,
     },
-    #[error("Call method error of method '{method}' on component '{component_address}': {details}")]
-    CallMethodError {
+    #[error("Cross-template call failed for method '{method}' on component '{component_address}': {details}")]
+    CrossTemplateCallMethodError {
         component_address: ComponentAddress,
         method: String,
         details: String,
@@ -169,6 +193,33 @@ pub enum RuntimeError {
     AuthScopeStackEmpty,
     #[error("Invalid deposit of bucket {bucket_id} has locked value amounting to {locked_amount}")]
     InvalidOpDepositLockedBucket { bucket_id: BucketId, locked_amount: Amount },
+    #[error("Duplicate substate {address}")]
+    DuplicateSubstate { address: SubstateAddress },
+    #[error("Substate {address} is orphaned")]
+    OrphanedSubstate { address: SubstateAddress },
+    #[error("{} orphaned substate(s) detected: {}", .substates.len(), .substates.join(", "))]
+    OrphanedSubstates { substates: Vec<String> },
+    #[error("Attempted to finalise state but {remaining} call frame(s) remain on the stack")]
+    CallFrameRemainingOnStack { remaining: usize },
+    #[error("Duplicate reference to substate {address}")]
+    DuplicateReference { address: SubstateAddress },
+
+    #[error("BUG: [{function}] Invariant error {details}")]
+    InvariantError { function: &'static str, details: String },
+    #[error("Lock error: {0}")]
+    LockError(#[from] LockError),
+    #[error("{count} substate locks were still active after call")]
+    DanglingSubstateLocks { count: usize },
+    #[error("No active call scope")]
+    NoActiveCallScope,
+    #[error("Max call depth {max_depth} exceeded")]
+    MaxCallDepthExceeded { max_depth: usize },
+    #[error("{action} can only be called from within a component context")]
+    NotInComponentContext { action: ActionIdent },
+    #[error("Duplicate bucket {bucket_id}")]
+    DuplicateBucket { bucket_id: BucketId },
+    #[error("Duplicate proof {proof_id}")]
+    DuplicateProof { proof_id: ProofId },
 }
 
 impl RuntimeError {
@@ -181,7 +232,8 @@ impl IsNotFoundError for RuntimeError {
     fn is_not_found_error(&self) -> bool {
         matches!(
             self,
-            RuntimeError::ComponentNotFound { .. } |
+            RuntimeError::SubstateNotFound { .. } |
+                RuntimeError::ComponentNotFound { .. } |
                 RuntimeError::VaultNotFound { .. } |
                 RuntimeError::BucketNotFound { .. } |
                 RuntimeError::ResourceNotFound { .. } |
@@ -199,12 +251,12 @@ pub enum TransactionCommitError {
     DanglingProofs { count: usize },
     #[error("Locked value (amount: {locked_amount}) remaining in vault {vault_id}")]
     DanglingLockedValueInVault { vault_id: VaultId, locked_amount: Amount },
+    #[error("{} orphaned substate(s) detected: {}", .substates.len(), .substates.join(", "))]
+    OrphanedSubstates { substates: Vec<String> },
     #[error("{count} dangling items in workspace after transaction execution")]
     WorkspaceNotEmpty { count: usize },
     #[error(transparent)]
     StateStoreError(#[from] StateStoreError),
-    #[error("Failed to obtain a state store transaction: {0}")]
-    StateStoreTransactionError(anyhow::Error),
     #[error(transparent)]
     IdProviderError(#[from] IdProviderError),
     #[error("trying to mutate non fungible index of resource {resource_address} at index {index}")]

@@ -3,12 +3,13 @@
 
 use tari_template_lib::prelude::*;
 
-pub fn create_badge_resource() -> Bucket {
+pub fn create_badge_resource(recall_rule: AccessRule) -> Bucket {
     ResourceBuilder::non_fungible()
         .with_non_fungible(NonFungibleId::from_string("mint"), &(), &())
         .with_non_fungible(NonFungibleId::from_string("burn"), &(), &())
         .with_non_fungible(NonFungibleId::from_string("withdraw"), &(), &())
         .with_non_fungible(NonFungibleId::from_string("deposit"), &(), &())
+        .recallable(recall_rule)
         .build_bucket()
 }
 
@@ -27,6 +28,7 @@ mod access_rules_template {
             owner_rule: OwnerRule,
             component_access_rule: ComponentAccessRules,
             resource_rules: ResourceAccessRules,
+            recall_rule: AccessRule,
         ) -> Component<AccessRulesTest> {
             let tokens = ResourceBuilder::fungible()
                 .with_owner_rule(owner_rule.clone())
@@ -34,7 +36,7 @@ mod access_rules_template {
                 .initial_supply(1000)
                 .build_bucket();
 
-            let badges = create_badge_resource();
+            let badges = create_badge_resource(recall_rule);
 
             Component::new(Self {
                 value: 0,
@@ -47,7 +49,7 @@ mod access_rules_template {
         }
 
         pub fn default_rules() -> Component<AccessRulesTest> {
-            let badges = create_badge_resource();
+            let badges = create_badge_resource(AccessRule::DenyAll);
 
             let tokens = ResourceBuilder::fungible().initial_supply(1000).build_bucket();
 
@@ -59,7 +61,7 @@ mod access_rules_template {
         }
 
         pub fn using_badge_rules() -> Component<AccessRulesTest> {
-            let badges = create_badge_resource();
+            let badges = create_badge_resource(AccessRule::AllowAll);
 
             let badge_resource = badges.resource_address();
             let tokens = ResourceBuilder::fungible()
@@ -96,7 +98,7 @@ mod access_rules_template {
         }
 
         pub fn using_resource_rules() -> Component<AccessRulesTest> {
-            let badges = create_badge_resource();
+            let badges = create_badge_resource(AccessRule::AllowAll);
 
             let badge_resource = badges.resource_address();
             let tokens = ResourceBuilder::fungible()
@@ -128,7 +130,13 @@ mod access_rules_template {
             self.badges.withdraw_non_fungible(NonFungibleId::from_string(&name))
         }
 
-        pub fn mint_new_badge(&mut self) -> Bucket {
+        pub fn recall_badge(&mut self, vault_id: VaultId, name: String) {
+            let bucket = ResourceManager::get(self.badges.resource_address())
+                .recall_non_fungible(vault_id, NonFungibleId::from_string(&name));
+            self.badges.deposit(bucket)
+        }
+
+        pub fn mint_new_badge(&self) -> Bucket {
             ResourceManager::get(self.badges.resource_address()).mint_non_fungible(NonFungibleId::random(), &(), &())
         }
 

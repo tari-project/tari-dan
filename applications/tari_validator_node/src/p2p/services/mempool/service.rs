@@ -286,25 +286,6 @@ where
 
         let transaction = transaction.into_transaction();
 
-        let current_epoch = self.epoch_manager.current_epoch().await?;
-        if let Some(min_epoch) = transaction.min_epoch() {
-            if current_epoch < min_epoch {
-                return Err(MempoolError::CurrentEpochLessThanMinimum {
-                    current_epoch,
-                    min_epoch,
-                });
-            }
-        }
-
-        if let Some(max_epoch) = transaction.max_epoch() {
-            if current_epoch > max_epoch {
-                return Err(MempoolError::CurrentEpochGreaterThanMaximum {
-                    current_epoch,
-                    max_epoch,
-                });
-            }
-        }
-
         // Get the shards involved in claim fees.
         let fee_claims = transaction.fee_claims().collect::<Vec<_>>();
 
@@ -320,7 +301,8 @@ where
             warn!(target: LOG_TARGET, "⚠ No involved shards for payload");
         }
 
-        let tx_shard_id = ShardId::from(transaction.id().into_array());
+        let current_epoch = self.epoch_manager.current_epoch().await?;
+        let tx_shard_id = ShardId::for_transaction_receipt(transaction.id().into_array().into());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
 
@@ -478,17 +460,36 @@ where
             Ok(mut executed) => {
                 info!(
                     target: LOG_TARGET,
-                    "✅ Transaction {} executed successfully ({}) in {:?}",
+                    "✅ Transaction {} executed ({}) in {:?}",
                     executed.id(),
                     executed.result().finalize.result,
                     executed.execution_time()
                 );
+                let has_involved_shards = executed.num_involved_shards() > 0;
+
                 match self.after_execute_validator.validate(&executed).await {
                     Ok(_) => {
                         // Add the transaction result and push it into the pool for consensus. This is done in a single
                         // transaction so that if we receive a proposal for this transaction, we
                         // either are awaiting execution OR execution is complete and it's in the pool.
                         self.state_store.with_write_tx(|tx| {
+                            if !has_involved_shards {
+                                match executed.result().finalize.result.full_reject() {
+                                    Some(reason) => {
+                                        executed
+                                            .set_abort(format!("Transaction failed: {}", reason))
+                                            .update(tx)?;
+                                    },
+                                    None => {
+                                        executed
+                                            .set_abort("Mempool after execution validation failed: No involved shards")
+                                            .update(tx)?;
+                                    },
+                                }
+
+                                return Ok::<_, MempoolError>(());
+                            }
+
                             executed.update(tx)?;
                             if is_consensus_running &&
                                 !SubstateRecord::exists_for_transaction(tx.deref_mut(), &transaction_id)?
@@ -499,11 +500,28 @@ where
                         })?;
                     },
                     Err(e) => {
+                        info!(
+                            target: LOG_TARGET,
+                            "❌ Executed transaction {} failed validation: {}",
+                            executed.id(),
+                            e,
+                        );
                         self.state_store.with_write_tx(|tx| {
-                            executed
-                                .set_abort(format!("Mempool after execution validation failed: {}", e))
-                                .update(tx)?;
-                            if is_consensus_running &&
+                            match executed.result().finalize.result.full_reject() {
+                                Some(reason) => {
+                                    executed
+                                        .set_abort(format!("Transaction failed: {}", reason))
+                                        .update(tx)?;
+                                },
+                                None => {
+                                    executed
+                                        .set_abort(format!("Mempool after execution validation failed: {}", e))
+                                        .update(tx)?;
+                                },
+                            }
+
+                            if has_involved_shards &&
+                                is_consensus_running &&
                                 !SubstateRecord::exists_for_transaction(tx.deref_mut(), &transaction_id)?
                             {
                                 self.transaction_pool.insert(tx, executed.to_atom())?;
@@ -514,6 +532,18 @@ where
                         // outputs already exist) so we need to send LocalPrepared(ABORT) to
                         // other shards.
                     },
+                }
+
+                // TODO: This transaction executed but no shard is involved even after execution
+                //        (happens for CreateFreeTestCoin only) so we just ignore it.
+                if !has_involved_shards {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Transaction {} has no involved shards after executing. Ignoring",
+                        transaction_id
+                    );
+                    self.transactions.remove(&transaction_id);
+                    return Ok(());
                 }
 
                 executed
@@ -530,6 +560,8 @@ where
                         .set_abort(format!("Mempool failed to execute: {}", e))
                         .update(tx)
                 })?;
+
+                self.transactions.remove(&transaction_id);
 
                 return Ok(());
             },

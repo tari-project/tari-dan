@@ -1,6 +1,6 @@
 [package]
 name = "tari_dan_engine"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Tari template runtime engine"
@@ -10,13 +10,12 @@ license = "BSD-3-Clause"
 [dependencies]
 tari_bor = { path = "../tari_bor" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common_types" }
-tari_crypto = { version = "0.18", features = ["borsh"] }
+tari_crypto = { version = "0.19", features = ["borsh"] }
 tari_dan_common_types = { path = "../common_types" }
 tari_engine_types = { path = "../engine_types" }
-tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_mmr" }
 tari_template_abi = { path = "../template_abi", features = ["std"] }
 tari_template_lib = { path = "../template_lib" }
-tari_utilities = "0.4.10"
+tari_utilities = "0.6"
 tari_transaction = { path = "../transaction" }
 
 anyhow = "1.0.53"
@@ -25,7 +24,8 @@ cargo_toml = "0.11.5"
 d3ne = { git = "https://github.com/stringhandler/d3ne-rs.git", tag = "v0.8.0-pre.3" }
 log = { version = "0.4.8", features = ["std"] }
 rand = "0.8"
-serde = "1.0.150"
+indexmap = "2.1.0"
+serde = "1.0"
 serde_json = "1"
 thiserror = "^1.0.20"
 tempfile = "3.3.0"
@@ -33,6 +33,7 @@ wasmer = "2.3.0"
 wasmer-middlewares = "2.3.0"
 
 [dev-dependencies]
+env_logger = "0.10.0"
 tari_template_test_tooling = { path = "../template_test_tooling" }
 tari_transaction_manifest = { path = "../transaction_manifest" }
 tari_transaction = { path = "../transaction" }

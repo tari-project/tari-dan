@@ -1,8 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::HashMap, io};
+use std::io;
 
+use indexmap::IndexMap;
 use tari_bor::encode_into;
 use tari_engine_types::{
     fees::FeeSource,
@@ -40,7 +41,7 @@ impl RuntimeModule for FeeModule {
     fn on_before_finalize(
         &self,
         track: &StateTracker,
-        changes: &HashMap<SubstateAddress, SubstateValue>,
+        changes: &IndexMap<SubstateAddress, SubstateValue>,
     ) -> Result<(), RuntimeModuleError> {
         let total_storage = changes
             .values()
@@ -55,6 +56,13 @@ impl RuntimeModule for FeeModule {
             FeeSource::Storage,
             // Divide by 3 to account for CBOR
             self.fee_table.per_byte_storage_cost() * total_storage as u64 / 3,
+        );
+
+        track.add_fee_charge(FeeSource::Logs, track.num_logs() as u64 * self.fee_table.per_log_cost());
+
+        track.add_fee_charge(
+            FeeSource::Events,
+            track.num_events() as u64 * self.fee_table.per_event_cost(),
         );
 
         Ok(())

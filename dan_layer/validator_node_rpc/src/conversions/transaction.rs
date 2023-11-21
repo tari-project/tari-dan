@@ -23,6 +23,7 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
+use tari_bor::decode_exact;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_dan_common_types::Epoch;
@@ -34,7 +35,7 @@ use tari_engine_types::{
 };
 use tari_template_lib::{
     args::Arg,
-    crypto::{BalanceProofSignature, RistrettoPublicKeyBytes},
+    crypto::{BalanceProofSignature, PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     models::{ConfidentialOutputProof, ConfidentialStatement, ConfidentialWithdrawProof, EncryptedData},
     Hash,
 };
@@ -200,7 +201,7 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
             },
             InstructionType::ClaimBurn => Instruction::ClaimBurn {
                 claim: Box::new(ConfidentialClaim {
-                    public_key: PublicKey::from_bytes(&request.claim_burn_public_key)
+                    public_key: PublicKey::from_canonical_bytes(&request.claim_burn_public_key)
                         .map_err(|e| anyhow!("claim_burn_public_key: {}", e))?,
                     output_address: request
                         .claim_burn_commitment_address
@@ -218,8 +219,10 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
             },
             InstructionType::ClaimValidatorFees => Instruction::ClaimValidatorFees {
                 epoch: request.claim_validator_fees_epoch,
-                validator_public_key: PublicKey::from_bytes(&request.claim_validator_fees_validator_public_key)
-                    .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
+                validator_public_key: PublicKey::from_canonical_bytes(
+                    &request.claim_validator_fees_validator_public_key,
+                )
+                .map_err(|e| anyhow!("claim_validator_fees_validator_public_key: {}", e))?,
             },
             InstructionType::DropAllProofsInWorkspace => Instruction::DropAllProofsInWorkspace,
             InstructionType::CreateFreeTestCoins => Instruction::CreateFreeTestCoins {
@@ -311,7 +314,7 @@ impl TryFrom<proto::transaction::Arg> for Arg {
     fn try_from(request: proto::transaction::Arg) -> Result<Self, Self::Error> {
         let data = request.data;
         let arg = match request.arg_type {
-            0 => Arg::Literal(data),
+            0 => Arg::Literal(decode_exact(&data)?),
             1 => Arg::Workspace(data),
             _ => return Err(anyhow!("invalid arg_type")),
         };
@@ -327,7 +330,7 @@ impl From<Arg> for proto::transaction::Arg {
         match arg {
             Arg::Literal(data) => {
                 result.arg_type = 0;
-                result.data = data;
+                result.data = tari_bor::encode(&data).unwrap();
             },
             Arg::Workspace(data) => {
                 result.arg_type = 1;
@@ -375,9 +378,9 @@ impl TryFrom<proto::transaction::CommitmentSignature> for RistrettoComSig {
     type Error = anyhow::Error;
 
     fn try_from(val: proto::transaction::CommitmentSignature) -> Result<Self, Self::Error> {
-        let u = PrivateKey::from_bytes(&val.signature_u).map_err(anyhow::Error::msg)?;
-        let v = PrivateKey::from_bytes(&val.signature_v).map_err(anyhow::Error::msg)?;
-        let public_nonce = PublicKey::from_bytes(&val.public_nonce_commitment).map_err(anyhow::Error::msg)?;
+        let u = PrivateKey::from_canonical_bytes(&val.signature_u).map_err(anyhow::Error::msg)?;
+        let v = PrivateKey::from_canonical_bytes(&val.signature_v).map_err(anyhow::Error::msg)?;
+        let public_nonce = PublicKey::from_canonical_bytes(&val.public_nonce_commitment).map_err(anyhow::Error::msg)?;
 
         Ok(RistrettoComSig::new(Commitment::from_public_key(&public_nonce), u, v))
     }
@@ -402,7 +405,9 @@ impl TryFrom<proto::transaction::ConfidentialWithdrawProof> for ConfidentialWith
             inputs: val
                 .inputs
                 .into_iter()
-                .map(|v| checked_copy_fixed(&v).ok_or_else(|| anyhow!("Invalid length of input commitment bytes")))
+                .map(|v| {
+                    PedersonCommitmentBytes::from_bytes(&v).map_err(|e| anyhow!("Invalid input commitment bytes: {e}"))
+                })
                 .collect::<Result<_, _>>()?,
             output_proof: val
                 .output_proof
@@ -417,7 +422,7 @@ impl TryFrom<proto::transaction::ConfidentialWithdrawProof> for ConfidentialWith
 impl From<ConfidentialWithdrawProof> for proto::transaction::ConfidentialWithdrawProof {
     fn from(val: ConfidentialWithdrawProof) -> Self {
         Self {
-            inputs: val.inputs.iter().map(|v| v.to_vec()).collect(),
+            inputs: val.inputs.iter().map(|v| v.as_bytes().to_vec()).collect(),
             output_proof: Some(val.output_proof.into()),
             balance_proof: val.balance_proof.as_bytes().to_vec(),
         }

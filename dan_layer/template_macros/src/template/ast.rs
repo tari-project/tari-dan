@@ -33,18 +33,21 @@ use syn::{
     ImplItemMethod,
     Item,
     ItemMod,
+    ItemUse,
     Result,
     ReturnType,
     Signature,
     Stmt,
     TypePath,
     TypeTuple,
+    UseTree,
 };
 
 #[allow(dead_code)]
 pub struct TemplateAst {
     pub template_name: Ident,
-    pub module: ItemMod,
+    pub module_content: Vec<Item>,
+    pub uses: Vec<ItemUse>,
 }
 
 impl Parse for TemplateAst {
@@ -61,6 +64,7 @@ impl Parse for TemplateAst {
         // add derive macros to all structs
         let mut template_name = None;
         let mut has_impl = false;
+        let mut uses = Vec::new();
 
         for item in items {
             match item {
@@ -79,6 +83,15 @@ impl Parse for TemplateAst {
                 Item::Impl(_) => {
                     has_impl = true;
                 },
+                Item::Use(item) => {
+                    // Exclude super imports
+                    if let UseTree::Path(path) = &item.tree {
+                        if path.ident == "super" {
+                            continue;
+                        }
+                    }
+                    uses.push(item.clone());
+                },
                 _ => {},
             }
         }
@@ -96,17 +109,19 @@ impl Parse for TemplateAst {
 
         Ok(Self {
             template_name: template_name.unwrap(),
-            module,
+            module_content: module
+                .content
+                .map(|(_, c)| c)
+                .ok_or_else(|| Error::new(module.ident.span(), "Template module must contain content"))?,
+            uses,
         })
     }
 }
 
 impl TemplateAst {
     pub fn get_functions(&self) -> impl Iterator<Item = FunctionAst> + '_ {
-        self.module
-            .content
+        self.module_content
             .iter()
-            .flat_map(|(_, items)| items)
             .filter_map(|i| match i {
                 Item::Impl(impl_item) => Some(&impl_item.items),
                 _ => None,
@@ -210,6 +225,15 @@ pub struct FunctionAst {
     pub statements: Vec<Stmt>,
     pub is_constructor: bool,
     pub is_public: bool,
+}
+
+impl FunctionAst {
+    /// Returns true if the any argument is a &mut Self receiver
+    pub fn is_mut(&self) -> bool {
+        self.input_types
+            .iter()
+            .any(|t| matches!(t, TypeAst::Receiver { mutability: true }))
+    }
 }
 
 pub enum TypeAst {

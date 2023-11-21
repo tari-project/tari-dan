@@ -1,0 +1,92 @@
+---
+name: Build docker images
+
+'on':
+  push:
+    paths-ignore:
+      - '**/*.md'
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]*'
+    branches:
+      - 'development'
+      - 'build_dockers*'
+  schedule:
+    - cron: '05 00 * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        description: 'override image tag/version'
+      tag_alias:
+        default: latest
+        type: string
+        description: 'image tag alias'
+      platforms:
+        default: linux/arm64, linux/amd64
+        description: 'docker platform(s)'
+        type: choice
+        options:
+          - linux/amd64
+          - linux/arm64
+          - linux/arm64, linux/amd64
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  builds_envs_setup:
+    runs-on: ubuntu-latest
+    outputs:
+      platforms: ${{ steps.envs_setup.outputs.platforms }}
+      version: ${{ steps.envs_setup.outputs.version }}
+      tag_alias: ${{ steps.envs_setup.outputs.tag_alias }}
+
+    steps:
+      - name: envs setup
+        id: envs_setup
+        shell: bash
+        run: |
+          echo "Workflow triggered by ${{ github.actor }} for ${{ github.event_name }}"
+          echo "SHA - ${GITHUB_SHA}"
+          VSHA_SHORT=${GITHUB_SHA::7}
+          echo "SHA short - ${VSHA_SHORT}"
+          echo "VSHA_SHORT=${VSHA_SHORT}" >> $GITHUB_ENV
+          TOOLCHAIN=${{ github.event.inputs.toolchain }}
+          echo "toolchain=${TOOLCHAIN:-${{ env.toolchain_default }}}" >> $GITHUB_OUTPUT
+          if [[ "${{ github.ref }}" =~ ^refs/tags/v* ]] && [ "${{ github.event_name }}" != "workflow_dispatch" ] ; then
+            echo "Tagged Build - Build everything"
+            VERSION="${{ github.ref_name }}_$(date -u '+%Y%m%d')_${VSHA_SHORT}"
+            echo "Version used - ${VERSION}"
+            echo "platforms=linux/arm64, linux/amd64" >> $GITHUB_OUTPUT
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+            echo "tag_alias=latest" >> $GITHUB_OUTPUT
+          fi
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] ; then
+            echo "Manual Build - selective"
+            echo "platforms=${{ github.event.inputs.platforms }}" >> $GITHUB_OUTPUT
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "tag_alias=${{ github.event.inputs.tag_alias }}" >> $GITHUB_OUTPUT
+          fi
+          if [ "${{ github.event_name }}" == "schedule" ] ; then
+            if [[ $(date +%u) -eq 7 ]] ; then
+              echo "Weekly Build - limited dual arch"
+              echo "platforms=linux/arm64, linux/amd64" >> $GITHUB_OUTPUT
+              echo "tag_alias=latest-weekly" >> $GITHUB_OUTPUT
+            else
+              echo "Daily Build - limited"
+              echo "platforms=linux/amd64" >> $GITHUB_OUTPUT
+              echo "tag_alias=latest-daily" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+  builds_run:
+    permissions:
+      packages: write
+    needs: builds_envs_setup
+    uses: ./.github/workflows/build_dockers_workflow.yml
+    secrets: inherit
+    with:
+      platforms: ${{ needs.builds_envs_setup.outputs.platforms }}
+      version: ${{ needs.builds_envs_setup.outputs.version }}
+      tag_alias: ${{ needs.builds_envs_setup.outputs.tag_alias }}

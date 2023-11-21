@@ -8,7 +8,7 @@ tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
 tari_template_builtin = { path = "../../dan_layer/template_builtin" }
-tari_crypto = "0.18"
+tari_crypto = "0.19"
 
 anyhow = "1.0.72"
 bincode = { version = "2.0.0-rc.3", features = ["serde"] }

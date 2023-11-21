@@ -43,21 +43,26 @@ mod tracker;
 
 mod virtual_substate;
 pub use virtual_substate::VirtualSubstates;
-
+mod locking;
+pub mod scope;
+pub use locking::{LockError, LockState};
+mod state_store;
 mod tracker_auth;
+mod utils;
 mod working_state;
 mod workspace;
 
 use std::{fmt::Debug, sync::Arc};
 
-use tari_bor::decode;
+use tari_bor::decode_exact;
 use tari_common_types::types::PublicKey;
-use tari_crypto::ristretto::RistrettoPublicKey;
 use tari_dan_common_types::Epoch;
 use tari_engine_types::{
     component::ComponentHeader,
     confidential::{ConfidentialClaim, ConfidentialOutput},
     indexed_value::IndexedValue,
+    lock::LockFlag,
+    substate::{SubstateAddress, SubstateValue},
 };
 use tari_template_lib::{
     args::{
@@ -83,17 +88,20 @@ use tari_template_lib::{
     invoke_args,
     models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, VaultRef},
 };
-pub use tracker::{RuntimeState, StateTracker};
+pub use tracker::StateTracker;
+
+use crate::runtime::{locking::LockedSubstate, scope::PushCallFrame};
 
 pub trait RuntimeInterface: Send + Sync {
-    fn set_current_runtime_state(&self, state: RuntimeState) -> Result<(), RuntimeError>;
-
     fn emit_event(&self, topic: String, payload: Metadata) -> Result<(), RuntimeError>;
 
     fn emit_log(&self, level: LogLevel, message: String) -> Result<(), RuntimeError>;
 
-    fn get_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError>;
+    fn load_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError>;
 
+    fn lock_substate(&self, address: &SubstateAddress, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError>;
+
+    fn get_substate(&self, lock: &LockedSubstate) -> Result<SubstateValue, RuntimeError>;
     fn component_invoke(
         &self,
         component_ref: ComponentRef,
@@ -162,9 +170,12 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn call_invoke(&self, action: CallAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
 
-    fn get_transaction_signer_public_key(&self) -> Result<RistrettoPublicKey, RuntimeError>;
+    fn check_component_access_rules(&self, method: &str, locked: &LockedSubstate) -> Result<(), RuntimeError>;
 
-    fn check_component_access_rules(&self, method: &str, component: &ComponentHeader) -> Result<(), RuntimeError>;
+    fn validate_return_value(&self, value: &IndexedValue) -> Result<(), RuntimeError>;
+
+    fn push_call_frame(&self, frame: PushCallFrame) -> Result<(), RuntimeError>;
+    fn pop_call_frame(&self) -> Result<(), RuntimeError>;
 }
 
 #[derive(Clone)]
@@ -173,7 +184,7 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    pub(crate) fn resolve_args(&self, args: &[Arg]) -> Result<Vec<tari_bor::Value>, RuntimeError> {
+    pub(crate) fn resolve_args(&self, args: Vec<Arg>) -> Result<Vec<tari_bor::Value>, RuntimeError> {
         let mut resolved = Vec::with_capacity(args.len());
         for arg in args {
             match arg {
@@ -181,9 +192,9 @@ impl Runtime {
                     let value = self
                         .interface
                         .workspace_invoke(WorkspaceAction::Get, invoke_args![key].into())?;
-                    resolved.push(value.decode()?);
+                    resolved.push(value.into_value()?);
                 },
-                Arg::Literal(v) => resolved.push(decode(v)?),
+                Arg::Literal(v) => resolved.push(decode_exact(&v)?),
             }
         }
         Ok(resolved)

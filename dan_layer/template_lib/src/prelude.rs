@@ -23,9 +23,10 @@
 //! The prelude contains all the commonly used types and functions that are used. To use it, add the import `use
 //! tari_template_lib::prelude::*;`
 
-pub use tari_bor;
-#[cfg(feature = "macro")]
+#[cfg(all(feature = "macro", target_arch = "wasm32"))]
 pub use tari_template_macros::template;
+#[cfg(all(feature = "macro", not(target_arch = "wasm32")))]
+pub use tari_template_macros::template_non_wasm as template;
 
 pub use crate::{
     args,
@@ -33,8 +34,8 @@ pub use crate::{
     caller_context::CallerContext,
     component::{Component, ComponentManager},
     consensus::Consensus,
-    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS},
-    crypto::RistrettoPublicKeyBytes,
+    constants::{CONFIDENTIAL_TARI_RESOURCE_ADDRESS, PUBLIC_IDENTITY_RESOURCE_ADDRESS, XTR2},
+    crypto::{PedersonCommitmentBytes, RistrettoPublicKeyBytes},
     debug,
     events::emit_event,
     invoke_args,
@@ -54,6 +55,7 @@ pub use crate::{
         ResourceAddress,
         TemplateAddress,
         Vault,
+        VaultId,
     },
     rand,
     resource::{ResourceBuilder, ResourceManager, ResourceType},

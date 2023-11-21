@@ -5,7 +5,7 @@ use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
 use tari_engine_types::{
-    indexed_value::{IndexedValue, IndexedValueError},
+    indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     substate::SubstateDiff,
 };
 use tari_template_lib::prelude::ComponentAddress;
@@ -39,7 +39,7 @@ where
 
     pub fn get(&self, tx_id: TransactionId) -> Result<WalletTransaction<PublicKey>, TransactionApiError> {
         let mut tx = self.store.create_read_tx()?;
-        let transaction = tx.transaction_get(tx_id)?;
+        let transaction = tx.transactions_get(tx_id)?;
         Ok(transaction)
     }
 
@@ -51,8 +51,8 @@ where
         self.store
             .with_write_tx(|tx| tx.transactions_insert(&transaction, false))?;
 
-        let transaction_id = self
-            .network_interface
+        let transaction_id = *transaction.id();
+        self.network_interface
             .submit_transaction(transaction, required_substates)
             .await
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
@@ -119,7 +119,7 @@ where
     ) -> Result<Option<WalletTransaction<PublicKey>>, TransactionApiError> {
         // Multithreaded considerations: The transaction result could be requested more than once because db
         // transactions cannot be used around await points.
-        let transaction = self.store.with_read_tx(|tx| tx.transaction_get(transaction_id))?;
+        let transaction = self.store.with_read_tx(|tx| tx.transactions_get(transaction_id))?;
         if transaction.finalize.is_some() {
             return Ok(Some(transaction));
         }
@@ -258,7 +258,7 @@ where
                 Some(header.template_address),
             )?;
 
-            let value = IndexedValue::from_raw(&header.state.state)?;
+            let value = IndexedWellKnownTypes::from_value(header.state())?;
 
             for owned_addr in value.referenced_substates() {
                 if let Some(pos) = rest.iter().position(|(addr, _)| addr == &owned_addr) {
@@ -294,7 +294,7 @@ pub enum TransactionApiError {
     #[error("Network interface error: {0}")]
     NetworkInterfaceError(String),
     #[error("Failed to extract known type data from value: {0}")]
-    ValueVisitorError(#[from] IndexedValueError),
+    IndexedValueError(#[from] IndexedValueError),
     #[error("Invalid transaction query response: {details}")]
     InvalidTransactionQueryResponse { details: String },
 }

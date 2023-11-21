@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{
-    hashing::{hasher, EngineHashDomainLabel},
+    hashing::{hasher32, EngineHashDomainLabel},
     instruction::Instruction,
     serde_with,
     substate::SubstateAddress,
@@ -65,7 +65,7 @@ impl Transaction {
     }
 
     fn calculate_hash(&self) -> TransactionId {
-        hasher(EngineHashDomainLabel::Transaction)
+        hasher32(EngineHashDomainLabel::Transaction)
             .chain(&self.signature)
             .chain(&self.fee_instructions)
             .chain(&self.instructions)

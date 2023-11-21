@@ -4,12 +4,12 @@ authors = ["The Tari Development Community"]
 description = "The Tari validator node CLI"
 repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = "0.18"
+tari_crypto = "0.19"
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_dan_engine = { path = "../../dan_layer/engine" }
 tari_engine_types = { path = "../../dan_layer/engine_types" }
@@ -28,8 +28,8 @@ jfs = "0.7.1"
 log = "0.4.17"
 multiaddr = "0.14.0"
 reqwest = { version = "0.11.11", features = ["json"] }
-serde = "1.0.144"
-serde_json = "1.0.85"
+serde = "1.0"
+serde_json = "1.0"
 thiserror = "1.0.36"
 time = "0.3.15"
 tokio = { version = "1", features = ["macros", "time"] }

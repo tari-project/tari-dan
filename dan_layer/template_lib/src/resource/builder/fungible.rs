@@ -51,6 +51,11 @@ impl FungibleResourceBuilder {
         self
     }
 
+    pub fn recallable(mut self, rule: AccessRule) -> Self {
+        self.access_rules = self.access_rules.recallable(rule);
+        self
+    }
+
     pub fn withdrawable(mut self, rule: AccessRule) -> Self {
         self.access_rules = self.access_rules.withdrawable(rule);
         self
@@ -63,6 +68,11 @@ impl FungibleResourceBuilder {
 
     pub fn add_metadata<K: Into<String>, V: Into<String>>(mut self, key: K, value: V) -> Self {
         self.metadata.insert(key, value);
+        self
+    }
+
+    pub fn with_metadata(mut self, metadata: Metadata) -> Self {
+        self.metadata = metadata;
         self
     }
 
@@ -82,11 +92,11 @@ impl FungibleResourceBuilder {
     }
 
     pub fn build_bucket(self) -> Bucket {
-        let mint_args = MintArg::Fungible {
+        let resource = MintArg::Fungible {
             amount: self.initial_supply,
         };
 
-        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(mint_args));
+        let (_, bucket) = Self::build_internal(self.owner_rule, self.access_rules, self.metadata, Some(resource));
         bucket.expect("[build_bucket] Bucket not returned from system")
     }
 
@@ -94,8 +104,8 @@ impl FungibleResourceBuilder {
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
         metadata: Metadata,
-        mint_args: Option<MintArg>,
+        resource: Option<MintArg>,
     ) -> (ResourceAddress, Option<Bucket>) {
-        ResourceManager::new().create(ResourceType::Fungible, owner_rule, access_rules, metadata, mint_args)
+        ResourceManager::new().create(ResourceType::Fungible, owner_rule, access_rules, metadata, resource)
     }
 }

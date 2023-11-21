@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::anyhow;
 use serde::de::DeserializeOwned;
-use tari_bor::encode;
+use tari_bor::{decode_exact, to_value};
 use tari_crypto::{
     keys::PublicKey,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
@@ -20,22 +20,19 @@ use tari_dan_common_types::crypto::create_key_pair;
 use tari_dan_engine::{
     bootstrap_state,
     fees::{FeeModule, FeeTable},
-    packager::{LoadedTemplate, Package, TemplateModuleLoader},
     runtime::{AuthParams, RuntimeModule, VirtualSubstates},
     state_store::{
         memory::{MemoryStateStore, MemoryWriteTransaction},
         AtomicDb,
-        StateReader,
-        StateStoreError,
         StateWriter,
     },
+    template::{LoadedTemplate, TemplateModuleLoader},
     transaction::{TransactionError, TransactionProcessor},
-    wasm::{compile::compile_template, LoadedWasmTemplate, WasmModule},
+    wasm::{LoadedWasmTemplate, WasmModule},
 };
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
     component::{ComponentBody, ComponentHeader},
-    hashing::template_hasher,
     instruction::Instruction,
     resource_container::ResourceContainer,
     substate::{Substate, SubstateAddress, SubstateDiff},
@@ -55,7 +52,7 @@ use tari_template_lib::{
 use tari_transaction::{id_provider::IdProvider, Transaction};
 use tari_transaction_manifest::{parse_manifest, ManifestValue};
 
-use crate::track_calls::TrackCallsModule;
+use crate::{read_only_state_store::ReadOnlyStateStore, track_calls::TrackCallsModule, Package};
 
 pub fn test_faucet_component() -> ComponentAddress {
     ComponentAddress::new(Hash::from_array([0xfau8; 32]))
@@ -76,46 +73,45 @@ pub struct TemplateTest {
 
 impl TemplateTest {
     pub fn new<I: IntoIterator<Item = P>, P: AsRef<Path>>(template_paths: I) -> Self {
-        let secret_key =
-            RistrettoSecretKey::from_hex("7e100429f979d37999f051e65b94734e206925e9346759fd73caafb2f3232578").unwrap();
-        let public_key = RistrettoPublicKey::from_secret_key(&secret_key);
-
-        let mut name_to_template = HashMap::new();
         let mut builder = Package::builder();
-
         // Add Account template builtin
         let wasm = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
         let template = WasmModule::from_code(wasm.to_vec()).load_template().unwrap();
-        builder.add_template(*ACCOUNT_TEMPLATE_ADDRESS, template);
-        name_to_template.insert("Account".to_string(), *ACCOUNT_TEMPLATE_ADDRESS);
-        // Add test Faucet
-        let wasm = compile_template(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/faucet"), &[]).unwrap();
-        let test_faucet_template_address = template_hasher().chain(wasm.code()).result();
-        builder.add_template(test_faucet_template_address, wasm.load_template().unwrap());
-        name_to_template.insert("TestFaucet".to_string(), test_faucet_template_address);
+        builder.add_loaded_template(*ACCOUNT_TEMPLATE_ADDRESS, template);
 
-        let wasms = template_paths
-            .into_iter()
-            .map(|path| compile_template(path, &[]).unwrap());
-
-        for wasm in wasms {
-            let template_addr = template_hasher().chain(wasm.code()).result();
-            let wasm = wasm.load_template().unwrap();
-            let name = wasm.template_name().to_string();
-            name_to_template.insert(name, template_addr);
-            builder.add_template(template_addr, wasm);
+        builder.add_template(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/faucet"));
+        for path in template_paths {
+            builder.add_template(path);
         }
+
         let package = builder.build();
+
+        let test = Self::from_package(package);
+        test.bootstrap_faucet(100_000.into());
+        test
+    }
+
+    pub fn from_package(package: Package) -> Self {
+        let secret_key =
+            RistrettoSecretKey::from_hex("8a39567509bf2f7074e5fd153337405292cdc9f574947313b62fbf8fb4cffc02").unwrap();
+
+        let public_key = RistrettoPublicKey::from_secret_key(&secret_key);
+
+        let mut name_to_template = HashMap::new();
+
+        for (addr, template) in package.iter() {
+            if name_to_template
+                .insert(template.template_name().to_string(), *addr)
+                .is_some()
+            {
+                panic!("Duplicate template name: {}", template.template_name());
+            }
+        }
+
         let state_store = MemoryStateStore::default();
         {
             let mut tx = state_store.write_access().unwrap();
             bootstrap_state(&mut tx).unwrap();
-            Self::initial_tari_faucet_supply(
-                &mut tx,
-                &public_key,
-                Amount::from(100_000),
-                test_faucet_template_address,
-            );
             tx.commit().unwrap();
         }
 
@@ -132,8 +128,24 @@ impl TemplateTest {
             state_store,
             virtual_substates,
             enable_fees: false,
-            fee_table: FeeTable::new(1, 1),
+            fee_table: FeeTable {
+                per_module_call_cost: 1,
+                per_byte_storage_cost: 1,
+                per_event_cost: 1,
+                per_log_cost: 1,
+            },
         }
+    }
+
+    pub fn bootstrap_faucet(&self, amount: Amount) {
+        let mut tx = self.state_store.write_access().unwrap();
+        Self::initial_tari_faucet_supply(
+            &mut tx,
+            &self.public_key,
+            amount,
+            self.get_template_address("TestFaucet"),
+        );
+        tx.commit().unwrap();
     }
 
     fn initial_tari_faucet_supply(
@@ -156,7 +168,7 @@ impl TemplateTest {
         struct Faucet {
             vault: tari_template_lib::models::Vault,
         }
-        let state = encode(&Faucet {
+        let state = to_value(&Faucet {
             vault: tari_template_lib::models::Vault::for_test(vault_id),
         })
         .unwrap();
@@ -168,7 +180,7 @@ impl TemplateTest {
                 owner_key: RistrettoPublicKeyBytes::from_bytes(signer_public_key.as_bytes()).unwrap(),
                 owner_rule: OwnerRule::None,
                 access_rules: ComponentAccessRules::allow_all(),
-                state: ComponentBody { state },
+                body: ComponentBody { state },
             }),
         )
         .unwrap();
@@ -200,6 +212,15 @@ impl TemplateTest {
 
     pub fn read_only_state_store(&self) -> ReadOnlyStateStore {
         ReadOnlyStateStore::new(self.state_store.clone())
+    }
+
+    pub fn extract_component_value<T: DeserializeOwned>(&self, component_address: ComponentAddress, path: &str) -> T {
+        self.read_only_state_store()
+            .inspect_component(component_address)
+            .unwrap()
+            .get_value(path)
+            .unwrap()
+            .unwrap()
     }
 
     pub fn default_signing_key(&self) -> &RistrettoSecretKey {
@@ -318,7 +339,19 @@ impl TemplateTest {
     }
 
     pub fn get_test_proof(&self) -> NonFungibleAddress {
-        NonFungibleAddress::from_public_key(RistrettoPublicKeyBytes::from_bytes(self.public_key.as_bytes()).unwrap())
+        NonFungibleAddress::from_public_key(self.get_test_public_key_bytes())
+    }
+
+    pub fn get_test_secret_key(&self) -> &RistrettoSecretKey {
+        &self.secret_key
+    }
+
+    pub fn get_test_public_key(&self) -> &RistrettoPublicKey {
+        &self.public_key
+    }
+
+    pub fn get_test_public_key_bytes(&self) -> RistrettoPublicKeyBytes {
+        RistrettoPublicKeyBytes::from_bytes(self.public_key.as_bytes()).unwrap()
     }
 
     pub fn create_empty_account(&mut self) -> (ComponentAddress, NonFungibleAddress, RistrettoSecretKey) {
@@ -469,7 +502,7 @@ impl TemplateTest {
         proofs: Vec<NonFungibleAddress>,
     ) -> RejectReason {
         let result = self.try_execute(transaction, proofs).unwrap();
-        result.expect_transaction_failure().clone()
+        result.expect_failure().clone()
     }
 
     pub fn execute_and_commit(
@@ -525,25 +558,15 @@ impl TemplateTest {
         .unwrap();
         self.execute_and_commit(instructions, proofs)
     }
-}
 
-pub struct ReadOnlyStateStore {
-    store: MemoryStateStore,
-}
-impl ReadOnlyStateStore {
-    pub fn new(store: MemoryStateStore) -> Self {
-        Self { store }
-    }
+    pub fn print_state(&self) {
+        let tx = self.state_store.read_access().unwrap();
+        for (k, v) in tx.iter_raw() {
+            let k: SubstateAddress = decode_exact(k).unwrap();
+            let v: Substate = decode_exact(v).unwrap();
 
-    pub fn get_component(&self, component_address: ComponentAddress) -> Result<ComponentHeader, StateStoreError> {
-        let substate = self.get_substate(&SubstateAddress::Component(component_address))?;
-        Ok(substate.into_substate_value().into_component().unwrap())
-    }
-
-    pub fn get_substate(&self, address: &SubstateAddress) -> Result<Substate, StateStoreError> {
-        let tx = self.store.read_access()?;
-        let substate = tx.get_state::<_, Substate>(address)?;
-        Ok(substate)
+            eprintln!("[{}]: {}", k, v.into_substate_value());
+        }
     }
 }
 

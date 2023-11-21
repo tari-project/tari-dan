@@ -21,28 +21,27 @@
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{Deserialize, Serialize};
-use tari_bor::{decode, encode, BorError};
+use tari_bor::encode;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Arg {
     Workspace(Vec<u8>),
     Literal(Vec<u8>),
+    // Literal(tari_bor::Value),
 }
 
 impl Arg {
-    pub fn literal(value: Vec<u8>) -> Self {
-        Arg::Literal(value)
+    pub fn literal(value: tari_bor::Value) -> Result<Self, tari_bor::BorError> {
+        // TODO: Unfortunately, CBOR value does not serialize consistently in JSON so we have to use the byte encoded
+        // form for now.
+        Ok(Arg::Literal(encode(&value)?))
+    }
+
+    pub fn from_type<T: Serialize>(val: &T) -> Result<Self, tari_bor::BorError> {
+        Ok(Arg::Literal(encode(val)?))
     }
 
     pub fn workspace<T: Into<Vec<u8>>>(key: T) -> Self {
         Arg::Workspace(key.into())
-    }
-
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, BorError> {
-        decode(bytes)
-    }
-
-    pub fn to_bytes(&self) -> Vec<u8> {
-        encode(self).unwrap()
     }
 }

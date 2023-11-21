@@ -30,12 +30,14 @@ use tari_template_lib::{
 };
 
 use crate::{
-    hashing::{hasher, EngineHashDomainLabel},
+    hashing::{hasher32, EngineHashDomainLabel},
+    indexed_value::{IndexedValueError, IndexedWellKnownTypes},
     serde_with,
+    substate::SubstateAddress,
 };
 
 pub fn new_component_address_from_parts(template_address: &TemplateAddress, component_id: &Hash) -> ComponentAddress {
-    let address = hasher(EngineHashDomainLabel::ComponentAddress)
+    let address = hasher32(EngineHashDomainLabel::ComponentAddress)
         .chain(template_address)
         .chain(component_id)
         .result();
@@ -47,20 +49,25 @@ pub struct ComponentHeader {
     #[serde(with = "serde_with::hex")]
     pub template_address: TemplateAddress,
     pub module_name: String,
+    #[serde(with = "serde_with::hex")]
     pub owner_key: RistrettoPublicKeyBytes,
     pub owner_rule: OwnerRule,
     pub access_rules: ComponentAccessRules,
     // TODO: Split the state from the header
-    pub state: ComponentBody,
+    pub body: ComponentBody,
 }
 
 impl ComponentHeader {
     pub fn into_component(self) -> ComponentBody {
-        self.state
+        self.body
     }
 
-    pub fn state(&self) -> &[u8] {
-        &self.state.state
+    pub fn state(&self) -> &tari_bor::Value {
+        &self.body.state
+    }
+
+    pub fn into_state(self) -> tari_bor::Value {
+        self.body.state
     }
 
     pub fn as_ownership(&self) -> Ownership<'_> {
@@ -73,16 +80,26 @@ impl ComponentHeader {
     pub fn access_rules(&self) -> &ComponentAccessRules {
         &self.access_rules
     }
+
+    pub fn set_access_rules(&mut self, access_rules: ComponentAccessRules) -> &mut Self {
+        self.access_rules = access_rules;
+        self
+    }
+
+    pub fn contains_substate(&self, address: &SubstateAddress) -> Result<bool, IndexedValueError> {
+        let found = IndexedWellKnownTypes::value_contains_substate(self.state(), address)?;
+        Ok(found)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentBody {
-    #[serde(with = "serde_with::hex")]
-    pub state: Vec<u8>,
+    #[serde(with = "serde_with::cbor_value")]
+    pub state: tari_bor::Value,
 }
 
 impl ComponentBody {
-    pub fn set(&mut self, state: Vec<u8>) -> &mut Self {
+    pub fn set(&mut self, state: tari_bor::Value) -> &mut Self {
         self.state = state;
         self
     }

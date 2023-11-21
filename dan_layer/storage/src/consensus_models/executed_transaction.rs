@@ -87,6 +87,10 @@ impl ExecutedTransaction {
         self.transaction.all_inputs_iter().chain(&self.resulting_outputs)
     }
 
+    pub fn num_involved_shards(&self) -> usize {
+        self.transaction.num_involved_shards() + self.resulting_outputs.len()
+    }
+
     pub fn into_final_result(self) -> Option<ExecuteResult> {
         self.final_decision().map(|d| {
             if d.is_commit() {

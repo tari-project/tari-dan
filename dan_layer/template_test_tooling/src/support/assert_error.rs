@@ -8,12 +8,10 @@ use tari_engine_types::{commit_result::RejectReason, resource_container::Resourc
 
 pub fn assert_reject_reason<B: Borrow<RejectReason>, E: Display>(reason: B, error: E) {
     match reason.borrow() {
-        RejectReason::ExecutionFailure(s) => {
-            // TODO: Would be great if we could enumerate specific reasons from within the engine rather than simply
-            //       turning RuntimeError into a string
-            assert!(s.contains(&error.to_string(),), "Unexpected reject reason \"{}\"", s,)
-        },
-        r => panic!("Unexpected reject reason {}", r),
+        // TODO: Would be great if we could enumerate specific reasons from within the engine rather than simply
+        //       turning RuntimeError into a string
+        RejectReason::ExecutionFailure(s) if s.contains(&error.to_string()) => {},
+        r => panic!("Expected reject reason \"{}\" but got \"{}\"", error, r),
     }
 }
 

@@ -23,10 +23,9 @@
 use serde::{de::DeserializeOwned, Serialize};
 use tari_bor::{decode_exact, encode, encode_into, encode_with_len};
 use tari_engine_types::{indexed_value::IndexedValue, instruction_result::InstructionResult};
-use tari_template_abi::{CallInfo, EngineOp};
+use tari_template_abi::{CallInfo, EngineOp, FunctionDef};
 use tari_template_lib::{
     args::{
-        Arg,
         BucketInvokeArg,
         CallInvokeArg,
         CallerContextInvokeArg,
@@ -55,9 +54,7 @@ use crate::{
         LoadedWasmTemplate,
     },
 };
-
 const LOG_TARGET: &str = "tari::dan::engine::wasm::process";
-
 #[derive(Debug)]
 pub struct WasmProcess {
     module: LoadedWasmTemplate,
@@ -105,6 +102,8 @@ impl WasmProcess {
                 return 0;
             },
         };
+
+        log::debug!(target: LOG_TARGET, "Engine call: {:?}", op);
 
         let result = match op {
             EngineOp::EmitLog => Self::handle(env, arg, |env, arg: EmitLogArg| {
@@ -157,6 +156,7 @@ impl WasmProcess {
                 env.state().interface().call_invoke(arg.action, arg.args.into())
             }),
             EngineOp::ProofInvoke => Self::handle(env, arg, |env, arg: ProofInvokeArg| {
+                log::debug!(target: LOG_TARGET, "proof action = {:?}", arg.action);
                 env.state()
                     .interface()
                     .proof_invoke(arg.proof_ref, arg.action, arg.args.into())
@@ -171,7 +171,7 @@ impl WasmProcess {
             {
                 log::error!(target: LOG_TARGET, "Error emitting log: {}", err);
             }
-            eprintln!("{}", err);
+
             log::error!(target: LOG_TARGET, "{}", err);
             if let WasmExecutionError::RuntimeError(e) = err {
                 env.set_last_engine_error(e);
@@ -208,14 +208,7 @@ impl WasmProcess {
 impl Invokable for WasmProcess {
     type Error = WasmExecutionError;
 
-    fn invoke_by_name(&self, name: &str, args: Vec<Arg>) -> Result<InstructionResult, Self::Error> {
-        let func_def = self
-            .module
-            .find_func_by_name(name)
-            .ok_or_else(|| WasmExecutionError::FunctionNotFound { name: name.into() })?;
-
-        let args = self.env.state().resolve_args(&args)?;
-
+    fn invoke(&self, func_def: &FunctionDef, args: Vec<tari_bor::Value>) -> Result<InstructionResult, Self::Error> {
         let call_info = CallInfo {
             abi_context: self.encoded_abi_context(),
             func_name: func_def.name.clone(),
@@ -228,6 +221,7 @@ impl Invokable for WasmProcess {
         let call_info_ptr = self.alloc_and_write(&call_info)?;
         let res = func.call(&[Val::I32(call_info_ptr.as_i32()), Val::I32(call_info_ptr.len() as i32)]);
         self.env.free(call_info_ptr)?;
+
         let val = match res {
             Ok(res) => res,
             Err(err) => {
@@ -260,8 +254,7 @@ impl Invokable for WasmProcess {
             .set_last_instruction_output(value.clone())?;
 
         Ok(InstructionResult {
-            raw,
-            value,
+            indexed: value,
             return_type: func_def.output.clone(),
         })
     }

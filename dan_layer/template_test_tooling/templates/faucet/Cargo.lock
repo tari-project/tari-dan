@@ -73,10 +73,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-big-array"
-version = "0.5.1"
+name = "serde-byte-array"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11fc7cc2c76d73e0f27ee52abbd64eec84d46f370c88371120433196934e4b7f"
+checksum = "63213ee4ed648dbd87db6fa993d4275b46bfb4ddfd95b3756045007c2b28f742"
 dependencies = [
  "serde",
 ]
@@ -105,7 +105,7 @@ dependencies = [
 
 [[package]]
 name = "tari_bor"
-version = "0.0.3"
+version = "0.0.7"
 dependencies = [
  "ciborium",
  "ciborium-io",
@@ -114,7 +114,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_abi"
-version = "0.0.3"
+version = "0.0.7"
 dependencies = [
  "serde",
  "tari_bor",
@@ -122,11 +122,11 @@ dependencies = [
 
 [[package]]
 name = "tari_template_lib"
-version = "0.0.3"
+version = "0.0.7"
 dependencies = [
  "newtype-ops",
  "serde",
- "serde-big-array",
+ "serde-byte-array",
  "tari_bor",
  "tari_template_abi",
  "tari_template_macros",
@@ -134,7 +134,7 @@ dependencies = [
 
 [[package]]
 name = "tari_template_macros"
-version = "0.0.3"
+version = "0.0.7"
 dependencies = [
  "proc-macro2",
  "quote",

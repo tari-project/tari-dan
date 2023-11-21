@@ -22,10 +22,9 @@
 
 mod error;
 
-use std::{fmt::Display, future::Future, sync::Arc};
+use std::{collections::HashSet, fmt::Display, future::Future, iter, sync::Arc};
 
 use log::*;
-use rand::{rngs::OsRng, seq::SliceRandom};
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
     NodeAddressable,
@@ -89,10 +88,18 @@ where
             .autofill_transaction(transaction, required_substates)
             .await?;
 
-        self.try_with_committee(tx_hash.into_array().into(), move |mut client| {
-            let transaction = autofilled_transaction.clone();
-            async move { client.submit_transaction(transaction).await }
-        })
+        let transaction_shard_id = ShardId::for_transaction_receipt(tx_hash.into_array().into());
+
+        self.try_with_committee(
+            autofilled_transaction
+                .involved_shards_iter()
+                .copied()
+                .chain(iter::once(transaction_shard_id)),
+            |mut client| {
+                let transaction = autofilled_transaction.clone();
+                async move { client.submit_transaction(transaction).await }
+            },
+        )
         .await
     }
 
@@ -100,7 +107,8 @@ where
         &self,
         transaction_id: TransactionId,
     ) -> Result<TransactionResultStatus, TransactionManagerError> {
-        self.try_with_committee(transaction_id.into_array().into(), |mut client| async move {
+        let transaction_shard_id = ShardId::for_transaction_receipt(transaction_id.into_array().into());
+        self.try_with_committee(iter::once(transaction_shard_id), |mut client| async move {
             client.get_finalized_transaction_result(transaction_id).await.optional()
         })
         .await?
@@ -117,7 +125,7 @@ where
     ) -> Result<SubstateResult, TransactionManagerError> {
         let shard = ShardId::from_address(&substate_address, version);
 
-        self.try_with_committee(shard, |mut client| {
+        self.try_with_committee(iter::once(shard), |mut client| {
             // This double clone looks strange, but it's needed because this function is called in a loop
             // and each iteration needs its own copy of the address (because of the move).
             let substate_address = substate_address.clone();
@@ -134,9 +142,9 @@ where
     /// Fetches the committee members for the given shard and calls the given callback with each member until
     /// the callback returns a `Ok` result. If the callback returns an `Err` result, the next committee member is
     /// called.
-    async fn try_with_committee<'a, F, T, E, TFut>(
+    async fn try_with_committee<'a, F, T, E, TFut, IShard>(
         &self,
-        shard_id: ShardId,
+        shard_ids: IShard,
         mut callback: F,
     ) -> Result<T, TransactionManagerError>
     where
@@ -145,18 +153,22 @@ where
         TFut: Future<Output = Result<T, E>> + 'a,
         T: 'static,
         E: Display,
+        IShard: IntoIterator<Item = ShardId>,
     {
         let epoch = self.epoch_manager.current_epoch().await?;
-        let mut committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+        // Get all unique members. The hashset already "shuffles" items owing to the random hash function.
+        let mut all_members = HashSet::new();
+        for shard_id in shard_ids {
+            let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+            all_members.extend(committee);
+        }
 
-        committee.members.shuffle(&mut OsRng);
-
-        let committee_size = committee.members.len();
+        let committee_size = all_members.len();
         if committee_size == 0 {
             return Err(TransactionManagerError::NoCommitteeMembers);
         }
 
-        for validator in committee.members {
+        for validator in all_members {
             let client = self.client_provider.create_client(&validator);
             match callback(client).await {
                 Ok(ret) => {

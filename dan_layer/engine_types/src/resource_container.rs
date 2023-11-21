@@ -8,40 +8,45 @@
 use std::{collections::BTreeMap, iter, mem};
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::PublicKey;
+use tari_common_types::types::Commitment;
+use tari_crypto::tari_utilities::ByteArray;
 use tari_template_abi::rust::collections::BTreeSet;
 use tari_template_lib::{
-    models::{Amount, ConfidentialOutputProof, ConfidentialWithdrawProof, NonFungibleId, ResourceAddress},
+    crypto::PedersonCommitmentBytes,
+    models::{
+        Amount,
+        ConfidentialOutputProof,
+        ConfidentialWithdrawProof,
+        NonFungibleAddress,
+        NonFungibleId,
+        ResourceAddress,
+    },
     prelude::ResourceType,
 };
-use tari_utilities::ByteArray;
 
 use crate::{
     confidential::{validate_confidential_proof, validate_confidential_withdraw, ConfidentialOutput},
-    serde_with,
+    substate::SubstateAddress,
 };
 
 /// Instances of a single resource kept in Buckets and Vaults
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResourceContainer {
     Fungible {
-        #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         amount: Amount,
         locked_amount: Amount,
     },
     NonFungible {
-        #[serde(with = "serde_with::string")]
         address: ResourceAddress,
         token_ids: BTreeSet<NonFungibleId>,
         locked_token_ids: BTreeSet<NonFungibleId>,
     },
     Confidential {
-        #[serde(with = "serde_with::string")]
         address: ResourceAddress,
-        commitments: BTreeMap<PublicKey, ConfidentialOutput>,
+        commitments: BTreeMap<Commitment, ConfidentialOutput>,
         revealed_amount: Amount,
-        locked_commitments: BTreeMap<PublicKey, ConfidentialOutput>,
+        locked_commitments: BTreeMap<Commitment, ConfidentialOutput>,
         locked_revealed_amount: Amount,
     },
 }
@@ -63,7 +68,7 @@ impl ResourceContainer {
         }
     }
 
-    pub fn confidential<I: IntoIterator<Item = (PublicKey, ConfidentialOutput)>>(
+    pub fn confidential<I: IntoIterator<Item = (Commitment, ConfidentialOutput)>>(
         address: ResourceAddress,
         commitment: I,
         revealed_amount: Amount,
@@ -91,11 +96,7 @@ impl ResourceContainer {
         );
         Ok(ResourceContainer::Confidential {
             address,
-            commitments: iter::once((
-                validated_proof.output.commitment.as_public_key().clone(),
-                validated_proof.output,
-            ))
-            .collect(),
+            commitments: iter::once((validated_proof.output.commitment.clone(), validated_proof.output)).collect(),
             revealed_amount: Amount::zero(),
             locked_commitments: BTreeMap::new(),
             locked_revealed_amount: Amount::zero(),
@@ -159,6 +160,12 @@ impl ResourceContainer {
         }
     }
 
+    pub fn child_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.non_fungible_token_ids()
+            .iter()
+            .map(|id| SubstateAddress::NonFungible(NonFungibleAddress::new(*self.resource_address(), id.clone())))
+    }
+
     pub fn deposit(&mut self, other: ResourceContainer) -> Result<(), ResourceError> {
         if self.resource_address() != other.resource_address() {
             return Err(ResourceError::ResourceAddressMismatch {
@@ -214,10 +221,8 @@ impl ResourceContainer {
     }
 
     pub fn withdraw(&mut self, amt: Amount) -> Result<ResourceContainer, ResourceError> {
-        if !amt.is_positive() || amt.is_zero() {
-            return Err(ResourceError::InvariantError(
-                "Amount must be positive and non-zero".to_string(),
-            ));
+        if !amt.is_positive() {
+            return Err(ResourceError::InvariantError("Amount must be positive".to_string()));
         }
         match self {
             ResourceContainer::Fungible { amount, .. } => {
@@ -269,8 +274,24 @@ impl ResourceContainer {
         }
     }
 
-    pub fn withdraw_all(&mut self) -> Result<ResourceContainer, ResourceError> {
-        self.withdraw(self.amount())
+    pub fn recall_all(&mut self) -> Result<ResourceContainer, ResourceError> {
+        match self {
+            ResourceContainer::Fungible { .. } | ResourceContainer::NonFungible { .. } => self.withdraw(self.amount()),
+            ResourceContainer::Confidential {
+                commitments,
+                revealed_amount,
+                ..
+            } => {
+                let amount = *revealed_amount;
+                *revealed_amount = Amount::zero();
+                let commitments = mem::take(commitments);
+                Ok(ResourceContainer::confidential(
+                    *self.resource_address(),
+                    commitments,
+                    amount,
+                ))
+            },
+        }
     }
 
     pub fn withdraw_by_ids(&mut self, ids: &BTreeSet<NonFungibleId>) -> Result<ResourceContainer, ResourceError> {
@@ -315,16 +336,17 @@ impl ResourceContainer {
                     .inputs
                     .iter()
                     .map(|input| {
-                        let commitment =
-                            PublicKey::from_bytes(input).map_err(|_| ResourceError::InvalidConfidentialProof {
+                        let commitment = Commitment::from_canonical_bytes(input.as_bytes()).map_err(|_| {
+                            ResourceError::InvalidConfidentialProof {
                                 details: "Invalid input commitment".to_string(),
-                            })?;
+                            }
+                        })?;
                         match commitments.remove(&commitment) {
                             Some(_) => Ok(commitment),
                             None => Err(ResourceError::InvalidConfidentialProof {
                                 details: format!(
                                     "withdraw_confidential: input commitment {} not found in resource",
-                                    commitment
+                                    commitment.as_public_key()
                                 ),
                             }),
                         }
@@ -333,10 +355,7 @@ impl ResourceContainer {
 
                 let validated_proof = validate_confidential_withdraw(&inputs, proof)?;
                 if let Some(change) = validated_proof.change_output {
-                    if commitments
-                        .insert(change.commitment.as_public_key().clone(), change)
-                        .is_some()
-                    {
+                    if commitments.insert(change.commitment.clone(), change).is_some() {
                         return Err(ResourceError::InvariantError(
                             "Confidential deposit contained duplicate commitment in change commitment".to_string(),
                         ));
@@ -346,11 +365,66 @@ impl ResourceContainer {
 
                 Ok(ResourceContainer::confidential(
                     *self.resource_address(),
-                    Some((
-                        validated_proof.output.commitment.as_public_key().clone(),
-                        validated_proof.output,
-                    )),
+                    Some((validated_proof.output.commitment.clone(), validated_proof.output)),
                     validated_proof.output_revealed_amount,
+                ))
+            },
+        }
+    }
+
+    pub fn recall_confidential_commitments(
+        &mut self,
+        commitments: BTreeSet<PedersonCommitmentBytes>,
+        revealed_amount: Amount,
+    ) -> Result<ResourceContainer, ResourceError> {
+        match self {
+            ResourceContainer::Fungible { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot withdraw confidential assets from a fungible resource".to_string(),
+            )),
+            ResourceContainer::NonFungible { .. } => Err(ResourceError::OperationNotAllowed(
+                "Cannot withdraw confidential assets from a non-fungible resource".to_string(),
+            )),
+            ResourceContainer::Confidential {
+                commitments: existing_commitments,
+                revealed_amount: existing_revealed_amount,
+                ..
+            } => {
+                if *existing_revealed_amount < revealed_amount {
+                    return Err(ResourceError::InsufficientBalance {
+                        details: format!(
+                            "recall_confidential_commitments: resource container did not contain enough revealed \
+                             funds. Required: {}, Available: {}",
+                            revealed_amount, existing_revealed_amount
+                        ),
+                    });
+                }
+
+                *existing_revealed_amount -= revealed_amount;
+
+                let recalled = commitments
+                    .iter()
+                    .map(|commitment| {
+                        let commitment = Commitment::from_canonical_bytes(commitment.as_bytes()).map_err(|_| {
+                            ResourceError::InvalidConfidentialProof {
+                                details: "Invalid input commitment".to_string(),
+                            }
+                        })?;
+                        let output = existing_commitments.remove(&commitment).ok_or_else(|| {
+                            ResourceError::InvalidConfidentialProof {
+                                details: format!(
+                                    "recall_confidential_commitments: input commitment {} not found in resource",
+                                    commitment.as_public_key()
+                                ),
+                            }
+                        })?;
+                        Ok((commitment, output))
+                    })
+                    .collect::<Result<Vec<_>, ResourceError>>()?;
+
+                Ok(ResourceContainer::confidential(
+                    *self.resource_address(),
+                    recalled,
+                    revealed_amount,
                 ))
             },
         }
@@ -365,14 +439,14 @@ impl ResourceContainer {
     }
 
     /// Returns all confidential commitments. If the resource is not confidential, None is returned.
-    pub fn get_confidential_commitments(&self) -> Option<&BTreeMap<PublicKey, ConfidentialOutput>> {
+    pub fn get_confidential_commitments(&self) -> Option<&BTreeMap<Commitment, ConfidentialOutput>> {
         match self {
             ResourceContainer::Fungible { .. } | ResourceContainer::NonFungible { .. } => None,
             ResourceContainer::Confidential { commitments, .. } => Some(commitments),
         }
     }
 
-    pub fn into_confidential_commitments(self) -> Option<BTreeMap<PublicKey, ConfidentialOutput>> {
+    pub fn into_confidential_commitments(self) -> Option<BTreeMap<Commitment, ConfidentialOutput>> {
         match self {
             ResourceContainer::Fungible { .. } | ResourceContainer::NonFungible { .. } => None,
             ResourceContainer::Confidential { commitments, .. } => Some(commitments),

@@ -1,6 +1,6 @@
 [package]
 name = "tari_dan_common_types"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 license = "BSD-3-Clause"
 
@@ -8,7 +8,7 @@ license = "BSD-3-Clause"
 
 [dependencies]
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = { version = "0.18", features = ["borsh"] }
+tari_crypto = { version = "0.19", features = ["borsh"] }
 tari_engine_types = { path = "../engine_types" }
 tari_bor = { path = "../tari_bor" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
@@ -18,11 +18,13 @@ newtype-ops = "0.1.4"
 rand = "0.8"
 prost = "0.9"
 prost-types = "0.9"
-serde = "1.0.126"
+serde = "1.0"
 ruint = "1.8.0"
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common", features = ["build"] }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common", features = [
+  "build",
+] }
 
 [package.metadata.cargo-machete]
 ignored = ["prost", "prost-types"] # false positive, used in OUT_DIR structs

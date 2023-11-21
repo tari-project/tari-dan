@@ -6,3 +6,51 @@ passthrough = ["CFLAGS"]
 
 [target.arm-linux-androideabi.env]
 passthrough = ["CFLAGS"]
+
+[target.aarch64-unknown-linux-gnu]
+image = "ubuntu:18.04"
+# Mergered all scripts/install_ubuntu_dependencies*.sh scripts
+pre-build = [ """
+apt-get update && \
+apt-get -y install \
+  openssl \
+  libssl-dev \
+  pkg-config \
+  libsqlite3-dev \
+  clang-10 \
+  git \
+  cmake \
+  dh-autoreconf \
+  libc++-dev \
+  libc++abi-dev \
+  libprotobuf-dev \
+  protobuf-compiler \
+  libncurses5-dev \
+  libncursesw5-dev \
+  zip \
+  curl \
+  pkg-config-aarch64-linux-gnu \
+  gcc-aarch64-linux-gnu \
+  g++-aarch64-linux-gnu && \
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && \
+export PATH="$HOME/.cargo/bin:$PATH" && \
+rustup target add aarch64-unknown-linux-gnu && \
+rustup toolchain install stable-aarch64-unknown-linux-gnu
+""" ]
+
+[target.aarch64-unknown-linux-gnu.env]
+passthrough = [
+  "CFLAGS",
+  "RUST_DEBUG",
+  "RUSTFLAGS",
+  "ARCH",
+  "FEATURES",
+  "ROARING_ARCH",
+  "TARGET",
+  "RUST_TARGET",
+  "BUILD_TARGET",
+  "CARGO_BUILD_TARGET",
+  "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc",
+  "BINDGEN_EXTRA_CLANG_ARGS=--sysroot /usr/aarch64-linux-gnu/include/",
+  "TARI_NETWORK",
+]

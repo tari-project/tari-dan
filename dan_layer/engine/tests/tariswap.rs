@@ -20,7 +20,7 @@ struct TariSwapTest {
 }
 
 fn setup(fee: u16) -> TariSwapTest {
-    let mut template_test = TemplateTest::new(vec!["tests/templates/tariswap", "tests/templates/faucet"]);
+    let mut template_test = TemplateTest::new(vec!["tests/templates/tariswap"]);
 
     // create the token pair for the swap pool
     let (a_faucet, a_resource) = create_faucet_component(&mut template_test, "A".to_string());

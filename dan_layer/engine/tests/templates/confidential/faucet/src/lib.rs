@@ -33,7 +33,7 @@ mod faucet_template {
     impl ConfidentialFaucet {
         pub fn mint(confidential_proof: ConfidentialOutputProof) -> Component<Self> {
             let coins = ResourceBuilder::confidential()
-                .with_token_symbol("testconf")
+                .mintable(AccessRule::AllowAll)
                 .initial_supply(confidential_proof)
                 .build_bucket();
 
@@ -44,9 +44,13 @@ mod faucet_template {
             .create()
         }
 
+        pub fn mint_more(&mut self, proof: ConfidentialOutputProof) {
+            let bucket = ResourceManager::get(self.vault.resource_address()).mint_confidential(proof);
+            self.vault.deposit(bucket);
+        }
+
         pub fn take_free_coins(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
-            // let proof = engine().create_confidential_proof(partial_proof, Amount(1000));
-            debug("Withdrawing <unknown> coins from faucet");
+            debug!("Withdrawing <unknown> coins from faucet");
             self.vault.withdraw_confidential(proof)
         }
 

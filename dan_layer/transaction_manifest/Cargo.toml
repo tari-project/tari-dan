@@ -1,6 +1,6 @@
 [package]
 name = "tari_transaction_manifest"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Tari transaction manifest"
@@ -11,6 +11,7 @@ license = "BSD-3-Clause"
 tari_template_lib = { path = "../template_lib" }
 tari_engine_types = { path = "../engine_types" }
 tari_template_builtin = { path = "../template_builtin" }
+tari_bor = { path = "../tari_bor" }
 
 proc-macro2 = "1.0.42"
 syn = { version = "1.0.98", features = ["full", "extra-traits"] }

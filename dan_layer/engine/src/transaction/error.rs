@@ -22,7 +22,6 @@
 
 use tari_engine_types::indexed_value::IndexedValueError;
 use tari_template_lib::models::TemplateAddress;
-use tari_utilities::ByteArrayError;
 
 use crate::{runtime::RuntimeError, wasm::WasmExecutionError};
 
@@ -35,15 +34,15 @@ pub enum TransactionError {
     #[error(transparent)]
     RuntimeError(#[from] RuntimeError),
     #[error(transparent)]
-    ByteArrayError(#[from] ByteArrayError),
-    #[error(transparent)]
     FlowEngineError(#[from] crate::flow::FlowEngineError),
-    #[error("Recursion limit exceeded")]
-    RecursionLimitExceeded,
     #[error("Failed to load template '{address}': {details}")]
     FailedToLoadTemplate { address: TemplateAddress, details: String },
     #[error("BOR error: {0}")]
     BorError(#[from] tari_bor::BorError),
     #[error("Value visitor error: {0}")]
     ValueVisitorError(#[from] IndexedValueError),
+    #[error("Function {name} not found")]
+    FunctionNotFound { name: String },
+    #[error("Invariant error: {details}")]
+    InvariantError { details: String },
 }

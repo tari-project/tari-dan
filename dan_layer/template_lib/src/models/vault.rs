@@ -20,20 +20,20 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::BTreeSet, str::FromStr};
-
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{
     call_engine,
     rust::{
+        collections::BTreeSet,
         fmt,
         fmt::{Display, Formatter},
+        str::FromStr,
     },
     EngineOp,
 };
 
-use super::{BinaryTag, Proof};
+use super::{BinaryTag, Proof, ProofAuth};
 use crate::{
     args::{
         ConfidentialRevealArg,
@@ -134,6 +134,15 @@ impl VaultRef {
     }
 }
 
+impl Display for VaultRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            VaultRef::Vault { address, .. } => write!(f, "Vaults({})", address),
+            VaultRef::Ref(id) => write!(f, "Ref({})", id),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Vault {
@@ -208,14 +217,10 @@ impl Vault {
         resp.decode().expect("failed to decode Bucket")
     }
 
+    /// Withdraws all fungible, non-fungible and revealed confidential amounts from the vault.
+    /// NOTE: blinded confidential amounts are not withdrawn as these require a ConfidentialWithdrawProof.
     pub fn withdraw_all(&mut self) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
-            vault_ref: self.vault_ref(),
-            action: VaultAction::WithdrawAll,
-            args: invoke_args![],
-        });
-
-        resp.decode().expect("failed to decode Bucket")
+        self.withdraw(self.balance())
     }
 
     pub fn balance(&self) -> Amount {
@@ -296,6 +301,16 @@ impl Vault {
     pub fn join_confidential(&mut self, proof: ConfidentialWithdrawProof) {
         let bucket = self.withdraw_confidential(proof);
         self.deposit(bucket);
+    }
+
+    pub fn authorize(&self) -> ProofAuth {
+        let proof = self.create_proof();
+        ProofAuth { id: proof.id() }
+    }
+
+    pub fn authorize_with<F: FnOnce() -> R, R>(&self, f: F) -> R {
+        let _auth = self.authorize();
+        f()
     }
 
     pub fn create_proof(&self) -> Proof {

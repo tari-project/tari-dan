@@ -23,40 +23,42 @@
 mod abi;
 mod ast;
 mod definition;
-mod dependencies;
 mod dispatcher;
 
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse2, Result};
 
-use self::{
-    abi::generate_abi,
-    ast::TemplateAst,
-    definition::generate_definition,
-    dependencies::generate_dependencies,
-    dispatcher::generate_dispatcher,
-};
+use self::{abi::generate_abi, ast::TemplateAst, definition::generate_definition, dispatcher::generate_dispatcher};
 
 pub fn generate_template(input: TokenStream) -> Result<TokenStream> {
     let ast = parse2::<TemplateAst>(input).unwrap();
 
-    let dependencies = generate_dependencies();
     let definition = generate_definition(&ast);
     let abi = generate_abi(&ast)?;
     let dispatcher = generate_dispatcher(&ast)?;
 
     let output = quote! {
-        #dependencies
-
         #definition
 
-        #abi
-
         #dispatcher
+
+        #abi
     };
 
     // eprintln!("output = {}", output);
+
+    Ok(output)
+}
+
+pub fn generate_template_non_wasm(input: TokenStream) -> Result<TokenStream> {
+    let ast = parse2::<TemplateAst>(input).unwrap();
+
+    let definition = generate_definition(&ast);
+
+    let output = quote! {
+        #definition
+    };
 
     Ok(output)
 }

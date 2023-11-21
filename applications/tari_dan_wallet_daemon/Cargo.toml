@@ -4,13 +4,13 @@ authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet daemon"
 repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = "0.18"
+tari_crypto = "0.19"
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
@@ -36,20 +36,29 @@ include_dir = "0.7.2"
 log = "0.4.17"
 rand = "0.8"
 reqwest = "0.11.16"
-serde = "1.0.152"
-serde_json = "1.0.92"
+serde = "1.0"
+serde_json = "1.0"
 thiserror = "1.0.38"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
-tower-http = { version = "0.3.5", default-features = false, features = ["cors", "trace"] }
-webrtc = "0.7.1"
+tower-http = { version = "0.3.5", default-features = false, features = [
+    "cors",
+    "trace",
+] }
+webrtc = "0.9.0"
 
 libsqlite3-sys = { version = "0.25", features = ["bundled"] }
-log4rs = { version = "1.1.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller", "console_appender"] }
+log4rs = { version = "1.1.1", features = [
+    "rolling_file_appender",
+    "compound_policy",
+    "size_trigger",
+    "fixed_window_roller",
+    "console_appender",
+] }
 mime_guess = "2.0.4"
 url = "2.4.1"
 
 [dev-dependencies]
-tari_utilities = "0.4.10"
+tari_utilities = "0.6"
 
 [package.metadata.cargo-machete]
 ignored = [

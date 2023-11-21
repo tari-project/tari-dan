@@ -20,12 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use proc_macro2::TokenStream;
-use quote::quote;
+use tari_template_lib::prelude::*;
 
-/// Returns code that contains global functions and types implicitly available to contract authors
-pub fn generate_dependencies() -> TokenStream {
-    quote! {
-        use tari_template_lib::template_dependencies::*;
+#[template]
+mod template {
+    use super::*;
+
+    pub struct ComponentManagerTest;
+
+    impl ComponentManagerTest {
+        pub fn get_template_address_for_component(component_address: ComponentAddress) -> TemplateAddress {
+            ComponentManager::get(component_address).get_template_address()
+        }
     }
 }

@@ -7,7 +7,7 @@ use d3ne::{Node, OutputValue, Worker};
 use tari_bor::from_value;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 
-use crate::{flow::FlowContext, function_definitions::ArgType, packager::LoadedTemplate};
+use crate::{flow::FlowContext, function_definitions::ArgType, template::LoadedTemplate};
 
 pub struct ArgWorker {}
 

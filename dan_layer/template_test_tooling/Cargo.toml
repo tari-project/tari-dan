@@ -1,6 +1,6 @@
 [package]
 name = "tari_template_test_tooling"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Test tooling for Tari template development"
@@ -10,7 +10,8 @@ license = "BSD-3-Clause"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 tari_dan_engine = { path = "../engine" }
-tari_crypto = "0.18"
+tari_crypto = "0.19"
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_template_lib = { path = "../template_lib" }
 tari_engine_types = { path = "../engine_types" }
 tari_transaction_manifest = { path = "../transaction_manifest" }
@@ -20,4 +21,5 @@ tari_dan_common_types = { path = "../common_types" }
 tari_bor = { path = "../tari_bor" }
 
 anyhow = "1.0.68"
-serde = { version = "1.0.144", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+rand = "0.8"

@@ -124,7 +124,7 @@ mod sparkle_nft_template {
                 bucket.resource_address() == self.address,
                 "Cannot burn bucket not from this collection"
             );
-            debug(format!("Burning bucket {} containing {}", bucket.id(), bucket.amount()));
+            debug!("Burning bucket {} containing {}", bucket.id(), bucket.amount());
             // This is all that's required, typically the template would not need to include a burn function because a
             // native instruction can be used instead
             bucket.burn();

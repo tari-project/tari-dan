@@ -13,9 +13,10 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError};
 use tari_crypto::tari_utilities::hex::{from_hex, Hex};
 use tari_engine_types::{
-    hashing::{hasher, EngineHashDomainLabel},
+    hashing::{hasher32, EngineHashDomainLabel},
     serde_with,
     substate::SubstateAddress,
+    transaction_receipt::TransactionReceiptAddress,
 };
 
 use crate::{shard_bucket::ShardBucket, uint::U256};
@@ -29,8 +30,12 @@ impl ShardId {
         Self::from_hash(&addr.to_canonical_hash(), version)
     }
 
+    pub fn for_transaction_receipt(tx_receipt: TransactionReceiptAddress) -> Self {
+        Self::from_address(&tx_receipt.into(), 0)
+    }
+
     pub fn from_hash(hash: &[u8], version: u32) -> Self {
-        let new_addr = hasher(EngineHashDomainLabel::ShardId)
+        let new_addr = hasher32(EngineHashDomainLabel::ShardId)
             .chain(&hash)
             .chain(&version)
             .result();

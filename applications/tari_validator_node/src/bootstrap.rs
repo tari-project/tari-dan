@@ -82,6 +82,7 @@ use crate::{
             mempool,
             mempool::{
                 ClaimFeeTransactionValidator,
+                EpochRangeValidator,
                 FeeTransactionValidator,
                 HasInputs,
                 HasInvolvedShards,
@@ -191,7 +192,12 @@ pub async fn spawn_services(
     let fee_table = if config.validator_node.no_fees {
         FeeTable::zero_rated()
     } else {
-        FeeTable::new(1, 1)
+        FeeTable {
+            per_module_call_cost: 1,
+            per_byte_storage_cost: 1,
+            per_event_cost: 1,
+            per_log_cost: 1,
+        }
     };
     let payload_processor = TariDanTransactionProcessor::new(template_manager.clone(), fee_table);
 
@@ -469,6 +475,7 @@ fn create_mempool_before_execute_validator(
     epoch_manager: EpochManagerHandle,
 ) -> impl Validator<Transaction, Error = MempoolError> {
     let mut validator = TemplateExistsValidator::new(template_manager)
+        .and_then(EpochRangeValidator::new(epoch_manager.clone()))
         .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
         .boxed();
     if !config.no_fees {

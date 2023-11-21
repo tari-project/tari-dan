@@ -420,15 +420,16 @@ impl SubstateManager {
         Ok(events)
     }
 
-    pub async fn scan_and_update_substates(&self) -> Result<(), anyhow::Error> {
+    pub async fn scan_and_update_substates(&self) -> Result<usize, anyhow::Error> {
         let addresses = self.get_all_addresses_from_db().await?;
 
+        let num_scanned = addresses.len();
         for (address, _) in addresses {
             let address = SubstateAddress::from_str(&address)?;
             self.fetch_and_add_substate_to_db(&address).await?;
         }
 
-        Ok(())
+        Ok(num_scanned)
     }
 }
 

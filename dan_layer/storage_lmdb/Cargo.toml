@@ -1,6 +1,6 @@
 [package]
 name = "tari_dan_storage_lmdb"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "LMDB implementation of the Tari Storage API"
@@ -15,7 +15,7 @@ tari_storage = {  git = "https://github.com/tari-project/tari.git", branch = "fe
 
 lmdb-zero = "0.4.4"
 hex = "0.4.3"
-serde = { version = "1.0.143", default-features = false, features = ["derive", "alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
 
 [dev-dependencies]
 tempfile = "3.3.0"

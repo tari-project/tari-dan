@@ -187,7 +187,7 @@ fn failed_fee_transaction() {
         )
         .unwrap();
 
-    let reason = result.expect_failure();
+    let reason = result.expect_finalization_failure();
     assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
     let reason = result.expect_transaction_failure();
     assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
@@ -284,7 +284,7 @@ fn fail_pay_less_fees_than_fee_transaction() {
 
     test.disable_fees();
 
-    let reason = result.expect_failure();
+    let reason = result.expect_finalization_failure();
     assert!(matches!(reason, RejectReason::ExecutionFailure(_)));
 
     // Fee was not deducted
@@ -306,9 +306,8 @@ fn fail_pay_too_little_no_fee_instruction() {
 
     test.enable_fees();
 
-    let result = test
-        .try_execute(
-            Transaction::builder()
+    let reason = test.execute_expect_failure(
+        Transaction::builder()
                 // These instructions should not be applied
                 .call_method(account2, "withdraw", args![
                     CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
@@ -319,13 +318,11 @@ fn fail_pay_too_little_no_fee_instruction() {
                 .call_method(account,"pay_fee",  args![Amount(10)])
                 .sign(&private_key)
                 .build(),
-            vec![owner_token, owner_token2],
-        )
-        .unwrap();
+        vec![owner_token, owner_token2],
+    );
 
     test.disable_fees();
 
-    let reason = result.expect_transaction_failure();
     assert!(matches!(reason, RejectReason::FeesNotPaid(_)));
 
     // Fee was not deducted

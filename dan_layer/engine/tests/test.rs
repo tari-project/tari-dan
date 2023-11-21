@@ -22,7 +22,7 @@
 use std::iter;
 
 use tari_dan_engine::{
-    packager::{PackageError, TemplateModuleLoader},
+    template::{TemplateLoaderError, TemplateModuleLoader},
     wasm::{compile::compile_template, WasmExecutionError},
 };
 use tari_engine_types::{
@@ -30,6 +30,7 @@ use tari_engine_types::{
     instruction::Instruction,
     substate::SubstateAddress,
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    TemplateAddress,
 };
 use tari_template_lib::{
     args,
@@ -59,7 +60,6 @@ fn test_state() {
     // constructor
     let component_address1: ComponentAddress = template_test.call_function("State", "new", args![], vec![]);
     template_test.assert_calls(&[
-        "set_current_runtime_state",
         "emit_log",
         "component_invoke",
         "set_last_instruction_output",
@@ -131,7 +131,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::MemoryPointerOutOfRange { .. })
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::MemoryPointerOutOfRange { .. })
     ));
 
     let err = compile_template("tests/templates/buggy", &["unexpected_export_function"])
@@ -140,7 +140,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::UnexpectedAbiFunction { .. })
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::UnexpectedAbiFunction { .. })
     ));
 
     let err = compile_template("tests/templates/buggy", &["return_empty_abi"])
@@ -149,7 +149,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::AbiDecodeError(_))
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::AbiDecodeError(_))
     ));
 
     let err = compile_template("tests/templates/buggy", &[])
@@ -158,7 +158,7 @@ fn test_buggy_template() {
         .unwrap_err();
     assert!(matches!(
         err,
-        PackageError::WasmModuleError(WasmExecutionError::ExportError(ExportError::Missing(_)))
+        TemplateLoaderError::WasmModuleError(WasmExecutionError::ExportError(ExportError::Missing(_)))
     ));
 }
 
@@ -211,8 +211,8 @@ fn test_engine_errors() {
     // call returned null for op VaultInvoke)
     assert_eq!(
         reason,
-        "Runtime error: Resource not found with address \
-         resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b"
+        "Runtime error: Substate not found with address \
+         'resource_7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b7b'"
     );
 }
 
@@ -238,6 +238,20 @@ fn test_tuples() {
 }
 
 #[test]
+fn test_get_template_address() {
+    let mut template_test = TemplateTest::new(vec!["tests/templates/component_manager"]);
+    let (account, _, _) = template_test.create_empty_account();
+
+    let addr: TemplateAddress = template_test.call_function(
+        "ComponentManagerTest",
+        "get_template_address_for_component",
+        args![account],
+        vec![],
+    );
+    assert_eq!(addr, template_test.get_template_address("Account"));
+}
+
+#[test]
 fn test_caller_context() {
     let mut template_test = TemplateTest::new(vec!["tests/templates/caller_context"]);
 
@@ -246,7 +260,7 @@ fn test_caller_context() {
     let value: RistrettoPublicKeyBytes = template_test.call_method(component, "caller_pub_key", args![], vec![]);
     assert_eq!(
         to_hex(value.as_bytes()),
-        "66cad05f12652276f0656288f60963753f50a7947c54a640aa1e1c62097a406d"
+        "d884dd886cc7464402a04920485aebe6dd657b98072de655c46ec6179a52cd0d"
     );
 }
 
@@ -349,7 +363,7 @@ mod fungible {
 
     #[test]
     fn fungible_mint_and_burn() {
-        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet"]);
+        let mut template_test = TemplateTest::new(Vec::<&str>::new());
 
         let faucet_template = template_test.get_template_address("TestFaucet");
 
@@ -457,6 +471,7 @@ mod basic_nft {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn create_resource_mint_and_deposit() {
         let (mut template_test, (account_address, account_owner), nft_component, nft_resx) = setup();
 
@@ -857,7 +872,7 @@ mod emoji_id {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn mint_emoji_ids() {
-        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/emoji_id"]);
+        let mut template_test = TemplateTest::new(vec!["tests/templates/nft/emoji_id"]);
 
         // create an account
         let (account_address, owner_proof, _) = template_test.create_owned_account();
@@ -1006,7 +1021,7 @@ mod tickets {
     #[test]
     #[allow(clippy::too_many_lines)]
     fn buy_and_redeem_ticket() {
-        let mut template_test = TemplateTest::new(vec!["tests/templates/faucet", "tests/templates/nft/tickets"]);
+        let mut template_test = TemplateTest::new(vec!["tests/templates/nft/tickets"]);
 
         // create an account
         let (account_address, owner_proof, secret) = template_test.create_owned_account();
@@ -1159,6 +1174,7 @@ mod nft_indexes {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn new_nft_index() {
         let (mut template_test, (account_address, owner_proof), nft_component, nft_resx) = setup();
 
@@ -1241,5 +1257,47 @@ mod nft_indexes {
         // The total supply of the resource is increased
         let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![owner_proof]);
         assert_eq!(total_supply, Amount(1));
+    }
+}
+
+// TODO: these tests can be removed when create free test coins is removed
+mod free_test_coins {
+    use tari_transaction::id_provider::IdProvider;
+
+    use super::*;
+    #[test]
+    fn it_creates_free_test_coins() {
+        let mut test = TemplateTest::new(Vec::<&str>::new());
+        test.enable_fees();
+        let account_template = test.get_template_address("Account");
+        let (other, _) = test.create_owner_proof();
+
+        let owner_token = test.get_test_proof();
+        let future_account_component = IdProvider::new(Default::default(), 1)
+            .new_component_address(account_template, Some(owner_token.id().as_u256().unwrap().into()))
+            .unwrap();
+
+        test.execute_expect_success(
+            Transaction::builder()
+                .with_fee_instructions_builder(|builder| {
+                    builder
+                        .add_instruction(Instruction::CreateFreeTestCoins {
+                            revealed_amount: Amount(1000),
+                            output: None,
+                        })
+                        .put_last_instruction_output_on_workspace("free")
+                        .call_function(
+                            account_template,
+                            "create_with_bucket",
+                            args![owner_token.clone(), Workspace("free")],
+                        )
+                        .call_method(future_account_component, "pay_fee", args![Amount(1000)])
+                })
+                // Checking we can create an account for another user in this transaction
+                .call_function(account_template, "create", args![other])
+                .sign(test.get_test_secret_key())
+                .build(),
+            vec![owner_token],
+        );
     }
 }

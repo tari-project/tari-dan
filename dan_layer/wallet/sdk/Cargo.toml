@@ -3,13 +3,13 @@ name = "tari_dan_wallet_sdk"
 authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet library"
 repository = "https://github.com/tari-project/tari-dan"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = { version = "0.18", features = ["borsh"] }
+tari_crypto = { version = "0.19", features = ["borsh"] }
 tari_engine_types = { path = "../../engine_types" }
 tari_dan_common_types = { path = "../../common_types" }
 # Just used for QuorumCertificate
@@ -17,7 +17,7 @@ tari_dan_storage = { path = "../../storage" }
 tari_key_manager = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_transaction = { path = "../../transaction" }
 tari_template_lib = { path = "../../template_lib" }
-tari_utilities = "0.4.10"
+tari_utilities = "0.6"
 
 anyhow = "1.0"
 async-trait = "0.1"
@@ -28,7 +28,7 @@ jsonwebtoken = "8.3.0"
 lazy_static = "1.4.0"
 log = "0.4.14"
 rand = "0.8"
-serde = "1.0.126"
+serde = "1.0"
 serde_json = "1.0"
 thiserror = "1.0.38"
 zeroize = "1"

@@ -1,6 +1,6 @@
 [workspace]
 [package]
-name = "faucet"
+name = "dangling"
 version = "0.1.0"
 edition = "2021"
 

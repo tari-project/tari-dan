@@ -1,6 +1,6 @@
 [package]
 name = "tari_template_abi"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Defines the low-level Tari engine ABI for WASM targets"
@@ -9,7 +9,7 @@ license = "BSD-3-Clause"
 
 [dependencies]
 tari_bor = { path = "../tari_bor", default-features = false }
-serde = { version = "1.0.143", default-features = false, features = ["alloc", "derive"] }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 hashbrown = { version = "0.13.2", optional = true }
 
 [features]

@@ -23,19 +23,18 @@
 use std::sync::Arc;
 
 use log::*;
-use tari_bor::encode;
-use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch, NodeAddressable};
+use tari_bor::to_value;
+use tari_dan_common_types::{services::template_provider::TemplateProvider, Epoch};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
-    indexed_value::IndexedValue,
+    indexed_value::{IndexedValue, IndexedWellKnownTypes},
     instruction::Instruction,
     instruction_result::InstructionResult,
+    lock::LockFlag,
 };
-use tari_template_abi::Type;
+use tari_template_abi::{FunctionDef, Type};
 use tari_template_lib::{
-    arg,
     args::{Arg, WorkspaceAction},
-    crypto::RistrettoPublicKeyBytes,
     invoke_args,
     models::ComponentAddress,
     prelude::TemplateAddress,
@@ -43,19 +42,19 @@ use tari_template_lib::{
 use tari_transaction::{id_provider::IdProvider, Transaction};
 
 use crate::{
-    packager::LoadedTemplate,
     runtime::{
+        scope::PushCallFrame,
         AuthParams,
         AuthorizationScope,
         Runtime,
         RuntimeInterfaceImpl,
         RuntimeModule,
-        RuntimeState,
         StateFinalize,
         StateTracker,
         VirtualSubstates,
     },
     state_store::memory::MemoryStateStore,
+    template::LoadedTemplate,
     traits::Invokable,
     transaction::TransactionError,
     wasm::WasmProcess,
@@ -99,13 +98,14 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             modules,
         } = self;
 
-        let auth_scope = AuthorizationScope::new(auth_params.initial_ownership_proofs);
-        let tracker = StateTracker::new(state_db, id_provider, virtual_substates, auth_scope);
+        let initial_auth_scope = AuthorizationScope::new(auth_params.initial_ownership_proofs);
+        let tracker = StateTracker::new(state_db, id_provider, virtual_substates, initial_auth_scope);
         let runtime_interface = RuntimeInterfaceImpl::initialize(
             tracker,
             template_provider.clone(),
             transaction.signer_public_key().clone(),
             modules,
+            MAX_CALL_DEPTH,
         )?;
 
         let runtime = Runtime::new(Arc::new(runtime_interface));
@@ -213,7 +213,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
     ) -> Result<Vec<InstructionResult>, TransactionError> {
         instructions
             .into_iter()
-            .map(|instruction| Self::process_instruction(template_provider, runtime, instruction, MAX_CALL_DEPTH))
+            .map(|instruction| Self::process_instruction(template_provider, runtime, instruction))
             .collect()
     }
 
@@ -221,7 +221,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         template_provider: &TTemplateProvider,
         runtime: &Runtime,
         instruction: Instruction,
-        max_recursion_depth: usize,
     ) -> Result<InstructionResult, TransactionError> {
         debug!(target: LOG_TARGET, "instruction = {:?}", instruction);
         match instruction {
@@ -229,28 +228,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 template_address,
                 function,
                 args,
-            } => Self::call_function(
-                template_provider,
-                runtime,
-                &template_address,
-                &function,
-                args,
-                0,
-                max_recursion_depth,
-            ),
+            } => Self::call_function(template_provider, runtime, &template_address, &function, args),
             Instruction::CallMethod {
                 component_address,
                 method,
                 args,
-            } => Self::call_method(
-                template_provider,
-                runtime,
-                &component_address,
-                &method,
-                args,
-                0,
-                max_recursion_depth,
-            ),
+            } => Self::call_method(template_provider, runtime, &component_address, &method, args),
             // Basically names an output on the workspace so that you can refer to it as an
             // Arg::Variable
             Instruction::PutLastInstructionOutputOnWorkspace { key } => {
@@ -284,10 +267,8 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
                 output,
             } => {
                 let bucket_id = runtime.interface().create_free_test_coins(amount, output)?;
-                let encoded = encode(&bucket_id)?;
                 Ok(InstructionResult {
-                    value: IndexedValue::from_raw(&encoded)?,
-                    raw: encoded,
+                    indexed: IndexedValue::from_type(&bucket_id)?,
                     return_type: Type::Other {
                         name: "BucketId".to_string(),
                     },
@@ -316,8 +297,6 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         template_address: &TemplateAddress,
         function: &str,
         args: Vec<Arg>,
-        recursion_depth: usize,
-        max_recursion_depth: usize,
     ) -> Result<InstructionResult, TransactionError> {
         let template = template_provider
             .get_template_module(template_address)
@@ -328,20 +307,31 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
             .ok_or(TransactionError::TemplateNotFound {
                 address: *template_address,
             })?;
-        let transaction_signer_public_key =
-            RistrettoPublicKeyBytes::from_bytes(runtime.interface().get_transaction_signer_public_key()?.as_bytes())
-                .expect("RistrettoPublicKey::as_bytes did not return 32 bytes");
 
-        runtime.interface().set_current_runtime_state(RuntimeState {
-            template_name: template.template_name().to_string(),
-            template_address: *template_address,
-            transaction_signer_public_key,
-            component_address: None,
-            recursion_depth,
-            max_recursion_depth,
+        let function_def = template.template_def().get_function(function).cloned().ok_or_else(|| {
+            TransactionError::FunctionNotFound {
+                name: function.to_string(),
+            }
         })?;
 
-        let result = Self::invoke_template(template, template_provider, runtime.clone(), function, args, 0, 1)?;
+        let args = runtime.resolve_args(args)?;
+        let arg_scope = args
+            .iter()
+            .map(IndexedWellKnownTypes::from_value)
+            .collect::<Result<_, _>>()?;
+
+        runtime.interface().push_call_frame(PushCallFrame::Static {
+            template_address: *template_address,
+            module_name: template.template_name().to_string(),
+            arg_scope,
+        })?;
+
+        let result = Self::invoke_template(template, template_provider, runtime.clone(), function_def, args)?;
+
+        runtime.interface().validate_return_value(&result.indexed)?;
+
+        runtime.interface().pop_call_frame()?;
+
         Ok(result)
     }
 
@@ -351,48 +341,63 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         component_address: &ComponentAddress,
         method: &str,
         args: Vec<Arg>,
-        recursion_depth: usize,
-        max_recursion_depth: usize,
     ) -> Result<InstructionResult, TransactionError> {
-        let header = runtime.interface().get_component(component_address)?;
-        runtime.interface().check_component_access_rules(method, &header)?;
+        let component = runtime.interface().load_component(component_address)?;
+        let template_address = component.template_address;
 
         let template = template_provider
-            .get_template_module(&header.template_address)
+            .get_template_module(&template_address)
             .map_err(|e| TransactionError::FailedToLoadTemplate {
-                address: header.template_address,
+                address: template_address,
                 details: e.to_string(),
             })?
             .ok_or(TransactionError::TemplateNotFound {
-                address: header.template_address,
+                address: template_address,
             })?;
 
-        let transaction_signer_public_key =
-            RistrettoPublicKeyBytes::from_bytes(runtime.interface().get_transaction_signer_public_key()?.as_bytes())
-                .expect("RistrettoPublicKey::as_bytes did not return 32 bytes");
-
-        runtime.interface().set_current_runtime_state(RuntimeState {
-            template_name: template.template_name().to_string(),
-            template_address: header.template_address,
-            component_address: Some(*component_address),
-            transaction_signer_public_key,
-            recursion_depth,
-            max_recursion_depth,
+        let function_def = template.template_def().get_function(method).cloned().ok_or_else(|| {
+            TransactionError::FunctionNotFound {
+                name: method.to_string(),
+            }
         })?;
 
+        let lock_flag = if function_def.is_mut {
+            LockFlag::Write
+        } else {
+            LockFlag::Read
+        };
+
+        let component_lock = runtime
+            .interface()
+            .lock_substate(&(*component_address).into(), lock_flag)?;
+
+        let args = runtime.resolve_args(args)?;
+        let arg_scope = args
+            .iter()
+            .map(IndexedWellKnownTypes::from_value)
+            .collect::<Result<_, _>>()?;
+
+        runtime.interface().push_call_frame(PushCallFrame::ForComponent {
+            template_address,
+            module_name: template.template_name().to_string(),
+            component_lock: component_lock.clone(),
+            arg_scope,
+        })?;
+
+        // This must come after the call frame as that defines the authorization scope
+        runtime
+            .interface()
+            .check_component_access_rules(method, &component_lock)?;
+
         let mut final_args = Vec::with_capacity(args.len() + 1);
-        final_args.push(arg![component_address]);
+        final_args.push(to_value(component_address)?);
         final_args.extend(args);
 
-        let result = Self::invoke_template(
-            template,
-            template_provider,
-            runtime.clone(),
-            method,
-            final_args,
-            recursion_depth,
-            max_recursion_depth,
-        )?;
+        let result = Self::invoke_template(template, template_provider, runtime.clone(), function_def, final_args)?;
+
+        runtime.interface().validate_return_value(&result.indexed)?;
+        runtime.interface().pop_call_frame()?;
+
         Ok(result)
     }
 
@@ -400,27 +405,25 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate> + 'static> T
         module: LoadedTemplate,
         template_provider: &TTemplateProvider,
         runtime: Runtime,
-        function: &str,
-        args: Vec<Arg>,
-        recursion_depth: usize,
-        max_recursion_depth: usize,
+        function_def: FunctionDef,
+        args: Vec<tari_bor::Value>,
     ) -> Result<InstructionResult, TransactionError> {
-        if recursion_depth > max_recursion_depth {
-            return Err(TransactionError::RecursionLimitExceeded);
-        }
         let result = match module {
             LoadedTemplate::Wasm(wasm_module) => {
                 let process = WasmProcess::start(wasm_module, runtime)?;
-                process.invoke_by_name(function, args)?
+                process.invoke(&function_def, args)?
             },
-            LoadedTemplate::Flow(flow_factory) => flow_factory.run_new_instance(
-                Arc::new(template_provider.clone()),
-                runtime,
-                function,
-                args,
-                recursion_depth,
-                max_recursion_depth,
-            )?,
+            LoadedTemplate::Flow(flow_factory) => {
+                flow_factory.run_new_instance(
+                    Arc::new(template_provider.clone()),
+                    runtime,
+                    &function_def,
+                    args,
+                    // TODO
+                    0,
+                    MAX_CALL_DEPTH,
+                )?
+            },
         };
         Ok(result)
     }

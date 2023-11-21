@@ -1,6 +1,6 @@
 [package]
 name = "tari_transaction"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Tari transaction builder and associated data types"
@@ -11,11 +11,11 @@ license = "BSD-3-Clause"
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_engine_types = { path = "../engine_types" }
 tari_dan_common_types = { path = "../common_types" }
-tari_crypto = { version = "0.18", features = ["borsh"] }
+tari_crypto = { version = "0.19", features = ["borsh"] }
 tari_template_lib = { path = "../template_lib" }
 
 rand = "0.8"
-serde = "1.0.126"
+serde = "1.0"
 thiserror = "1"
 
 #siphasher = "0.3.1"

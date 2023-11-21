@@ -19,10 +19,11 @@ axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
 clap = { version = "4.1.4", features = ["derive", "env"] }
 dirs = "4.0.0"
 log = "0.4.17"
-serde = "1.0.152"
-serde_json = "1.0.92"
+serde = "1.0"
+serde_json = "1.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 tower-http = { version = "0.3.5", default-features = false, features = ["cors", "trace"] }
 jsonwebtoken = "8.3.0"
 chrono = "0.4.24"
-webrtc = "0.7.2"
+webrtc = "0.9.0"
+

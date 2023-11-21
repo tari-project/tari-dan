@@ -14,7 +14,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     args,
     args::Arg,
-    models::{Amount, ComponentAddress, ConfidentialWithdrawProof},
+    models::{Amount, ComponentAddress, ConfidentialWithdrawProof, ResourceAddress},
 };
 
 use crate::{Transaction, TransactionSignature};
@@ -104,8 +104,23 @@ impl TransactionBuilder {
         self.add_instruction(Instruction::ClaimBurn { claim: Box::new(claim) })
     }
 
+    pub fn create_proof(self, account: ComponentAddress, resource_addr: ResourceAddress) -> Self {
+        // We may want to make this a native instruction
+        self.add_instruction(Instruction::CallMethod {
+            component_address: account,
+            method: "create_proof_for_resource".to_string(),
+            args: args![resource_addr],
+        })
+    }
+
     pub fn with_fee_instructions(mut self, instructions: Vec<Instruction>) -> Self {
         self.fee_instructions = instructions;
+        self
+    }
+
+    pub fn with_fee_instructions_builder<F: FnOnce(TransactionBuilder) -> TransactionBuilder>(mut self, f: F) -> Self {
+        let builder = f(TransactionBuilder::new());
+        self.fee_instructions = builder.instructions;
         self
     }
 

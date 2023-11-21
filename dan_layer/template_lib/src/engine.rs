@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::Serialize;
-use tari_bor::encode;
+use tari_bor::to_value;
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
@@ -57,7 +57,7 @@ impl TariEngine {
         access_rules: ComponentAccessRules,
         component_id: Option<Hash>,
     ) -> ComponentAddress {
-        let encoded_state = encode(&initial_state).unwrap();
+        let encoded_state = to_value(&initial_state).unwrap();
 
         let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Component,

@@ -13,6 +13,7 @@ pub mod hashing;
 pub mod indexed_value;
 pub mod instruction;
 pub mod instruction_result;
+pub mod lock;
 pub mod logs;
 pub mod non_fungible;
 pub mod non_fungible_index;

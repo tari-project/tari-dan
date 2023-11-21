@@ -34,8 +34,8 @@ macro_rules! newtype_struct_serde_impl {
                     impl<'de> serde::de::Visitor<'de> for Visitor<'de> {
                         type Value = $ty;
 
-                        fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-                            Formatter::write_str(formatter, concat!("tuple struct ", stringify!($ty)))
+                        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                            fmt::Formatter::write_str(formatter, concat!("tuple struct ", stringify!($ty)))
                         }
 
                         fn visit_newtype_struct<E>(self, __e: E) -> Result<Self::Value, E::Error>

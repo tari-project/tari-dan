@@ -1,6 +1,6 @@
 [package]
 name = "tari_template_macros"
-version = "0.0.3"
+version = "0.1.0"
 edition = "2021"
 authors = ["The Tari Development Community"]
 description = "Tari template macro"
@@ -14,9 +14,9 @@ proc-macro = true
 tari_template_abi = { path = "../template_abi" }
 tari_bor = { path = "../tari_bor" }
 
-proc-macro2 = "1.0.42"
-quote = "1.0.20"
-syn = { version = "1.0.98", features = ["full", "extra-traits"] }
+proc-macro2 = "1.0.56"
+quote = "1.0"
+syn = { version = "1.0", features = ["full", "extra-traits"] }
 
 [dev-dependencies]
 indoc = "1.0.6"

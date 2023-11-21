@@ -5,12 +5,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 
-use crate::{function_definitions::FunctionArgDefinition, packager::LoadedTemplate, runtime::Runtime};
+use crate::{function_definitions::FunctionArgDefinition, runtime::Runtime, template::LoadedTemplate};
 
 pub struct FlowContext<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> {
     pub template_provider: Arc<TTemplateProvider>,
     pub runtime: Runtime,
     pub args: HashMap<String, (tari_bor::Value, FunctionArgDefinition)>,
-    pub recursion_depth: usize,
-    pub max_recursion_depth: usize,
+    pub call_depth: usize,
+    pub max_call_depth: usize,
 }

@@ -114,7 +114,7 @@ pub trait WalletStoreReader {
     // JWT
     fn jwt_get_all(&mut self) -> Result<Vec<(i32, Option<String>)>, WalletStorageError>;
     // Transactions
-    fn transaction_get(
+    fn transactions_get(
         &mut self,
         transaction_id: TransactionId,
     ) -> Result<WalletTransaction<PublicKey>, WalletStorageError>;

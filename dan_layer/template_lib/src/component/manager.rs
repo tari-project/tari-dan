@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{de::DeserializeOwned, Serialize};
-use tari_bor::{decode_exact, encode};
+use tari_bor::{from_value, to_value};
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{
@@ -36,7 +36,8 @@ use crate::{
         InvokeResult,
     },
     auth::ComponentAccessRules,
-    models::ComponentAddress,
+    caller_context::CallerContext,
+    models::{ComponentAddress, TemplateAddress},
 };
 
 pub struct ComponentManager {
@@ -52,10 +53,14 @@ impl ComponentManager {
         Self { address }
     }
 
-    pub fn call<T: DeserializeOwned>(&self, method: String, args: Vec<Arg>) -> T {
+    pub fn current() -> Self {
+        Self::new(CallerContext::current_component_address())
+    }
+
+    pub fn call<T: Into<String>, R: DeserializeOwned>(&self, method: T, args: Vec<Arg>) -> R {
         self.call_internal(CallMethodArg {
             component_address: self.address,
-            method,
+            method: method.into(),
             args,
         })
     }
@@ -75,16 +80,16 @@ impl ComponentManager {
     pub fn get_state<T: DeserializeOwned>(&self) -> T {
         let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Ref(self.address),
-            action: ComponentAction::Get,
+            action: ComponentAction::GetState,
             args: invoke_args![],
         });
 
-        let component: Vec<u8> = result.decode().expect("failed to decode component state from engine");
-        decode_exact(&component).expect("Failed to decode component state")
+        let component: tari_bor::Value = result.decode().expect("failed to decode component state from engine");
+        from_value(&component).expect("Failed to decode component state")
     }
 
     pub fn set_state<T: Serialize>(&self, state: T) {
-        let state = encode(&state).expect("Failed to encode component state");
+        let state = to_value(&state).expect("Failed to encode component state");
         let _result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
             component_ref: ComponentRef::Ref(self.address),
             action: ComponentAction::SetState,
@@ -98,5 +103,17 @@ impl ComponentManager {
             action: ComponentAction::SetAccessRules,
             args: invoke_args![access_rules],
         });
+    }
+
+    pub fn get_template_address(&self) -> TemplateAddress {
+        let result = call_engine::<_, InvokeResult>(EngineOp::ComponentInvoke, &ComponentInvokeArg {
+            component_ref: ComponentRef::Ref(self.address),
+            action: ComponentAction::GetTemplateAddress,
+            args: invoke_args![],
+        });
+
+        result
+            .decode()
+            .expect("failed to decode component template address from engine")
     }
 }

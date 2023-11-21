@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, ops::ControlFlow};
 
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, BorError, FromTagAndValue, ValueVisitor};
@@ -18,20 +18,12 @@ use crate::{
     transaction_receipt::TransactionReceiptAddress,
 };
 
+const MAX_VISITOR_DEPTH: usize = 50;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct IndexedValue {
-    bucket_ids: Vec<BucketId>,
-    proof_ids: Vec<ProofId>,
-    #[serde(with = "serde_with::hex::vec")]
-    component_addresses: Vec<ComponentAddress>,
-    #[serde(with = "serde_with::hex::vec")]
-    resource_addresses: Vec<ResourceAddress>,
-    transaction_receipt_addresses: Vec<TransactionReceiptAddress>,
-    // #[serde(with = "serde_with::hex::vec")]
-    non_fungible_addresses: Vec<NonFungibleAddress>,
-    #[serde(with = "serde_with::hex::vec")]
-    vault_ids: Vec<VaultId>,
-    metadata: Vec<Metadata>,
+    indexed: IndexedWellKnownTypes,
+    #[serde(with = "serde_with::cbor_value")]
     value: tari_bor::Value,
 }
 
@@ -50,8 +42,115 @@ impl IndexedValue {
     }
 
     pub fn from_value(value: tari_bor::Value) -> Result<Self, IndexedValueError> {
+        let indexed = IndexedWellKnownTypes::from_value(&value)?;
+        Ok(Self { indexed, value })
+    }
+
+    pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
+        self.indexed
+            .component_addresses
+            .iter()
+            .map(|a| (*a).into())
+            .chain(self.indexed.resource_addresses.iter().map(|a| (*a).into()))
+            .chain(self.indexed.non_fungible_addresses.iter().map(|a| a.clone().into()))
+            .chain(self.indexed.vault_ids.iter().map(|a| (*a).into()))
+    }
+
+    pub fn well_known_types(&self) -> &IndexedWellKnownTypes {
+        &self.indexed
+    }
+
+    pub fn bucket_ids(&self) -> &[BucketId] {
+        &self.indexed.bucket_ids
+    }
+
+    pub fn proof_ids(&self) -> &[ProofId] {
+        &self.indexed.proof_ids
+    }
+
+    pub fn component_addresses(&self) -> &[ComponentAddress] {
+        &self.indexed.component_addresses
+    }
+
+    pub fn resource_addresses(&self) -> &[ResourceAddress] {
+        &self.indexed.resource_addresses
+    }
+
+    pub fn non_fungible_addresses(&self) -> &[NonFungibleAddress] {
+        &self.indexed.non_fungible_addresses
+    }
+
+    pub fn vault_ids(&self) -> &[VaultId] {
+        &self.indexed.vault_ids
+    }
+
+    pub fn metadata(&self) -> &[Metadata] {
+        &self.indexed.metadata
+    }
+
+    pub fn value(&self) -> &tari_bor::Value {
+        &self.value
+    }
+
+    pub fn into_value(self) -> tari_bor::Value {
+        self.value
+    }
+
+    pub fn get_value<T>(&self, path: &str) -> Result<Option<T>, IndexedValueError>
+    where for<'a> T: serde::Deserialize<'a> {
+        get_value_by_path(&self.value, path)
+            .map(tari_bor::from_value)
+            .transpose()
+            .map_err(Into::into)
+    }
+}
+
+impl Default for IndexedValue {
+    fn default() -> Self {
+        Self {
+            indexed: IndexedWellKnownTypes::default(),
+            value: tari_bor::Value::Null,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct IndexedWellKnownTypes {
+    bucket_ids: Vec<BucketId>,
+    proof_ids: Vec<ProofId>,
+    #[serde(with = "serde_with::hex::vec")]
+    component_addresses: Vec<ComponentAddress>,
+    #[serde(with = "serde_with::hex::vec")]
+    resource_addresses: Vec<ResourceAddress>,
+    transaction_receipt_addresses: Vec<TransactionReceiptAddress>,
+    // #[serde(with = "serde_with::hex::vec")]
+    non_fungible_addresses: Vec<NonFungibleAddress>,
+    #[serde(with = "serde_with::hex::vec")]
+    vault_ids: Vec<VaultId>,
+    metadata: Vec<Metadata>,
+}
+
+impl IndexedWellKnownTypes {
+    pub const fn new() -> Self {
+        Self {
+            bucket_ids: vec![],
+            proof_ids: vec![],
+            component_addresses: vec![],
+            resource_addresses: vec![],
+            transaction_receipt_addresses: vec![],
+            non_fungible_addresses: vec![],
+            vault_ids: vec![],
+            metadata: vec![],
+        }
+    }
+
+    pub fn from_value(value: &tari_bor::Value) -> Result<Self, IndexedValueError> {
+        Self::from_value_with_max_depth(value, MAX_VISITOR_DEPTH)
+    }
+
+    pub fn from_value_with_max_depth(value: &tari_bor::Value, max_depth: usize) -> Result<Self, IndexedValueError> {
         let mut visitor = IndexedValueVisitor::new();
-        tari_bor::walk_all(&value, &mut visitor)?;
+        tari_bor::walk_all(value, &mut visitor, max_depth)?;
 
         Ok(Self {
             bucket_ids: visitor.buckets,
@@ -62,22 +161,51 @@ impl IndexedValue {
             non_fungible_addresses: visitor.non_fungible_addresses,
             vault_ids: visitor.vault_ids,
             metadata: visitor.metadata,
-            value,
         })
     }
 
-    pub fn contains_substate(&self, addr: &SubstateAddress) -> bool {
-        match addr {
-            SubstateAddress::Component(addr) => self.component_addresses.contains(addr),
-            SubstateAddress::Resource(addr) => self.resource_addresses.contains(addr),
-            SubstateAddress::TransactionReceipt(addr) => self.transaction_receipt_addresses.contains(addr),
-            SubstateAddress::NonFungible(addr) => self.non_fungible_addresses.contains(addr),
-            SubstateAddress::Vault(addr) => self.vault_ids.contains(addr),
-            SubstateAddress::UnclaimedConfidentialOutput(_) => false,
-            // TODO: should we index this value?
-            SubstateAddress::NonFungibleIndex(_) => false,
-            SubstateAddress::FeeClaim(_) => false,
-        }
+    /// Checks if a value contains a substate with the given address. This function does not allocate.
+    pub fn value_contains_substate(
+        value: &tari_bor::Value,
+        address: &SubstateAddress,
+    ) -> Result<bool, IndexedValueError> {
+        let mut found = false;
+        tari_bor::walk_all(
+            value,
+            &mut |value: WellKnownTariValue| {
+                match value {
+                    WellKnownTariValue::ComponentAddress(addr) => {
+                        found = *address == addr;
+                    },
+                    WellKnownTariValue::ResourceAddress(addr) => {
+                        found = *address == addr;
+                    },
+                    WellKnownTariValue::TransactionReceiptAddress(addr) => {
+                        found = *address == addr;
+                    },
+                    WellKnownTariValue::NonFungibleAddress(addr) => {
+                        found = *address == addr;
+                    },
+                    WellKnownTariValue::VaultId(addr) => {
+                        found = *address == addr;
+                    },
+                    WellKnownTariValue::FeeClaim(addr) => {
+                        found = *address == addr;
+                    },
+                    WellKnownTariValue::BucketId(_) |
+                    WellKnownTariValue::Metadata(_) |
+                    WellKnownTariValue::ProofId(_) => {},
+                }
+
+                if found {
+                    Ok(ControlFlow::Break(()))
+                } else {
+                    Ok(ControlFlow::Continue(()))
+                }
+            },
+            MAX_VISITOR_DEPTH,
+        )?;
+        Ok(found)
     }
 
     pub fn referenced_substates(&self) -> impl Iterator<Item = SubstateAddress> + '_ {
@@ -116,29 +244,28 @@ impl IndexedValue {
     pub fn metadata(&self) -> &[Metadata] {
         &self.metadata
     }
-
-    pub fn value(&self) -> &tari_bor::Value {
-        &self.value
-    }
 }
 
-impl Default for IndexedValue {
-    fn default() -> Self {
-        Self {
-            bucket_ids: vec![],
-            proof_ids: vec![],
-            component_addresses: vec![],
-            resource_addresses: vec![],
-            transaction_receipt_addresses: vec![],
-            non_fungible_addresses: vec![],
-            vault_ids: vec![],
-            metadata: vec![],
-            value: tari_bor::Value::Null,
+impl FromIterator<IndexedWellKnownTypes> for IndexedWellKnownTypes {
+    fn from_iter<T: IntoIterator<Item = IndexedWellKnownTypes>>(iter: T) -> Self {
+        let mut indexed = Self::default();
+        for value in iter {
+            indexed.bucket_ids.extend(value.bucket_ids);
+            indexed.proof_ids.extend(value.proof_ids);
+            indexed.component_addresses.extend(value.component_addresses);
+            indexed.resource_addresses.extend(value.resource_addresses);
+            indexed
+                .transaction_receipt_addresses
+                .extend(value.transaction_receipt_addresses);
+            indexed.non_fungible_addresses.extend(value.non_fungible_addresses);
+            indexed.vault_ids.extend(value.vault_ids);
+            indexed.metadata.extend(value.metadata);
         }
+        indexed
     }
 }
 
-pub enum TariValue {
+pub enum WellKnownTariValue {
     ComponentAddress(ComponentAddress),
     ResourceAddress(ResourceAddress),
     TransactionReceiptAddress(TransactionReceiptAddress),
@@ -150,7 +277,7 @@ pub enum TariValue {
     ProofId(ProofId),
 }
 
-impl FromTagAndValue for TariValue {
+impl FromTagAndValue for WellKnownTariValue {
     type Error = IndexedValueError;
 
     fn try_from_tag_and_value(tag: u64, value: &tari_bor::Value) -> Result<Self, Self::Error>
@@ -224,40 +351,40 @@ impl IndexedValueVisitor {
     }
 }
 
-impl ValueVisitor<TariValue> for IndexedValueVisitor {
+impl ValueVisitor<WellKnownTariValue> for IndexedValueVisitor {
     type Error = IndexedValueError;
 
-    fn visit(&mut self, value: TariValue) -> Result<(), Self::Error> {
+    fn visit(&mut self, value: WellKnownTariValue) -> Result<ControlFlow<()>, Self::Error> {
         match value {
-            TariValue::ComponentAddress(address) => {
+            WellKnownTariValue::ComponentAddress(address) => {
                 self.component_addresses.push(address);
             },
-            TariValue::ResourceAddress(address) => {
+            WellKnownTariValue::ResourceAddress(address) => {
                 self.resource_addresses.push(address);
             },
-            TariValue::TransactionReceiptAddress(address) => {
+            WellKnownTariValue::TransactionReceiptAddress(address) => {
                 self.transaction_receipt_addresses.push(address);
             },
-            TariValue::BucketId(bucket_id) => {
+            WellKnownTariValue::BucketId(bucket_id) => {
                 self.buckets.push(bucket_id);
             },
-            TariValue::NonFungibleAddress(address) => {
+            WellKnownTariValue::NonFungibleAddress(address) => {
                 self.non_fungible_addresses.push(address);
             },
-            TariValue::VaultId(vault_id) => {
+            WellKnownTariValue::VaultId(vault_id) => {
                 self.vault_ids.push(vault_id);
             },
-            TariValue::Metadata(metadata) => {
+            WellKnownTariValue::Metadata(metadata) => {
                 self.metadata.push(metadata);
             },
-            TariValue::FeeClaim(_) => {
+            WellKnownTariValue::FeeClaim(_) => {
                 // Do nothing
             },
-            TariValue::ProofId(proof_id) => {
+            WellKnownTariValue::ProofId(proof_id) => {
                 self.proofs.push(proof_id);
             },
         }
-        Ok(())
+        Ok(ControlFlow::Continue(()))
     }
 }
 
@@ -267,6 +394,37 @@ pub enum IndexedValueError {
     BorError(#[from] tari_bor::BorError),
     #[error("Invalid tag: {0}")]
     InvalidTag(u64),
+    #[error("{0}")]
+    Custom(String),
+}
+
+impl From<&str> for IndexedValueError {
+    fn from(s: &str) -> Self {
+        Self::Custom(s.to_string())
+    }
+}
+
+fn get_value_by_path<'a>(value: &'a tari_bor::Value, path: &str) -> Option<&'a tari_bor::Value> {
+    let mut value = value;
+    for part in path.split('.') {
+        if part == "$" {
+            continue;
+        }
+        match value {
+            tari_bor::Value::Map(map) => {
+                value = &map
+                    .iter()
+                    .find(|(k, _)| k.as_text().map(|s| s == part).unwrap_or(false))?
+                    .1;
+            },
+            tari_bor::Value::Array(list) => {
+                let index: usize = part.parse().expect("invalid index");
+                value = list.get(index)?;
+            },
+            _ => return None,
+        }
+    }
+    Some(value)
 }
 
 #[cfg(test)]
@@ -277,10 +435,10 @@ mod tests {
     use tari_template_lib::models::NonFungibleId;
 
     use super::*;
-    use crate::hashing::{hasher, EngineHashDomainLabel};
+    use crate::hashing::{hasher32, EngineHashDomainLabel};
 
     fn new_hash() -> Hash {
-        hasher(EngineHashDomainLabel::ComponentAddress)
+        hasher32(EngineHashDomainLabel::ComponentAddress)
             .chain(&OsRng.next_u32())
             .result()
     }
@@ -339,21 +497,24 @@ mod tests {
             metadata: Metadata::new(),
         };
 
-        let bytes = tari_bor::encode(&data).unwrap();
-        let indexed = IndexedValue::from_raw(&bytes).unwrap();
+        let value = tari_bor::to_value(&data).unwrap();
+        let indexed = IndexedValue::from_value(value).unwrap();
 
-        assert!(indexed.component_addresses.contains(&addrs[0]));
-        assert!(indexed.component_addresses.contains(&addrs[1]));
-        assert!(indexed.component_addresses.contains(&addrs[2]));
-        assert_eq!(indexed.component_addresses.len(), 3);
-        assert_eq!(indexed.resource_addresses.len(), 1);
+        assert!(indexed.component_addresses().contains(&addrs[0]));
+        assert!(indexed.component_addresses().contains(&addrs[1]));
+        assert!(indexed.component_addresses().contains(&addrs[2]));
+        assert_eq!(indexed.component_addresses().len(), 3);
+        assert_eq!(indexed.resource_addresses().len(), 1);
 
-        assert_eq!(indexed.non_fungible_addresses.len(), 1);
-        assert_eq!(indexed.vault_ids.len(), 1);
-        assert_eq!(indexed.metadata.len(), 1);
+        assert_eq!(indexed.non_fungible_addresses().len(), 1);
+        assert_eq!(indexed.vault_ids().len(), 1);
+        assert_eq!(indexed.metadata().len(), 1);
 
-        assert!(indexed.bucket_ids.contains(&1.into()));
-        assert!(indexed.bucket_ids.contains(&2.into()));
-        assert_eq!(indexed.bucket_ids.len(), 6);
+        assert!(indexed.bucket_ids().contains(&1.into()));
+        assert!(indexed.bucket_ids().contains(&2.into()));
+        assert_eq!(indexed.bucket_ids().len(), 6);
+
+        let buckets: Vec<BucketId> = indexed.get_value("$.sub_structs.1.buckets").unwrap().unwrap();
+        assert_eq!(buckets, vec![1.into(), 2.into()]);
     }
 }

@@ -4,13 +4,14 @@
 use std::{collections::HashMap, str::FromStr};
 
 use d3ne::{Node, OutputValue, Worker};
+use tari_bor::encode;
 use tari_dan_common_types::services::template_provider::TemplateProvider;
 use tari_template_lib::{
     args::Arg,
     models::{ComponentAddress, TemplateAddress},
 };
 
-use crate::{flow::FlowContext, packager::LoadedTemplate, transaction::TransactionProcessor};
+use crate::{flow::FlowContext, template::LoadedTemplate, transaction::TransactionProcessor};
 
 pub struct CallMethodWorker {}
 
@@ -75,7 +76,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
                 .cloned()
                 .or(node.get_data(arg.name.as_str())?.map(OutputValue::Bytes))
                 .ok_or_else(|| anyhow::anyhow!("could not find arg `{}`", arg.name))?;
-            args.push(Arg::Literal(arg_value.as_bytes()?.to_vec()));
+            args.push(Arg::literal(convert_d3ne_value_to_tari_bor(arg_value))?);
         }
 
         let exec_result = TransactionProcessor::call_method(
@@ -85,14 +86,21 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> Worker<Flow
             method_name,
             // TODO: put in rest of args
             args,
-            context.recursion_depth + 1,
-            context.max_recursion_depth,
         )?;
 
-        let result = exec_result.raw;
+        let result = exec_result.indexed.into_value();
 
         let mut h = HashMap::new();
-        h.insert("default".to_string(), OutputValue::Bytes(result));
+        h.insert("default".to_string(), OutputValue::Bytes(encode(&result)?));
         Ok(h)
+    }
+}
+
+fn convert_d3ne_value_to_tari_bor(value: OutputValue) -> tari_bor::Value {
+    match value {
+        OutputValue::String(s) => tari_bor::Value::Text(s),
+        OutputValue::Bytes(b) => tari_bor::Value::Bytes(b),
+        OutputValue::I64(i) => tari_bor::Value::Integer(i.into()),
+        OutputValue::U64(i) => tari_bor::Value::Integer(i.into()),
     }
 }
