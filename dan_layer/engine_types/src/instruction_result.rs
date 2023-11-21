@@ -24,7 +24,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_bor::BorError;
 use tari_template_abi::Type;
 
-use crate::indexed_value::IndexedValue;
+use crate::indexed_value::{IndexedValue, IndexedValueError};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct InstructionResult {
@@ -42,5 +42,9 @@ impl InstructionResult {
 
     pub fn decode<T: DeserializeOwned>(&self) -> Result<T, BorError> {
         tari_bor::from_value(self.indexed.value())
+    }
+
+    pub fn get_value<T: DeserializeOwned>(&self, path: &str) -> Result<Option<T>, IndexedValueError> {
+        self.indexed.get_value(path)
     }
 }

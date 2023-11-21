@@ -20,9 +20,11 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::collections::BTreeSet;
+
 use serde::Serialize;
 use tari_bor::encode;
-use tari_template_abi::{call_engine, rust::collections::HashMap, EngineOp};
+use tari_template_abi::{call_engine, rust::collections::BTreeMap, EngineOp};
 
 use crate::{
     args::{
@@ -30,14 +32,17 @@ use crate::{
         InvokeResult,
         MintArg,
         MintResourceArg,
+        RecallResourceArg,
         ResourceAction,
+        ResourceDiscriminator,
         ResourceGetNonFungibleArg,
         ResourceInvokeArg,
         ResourceRef,
         ResourceUpdateNonFungibleDataArg,
     },
     auth::{OwnerRule, ResourceAccessRules},
-    models::{Amount, Bucket, ConfidentialOutputProof, Metadata, NonFungible, NonFungibleId, ResourceAddress},
+    crypto::PedersonCommitmentBytes,
+    models::{Amount, Bucket, ConfidentialOutputProof, Metadata, NonFungible, NonFungibleId, ResourceAddress, VaultId},
     prelude::ResourceType,
 };
 
@@ -127,7 +132,7 @@ impl ResourceManager {
         mutable_data: &U,
         supply: usize,
     ) -> Bucket {
-        let mut tokens: HashMap<NonFungibleId, (Vec<u8>, Vec<u8>)> = HashMap::with_capacity(supply);
+        let mut tokens = BTreeMap::new();
         let token_data = (encode(metadata).unwrap(), encode(mutable_data).unwrap());
         for _ in 0..supply {
             let id = NonFungibleId::random();
@@ -144,15 +149,44 @@ impl ResourceManager {
         })
     }
 
-    fn mint_internal(&mut self, arg: MintResourceArg) -> Bucket {
-        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
-            resource_ref: self.expect_resource_address(),
-            action: ResourceAction::Mint,
-            args: invoke_args![arg],
-        });
+    pub fn recall_fungible_all(&self, vault_id: VaultId) -> Bucket {
+        self.recall_internal(RecallResourceArg {
+            resource: ResourceDiscriminator::Everything,
+            vault_id,
+        })
+    }
 
-        let bucket_id = resp.decode().expect("Failed to decode Bucket");
-        Bucket::from_id(bucket_id)
+    pub fn recall_fungible_amount(&self, vault_id: VaultId, amount: Amount) -> Bucket {
+        self.recall_internal(RecallResourceArg {
+            resource: ResourceDiscriminator::Fungible { amount },
+            vault_id,
+        })
+    }
+
+    pub fn recall_non_fungible(&self, vault_id: VaultId, token: NonFungibleId) -> Bucket {
+        self.recall_non_fungibles(vault_id, Some(token).into_iter().collect())
+    }
+
+    pub fn recall_non_fungibles(&self, vault_id: VaultId, tokens: BTreeSet<NonFungibleId>) -> Bucket {
+        self.recall_internal(RecallResourceArg {
+            resource: ResourceDiscriminator::NonFungible { tokens },
+            vault_id,
+        })
+    }
+
+    pub fn recall_confidential(
+        &self,
+        vault_id: VaultId,
+        commitments: BTreeSet<PedersonCommitmentBytes>,
+        revealed_amount: Amount,
+    ) -> Bucket {
+        self.recall_internal(RecallResourceArg {
+            resource: ResourceDiscriminator::Confidential {
+                commitments,
+                revealed_amount,
+            },
+            vault_id,
+        })
     }
 
     pub fn total_supply(&self) -> Amount {
@@ -196,5 +230,27 @@ impl ResourceManager {
         });
 
         resp.decode().expect("[set_access_rules] Failed")
+    }
+
+    fn recall_internal(&self, arg: RecallResourceArg) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
+            resource_ref: self.expect_resource_address(),
+            action: ResourceAction::Recall,
+            args: invoke_args![arg],
+        });
+
+        let bucket_id = resp.decode().expect("Failed to decode Bucket");
+        Bucket::from_id(bucket_id)
+    }
+
+    fn mint_internal(&mut self, arg: MintResourceArg) -> Bucket {
+        let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
+            resource_ref: self.expect_resource_address(),
+            action: ResourceAction::Mint,
+            args: invoke_args![arg],
+        });
+
+        let bucket_id = resp.decode().expect("Failed to decode Bucket");
+        Bucket::from_id(bucket_id)
     }
 }

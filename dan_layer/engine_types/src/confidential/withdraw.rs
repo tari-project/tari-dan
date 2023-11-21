@@ -29,7 +29,7 @@ pub struct ConfidentialOutput {
     pub minimum_value_promise: u64,
 }
 
-pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>(
+pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a Commitment>>(
     inputs: I,
     withdraw_proof: ConfidentialWithdrawProof,
 ) -> Result<ValidatedConfidentialWithdrawProof, ResourceError> {
@@ -53,7 +53,9 @@ pub fn validate_confidential_withdraw<'a, I: IntoIterator<Item = &'a PublicKey>>
             details: "Malformed balance proof".to_string(),
         })?;
 
-    let public_excess = inputs.into_iter().fold(PublicKey::default(), |sum, pk| sum + pk) -
+    let public_excess = inputs
+        .into_iter()
+        .fold(PublicKey::default(), |sum, commit| sum + commit.as_public_key()) -
         output_commitment_with_revealed -
         validated_proof
             .change_output
