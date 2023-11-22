@@ -20,6 +20,8 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::rust::{collections::BTreeMap, fmt::Display};
@@ -49,6 +51,25 @@ impl Metadata {
     pub fn merge(&mut self, other: Metadata) -> &mut Self {
         self.0.extend(other.0.into_inner());
         self
+    }
+}
+
+impl FromStr for Metadata {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let pairs = s.split(',').map(|pair| {
+            let mut split = pair.split('=');
+            let key = split.next().ok_or_else(|| "Missing key".to_string())?;
+            let value = split.next().ok_or_else(|| "Missing value".to_string())?;
+            Ok::<(String, String), String>((key.to_string(), value.to_string()))
+        });
+        let mut map = BTreeMap::new();
+        for pair in pairs {
+            let (key, value) = pair?;
+            map.insert(key, value);
+        }
+        Ok(Self(BorTag::new(map)))
     }
 }
 
