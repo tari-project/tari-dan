@@ -2,6 +2,7 @@
 # NB: The order these are listed in is IMPORTANT! Dependencies must go first
 
 packages=${@:-'
+dan_layer/tari_bor
 dan_layer/template_lib
 '}
 p_arr=($packages)
