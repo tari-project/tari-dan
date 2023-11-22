@@ -112,7 +112,9 @@ ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get --no-install-recommends install -y \
-      dumb-init
+      dumb-init \
+      ca-certificates \
+      openssl
 
 RUN groupadd --gid 1000 tari && \
     useradd --create-home --no-log-init --shell /bin/bash \
