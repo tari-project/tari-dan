@@ -6127,7 +6127,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "248fbed6f59e99c8ef6c6ecadc9b09c6e93713b8f921d73e41d6ed6017bf0624"
 dependencies = [
  "cfg-if",
- "rustix 0.38.21",
+ "rustix 0.38.25",
  "windows",
 ]
 
@@ -6932,6 +6932,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha-1"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f5058ada175748e33390e40e872bd0fe59a19f265d0158daa551c5a88a76009c"
+dependencies = [
+ "cfg-if",
+ "cpufeatures",
+ "digest 0.10.7",
+]
+
+[[package]]
 name = "sha1"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7190,7 +7201,7 @@ dependencies = [
  "hex",
  "miette",
  "serde",
- "sha-1 0.10.1",
+ "sha-1",
  "sha2",
  "thiserror",
  "xxhash-rust",
