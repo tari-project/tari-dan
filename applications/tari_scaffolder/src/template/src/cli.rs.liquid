@@ -24,7 +24,9 @@ pub(crate) struct Cli {
     #[clap(subcommand)]
     pub command: Command,
     #[clap(long, short='f', default_value="100")]
-    pub fees: u64
+    pub fees: u64,
+    #[clap(long, short = 'a', default_value = "TestAccount_0")]
+    pub default_account: String,
 }
 
 impl Cli {
