@@ -3,7 +3,8 @@
 
 packages=${@:-'
 dan_layer/tari_bor
-dan_layer/template_api
+dan_layer/template_abi
+dan_layer/template_macros
 dan_layer/template_lib
 '}
 p_arr=($packages)
