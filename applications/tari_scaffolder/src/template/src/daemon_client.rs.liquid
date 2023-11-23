@@ -23,7 +23,7 @@ pub struct DaemonClient {
 }
 
 impl DaemonClient {
-    pub(crate) fn new(endpoint: String, auth_token: Option<String>, default_account) -> Self {
+    pub(crate) fn new(endpoint: String, auth_token: Option<String>, default_account: String) -> Self {
         Self {
             endpoint,
             auth_token,
@@ -51,7 +51,7 @@ impl DaemonClient {
         self.submit_instructions(vec![instruction], dump_buckets, is_dry_run, fees, other_inputs).await;
     }
 
-    pub async fn submit_instructions(&mut self, instructions: Vec<Instruction>, dump_buckets: bool, is_dry_run: bool, fees: u64, other_inputs: Vec<SubstateRequirement>) {
+    pub async fn submit_instructions(&mut self, instructions: Vec<Instruction>, dump_buckets: bool, is_dry_run: bool, max_fee: u64, other_inputs: Vec<SubstateRequirement>) {
      let mut client =
             WalletDaemonClient::connect(&self.endpoint, self.auth_token.clone()).unwrap();
         //let r = client.list_keys().await;
@@ -60,13 +60,13 @@ impl DaemonClient {
 
            let tx = CallInstructionRequest {
             instructions,
-            fee_account: ComponentAddressOrName::Name(self.default_account),
+            fee_account: ComponentAddressOrName::Name(self.default_account.clone()),
             dump_outputs_into: if dump_buckets {
-                Some(ComponentAddressOrName::Name(self.default_account))
+                Some(ComponentAddressOrName::Name(self.default_account.clone()))
             } else {
                 None
             },
-            fee: fees,
+            max_fee,
             inputs: other_inputs,
             override_inputs: None,
             is_dry_run,

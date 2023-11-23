@@ -23,8 +23,8 @@ pub(crate) struct Cli {
     pub dry_run: bool,
     #[clap(subcommand)]
     pub command: Command,
-    #[clap(long, short='f', default_value="100")]
-    pub fees: u64,
+    #[clap(long, short='f', default_value="1000")]
+    pub max_fee: u64,
     #[clap(long, short = 'a', default_value = "TestAccount_0")]
     pub default_account: String,
 }
@@ -150,7 +150,7 @@ use tari_template_lib::args;
 
 
     {% else %}
-       pub async fn run(self, mut client: DaemonClient, template_address: TemplateAddress, fees: u64) {
+       pub async fn run(self, mut client: DaemonClient, template_address: TemplateAddress, dump_buckets: bool, fees: u64) {
 
        // let template_address= ;
         let  function = "{{c.name}}".to_string();
@@ -167,7 +167,7 @@ use tari_template_lib::args;
       {% endif %}
       {% endfor %}
                     ]
-               }, false, false, fees, vec![]
+           }, dump_buckets, false, fees, vec![]
 
             ).await;
             println!("done");

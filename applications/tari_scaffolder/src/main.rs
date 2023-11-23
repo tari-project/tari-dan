@@ -118,6 +118,7 @@ fn replace_tokens(in_file: &str, loaded_template: &LoadedTemplate, cli: &Cli) ->
                     "args" : args,
                     "is_method": is_method,
                     "is_mut": f.is_mut,
+                    "output": f.output.to_string(),
                     "requires_buckets": requires_buckets,
                 })));
             }
