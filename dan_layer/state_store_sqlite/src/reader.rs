@@ -1079,7 +1079,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                 let maybe_update = updates.remove(&rec.transaction_id);
                 match rec.try_convert(maybe_update) {
                     Ok(rec) => {
-                        if rec.is_ready() || rec.stage().is_new() {
+                        if rec.is_ready() {
                             Some(Ok(rec))
                         } else {
                             None
