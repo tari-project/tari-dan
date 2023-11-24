@@ -41,7 +41,11 @@ use tari_engine_types::{
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_epoch_manager::EpochManagerReader;
-use tari_indexer_lib::{substate_scanner::SubstateScanner, transaction_autofiller::TransactionAutofiller};
+use tari_indexer_lib::{
+    substate_cache::SubstateCache,
+    substate_scanner::SubstateScanner,
+    transaction_autofiller::TransactionAutofiller,
+};
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
 use tokio::task;
@@ -50,23 +54,25 @@ use crate::dry_run::error::DryRunTransactionProcessorError;
 
 const LOG_TARGET: &str = "tari::indexer::dry_run_transaction_processor";
 
-pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory> {
+pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory, TSubstateCache> {
     epoch_manager: TEpochManager,
     client_provider: TClientFactory,
-    transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory>,
+    transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory, TSubstateCache>,
     template_manager: TemplateManager,
 }
 
-impl<TEpochManager, TClientFactory> DryRunTransactionProcessor<TEpochManager, TClientFactory>
+impl<TEpochManager, TClientFactory, TSubstateCache>
+    DryRunTransactionProcessor<TEpochManager, TClientFactory, TSubstateCache>
 where
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
-    TClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
+    TEpochManager: EpochManagerReader<Addr = CommsPublicKey> + 'static,
+    TClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey> + 'static,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
+    TSubstateCache: SubstateCache + 'static,
 {
     pub fn new(
         epoch_manager: TEpochManager,
         client_provider: TClientFactory,
-        substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory>>,
+        substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory, TSubstateCache>>,
         template_manager: TemplateManager,
     ) -> Self {
         let transaction_autofiller = TransactionAutofiller::new(substate_scanner);
