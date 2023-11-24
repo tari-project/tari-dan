@@ -58,6 +58,9 @@ impl FromStr for Metadata {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if !s.contains('=') {
+            return Err("Invalid metadata string, missing '='".to_string());
+        }
         let pairs = s.split(',').map(|pair| {
             let mut split = pair.split('=');
             let key = split.next().ok_or_else(|| "Missing key".to_string())?;
