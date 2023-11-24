@@ -473,9 +473,8 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                 }
             },
             Type::Tuple(subtypes)=> {
-                let tuple_type = Type::Tuple(subtypes.to_vec());
-                // TODO: proper display of tuples
-                println!("{}: TODO", tuple_type);
+                let str = format_tuple(subtypes, result);
+                println!("{}", str);
             },
             Type::Other { ref name } if name == "Amount" => {
                 println!("{}: {}", name, result.decode::<Amount>().unwrap());
@@ -551,9 +550,9 @@ fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &InstructionRes
                 },
             }
         },
-        Type::Tuple(_) => {
-            // TODO: proper Vec<Tuple<A,B,...>> display
-            write!(writer, "{}", serde_json::to_string(&result.indexed).unwrap())?;
+        Type::Tuple(subtypes) => {
+            let str = format_tuple(subtypes, result);
+            write!(writer, "{}", str)?;
         },
         Type::Other { name } if name == "Amount" => {
             write!(writer, "{}", stringify_slice(&result.decode::<Vec<Amount>>().unwrap()))?;
@@ -570,6 +569,12 @@ fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &InstructionRes
         },
     }
     Ok(())
+}
+
+fn format_tuple(subtypes: &Vec<Type>, result: &InstructionResult) -> String {
+    let tuple_type = Type::Tuple(subtypes.to_vec());
+    let result_json = serde_json::to_string(&result.indexed).unwrap();
+    format!("{}: {}", tuple_type, result_json)
 }
 
 fn load_inputs(
