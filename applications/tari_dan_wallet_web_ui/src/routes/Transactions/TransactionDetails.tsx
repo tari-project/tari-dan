@@ -73,6 +73,11 @@ export default function TransactionDetails() {
             <span>{result.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>
         );
       }
+      if (result.result.Reject) {
+        return (
+            <span>{Object.keys(result.result.Reject)[0]} - {result.result.Reject[Object.keys(result.result.Reject)[0]]}</span>
+        )
+      }
     } else {
       return (
           <span>In progress</span>

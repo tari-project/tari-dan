@@ -110,6 +110,11 @@ export default function TransactionDetails() {
             <span>{result.finalize.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>
         );
       }
+      if (result.finalize.result.Reject) {
+        return (
+            <span>{Object.keys(result.finalize.result.Reject)[0]} - {result.finalize.result.Reject[Object.keys(result.finalize.result.Reject)[0]]}</span>
+        )
+      }
     } else {
       return (
         <span>In progress</span>
