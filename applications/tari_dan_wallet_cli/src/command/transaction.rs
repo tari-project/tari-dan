@@ -610,7 +610,7 @@ fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &InstructionRes
     Ok(())
 }
 
-fn format_tuple(subtypes: &Vec<Type>, result: &InstructionResult) -> String {
+fn format_tuple(subtypes: &[Type], result: &InstructionResult) -> String {
     let tuple_type = Type::Tuple(subtypes.to_vec());
     let result_json = serde_json::to_string(&result.indexed).unwrap();
     format!("{}: {}", tuple_type, result_json)
