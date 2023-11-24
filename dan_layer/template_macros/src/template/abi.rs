@@ -82,17 +82,8 @@ fn convert_to_arg_type(template_name: &str, ty: &TypeAst) -> ArgType {
             name: "&self".to_string(),
         },
         TypeAst::Typed { type_path, .. } => path_segment_to_arg_type(template_name, &type_path.path.segments[0]),
-        TypeAst::Tuple(tuple) => {
-            // TODO: improve
-            let tuple_str = tuple
-                .elems
-                .iter()
-                .map(|t| format!("{:?}", t))
-                .collect::<Vec<_>>()
-                .join(",");
-            ArgType::Other {
-                name: tuple_str.to_string(),
-            }
+        TypeAst::Tuple { type_tuple, ..} => {
+            tuple_to_arg_type(template_name, type_tuple)
         },
     }
 }
@@ -131,8 +122,22 @@ fn convert_to_arg_def(template_name: &str, rust_type: &TypeAst) -> Result<ArgDef
                 arg_type,
             })
         },
-
-        TypeAst::Tuple(TypeTuple { elems, .. }) => Err(syn::Error::new_spanned(elems, "Tuples are not supported")),
+        TypeAst::Tuple {
+            name: arg_name,
+            type_tuple
+        } => {
+            let Some(arg_name) = arg_name else {
+                return Err(syn::Error::new_spanned(
+                    type_tuple,
+                    "convert_to_arg_def: Unnamed type is not valid in this context",
+                ));
+            };
+            let arg_type = tuple_to_arg_type(template_name, type_tuple);
+            Ok(ArgDef {
+                name: arg_name.to_string(),
+                arg_type,
+            })
+        },
     }
 }
 
@@ -152,21 +157,15 @@ fn path_segment_to_arg_type(template_name: &str, segment: &PathSegment) -> ArgTy
         "u128" => ArgType::U128,
         "String" => ArgType::String,
         "Vec" => {
-            let ty = match &segment.arguments {
+            match &segment.arguments {
                 PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) => {
                     match &args[0] {
                         GenericArgument::Type(Type::Path(path)) => {
-                            path_segment_to_arg_type(template_name, &path.path.segments[0])
+                            let ty = path_segment_to_arg_type(template_name, &path.path.segments[0]);
+                            ArgType::Vec(Box::new(ty))
                         },
                         GenericArgument::Type(Type::Tuple(tuple)) => {
-                            // FIXME: improve
-                            let tuple_str = tuple
-                                .elems
-                                .iter()
-                                .map(|t| format!("{:?}", t))
-                                .collect::<Vec<_>>()
-                                .join(",");
-                            ArgType::Other { name: tuple_str }
+                            tuple_to_arg_type(template_name, tuple)
                         },
                         // TODO: These should be errors
                         a => panic!("Invalid vec generic argument {:?}", a),
@@ -175,9 +174,7 @@ fn path_segment_to_arg_type(template_name: &str, segment: &PathSegment) -> ArgTy
                 PathArguments::Parenthesized(_) | PathArguments::None => {
                     panic!("Vec must specify a type {:?}", segment)
                 },
-            };
-
-            ArgType::Vec(Box::new(ty))
+            }
         },
         "Self" => ArgType::Other {
             name: format!("Component<{}>", template_name),
@@ -186,4 +183,17 @@ fn path_segment_to_arg_type(template_name: &str, segment: &PathSegment) -> ArgTy
             name: type_name.to_string(),
         },
     }
+}
+
+fn tuple_to_arg_type(template_name: &str, tuple: &TypeTuple) -> ArgType {
+    let subtypes = tuple.elems.iter().map(|t| {
+        match t {
+            Type::Path(path) => path_segment_to_arg_type(template_name,&path.path.segments[0]),
+            Type::Tuple(subtuple) => tuple_to_arg_type(template_name, subtuple),
+            // TODO: These should be errors
+            a => panic!("Invalid Tuple subtype argument {:?}", a),
+        }
+    }).collect::<Vec<_>>();
+
+    ArgType::Tuple(subtypes)
 }

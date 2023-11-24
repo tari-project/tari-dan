@@ -131,11 +131,11 @@ fn get_function_block(template_ident: &Ident, ast: FunctionAst) -> Expr {
                         .unwrap_or_else(|e| panic!("failed to decode argument at position {} for function '{}': {}", #i, #func_name, e));
                 })
             },
-            TypeAst::Tuple(tuple) => {
+            TypeAst::Tuple { type_tuple, .. } => {
                 args.push(parse_quote! { #arg_ident });
                 stmts.push(parse_quote! {
-                    let #arg_ident = from_value::<#tuple>(&call_info.args[#i])
-                        .unwrap_or_else(|e| panic!("failed to decode tuple argument at position {} for function '{}'.", #i, #func_name, e));
+                    let #arg_ident = from_value::<#type_tuple>(&call_info.args[#i])
+                        .unwrap_or_else(|e| panic!("failed to decode tuple argument at position {} for function '{}': {}", #i, #func_name, e));
                 });
             },
         }
@@ -184,7 +184,7 @@ fn replace_self_in_output(ast: &FunctionAst) -> Vec<Stmt> {
                     stmts.push(stmt);
                 }
             },
-            TypeAst::Tuple(type_tuple) => {
+            TypeAst::Tuple { type_tuple, ..} => {
                 stmts.push(replace_self_in_tuple(type_tuple));
             },
             _ => todo!("replace_self_in_output only supports typed and tuple"),
