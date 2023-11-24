@@ -668,7 +668,7 @@ pub fn print_execution_results(results: &[InstructionResult]) {
                     },
                 }
             },
-            Type::Tuple(subtypes)=> {
+            Type::Tuple(subtypes) => {
                 let str = format_tuple(subtypes, result);
                 println!("{}", str);
             },

@@ -184,11 +184,9 @@ impl TemplateAst {
                     type_path: type_path.clone(),
                 }
             },
-            syn::Type::Tuple(type_tuple) => {
-                TypeAst::Tuple {
-                    name: pat.map(Self::get_pat_name),
-                    type_tuple: type_tuple.clone(),
-                }
+            syn::Type::Tuple(type_tuple) => TypeAst::Tuple {
+                name: pat.map(Self::get_pat_name),
+                type_tuple: type_tuple.clone(),
             },
             _ => todo!(
                 "get_type_ast only supports paths and tuples. Encountered:{:?}",
@@ -203,7 +201,7 @@ impl TemplateAst {
             // There may be other patterns we are interested in, the following code
             // will print out the details, and the resulting code will not compile
             // but it will allow us to see the patterns we need.
-            _ => format!("{:?}", pat)
+            _ => format!("{:?}", pat),
         }
     }
 
@@ -245,9 +243,17 @@ impl FunctionAst {
 }
 
 pub enum TypeAst {
-    Receiver { mutability: bool },
-    Typed { name: Option<String>, type_path: TypePath },
-    Tuple { name: Option<String>, type_tuple: TypeTuple },
+    Receiver {
+        mutability: bool,
+    },
+    Typed {
+        name: Option<String>,
+        type_path: TypePath,
+    },
+    Tuple {
+        name: Option<String>,
+        type_tuple: TypeTuple,
+    },
 }
 
 impl Debug for TypeAst {
@@ -255,7 +261,9 @@ impl Debug for TypeAst {
         match self {
             TypeAst::Receiver { mutability } => write!(f, "Receiver {{ mutability: {} }}", mutability),
             TypeAst::Typed { name, type_path } => write!(f, "Typed {{ name: {:?}, type_path: {:?} }}", name, type_path),
-            TypeAst::Tuple { name, type_tuple} => write!(f, "Tuple {{ name: {:?}, type_tuple: {:?} }}", name, type_tuple),
+            TypeAst::Tuple { name, type_tuple } => {
+                write!(f, "Tuple {{ name: {:?}, type_tuple: {:?} }}", name, type_tuple)
+            },
         }
     }
 }

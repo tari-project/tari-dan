@@ -472,7 +472,7 @@ fn summarize_finalize_result(finalize: &FinalizeResult) {
                     },
                 }
             },
-            Type::Tuple(subtypes)=> {
+            Type::Tuple(subtypes) => {
                 let str = format_tuple(subtypes, result);
                 println!("{}", str);
             },

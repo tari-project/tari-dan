@@ -238,10 +238,10 @@ fn test_tuples() {
     assert_eq!(message, "Hello World!");
 
     // tuples returned in a method
-    let (message, number): (String, u32) =  template_test.call_method(component_id, "get", args![], vec![]);
+    let (message, number): (String, u32) = template_test.call_method(component_id, "get", args![], vec![]);
     assert_eq!(message, "Hello World!");
     assert_eq!(number, 0);
-    
+
     // tuples passed as arguments to methods
     let new_value = ("New String".to_string(), 1);
     template_test.call_method::<()>(component_id, "set", args![new_value], vec![]);

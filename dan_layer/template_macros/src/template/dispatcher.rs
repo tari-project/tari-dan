@@ -184,7 +184,7 @@ fn replace_self_in_output(ast: &FunctionAst) -> Vec<Stmt> {
                     stmts.push(stmt);
                 }
             },
-            TypeAst::Tuple { type_tuple, ..} => {
+            TypeAst::Tuple { type_tuple, .. } => {
                 stmts.push(replace_self_in_tuple(type_tuple));
             },
             _ => todo!("replace_self_in_output only supports typed and tuple"),
