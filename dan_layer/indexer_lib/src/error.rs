@@ -4,6 +4,8 @@
 use tari_engine_types::substate::SubstateAddress;
 use tari_epoch_manager::EpochManagerError;
 
+use crate::substate_cache::SubstateCacheError;
+
 #[derive(Debug, thiserror::Error)]
 pub enum IndexerError {
     #[error("Epoch manager error: {0}")]
@@ -22,4 +24,6 @@ pub enum IndexerError {
     FailedToGetCommitteeSize(String),
     #[error("Failed to parse transaction hash: {0}")]
     FailedToParseTransactionHash(String),
+    #[error("Substate cache operation failed: {0}")]
+    SubstateCacheError(#[from] SubstateCacheError),
 }

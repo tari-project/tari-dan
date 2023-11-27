@@ -27,9 +27,13 @@ tari_template_builtin = { path = "../../dan_layer/template_builtin" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
+tari_bor = { path = "../../dan_layer/tari_bor" }
+tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
 
 anyhow = "1.0.53"
+async-trait = "0.1.74"
 bytes = "1"
+cacache = "12.0.0"
 chrono = "0.4.22"
 futures = { version = "^0.3.1" }
 log = { version = "0.4.8", features = ["std"] }

@@ -51,7 +51,7 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_comms::peer_manager::PeerFeatures;
-use tari_dan_app_utilities::consensus_constants::ConsensusConstants;
+use tari_dan_app_utilities::{consensus_constants::ConsensusConstants, substate_file_cache::SubstateFileCache};
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_indexer_lib::substate_scanner::SubstateScanner;
@@ -96,9 +96,14 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     )
     .await?;
 
+    let substate_cache_dir = config.common.base_path.join("substate_cache");
+    let substate_cache = SubstateFileCache::new(substate_cache_dir)
+        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Substate cache error: {}", e)))?;
+
     let dan_layer_scanner = Arc::new(SubstateScanner::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
+        substate_cache,
     ));
 
     let substate_manager = Arc::new(SubstateManager::new(

@@ -5,7 +5,11 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Deserializer};
 use serde_json as json;
-use tari_template_lib::{arg, args::Arg, models::Amount};
+use tari_template_lib::{
+    arg,
+    args::Arg,
+    models::{Amount, Metadata},
+};
 
 use crate::{substate::SubstateAddress, template::parse_template_address, TemplateAddress};
 
@@ -76,6 +80,10 @@ fn try_parse_special_string_arg(s: &str) -> Result<StringArg<'_>, ArgParseError>
         return Ok(StringArg::TemplateAddress(address));
     }
 
+    if let Ok(metadata) = Metadata::from_str(s) {
+        return Ok(StringArg::Metadata(metadata));
+    }
+
     match s {
         "true" => return Ok(StringArg::Bool(true)),
         "false" => return Ok(StringArg::Bool(false)),
@@ -102,6 +110,7 @@ pub enum StringArg<'a> {
     UnsignedInteger(u64),
     SignedInteger(i64),
     Bool(bool),
+    Metadata(Metadata),
 }
 
 impl From<StringArg<'_>> for Arg {
@@ -124,6 +133,7 @@ impl From<StringArg<'_>> for Arg {
             StringArg::SignedInteger(v) => arg!(v),
             StringArg::Bool(v) => arg!(v),
             StringArg::Workspace(s) => arg!(Workspace(s)),
+            StringArg::Metadata(m) => arg!(m),
         }
     }
 }

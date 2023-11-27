@@ -99,6 +99,29 @@ export default function TransactionDetails() {
       });
     };
 
+  const renderResult = (result: any) => {
+    if (result) {
+      if (result.finalize.result.Accept) {
+        return (
+         <span>Accepted</span>);
+      }
+      if (result.finalize.result.AcceptFeeRejectRest) {
+        return (
+            <span>{result.finalize.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>
+        );
+      }
+      if (result.finalize.result.Reject) {
+        return (
+            <span>{Object.keys(result.finalize.result.Reject)[0]} - {result.finalize.result.Reject[Object.keys(result.finalize.result.Reject)[0]]}</span>
+        )
+      }
+    } else {
+      return (
+        <span>In progress</span>
+      );
+    }
+  }
+
   const expandAll = () => {
     setExpandedPanels(['panel1', 'panel2', 'panel3', 'panel4', 'panel5']);
   };
@@ -144,6 +167,10 @@ export default function TransactionDetails() {
                             <DataTableCell>
                               <StatusChip status={final_decision} />
                             </DataTableCell>
+                          </TableRow>
+                          <TableRow>
+                            <TableCell>Result</TableCell>
+                            <DataTableCell>{renderResult(result)}</DataTableCell>
                           </TableRow>
                         </TableBody>
                       </Table>

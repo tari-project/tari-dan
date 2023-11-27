@@ -4,6 +4,7 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
 use tari_consensus::traits::StateManager;
+use tari_dan_common_types::committee::CommitteeShard;
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction},
     StateStore,
@@ -35,6 +36,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for NoopStateManager {
         _tx: &mut TStateStore::WriteTransaction<'_>,
         _block: &Block<TStateStore::Addr>,
         _transaction: &ExecutedTransaction,
+        _local_committee_shard: &CommitteeShard,
     ) -> Result<(), Self::Error> {
         self.0.store(true, std::sync::atomic::Ordering::Relaxed);
         Ok(())

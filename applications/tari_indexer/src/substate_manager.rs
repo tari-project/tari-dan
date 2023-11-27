@@ -27,6 +27,7 @@ use log::info;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
+use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
 use tari_engine_types::{
     events::Event,
     substate::{Substate, SubstateAddress},
@@ -79,13 +80,15 @@ pub struct EventResponse {
 }
 
 pub struct SubstateManager {
-    substate_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
+    substate_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>>,
     substate_store: SqliteSubstateStore,
 }
 
 impl SubstateManager {
     pub fn new(
-        dan_layer_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory>>,
+        dan_layer_scanner: Arc<
+            SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
+        >,
         substate_store: SqliteSubstateStore,
     ) -> Self {
         Self {

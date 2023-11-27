@@ -15,7 +15,7 @@ use tari_engine_types::{
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
-use tari_indexer_lib::{error::IndexerError, substate_scanner::SubstateScanner};
+use tari_indexer_lib::{error::IndexerError, substate_cache::SubstateCache, substate_scanner::SubstateScanner};
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
 
@@ -27,23 +27,24 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::substate_resolver";
 
 #[derive(Debug, Clone)]
-pub struct TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory> {
+pub struct TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache> {
     store: TStateStore,
-    scanner: SubstateScanner<TEpochManager, TValidatorNodeClientFactory>,
+    scanner: SubstateScanner<TEpochManager, TValidatorNodeClientFactory, TSubstateCache>,
     epoch_manager: TEpochManager,
     virtual_substate_manager: VirtualSubstateManager<TStateStore, TEpochManager>,
 }
 
-impl<TStateStore, TEpochManager, TValidatorNodeClientFactory>
-    TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory>
+impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
+    TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
 where
     TStateStore: StateStore,
     TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
     TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
+    TSubstateCache: SubstateCache,
 {
     pub fn new(
         store: TStateStore,
-        scanner: SubstateScanner<TEpochManager, TValidatorNodeClientFactory>,
+        scanner: SubstateScanner<TEpochManager, TValidatorNodeClientFactory, TSubstateCache>,
         epoch_manager: TEpochManager,
         virtual_substate_manager: VirtualSubstateManager<TStateStore, TEpochManager>,
     ) -> Self {
@@ -147,12 +148,13 @@ where
 }
 
 #[async_trait]
-impl<TStateStore, TEpochManager, TValidatorNodeClientFactory> SubstateResolver
-    for TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory>
+impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache> SubstateResolver
+    for TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
 where
     TStateStore: StateStore<Addr = CommsPublicKey> + Sync + Send,
     TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
     TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
+    TSubstateCache: SubstateCache,
 {
     type Error = SubstateResolverError;
 

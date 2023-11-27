@@ -12,8 +12,14 @@ use tari_engine_types::{
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::{SubstateRequirement, Transaction};
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory};
+use tokio::task::JoinError;
 
-use crate::{error::IndexerError, substate_decoder::find_related_substates, substate_scanner::SubstateScanner};
+use crate::{
+    error::IndexerError,
+    substate_cache::SubstateCache,
+    substate_decoder::find_related_substates,
+    substate_scanner::SubstateScanner,
+};
 
 const LOG_TARGET: &str = "tari::indexer::transaction_autofiller";
 
@@ -23,19 +29,22 @@ pub enum TransactionAutofillerError {
     IndexedValueVisitorError(#[from] IndexedValueError),
     #[error("Indexer error: {0}")]
     IndexerError(#[from] IndexerError),
+    #[error("Tokio join error: {0}")]
+    JoinError(#[from] JoinError),
 }
 
-pub struct TransactionAutofiller<TEpochManager, TVnClient> {
-    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient>>,
+pub struct TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache> {
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
 }
 
-impl<TEpochManager, TVnClient, TAddr> TransactionAutofiller<TEpochManager, TVnClient>
+impl<TEpochManager, TVnClient, TAddr, TSubstateCache> TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache>
 where
-    TEpochManager: EpochManagerReader<Addr = TAddr>,
-    TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
-    TAddr: NodeAddressable,
+    TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,
+    TVnClient: ValidatorNodeClientFactory<Addr = TAddr> + 'static,
+    TAddr: NodeAddressable + 'static,
+    TSubstateCache: SubstateCache + 'static,
 {
-    pub fn new(substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient>>) -> Self {
+    pub fn new(substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>) -> Self {
         Self { substate_scanner }
     }
 
@@ -48,52 +57,28 @@ where
         // note that the transaction hash will not change as the "involved_objects" is not part of the hash
         let mut autofilled_transaction = original_transaction;
 
-        // scan the network to fetch all the substates for each required input
-        // TODO: perform this loop concurrently by spawning a tokio task for each scan
+        // scan the network in parallel to fetch all the substates for each required input
         let mut input_shards = vec![];
         let mut found_substates = HashMap::new();
-        for r in &substate_requirements {
-            let scan_res = match r.version() {
-                Some(version) => {
-                    let shard = ShardId::from_address(r.address(), version);
-                    if autofilled_transaction.all_inputs_iter().any(|s| *s == shard) {
-                        // Shard is already an input
-                        continue;
-                    }
-
-                    // if the client specified a version, we need to retrieve it
-                    self.substate_scanner
-                        .get_specific_substate_from_committee(r.address(), version)
-                        .await?
-                },
-                None => {
-                    // if the client didn't specify a version, we fetch the latest one
-                    self.substate_scanner.get_substate(r.address(), None).await?
-                },
-            };
-
-            if let SubstateResult::Up { substate, address, .. } = scan_res {
-                info!(
-                    target: LOG_TARGET,
-                    "✏️Filling input substate {}:v{}",
-                    address,
-                    substate.version()
-                );
+        let substate_scanner_ref = self.substate_scanner.clone();
+        let transaction_ref = Arc::new(autofilled_transaction.clone());
+        let mut handles = Vec::new();
+        for requirement in &substate_requirements {
+            let handle = tokio::spawn(get_substate_requirement(
+                substate_scanner_ref.clone(),
+                transaction_ref.clone(),
+                requirement.clone(),
+            ));
+            handles.push(handle);
+        }
+        for handle in handles {
+            let res = handle.await??;
+            if let Some((address, substate)) = res {
                 let shard = ShardId::from_address(&address, substate.version());
-                if autofilled_transaction.all_inputs_iter().any(|s| *s == shard) {
-                    // Shard is already an input (TODO: what a waste)
-                    continue;
-                }
                 input_shards.push(shard);
                 found_substates.insert(address, substate);
-            } else {
-                warn!(
-                    target: LOG_TARGET,
-                    "🖋️ The substate for input requirement {} is not in UP status, skipping", r
-                );
             }
         }
-
         info!(target: LOG_TARGET, "✏️️ Found {} input substates", found_substates.len());
         autofilled_transaction.filled_inputs_mut().extend(input_shards);
 
@@ -103,7 +88,6 @@ where
 
         for _i in 0..MAX_RECURSION {
             // add all substates related to the inputs
-            // TODO: perform this loop concurrently by spawning a tokio task for each scan
             // TODO: we are going to only check the first level of recursion, for composability we may want to do it
             // recursively (with a recursion limit)
             let mut autofilled_inputs = vec![];
@@ -119,12 +103,16 @@ where
                 .flatten()
                 .filter(|s| !substate_requirements.iter().any(|r| r.address() == s));
 
+            // we need to fetch (in parallel) the latest version of all the related substates
+            let mut handles = HashMap::new();
+            let substate_scanner_ref = self.substate_scanner.clone();
             for address in related_addresses {
-                info!(target: LOG_TARGET, "✏️️️ Found {} related substate", address);
-
-                // we need to fetch the latest version of all the related substates
-                // note that if the version specified is "None", the scanner will fetch the latest version
-                let scan_res = self.substate_scanner.get_substate(&address, None).await?;
+                info!(target: LOG_TARGET, "✏️️️ Found {} related substates", address);
+                let handle = tokio::spawn(get_substate(substate_scanner_ref.clone(), address.clone(), None));
+                handles.insert(address.clone(), handle);
+            }
+            for (address, handle) in handles {
+                let scan_res = handle.await??;
 
                 if let SubstateResult::Up { substate, address, .. } = scan_res {
                     info!(
@@ -157,4 +145,71 @@ where
 
         Ok((autofilled_transaction, found_substates))
     }
+}
+
+pub async fn get_substate_requirement<TEpochManager, TVnClient, TAddr, TSubstateCache>(
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
+    transaction: Arc<Transaction>,
+    req: SubstateRequirement,
+) -> Result<Option<(SubstateAddress, Substate)>, IndexerError>
+where
+    TEpochManager: EpochManagerReader<Addr = TAddr>,
+    TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
+    TAddr: NodeAddressable,
+    TSubstateCache: SubstateCache,
+{
+    let scan_res = match req.version() {
+        Some(version) => {
+            let shard = ShardId::from_address(req.address(), version);
+            if transaction.all_inputs_iter().any(|s| *s == shard) {
+                // Shard is already an input
+                return Ok(None);
+            }
+
+            // if the client specified a version, we need to retrieve it
+            substate_scanner
+                .get_specific_substate_from_committee(req.address(), version)
+                .await?
+        },
+        None => {
+            // if the client didn't specify a version, we fetch the latest one
+            substate_scanner.get_substate(req.address(), None).await?
+        },
+    };
+
+    if let SubstateResult::Up { substate, address, .. } = &scan_res {
+        info!(
+            target: LOG_TARGET,
+            "Filling input substate {}:v{}",
+            address,
+            substate.version()
+        );
+        let shard = ShardId::from_address(address, substate.version());
+        if transaction.all_inputs_iter().any(|s| *s == shard) {
+            // Shard is already an input (TODO: what a waste)
+            return Ok(None);
+        }
+
+        Ok(Some((address.clone(), substate.clone())))
+    } else {
+        warn!(
+            target: LOG_TARGET,
+            "🖋️ The substate for input requirement {} is not in UP status, skipping", req
+        );
+        Ok(None)
+    }
+}
+
+pub async fn get_substate<TEpochManager, TVnClient, TAddr, TSubstateCache>(
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
+    substate_address: SubstateAddress,
+    version_hint: Option<u32>,
+) -> Result<SubstateResult, IndexerError>
+where
+    TEpochManager: EpochManagerReader<Addr = TAddr>,
+    TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
+    TAddr: NodeAddressable,
+    TSubstateCache: SubstateCache,
+{
+    substate_scanner.get_substate(&substate_address, version_hint).await
 }

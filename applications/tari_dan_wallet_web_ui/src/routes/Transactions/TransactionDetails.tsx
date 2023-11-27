@@ -62,6 +62,29 @@ export default function TransactionDetails() {
     setExpandedPanels([]);
   };
 
+  const renderResult = (result: any) => {
+    if (result) {
+      if (result.result.Accept) {
+        return (
+            <span>Accepted</span>);
+      }
+      if (result.result.AcceptFeeRejectRest) {
+        return (
+            <span>{result.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>
+        );
+      }
+      if (result.result.Reject) {
+        return (
+            <span>{Object.keys(result.result.Reject)[0]} - {result.result.Reject[Object.keys(result.result.Reject)[0]]}</span>
+        )
+      }
+    } else {
+      return (
+          <span>In progress</span>
+      );
+    }
+  }
+
   const renderContent = () => {
     if (isLoading) {
       return <Loading />;
@@ -144,6 +167,10 @@ export default function TransactionDetails() {
                     <DataTableCell>
                       <StatusChip status={data.status} />
                     </DataTableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell>Result</TableCell>
+                    <DataTableCell>{renderResult(data?.result)}</DataTableCell>
                   </TableRow>
                   {data?.transaction_failure ? (
                     <TableRow>

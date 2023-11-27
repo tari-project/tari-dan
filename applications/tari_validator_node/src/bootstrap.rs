@@ -38,6 +38,7 @@ use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_dan_app_utilities::{
     base_layer_scanner,
     consensus_constants::ConsensusConstants,
+    substate_file_cache::SubstateFileCache,
     template_manager,
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
@@ -218,9 +219,18 @@ pub async fn spawn_services(
     .await;
     handles.push(consensus_join_handle);
 
+    // substate cache
+    let substate_cache_dir = config.common.base_path.join("substate_cache");
+    let substate_cache = SubstateFileCache::new(substate_cache_dir)
+        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Substate cache error: {}", e)))?;
+
     // Mempool
     let virtual_substate_manager = VirtualSubstateManager::new(state_store.clone(), epoch_manager.clone());
-    let scanner = SubstateScanner::new(epoch_manager.clone(), validator_node_client_factory.clone());
+    let scanner = SubstateScanner::new(
+        epoch_manager.clone(),
+        validator_node_client_factory.clone(),
+        substate_cache,
+    );
     let substate_resolver = TariSubstateResolver::new(
         state_store.clone(),
         scanner,
