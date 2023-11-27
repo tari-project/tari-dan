@@ -92,6 +92,7 @@ pub enum Type {
     U128,
     String,
     Vec(Box<Type>),
+    Tuple(Vec<Type>),
     Other {
         name: String,
     },
@@ -115,6 +116,10 @@ impl std::fmt::Display for Type {
             Type::U128 => write!(f, "U128"),
             Type::String => write!(f, "String"),
             Type::Vec(t) => write!(f, "Vec<{}>", t),
+            Type::Tuple(types) => {
+                let type_list = types.iter().map(|t| format!("{:?}", t)).collect::<Vec<_>>().join(",");
+                write!(f, "Tuple<{}>", type_list)
+            },
             Type::Other { name } => write!(f, "{}", name),
         }
     }
