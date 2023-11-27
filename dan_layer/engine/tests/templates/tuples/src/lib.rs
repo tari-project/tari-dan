@@ -27,29 +27,27 @@ mod tuple_template {
     use super::*;
 
     pub struct Tuple {
-        pub value: u32,
+        pub value_a: String,
+        pub value_b: u32,
     }
 
     impl Tuple {
         pub fn new() -> (Component<Self>, String) {
             (
-                Component::new(Self { value: 0 })
+                Component::new(Self { value_a: "Hello World!".to_string(), value_b: 0 })
                     .with_access_rules(AccessRules::allow_all())
                     .create(),
                 "Hello World!".to_string(),
             )
         }
 
-        pub fn tuple_output() -> (String, u32) {
-            ("Hello World!".to_string(), 100)
+        pub fn get(&self) -> (String, u32) {
+            (self.value_a.clone(), self.value_b)
         }
 
-        pub fn set(&mut self, value: u32) {
-            self.value = value;
-        }
-
-        pub fn get(&self) -> u32 {
-            self.value
+        pub fn set(&mut self, value: (String, u32)) {
+            self.value_a = value.0;
+            self.value_b = value.1;
         }
     }
 }
