@@ -214,6 +214,10 @@ impl TransactionBuilder {
         self
     }
 
+    pub fn build_as_instructions(mut self) -> Vec<Instruction> {
+        self.instructions.drain(..).collect()
+    }
+
     pub fn build(mut self) -> Transaction {
         Transaction::new(
             self.fee_instructions.drain(..).collect(),

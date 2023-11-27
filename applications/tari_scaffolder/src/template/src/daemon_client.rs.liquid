@@ -19,14 +19,16 @@ pub struct DaemonClient {
     endpoint: String,
     auth_token: Option<String>,
     last_id: usize,
+    default_account: String
 }
 
 impl DaemonClient {
-    pub(crate) fn new(endpoint: String, auth_token: Option<String>) -> Self {
+    pub(crate) fn new(endpoint: String, auth_token: Option<String>, default_account: String) -> Self {
         Self {
             endpoint,
             auth_token,
             last_id: 0,
+            default_account
         }
     }
 
@@ -49,7 +51,7 @@ impl DaemonClient {
         self.submit_instructions(vec![instruction], dump_buckets, is_dry_run, fees, other_inputs).await;
     }
 
-    pub async fn submit_instructions(&mut self, instruction: Vec<Instruction>, dump_buckets: bool, is_dry_run: bool, fees: u64, other_inputs: Vec<SubstateRequirement>) {
+    pub async fn submit_instructions(&mut self, instructions: Vec<Instruction>, dump_buckets: bool, is_dry_run: bool, max_fee: u64, other_inputs: Vec<SubstateRequirement>) {
      let mut client =
             WalletDaemonClient::connect(&self.endpoint, self.auth_token.clone()).unwrap();
         //let r = client.list_keys().await;
@@ -57,18 +59,21 @@ impl DaemonClient {
         //dbg!(r);
 
            let tx = CallInstructionRequest {
-            instruction,
-            fee_account: ComponentAddressOrName::Name("TestAccount_0".to_string()),
+            instructions,
+            fee_account: ComponentAddressOrName::Name(self.default_account.clone()),
             dump_outputs_into: if dump_buckets {
-                Some(ComponentAddressOrName::Name("TestAccount_0".to_string()))
+                Some(ComponentAddressOrName::Name(self.default_account.clone()))
             } else {
                 None
             },
-            fee: fees,
+            max_fee,
             inputs: other_inputs,
             override_inputs: None,
             is_dry_run,
             proof_ids: vec![],
+            new_outputs: None,
+            min_epoch: None,
+            max_epoch: None,
         };
 
         let r2 = client.submit_instruction(tx).await.unwrap();
@@ -78,7 +83,7 @@ impl DaemonClient {
 
 
 
-	    //"dump_outputs_into": "TestAccount_0",
+	    //"dump_outputs_into": self.default_account,
 
     }
 
