@@ -17,7 +17,7 @@ use tari_template_lib::{
     models::{Amount, ComponentAddress, ConfidentialWithdrawProof, ResourceAddress},
 };
 
-use crate::{Transaction, TransactionSignature};
+use crate::{signature::TransactionSignatureFields, Transaction, TransactionSignature};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
@@ -144,8 +144,16 @@ impl TransactionBuilder {
     }
 
     pub fn sign(mut self, secret_key: &PrivateKey) -> Self {
-        // TODO: create proper challenge that signs everything
-        self.signature = Some(TransactionSignature::sign(secret_key, &self.instructions));
+        let signature_fields = TransactionSignatureFields {
+            fee_instructions: self.fee_instructions.clone(),
+            instructions: self.instructions.clone(),
+            inputs: self.inputs.clone(),
+            input_refs: self.input_refs.clone(),
+            min_epoch: self.min_epoch,
+            max_epoch: self.max_epoch,
+        };
+
+        self.signature = Some(TransactionSignature::sign(secret_key, signature_fields));
         self
     }
 

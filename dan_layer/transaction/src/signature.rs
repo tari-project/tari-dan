@@ -8,10 +8,21 @@ use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
+use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{
     hashing::{hasher64, EngineHashDomainLabel},
     instruction::Instruction,
 };
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionSignatureFields {
+    pub fee_instructions: Vec<Instruction>,
+    pub instructions: Vec<Instruction>,
+    pub inputs: Vec<ShardId>,
+    pub input_refs: Vec<ShardId>,
+    pub min_epoch: Option<Epoch>,
+    pub max_epoch: Option<Epoch>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TransactionSignature {
@@ -24,10 +35,10 @@ impl TransactionSignature {
         Self { public_key, signature }
     }
 
-    pub fn sign(secret_key: &RistrettoSecretKey, instructions: &[Instruction]) -> Self {
+    pub fn sign(secret_key: &RistrettoSecretKey, fields: TransactionSignatureFields) -> Self {
         let public_key = RistrettoPublicKey::from_secret_key(secret_key);
-        let challenge = hasher64(EngineHashDomainLabel::InstructionSignature)
-            .chain(instructions)
+        let challenge = hasher64(EngineHashDomainLabel::TransactionSignature)
+            .chain(&fields)
             .result();
 
         Self {

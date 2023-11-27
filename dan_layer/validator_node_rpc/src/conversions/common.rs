@@ -77,7 +77,7 @@ impl<TAddr: NodeAddressable> From<&ValidatorSignature<TAddr>> for proto::common:
     }
 }
 
-//---------------------------------- InstructionSignature --------------------------------------------//
+//---------------------------------- TransactionSignature --------------------------------------------//
 
 impl TryFrom<proto::common::SignatureAndPublicKey> for TransactionSignature {
     type Error = anyhow::Error;
