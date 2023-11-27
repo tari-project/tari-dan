@@ -8,7 +8,6 @@ repository = "https://github.com/tari-project/tari-dan"
 license = "BSD-3-Clause"
 
 [dependencies]
-# git rev: include fix from https://github.com/enarx/ciborium/pull/80
 ciborium = { version="0.2.1", default-features = false }
 ciborium-io = { version="0.2.1", default-features = false }
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
