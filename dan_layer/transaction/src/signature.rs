@@ -37,14 +37,17 @@ impl TransactionSignature {
 
     pub fn sign(secret_key: &RistrettoSecretKey, fields: TransactionSignatureFields) -> Self {
         let public_key = RistrettoPublicKey::from_secret_key(secret_key);
-        let challenge = hasher64(EngineHashDomainLabel::TransactionSignature)
-            .chain(&fields)
-            .result();
+        let challenge = Self::create_challenge(fields);
 
         Self {
             signature: Signature::sign(secret_key, challenge, &mut OsRng).unwrap(),
             public_key,
         }
+    }
+
+    pub fn verify(&self, fields: TransactionSignatureFields) -> bool {
+        let challenge = Self::create_challenge(fields);
+        self.signature.verify(&self.public_key, challenge)
     }
 
     pub fn signature(&self) -> &Signature {
@@ -53,5 +56,11 @@ impl TransactionSignature {
 
     pub fn public_key(&self) -> &RistrettoPublicKey {
         &self.public_key
+    }
+
+    fn create_challenge(fields: TransactionSignatureFields) -> [u8; 64] {
+        hasher64(EngineHashDomainLabel::TransactionSignature)
+            .chain(&fields)
+            .result()
     }
 }

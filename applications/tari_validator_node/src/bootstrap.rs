@@ -80,8 +80,8 @@ use crate::{
         create_tari_validator_node_rpc_service,
         services::{
             comms_peer_provider::CommsPeerProvider,
-            mempool,
             mempool::{
+                self,
                 ClaimFeeTransactionValidator,
                 EpochRangeValidator,
                 FeeTransactionValidator,
@@ -92,6 +92,7 @@ use crate::{
                 MempoolHandle,
                 OutputsDontExistLocally,
                 TemplateExistsValidator,
+                TransactionSignatureValidator,
                 Validator,
             },
             messaging,
@@ -484,7 +485,8 @@ fn create_mempool_before_execute_validator(
     template_manager: TemplateManager,
     epoch_manager: EpochManagerHandle,
 ) -> impl Validator<Transaction, Error = MempoolError> {
-    let mut validator = TemplateExistsValidator::new(template_manager)
+    let mut validator = TransactionSignatureValidator
+        .and_then(TemplateExistsValidator::new(template_manager))
         .and_then(EpochRangeValidator::new(epoch_manager.clone()))
         .and_then(ClaimFeeTransactionValidator::new(epoch_manager))
         .boxed();
