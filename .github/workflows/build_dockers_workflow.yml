@@ -35,8 +35,8 @@ env:
 
 jobs:
   docker_build:
-    # runs-on: ubuntu-latest
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
+
     permissions:
       packages: write
 

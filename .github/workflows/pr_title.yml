@@ -19,6 +19,7 @@ jobs:
         run: |
           npm install -g @commitlint/cli @commitlint/config-conventional
           echo "module.exports = {extends: ['@commitlint/config-conventional']}" > commitlint.config.js
+
       - name: lint
         run: |
           echo "$PR_TITLE" | commitlint
