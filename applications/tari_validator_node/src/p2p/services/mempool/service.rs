@@ -344,7 +344,7 @@ where
                     );
                 }
 
-                // Only input shards propagate to foreign shards
+                // Only tx receipt shards propagate to foreign shards
                 if is_input_shard {
                     // Forward to foreign replicas.
                     // We assume that at least f other local replicas receive this transaction and also forward to their
@@ -568,15 +568,19 @@ where
         };
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
+
+        self.epoch_manager.get_local_committee_shard(current_epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
-        let is_input_shard = local_committee_shard.includes_any_shard(executed.transaction().all_inputs_iter());
+        let is_input_shard = local_committee_shard.includes_any_shard(executed.transaction().all_inputs_iter()) |
+            (executed.transaction().inputs().len() + executed.transaction().input_refs().len() == 0);
 
         if should_propagate && is_input_shard {
             // Forward the transaction to any output shards that are not part of the input shard set as these have
             // already been forwarded
             let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
-            let input_buckets = executed
-                .involved_shards_iter()
+            let input_buckets: HashSet<ShardBucket> = executed
+                .transaction()
+                .all_inputs_iter()
                 .map(|s| s.to_committee_bucket(num_committees))
                 .collect::<HashSet<_>>();
             let output_shards = executed

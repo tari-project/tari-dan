@@ -977,7 +977,7 @@ where TConsensusSpec: ConsensusSpec
                         }
 
                         self.state_manager
-                            .commit_transaction(tx, block, &executed)
+                            .commit_transaction(tx, block, &executed, local_committee_shard)
                             .map_err(|e| HotStuffError::StateManagerError(e.into()))?;
                     }
 

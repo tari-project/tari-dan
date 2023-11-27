@@ -20,8 +20,22 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod base_layer_scanner;
-pub mod consensus_constants;
-pub mod substate_file_cache;
-pub mod template_manager;
-pub mod transaction_executor;
+use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
+use tari_validator_node_rpc::client::SubstateResult;
+
+#[derive(thiserror::Error, Debug)]
+#[error("Failed substate cache operation {0}")]
+pub struct SubstateCacheError(pub String);
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SubstateCacheEntry {
+    pub version: u32,
+    pub substate_result: SubstateResult,
+}
+
+#[async_trait]
+pub trait SubstateCache: Send + Sync {
+    async fn read(&self, address: String) -> Result<Option<SubstateCacheEntry>, SubstateCacheError>;
+    async fn write(&self, address: String, entry: &SubstateCacheEntry) -> Result<(), SubstateCacheError>;
+}
