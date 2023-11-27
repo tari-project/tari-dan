@@ -220,20 +220,33 @@ fn test_engine_errors() {
 fn test_tuples() {
     let mut template_test = TemplateTest::new(vec!["tests/templates/tuples"]);
 
-    // tuples returned in a regular function
-    let (message, number): (String, u32) = template_test.call_function("Tuple", "tuple_output", args![], vec![]);
-    assert_eq!(message, "Hello World!");
-    assert_eq!(number, 100);
+    // check that the ABI is valid
+    let module = template_test.get_module("Tuple");
+    // the "new" constructor returns a tuple (Component, String)
+    let fn_new = module.find_func_by_name("new").unwrap();
+    assert_eq!(fn_new.output.to_string(), "Tuple<Other { name: \"Component\" },String>");
+    // the "get" method returns a tuple (String, u32)
+    let fn_get = module.find_func_by_name("get").unwrap();
+    assert_eq!(fn_get.output.to_string(), "Tuple<String,U32>");
+    // the "set" method accepts a tuple (String, u32) as argument
+    let fn_set = module.find_func_by_name("set").unwrap();
+    assert_eq!(fn_set.arguments[1].arg_type.to_string(), "Tuple<String,U32>");
 
     // tuples returned in a constructor
     let (component_id, message): (ComponentAddress, String) =
         template_test.call_function("Tuple", "new", args![], vec![]);
     assert_eq!(message, "Hello World!");
 
-    // the component id returned in the tuple must be valid and usable
-    let new_value = 20_u32;
+    // tuples returned in a method
+    let (message, number): (String, u32) = template_test.call_method(component_id, "get", args![], vec![]);
+    assert_eq!(message, "Hello World!");
+    assert_eq!(number, 0);
+
+    // tuples passed as arguments to methods
+    let new_value = ("New String".to_string(), 1);
     template_test.call_method::<()>(component_id, "set", args![new_value], vec![]);
-    let value: u32 = template_test.call_method(component_id, "get", args![], vec![]);
+    // check that the component state was actually updated
+    let value: (String, u32) = template_test.call_method(component_id, "get", args![], vec![]);
     assert_eq!(value, new_value);
 }
 

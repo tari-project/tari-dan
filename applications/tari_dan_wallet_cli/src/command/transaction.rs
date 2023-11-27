@@ -589,6 +589,10 @@ fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &InstructionRes
                 },
             }
         },
+        Type::Tuple(subtypes) => {
+            let str = format_tuple(subtypes, result);
+            write!(writer, "{}", str)?;
+        },
         Type::Other { name } if name == "Amount" => {
             write!(writer, "{}", stringify_slice(&result.decode::<Vec<Amount>>().unwrap()))?;
         },
@@ -604,6 +608,12 @@ fn display_vec<W: fmt::Write>(writer: &mut W, ty: &Type, result: &InstructionRes
         },
     }
     Ok(())
+}
+
+fn format_tuple(subtypes: &[Type], result: &InstructionResult) -> String {
+    let tuple_type = Type::Tuple(subtypes.to_vec());
+    let result_json = serde_json::to_string(&result.indexed).unwrap();
+    format!("{}: {}", tuple_type, result_json)
 }
 
 pub fn print_execution_results(results: &[InstructionResult]) {
@@ -657,6 +667,10 @@ pub fn print_execution_results(results: &[InstructionResult]) {
                         println!("Vec<{:?}>: {}", ty, vec_ty);
                     },
                 }
+            },
+            Type::Tuple(subtypes) => {
+                let str = format_tuple(subtypes, result);
+                println!("{}", str);
             },
             Type::Other { ref name } if name == "Amount" => {
                 println!("{}: {}", name, result.decode::<Amount>().unwrap());
