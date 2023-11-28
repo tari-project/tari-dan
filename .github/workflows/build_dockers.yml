@@ -37,6 +37,7 @@ concurrency:
 jobs:
   builds_envs_setup:
     runs-on: ubuntu-latest
+
     outputs:
       platforms: ${{ steps.envs_setup.outputs.platforms }}
       version: ${{ steps.envs_setup.outputs.version }}
