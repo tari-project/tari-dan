@@ -1,12 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use log::{debug, info};
 use tari_dan_common_types::shard_bucket::ShardBucket;
 use tari_dan_storage::{
-    consensus_models::{Block, ExecutedTransaction},
+    consensus_models::{Block, Command, ExecutedTransaction},
     StateStore,
     StateStoreReadTransaction,
 };
@@ -95,11 +95,16 @@ pub fn get_non_local_buckets<TTx: StateStoreReadTransaction>(
     num_committees: u32,
     local_bucket: ShardBucket,
 ) -> Result<HashSet<ShardBucket>, HotStuffError> {
-    let prepared_iter = block
-        .commands()
-        .iter()
-        .filter_map(|cmd| cmd.local_prepared())
-        .map(|t| &t.id);
+    get_non_local_buckets_from_commands(tx, block.commands(), num_committees, local_bucket)
+}
+
+pub fn get_non_local_buckets_from_commands<TTx: StateStoreReadTransaction>(
+    tx: &mut TTx,
+    commands: &BTreeSet<Command>,
+    num_committees: u32,
+    local_bucket: ShardBucket,
+) -> Result<HashSet<ShardBucket>, HotStuffError> {
+    let prepared_iter = commands.iter().filter_map(|cmd| cmd.local_prepared()).map(|t| &t.id);
     let prepared_txs = ExecutedTransaction::get_involved_shards(tx, prepared_iter)?;
     let non_local_buckets = prepared_txs
         .into_iter()

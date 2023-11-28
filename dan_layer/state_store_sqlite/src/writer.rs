@@ -16,6 +16,8 @@ use tari_dan_storage::{
         BlockId,
         Decision,
         Evidence,
+        ForeignReceiveCounters,
+        ForeignSendCounters,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -142,6 +144,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::commands.eq(serialize_json(block.commands())?),
             parked_blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             parked_blocks::justify.eq(serialize_json(block.justify())?),
+            parked_blocks::foreign_indexes.eq(serialize_json(block.get_foreign_indexes())?),
         );
 
         diesel::insert_into(parked_blocks::table)
@@ -186,6 +189,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
             blocks::is_dummy.eq(block.is_dummy()),
             blocks::is_processed.eq(block.is_processed()),
+            blocks::foreign_indexes.eq(serialize_json(block.get_foreign_indexes())?),
         );
 
         diesel::insert_into(blocks::table)
@@ -557,6 +561,48 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "high_qc_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_send_counters_set(
+        &mut self,
+        foreign_send_counter: &ForeignSendCounters,
+        block_id: &BlockId,
+    ) -> Result<(), StorageError> {
+        use crate::schema::foreign_send_counters;
+
+        let insert = (
+            foreign_send_counters::block_id.eq(serialize_hex(block_id)),
+            foreign_send_counters::counters.eq(serialize_json(&foreign_send_counter.counters)?),
+        );
+
+        diesel::insert_into(foreign_send_counters::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_send_counters_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_receive_counters_set(
+        &mut self,
+        foreign_receive_counter: &ForeignReceiveCounters,
+    ) -> Result<(), StorageError> {
+        use crate::schema::foreign_receive_counters;
+
+        let insert = (foreign_receive_counters::counters.eq(serialize_json(&foreign_receive_counter.counters)?),);
+
+        diesel::insert_into(foreign_receive_counters::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_receive_counters_set",
                 source: e,
             })?;
 

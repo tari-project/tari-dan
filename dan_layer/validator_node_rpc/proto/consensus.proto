@@ -49,6 +49,7 @@ message Block {
   bytes merkle_root = 7;
   repeated Command commands = 8;
   uint64 total_leader_fee = 9;
+  bytes foreign_indexes = 10;
 }
 
 message Command {
@@ -116,7 +117,6 @@ message ValidatorMetadata {
 message TariDanPayload {
   tari.dan.transaction.Transaction transaction = 1;
 }
-
 
 enum QuorumDecision {
   QUORUM_DECISION_UNKNOWN = 0;
@@ -204,4 +204,3 @@ message FullBlock {
   repeated QuorumCertificate qcs = 2;
   repeated tari.dan.transaction.Transaction transactions = 3;
 }
-

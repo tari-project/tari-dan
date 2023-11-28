@@ -15,6 +15,24 @@ diesel::table! {
         is_committed -> Bool,
         is_processed -> Bool,
         is_dummy -> Bool,
+        foreign_indexes -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    foreign_receive_counters (id) {
+        id -> Integer,
+        counters -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    foreign_send_counters (id) {
+        id -> Integer,
+        block_id -> Text,
+        counters -> Text,
         created_at -> Timestamp,
     }
 }
@@ -119,6 +137,7 @@ diesel::table! {
         command_count -> BigInt,
         commands -> Text,
         total_leader_fee -> BigInt,
+        foreign_indexes -> Text,
         created_at -> Timestamp,
     }
 }

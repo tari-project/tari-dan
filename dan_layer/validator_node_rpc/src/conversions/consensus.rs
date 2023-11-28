@@ -256,6 +256,7 @@ impl<TAddr: NodeAddressable> From<&tari_dan_storage::consensus_models::Block<TAd
             justify: Some(value.justify().into()),
             total_leader_fee: value.total_leader_fee(),
             commands: value.commands().iter().map(Into::into).collect(),
+            foreign_indexes: encode(value.get_foreign_indexes()).unwrap(),
         }
     }
 }
@@ -281,6 +282,7 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::Block>
                 .map(TryInto::try_into)
                 .collect::<Result<_, _>>()?,
             value.total_leader_fee,
+            decode_exact(&value.foreign_indexes)?,
         ))
     }
 }

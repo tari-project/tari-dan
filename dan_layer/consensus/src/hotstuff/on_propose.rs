@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::BTreeSet, num::NonZeroU64};
+use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
 use tari_dan_common_types::{
@@ -14,6 +14,7 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
+        ForeignSendCounters,
         HighQc,
         LastProposed,
         LeafBlock,
@@ -29,7 +30,7 @@ use tokio::sync::mpsc;
 
 use super::common::CommitteeAndMessage;
 use crate::{
-    hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError},
+    hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, proposer},
     messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
@@ -109,7 +110,7 @@ where TConsensusSpec: ConsensusSpec
             let mut tx = self.store.create_write_tx()?;
             let high_qc = HighQc::get(&mut *tx)?;
             let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
-
+            let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), leaf_block.block_id())?;
             next_block = self.build_next_block(
                 &mut tx,
                 epoch,
@@ -120,6 +121,7 @@ where TConsensusSpec: ConsensusSpec
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
                 is_newview_propose,
+                &mut foreign_counters,
             )?;
 
             next_block.as_last_proposed().set(&mut tx)?;
@@ -184,6 +186,7 @@ where TConsensusSpec: ConsensusSpec
         proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
+        foreign_counters: &mut ForeignSendCounters,
     ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
@@ -235,6 +238,20 @@ where TConsensusSpec: ConsensusSpec
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
 
+        let non_local_buckets = proposer::get_non_local_buckets_from_commands(
+            tx,
+            &commands,
+            local_committee_shard.num_committees(),
+            local_committee_shard.bucket(),
+        )?;
+
+        // let mut foreign_indexes = HashMap::new();
+
+        let foreign_indexes = non_local_buckets
+            .iter()
+            .map(|bucket| (*bucket, foreign_counters.increment_counter(*bucket)))
+            .collect();
+
         let next_block = Block::new(
             *parent_block.block_id(),
             high_qc,
@@ -243,6 +260,7 @@ where TConsensusSpec: ConsensusSpec
             proposed_by,
             commands,
             total_leader_fee,
+            foreign_indexes,
         );
 
         Ok(next_block)
