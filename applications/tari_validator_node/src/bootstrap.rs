@@ -46,7 +46,7 @@ use tari_dan_app_utilities::{
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::{
-    consensus_models::{Block, ExecutedTransaction, SubstateRecord},
+    consensus_models::{Block, BlockId, ExecutedTransaction, SubstateRecord},
     global::GlobalDb,
     StateStore,
     StateStoreReadTransaction,
@@ -441,7 +441,7 @@ where
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
-            created_block: *genesis_block.id(),
+            created_block: BlockId::genesis(),
             created_height: NodeHeight(0),
             created_at_epoch: Epoch(0),
             destroyed: None,
@@ -468,7 +468,7 @@ where
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
-            created_block: *genesis_block.id(),
+            created_block: BlockId::genesis(),
             created_height: NodeHeight(0),
             created_at_epoch: Epoch(0),
             destroyed: None,
