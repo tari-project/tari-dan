@@ -116,34 +116,7 @@ jobs:
         if: ${{ startsWith(runner.os,'Linux') && matrix.builds.cross != 'true' }}
         run: |
           sudo apt-get update
-          sudo apt-get -y install \
-            openssl \
-            libssl-dev \
-            pkg-config \
-            libsqlite3-dev \
-            clang-10 \
-            git \
-            cmake \
-            libc++-dev \
-            libc++abi-dev \
-            libprotobuf-dev \
-            protobuf-compiler \
-            libncurses5-dev \
-            libncursesw5-dev \
-            zip \
-            build-essential \
-            libgtk-3-dev \
-            libwebkit2gtk-4.0-dev \
-            libsoup2.4-dev \
-            curl \
-            wget \
-            libappindicator3-dev \
-            patchelf \
-            librsvg2-dev \
-            gcc-aarch64-linux-gnu \
-            g++-aarch64-linux-gnu
-          sudo apt-get -y --purge remove \
-            clang-9 clang-format-9 libclang-common-9-dev libclang-cpp9 libclang1-9
+          sudo bash scripts/install_ubuntu_dependencies.sh
 
       - name: Install macOS dependencies
         if: startsWith(runner.os,'macOS')
