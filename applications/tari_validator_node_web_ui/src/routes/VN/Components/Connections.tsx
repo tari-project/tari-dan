@@ -76,8 +76,8 @@ function Connections() {
     setShowAddPeerDialog(setElseToggle);
   };
 
-  const onSubmitAddPeer = () => {
-    addPeer(formState.publicKey, [formState.address]);
+  const onSubmitAddPeer = async () => {
+    await addPeer(formState.publicKey, [formState.address]);
     setFormState({ publicKey: '', address: '' });
     setShowAddPeerDialog(false);
   };
