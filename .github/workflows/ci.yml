@@ -47,7 +47,7 @@ jobs:
         run: rustup target add wasm32-unknown-unknown
 
       - name: cargo format
-        run: cargo +nightly fmt --all -- --check
+        run: cargo +${{ env.nightly_toolchain }} fmt --all -- --check
 
   clippy:
     name: clippy
