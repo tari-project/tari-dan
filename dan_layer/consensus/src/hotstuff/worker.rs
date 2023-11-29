@@ -10,7 +10,7 @@ use std::{
 use log::*;
 use tari_dan_common_types::{optional::Optional, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
+    consensus_models::{Block, ForeignReceiveCounters, HighQc, LastSentVote, LastVoted, LeafBlock, TransactionPool},
     StateStore,
     StateStoreWriteTransaction,
 };
@@ -86,6 +86,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::UnboundedSender<Transaction>,
+        foreign_receive_counter: ForeignReceiveCounters,
         shutdown: ShutdownSignal,
     ) -> Self {
         let pacemaker = PaceMaker::new();
@@ -137,6 +138,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 epoch_manager.clone(),
                 transaction_pool.clone(),
                 pacemaker.clone_handle(),
+                foreign_receive_counter,
             ),
             on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(

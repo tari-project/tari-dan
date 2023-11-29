@@ -46,7 +46,7 @@ use tari_dan_app_utilities::{
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::{
-    consensus_models::{Block, ExecutedTransaction, SubstateRecord},
+    consensus_models::{Block, BlockId, ExecutedTransaction, ForeignReceiveCounters, SubstateRecord},
     global::GlobalDb,
     StateStore,
     StateStoreReadTransaction,
@@ -206,6 +206,7 @@ pub async fn spawn_services(
 
     // Consensus
     let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
+    let foreign_receive_counter = state_store.with_read_tx(|tx| ForeignReceiveCounters::get(tx))?;
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
         state_store.clone(),
         node_identity.clone(),
@@ -214,6 +215,7 @@ pub async fn spawn_services(
         rx_consensus_message,
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
+        foreign_receive_counter,
         shutdown.clone(),
     )
     .await;
@@ -441,7 +443,7 @@ where
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
-            created_block: *genesis_block.id(),
+            created_block: BlockId::genesis(),
             created_height: NodeHeight(0),
             created_at_epoch: Epoch(0),
             destroyed: None,
@@ -468,7 +470,7 @@ where
             state_hash: Default::default(),
             created_by_transaction: Default::default(),
             created_justify: *genesis_block.justify().id(),
-            created_block: *genesis_block.id(),
+            created_block: BlockId::genesis(),
             created_height: NodeHeight(0),
             created_at_epoch: Epoch(0),
             destroyed: None,
