@@ -37,12 +37,14 @@ use tari_consensus::messages::{
     VoteMessage,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ValidatorMetadata};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, NodeHeight, ValidatorMetadata};
 use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
     Decision,
     Evidence,
+    ForeignProposal,
+    ForeignProposalState,
     HighQc,
     QcId,
     QuorumCertificate,
@@ -54,7 +56,7 @@ use tari_dan_storage::consensus_models::{
 use tari_engine_types::substate::{SubstateAddress, SubstateValue};
 use tari_transaction::TransactionId;
 
-use crate::proto;
+use crate::proto::{self};
 // -------------------------------- HotstuffMessage -------------------------------- //
 
 impl<TAddr: NodeAddressable> From<&HotstuffMessage<TAddr>> for proto::consensus::HotStuffMessage {
@@ -295,6 +297,9 @@ impl From<&Command> for proto::consensus::Command {
             Command::Prepare(tx) => proto::consensus::command::Command::Prepare(tx.into()),
             Command::LocalPrepared(tx) => proto::consensus::command::Command::LocalPrepared(tx.into()),
             Command::Accept(tx) => proto::consensus::command::Command::Accept(tx.into()),
+            Command::ForeignProposal(foreign_proposal) => {
+                proto::consensus::command::Command::ForeignProposal(foreign_proposal.into())
+            },
         };
 
         Self { command: Some(command) }
@@ -310,6 +315,9 @@ impl TryFrom<proto::consensus::Command> for Command {
             proto::consensus::command::Command::Prepare(tx) => Command::Prepare(tx.try_into()?),
             proto::consensus::command::Command::LocalPrepared(tx) => Command::LocalPrepared(tx.try_into()?),
             proto::consensus::command::Command::Accept(tx) => Command::Accept(tx.try_into()?),
+            proto::consensus::command::Command::ForeignProposal(foreign_proposal) => {
+                Command::ForeignProposal(foreign_proposal.try_into()?)
+            },
         })
     }
 }
@@ -343,6 +351,64 @@ impl TryFrom<proto::consensus::TransactionAtom> for TransactionAtom {
                 .try_into()?,
             transaction_fee: value.fee,
             leader_fee: value.leader_fee,
+        })
+    }
+}
+
+// ForeignProposalState
+// -------------------------------- Decision -------------------------------- //
+
+impl From<ForeignProposalState> for proto::consensus::ForeignProposalState {
+    fn from(value: ForeignProposalState) -> Self {
+        match value {
+            ForeignProposalState::New => proto::consensus::ForeignProposalState::New,
+            ForeignProposalState::Mined => proto::consensus::ForeignProposalState::Mined,
+            ForeignProposalState::Deleted => proto::consensus::ForeignProposalState::Deleted,
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::ForeignProposalState> for ForeignProposalState {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::ForeignProposalState) -> Result<Self, Self::Error> {
+        match value {
+            proto::consensus::ForeignProposalState::New => Ok(ForeignProposalState::New),
+            proto::consensus::ForeignProposalState::Mined => Ok(ForeignProposalState::Mined),
+            proto::consensus::ForeignProposalState::Deleted => Ok(ForeignProposalState::Deleted),
+            proto::consensus::ForeignProposalState::UnknownState => Err(anyhow!("Foreign proposal state not provided")),
+        }
+    }
+}
+
+// ForeignProposal
+
+impl From<&ForeignProposal> for proto::consensus::ForeignProposal {
+    fn from(value: &ForeignProposal) -> Self {
+        Self {
+            bucket: value.bucket.as_u32(),
+            block_id: value.block_id.as_bytes().to_vec(),
+            state: proto::consensus::ForeignProposalState::from(value.state).into(),
+            mined_at: value.mined_at.map(|a| a.0).unwrap_or(0),
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::ForeignProposal) -> Result<Self, Self::Error> {
+        Ok(ForeignProposal {
+            bucket: ShardBucket::from(value.bucket),
+            block_id: BlockId::try_from(value.block_id)?,
+            state: proto::consensus::ForeignProposalState::from_i32(value.state)
+                .ok_or_else(|| anyhow!("Invalid foreign proposal state value {}", value.state))?
+                .try_into()?,
+            mined_at: if value.mined_at == 0 {
+                None
+            } else {
+                Some(NodeHeight(value.mined_at))
+            },
         })
     }
 }

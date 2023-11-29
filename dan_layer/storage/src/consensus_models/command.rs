@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tari_dan_common_types::ShardId;
 use tari_transaction::TransactionId;
 
+use super::ForeignProposal;
 use crate::{
     consensus_models::{Decision, ExecutedTransaction, QcId},
     StateStoreReadTransaction,
@@ -121,14 +122,40 @@ pub enum Command {
     Prepare(TransactionAtom),
     LocalPrepared(TransactionAtom),
     Accept(TransactionAtom),
+    ForeignProposal(ForeignProposal),
+}
+
+#[derive(PartialEq, Eq, Ord, PartialOrd)]
+pub enum CommandId {
+    TransactionId(TransactionId),
+    ForeignProposal(ForeignProposal),
+}
+
+impl Display for CommandId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CommandId::TransactionId(id) => write!(f, "Transaction({})", id),
+            CommandId::ForeignProposal(fp) => write!(f, "ForeignProposal({})", fp.block_id),
+        }
+    }
 }
 
 impl Command {
-    pub fn transaction_id(&self) -> &TransactionId {
+    pub fn transaction(&self) -> Option<&TransactionAtom> {
         match self {
-            Command::Prepare(tx) => &tx.id,
-            Command::LocalPrepared(tx) => &tx.id,
-            Command::Accept(tx) => &tx.id,
+            Command::Prepare(tx) => Some(tx),
+            Command::LocalPrepared(tx) => Some(tx),
+            Command::Accept(tx) => Some(tx),
+            Command::ForeignProposal(_) => None,
+        }
+    }
+
+    pub fn id(&self) -> CommandId {
+        match self {
+            Command::Prepare(tx) => CommandId::TransactionId(tx.id),
+            Command::LocalPrepared(tx) => CommandId::TransactionId(tx.id),
+            Command::Accept(tx) => CommandId::TransactionId(tx.id),
+            Command::ForeignProposal(foreign_proposal) => CommandId::ForeignProposal(foreign_proposal.clone()),
         }
     }
 
@@ -137,6 +164,7 @@ impl Command {
             Command::Prepare(tx) => tx.decision,
             Command::LocalPrepared(tx) => tx.decision,
             Command::Accept(tx) => tx.decision,
+            Command::ForeignProposal(_) => panic!("ForeignProposal does not have a decision"),
         }
     }
 
@@ -161,11 +189,19 @@ impl Command {
         }
     }
 
+    pub fn foreign_proposal(&self) -> Option<&ForeignProposal> {
+        match self {
+            Command::ForeignProposal(tx) => Some(tx),
+            _ => None,
+        }
+    }
+
     pub fn involved_shards(&self) -> impl Iterator<Item = &ShardId> + '_ {
         match self {
             Command::Prepare(tx) => tx.evidence.shards_iter(),
             Command::LocalPrepared(tx) => tx.evidence.shards_iter(),
             Command::Accept(tx) => tx.evidence.shards_iter(),
+            Command::ForeignProposal(_) => panic!("ForeignProposal does not have involved shards"),
         }
     }
 
@@ -174,6 +210,7 @@ impl Command {
             Command::Prepare(tx) => &tx.evidence,
             Command::LocalPrepared(tx) => &tx.evidence,
             Command::Accept(tx) => &tx.evidence,
+            Command::ForeignProposal(_) => panic!("ForeignProposal does not have evidence"),
         }
     }
 }
@@ -186,7 +223,7 @@ impl PartialOrd for Command {
 
 impl Ord for Command {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.transaction_id().cmp(other.transaction_id())
+        self.id().cmp(&other.id())
     }
 }
 
@@ -196,6 +233,7 @@ impl Display for Command {
             Command::Prepare(tx) => write!(f, "Prepare({}, {})", tx.id, tx.decision),
             Command::LocalPrepared(tx) => write!(f, "LocalPrepared({}, {})", tx.id, tx.decision),
             Command::Accept(tx) => write!(f, "Accept({}, {})", tx.id, tx.decision),
+            Command::ForeignProposal(fp) => write!(f, "ForeignProposal {}", fp.block_id),
         }
     }
 }

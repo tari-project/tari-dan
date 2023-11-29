@@ -21,6 +21,17 @@ diesel::table! {
 }
 
 diesel::table! {
+    foreign_proposals (id) {
+        id -> Integer,
+        bucket -> Integer,
+        block_id -> Text,
+        state -> Text,
+        mined_at -> Nullable<BigInt>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     foreign_receive_counters (id) {
         id -> Integer,
         counters -> Text,

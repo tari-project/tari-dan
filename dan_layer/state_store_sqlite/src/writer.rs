@@ -16,6 +16,7 @@ use tari_dan_storage::{
         BlockId,
         Decision,
         Evidence,
+        ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -561,6 +562,44 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "high_qc_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_proposal_upsert(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let values = (
+            foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32),
+            foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)),
+            foreign_proposals::state.eq(foreign_proposal.state.to_string()),
+            foreign_proposals::mined_at.eq(foreign_proposal.mined_at.map(|h| h.as_u64() as i64)),
+        );
+
+        diesel::insert_into(foreign_proposals::table)
+            .values(&values)
+            .on_conflict((foreign_proposals::bucket, foreign_proposals::block_id))
+            .do_update()
+            .set(values.clone())
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_set",
+                source: e,
+            })?;
+        Ok(())
+    }
+
+    fn foreign_proposal_delete(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError> {
+        use crate::schema::foreign_proposals;
+
+        diesel::delete(foreign_proposals::table)
+            .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
+            .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_delete",
                 source: e,
             })?;
 

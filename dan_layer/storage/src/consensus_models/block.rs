@@ -24,7 +24,7 @@ use tari_dan_common_types::{
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
 
-use super::QuorumCertificate;
+use super::{ForeignProposal, QuorumCertificate};
 use crate::{
     consensus_models::{
         Command,
@@ -222,7 +222,11 @@ impl<TAddr> Block<TAddr> {
     }
 
     pub fn all_transaction_ids(&self) -> impl Iterator<Item = &TransactionId> + '_ {
-        self.commands.iter().map(|d| d.transaction_id())
+        self.commands.iter().filter_map(|d| d.transaction().map(|t| t.id()))
+    }
+
+    pub fn all_foreign_proposals(&self) -> impl Iterator<Item = &ForeignProposal> + '_ {
+        self.commands.iter().filter_map(|d| d.foreign_proposal())
     }
 
     pub fn command_count(&self) -> usize {
@@ -509,7 +513,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         &self,
         tx: &mut TTx,
     ) -> Result<Vec<TransactionRecord>, StorageError> {
-        let tx_ids = self.commands().iter().map(|t| t.transaction_id());
+        let tx_ids = self.commands().iter().filter_map(|t| t.transaction().map(|t| t.id()));
         let (found, missing) = TransactionRecord::get_any(tx, tx_ids)?;
         if !missing.is_empty() {
             return Err(StorageError::NotFound {

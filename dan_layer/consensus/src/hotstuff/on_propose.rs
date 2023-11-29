@@ -14,10 +14,12 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
+        ForeignProposal,
         ForeignSendCounters,
         HighQc,
         LastProposed,
         LeafBlock,
+        LockedBlock,
         QuorumCertificate,
         TransactionPool,
         TransactionPoolStage,
@@ -197,17 +199,31 @@ where TConsensusSpec: ConsensusSpec
         };
 
         let mut total_leader_fee = 0;
-        let commands = batch
+        let locked_block = LockedBlock::get(tx)?;
+        let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
+        let commands = ForeignProposal::get_all_new(tx)?
             .into_iter()
-            .map(|t| match t.current_stage() {
+            .filter_map(|foreign_proposal| {
+                if pending_proposals.iter().any(|pending_proposal| {
+                    pending_proposal.bucket == foreign_proposal.bucket &&
+                        pending_proposal.block_id == foreign_proposal.block_id
+                }) {
+                    None
+                } else {
+                    Some(Ok(Command::ForeignProposal(
+                        foreign_proposal.set_mined_at(parent_block.height().saturating_add(NodeHeight(1))),
+                    )))
+                }
+            })
+            .chain(batch.into_iter().map(|t| match t.current_stage() {
                 // If the transaction is New, propose to Prepare it
                 TransactionPoolStage::New => Ok(Command::Prepare(t.get_local_transaction_atom())),
                 // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
                 // accepted Prepared so we propose LocalPrepared
                 TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.get_local_transaction_atom())),
                 // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
-                // prepared. We can now propose to Accept it. We also propose the decision change which everyone should
-                // agree with if they received the same foreign LocalPrepare.
+                // prepared. We can now propose to Accept it. We also propose the decision change which everyone
+                // should agree with if they received the same foreign LocalPrepare.
                 TransactionPoolStage::LocalPrepared => {
                     let involved = local_committee_shard.count_distinct_buckets(t.transaction().evidence.shards_iter());
                     let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
@@ -220,16 +236,16 @@ where TConsensusSpec: ConsensusSpec
                     total_leader_fee += leader_fee;
                     Ok(Command::Accept(t.get_final_transaction_atom(leader_fee)))
                 },
-                // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes agreed
-                // with the Accept, more (possibly empty) blocks with QCs will be proposed and accepted,
-                // otherwise the Accept block will not be committed.
+                // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes
+                // agreed with the Accept, more (possibly empty) blocks with QCs will be
+                // proposed and accepted, otherwise the Accept block will not be committed.
                 TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => {
                     unreachable!(
                         "It is invalid for TransactionPoolStage::{} to be ready to propose",
                         t.current_stage()
                     )
                 },
-            })
+            }))
             .collect::<Result<BTreeSet<_>, HotStuffError>>()?;
 
         debug!(
