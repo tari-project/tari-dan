@@ -31,6 +31,8 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
+        Command,
+        ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
         HighQc,
@@ -370,6 +372,66 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             })?;
 
         high_qc.try_into()
+    }
+
+    fn foreign_proposal_exists(&mut self, foreign_proposal: &ForeignProposal) -> Result<bool, StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let foreign_proposals = foreign_proposals::table
+            .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
+            .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
+            .count()
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_exists",
+                source: e,
+            })?;
+
+        Ok(foreign_proposals > 0)
+    }
+
+    fn foreign_proposal_get_all_new(&mut self) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let foreign_proposals = foreign_proposals::table
+            .filter(foreign_proposals::state.eq("New"))
+            .load::<sql_models::ForeignProposal>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_get_all",
+                source: e,
+            })?;
+
+        foreign_proposals.into_iter().map(|p| p.try_into()).collect()
+    }
+
+    fn foreign_proposal_get_all_pending(
+        &mut self,
+        from_block_id: &BlockId,
+        to_block_id: &BlockId,
+    ) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::blocks;
+
+        let blocks = self.get_block_ids_that_change_state_between(from_block_id, to_block_id)?;
+
+        let all_commands: Vec<String> = blocks::table
+            .select(blocks::commands)
+            .filter(blocks::command_count.gt(0)) // if there is no command, then there is definitely no foreign proposal command
+            .filter(blocks::block_id.eq_any(blocks))
+            .load::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_get_all",
+                source: e,
+            })?;
+        let all_commands = all_commands
+            .into_iter()
+            .map(|commands| deserialize_json(commands.as_str()))
+            .collect::<Result<Vec<Vec<Command>>, _>>()?;
+        let all_commands = all_commands.into_iter().flatten().collect::<Vec<_>>();
+        Ok(all_commands
+            .into_iter()
+            .filter_map(|command| command.foreign_proposal().cloned())
+            .collect::<Vec<ForeignProposal>>())
     }
 
     fn foreign_send_counters_get(&mut self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError> {

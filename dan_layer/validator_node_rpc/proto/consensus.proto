@@ -57,7 +57,22 @@ message Command {
     TransactionAtom prepare = 1;
     TransactionAtom local_prepared = 2;
     TransactionAtom accept = 3;
+    ForeignProposal foreign_proposal = 4;
   }
+}
+
+enum ForeignProposalState {
+  UNKNOWN_STATE = 0;
+  NEW = 1;
+  MINED = 2;
+  DELETED = 3;
+}
+
+message ForeignProposal {
+  uint32 bucket = 1;
+  bytes block_id = 2;
+  ForeignProposalState state = 3;
+  uint64 mined_at = 4;
 }
 
 message TransactionAtom {

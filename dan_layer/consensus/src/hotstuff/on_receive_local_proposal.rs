@@ -15,7 +15,7 @@ use tari_dan_common_types::{
     NodeHeight,
 };
 use tari_dan_storage::{
-    consensus_models::{Block, ForeignSendCounters, HighQc, TransactionPool, ValidBlock},
+    consensus_models::{Block, BlockId, ForeignSendCounters, HighQc, TransactionPool, ValidBlock},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -157,8 +157,9 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         num_committees: u32,
         local_bucket: ShardBucket,
         block: &Block<TConsensusSpec::Addr>,
+        justify_block: &BlockId,
     ) -> Result<bool, HotStuffError> {
-        let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), block.parent())?;
+        let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), justify_block)?;
         let non_local_buckets = proposer::get_non_local_buckets(tx.deref_mut(), block, num_committees, local_bucket)?;
         let mut foreign_indexes = HashMap::new();
         for non_local_bucket in non_local_buckets {
@@ -226,6 +227,20 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
 
         let justify_block_height = justify_block.height();
 
+        if !self.check_foreign_indexes(
+            tx,
+            local_committee_shard.num_committees(),
+            local_committee_shard.bucket(),
+            &candidate_block,
+            justify_block.id(),
+        )? {
+            return Err(ProposalValidationError::InvalidForeignCounters {
+                proposed_by: candidate_block.proposed_by().to_string(),
+                hash: *candidate_block.id(),
+            }
+            .into());
+        }
+
         if justify_block.id() != candidate_block.parent() {
             let mut dummy_blocks =
                 Vec::with_capacity((candidate_block.height().as_u64() - justify_block_height.as_u64() - 1) as usize);
@@ -271,18 +286,6 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         // Specifically, it should extend the locked block via the dummy blocks.
         if !candidate_block.is_safe(tx.deref_mut())? {
             return Err(ProposalValidationError::NotSafeBlock {
-                proposed_by: candidate_block.proposed_by().to_string(),
-                hash: *candidate_block.id(),
-            }
-            .into());
-        }
-        if !self.check_foreign_indexes(
-            tx,
-            local_committee_shard.num_committees(),
-            local_committee_shard.bucket(),
-            &candidate_block,
-        )? {
-            return Err(ProposalValidationError::InvalidForeignCounters {
                 proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),
             }

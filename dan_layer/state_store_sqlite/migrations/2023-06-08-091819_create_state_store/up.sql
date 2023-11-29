@@ -245,6 +245,17 @@ CREATE TABLE missing_transactions
     FOREIGN KEY (block_id) REFERENCES parked_blocks (block_id)
 );
 
+CREATE TABLE foreign_proposals
+(
+    id         integer   not NULL primary key AUTOINCREMENT,
+    bucket     bigint    not NULL,
+    block_id   text      not NULL,
+    state      text      not NULL,
+    mined_at   bigint    NULL,
+    created_at timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (bucket, block_id)
+);
+
 CREATE TABLE foreign_send_counters
 (
     id         integer   not NULL primary key AUTOINCREMENT,

@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{self, QuorumDecision},
     StorageError,
@@ -11,7 +11,7 @@ use time::PrimitiveDateTime;
 
 use crate::{
     error::SqliteStorageError,
-    serialization::{deserialize_hex_try_from, deserialize_json},
+    serialization::{deserialize_hex_try_from, deserialize_json, parse_from_string},
 };
 
 #[derive(Debug, Clone, Queryable)]
@@ -31,6 +31,29 @@ impl TryFrom<HighQc> for consensus_models::HighQc {
             block_id: deserialize_hex_try_from(&value.block_id)?,
             block_height: NodeHeight(value.block_height as u64),
             qc_id: deserialize_hex_try_from(&value.qc_id)?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Queryable)]
+pub struct ForeignProposal {
+    pub id: i32,
+    pub bucket: i32,
+    pub block_id: String,
+    pub state: String,
+    pub mined_at: Option<i64>,
+    pub created_at: PrimitiveDateTime,
+}
+
+impl TryFrom<ForeignProposal> for consensus_models::ForeignProposal {
+    type Error = StorageError;
+
+    fn try_from(value: ForeignProposal) -> Result<Self, Self::Error> {
+        Ok(Self {
+            bucket: ShardBucket::from(value.bucket as u32),
+            block_id: deserialize_hex_try_from(&value.block_id)?,
+            state: parse_from_string(&value.state)?,
+            mined_at: value.mined_at.map(|mined_at| NodeHeight(mined_at as u64)),
         })
     }
 }

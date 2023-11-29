@@ -5,7 +5,14 @@ use std::ops::DerefMut;
 use log::*;
 use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, shard_bucket::ShardBucket, NodeHeight};
 use tari_dan_storage::{
-    consensus_models::{Block, ForeignReceiveCounters, LeafBlock, TransactionPool, TransactionPoolStage},
+    consensus_models::{
+        Block,
+        ForeignProposal,
+        ForeignReceiveCounters,
+        LeafBlock,
+        TransactionPool,
+        TransactionPoolStage,
+    },
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
@@ -72,6 +79,7 @@ where TConsensusSpec: ConsensusSpec
         self.foreign_receive_counter.increment(&committee_shard.bucket());
         self.store.with_write_tx(|tx| {
             self.foreign_receive_counter.save(tx)?;
+            ForeignProposal::new(committee_shard.bucket(), *block.id()).upsert(tx)?;
             self.on_receive_foreign_block(tx, &block, &committee_shard)
         })?;
 
