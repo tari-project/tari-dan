@@ -77,7 +77,7 @@ export const useAccountsTransfer = (
   amount: number,
   resource_address: string,
   destination_public_key: string,
-  fee: number | null,
+  max_fee: number | null,
   confidential: boolean
 ) => {
   return useMutation(
@@ -87,7 +87,7 @@ export const useAccountsTransfer = (
         amount,
         resource_address,
         destination_public_key,
-        fee,
+        max_fee,
       }),
     {
       onError: (error: apiError) => {
