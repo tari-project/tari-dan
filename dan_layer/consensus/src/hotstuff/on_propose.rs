@@ -204,7 +204,10 @@ where TConsensusSpec: ConsensusSpec
         let commands = ForeignProposal::get_all_new(tx)?
             .into_iter()
             .filter_map(|foreign_proposal| {
-                if pending_proposals.contains(&foreign_proposal) {
+                if pending_proposals.iter().any(|pending_proposal| {
+                    pending_proposal.bucket == foreign_proposal.bucket &&
+                        pending_proposal.block_id == foreign_proposal.block_id
+                }) {
                     None
                 } else {
                     Some(Ok(Command::ForeignProposal(

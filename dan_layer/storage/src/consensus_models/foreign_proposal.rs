@@ -3,6 +3,7 @@
 
 use std::{
     fmt::{self, Display, Formatter},
+    hash::Hash,
     str::FromStr,
 };
 
@@ -42,18 +43,12 @@ impl FromStr for ForeignProposalState {
     }
 }
 
-#[derive(Debug, Clone, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct ForeignProposal {
     pub bucket: ShardBucket,
     pub block_id: BlockId,
     pub state: ForeignProposalState,
     pub mined_at: Option<NodeHeight>,
-}
-
-impl PartialEq for ForeignProposal {
-    fn eq(&self, other: &Self) -> bool {
-        self.bucket == other.bucket && self.block_id == other.block_id
-    }
 }
 
 impl ForeignProposal {
