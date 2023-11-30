@@ -25,7 +25,6 @@ use std::{collections::HashMap, convert::TryInto, str::FromStr, sync::Arc};
 use anyhow::anyhow;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
@@ -407,7 +406,7 @@ impl SubstateManager {
         // because the same component address with different version
         // can be processed in the same transaction, we need to avoid
         // duplicates
-        for (version, event) in network_events.into_iter().filter(|(v, e)| v > &latest_version_in_db) {
+        for (version, event) in network_events.into_iter().filter(|(v, _e)| v > &latest_version_in_db) {
             let template_address = event.template_address();
             let tx_hash = TransactionId::new(event.tx_hash().into_array());
             let topic = event.topic();

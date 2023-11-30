@@ -107,6 +107,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
         block
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn load(
         id: BlockId,
         parent: BlockId,

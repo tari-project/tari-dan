@@ -25,10 +25,7 @@ use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{
-    prelude::{ComponentAddress, ResourceAddress},
-    Hash,
-};
+use tari_template_lib::prelude::{ComponentAddress, ResourceAddress};
 use tari_transaction::TransactionId;
 
 use crate::substate_manager::SubstateManager;
