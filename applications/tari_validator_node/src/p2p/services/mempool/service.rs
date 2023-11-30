@@ -344,7 +344,7 @@ where
                     );
                 }
 
-                // Only tx receipt shards propagate to foreign shards
+                // Only input shards propagate to foreign shards
                 if is_input_shard {
                     // Forward to foreign replicas.
                     // We assume that at least f other local replicas receive this transaction and also forward to their

@@ -96,17 +96,19 @@ where
 
         let transaction_shard_id = ShardId::for_transaction_receipt(tx_hash.into_array().into());
 
-        self.try_with_committee(
-            autofilled_transaction
-                .involved_shards_iter()
-                .copied()
-                .chain(iter::once(transaction_shard_id)),
-            |mut client| {
+        if autofilled_transaction.involved_shards_iter().count() == 0 {
+            self.try_with_committee(iter::once(transaction_shard_id), |mut client| {
                 let transaction = autofilled_transaction.clone();
                 async move { client.submit_transaction(transaction).await }
-            },
-        )
-        .await
+            })
+            .await
+        } else {
+            self.try_with_committee(autofilled_transaction.involved_shards_iter().copied(), |mut client| {
+                let transaction = autofilled_transaction.clone();
+                async move { client.submit_transaction(transaction).await }
+            })
+            .await
+        }
     }
 
     pub async fn get_transaction_result(
