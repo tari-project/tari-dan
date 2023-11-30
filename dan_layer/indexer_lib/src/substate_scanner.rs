@@ -395,6 +395,7 @@ where
         &self,
         component_address: ComponentAddress,
         version: u32,
+        include_other_events_from_tx: bool,
     ) -> Result<Vec<Event>, IndexerError> {
         let substate_address = SubstateAddress::Component(component_address);
 
@@ -408,7 +409,10 @@ where
                 // to the current component address
                 let component_tx_events = tx_events
                     .into_iter()
-                    .filter(|e| e.component_address().is_some() && e.component_address().unwrap() == component_address)
+                    .filter(|e| {
+                        include_other_events_from_tx ||
+                            (e.component_address().is_some() && e.component_address().unwrap() == component_address)
+                    })
                     .collect::<Vec<Event>>();
                 Ok(component_tx_events)
             },
@@ -422,13 +426,14 @@ where
         &self,
         component_address: ComponentAddress,
         version: Option<u32>,
+        include_other_events_from_tx: bool,
     ) -> Result<Vec<(u32, Event)>, IndexerError> {
         let mut events = vec![];
         let mut version: u32 = version.unwrap_or_default();
 
         loop {
             match self
-                .get_events_for_component_and_version(component_address, version)
+                .get_events_for_component_and_version(component_address, version, include_other_events_from_tx)
                 .await
             {
                 Ok(component_tx_events) => events.extend(

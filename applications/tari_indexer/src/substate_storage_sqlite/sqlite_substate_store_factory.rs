@@ -39,7 +39,7 @@ use log::*;
 use tari_dan_storage::StorageError;
 use tari_dan_storage_sqlite::{error::SqliteStorageError, SqliteTransaction};
 use tari_engine_types::substate::SubstateAddress;
-use tari_template_lib::prelude::ComponentAddress;
+use tari_template_lib::{models::ResourceAddress, prelude::ComponentAddress};
 use tari_transaction::TransactionId;
 use thiserror::Error;
 

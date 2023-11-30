@@ -25,7 +25,10 @@ use std::{collections::BTreeMap, str::FromStr, sync::Arc};
 use async_graphql::{Context, EmptyMutation, EmptySubscription, Object, Schema, SimpleObject};
 use log::*;
 use serde::{Deserialize, Serialize};
-use tari_template_lib::{prelude::ComponentAddress, Hash};
+use tari_template_lib::{
+    prelude::{ComponentAddress, ResourceAddress},
+    Hash,
+};
 use tari_transaction::TransactionId;
 
 use crate::substate_manager::SubstateManager;
@@ -91,6 +94,7 @@ impl EventQuery {
         &self,
         ctx: &Context<'_>,
         component_address: String,
+        resource_address: Option<String>,
         version: Option<u32>,
     ) -> Result<Vec<Event>, anyhow::Error> {
         let version = version.unwrap_or_default();
@@ -100,7 +104,11 @@ impl EventQuery {
         );
         let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
         let events = substate_manager
-            .scan_events_for_substate_from_network(ComponentAddress::from_str(&component_address)?, Some(version))
+            .scan_events_for_substate_from_network(
+                ComponentAddress::from_str(&component_address)?,
+                resource_address.map(|r| ResourceAddress::from_str(&r)).transpose()?,
+                Some(version),
+            )
             .await?
             .iter()
             .map(|e| Event::from_engine_event(e.clone()))

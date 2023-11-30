@@ -25,6 +25,7 @@ use std::{collections::HashMap, convert::TryInto, str::FromStr, sync::Arc};
 use anyhow::anyhow;
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
@@ -39,7 +40,7 @@ use tari_indexer_lib::{
     NonFungibleSubstate,
 };
 use tari_template_lib::{
-    models::TemplateAddress,
+    models::{ResourceAddress, TemplateAddress},
     prelude::{ComponentAddress, Metadata},
 };
 use tari_transaction::TransactionId;
@@ -347,6 +348,7 @@ impl SubstateManager {
     pub async fn scan_events_for_substate_from_network(
         &self,
         component_address: ComponentAddress,
+        resource_address: Option<ResourceAddress>,
         version: Option<u32>,
     ) -> Result<Vec<Event>, anyhow::Error> {
         let mut events = vec![];
@@ -386,7 +388,7 @@ impl SubstateManager {
             }
             let network_version_events = self
                 .substate_scanner
-                .get_events_for_component_and_version(component_address, v)
+                .get_events_for_component_and_version(component_address, v, false)
                 .await?;
             events.extend(network_version_events);
         }
@@ -395,9 +397,10 @@ impl SubstateManager {
         let version = version.max(latest_version_in_db);
 
         // check if there are newest events for this component address in the network
+        // Include all events for the transaction so that we can cache them for future queries
         let network_events = self
             .substate_scanner
-            .get_events_for_component(component_address, Some(version))
+            .get_events_for_component(component_address, Some(version), true)
             .await?;
 
         // stores the newest network events to the db
@@ -410,17 +413,30 @@ impl SubstateManager {
             let topic = event.topic();
             let payload = event.payload();
             self.save_event_to_db(
-                component_address,
+                event.component_address().unwrap_or(component_address),
                 template_address,
                 tx_hash,
                 topic,
                 payload,
                 u64::from(version),
             )?;
-            events.push(event);
+            if event.component_address() == Some(component_address) {
+                events.push(event);
+            }
+            // events.push(event);
         }
 
-        Ok(events)
+        match resource_address {
+            None => Ok(events),
+            Some(res) => {
+                let s = res.to_string();
+                let events = events
+                    .into_iter()
+                    .filter(|e| e.payload().get("resource") == Some(&s))
+                    .collect::<Vec<_>>();
+                Ok(events)
+            },
+        }
     }
 
     pub async fn scan_and_update_substates(&self) -> Result<usize, anyhow::Error> {
