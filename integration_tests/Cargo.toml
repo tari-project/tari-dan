@@ -49,6 +49,7 @@ cucumber = { version = "0.18.0", features = [
     "libtest",
     "output-junit",
 ] }
+futures = "0.3.29"
 httpmock = "0.6.8"
 indexmap = "1.9.1"
 log = { version = "0.4.8", features = ["std"] }
