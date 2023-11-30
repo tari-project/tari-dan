@@ -75,6 +75,7 @@ message ForeignProposal {
   bytes block_id = 2;
   ForeignProposalState state = 3;
   uint64 mined_at = 4;
+  repeated bytes transactions = 5;
 }
 
 message TransactionAtom {

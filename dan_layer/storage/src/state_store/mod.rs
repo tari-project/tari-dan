@@ -102,6 +102,7 @@ pub trait StateStoreReadTransaction {
         from_block_id: &BlockId,
         to_block_id: &BlockId,
     ) -> Result<Vec<ForeignProposal>, StorageError>;
+    fn foreign_proposal_get_all_mined(&mut self, to_height: NodeHeight) -> Result<Vec<ForeignProposal>, StorageError>;
     fn foreign_send_counters_get(&mut self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError>;
     fn foreign_receive_counters_get(&mut self) -> Result<ForeignReceiveCounters, StorageError>;
     fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError>;

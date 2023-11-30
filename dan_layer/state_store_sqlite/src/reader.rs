@@ -64,7 +64,7 @@ use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
-    serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex},
+    serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex, serialize_json},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -384,6 +384,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         let foreign_proposals = foreign_proposals::table
             .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
             .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
+            .filter(foreign_proposals::transactions.eq(serialize_json(&foreign_proposal.transactions)?))
             .count()
             .limit(1)
             .get_result::<i64>(self.connection())
@@ -436,6 +437,21 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .into_iter()
             .filter_map(|command| command.foreign_proposal().cloned())
             .collect::<Vec<ForeignProposal>>())
+    }
+
+    fn foreign_proposal_get_all_mined(&mut self, to_height: NodeHeight) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let foreign_proposals = foreign_proposals::table
+            .filter(foreign_proposals::state.eq("Mined"))
+            .filter(foreign_proposals::mined_at.le(to_height.0 as i64))
+            .load::<sql_models::ForeignProposal>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_get_all",
+                source: e,
+            })?;
+
+        foreign_proposals.into_iter().map(|p| p.try_into()).collect()
     }
 
     fn foreign_send_counters_get(&mut self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError> {
