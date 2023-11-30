@@ -35,9 +35,9 @@ const LOG_TARGET: &str = "tari::indexer::graphql::events";
 #[derive(SimpleObject, Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Event {
-    pub component_address: Option<[u8; 32]>,
-    pub template_address: [u8; 32],
-    pub tx_hash: [u8; 32],
+    pub component_address: Option<String>,
+    pub template_address: String,
+    pub tx_hash: String,
     pub topic: String,
     pub payload: BTreeMap<String, String>,
 }
@@ -45,9 +45,9 @@ pub struct Event {
 impl Event {
     fn from_engine_event(event: tari_engine_types::events::Event) -> Result<Self, anyhow::Error> {
         Ok(Self {
-            component_address: event.component_address().map(|comp_addr| comp_addr.into_array()),
-            template_address: event.template_address().into_array(),
-            tx_hash: event.tx_hash().into_array(),
+            component_address: event.component_address().map(|comp_addr| comp_addr.to_string()),
+            template_address: event.template_address().to_string(),
+            tx_hash: event.tx_hash().to_string(),
             topic: event.topic(),
             payload: event.into_payload().into_iter().collect(),
         })

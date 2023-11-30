@@ -127,7 +127,7 @@ impl IndexerProcess {
             .unwrap_or_else(|e| panic!("Failed to save event via graphql client: {}", e));
         let res = res.get("saveEvent").unwrap();
 
-        assert_eq!(res.component_address, Some([0u8; 32]));
+        assert_eq!(res.component_address, None);
     }
 
     pub fn get_jrpc_indexer_client(&self) -> IndexerJsonRpcClient {

@@ -73,15 +73,11 @@ impl TryFrom<EventData> for crate::graphql::model::events::Event {
     type Error = anyhow::Error;
 
     fn try_from(event_data: EventData) -> Result<Self, Self::Error> {
-        let component_address = event_data
-            .component_address
-            .map(|comp_addr| ComponentAddress::from_str(comp_addr.as_str()))
-            .transpose()?
-            .map(|comp_addr| comp_addr.into_array());
+        let component_address = event_data.component_address;
 
-        let template_address = Hash::from_hex(&event_data.template_address)?.into_array();
+        let template_address = event_data.template_address.clone();
 
-        let tx_hash = Hash::from_hex(&event_data.tx_hash)?.into_array();
+        let tx_hash = event_data.tx_hash.clone();
 
         let payload = serde_json::from_str(event_data.payload.as_str())?;
 
