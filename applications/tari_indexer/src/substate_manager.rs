@@ -23,7 +23,7 @@
 use std::{collections::HashMap, convert::TryInto, str::FromStr, sync::Arc};
 
 use anyhow::anyhow;
-use log::info;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
@@ -362,7 +362,7 @@ impl SubstateManager {
             let stored_events = match tx.get_all_events(&component_address) {
                 Ok(events) => events,
                 Err(e) => {
-                    info!(
+                    warn!(
                         target: LOG_TARGET,
                         "Failed to get all events for component_address = {}, version = {} with error = {}",
                         component_address,
@@ -404,7 +404,7 @@ impl SubstateManager {
         // because the same component address with different version
         // can be processed in the same transaction, we need to avoid
         // duplicates
-        for (version, event) in network_events {
+        for (version, event) in network_events.into_iter().filter(|(v, e)| v > &latest_version_in_db) {
             let template_address = event.template_address();
             let tx_hash = TransactionId::new(event.tx_hash().into_array());
             let topic = event.topic();

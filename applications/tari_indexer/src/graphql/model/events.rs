@@ -108,43 +108,4 @@ impl EventQuery {
 
         Ok(events)
     }
-
-    pub async fn save_event(
-        &self,
-        ctx: &Context<'_>,
-        component_address: String,
-        template_address: String,
-        tx_hash: String,
-        topic: String,
-        payload: String,
-        version: u64,
-    ) -> Result<Event, anyhow::Error> {
-        info!(
-            target: LOG_TARGET,
-            "Saving event for component_address = {}, tx_hash = {} and topic = {}", component_address, tx_hash, topic
-        );
-
-        let component_address = ComponentAddress::from_hex(&component_address)?;
-        let template_address = Hash::from_str(&template_address)?;
-        let tx_hash = TransactionId::from_hex(&tx_hash)?;
-
-        let payload = serde_json::from_str(&payload)?;
-        let substate_manager = ctx.data_unchecked::<Arc<SubstateManager>>();
-        substate_manager.save_event_to_db(
-            component_address,
-            template_address,
-            tx_hash,
-            topic.clone(),
-            &payload,
-            version,
-        )?;
-
-        Ok(Event {
-            component_address: Some(component_address.into_array()),
-            template_address: template_address.into_array(),
-            tx_hash: tx_hash.into_array(),
-            topic,
-            payload: payload.into_iter().collect(),
-        })
-    }
 }
