@@ -157,6 +157,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
                 let all_qcs = block
                     .commands()
                     .iter()
+                    .filter(|cmd| cmd.transaction().is_some())
                     .flat_map(|cmd| cmd.evidence().qc_ids_iter())
                     .collect::<HashSet<_>>();
                 let certificates = QuorumCertificate::get_all(tx, all_qcs)?;

@@ -331,7 +331,8 @@ where
                         current_epoch,
                         NewTransactionMessage {
                             transaction: transaction.clone(),
-                            output_shards: vec![],
+                            output_shards: unverified_output_shards, /* Or send to local only when we are input shard
+                                                                      * and if we are output send after execution */
                         }
                         .into(),
                     )
