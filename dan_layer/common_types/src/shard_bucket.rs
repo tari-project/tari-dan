@@ -3,6 +3,7 @@
 
 use std::{fmt::Display, ops::RangeInclusive};
 
+use blake2::digest::typenum::U2;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -19,18 +20,28 @@ impl ShardBucket {
         self.0
     }
 
-    pub fn to_shard_range(self, num_committees: u32) -> RangeInclusive<ShardId> {
-        if num_committees == 0 {
+    pub fn to_shard_range(self, shards: &Vec<ShardId>, min_committee_size: u32) -> RangeInclusive<ShardId> {
+        let buckets = shards.len() as u32 / min_committee_size;
+        if buckets < 2 {
             return RangeInclusive::new(ShardId::zero(), ShardId::from_u256(U256::MAX));
         }
-        let bucket_size = U256::MAX / U256::from(num_committees);
-        let start = bucket_size * U256::from(self.0);
-        let mut end = start + bucket_size;
-        // Edge case: The start of the next bucket is excluded except for the last bucket
-        if end < U256::MAX {
-            end -= U256_ONE;
-        }
-        RangeInclusive::new(ShardId::from_u256(start), ShardId::from_u256(end))
+        let remainder = shards.len() as u32 % min_committee_size;
+        let start = if self.0 == 0 {
+            ShardId::zero()
+        } else {
+            ShardId::from_u256(
+                shards[(self.0 * min_committee_size + std::cmp::min(remainder, self.0) - 1) as usize].to_u256() +
+                    U256_ONE,
+            )
+        };
+
+        let end = if self.0 == (shards.len() as u32 + min_committee_size - 1) / min_committee_size - 1 {
+            ShardId::from_u256(U256::MAX)
+        } else {
+            shards[((self.0 + 1) * min_committee_size + std::cmp::min(remainder, self.0 + 1) - 1) as usize]
+        };
+        // println!("CIFKO Bucket {} range: {} - {}", self.0, start, end);
+        RangeInclusive::new(start, end)
     }
 }
 

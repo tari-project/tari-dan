@@ -131,17 +131,19 @@ impl<TAddr: PartialEq> FromIterator<Committee<TAddr>> for Committee<TAddr> {
 }
 
 /// Represents a "slice" of the 256-bit shard space
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitteeShard {
-    num_committees: u32,
+    shards: Vec<ShardId>,
+    committee_size: u32,
     num_members: u32,
     bucket: ShardBucket,
 }
 
 impl CommitteeShard {
-    pub fn new(num_committees: u32, num_members: u32, bucket: ShardBucket) -> Self {
+    pub fn new(shards: Vec<ShardId>, committee_size: u32, num_members: u32, bucket: ShardBucket) -> Self {
         Self {
-            num_committees,
+            shards,
+            committee_size,
             num_members,
             bucket,
         }
@@ -162,7 +164,15 @@ impl CommitteeShard {
     }
 
     pub fn num_committees(&self) -> u32 {
-        self.num_committees
+        self.shards.len() as u32 / self.committee_size
+    }
+
+    pub fn committee_size(&self) -> u32 {
+        self.committee_size
+    }
+
+    pub fn shards(&self) -> &[ShardId] {
+        &self.shards
     }
 
     pub fn num_members(&self) -> u32 {
@@ -174,7 +184,7 @@ impl CommitteeShard {
     }
 
     pub fn includes_shard(&self, shard_id: &ShardId) -> bool {
-        let b = shard_id.to_committee_bucket(self.num_committees);
+        let b = shard_id.to_committee_bucket(&self.shards, self.committee_size);
         self.bucket == b
     }
 
@@ -201,7 +211,7 @@ impl CommitteeShard {
     pub fn count_distinct_buckets<'a, I: IntoIterator<Item = &'a ShardId>>(&self, shards: I) -> usize {
         shards
             .into_iter()
-            .map(|shard| shard.to_committee_bucket(self.num_committees))
+            .map(|shard| shard.to_committee_bucket(&self.shards, self.committee_size))
             .collect::<std::collections::HashSet<_>>()
             .len()
     }

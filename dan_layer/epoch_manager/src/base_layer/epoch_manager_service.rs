@@ -184,6 +184,8 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             EpochManagerRequest::GetNumCommittees { epoch, reply } => {
                 handle(reply, self.inner.get_num_committees(epoch))
             },
+            EpochManagerRequest::GetCommitteeSize { reply } => handle(reply, self.inner.get_committee_size()),
+            EpochManagerRequest::GetVns { epoch, reply } => handle(reply, self.inner.get_vns(epoch)),
             EpochManagerRequest::GetCommitteesByBuckets { epoch, buckets, reply } => {
                 handle(reply, self.inner.get_committees_by_buckets(epoch, buckets))
             },

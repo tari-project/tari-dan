@@ -94,6 +94,8 @@ pub trait EpochManagerReader: Send + Sync {
     async fn is_epoch_active(&self, epoch: Epoch) -> Result<bool, EpochManagerError>;
 
     async fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError>;
+    async fn get_vns(&self, epoch: Epoch) -> Result<Vec<ShardId>, EpochManagerError>;
+    async fn get_committee_size(&self) -> Result<u32, EpochManagerError>;
 
     async fn get_committees_by_buckets(
         &self,

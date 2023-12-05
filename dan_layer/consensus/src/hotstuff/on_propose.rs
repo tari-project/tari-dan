@@ -257,7 +257,8 @@ where TConsensusSpec: ConsensusSpec
         let non_local_buckets = proposer::get_non_local_buckets_from_commands(
             tx,
             &commands,
-            local_committee_shard.num_committees(),
+            local_committee_shard.committee_size(),
+            &local_committee_shard.shards().to_vec(),
             local_committee_shard.bucket(),
         )?;
 

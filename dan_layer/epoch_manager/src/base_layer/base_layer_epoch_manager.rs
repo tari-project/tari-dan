@@ -133,11 +133,13 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let mut validator_nodes = self.global_db.validator_nodes(&mut tx);
 
         let vns = validator_nodes.get_all_within_epochs(start_epoch, end_epoch)?;
-
-        let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
+        let shards = vns.iter().map(|vn| vn.shard_key).collect::<Vec<_>>();
 
         for vn in &vns {
-            validator_nodes.set_committee_bucket(vn.shard_key, vn.shard_key.to_committee_bucket(num_committees))?;
+            validator_nodes.set_committee_bucket(
+                vn.shard_key,
+                vn.shard_key.to_committee_bucket(&shards, self.config.committee_size),
+            )?;
         }
         tx.commit()?;
 
@@ -347,13 +349,14 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         epoch: Epoch,
         shards: &HashSet<ShardId>,
     ) -> Result<HashMap<ShardBucket, Committee<CommsPublicKey>>, EpochManagerError> {
-        let num_committees = self.get_number_of_committees(epoch)?;
+        let vns = self.get_vns(epoch)?;
+        let committee_size = self.config.committee_size;
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
         let buckets = shards
             .iter()
-            .map(|shard| shard.to_committee_bucket(num_committees))
+            .map(|shard| shard.to_committee_bucket(&vns, committee_size))
             .collect();
         let result = validator_node_db.get_committees_by_buckets(start_epoch, end_epoch, buckets)?;
         Ok(result)
@@ -375,14 +378,15 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             return Ok(vns);
         }
 
+        let shards = vns.iter().map(|vn| vn.shard_key).collect::<Vec<_>>();
         // A shard bucket is a equal slice of the shard space that a validator fits into
-        let shard_bucket = shard.to_committee_bucket(num_committees);
+        let shard_bucket = shard.to_committee_bucket(&shards, self.config.committee_size);
 
         let selected_vns = vns
             .into_iter()
             .filter(|vn| {
                 vn.committee_bucket
-                    .unwrap_or_else(|| vn.shard_key.to_committee_bucket(num_committees)) ==
+                    .unwrap_or_else(|| vn.shard_key.to_committee_bucket(&shards, self.config.committee_size)) ==
                     shard_bucket
             })
             .collect();
@@ -404,10 +408,10 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
         let mut tx = self.global_db.create_transaction()?;
         let mut vn_db = self.global_db.validator_nodes(&mut tx);
-        let num_vns = vn_db.count(start_epoch, end_epoch)?;
+        let vns = vn_db.get_all_within_epochs(start_epoch, end_epoch)?;
+        let shards = vns.iter().map(|vn| vn.shard_key).collect::<Vec<_>>();
         let vn = vn_db.get(start_epoch, end_epoch, ByteArray::as_bytes(identity))?;
-        let num_committees = calculate_num_committees(num_vns, self.config.committee_size);
-        let shard_bucket = shard.to_committee_bucket(num_committees);
+        let shard_bucket = shard.to_committee_bucket(&shards, self.config.committee_size);
         match vn.committee_bucket {
             Some(bucket) => Ok(bucket == shard_bucket),
             None => Ok(false),
@@ -420,6 +424,17 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let mut tx = self.global_db.create_transaction()?;
         let num_vns = self.global_db.validator_nodes(&mut tx).count(start_epoch, end_epoch)?;
         Ok(calculate_num_committees(num_vns, self.config.committee_size))
+    }
+
+    pub fn get_vns(&self, epoch: Epoch) -> Result<Vec<ShardId>, EpochManagerError> {
+        let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
+
+        let mut tx = self.global_db.create_transaction()?;
+        let vns = self
+            .global_db
+            .validator_nodes(&mut tx)
+            .get_all_within_epochs(start_epoch, end_epoch)?;
+        Ok(vns.iter().map(|vn| vn.shard_key).collect::<Vec<_>>())
     }
 
     fn get_epoch_range(&self, end_epoch: Epoch) -> Result<(Epoch, Epoch), EpochManagerError> {
@@ -551,7 +566,9 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
             target: LOG_TARGET,
             "VN {} epoch: {}, num_committees: {}", addr, epoch, num_committees
         );
-        Ok(vn.shard_key.to_committee_range(num_committees))
+        let committee_size = self.config.committee_size;
+        let shards = self.get_vns(epoch)?;
+        Ok(vn.shard_key.to_committee_range(&shards, committee_size))
     }
 
     pub fn get_committee_for_shard_range(
@@ -559,14 +576,15 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         epoch: Epoch,
         shard_range: RangeInclusive<ShardId>,
     ) -> Result<Committee<CommsPublicKey>, EpochManagerError> {
-        let num_committees = self.get_number_of_committees(epoch)?;
+        let committee_size = self.config.committee_size;
+        let shards = self.get_vns(epoch)?;
 
         // Since we have fixed boundaries for committees, we want to include all validators within any range "touching"
         // the range we are searching for. For e.g. the committee for half a committee shard is the same committee as
         // for a whole committee shard.
         let rounded_shard_range = {
-            let start_range = shard_range.start().to_committee_range(num_committees);
-            let end_range = shard_range.end().to_committee_range(num_committees);
+            let start_range = shard_range.start().to_committee_range(&shards, committee_size);
+            let end_range = shard_range.end().to_committee_range(&shards, committee_size);
             *start_range.start()..=*end_range.end()
         };
         let mut tx = self.global_db.create_transaction()?;
@@ -601,9 +619,14 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         Ok(num_committees)
     }
 
+    pub fn get_committee_size(&self) -> Result<u32, EpochManagerError> {
+        Ok(self.config.committee_size)
+    }
+
     pub fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, EpochManagerError> {
-        let num_committees = self.get_number_of_committees(epoch)?;
-        let bucket = shard.to_committee_bucket(num_committees);
+        let committee_size = self.config.committee_size;
+        let shards = self.get_vns(epoch)?;
+        let bucket = shard.to_committee_bucket(&shards, committee_size);
         let mut tx = self.global_db.create_transaction()?;
         let mut validator_node_db = self.global_db.validator_nodes(&mut tx);
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
@@ -611,7 +634,7 @@ impl BaseLayerEpochManager<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
         let num_validators = u32::try_from(num_validators).map_err(|_| EpochManagerError::IntegerOverflow {
             func: "get_committee_shard",
         })?;
-        Ok(CommitteeShard::new(num_committees, num_validators, bucket))
+        Ok(CommitteeShard::new(shards, committee_size, num_validators, bucket))
     }
 
     pub fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError> {

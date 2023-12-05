@@ -152,6 +152,20 @@ impl EpochManagerReader for TestEpochManager {
         Ok(self.inner.lock().await.committees.len() as u32)
     }
 
+    async fn get_committee_size(&self, _epoch: Epoch) -> Result<u32, EpochManagerError> {
+        Ok(self.inner.lock().await.committees.values().next().unwrap().len() as u32)
+    }
+
+    async fn get_vns(&self) -> Result<Vec<ShardId>, EpochManagerError> {
+        Ok(self
+            .state_lock()
+            .await
+            .validator_shards
+            .values()
+            .map(|(_, s)| *s)
+            .collect())
+    }
+
     async fn get_validator_set_merged_merkle_proof(
         &self,
         _epoch: Epoch,

@@ -13,6 +13,7 @@ use tari_dan_common_types::{
     optional::Optional,
     shard_bucket::ShardBucket,
     NodeHeight,
+    ShardId,
 };
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, ForeignSendCounters, HighQc, TransactionPool, ValidBlock},
@@ -154,13 +155,15 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
     fn check_foreign_indexes(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        num_committees: u32,
+        committee_size: u32,
+        shards: &Vec<ShardId>,
         local_bucket: ShardBucket,
         block: &Block<TConsensusSpec::Addr>,
         justify_block: &BlockId,
     ) -> Result<bool, HotStuffError> {
         let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), justify_block)?;
-        let non_local_buckets = proposer::get_non_local_buckets(tx.deref_mut(), block, num_committees, local_bucket)?;
+        let non_local_buckets =
+            proposer::get_non_local_buckets(tx.deref_mut(), block, committee_size, shards, local_bucket)?;
         let mut foreign_indexes = HashMap::new();
         for non_local_bucket in non_local_buckets {
             foreign_indexes
@@ -229,7 +232,8 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
 
         if !self.check_foreign_indexes(
             tx,
-            local_committee_shard.num_committees(),
+            local_committee_shard.committee_size(),
+            &local_committee_shard.shards().to_vec(),
             local_committee_shard.bucket(),
             &candidate_block,
             justify_block.id(),

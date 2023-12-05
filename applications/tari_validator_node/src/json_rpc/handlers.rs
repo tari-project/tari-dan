@@ -730,9 +730,14 @@ impl JsonRpcHandlers {
             .current_epoch()
             .await
             .map_err(internal_error(answer_id))?;
-        let num_committees = self
+        let committee_size = self
             .epoch_manager
-            .get_num_committees(current_epoch)
+            .get_committee_size()
+            .await
+            .map_err(internal_error(answer_id))?;
+        let shards = self
+            .epoch_manager
+            .get_vns(current_epoch)
             .await
             .map_err(internal_error(answer_id))?;
 
@@ -760,7 +765,7 @@ impl JsonRpcHandlers {
             .into_iter()
             .map(|(bucket, validators)| CommitteeShardInfo {
                 bucket,
-                shard_range: bucket.to_shard_range(num_committees),
+                shard_range: bucket.to_shard_range(&shards, committee_size),
                 validators,
             })
             .collect();

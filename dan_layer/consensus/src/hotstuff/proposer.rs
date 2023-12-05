@@ -4,7 +4,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use log::{debug, info};
-use tari_dan_common_types::shard_bucket::ShardBucket;
+use tari_dan_common_types::{shard_bucket::ShardBucket, ShardId};
 use tari_dan_storage::{
     consensus_models::{Block, Command, ExecutedTransaction},
     StateStore,
@@ -44,13 +44,14 @@ where TConsensusSpec: ConsensusSpec
     }
 
     pub async fn broadcast_proposal_foreignly(&self, block: &Block<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
-        let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
+        let committee_size = self.epoch_manager.get_committee_size().await?;
+        let shards = self.epoch_manager.get_vns(block.epoch()).await?;
 
         let validator = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
-        let local_bucket = validator.shard_key.to_committee_bucket(num_committees);
+        let local_bucket = validator.shard_key.to_committee_bucket(&shards, committee_size);
         let non_local_buckets = self
             .store
-            .with_read_tx(|tx| get_non_local_buckets(tx, block, num_committees, local_bucket))?;
+            .with_read_tx(|tx| get_non_local_buckets(tx, block, committee_size, &shards, local_bucket))?;
         info!(
             target: LOG_TARGET,
             "🌿 PROPOSING foreignly new locked block {} to {} foreign shards. justify: {} ({}), parent: {}",
@@ -92,16 +93,18 @@ where TConsensusSpec: ConsensusSpec
 pub fn get_non_local_buckets<TTx: StateStoreReadTransaction>(
     tx: &mut TTx,
     block: &Block<TTx::Addr>,
-    num_committees: u32,
+    committee_size: u32,
+    shards: &Vec<ShardId>,
     local_bucket: ShardBucket,
 ) -> Result<HashSet<ShardBucket>, HotStuffError> {
-    get_non_local_buckets_from_commands(tx, block.commands(), num_committees, local_bucket)
+    get_non_local_buckets_from_commands(tx, block.commands(), committee_size, shards, local_bucket)
 }
 
 pub fn get_non_local_buckets_from_commands<TTx: StateStoreReadTransaction>(
     tx: &mut TTx,
     commands: &BTreeSet<Command>,
-    num_committees: u32,
+    committee_size: u32,
+    shards: &Vec<ShardId>,
     local_bucket: ShardBucket,
 ) -> Result<HashSet<ShardBucket>, HotStuffError> {
     let prepared_iter = commands.iter().filter_map(|cmd| cmd.local_prepared()).map(|t| &t.id);
@@ -109,7 +112,7 @@ pub fn get_non_local_buckets_from_commands<TTx: StateStoreReadTransaction>(
     let non_local_buckets = prepared_txs
         .into_iter()
         .flat_map(|(_, shards)| shards)
-        .map(|shard| shard.to_committee_bucket(num_committees))
+        .map(|shard| shard.to_committee_bucket(shards, committee_size))
         .filter(|bucket| *bucket != local_bucket)
         .collect();
     Ok(non_local_buckets)

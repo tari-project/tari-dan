@@ -78,20 +78,24 @@ impl ShardId {
 
     /// Calculates and returns the bucket number that this ShardId belongs.
     /// A bucket is an equal division of the 256-bit shard space.
-    pub fn to_committee_bucket(&self, num_committees: u32) -> ShardBucket {
-        if num_committees == 0 {
+    pub fn to_committee_bucket(&self, shards: &Vec<ShardId>, min_committee_size: u32) -> ShardBucket {
+        let buckets = shards.len() as u32 / min_committee_size;
+        if buckets < 2 {
             return ShardBucket::from(0u32);
         }
-        let bucket_size = U256::MAX / U256::from(num_committees);
-        // 4,294,967,295 committees.
-        u32::try_from(self.to_u256() / bucket_size)
-            .expect("to_committee_bucket: num_committees is a u32, so this cannot fail")
-            .into()
+        let remainder = shards.len() as u32 % min_committee_size;
+        let shard = shards.binary_search(self).map_or_else(|b| b, |b| b) as u32;
+        let mut bucket = shard / (min_committee_size + 1);
+        if remainder <= bucket {
+            bucket = (shard - remainder) / min_committee_size;
+        }
+        // println!("CIFKO shard: {:2x}, bucket: {:2x}", self.to_u256(), bucket);
+        ShardBucket::from(std::cmp::min(bucket as u32, buckets - 1))
     }
 
-    pub fn to_committee_range(&self, num_committees: u32) -> RangeInclusive<ShardId> {
-        let bucket = self.to_committee_bucket(num_committees);
-        bucket.to_shard_range(num_committees)
+    pub fn to_committee_range(&self, shards: &Vec<ShardId>, min_committee_size: u32) -> RangeInclusive<ShardId> {
+        let bucket = self.to_committee_bucket(shards, min_committee_size);
+        bucket.to_shard_range(shards, min_committee_size)
     }
 }
 

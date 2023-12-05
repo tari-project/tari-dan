@@ -232,7 +232,8 @@ where
         );
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
-        let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
+        let committee_size = self.epoch_manager.get_committee_size().await?;
+        let shards = self.epoch_manager.get_vns(current_epoch).await?;
         let maybe_sender_bucket = self
             .epoch_manager
             .get_validator_node(current_epoch, &from)
@@ -248,7 +249,7 @@ where
             };
             let mut is_input_shard = transaction
                 .all_inputs_iter()
-                .any(|s| s.to_committee_bucket(num_committees) == sender_bucket);
+                .any(|s| s.to_committee_bucket(&shards, committee_size) == sender_bucket);
             // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
             // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
             is_input_shard |= transaction.inputs().len() + transaction.input_refs().len() == 0;
@@ -569,7 +570,8 @@ where
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
 
-        self.epoch_manager.get_local_committee_shard(current_epoch).await?;
+        let committee_size = self.epoch_manager.get_committee_size().await?;
+        let shards = self.epoch_manager.get_vns(current_epoch).await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
         let is_input_shard = local_committee_shard.includes_any_shard(executed.transaction().all_inputs_iter()) |
             (executed.transaction().inputs().len() + executed.transaction().input_refs().len() == 0);
@@ -577,16 +579,15 @@ where
         if should_propagate && is_input_shard {
             // Forward the transaction to any output shards that are not part of the input shard set as these have
             // already been forwarded
-            let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
             let input_buckets: HashSet<ShardBucket> = executed
                 .transaction()
                 .all_inputs_iter()
-                .map(|s| s.to_committee_bucket(num_committees))
+                .map(|s| s.to_committee_bucket(&shards, committee_size))
                 .collect::<HashSet<_>>();
             let output_shards = executed
                 .resulting_outputs()
                 .iter()
-                .filter(|s| !input_buckets.contains(&s.to_committee_bucket(num_committees)))
+                .filter(|s| !input_buckets.contains(&s.to_committee_bucket(&shards, committee_size)))
                 .copied()
                 .collect();
 

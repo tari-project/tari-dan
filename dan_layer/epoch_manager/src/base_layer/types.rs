@@ -129,6 +129,13 @@ pub enum EpochManagerRequest {
         epoch: Epoch,
         reply: Reply<u32>,
     },
+    GetCommitteeSize {
+        reply: Reply<u32>,
+    },
+    GetVns {
+        epoch: Epoch,
+        reply: Reply<Vec<ShardId>>,
+    },
     GetCommitteesByBuckets {
         epoch: Epoch,
         buckets: HashSet<ShardBucket>,
