@@ -75,6 +75,7 @@ function RowData({ info, state }: any, index: number) {
               />
             )}
             {state}
+            ({info?.[1]?.version !== undefined ? info[1].version : info?.[1]})
           </div>
         </DataTableCell>
         <DataTableCell>{itemKey}</DataTableCell>
