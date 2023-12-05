@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-// TODO: Use this
+/// TODO: unused
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum SystemAddress {
     Epoch,

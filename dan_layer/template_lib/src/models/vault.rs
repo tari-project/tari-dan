@@ -55,6 +55,7 @@ use crate::{
 
 const TAG: u64 = BinaryTag::VaultId as u64;
 
+/// A vault's unique identification in the Tari network
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VaultId(BorTag<Hash, TAG>);
 
@@ -112,6 +113,7 @@ impl TryFrom<Vec<u8>> for VaultId {
 
 newtype_struct_serde_impl!(VaultId, BorTag<Hash, TAG>);
 
+/// Encapsulates all the ways that a vault can be referenced
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum VaultRef {
     Vault { address: ResourceAddress },
@@ -143,6 +145,7 @@ impl Display for VaultRef {
     }
 }
 
+/// A permanent container of resources. Vaults live after the end of a transaction.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Vault {

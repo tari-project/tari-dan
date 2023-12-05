@@ -32,6 +32,7 @@ use crate::{
 
 const TAG: u64 = BinaryTag::BucketId.as_u64();
 
+/// A bucket's unique identification during the transaction execution
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct BucketId(BorTag<u32, TAG>);
 
@@ -47,6 +48,7 @@ impl fmt::Display for BucketId {
     }
 }
 
+/// A temporary container of resources. Buckets only live during a transaction execution and must be empty at the end of the transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Bucket {

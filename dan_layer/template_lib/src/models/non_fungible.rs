@@ -21,6 +21,7 @@ use crate::{
 
 const DELIM: char = ':';
 
+/// The unique identification of a non-fungible token inside it's parent resource
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum NonFungibleId {
     U256(#[serde(with = "serde_byte_array")] [u8; 32]),
@@ -195,9 +196,11 @@ impl Display for NonFungibleId {
 
 const TAG: u64 = BinaryTag::NonFungibleAddress.as_u64();
 
+/// The unique identifier of a non-fungible index in the Tari network
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NonFungibleAddress(BorTag<NonFungibleAddressContents, TAG>);
 
+/// Data used to build a `NonFungibleAddress`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NonFungibleAddressContents {
     resource_address: ResourceAddress,
@@ -251,6 +254,7 @@ impl Display for NonFungibleAddress {
     }
 }
 
+/// A non-fungible token. Each non-fungible token is uniquely addressable inside their parent resource, can hold its own data, and it's non-divisible
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct NonFungible {
@@ -289,6 +293,7 @@ impl NonFungible {
     }
 }
 
+/// All the types of errors that can occur when parsing a non-fungible ID
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseNonFungibleIdError {
     InvalidFormat,
