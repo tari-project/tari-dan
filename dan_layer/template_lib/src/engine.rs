@@ -35,6 +35,7 @@ use crate::{
     Hash,
 };
 
+/// Returns the corresponding `TariEngine` of the current template execution
 pub fn engine() -> TariEngine {
     // TODO: I expect some thread local state to be included here
     TariEngine::new(get_context())
