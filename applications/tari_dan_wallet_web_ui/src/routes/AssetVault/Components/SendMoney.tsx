@@ -36,6 +36,7 @@ import useAccountStore from "../../../store/accountStore";
 
 export default function SendMoney() {
   const [open, setOpen] = useState(false);
+  const [disabled, setDisabled] = useState(false);
   const [transferFormState, setTransferFormState] = useState({
     publicKey: "",
     confidential: false,
@@ -43,11 +44,9 @@ export default function SendMoney() {
     fee: "",
   });
 
-  const { accountName } = useAccountStore();
+  const { accountName, setPopup } = useAccountStore();
 
   const theme = useTheme();
-
-  console.log(accountName, transferFormState.amount, transferFormState.publicKey, transferFormState.fee);
 
   const { mutateAsync: sendIt } = useAccountsTransfer(
     accountName,
@@ -85,9 +84,16 @@ export default function SendMoney() {
 
   const onTransfer = async () => {
     if (accountName) {
-      await sendIt();
-      setTransferFormState({ publicKey: "", confidential: false, amount: "", fee: "" });
-      setOpen(false);
+      setDisabled(true);
+      sendIt().then(() => {
+        setTransferFormState({ publicKey: "", confidential: false, amount: "", fee: "" });
+        setOpen(false);
+        setPopup({ title: "Send successful", error: false });
+      }).catch((e) => {
+        setPopup({ title: "Send failed", error: true, message: e.message });
+      }).finaly(() => {
+        setDisabled(false);
+      });
     }
   };
 
@@ -114,6 +120,7 @@ export default function SendMoney() {
               value={transferFormState.publicKey}
               onChange={onPublicKeyChange}
               style={{ flexGrow: 1 }}
+              disabled={disabled}
             />
             <FormControlLabel
               control={
@@ -121,6 +128,7 @@ export default function SendMoney() {
                   name="confidential"
                   checked={transferFormState.confidential}
                   onChange={onConfidentialChange}
+                  disabled={disabled}
                 />
               }
               label="Confidential"
@@ -131,6 +139,7 @@ export default function SendMoney() {
               value={transferFormState.amount}
               onChange={onNumberChange}
               style={{ flexGrow: 1 }}
+              disabled={disabled}
             />
             <TextField
               name="fee"
@@ -138,6 +147,7 @@ export default function SendMoney() {
               value={transferFormState.fee}
               onChange={onNumberChange}
               style={{ flexGrow: 1 }}
+              disabled={disabled}
             />
             <Box
               className="flex-container"
@@ -145,10 +155,10 @@ export default function SendMoney() {
                 justifyContent: "flex-end",
               }}
             >
-              <Button variant="outlined" onClick={handleClose}>
+              <Button variant="outlined" onClick={handleClose} disabled={disabled}>
                 Cancel
               </Button>
-              <Button variant="contained" type="submit">
+              <Button variant="contained" type="submit" disabled={disabled}>
                 Send Tari
               </Button>
             </Box>

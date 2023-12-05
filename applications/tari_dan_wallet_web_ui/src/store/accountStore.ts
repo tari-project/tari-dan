@@ -30,6 +30,8 @@ interface Store {
   setAccountName: (name: string) => void;
   indexer: string;
   setIndexer: (indexer: string) => void;
+  popup: any;
+  setPopup: (popup: any) => void;
 }
 
 const useAccountStore = create<Store>()(
@@ -41,6 +43,8 @@ const useAccountStore = create<Store>()(
       setAccountName: (name) => set({ accountName: name }),
       indexer: '',
       setIndexer: (indexer) => set({ indexer: indexer }),
+      popup: {},
+      setPopup: (popup) => set({ popup: { visible: true, ...popup } }),
     }),
     {
       name: 'account-store',
