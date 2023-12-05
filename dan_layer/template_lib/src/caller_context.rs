@@ -11,6 +11,7 @@ use crate::{
     models::ComponentAddress,
 };
 
+/// Allows a template to access information about the current instruction's caller
 pub struct CallerContext;
 
 impl CallerContext {

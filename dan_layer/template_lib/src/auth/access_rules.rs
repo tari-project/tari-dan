@@ -6,6 +6,7 @@ use tari_template_abi::rust::collections::BTreeMap;
 
 use crate::models::{NonFungibleAddress, ResourceAddress};
 
+/// Represents the types of possible access control rules over a component method or resource
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AccessRule {
     AllowAll,
@@ -35,6 +36,7 @@ impl AccessRule {
     }
 }
 
+/// An enum that represents the possible ways to restrict access to components or resources
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RestrictedAccessRule {
     Require(RequireRule),
@@ -52,6 +54,7 @@ impl RestrictedAccessRule {
     }
 }
 
+/// An enum that allows passing either a resource or a non-fungible argument
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ResourceOrNonFungibleAddress {
     Resource(ResourceAddress),
@@ -70,6 +73,7 @@ impl From<NonFungibleAddress> for ResourceOrNonFungibleAddress {
     }
 }
 
+/// An enum that represents the possible ways to require access to components or resources
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RequireRule {
     Require(ResourceOrNonFungibleAddress),
@@ -77,6 +81,7 @@ pub enum RequireRule {
     AllOf(Vec<ResourceOrNonFungibleAddress>),
 }
 
+/// Information needed to specify access rules to a component method
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComponentAccessRules {
     method_access: BTreeMap<String, AccessRule>,
@@ -123,6 +128,7 @@ impl Default for ComponentAccessRules {
     }
 }
 
+/// An enum that represents all the possible actions that can be performed on a resource
 #[derive(Debug, Clone)]
 pub enum ResourceAuthAction {
     Mint,
@@ -140,6 +146,7 @@ impl ResourceAuthAction {
     }
 }
 
+/// Information needed to specify access rules to a resource
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceAccessRules {
     mintable: AccessRule,

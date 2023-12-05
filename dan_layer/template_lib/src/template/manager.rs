@@ -28,6 +28,7 @@ use crate::{
     prelude::TemplateAddress,
 };
 
+/// Utility to allow template code to call functions from other templates (i.e., composability)
 #[derive(Debug)]
 pub struct TemplateManager {
     template_address: TemplateAddress,

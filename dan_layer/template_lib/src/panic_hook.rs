@@ -46,6 +46,7 @@ fn hook(info: &std::panic::PanicInfo<'_>) {
     }
 }
 
+/// Registers a `std::panic` hook that tries to include the error line and column to the error
 pub fn register_panic_hook() {
     use std::sync::Once;
     static SET_HOOK: Once = Once::new();

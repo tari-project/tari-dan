@@ -4,6 +4,7 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_bor::{decode_exact, from_value, to_value, BorError};
 
+/// The result of an instruction invocation, which is either the CBOR encoded result value or a `String` with an error message
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct InvokeResult(Result<tari_bor::Value, String>);
 

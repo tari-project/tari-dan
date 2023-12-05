@@ -7,6 +7,7 @@ use tari_template_abi::{
 
 use crate::models::{Amount, ComponentAddress};
 
+/// All the possible value types that can be passed as arguments or returned from instruction calls
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 //#[serde(tag = "type", content = "value")]
 pub enum Value {
