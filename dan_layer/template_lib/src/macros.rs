@@ -5,6 +5,7 @@
 
 pub use tari_template_abi::call_debug;
 
+/// Macro for writing debug messages from inside templates
 #[macro_export]
 macro_rules! debug {
     ($fmt:expr) => {

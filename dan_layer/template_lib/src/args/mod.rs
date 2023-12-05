@@ -32,6 +32,7 @@ pub use arg::Arg;
 mod result;
 pub use result::InvokeResult;
 
+/// Low-level macro used for counting characters in the encoding of arguments. Not intended for general usage
 #[macro_export]
 macro_rules! __expr_counter {
     () => (0usize);
@@ -39,6 +40,7 @@ macro_rules! __expr_counter {
     ( $x:expr, $($next:tt)* ) => (1usize + $crate::__expr_counter!($($next)*));
 }
 
+/// Utility macro for building a single instruction argument
 #[macro_export]
 macro_rules! arg {
     // Deprecated
@@ -57,6 +59,7 @@ macro_rules! arg {
     };
 }
 
+/// Low-level macro for building instruction arguments, used by both `arg!` and `args!` macros. Not intended for general usage.
 #[macro_export]
 macro_rules! __args_inner {
     (@ { $this:ident } Variable($e:expr), $($tail:tt)*) => {
@@ -98,6 +101,7 @@ macro_rules! __args_inner {
     (@ { $this:ident } $(,)?) => { };
 }
 
+/// Low-level macro used for encoding the arguments of engine calls. Not intended for general usage
 #[macro_export]
 macro_rules! invoke_args {
     () => (Vec::new());
@@ -111,6 +115,7 @@ macro_rules! invoke_args {
     }}
 }
 
+/// Utility macro for building multiple instruction arguments
 #[macro_export]
 macro_rules! args {
     () => (Vec::new());
