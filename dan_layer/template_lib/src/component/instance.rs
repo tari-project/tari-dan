@@ -10,6 +10,7 @@ use crate::{
     Hash,
 };
 
+/// Utility for building components inside templates
 pub struct ComponentBuilder<T> {
     component: T,
     owner_rule: OwnerRule,
@@ -48,6 +49,7 @@ impl<T: serde::Serialize> ComponentBuilder<T> {
     }
 }
 
+/// A newly created component, typically used as a return value from template constructor functions
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(transparent)]
 pub struct Component<T> {

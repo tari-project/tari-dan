@@ -40,6 +40,7 @@ use crate::{
     models::{ComponentAddress, TemplateAddress},
 };
 
+/// Utility for managing components inside templates
 pub struct ComponentManager {
     address: ComponentAddress,
 }
