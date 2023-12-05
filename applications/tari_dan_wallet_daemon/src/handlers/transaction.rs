@@ -191,6 +191,7 @@ pub async fn handle_get(
         transaction: transaction.transaction,
         result: transaction.finalize,
         status: transaction.status,
+        last_update_time: transaction.last_update_time,
     })
 }
 
@@ -210,7 +211,7 @@ pub async fn handle_get_all(
     Ok(TransactionGetAllResponse {
         transactions: transactions
             .into_iter()
-            .map(|tx| (tx.transaction, tx.finalize, tx.status))
+            .map(|tx| (tx.transaction, tx.finalize, tx.status, tx.last_update_time))
             .collect(),
     })
 }

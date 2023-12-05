@@ -66,21 +66,21 @@ export default function TransactionDetails() {
     if (result) {
       if (result.result.Accept) {
         return (
-            <span>Accepted</span>);
+          <span>Accepted</span>);
       }
       if (result.result.AcceptFeeRejectRest) {
         return (
-            <span>{result.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>
+          <span>{result.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>
         );
       }
       if (result.result.Reject) {
         return (
-            <span>{Object.keys(result.result.Reject)[0]} - {result.result.Reject[Object.keys(result.result.Reject)[0]]}</span>
+          <span>{Object.keys(result.result.Reject)[0]} - {result.result.Reject[Object.keys(result.result.Reject)[0]]}</span>
         )
       }
     } else {
       return (
-          <span>In progress</span>
+        <span>In progress</span>
       );
     }
   }
@@ -107,6 +107,7 @@ export default function TransactionDetails() {
         </>
       );
     }
+    const last_update_time = new Date(data.last_update_time);
 
     if (data.status === "Rejected" || data.status === "InvalidTransaction") {
       return (
@@ -120,7 +121,7 @@ export default function TransactionDetails() {
                 </TableRow>
                 <TableRow>
                   <TableCell>Timestamp</TableCell>
-                  <DataTableCell>Timestamp</DataTableCell>
+                  <DataTableCell>{last_update_time.toLocaleString()}</DataTableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Status</TableCell>
@@ -156,7 +157,7 @@ export default function TransactionDetails() {
                   </TableRow>
                   <TableRow>
                     <TableCell>Timestamp</TableCell>
-                    <DataTableCell>Timestamp</DataTableCell>
+                    <DataTableCell>{last_update_time.toLocaleString()}</DataTableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Total Fees</TableCell>
@@ -190,7 +191,7 @@ export default function TransactionDetails() {
                 alignItems: "center",
                 padding: "2rem 1rem 0.5rem 1rem",
               }}
-              // className="flex-container"
+            // className="flex-container"
             >
               <Typography variant="h5">More Info</Typography>
               <div

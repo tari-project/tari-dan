@@ -83,6 +83,7 @@ impl Transaction {
                 .map(|r| deserialize_json(&r))
                 .transpose()?
                 .unwrap_or_default(),
+            last_update_time: self.updated_at,
         })
     }
 }
