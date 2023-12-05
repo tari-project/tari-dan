@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+//! Rust macros that can be used inside templates
+
 pub use tari_template_abi::call_debug;
 
 #[macro_export]

@@ -1,5 +1,8 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
+
+//! Context definitions related to the caller of an instruction
+
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{

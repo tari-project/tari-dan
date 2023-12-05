@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+//! A collection of convenient constant values
+
 use crate::{models::ResourceAddress, Hash};
 
 // TODO: This is set pretty arbitrarily.

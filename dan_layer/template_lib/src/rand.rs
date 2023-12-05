@@ -1,6 +1,8 @@
 //  Copyright 2022 The Tari Project
 //  SPDX-License-Identifier: BSD-3-Clause
 
+//! Utilities to get random values inside templates
+
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::args::{GenerateRandomAction, GenerateRandomInvokeArg, InvokeResult};
