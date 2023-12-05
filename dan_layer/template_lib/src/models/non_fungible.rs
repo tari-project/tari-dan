@@ -254,7 +254,7 @@ impl Display for NonFungibleAddress {
     }
 }
 
-/// A non-fungible token. Each non-fungible token is uniquely addressable inside their parent resource, can hold its own data, and it's non-divisible
+/// A non-fungible token. Each non-fungible token is uniquely addressable inside its parent resource, can hold its own data, and is non-divisible
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct NonFungible {

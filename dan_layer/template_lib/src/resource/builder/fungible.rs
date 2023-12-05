@@ -9,6 +9,8 @@ use crate::{
     resource::{ResourceManager, ResourceType},
 };
 
+
+/// Utility for building fungible resources inside templates
 pub struct FungibleResourceBuilder {
     initial_supply: Amount,
     owner_rule: OwnerRule,

@@ -46,6 +46,7 @@ use crate::{
     prelude::ResourceType,
 };
 
+/// Utility for managing resources inside templates
 #[derive(Debug)]
 pub struct ResourceManager {
     resource_address: Option<ResourceAddress>,

@@ -15,6 +15,8 @@ use crate::{
     resource::{ResourceManager, ResourceType},
 };
 
+
+/// Utility for building non-fungible resources inside templates
 pub struct NonFungibleResourceBuilder {
     owner_rule: OwnerRule,
     metadata: Metadata,
