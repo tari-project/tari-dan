@@ -266,6 +266,8 @@ impl NonFungible {
         Self { address }
     }
 
+    /// Returns a copy of the immutable data of the token.
+    /// This data is set up during the token minting process and cannot be updated
     pub fn get_data<T: DeserializeOwned>(&self) -> T {
         let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
             address: self.address.clone(),
@@ -276,6 +278,7 @@ impl NonFungible {
         resp.decode().expect("[get_data] Failed to decode NonFungible data")
     }
 
+    /// Returns a copy of the mutable data of the token
     pub fn get_mutable_data<T: DeserializeOwned>(&self) -> T {
         let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
             address: self.address.clone(),
@@ -287,6 +290,8 @@ impl NonFungible {
             .expect("[get_mutable_data] Failed to decode raw NonFungible mutable data")
     }
 
+    /// Update the mutable data of the token, replacing it with the data provided as an argument.
+    /// Note that this operation may be protected via access rules, resulting in a panic if the caller does not have the appropriate permissions
     pub fn set_mutable_data<T: Serialize + ?Sized>(&mut self, data: &T) {
         ResourceManager::get(*self.address.resource_address())
             .update_non_fungible_data(self.address.id().clone(), data);

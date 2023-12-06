@@ -64,6 +64,7 @@ impl Bucket {
         self.id
     }
 
+    /// Returns the resource address of the tokens that this bucket holds
     pub fn resource_address(&self) -> ResourceAddress {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
@@ -75,6 +76,7 @@ impl Bucket {
             .expect("Bucket GetResourceAddress returned invalid resource address")
     }
 
+    /// Returns the the type of resource that this bucket holds
     pub fn resource_type(&self) -> ResourceType {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
@@ -86,6 +88,8 @@ impl Bucket {
             .expect("Bucket GetResourceType returned invalid resource type")
     }
 
+    /// Withdraws `amount` tokens from the bucket into a new bucket.
+    /// It will panic if there are not enough tokens in the bucket
     pub fn take(&mut self, amount: Amount) -> Self {
         assert!(!amount.is_zero() && amount.is_positive());
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
@@ -97,6 +101,8 @@ impl Bucket {
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
 
+    /// Withdraws an amount (specified in the `proof`) of confidential tokens from the bucket into a new bucket.
+    /// It will panic if the proof is invalid or there are not enough tokens in the bucket
     pub fn take_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
@@ -107,6 +113,8 @@ impl Bucket {
         resp.decode().expect("Bucket Take returned invalid bucket")
     }
 
+    /// Destroy all the tokens that this bucket holds.
+    /// It will panic if the caller does not have the appropriate permissions
     pub fn burn(&self) {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
@@ -117,16 +125,21 @@ impl Bucket {
         resp.decode().expect("Bucket Burn returned invalid result")
     }
 
+    /// Split the current bucket, returning two new buckets, one with `amount` tokens and the other with the rest.
+    /// It will panic if there are not enough tokens in the bucket
     pub fn split(mut self, amount: Amount) -> (Self, Self) {
         let new_bucket = self.take(amount);
         (new_bucket, self)
     }
 
+    /// Split the current bucket, returning two new buckets, one with an amount (specified in the `proof`) of confidential tokens and the other with the rest.
+    /// It will panic if the proof is invalid or there are not enough tokens in the bucket
     pub fn split_confidential(mut self, proof: ConfidentialWithdrawProof) -> (Self, Self) {
         let new_bucket = self.take_confidential(proof);
         (new_bucket, self)
     }
 
+    /// Returns how many tokens this bucket holds
     pub fn amount(&self) -> Amount {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
@@ -137,6 +150,8 @@ impl Bucket {
         resp.decode().expect("Bucket GetAmount returned invalid amount")
     }
 
+    /// Returns a new bucket with revealed funds, specified by the `proof`.
+    /// The amount of tokens will not change, only how many of those tokens will be known by everyone
     pub fn reveal_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
@@ -148,6 +163,7 @@ impl Bucket {
             .expect("Bucket RevealConfidential returned invalid result")
     }
 
+    /// Create a proof of token balances in the bucket, used mainly for cross-template calls
     pub fn create_proof(&self) -> Proof {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),
