@@ -15,6 +15,7 @@ use crate::{
 pub struct CallerContext;
 
 impl CallerContext {
+    /// Returns the  public key used to sign the transaction that is currently being executed
     pub fn transaction_signer_public_key() -> RistrettoPublicKeyBytes {
         let resp: InvokeResult = call_engine(EngineOp::CallerContextInvoke, &CallerContextInvokeArg {
             action: CallerContextAction::GetCallerPublicKey,
@@ -23,6 +24,8 @@ impl CallerContext {
         resp.decode().expect("Failed to decode PublicKey")
     }
 
+    /// Returns the address of the component that is being called in the current instruction. 
+    /// Assumes that the instruction is a call method; otherwise, it will panic
     pub fn current_component_address() -> ComponentAddress {
         let resp: InvokeResult = call_engine(EngineOp::CallerContextInvoke, &CallerContextInvokeArg {
             action: CallerContextAction::GetComponentAddress,

@@ -37,14 +37,17 @@ pub const TOKEN_SYMBOL: &str = "SYMBOL";
 pub struct ResourceBuilder;
 
 impl ResourceBuilder {
+    /// Returns a new fungible resource builder
     pub fn fungible() -> FungibleResourceBuilder {
         FungibleResourceBuilder::new()
     }
 
+    /// Returns a new non-fungible resource builder
     pub fn non_fungible() -> NonFungibleResourceBuilder {
         NonFungibleResourceBuilder::new()
     }
 
+    /// Returns a new confidential resource builder
     pub fn confidential() -> ConfidentialResourceBuilder {
         ConfidentialResourceBuilder::new()
     }
