@@ -157,6 +157,7 @@ export const useAccountsGetBalances = (accountName: string | null) => {
     onError: (error: apiError) => {
       error;
     },
+    refetchInterval: 5000,
   });
 };
 
