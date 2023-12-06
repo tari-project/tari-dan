@@ -91,7 +91,7 @@ export default function SendMoney() {
         setPopup({ title: "Send successful", error: false });
       }).catch((e) => {
         setPopup({ title: "Send failed", error: true, message: e.message });
-      }).finaly(() => {
+      }).finally(() => {
         setDisabled(false);
       });
     }
