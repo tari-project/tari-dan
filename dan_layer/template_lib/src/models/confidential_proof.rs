@@ -8,14 +8,19 @@ use crate::{
     models::Amount,
 };
 
+/// A zero-knowledge proof of a confidential transfer
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialOutputProof {
+    /// Proof of the confidential resources that are going to be transferred to the receiver
     pub output_statement: ConfidentialStatement,
+    /// Proof of the transaction change, which goes back to the sender's vault
     pub change_statement: Option<ConfidentialStatement>,
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
+    /// Needed to prove that no coins were created
     pub range_proof: Vec<u8>,
 }
 
+/// A zero-knowledge proof that a confidential resource amount is valid
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialStatement {
     #[serde(with = "serde_byte_array")]
@@ -30,6 +35,7 @@ pub struct ConfidentialStatement {
     pub revealed_amount: Amount,
 }
 
+/// A zero-knowledge proof that a withdrawal of confidential resources from a vault is valid
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ConfidentialWithdrawProof {
     // #[cfg_attr(feature = "hex", serde(with = "hex::serde"))]
@@ -39,6 +45,7 @@ pub struct ConfidentialWithdrawProof {
     pub balance_proof: BalanceProofSignature,
 }
 
+/// Used by the receiver to determine the value component of the commitment, in both confidential transfers and Minotari burns
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct EncryptedData(#[serde(with = "serde_byte_array")] pub [u8; EncryptedData::size()]);

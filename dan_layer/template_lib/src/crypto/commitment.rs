@@ -6,6 +6,7 @@ use tari_template_abi::rust::fmt::{Display, Formatter};
 
 use crate::{crypto::InvalidByteLengthError, Hash};
 
+/// A Pederson Commitment byte contents
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct PedersonCommitmentBytes(#[serde(with = "serde_byte_array")] [u8; PedersonCommitmentBytes::length()]);

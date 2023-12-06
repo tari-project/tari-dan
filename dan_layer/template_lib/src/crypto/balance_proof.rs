@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::crypto::InvalidByteLengthError;
 
+/// The signature of a balance proof, used to validate the authorship of confidential transfers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct BalanceProofSignature(#[serde(with = "serde_byte_array")] [u8; BalanceProofSignature::length()]);
