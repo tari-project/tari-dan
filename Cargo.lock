@@ -3766,6 +3766,7 @@ dependencies = [
  "base64 0.21.5",
  "config",
  "cucumber",
+ "futures 0.3.29",
  "httpmock",
  "indexmap 1.9.3",
  "log",
