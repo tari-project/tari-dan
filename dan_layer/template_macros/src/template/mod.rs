@@ -30,7 +30,13 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse2, Result};
 
-use self::{abi::generate_abi, ast::TemplateAst, definition::generate_definition, dispatcher::generate_dispatcher, template_lib_version::generate_template_lib_version};
+use self::{
+    abi::generate_abi,
+    ast::TemplateAst,
+    definition::generate_definition,
+    dispatcher::generate_dispatcher,
+    template_lib_version::generate_template_lib_version,
+};
 
 pub fn generate_template(input: TokenStream) -> Result<TokenStream> {
     let ast = parse2::<TemplateAst>(input).unwrap();

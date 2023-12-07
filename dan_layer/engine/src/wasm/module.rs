@@ -37,12 +37,11 @@ use wasmer::{
     WasmerEnv,
 };
 
+use super::process::TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME;
 use crate::{
     template::{LoadedTemplate, TemplateLoaderError, TemplateModuleLoader},
     wasm::{environment::WasmEnv, metering, WasmExecutionError},
 };
-
-use super::process::TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME;
 
 #[derive(Debug, Clone)]
 pub struct WasmModule {
@@ -181,5 +180,8 @@ fn validate_instance(instance: &Instance) -> Result<(), WasmExecutionError> {
 }
 
 fn is_func_permitted(name: &str) -> bool {
-    name.ends_with("_main") || name == "tari_alloc" || name == "tari_free" || name == TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME
+    name.ends_with("_main") ||
+        name == "tari_alloc" ||
+        name == "tari_free" ||
+        name == TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME
 }

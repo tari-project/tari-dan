@@ -28,7 +28,7 @@ pub const TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME: &str = "_GET_TEMPLATE_LIB_V
 
 pub fn generate_template_lib_version() -> TokenStream {
     let version_function_name = format_ident!("{TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME}");
-    
+
     quote! {
         #[no_mangle]
         pub unsafe extern "C" fn #version_function_name() -> *mut u8 {

@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{de::DeserializeOwned, Serialize};
-use tari_bor::{decode_exact, encode, encode_into, encode_with_len, decode};
+use tari_bor::{decode, decode_exact, encode, encode_into, encode_with_len};
 use tari_engine_types::{indexed_value::IndexedValue, instruction_result::InstructionResult};
 use tari_template_abi::{CallInfo, EngineOp, FunctionDef};
 use tari_template_lib::{
@@ -43,7 +43,7 @@ use tari_template_lib::{
     },
     AbiContext,
 };
-use wasmer::{Function, Instance, Module, Val, WasmerEnv, RuntimeError};
+use wasmer::{Function, Instance, Module, RuntimeError, Val, WasmerEnv};
 
 use crate::{
     runtime::Runtime,
@@ -211,7 +211,7 @@ impl WasmProcess {
 
     /// Determine if the version of the template_lib crate in the WASM is valid.
     /// This is just a placeholder that logs the result, as we don't manage version incompatiblities yet
-    fn validate_template_lib_version(instance: &Instance, env: &WasmEnv<Runtime>) -> Result<(), WasmExecutionError>  {
+    fn validate_template_lib_version(instance: &Instance, env: &WasmEnv<Runtime>) -> Result<(), WasmExecutionError> {
         let wasm_version_result = Self::get_template_lib_version(instance, env);
         match wasm_version_result {
             Ok(wasm_version) => {
@@ -225,16 +225,19 @@ impl WasmProcess {
                 }
             },
             Err(e) => {
-                // TODO: if the WASM does not have a version then we should maybe propagate the error to stop the execution
+                // TODO: if the WASM does not have a version then we should maybe propagate the error to stop the
+                // execution
                 log::warn!(target: LOG_TARGET, "Unable to retrieve the template_lib version from the template WASM: {}", e);
             },
         }
-        
+
         Ok(())
     }
 
     fn get_template_lib_version(instance: &Instance, env: &WasmEnv<Runtime>) -> Result<String, WasmExecutionError> {
-        let func = instance.exports.get_function(&TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME)?;
+        let func = instance
+            .exports
+            .get_function(TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME)?;
         let res = func.call(&[]);
         let raw = Self::get_function_response_bytes(env, res, TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME)?;
         let value: String = decode(&raw).map_err(WasmExecutionError::TemplateLibVersionDecodeError)?;
@@ -242,7 +245,11 @@ impl WasmProcess {
         Ok(value)
     }
 
-    fn get_function_response_bytes(env: &WasmEnv<Runtime>, response: Result<Box<[Val]>, RuntimeError>,  func_name: &str) -> Result<Vec<u8>, WasmExecutionError> {
+    fn get_function_response_bytes(
+        env: &WasmEnv<Runtime>,
+        response: Result<Box<[Val]>, RuntimeError>,
+        func_name: &str,
+    ) -> Result<Vec<u8>, WasmExecutionError> {
         let val = match response {
             Ok(res) => res,
             Err(err) => {
@@ -262,7 +269,9 @@ impl WasmProcess {
         let ptr = val
             .get(0)
             .and_then(|v| v.i32())
-            .ok_or(WasmExecutionError::ExpectedPointerReturn { function: func_name.to_string() })?;
+            .ok_or(WasmExecutionError::ExpectedPointerReturn {
+                function: func_name.to_string(),
+            })?;
 
         let raw = env.read_memory_with_embedded_len(ptr as u32)?;
 

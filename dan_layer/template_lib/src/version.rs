@@ -22,4 +22,4 @@
 
 /// The full version of this package at compile time.
 /// Used to check for version incompatibilities when executing template WASM code
-pub const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
