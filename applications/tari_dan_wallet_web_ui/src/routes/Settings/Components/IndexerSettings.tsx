@@ -30,21 +30,29 @@ import Typography from '@mui/material/Typography';
 import Slide from '@mui/material/Slide';
 import useAccountStore from '../../../store/accountStore';
 import { useTheme } from '@mui/material/styles';
+import { useEffect } from 'react';
+import { getSettings, setSettings as uploadSettings } from '../../../utils/json_rpc';
 
 function IndexerSettings() {
+  // Keep the form and settings in the same format as the real settings in the dan wallet.
   const [accountFormState, setAccountFormState] = useState({
-    indexer: '',
+    indexer_url: '',
   });
-  const { indexer, setIndexer } = useAccountStore();
   const theme = useTheme();
   const [showForm, setShowForm] = useState(false);
+  const [settings, setSettings] = useState({ indexer_url: '' });
+
+  useEffect(() => {
+    getSettings().then((res) => {
+      setSettings(res);
+    });
+  }, []);
 
   const onSubmitIndexer = () => {
-    setIndexer(accountFormState.indexer);
+    setSettings(accountFormState);
+    uploadSettings(accountFormState);
     setShowForm(false);
-    setAccountFormState({
-      indexer: '',
-    });
+    setAccountFormState({ ...accountFormState, indexer_url: '' })
   };
 
   const onAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,9 +69,9 @@ function IndexerSettings() {
         {showForm ? (
           <Form onSubmit={onSubmitIndexer} className="flex-container">
             <TextField
-              name="indexer"
-              label="Account Name"
-              value={accountFormState.indexer}
+              name="indexer_url"
+              label="Indexer url"
+              value={accountFormState.indexer_url}
               onChange={onAccountChange}
               style={{ flexGrow: 1 }}
             />
@@ -82,16 +90,16 @@ function IndexerSettings() {
               alignItems: 'center',
             }}
           >
-            {indexer === '' ? (
+            {settings.indexer_url === '' ? (
               <Alert severity="warning" style={{ width: '100%' }}>
                 No Indexer Set
               </Alert>
             ) : (
-              <Typography variant="body2">{indexer}</Typography>
+              <Typography variant="body2">{settings.indexer_url}</Typography>
             )}
             <Button
               variant="outlined"
-              onClick={() => setShowForm(true)}
+              onClick={() => { setAccountFormState(settings); setShowForm(true); }}
               style={{ minWidth: '130px', height: '56px' }}
             >
               Set new url
