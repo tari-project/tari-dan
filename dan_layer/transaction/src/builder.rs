@@ -17,7 +17,7 @@ use tari_template_lib::{
     models::{Amount, ComponentAddress, ConfidentialWithdrawProof, ResourceAddress},
 };
 
-use crate::{Transaction, TransactionSignature};
+use crate::{signature::TransactionSignatureFields, Transaction, TransactionSignature};
 
 #[derive(Debug, Clone, Default)]
 pub struct TransactionBuilder {
@@ -49,29 +49,27 @@ impl TransactionBuilder {
     /// This method must exist and return a Bucket with containing revealed confidential XTR resource.
     /// This allows the fee to originate from sources other than the transaction sender's account.
     /// The fee instruction will lock up the "max_fee" amount for the duration of the transaction.
-    pub fn fee_transaction_pay_from_component(mut self, component_address: ComponentAddress, max_fee: Amount) -> Self {
-        self.fee_instructions.push(Instruction::CallMethod {
+    pub fn fee_transaction_pay_from_component(self, component_address: ComponentAddress, max_fee: Amount) -> Self {
+        self.add_fee_instruction(Instruction::CallMethod {
             component_address,
             method: "pay_fee".to_string(),
             args: args![max_fee],
-        });
-        self
+        })
     }
 
     /// Adds a fee instruction that calls the "take_fee_confidential" method on a component.
     /// This method must exist and return a Bucket with containing revealed confidential XTR resource.
     /// This allows the fee to originate from sources other than the transaction sender's account.
     pub fn fee_transaction_pay_from_component_confidential(
-        mut self,
+        self,
         component_address: ComponentAddress,
         proof: ConfidentialWithdrawProof,
     ) -> Self {
-        self.fee_instructions.push(Instruction::CallMethod {
+        self.add_fee_instruction(Instruction::CallMethod {
             component_address,
             method: "pay_fee_confidential".to_string(),
             args: args![proof],
-        });
-        self
+        })
     }
 
     pub fn call_function(self, template_address: TemplateAddress, function: &str, args: Vec<Arg>) -> Self {
@@ -115,12 +113,23 @@ impl TransactionBuilder {
 
     pub fn with_fee_instructions(mut self, instructions: Vec<Instruction>) -> Self {
         self.fee_instructions = instructions;
+        // Reset the signature as it is no longer valid
+        self.signature = None;
         self
     }
 
     pub fn with_fee_instructions_builder<F: FnOnce(TransactionBuilder) -> TransactionBuilder>(mut self, f: F) -> Self {
         let builder = f(TransactionBuilder::new());
         self.fee_instructions = builder.instructions;
+        // Reset the signature as it is no longer valid
+        self.signature = None;
+        self
+    }
+
+    pub fn add_fee_instruction(mut self, instruction: Instruction) -> Self {
+        self.fee_instructions.push(instruction);
+        // Reset the signature as it is no longer valid
+        self.signature = None;
         self
     }
 
@@ -144,14 +153,24 @@ impl TransactionBuilder {
     }
 
     pub fn sign(mut self, secret_key: &PrivateKey) -> Self {
-        // TODO: create proper challenge that signs everything
-        self.signature = Some(TransactionSignature::sign(secret_key, &self.instructions));
+        let signature_fields = TransactionSignatureFields {
+            fee_instructions: self.fee_instructions.clone(),
+            instructions: self.instructions.clone(),
+            inputs: self.inputs.clone(),
+            input_refs: self.input_refs.clone(),
+            min_epoch: self.min_epoch,
+            max_epoch: self.max_epoch,
+        };
+
+        self.signature = Some(TransactionSignature::sign(secret_key, signature_fields));
         self
     }
 
     /// Add an input to be consumed
     pub fn add_input(mut self, input_object: ShardId) -> Self {
         self.inputs.push(input_object);
+        // Reset the signature as it is no longer valid
+        self.signature = None;
         self
     }
 
@@ -161,12 +180,16 @@ impl TransactionBuilder {
 
     pub fn with_inputs<I: IntoIterator<Item = ShardId>>(mut self, inputs: I) -> Self {
         self.inputs.extend(inputs);
+        // Reset the signature as it is no longer valid
+        self.signature = None;
         self
     }
 
     /// Add an input to be used without mutation
     pub fn add_input_ref(mut self, input_object: ShardId) -> Self {
         self.input_refs.push(input_object);
+        // Reset the signature as it is no longer valid
+        self.signature = None;
         self
     }
 
@@ -179,6 +202,8 @@ impl TransactionBuilder {
 
     pub fn with_input_refs<I: IntoIterator<Item = ShardId>>(mut self, inputs: I) -> Self {
         self.input_refs.extend(inputs);
+        // Reset the signature as it is no longer valid
+        self.signature = None;
         self
     }
 
@@ -206,11 +231,15 @@ impl TransactionBuilder {
 
     pub fn with_min_epoch(mut self, min_epoch: Option<Epoch>) -> Self {
         self.min_epoch = min_epoch;
+        // Reset the signature as it is no longer valid
+        self.signature = None;
         self
     }
 
     pub fn with_max_epoch(mut self, max_epoch: Option<Epoch>) -> Self {
         self.max_epoch = max_epoch;
+        // Reset the signature as it is no longer valid
+        self.signature = None;
         self
     }
 
