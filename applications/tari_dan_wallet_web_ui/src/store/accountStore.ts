@@ -28,8 +28,6 @@ interface Store {
   setShowBalance: (show: boolean) => void;
   accountName: string;
   setAccountName: (name: string) => void;
-  indexer: string;
-  setIndexer: (indexer: string) => void;
 }
 
 const useAccountStore = create<Store>()(
@@ -39,8 +37,6 @@ const useAccountStore = create<Store>()(
       setShowBalance: (show) => set({ showBalance: show }),
       accountName: '',
       setAccountName: (name) => set({ accountName: name }),
-      indexer: '',
-      setIndexer: (indexer) => set({ indexer: indexer }),
     }),
     {
       name: 'account-store',
