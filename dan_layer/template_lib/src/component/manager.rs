@@ -56,7 +56,7 @@ impl ComponentManager {
         Self { address }
     }
 
-    /// Returns the address of the component that is being called in the current instruction. 
+    /// Returns the address of the component that is being called in the current instruction.
     /// Assumes that the instruction is a call method; otherwise, it will panic
     pub fn current() -> Self {
         Self::new(CallerContext::current_component_address())

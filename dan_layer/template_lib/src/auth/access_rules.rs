@@ -98,7 +98,8 @@ impl ComponentAccessRules {
         }
     }
 
-    /// Builds a new set of access rules for a component, using by default that anyone can call any method on the component
+    /// Builds a new set of access rules for a component, using by default that anyone can call any method on the
+    /// component
     pub fn allow_all() -> Self {
         Self {
             method_access: BTreeMap::new(),
@@ -166,7 +167,7 @@ pub struct ResourceAccessRules {
 
 impl ResourceAccessRules {
     /// Builds a new set of access rules for a resource.
-    /// 
+    ///
     /// By default:
     /// * Minting, burning and recalling are disabled for all users
     /// * Withdrawals, deposits and non-fungible data updates are allowed for all users

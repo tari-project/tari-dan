@@ -48,7 +48,8 @@ impl fmt::Display for BucketId {
     }
 }
 
-/// A temporary container of resources. Buckets only live during a transaction execution and must be empty at the end of the transaction.
+/// A temporary container of resources. Buckets only live during a transaction execution and must be empty at the end of
+/// the transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Bucket {
@@ -132,8 +133,9 @@ impl Bucket {
         (new_bucket, self)
     }
 
-    /// Split the current bucket, returning two new buckets, one with an amount (specified in the `proof`) of confidential tokens and the other with the rest.
-    /// It will panic if the proof is invalid or there are not enough tokens in the bucket
+    /// Split the current bucket, returning two new buckets, one with an amount (specified in the `proof`) of
+    /// confidential tokens and the other with the rest. It will panic if the proof is invalid or there are not
+    /// enough tokens in the bucket
     pub fn split_confidential(mut self, proof: ConfidentialWithdrawProof) -> (Self, Self) {
         let new_bucket = self.take_confidential(proof);
         (new_bucket, self)

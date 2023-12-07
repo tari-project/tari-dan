@@ -10,7 +10,6 @@ use crate::{
     resource::{ResourceManager, ResourceType},
 };
 
-
 /// Utility for building confidential resources inside templates
 pub struct ConfidentialResourceBuilder {
     initial_supply_proof: Option<ConfidentialOutputProof>,

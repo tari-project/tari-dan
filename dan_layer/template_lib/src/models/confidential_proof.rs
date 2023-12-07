@@ -45,7 +45,8 @@ pub struct ConfidentialWithdrawProof {
     pub balance_proof: BalanceProofSignature,
 }
 
-/// Used by the receiver to determine the value component of the commitment, in both confidential transfers and Minotari burns
+/// Used by the receiver to determine the value component of the commitment, in both confidential transfers and Minotari
+/// burns
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct EncryptedData(#[serde(with = "serde_byte_array")] pub [u8; EncryptedData::size()]);

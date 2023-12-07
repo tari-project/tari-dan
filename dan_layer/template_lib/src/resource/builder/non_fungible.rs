@@ -15,7 +15,6 @@ use crate::{
     resource::{ResourceManager, ResourceType},
 };
 
-
 /// Utility for building non-fungible resources inside templates
 pub struct NonFungibleResourceBuilder {
     owner_rule: OwnerRule,
@@ -129,7 +128,8 @@ impl NonFungibleResourceBuilder {
         self
     }
 
-    /// Sets up multiple initial non-fungible tokens to be minted on resource creation by applying the provided function N times
+    /// Sets up multiple initial non-fungible tokens to be minted on resource creation by applying the provided function
+    /// N times
     pub fn mint_many_with<F, T>(mut self, bounds: RangeInclusive<usize>, mut f: F) -> Self
     where
         F: FnMut(T) -> (NonFungibleId, (Vec<u8>, Vec<u8>)),

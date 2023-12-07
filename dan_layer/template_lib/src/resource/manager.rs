@@ -87,7 +87,7 @@ impl ResourceManager {
 
     /// Creates a new resource in the Tari network.
     /// Returns the newly created resource address and a `Bucket` with the initial tokens (if minted on creation)
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `resource_type` - The type of resource that is being created
@@ -120,15 +120,16 @@ impl ResourceManager {
     }
 
     /// Mints new tokens of the confidential resource being managed. Returns a `Bucket` with the newly created tokens.
-    /// 
+    ///
     /// It will panic if:
     /// * The resource is not confidential
     /// * The proof is invalid
     /// * The caller doesn't have permissions (via access rules) for minting
-    /// 
+    ///
     /// # Arguments
     ///
-    /// * `proof` - A zero-knowledge proof that specifies the amount of tokens to be minted and returned back to the caller
+    /// * `proof` - A zero-knowledge proof that specifies the amount of tokens to be minted and returned back to the
+    ///   caller
     pub fn mint_confidential(&mut self, proof: ConfidentialOutputProof) -> Bucket {
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::Confidential { proof: Box::new(proof) },
@@ -136,17 +137,18 @@ impl ResourceManager {
     }
 
     /// Mints a new non-fungible token of the resource being managed. Returns a `Bucket` with the newly created token.
-    /// 
+    ///
     /// It will panic if:
     /// * The resource is not a non-fungible
     /// * The `id` is not unique for the resource
     /// * The caller doesn't have permissions (via access rules) for minting
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `id` - The identification of the new non-fungible token. It must be unique for the resource.
     /// * `metadata` - Immutable information used to describe the new token
-    /// * `mutable_data` - Initial data that the token will hold and that can potentially be updated in future instructions
+    /// * `mutable_data` - Initial data that the token will hold and that can potentially be updated in future
+    ///   instructions
     pub fn mint_non_fungible<T: Serialize, U: Serialize>(
         &mut self,
         id: NonFungibleId,
@@ -164,15 +166,16 @@ impl ResourceManager {
 
     /// Mints multiple new non-fungible tokens of the resource being managed.
     /// The `id` of each minted token will be set to random. Returns a `Bucket` with the newly created tokens.
-    /// 
+    ///
     /// It will panic if:
     /// * The resource is not a non-fungible
     /// * The caller doesn't have permissions (via access rules) for minting
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `metadata` - Immutable information used to describe each new token
-    /// * `mutable_data` - Initial data that each token will hold and that can potentially be updated in future instructions
+    /// * `mutable_data` - Initial data that each token will hold and that can potentially be updated in future
+    ///   instructions
     /// * `supply` - The amount of new tokens to be minted
     pub fn mint_many_non_fungible<T: Serialize, U: Serialize>(
         &mut self,
@@ -193,11 +196,11 @@ impl ResourceManager {
 
     /// Mints new fungible tokens of the resource being managed.
     /// Returns a `Bucket` with the newly created tokens.
-    /// 
+    ///
     /// It will panic if:
     /// * The resource is not fungible
     /// * The caller doesn't have permissions (via access rules) for minting
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `amount` - The amount of new tokens to be minted
@@ -209,9 +212,9 @@ impl ResourceManager {
 
     /// Withdraws all tokens of the resource from the specified vault.
     /// Returns a `Bucket` with the recalled tokens
-    /// 
+    ///
     /// It will panic if the caller doesn't have permissions (via access rules) for recalling
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `vault_id` - The vault whose tokens are going to be recalled
@@ -224,15 +227,15 @@ impl ResourceManager {
 
     /// Withdraws an amount of tokens of the resource from the specified vault.
     /// Returns a `Bucket` with the recalled tokens
-    /// 
+    ///
     /// It will panic if:
     /// * The resource is not fungible
     /// * The caller doesn't have permissions (via access rules) for recalling
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `vault_id` - The vault whose tokens are going to be recalled
-    /// * `amount` - The amount of tokens to be recalled from the 
+    /// * `amount` - The amount of tokens to be recalled from the
     pub fn recall_fungible_amount(&self, vault_id: VaultId, amount: Amount) -> Bucket {
         self.recall_internal(RecallResourceArg {
             resource: ResourceDiscriminator::Fungible { amount },
@@ -242,12 +245,12 @@ impl ResourceManager {
 
     /// Withdraws a single non-fungible token of the resource from the specified vault.
     /// Returns a `Bucket` with the recalled tokens
-    /// 
+    ///
     /// It will panic if:
     /// * The resource is not a non-fungible
     /// * The caller doesn't have permissions (via access rules) for recalling
-    /// * The resource does not contain tokens with the ID specified by `token` 
-    /// 
+    /// * The resource does not contain tokens with the ID specified by `token`
+    ///
     /// # Arguments
     ///
     /// * `vault_id` - The vault whose tokens are going to be recalled
@@ -258,12 +261,12 @@ impl ResourceManager {
 
     /// Withdraws multiple non-fungible tokens of the resource from the specified vault.
     /// Returns a `Bucket` with the recalled tokens
-    /// 
+    ///
     /// It will panic if:
     /// * The resource is not a non-fungible
     /// * The caller doesn't have permissions (via access rules) for recalling
-    /// * The resource does not contain all the tokens with the IDs specified by `tokens` 
-    /// 
+    /// * The resource does not contain all the tokens with the IDs specified by `tokens`
+    ///
     /// # Arguments
     ///
     /// * `vault_id` - The vault whose tokens are going to be recalled
@@ -277,13 +280,13 @@ impl ResourceManager {
 
     /// Withdraws an amount of confidential tokens of the resource from the specified vault.
     /// Returns a `Bucket` with the recalled tokens
-    /// 
+    ///
     /// It will panic if:
     /// * The resource is not confidential
     /// * The caller doesn't have permissions (via access rules) for recalling
     /// * `commitments` cointain invalid commitments
     /// * `revealed_amount` is greater than the amount of tokens present in the vault
-    /// 
+    ///
     /// # Arguments
     ///
     /// * `vault_id` - The vault whose tokens are going to be recalled

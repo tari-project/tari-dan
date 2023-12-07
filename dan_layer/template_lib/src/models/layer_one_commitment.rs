@@ -2,7 +2,9 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 
 use std::fmt::{Display, Formatter};
+
 use serde::{Deserialize, Serialize};
+
 use crate::{hash::HashParseError, Hash};
 
 /// The unique identification of a unclaimed confidential output in the Tari network.

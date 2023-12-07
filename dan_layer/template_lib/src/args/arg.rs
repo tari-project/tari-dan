@@ -26,7 +26,8 @@ use tari_bor::encode;
 /// The possible ways to represent an instruction's argument
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Arg {
-    /// The argument is in the transaction execution's workspace, which means it is the result of a previous instruction
+    /// The argument is in the transaction execution's workspace, which means it is the result of a previous
+    /// instruction
     Workspace(Vec<u8>),
     /// The argument is a value specified in the transaction
     Literal(Vec<u8>),

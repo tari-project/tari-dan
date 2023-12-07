@@ -254,7 +254,8 @@ impl Display for NonFungibleAddress {
     }
 }
 
-/// A non-fungible token. Each non-fungible token is uniquely addressable inside its parent resource, can hold its own data, and is non-divisible
+/// A non-fungible token. Each non-fungible token is uniquely addressable inside its parent resource, can hold its own
+/// data, and is non-divisible
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct NonFungible {
@@ -291,7 +292,8 @@ impl NonFungible {
     }
 
     /// Update the mutable data of the token, replacing it with the data provided as an argument.
-    /// Note that this operation may be protected via access rules, resulting in a panic if the caller does not have the appropriate permissions
+    /// Note that this operation may be protected via access rules, resulting in a panic if the caller does not have the
+    /// appropriate permissions
     pub fn set_mutable_data<T: Serialize + ?Sized>(&mut self, data: &T) {
         ResourceManager::get(*self.address.resource_address())
             .update_non_fungible_data(self.address.id().clone(), data);

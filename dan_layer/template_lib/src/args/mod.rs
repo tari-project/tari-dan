@@ -59,7 +59,8 @@ macro_rules! arg {
     };
 }
 
-/// Low-level macro for building instruction arguments, used by both `arg!` and `args!` macros. Not intended for general usage.
+/// Low-level macro for building instruction arguments, used by both `arg!` and `args!` macros. Not intended for general
+/// usage.
 #[macro_export]
 macro_rules! __args_inner {
     (@ { $this:ident } Variable($e:expr), $($tail:tt)*) => {

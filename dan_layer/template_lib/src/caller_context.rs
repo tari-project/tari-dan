@@ -24,7 +24,7 @@ impl CallerContext {
         resp.decode().expect("Failed to decode PublicKey")
     }
 
-    /// Returns the address of the component that is being called in the current instruction. 
+    /// Returns the address of the component that is being called in the current instruction.
     /// Assumes that the instruction is a call method; otherwise, it will panic
     pub fn current_component_address() -> ComponentAddress {
         let resp: InvokeResult = call_engine(EngineOp::CallerContextInvoke, &CallerContextInvokeArg {

@@ -33,9 +33,11 @@ pub use manager::*;
 /// Represents every possible type of resource in the Tari network
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ResourceType {
-    /// Fungible tokens do not have individual identity, making them interchangeable. E.g. monetary units, liquidity pool tokens, tokenized shares or commodities, etc.
+    /// Fungible tokens do not have individual identity, making them interchangeable. E.g. monetary units, liquidity
+    /// pool tokens, tokenized shares or commodities, etc.
     Fungible,
-    /// A resource (i.e. collection) of non-fungible tokens. Each non-fungible token is uniquely addressable inside its parent resource, can hold its own data, and is non-divisible. 
+    /// A resource (i.e. collection) of non-fungible tokens. Each non-fungible token is uniquely addressable inside its
+    /// parent resource, can hold its own data, and is non-divisible.
     NonFungible,
     /// A type of fungible resource that has private balance information using cryptography
     Confidential,
