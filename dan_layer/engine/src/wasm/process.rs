@@ -43,7 +43,7 @@ use tari_template_lib::{
     },
     AbiContext,
 };
-use wasmer::{Function, Instance, Module, Val, WasmerEnv};
+use wasmer::{Function, Instance, Module, Val, WasmerEnv, RuntimeError};
 
 use crate::{
     runtime::Runtime,
@@ -236,7 +236,14 @@ impl WasmProcess {
     fn get_template_lib_version(instance: &Instance, env: &WasmEnv<Runtime>) -> Result<String, WasmExecutionError> {
         let func = instance.exports.get_function(&TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME)?;
         let res = func.call(&[]);
-        let val = match res {
+        let raw = Self::get_function_response_bytes(env, res, TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME)?;
+        let value: String = decode(&raw).map_err(WasmExecutionError::TemplateLibVersionDecodeError)?;
+
+        Ok(value)
+    }
+
+    fn get_function_response_bytes(env: &WasmEnv<Runtime>, response: Result<Box<[Val]>, RuntimeError>,  func_name: &str) -> Result<Vec<u8>, WasmExecutionError> {
+        let val = match response {
             Ok(res) => res,
             Err(err) => {
                 if let Some(err) = env.take_last_engine_error() {
@@ -248,17 +255,18 @@ impl WasmProcess {
                         runtime_error: err,
                     });
                 }
-                eprintln!("Error getting the template_lib version: {}", err);
+                eprintln!("Error calling function: {}", err);
                 return Err(err.into());
             },
         };
         let ptr = val
             .get(0)
             .and_then(|v| v.i32())
-            .ok_or(WasmExecutionError::ExpectedPointerReturn { function: TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME.to_owned() })?;
+            .ok_or(WasmExecutionError::ExpectedPointerReturn { function: func_name.to_string() })?;
+
         let raw = env.read_memory_with_embedded_len(ptr as u32)?;
-        let value: String = decode(&raw).map_err(WasmExecutionError::TemplateLibVersionDecodeError)?;
-        Ok(value)
+
+        Ok(raw)
     }
 }
 
@@ -279,30 +287,7 @@ impl Invokable for WasmProcess {
         let res = func.call(&[Val::I32(call_info_ptr.as_i32()), Val::I32(call_info_ptr.len() as i32)]);
         self.env.free(call_info_ptr)?;
 
-        let val = match res {
-            Ok(res) => res,
-            Err(err) => {
-                if let Some(err) = self.env.take_last_engine_error() {
-                    return Err(WasmExecutionError::RuntimeError(err));
-                }
-                if let Some(message) = self.env.take_last_panic_message() {
-                    return Err(WasmExecutionError::Panic {
-                        message,
-                        runtime_error: err,
-                    });
-                }
-                eprintln!("Error calling function: {}", err);
-                return Err(err.into());
-            },
-        };
-        let ptr = val
-            .get(0)
-            .and_then(|v| v.i32())
-            .ok_or(WasmExecutionError::ExpectedPointerReturn { function: main_name })?;
-
-        // Read response from memory
-        let raw = self.env.read_memory_with_embedded_len(ptr as u32)?;
-
+        let raw = Self::get_function_response_bytes(&self.env, res, &main_name)?;
         let value = IndexedValue::from_raw(&raw)?;
 
         self.env
