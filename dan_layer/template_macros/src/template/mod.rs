@@ -24,21 +24,25 @@ mod abi;
 mod ast;
 mod definition;
 mod dispatcher;
+mod template_lib_version;
 
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{parse2, Result};
 
-use self::{abi::generate_abi, ast::TemplateAst, definition::generate_definition, dispatcher::generate_dispatcher};
+use self::{abi::generate_abi, ast::TemplateAst, definition::generate_definition, dispatcher::generate_dispatcher, template_lib_version::generate_template_lib_version};
 
 pub fn generate_template(input: TokenStream) -> Result<TokenStream> {
     let ast = parse2::<TemplateAst>(input).unwrap();
 
+    let template_lib_version = generate_template_lib_version();
     let definition = generate_definition(&ast);
     let abi = generate_abi(&ast)?;
     let dispatcher = generate_dispatcher(&ast)?;
 
-    let output = quote! {
+    let output: TokenStream = quote! {
+        #template_lib_version
+
         #definition
 
         #dispatcher

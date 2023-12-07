@@ -55,6 +55,8 @@ pub enum WasmExecutionError {
     },
     #[error("Value visitor error: {0}")]
     ValueVisitorError(#[from] IndexedValueError),
+    #[error("Failed to decode template_lib version: {0:?}")]
+    TemplateLibVersionDecodeError(BorError),
 }
 impl From<wasmer::InstantiationError> for WasmExecutionError {
     fn from(value: InstantiationError) -> Self {

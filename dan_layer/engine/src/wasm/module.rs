@@ -42,6 +42,8 @@ use crate::{
     wasm::{environment::WasmEnv, metering, WasmExecutionError},
 };
 
+use super::process::TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME;
+
 #[derive(Debug, Clone)]
 pub struct WasmModule {
     code: Vec<u8>,
@@ -179,5 +181,5 @@ fn validate_instance(instance: &Instance) -> Result<(), WasmExecutionError> {
 }
 
 fn is_func_permitted(name: &str) -> bool {
-    name.ends_with("_main") || name == "tari_alloc" || name == "tari_free"
+    name.ends_with("_main") || name == "tari_alloc" || name == "tari_free" || name == TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME
 }

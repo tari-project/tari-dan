@@ -1,4 +1,4 @@
-//  Copyright 2022. The Tari Project
+//  Copyright 2023. The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,61 +20,22 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-//! This crate contains an interface for WASM templates to interact with the state of the Tari Network, as well as
-//! some utilities for executing functions that may be slow in the WASM environment.
-//!
-//! In most cases, you will only require the `prelude` which can be included with:
-//! ```
-//! use tari_template_lib::prelude::*;
-//! ```
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote};
 
-pub mod auth;
+/// The name of the global export for the function that returns the template lib version
+pub const TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME: &str = "_GET_TEMPLATE_LIB_VERSION";
 
-mod hash;
-pub use hash::{Hash, HashParseError};
-
-#[macro_use]
-pub mod args;
-pub mod models;
-
-pub mod component;
-mod consensus;
-pub use consensus::Consensus;
-
-pub mod caller_context;
-mod context;
-pub use context::{get_context, init_context, AbiContext};
-
-pub mod rand;
-pub mod resource;
-
-pub mod crypto;
-pub mod events;
-
-pub mod template;
-
-// ---------------------------------------- WASM target exports ------------------------------------------------
-
-pub mod template_dependencies;
-
-mod engine;
-pub use engine::engine;
-
-pub mod panic_hook;
-pub mod prelude;
-#[cfg(all(feature = "macro", target_arch = "wasm32"))]
-pub use prelude::template;
-// Re-export for macro
-pub use tari_bor::to_value;
-
-pub mod constants;
-#[cfg(target_arch = "wasm32")]
-pub mod workspace;
-
-#[macro_use]
-mod newtype_serde_macros;
-#[macro_use]
-pub mod macros;
-
-mod version;
-pub use version::VERSION;
+pub fn generate_template_lib_version() -> TokenStream {
+    let version_function_name = format_ident!("{TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME}");
+    
+    quote! {
+        #[no_mangle]
+        pub unsafe extern "C" fn #version_function_name() -> *mut u8 {
+            use ::tari_template_lib::VERSION;
+            use ::tari_template_lib::template_dependencies::{wrap_ptr, encode_with_len};
+            let result = encode_with_len(&VERSION);
+            wrap_ptr(result)
+        }
+    }
+}

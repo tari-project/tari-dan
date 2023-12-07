@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use serde::{de::DeserializeOwned, Serialize};
-use tari_bor::{decode_exact, encode, encode_into, encode_with_len};
+use tari_bor::{decode_exact, encode, encode_into, encode_with_len, decode};
 use tari_engine_types::{indexed_value::IndexedValue, instruction_result::InstructionResult};
 use tari_template_abi::{CallInfo, EngineOp, FunctionDef};
 use tari_template_lib::{
@@ -54,7 +54,11 @@ use crate::{
         LoadedWasmTemplate,
     },
 };
+
+/// The name of the global export for the function that returns the template lib version
+pub const TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME: &str = "_GET_TEMPLATE_LIB_VERSION";
 const LOG_TARGET: &str = "tari::dan::engine::wasm::process";
+
 #[derive(Debug)]
 pub struct WasmProcess {
     module: LoadedWasmTemplate,
@@ -70,6 +74,7 @@ impl WasmProcess {
         let resolver = env.create_resolver(store, tari_engine);
         let instance = Instance::new(module.wasm_module(), &resolver)?;
         env.init_with_instance(&instance)?;
+        Self::validate_template_lib_version(&instance, &env)?;
         Ok(Self { module, env, instance })
     }
 
@@ -202,6 +207,58 @@ impl WasmProcess {
 
     fn encoded_abi_context(&self) -> Vec<u8> {
         encode(&AbiContext {}).unwrap()
+    }
+
+    /// Determine if the version of the template_lib crate in the WASM is valid.
+    /// This is just a placeholder that logs the result, as we don't manage version incompatiblities yet
+    fn validate_template_lib_version(instance: &Instance, env: &WasmEnv<Runtime>) -> Result<(), WasmExecutionError>  {
+        let wasm_version_result = Self::get_template_lib_version(instance, env);
+        match wasm_version_result {
+            Ok(wasm_version) => {
+                let engine_version = tari_template_lib::VERSION;
+                if wasm_version == engine_version {
+                    log::info!(target: LOG_TARGET, "The template_lib version in the template WASM (\"{}\") matches the one used in the engine", wasm_version);
+                } else {
+                    // TODO: for now we are going to ignore version mistmatches
+                    // In the future we could load a different version of the template_lib in the engine
+                    log::warn!(target: LOG_TARGET, "The template_lib version in the template WASM (\"{}\") does not matches the one used in the engine (\"{}\")", wasm_version, engine_version);
+                }
+            },
+            Err(e) => {
+                // TODO: if the WASM does not have a version then we should maybe propagate the error to stop the execution
+                log::warn!(target: LOG_TARGET, "Unable to retrieve the template_lib version from the template WASM: {}", e);
+            },
+        }
+        
+        Ok(())
+    }
+
+    fn get_template_lib_version(instance: &Instance, env: &WasmEnv<Runtime>) -> Result<String, WasmExecutionError> {
+        let func = instance.exports.get_function(&TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME)?;
+        let res = func.call(&[]);
+        let val = match res {
+            Ok(res) => res,
+            Err(err) => {
+                if let Some(err) = env.take_last_engine_error() {
+                    return Err(WasmExecutionError::RuntimeError(err));
+                }
+                if let Some(message) = env.take_last_panic_message() {
+                    return Err(WasmExecutionError::Panic {
+                        message,
+                        runtime_error: err,
+                    });
+                }
+                eprintln!("Error getting the template_lib version: {}", err);
+                return Err(err.into());
+            },
+        };
+        let ptr = val
+            .get(0)
+            .and_then(|v| v.i32())
+            .ok_or(WasmExecutionError::ExpectedPointerReturn { function: TEMPLATE_LIB_VERSION_FUNCTION_GLOBAL_NAME.to_owned() })?;
+        let raw = env.read_memory_with_embedded_len(ptr as u32)?;
+        let value: String = decode(&raw).map_err(WasmExecutionError::TemplateLibVersionDecodeError)?;
+        Ok(value)
     }
 }
 
