@@ -32,6 +32,7 @@ use crate::{
 
 const TAG: u64 = BinaryTag::ProofId.as_u64();
 
+/// The unique identification of a proof during a transaction execution
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct ProofId(BorTag<u32, TAG>);
 
@@ -47,6 +48,8 @@ impl fmt::Display for ProofId {
     }
 }
 
+/// Allows a user to prove ownership of a resource. Proofs only live during the execution of a transaction.
+/// The main use case is to prove that the user has a specific badge during cross-template calls
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Proof {
@@ -137,10 +140,11 @@ impl Proof {
     }
 }
 
+/// Returned when a proof cannot be authorized
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NotAuthorized;
 
-// TODO: Clean this up
+/// TODO: Clean this up
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofAccess {
     pub id: ProofId,
@@ -159,6 +163,7 @@ impl Drop for ProofAccess {
     }
 }
 
+/// A convenience wrapper for managing proofs in templates
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProofAuth {
     pub id: ProofId,

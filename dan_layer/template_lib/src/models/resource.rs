@@ -32,6 +32,7 @@ use crate::{hash::HashParseError, newtype_struct_serde_impl, Hash};
 
 const TAG: u64 = BinaryTag::ResourceAddress.as_u64();
 
+/// The unique identification of a resource in the Tari network
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ResourceAddress(BorTag<Hash, TAG>);
 

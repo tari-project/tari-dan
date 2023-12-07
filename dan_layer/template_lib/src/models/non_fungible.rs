@@ -21,6 +21,7 @@ use crate::{
 
 const DELIM: char = ':';
 
+/// The unique identification of a non-fungible token inside it's parent resource
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum NonFungibleId {
     U256(#[serde(with = "serde_byte_array")] [u8; 32]),
@@ -195,9 +196,11 @@ impl Display for NonFungibleId {
 
 const TAG: u64 = BinaryTag::NonFungibleAddress.as_u64();
 
+/// The unique identifier of a non-fungible index in the Tari network
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NonFungibleAddress(BorTag<NonFungibleAddressContents, TAG>);
 
+/// Data used to build a `NonFungibleAddress`
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NonFungibleAddressContents {
     resource_address: ResourceAddress,
@@ -251,6 +254,8 @@ impl Display for NonFungibleAddress {
     }
 }
 
+/// A non-fungible token. Each non-fungible token is uniquely addressable inside its parent resource, can hold its own
+/// data, and is non-divisible
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct NonFungible {
@@ -262,6 +267,8 @@ impl NonFungible {
         Self { address }
     }
 
+    /// Returns a copy of the immutable data of the token.
+    /// This data is set up during the token minting process and cannot be updated
     pub fn get_data<T: DeserializeOwned>(&self) -> T {
         let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
             address: self.address.clone(),
@@ -272,6 +279,7 @@ impl NonFungible {
         resp.decode().expect("[get_data] Failed to decode NonFungible data")
     }
 
+    /// Returns a copy of the mutable data of the token
     pub fn get_mutable_data<T: DeserializeOwned>(&self) -> T {
         let resp: InvokeResult = call_engine(EngineOp::NonFungibleInvoke, &NonFungibleInvokeArg {
             address: self.address.clone(),
@@ -283,12 +291,16 @@ impl NonFungible {
             .expect("[get_mutable_data] Failed to decode raw NonFungible mutable data")
     }
 
+    /// Update the mutable data of the token, replacing it with the data provided as an argument.
+    /// Note that this operation may be protected via access rules, resulting in a panic if the caller does not have the
+    /// appropriate permissions
     pub fn set_mutable_data<T: Serialize + ?Sized>(&mut self, data: &T) {
         ResourceManager::get(*self.address.resource_address())
             .update_non_fungible_data(self.address.id().clone(), data);
     }
 }
 
+/// All the types of errors that can occur when parsing a non-fungible ID
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseNonFungibleIdError {
     InvalidFormat,
