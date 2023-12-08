@@ -22,6 +22,7 @@
 
 use std::{collections::HashMap, time::Duration};
 
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tari_common_types::types::PublicKey;
@@ -105,6 +106,7 @@ pub struct TransactionGetResponse {
     pub transaction: Transaction,
     pub result: Option<FinalizeResult>,
     pub status: TransactionStatus,
+    pub last_update_time: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -115,7 +117,7 @@ pub struct TransactionGetAllRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionGetAllResponse {
-    pub transactions: Vec<(Transaction, Option<FinalizeResult>, TransactionStatus)>,
+    pub transactions: Vec<(Transaction, Option<FinalizeResult>, TransactionStatus, NaiveDateTime)>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

@@ -8084,6 +8084,7 @@ dependencies = [
  "async-trait",
  "blake2",
  "chacha20poly1305 0.10.1",
+ "chrono",
  "digest 0.10.7",
  "jsonwebtoken",
  "lazy_static",
@@ -8734,6 +8735,7 @@ dependencies = [
 name = "tari_wallet_daemon_client"
 version = "0.1.1"
 dependencies = [
+ "chrono",
  "reqwest",
  "serde",
  "serde_json",

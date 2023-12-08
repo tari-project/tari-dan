@@ -108,6 +108,8 @@ export default function TransactionDetails() {
         </>
       );
     }
+
+    const last_update_time = new Date(data.last_update_time);
     console.log(data);
     const handleDownload = () => {
       const json = JSON.stringify(data, null, 2);
@@ -115,7 +117,6 @@ export default function TransactionDetails() {
       const filename = `tx-${data?.transaction?.id}.json` || 'tx-unknown_id.json';
       saveAs(blob, filename);
     }
-
 
     if (data.status === "Rejected" || data.status === "InvalidTransaction") {
       return (
@@ -129,7 +130,7 @@ export default function TransactionDetails() {
                 </TableRow>
                 <TableRow>
                   <TableCell>Timestamp</TableCell>
-                  <DataTableCell>Timestamp</DataTableCell>
+                  <DataTableCell>{last_update_time.toLocaleString()}</DataTableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Status</TableCell>
@@ -169,7 +170,7 @@ export default function TransactionDetails() {
                   </TableRow>
                   <TableRow>
                     <TableCell>Timestamp</TableCell>
-                    <DataTableCell>Timestamp</DataTableCell>
+                    <DataTableCell>{last_update_time.toLocaleString()}</DataTableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell>Total Fees</TableCell>

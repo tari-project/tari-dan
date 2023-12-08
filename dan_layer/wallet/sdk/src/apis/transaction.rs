@@ -221,6 +221,8 @@ where
                     qcs: vec![],
                     is_dry_run: transaction.is_dry_run,
                     json_result: Some(json_results),
+                    // This is not precise, we should read it back from DB, but it's not critical
+                    last_update_time: chrono::Utc::now().naive_utc(),
                 }))
             },
         }

@@ -4,6 +4,7 @@
 use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tari_dan_storage::consensus_models::QuorumCertificate;
@@ -20,6 +21,7 @@ pub struct WalletTransaction<TAddr> {
     pub qcs: Vec<QuorumCertificate<TAddr>>,
     pub json_result: Option<Vec<Value>>,
     pub is_dry_run: bool,
+    pub last_update_time: NaiveDateTime,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default)]
