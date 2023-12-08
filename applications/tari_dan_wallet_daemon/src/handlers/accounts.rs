@@ -933,9 +933,21 @@ pub async fn handle_transfer(
         let execute_result = result.result.into_execute_result().unwrap();
         return Ok(TransferResponse {
             transaction_id: result.transaction_id,
-            fee: execute_result.fee_receipt.clone().unwrap().total_fees_paid,
-            fee_refunded: execute_result.fee_receipt.clone().unwrap().total_fee_payment -
-                execute_result.fee_receipt.clone().unwrap().total_fees_paid,
+            fee: execute_result
+                .fee_receipt
+                .clone()
+                .map(|fee_receipt| fee_receipt.total_fees_paid)
+                .unwrap_or_default(),
+            fee_refunded: execute_result
+                .fee_receipt
+                .clone()
+                .map(|fee_receipt| fee_receipt.total_fee_payment)
+                .unwrap_or_default() -
+                execute_result
+                    .fee_receipt
+                    .clone()
+                    .map(|fee_receipt| fee_receipt.total_fees_paid)
+                    .unwrap_or_default(),
             result: execute_result.finalize,
         });
     }
