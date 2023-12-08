@@ -18,6 +18,7 @@ message HotStuffMessage {
     RequestedTransactionMessage requested_transaction = 6;
     SyncRequest sync_request = 7;
     SyncResponse sync_response = 8;
+    RequestMissingForeignBlocksMessage request_missing_foreign_blocks = 9;
   }
 }
 
@@ -163,6 +164,12 @@ message UpState {
 message DownState {
   bytes deleted_by = 1;
   uint64 fees_accrued = 2;
+}
+
+message RequestMissingForeignBlocksMessage {
+  uint64 epoch = 1;
+  uint64 from = 2;
+  uint64 to = 3;
 }
 
 message RequestMissingTransactionsMessage {

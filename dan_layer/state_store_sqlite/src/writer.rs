@@ -176,7 +176,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
     }
 
     fn blocks_insert(&mut self, block: &Block<TAddr>) -> Result<(), StorageError> {
-        use crate::schema::blocks;
+        use crate::schema::{blocks, blocks_foreign_id_mapping};
 
         let insert = (
             blocks::block_id.eq(serialize_hex(block.id())),
@@ -200,6 +200,21 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                 operation: "blocks_insert",
                 source: e,
             })?;
+
+        for (bucket, index) in block.get_foreign_indexes() {
+            let insert = (
+                blocks_foreign_id_mapping::foreign_bucket.eq(i64::from(bucket.as_u32())),
+                blocks_foreign_id_mapping::foreign_index.eq(*index as i64),
+                blocks_foreign_id_mapping::block_id.eq(serialize_hex(block.id())),
+            );
+            diesel::insert_into(blocks_foreign_id_mapping::table)
+                .values(insert)
+                .execute(self.connection())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "blocks_insert",
+                    source: e,
+                })?;
+        }
 
         Ok(())
     }

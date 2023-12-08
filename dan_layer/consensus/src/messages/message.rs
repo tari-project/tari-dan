@@ -6,7 +6,13 @@ use std::fmt::Display;
 use serde::Serialize;
 use tari_dan_common_types::Epoch;
 
-use super::{NewViewMessage, ProposalMessage, RequestedTransactionMessage, VoteMessage};
+use super::{
+    NewViewMessage,
+    ProposalMessage,
+    RequestMissingForeignBlocksMessage,
+    RequestedTransactionMessage,
+    VoteMessage,
+};
 use crate::messages::{RequestMissingTransactionsMessage, SyncRequestMessage, SyncResponseMessage};
 
 // Serialize is implemented for the message logger
@@ -20,6 +26,7 @@ pub enum HotstuffMessage<TAddr> {
     RequestedTransaction(RequestedTransactionMessage),
     SyncRequest(SyncRequestMessage),
     SyncResponse(SyncResponseMessage<TAddr>),
+    RequestMissingForeignBlocks(RequestMissingForeignBlocksMessage),
 }
 
 impl<TAddr> HotstuffMessage<TAddr> {
@@ -33,6 +40,7 @@ impl<TAddr> HotstuffMessage<TAddr> {
             HotstuffMessage::RequestedTransaction(_) => "RequestedTransaction",
             HotstuffMessage::SyncRequest(_) => "SyncRequest",
             HotstuffMessage::SyncResponse(_) => "SyncResponse",
+            HotstuffMessage::RequestMissingForeignBlocks(_) => "RequestMissingForeignBlocks",
         }
     }
 
@@ -46,6 +54,7 @@ impl<TAddr> HotstuffMessage<TAddr> {
             Self::RequestedTransaction(msg) => msg.epoch,
             Self::SyncRequest(msg) => msg.epoch,
             Self::SyncResponse(msg) => msg.epoch,
+            Self::RequestMissingForeignBlocks(msg) => msg.epoch,
         }
     }
 
@@ -70,6 +79,9 @@ impl<TAddr> Display for HotstuffMessage<TAddr> {
             HotstuffMessage::RequestedTransaction(msg) => write!(f, "RequestedTransaction({})", msg.transactions.len()),
             HotstuffMessage::SyncRequest(msg) => write!(f, "SyncRequest({})", msg.high_qc),
             HotstuffMessage::SyncResponse(msg) => write!(f, "SyncResponse({} block(s))", msg.blocks.len()),
+            HotstuffMessage::RequestMissingForeignBlocks(msg) => {
+                write!(f, "RequestMissingForeignBlocks({}..{})", msg.from, msg.to)
+            },
         }
     }
 }

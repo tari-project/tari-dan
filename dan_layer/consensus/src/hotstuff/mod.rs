@@ -14,6 +14,7 @@ mod on_ready_to_vote_on_local_block;
 mod on_receive_foreign_proposal;
 mod on_receive_local_proposal;
 mod on_receive_new_view;
+mod on_receive_request_missing_foreign_blocks;
 mod on_receive_request_missing_transactions;
 mod on_receive_requested_transactions;
 mod on_receive_vote;
