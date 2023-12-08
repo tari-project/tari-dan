@@ -671,6 +671,7 @@ pub async fn transfer(
         resource_address,
         destination_public_key,
         max_fee,
+        dry_run: false,
     };
 
     let resp = client.accounts_transfer(request).await.unwrap();
@@ -696,6 +697,7 @@ pub async fn confidential_transfer(
         destination_public_key,
         max_fee,
         resource_address: CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
+        dry_run: false,
     };
 
     let resp = client.accounts_confidential_transfer(request).await.unwrap();
