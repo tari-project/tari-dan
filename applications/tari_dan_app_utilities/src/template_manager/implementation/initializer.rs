@@ -20,14 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+use tari_dan_common_types::NodeAddressable;
 use tari_shutdown::ShutdownSignal;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use super::{downloader::TemplateDownloadWorker, service::TemplateManagerService, TemplateManager};
 use crate::template_manager::interface::TemplateManagerHandle;
 
-pub fn spawn(
-    manager: TemplateManager,
+pub fn spawn<TAddr: NodeAddressable + 'static>(
+    manager: TemplateManager<TAddr>,
     shutdown: ShutdownSignal,
 ) -> (TemplateManagerHandle, JoinHandle<anyhow::Result<()>>) {
     let (tx_request, rx_request) = mpsc::channel(1);

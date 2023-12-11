@@ -21,13 +21,12 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use log::info;
-use tari_common_types::types::PublicKey;
-use tari_comms::protocol::rpc::RpcStatus;
 use tari_dan_app_utilities::{
     substate_file_cache::SubstateFileCache,
     template_manager::implementation::TemplateManager,
     transaction_executor::{TariDanTransactionProcessor, TransactionExecutor, TransactionProcessorError},
 };
+use tari_dan_common_types::PeerAddress;
 use tari_dan_engine::{
     bootstrap_state,
     state_store::{memory::MemoryStateStore, AtomicDb, StateStoreError, StateWriter},
@@ -35,10 +34,11 @@ use tari_dan_engine::{
 use tari_dan_storage::StorageError;
 use tari_engine_types::commit_result::ExecuteResult;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerReader};
+use tari_rpc_framework::RpcStatus;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::Transaction;
 use tari_validator_node_client::ValidatorNodeClientError;
-use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
+use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use thiserror::Error;
 use tokio::task;
 
@@ -73,23 +73,23 @@ pub enum DryRunTransactionProcessorError {
 #[derive(Clone, Debug)]
 pub struct DryRunTransactionProcessor {
     substate_resolver: TariSubstateResolver<
-        SqliteStateStore<PublicKey>,
-        EpochManagerHandle,
-        TariCommsValidatorNodeClientFactory,
+        SqliteStateStore<PeerAddress>,
+        EpochManagerHandle<PeerAddress>,
+        TariValidatorNodeRpcClientFactory,
         SubstateFileCache,
     >,
-    epoch_manager: EpochManagerHandle,
-    payload_processor: TariDanTransactionProcessor<TemplateManager>,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
+    payload_processor: TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
 }
 
 impl DryRunTransactionProcessor {
     pub fn new(
-        epoch_manager: EpochManagerHandle,
-        payload_processor: TariDanTransactionProcessor<TemplateManager>,
+        epoch_manager: EpochManagerHandle<PeerAddress>,
+        payload_processor: TariDanTransactionProcessor<TemplateManager<PeerAddress>>,
         substate_resolver: TariSubstateResolver<
-            SqliteStateStore<PublicKey>,
-            EpochManagerHandle,
-            TariCommsValidatorNodeClientFactory,
+            SqliteStateStore<PeerAddress>,
+            EpochManagerHandle<PeerAddress>,
+            TariValidatorNodeRpcClientFactory,
             SubstateFileCache,
         >,
     ) -> Self {

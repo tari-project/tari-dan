@@ -40,12 +40,12 @@ function Info({
         <Table>
           <TableBody>
             <TableRow>
-              <TableCell>Node id</TableCell>
-              <DataTableCell>{identity.node_id}</DataTableCell>
+              <TableCell>Peer id</TableCell>
+              <DataTableCell>{identity.peer_id}</DataTableCell>
             </TableRow>
             <TableRow>
-              <TableCell>Public address</TableCell>
-              <DataTableCell>{identity.public_address}</DataTableCell>
+              <TableCell>Listen addresses</TableCell>
+              <DataTableCell>{identity.public_addresses?.join(", ")}</DataTableCell>
             </TableRow>
             <TableRow>
               <TableCell>Public key</TableCell>

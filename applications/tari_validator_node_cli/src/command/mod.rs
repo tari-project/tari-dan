@@ -33,13 +33,11 @@ pub use vn::VnSubcommand;
 
 use crate::command::{
     account::AccountsSubcommand,
-    debug::DebugSubcommand,
     manifest::ManifestSubcommand,
     peer::PeersSubcommand,
     transaction::TransactionSubcommand,
 };
 
-mod debug;
 mod manifest;
 
 mod account;
@@ -63,6 +61,4 @@ pub enum Command {
     Manifests(ManifestSubcommand),
     #[clap(subcommand, alias = "peer")]
     Peers(PeersSubcommand),
-    #[clap(subcommand)]
-    Debug(DebugSubcommand),
 }

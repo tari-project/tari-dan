@@ -28,7 +28,7 @@ use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{configuration::CommonConfig, exit_codes::ExitError};
 use tari_comms::{multiaddr::Multiaddr, peer_manager::PeerFeatures, NodeIdentity};
 use tari_comms_dht::{DbConnectionUrl, DhtConfig};
-use tari_p2p::{auto_update::AutoUpdateConfig, Network, PeerSeedsConfig, TransportType};
+use tari_p2p::{auto_update::AutoUpdateConfig, peer_seeds::SeedPeer, Network, PeerSeedsConfig, TransportType};
 use tari_shutdown::Shutdown;
 use tokio::task;
 
@@ -71,6 +71,11 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
     let base_node_name = bn_name.clone();
 
     let shutdown = Shutdown::new();
+    let peer_seeds = world
+        .base_nodes
+        .values()
+        .map(|bn| SeedPeer::new(bn.identity.public_key().clone(), bn.identity.public_addresses()).to_string())
+        .collect::<Vec<_>>();
 
     let handle = task::spawn({
         let shutdown = shutdown.clone();
@@ -79,7 +84,10 @@ pub async fn spawn_base_node(world: &mut TariWorld, bn_name: String) {
                 common: CommonConfig::default(),
                 auto_update: AutoUpdateConfig::default(),
                 base_node: BaseNodeConfig::default(),
-                peer_seeds: PeerSeedsConfig::default(),
+                peer_seeds: PeerSeedsConfig {
+                    peer_seeds: peer_seeds.into(),
+                    ..Default::default()
+                },
                 metrics: MetricsConfig::default(),
             };
 

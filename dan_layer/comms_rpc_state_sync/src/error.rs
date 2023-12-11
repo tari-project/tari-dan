@@ -1,13 +1,13 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_comms::protocol::rpc::RpcError;
 use tari_consensus::hotstuff::HotStuffError;
 use tari_dan_storage::{
     consensus_models::{BlockId, TransactionPoolError},
     StorageError,
 };
 use tari_epoch_manager::EpochManagerError;
+use tari_rpc_framework::RpcError;
 use tari_validator_node_rpc::ValidatorNodeRpcClientError;
 
 #[derive(Debug, thiserror::Error)]

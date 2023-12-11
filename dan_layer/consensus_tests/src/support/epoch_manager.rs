@@ -8,6 +8,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
@@ -55,14 +56,15 @@ impl TestEpochManager {
         self.inner.lock().await
     }
 
-    pub fn clone_for(&self, address: TestAddress, shard_key: ShardId) -> Self {
+    pub fn clone_for(&self, address: TestAddress, public_key: PublicKey, shard_key: ShardId) -> Self {
         let mut copy = self.clone();
         copy.our_validator_node = Some(ValidatorNode {
             address,
+            public_key,
             shard_key,
             epoch: Epoch(0),
             committee_bucket: None,
-            fee_claim_public_key: TestAddress::new("invalid"),
+            fee_claim_public_key: PublicKey::default(),
         });
         copy
     }
@@ -71,11 +73,11 @@ impl TestEpochManager {
         let mut state = self.state_lock().await;
         let num_committees = committees.len() as u32;
         for (bucket, committee) in committees {
-            for address in &committee.members {
-                state.validator_shards.insert(
-                    address.clone(),
-                    (bucket, random_shard_in_bucket(bucket, num_committees)),
-                );
+            for (address, pk) in &committee.members {
+                let shard_id = random_shard_in_bucket(bucket, num_committees);
+                state
+                    .validator_shards
+                    .insert(address.clone(), (bucket, shard_id, pk.clone()));
                 state.address_bucket.insert(address.clone(), bucket);
             }
 
@@ -83,12 +85,12 @@ impl TestEpochManager {
         }
     }
 
-    pub async fn all_validators(&self) -> Vec<(TestAddress, ShardBucket, ShardId)> {
+    pub async fn all_validators(&self) -> Vec<(TestAddress, ShardBucket, ShardId, PublicKey)> {
         self.state_lock()
             .await
             .validator_shards
             .iter()
-            .map(|(a, (bucket, shard))| (a.clone(), *bucket, *shard))
+            .map(|(a, (bucket, shard, pk))| (a.clone(), *bucket, *shard, pk.clone()))
             .collect()
     }
 
@@ -120,14 +122,15 @@ impl EpochManagerReader for TestEpochManager {
         epoch: Epoch,
         addr: &Self::Addr,
     ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
-        let (bucket, shard_key) = self.state_lock().await.validator_shards[addr];
+        let (bucket, shard_key, public_key) = self.state_lock().await.validator_shards[addr].clone();
 
         Ok(ValidatorNode {
             address: addr.clone(),
+            public_key,
             shard_key,
             epoch,
             committee_bucket: Some(bucket),
-            fee_claim_public_key: TestAddress::new("invalid"),
+            fee_claim_public_key: PublicKey::default(),
         })
     }
 
@@ -155,7 +158,7 @@ impl EpochManagerReader for TestEpochManager {
     async fn get_validator_set_merged_merkle_proof(
         &self,
         _epoch: Epoch,
-        _validators: Vec<Self::Addr>,
+        _validators: Vec<PublicKey>,
     ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError> {
         let leaves = vec![];
         let tree = ValidatorNodeBalancedMerkleTree::create(leaves);
@@ -214,11 +217,32 @@ impl EpochManagerReader for TestEpochManager {
         Ok(Committee::new(
             lock.validator_shards
                 .iter()
-                .filter(|(_, (_, s))| range.contains(s))
-                .map(|(a, _)| a)
-                .cloned()
+                .filter(|(_, (_, s, _))| range.contains(s))
+                .map(|(a, (_, _, pk))| (a.clone(), pk.clone()))
                 .collect(),
         ))
+    }
+
+    async fn get_validator_node_by_public_key(
+        &self,
+        epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
+        let lock = self.state_lock().await;
+        let (address, (bucket, shard_key, public_key)) = lock
+            .validator_shards
+            .iter()
+            .find(|(_, (_, _, pk))| pk == public_key)
+            .unwrap();
+
+        Ok(ValidatorNode {
+            address: address.clone(),
+            public_key: public_key.clone(),
+            shard_key: *shard_key,
+            epoch,
+            committee_bucket: Some(*bucket),
+            fee_claim_public_key: PublicKey::default(),
+        })
     }
 }
 
@@ -226,7 +250,7 @@ impl EpochManagerReader for TestEpochManager {
 pub struct TestEpochManagerState {
     pub current_epoch: Epoch,
     pub is_epoch_active: bool,
-    pub validator_shards: HashMap<TestAddress, (ShardBucket, ShardId)>,
+    pub validator_shards: HashMap<TestAddress, (ShardBucket, ShardId, PublicKey)>,
     pub committees: HashMap<ShardBucket, Committee<TestAddress>>,
     pub address_bucket: HashMap<TestAddress, ShardBucket>,
 }

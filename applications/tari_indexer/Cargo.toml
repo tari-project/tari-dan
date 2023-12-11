@@ -11,12 +11,8 @@ edition = "2021"
 minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_logging = { path = "../../comms/tari_comms_logging" }
 tari_crypto = "0.19"
-tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
 tari_bor = { path = "../../dan_layer/tari_bor" }
 tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
@@ -35,6 +31,10 @@ tari_transaction = { path = "../../dan_layer/transaction" }
 tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
 tari_dan_p2p = { path = "../../dan_layer/p2p" }
 
+tari_rpc_framework = { path = "../../networking/rpc_framework" }
+tari_networking = { path = "../../networking/core" }
+libp2p = "0.53.1"
+
 anyhow = "1.0.53"
 async-trait = "0.1"
 axum = "0.6.0"
@@ -48,9 +48,7 @@ diesel = { version = "2", default-features = false, features = [
     "chrono",
 ] }
 diesel_migrations = "2"
-futures = { version = "^0.3.1" }
 include_dir = "0.7.2"
-lmdb-zero = "0.4.4"
 log = { version = "0.4.8", features = ["std"] }
 log4rs = { version = "1.1.1", features = [
     "rolling_file_appender",
@@ -58,7 +56,6 @@ log4rs = { version = "1.1.1", features = [
     "size_trigger",
     "fixed_window_roller",
 ] }
-prost = "0.9"
 reqwest = "0.11.11"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -69,9 +66,6 @@ tokio = { version = "1.10", features = [
     "sync",
     "rt-multi-thread",
 ] }
-tonic = "0.6.2"
-tower = "0.4"
-tower-layer = "0.3"
 tower-http = { version = "0.3.0", features = ["cors"] }
 mime_guess = "2.0.4"
 

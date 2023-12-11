@@ -25,9 +25,9 @@ pub struct ValidatorChannels {
     pub state_store: SqliteStateStore<TestAddress>,
 
     pub tx_new_transactions: mpsc::Sender<TransactionId>,
-    pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage<TestAddress>)>,
-    pub rx_broadcast: mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>,
-    pub rx_leader: mpsc::Receiver<(TestAddress, HotstuffMessage<TestAddress>)>,
+    pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage)>,
+    pub rx_broadcast: mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>,
+    pub rx_leader: mpsc::Receiver<(TestAddress, HotstuffMessage)>,
     pub rx_mempool: mpsc::UnboundedReceiver<Transaction>,
 }
 

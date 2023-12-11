@@ -43,6 +43,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_transaction::{Transaction, TransactionId};
+use tari_utilities::ByteArray;
 use time::PrimitiveDateTime;
 
 use crate::{
@@ -71,7 +72,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
         self.transaction.as_mut().unwrap().connection()
     }
 
-    fn parked_blocks_remove(&mut self, block_id: &str) -> Result<Block<TAddr>, StorageError> {
+    fn parked_blocks_remove(&mut self, block_id: &str) -> Result<Block, StorageError> {
         use crate::schema::parked_blocks;
 
         let block = parked_blocks::table
@@ -98,7 +99,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
         block.try_into()
     }
 
-    fn parked_blocks_insert(&mut self, block: &Block<TAddr>) -> Result<(), StorageError> {
+    fn parked_blocks_insert(&mut self, block: &Block) -> Result<(), StorageError> {
         use crate::schema::{blocks, parked_blocks};
 
         // check if block exists in blocks table using count query
@@ -175,8 +176,8 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn blocks_insert(&mut self, block: &Block<TAddr>) -> Result<(), StorageError> {
-        use crate::schema::{blocks, blocks_foreign_id_mapping};
+    fn blocks_insert(&mut self, block: &Block) -> Result<(), StorageError> {
+        use crate::schema::blocks;
 
         let insert = (
             blocks::block_id.eq(serialize_hex(block.id())),
@@ -200,21 +201,6 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                 operation: "blocks_insert",
                 source: e,
             })?;
-
-        for (bucket, index) in block.get_foreign_indexes() {
-            let insert = (
-                blocks_foreign_id_mapping::foreign_bucket.eq(i64::from(bucket.as_u32())),
-                blocks_foreign_id_mapping::foreign_index.eq(*index as i64),
-                blocks_foreign_id_mapping::block_id.eq(serialize_hex(block.id())),
-            );
-            diesel::insert_into(blocks_foreign_id_mapping::table)
-                .values(insert)
-                .execute(self.connection())
-                .map_err(|e| SqliteStorageError::DieselError {
-                    operation: "blocks_insert",
-                    source: e,
-                })?;
-        }
 
         Ok(())
     }
@@ -256,7 +242,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         IAwaiting: IntoIterator<Item = &'a TransactionId>,
     >(
         &mut self,
-        block: &Block<Self::Addr>,
+        block: &Block,
         missing_transaction_ids: IMissing,
         awaiting_transaction_ids: IAwaiting,
     ) -> Result<(), StorageError> {
@@ -309,7 +295,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         &mut self,
         current_height: NodeHeight,
         transaction_id: &TransactionId,
-    ) -> Result<Option<Block<TAddr>>, StorageError> {
+    ) -> Result<Option<Block>, StorageError> {
         use crate::schema::{missing_transactions, transactions};
 
         // delete all entries that are for previous heights
@@ -385,7 +371,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(None)
     }
 
-    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError> {
+    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError> {
         use crate::schema::quorum_certificates;
 
         let insert = (
@@ -405,7 +391,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn last_sent_vote_set(&mut self, last_sent_vote: &LastSentVote<Self::Addr>) -> Result<(), StorageError> {
+    fn last_sent_vote_set(&mut self, last_sent_vote: &LastSentVote) -> Result<(), StorageError> {
         use crate::schema::last_sent_vote;
 
         let insert = (
@@ -1006,7 +992,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn votes_insert(&mut self, vote: &Vote<Self::Addr>) -> Result<(), StorageError> {
+    fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError> {
         use crate::schema::votes;
 
         let insert = (

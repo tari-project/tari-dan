@@ -4,13 +4,13 @@
 use std::collections::HashSet;
 
 use log::*;
-use tari_comms::protocol::rpc::RpcStatus;
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, LeafBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
     StateStore,
     StateStoreReadTransaction,
     StorageError,
 };
+use tari_rpc_framework::RpcStatus;
 use tari_validator_node_rpc::proto::rpc::{
     sync_blocks_response::SyncData,
     QuorumCertificates,
@@ -23,24 +23,24 @@ const LOG_TARGET: &str = "tari::dan::rpc::sync_task";
 
 const BLOCK_BUFFER_SIZE: usize = 15;
 
-type BlockData<TAddr> = (
-    Block<TAddr>,
-    Vec<QuorumCertificate<TAddr>>,
-    Vec<SubstateUpdate<TAddr>>,
+type BlockData = (
+    Block,
+    Vec<QuorumCertificate>,
+    Vec<SubstateUpdate>,
     Vec<TransactionRecord>,
 );
-type BlockBuffer<TAddr> = Vec<BlockData<TAddr>>;
+type BlockBuffer = Vec<BlockData>;
 
 pub struct BlockSyncTask<TStateStore: StateStore> {
     store: TStateStore,
-    start_block: Block<TStateStore::Addr>,
+    start_block: Block,
     sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
 }
 
 impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
     pub fn new(
         store: TStateStore,
-        start_block: Block<TStateStore::Addr>,
+        start_block: Block,
         sender: mpsc::Sender<Result<SyncBlocksResponse, RpcStatus>>,
     ) -> Self {
         Self {
@@ -106,11 +106,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         Ok(())
     }
 
-    fn fetch_next_batch(
-        &self,
-        buffer: &mut BlockBuffer<TStateStore::Addr>,
-        current_block_id: &BlockId,
-    ) -> Result<BlockId, StorageError> {
+    fn fetch_next_batch(&self, buffer: &mut BlockBuffer, current_block_id: &BlockId) -> Result<BlockId, StorageError> {
         self.store.with_read_tx(|tx| {
             let mut current_block_id = *current_block_id;
             loop {
@@ -138,11 +134,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         })
     }
 
-    fn fetch_last_blocks(
-        &self,
-        buffer: &mut BlockBuffer<TStateStore::Addr>,
-        current_block_id: &BlockId,
-    ) -> Result<(), StorageError> {
+    fn fetch_last_blocks(&self, buffer: &mut BlockBuffer, current_block_id: &BlockId) -> Result<(), StorageError> {
         self.store.with_read_tx(|tx| {
             // TODO: if there are any transactions this will break the syncing node.
             let leaf_block = LeafBlock::get(tx)?;
@@ -181,10 +173,7 @@ impl<TStateStore: StateStore> BlockSyncTask<TStateStore> {
         Ok(())
     }
 
-    async fn send_block_data(
-        &mut self,
-        (block, qcs, updates, transactions): BlockData<TStateStore::Addr>,
-    ) -> Result<(), ()> {
+    async fn send_block_data(&mut self, (block, qcs, updates, transactions): BlockData) -> Result<(), ()> {
         self.send(Ok(SyncBlocksResponse {
             sync_data: Some(SyncData::Block((&block).into())),
         }))

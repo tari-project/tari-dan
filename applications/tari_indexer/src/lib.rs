@@ -27,14 +27,12 @@ extern crate diesel_migrations;
 
 mod bootstrap;
 pub mod cli;
-mod comms;
 pub mod config;
 mod dry_run;
 pub mod graphql;
 mod http_ui;
 
 mod json_rpc;
-mod p2p;
 mod substate_manager;
 mod substate_storage_sqlite;
 mod transaction_manager;
@@ -43,15 +41,17 @@ use std::{fs, sync::Arc};
 
 use http_ui::server::run_http_ui_server;
 use log::*;
-use minotari_app_utilities::identity_management::setup_node_identity;
 use substate_manager::SubstateManager;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_comms::peer_manager::PeerFeatures;
-use tari_dan_app_utilities::{consensus_constants::ConsensusConstants, substate_file_cache::SubstateFileCache};
+use tari_dan_app_utilities::{
+    consensus_constants::ConsensusConstants,
+    keypair::setup_keypair_prompt,
+    substate_file_cache::SubstateFileCache,
+};
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_indexer_lib::substate_scanner::SubstateScanner;
@@ -68,15 +68,9 @@ use crate::{
 };
 
 const LOG_TARGET: &str = "tari::indexer::app";
-pub const DAN_PEER_FEATURES: PeerFeatures = PeerFeatures::COMMUNICATION_NODE;
 
 pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
-    let node_identity = setup_node_identity(
-        &config.indexer.identity_file,
-        config.indexer.p2p.public_addresses.to_vec(),
-        true,
-        DAN_PEER_FEATURES,
-    )?;
+    let keypair = setup_keypair_prompt(&config.indexer.identity_file, true)?;
 
     let db_factory = SqliteDbFactory::new(config.indexer.data_dir.clone());
     db_factory
@@ -90,7 +84,7 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let services: Services = spawn_services(
         &config,
         shutdown_signal.clone(),
-        node_identity.clone(),
+        keypair.clone(),
         global_db,
         ConsensusConstants::devnet(), // TODO: change this eventually
     )

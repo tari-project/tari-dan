@@ -27,16 +27,16 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::inbound_messages";
 
-pub type IncomingMessageResult<TAddr> = Result<Option<(TAddr, HotstuffMessage<TAddr>)>, NeedsSync<TAddr>>;
+pub type IncomingMessageResult<TAddr> = Result<Option<(TAddr, HotstuffMessage)>, NeedsSync<TAddr>>;
 
 pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     pacemaker: PaceMakerHandle,
-    rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
-    tx_outbound_message: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
-    tx_msg_ready: mpsc::UnboundedSender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+    rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+    tx_outbound_message: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    tx_msg_ready: mpsc::UnboundedSender<(TConsensusSpec::Addr, HotstuffMessage)>,
     rx_new_transactions: mpsc::Receiver<TransactionId>,
     message_buffer: MessageBuffer<TConsensusSpec::Addr>,
     shutdown: ShutdownSignal,
@@ -50,8 +50,8 @@ where TConsensusSpec: ConsensusSpec
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         pacemaker: PaceMakerHandle,
-        rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
-        tx_outbound_message: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+        rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
+        tx_outbound_message: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         rx_new_transactions: mpsc::Receiver<TransactionId>,
         shutdown: ShutdownSignal,
     ) -> Self {
@@ -116,7 +116,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         current_height: NodeHeight,
         from: TConsensusSpec::Addr,
-        msg: HotstuffMessage<TConsensusSpec::Addr>,
+        msg: HotstuffMessage,
     ) -> Result<(), HotStuffError> {
         match msg {
             HotstuffMessage::Proposal(msg) => {
@@ -135,7 +135,7 @@ where TConsensusSpec: ConsensusSpec
     async fn process_proposal(
         &self,
         current_height: NodeHeight,
-        proposal: ProposalMessage<TConsensusSpec::Addr>,
+        proposal: ProposalMessage,
     ) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = proposal;
 
@@ -160,7 +160,7 @@ where TConsensusSpec: ConsensusSpec
         check_hash_and_height(&block)?;
         let committee_for_block = self
             .epoch_manager
-            .get_committee_by_validator_address(block.epoch(), block.proposed_by())
+            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
         check_proposed_by_leader(&self.leader_strategy, &committee_for_block, &block)?;
         check_quorum_certificate(&committee_for_block, &block)?;
@@ -170,7 +170,12 @@ where TConsensusSpec: ConsensusSpec
             return Ok(());
         };
 
-        self.send_ready_block(ready_block)?;
+        let vn = self
+            .epoch_manager
+            .get_validator_node_by_public_key(ready_block.epoch(), ready_block.proposed_by())
+            .await?;
+
+        self.send_ready_block(vn.address, ready_block)?;
 
         Ok(())
     }
@@ -191,16 +196,19 @@ where TConsensusSpec: ConsensusSpec
 
         if let Some(unparked_block) = maybe_unparked_block {
             info!(target: LOG_TARGET, "♻️ all transactions for block {unparked_block} have been executed");
-            self.send_ready_block(unparked_block)?;
+
+            let vn = self
+                .epoch_manager
+                .get_validator_node_by_public_key(unparked_block.epoch(), unparked_block.proposed_by())
+                .await?;
+
+            self.send_ready_block(vn.address, unparked_block)?;
         }
         self.pacemaker.beat();
         Ok(())
     }
 
-    async fn handle_missing_transactions(
-        &self,
-        block: Block<TConsensusSpec::Addr>,
-    ) -> Result<Option<Block<TConsensusSpec::Addr>>, HotStuffError> {
+    async fn handle_missing_transactions(&self, block: Block) -> Result<Option<Block>, HotStuffError> {
         let (missing_tx_ids, awaiting_execution) = self
             .store
             .with_write_tx(|tx| self.check_for_missing_transactions(tx, &block))?;
@@ -215,9 +223,14 @@ where TConsensusSpec: ConsensusSpec
             let epoch = block.epoch();
             let block_proposed_by = block.proposed_by().clone();
 
+            let vn = self
+                .epoch_manager
+                .get_validator_node_by_public_key(epoch, &block_proposed_by)
+                .await?;
+
             if !missing_tx_ids.is_empty() {
                 self.send_message(
-                    &block_proposed_by,
+                    &vn.address,
                     HotstuffMessage::RequestMissingTransactions(RequestMissingTransactionsMessage {
                         block_id,
                         epoch,
@@ -236,7 +249,7 @@ where TConsensusSpec: ConsensusSpec
     fn check_for_missing_transactions(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block<TConsensusSpec::Addr>,
+        block: &Block,
     ) -> Result<(HashSet<TransactionId>, HashSet<TransactionId>), HotStuffError> {
         if block.commands().is_empty() {
             return Ok((HashSet::new(), HashSet::new()));
@@ -266,7 +279,7 @@ where TConsensusSpec: ConsensusSpec
         Ok((missing_tx_ids, awaiting_execution))
     }
 
-    async fn send_message(&self, to: &TConsensusSpec::Addr, message: HotstuffMessage<TConsensusSpec::Addr>) {
+    async fn send_message(&self, to: &TConsensusSpec::Addr, message: HotstuffMessage) {
         if self.tx_outbound_message.send((to.clone(), message)).await.is_err() {
             debug!(
                 target: LOG_TARGET,
@@ -275,12 +288,9 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    fn send_ready_block(&self, block: Block<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+    fn send_ready_block(&self, dest_addr: TConsensusSpec::Addr, block: Block) -> Result<(), HotStuffError> {
         self.tx_msg_ready
-            .send((
-                block.proposed_by().clone(),
-                HotstuffMessage::Proposal(ProposalMessage { block }),
-            ))
+            .send((dest_addr, HotstuffMessage::Proposal(ProposalMessage { block })))
             .map_err(|_| HotStuffError::InternalChannelClosed {
                 context: "tx_msg_ready in InboundMessageWorker::process_proposal",
             })
@@ -288,12 +298,12 @@ where TConsensusSpec: ConsensusSpec
 }
 
 struct MessageBuffer<TAddr> {
-    buffer: BTreeMap<NodeHeight, VecDeque<(TAddr, HotstuffMessage<TAddr>)>>,
-    rx_msg_ready: mpsc::UnboundedReceiver<(TAddr, HotstuffMessage<TAddr>)>,
+    buffer: BTreeMap<NodeHeight, VecDeque<(TAddr, HotstuffMessage)>>,
+    rx_msg_ready: mpsc::UnboundedReceiver<(TAddr, HotstuffMessage)>,
 }
 
 impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
-    pub fn new(rx_msg_ready: mpsc::UnboundedReceiver<(TAddr, HotstuffMessage<TAddr>)>) -> Self {
+    pub fn new(rx_msg_ready: mpsc::UnboundedReceiver<(TAddr, HotstuffMessage)>) -> Self {
         Self {
             buffer: BTreeMap::new(),
             rx_msg_ready,
@@ -344,7 +354,7 @@ impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
     async fn next_message_or_sync(
         &mut self,
         current_height: NodeHeight,
-    ) -> Result<Option<(TAddr, HotstuffMessage<TAddr>)>, NeedsSync<TAddr>> {
+    ) -> Result<Option<(TAddr, HotstuffMessage)>, NeedsSync<TAddr>> {
         loop {
             // Don't really like this but because we can receive proposals out of order, we need to wait a bit to see
             // if we get a proposal at our height without switching to sync.
@@ -372,7 +382,7 @@ impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
         }
     }
 
-    fn push_to_buffer(&mut self, height: NodeHeight, from: TAddr, msg: HotstuffMessage<TAddr>) {
+    fn push_to_buffer(&mut self, height: NodeHeight, from: TAddr, msg: HotstuffMessage) {
         self.buffer.entry(height).or_default().push_back((from, msg));
     }
 }
@@ -385,7 +395,7 @@ pub struct NeedsSync<TAddr: NodeAddressable> {
     pub qc_height: NodeHeight,
 }
 
-fn msg_height<TAddr>(msg: &HotstuffMessage<TAddr>) -> Option<NodeHeight> {
+fn msg_height(msg: &HotstuffMessage) -> Option<NodeHeight> {
     match msg {
         HotstuffMessage::Proposal(msg) => Some(msg.block.height()),
         // Votes for block 2, occur at current height 3

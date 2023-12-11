@@ -37,9 +37,9 @@ use minotari_app_grpc::tari_rpc::{
 };
 use minotari_wallet_grpc_client::Client as GrpcWallet;
 use tari_common_types::types::PublicKey;
-use tari_comms::NodeIdentity;
 use tari_core::transactions::transaction_components::ValidatorNodeSignature;
 use tari_crypto::tari_utilities::ByteArray;
+use tari_dan_app_utilities::keypair::RistrettoKeypair;
 use tari_validator_node_client::types::TemplateRegistrationRequest;
 
 use crate::{grpc::base_layer_wallet::WalletGrpcError, template_registration_signing::sign_template_registration};
@@ -78,13 +78,13 @@ impl GrpcWalletClient {
 
     pub async fn register_validator_node(
         &mut self,
-        node_identity: &NodeIdentity,
+        keypair: &RistrettoKeypair,
         fee_claim_public_key: &PublicKey,
     ) -> Result<RegisterValidatorNodeResponse, WalletGrpcError> {
         let inner = self.connection().await?;
-        let signature = ValidatorNodeSignature::sign(node_identity.secret_key(), fee_claim_public_key, b"");
+        let signature = ValidatorNodeSignature::sign(keypair.secret_key(), fee_claim_public_key, b"");
         let request = RegisterValidatorNodeRequest {
-            validator_node_public_key: node_identity.public_key().to_vec(),
+            validator_node_public_key: keypair.public_key().to_vec(),
             validator_node_signature: Some(signature.signature().into()),
             validator_node_claim_public_key: fee_claim_public_key.to_vec(),
             fee_per_gram: 1,
@@ -101,14 +101,14 @@ impl GrpcWalletClient {
 
     pub async fn register_template(
         &mut self,
-        node_identity: &NodeIdentity,
+        keypair: &RistrettoKeypair,
         data: TemplateRegistrationRequest,
     ) -> Result<CreateTemplateRegistrationResponse, WalletGrpcError> {
         let inner = self.connection().await?;
-        let signature = sign_template_registration(node_identity.secret_key(), data.binary_sha.to_vec());
+        let signature = sign_template_registration(keypair.secret_key(), data.binary_sha.to_vec());
         let request = CreateTemplateRegistrationRequest {
             template_registration: Some(TemplateRegistration {
-                author_public_key: node_identity.public_key().to_vec(),
+                author_public_key: keypair.public_key().to_vec(),
                 author_signature: Some(signature.into()),
                 template_name: data.template_name,
                 template_version: data.template_version.into(),

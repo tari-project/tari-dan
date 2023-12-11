@@ -99,7 +99,7 @@ async fn handle_get_fee_info(args: GetFeesArgs, client: &mut ValidatorNodeClient
 
     for fee in resp.fees {
         table.add_row(table_row!(
-            fee.validator_addr,
+            fee.validator_public_key,
             fee.epoch,
             fee.block_id,
             fee.total_fee_due,

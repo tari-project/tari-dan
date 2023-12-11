@@ -28,21 +28,21 @@ use crate::Message;
 #[async_trait]
 pub trait OutboundService {
     type Error;
-    type Addr: NodeAddressable + Send + 'static;
+    type Addr: NodeAddressable + Send;
 
-    async fn send_self<T: Into<Message<Self::Addr>> + Send>(&mut self, message: T) -> Result<(), Self::Error>;
+    async fn send_self<T: Into<Message> + Send>(&mut self, message: T) -> Result<(), Self::Error>;
 
-    async fn send<T: Into<Message<Self::Addr>> + Send>(
+    async fn send<T: Into<Message> + Send>(&mut self, to: Self::Addr, message: T) -> Result<(), Self::Error>;
+
+    async fn broadcast<'a, I, T>(&mut self, committee: I, message: T) -> Result<(), Self::Error>
+    where
+        Self::Addr: 'a,
+        I: IntoIterator<Item = &'a Self::Addr> + Send,
+        T: Into<Message> + Send;
+
+    async fn publish_gossip<TTopic: Into<String> + Send, TMsg: Into<Message> + Send>(
         &mut self,
-        to: Self::Addr,
-        message: T,
+        topic: TTopic,
+        message: TMsg,
     ) -> Result<(), Self::Error>;
-
-    async fn broadcast<'a, I: IntoIterator<Item = &'a Self::Addr> + Send, T: Into<Message<Self::Addr>> + Send>(
-        &mut self,
-        committee: I,
-        message: T,
-    ) -> Result<(), Self::Error>;
-
-    async fn flood<T: Into<Message<Self::Addr>> + Send>(&mut self, message: T) -> Result<(), Self::Error>;
 }

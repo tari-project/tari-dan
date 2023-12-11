@@ -22,13 +22,13 @@ pub(super) const MAX_BLOCKS_PER_SYNC: usize = 100;
 #[derive(Debug)]
 pub struct OnSyncRequest<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
 }
 
 impl<TConsensusSpec: ConsensusSpec> OnSyncRequest<TConsensusSpec> {
     pub fn new(
         store: TConsensusSpec::StateStore,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     ) -> Self {
         Self { store, tx_leader }
     }

@@ -40,6 +40,8 @@ pub enum HotStuffError {
     StateManagerError(anyhow::Error),
     #[error("Invalid vote signature from {signer_public_key} (unauthenticated)")]
     InvalidVoteSignature { signer_public_key: String },
+    #[error("Vote sent from peer {address} did not match the expected signer public key {signer_public_key}")]
+    RejectingVoteNotSentBySigner { address: String, signer_public_key: String },
     #[error("Transaction pool error: {0}")]
     TransactionPoolError(#[from] TransactionPoolError),
     #[error("Transaction {transaction_id} does not exist")]
@@ -146,6 +148,4 @@ pub enum ProposalValidationError {
     },
     #[error("Proposed block {block_id} {height} already has been processed")]
     BlockAlreadyProcessed { block_id: BlockId, height: NodeHeight },
-    #[error("Internal channel send error when {context}")]
-    InternalChannelClosed { context: &'static str },
 }

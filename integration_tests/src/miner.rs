@@ -28,13 +28,10 @@ use minotari_app_grpc::{
         pow_algo::PowAlgos,
         wallet_client::WalletClient,
         GetCoinbaseRequest,
-        GetCoinbaseResponse,
         NewBlockTemplate,
         NewBlockTemplateRequest,
         NewBlockTemplateResponse,
         PowAlgo,
-        TransactionKernel,
-        TransactionOutput,
     },
 };
 use minotari_node_grpc_client::BaseNodeGrpcClient;
@@ -120,44 +117,35 @@ async fn create_block_template_with_coinbase(
         .unwrap()
         .into_inner();
 
-    let mut block_template = template_res.new_block_template.clone().unwrap();
+    let NewBlockTemplateResponse {
+        new_block_template: Some(mut template),
+        miner_data: Some(miner_data),
+        ..
+    } = template_res
+    else {
+        panic!("Failed to get block template");
+    };
+
+    let height = template.header.as_ref().unwrap().height;
+    let coinbase_res = wallet_client
+        .get_coinbase(GetCoinbaseRequest {
+            reward: miner_data.reward,
+            fee: miner_data.total_fees,
+            height,
+            extra: vec![],
+        })
+        .await
+        .unwrap()
+        .into_inner();
+
+    let mut transaction_body = coinbase_res.transaction.unwrap().body.unwrap();
+    let tx_out = transaction_body.outputs.remove(0);
+    let tx_kernel = transaction_body.kernels.remove(0);
 
     // add the coinbase outputs and kernels to the block template
-    let (output, kernel) = get_coinbase_outputs_and_kernels(wallet_client, template_res).await;
-    let body = block_template.body.as_mut().unwrap();
-    body.outputs.push(output);
-    body.kernels.push(kernel);
+    let body = template.body.as_mut().unwrap();
+    body.outputs.push(tx_out);
+    body.kernels.push(tx_kernel);
 
-    block_template
-}
-
-async fn get_coinbase_outputs_and_kernels(
-    wallet_client: &mut WalletGrpcClient,
-    template_res: NewBlockTemplateResponse,
-) -> (TransactionOutput, TransactionKernel) {
-    let coinbase_req = coinbase_request(&template_res);
-    let coinbase_res = wallet_client.get_coinbase(coinbase_req).await.unwrap().into_inner();
-    extract_outputs_and_kernels(coinbase_res)
-}
-
-fn coinbase_request(template_response: &NewBlockTemplateResponse) -> GetCoinbaseRequest {
-    let template = template_response.new_block_template.as_ref().unwrap();
-    let miner_data = template_response.miner_data.as_ref().unwrap();
-    let fee = miner_data.total_fees;
-    let reward = miner_data.reward;
-    let height = template.header.as_ref().unwrap().height;
-    let extra = vec![];
-    GetCoinbaseRequest {
-        reward,
-        fee,
-        height,
-        extra,
-    }
-}
-
-fn extract_outputs_and_kernels(coinbase: GetCoinbaseResponse) -> (TransactionOutput, TransactionKernel) {
-    let transaction_body = coinbase.transaction.unwrap().body.unwrap();
-    let output = transaction_body.outputs.get(0).cloned().unwrap();
-    let kernel = transaction_body.kernels.get(0).cloned().unwrap();
-    (output, kernel)
+    template
 }

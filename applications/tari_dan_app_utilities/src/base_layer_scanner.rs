@@ -29,7 +29,7 @@ use tari_base_node_client::{
     BaseNodeClient,
     BaseNodeClientError,
 };
-use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError, PublicKey};
+use tari_common_types::types::{Commitment, FixedHash, FixedHashSizeError};
 use tari_core::transactions::transaction_components::{
     CodeTemplateRegistration,
     SideChainFeature,
@@ -37,7 +37,7 @@ use tari_core::transactions::transaction_components::{
     ValidatorNodeRegistration,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, SubstateRecord},
     global::{GlobalDb, MetadataKey},
@@ -62,14 +62,14 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::base_layer_scanner";
 
-pub fn spawn(
-    global_db: GlobalDb<SqliteGlobalDbAdapter>,
+pub fn spawn<TAddr: NodeAddressable + 'static>(
+    global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     base_node_client: GrpcBaseNodeClient,
-    epoch_manager: EpochManagerHandle,
+    epoch_manager: EpochManagerHandle<TAddr>,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
     consensus_constants: ConsensusConstants,
-    shard_store: SqliteStateStore<PublicKey>,
+    shard_store: SqliteStateStore<TAddr>,
     scan_base_layer: bool,
     base_layer_scanning_interval: Duration,
 ) -> JoinHandle<anyhow::Result<()>> {
@@ -91,32 +91,32 @@ pub fn spawn(
     })
 }
 
-pub struct BaseLayerScanner {
-    global_db: GlobalDb<SqliteGlobalDbAdapter>,
+pub struct BaseLayerScanner<TAddr> {
+    global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
     last_scanned_height: u64,
     last_scanned_tip: Option<FixedHash>,
     last_scanned_hash: Option<FixedHash>,
     next_block_hash: Option<FixedHash>,
     base_node_client: GrpcBaseNodeClient,
-    epoch_manager: EpochManagerHandle,
+    epoch_manager: EpochManagerHandle<TAddr>,
     template_manager: TemplateManagerHandle,
     shutdown: ShutdownSignal,
     consensus_constants: ConsensusConstants,
-    state_store: SqliteStateStore<PublicKey>,
+    state_store: SqliteStateStore<TAddr>,
     scan_base_layer: bool,
     base_layer_scanning_interval: Duration,
     has_attempted_scan: bool,
 }
 
-impl BaseLayerScanner {
+impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
     pub fn new(
-        global_db: GlobalDb<SqliteGlobalDbAdapter>,
+        global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
         base_node_client: GrpcBaseNodeClient,
-        epoch_manager: EpochManagerHandle,
+        epoch_manager: EpochManagerHandle<TAddr>,
         template_manager: TemplateManagerHandle,
         shutdown: ShutdownSignal,
         consensus_constants: ConsensusConstants,
-        state_store: SqliteStateStore<PublicKey>,
+        state_store: SqliteStateStore<TAddr>,
         scan_base_layer: bool,
         base_layer_scanning_interval: Duration,
     ) -> Self {
@@ -374,7 +374,7 @@ impl BaseLayerScanner {
         });
         self.state_store
             .with_write_tx(|tx| {
-                let genesis = Block::<PublicKey>::genesis();
+                let genesis = Block::genesis();
 
                 // TODO: This should be proposed in a block...
                 SubstateRecord {

@@ -230,10 +230,10 @@ where
         let f = (committee.members.len() - 1) / 3;
         let mut num_nexist_substate_results = 0;
         let mut last_error = None;
-        for vn_public_key in &committee.members {
+        for vn_addr in committee.addresses() {
             // TODO: we cannot request data from ourselves via p2p rpc - so we should exclude ourselves from requests
 
-            match self.get_substate_from_vn(vn_public_key, shard).await {
+            match self.get_substate_from_vn(vn_addr, shard).await {
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up { .. } | SubstateResult::Down { .. } => return Ok(substate_result),
                     SubstateResult::DoesNotExist => {
@@ -247,7 +247,7 @@ where
                     // We ignore a single VN error and keep querying the rest of the committee
                     error!(
                         target: LOG_TARGET,
-                        "Could not get substate {} from vn {}: {}", shard, vn_public_key, e
+                        "Could not get substate {} from vn {}: {}", shard, vn_addr, e
                     );
                     last_error = Some(e);
                 },
@@ -276,10 +276,10 @@ where
         committee.shuffle();
 
         let mut last_error = None;
-        for vn_public_key in &committee.members {
+        for vn_addr in committee.addresses() {
             // TODO: we cannot request data from ourselves via p2p rpc - so we should exclude ourselves from requests
             // Gets a substate directly from querying a VN
-            let mut client = self.validator_node_client_factory.create_client(vn_public_key);
+            let mut client = self.validator_node_client_factory.create_client(vn_addr);
             let result = client.get_virtual_substate(address.clone()).await;
 
             match result {
@@ -304,13 +304,9 @@ where
     }
 
     /// Gets a substate directly from querying a VN
-    async fn get_substate_from_vn(
-        &self,
-        vn_public_key: &TAddr,
-        shard: ShardId,
-    ) -> Result<SubstateResult, IndexerError> {
+    async fn get_substate_from_vn(&self, vn_addr: &TAddr, shard: ShardId) -> Result<SubstateResult, IndexerError> {
         // build a client with the VN
-        let mut client = self.validator_node_client_factory.create_client(vn_public_key);
+        let mut client = self.validator_node_client_factory.create_client(vn_addr);
         let result = client
             .get_substate(shard)
             .await
@@ -350,7 +346,7 @@ where
         committee.members.shuffle(&mut OsRng);
 
         let mut transaction_hash = None;
-        for member in &committee.members {
+        for member in committee.addresses() {
             match self.get_substate_from_vn(member, shard_id).await {
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up {

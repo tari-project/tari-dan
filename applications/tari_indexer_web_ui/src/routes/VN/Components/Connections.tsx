@@ -22,7 +22,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { addPeer, getConnections } from '../../../utils/json_rpc';
-import { toHexString } from './helpers';
+import {shortenString, toHexString} from './helpers';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -38,13 +38,21 @@ import Button from '@mui/material/Button';
 import { TextField } from '@mui/material';
 import { Form } from 'react-router-dom';
 import Fade from '@mui/material/Fade';
+import CopyToClipboard from "../../../Components/CopyToClipboard";
 
 interface IConnection {
+  connection_id: number;
   address: string;
-  age: number;
+  age: Duration;
   direction: boolean;
-  node_id: number[];
-  public_key: string;
+  peer_id: string;
+  ping_latency: Duration | null;
+  // public_key: string;
+}
+
+interface Duration {
+  secs: number;
+  nanos: number;
 }
 
 const useInterval = (fn: () => Promise<unknown>, ms: number) => {
@@ -76,7 +84,9 @@ function Connections() {
   };
 
   const onSubmitAddPeer = async () => {
-    await addPeer(formState.publicKey, [formState.address]);
+    await addPeer(formState.publicKey,
+        formState.address ? [formState.address] : [],
+    );
     setFormState({ publicKey: '', address: '' });
     setShowAddPeerDialog(false);
   };
@@ -139,31 +149,64 @@ function Connections() {
       <Table>
         <TableHead>
           <TableRow>
+            <TableCell>Peer id</TableCell>
             <TableCell>Address</TableCell>
             <TableCell>Age</TableCell>
             <TableCell>Direction</TableCell>
-            <TableCell>Node id</TableCell>
-            <TableCell>Public key</TableCell>
+            <TableCell>Latency</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {connections.map(
-            ({ address, age, direction, node_id, public_key }) => (
-              <TableRow key={public_key}>
-                <DataTableCell>{address}</DataTableCell>
-                <DataTableCell>{age}</DataTableCell>
-                <DataTableCell>
-                  {direction ? 'Inbound' : 'Outbound'}
-                </DataTableCell>
-                <DataTableCell>{toHexString(node_id)}</DataTableCell>
-                <DataTableCell>{public_key}</DataTableCell>
-              </TableRow>
-            )
-          )}
+          {connections &&
+              connections.map(
+                  ({
+                     connection_id,
+                     address,
+                     age,
+                     direction,
+                     peer_id,
+                     ping_latency,
+                   }) => (
+                      <TableRow key={connection_id}>
+                        <DataTableCell>
+                          {peer_id ? shortenString(peer_id) : "--"}
+                          <CopyToClipboard copy={peer_id} />
+                        </DataTableCell>
+                        <DataTableCell>{address}</DataTableCell>
+                        <DataTableCell>{displayDuration(age)}</DataTableCell>
+                        <DataTableCell>{direction}</DataTableCell>
+                        <DataTableCell>
+                          {ping_latency ? displayDuration(ping_latency) : "--"}
+                        </DataTableCell>
+                      </TableRow>
+                  ),
+              )}
         </TableBody>
       </Table>
     </TableContainer>
   );
 }
 
+function displayDuration(duration: Duration) {
+  if (duration.secs === 0) {
+    if (duration.nanos > 1000000) {
+      return `${(duration.nanos / 1000000).toFixed(2)}ms`;
+    }
+    if (duration.nanos > 1000) {
+      return `${(duration.nanos / 1000).toFixed(2)}µs`;
+    }
+    return `${duration.nanos / 1000}ns`;
+  }
+  if (duration.secs > 60 * 60) {
+    return `${(duration.secs / 60 / 60).toFixed(0)}h${(
+        duration.secs / 60
+    ).toFixed(0)}m`;
+  }
+  if (duration.secs > 60) {
+    return `${(duration.secs / 60).toFixed(0)}m${(duration.secs % 60).toFixed(
+        0,
+    )}s`;
+  }
+  return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0)}s`;
+}
 export default Connections;

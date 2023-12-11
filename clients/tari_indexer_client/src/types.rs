@@ -1,6 +1,8 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use std::time::Duration;
+
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -87,7 +89,7 @@ pub enum IndexerTransactionFinalizedResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetIdentityResponse {
-    pub node_id: String,
+    pub peer_id: String,
     pub public_key: PublicKey,
     pub public_addresses: Vec<Multiaddr>,
 }
@@ -163,4 +165,25 @@ pub struct AddPeerResponse {}
 pub struct GetEpochManagerStatsResponse {
     pub current_epoch: Epoch,
     pub current_block_height: u64,
+}
+
+#[derive(Serialize, Debug)]
+pub struct Connection {
+    pub connection_id: String,
+    pub peer_id: String,
+    pub address: Multiaddr,
+    pub direction: ConnectionDirection,
+    pub age: Duration,
+    pub ping_latency: Option<Duration>,
+}
+
+#[derive(Serialize, Debug)]
+pub enum ConnectionDirection {
+    Inbound,
+    Outbound,
+}
+
+#[derive(Serialize, Debug)]
+pub struct GetConnectionsResponse {
+    pub connections: Vec<Connection>,
 }
