@@ -18,10 +18,11 @@ use tari_dan_storage::{
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::mpsc;
 
+use super::common::CommitteeAndMessage;
 use crate::{
     hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle, ProposalValidationError},
     messages::{HotstuffMessage, ProposalMessage, RequestMissingForeignBlocksMessage},
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, LeaderStrategy},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_foreign_proposal";
@@ -32,6 +33,8 @@ pub struct OnReceiveForeignProposalHandler<TConsensusSpec: ConsensusSpec> {
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     pacemaker: PaceMakerHandle,
     foreign_receive_counter: ForeignReceiveCounters,
+    leader_strategy: TConsensusSpec::LeaderStrategy,
+    tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
     tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
 }
 
@@ -44,6 +47,8 @@ where TConsensusSpec: ConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         pacemaker: PaceMakerHandle,
         foreign_receive_counter: ForeignReceiveCounters,
+        leader_strategy: TConsensusSpec::LeaderStrategy,
+        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
     ) -> Self {
         Self {
@@ -52,6 +57,8 @@ where TConsensusSpec: ConsensusSpec
             transaction_pool,
             pacemaker,
             foreign_receive_counter,
+            leader_strategy,
+            tx_broadcast,
             tx_leader,
         }
     }
@@ -72,22 +79,78 @@ where TConsensusSpec: ConsensusSpec
             from,
         );
 
-        let vn = self.epoch_manager.get_validator_node(block.epoch(), &from).await?;
+        let our_vn = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
+        let foreign_vn = self
+            .epoch_manager
+            .get_validator_node(block.epoch(), block.proposed_by())
+            .await?;
         let committee_shard = self
             .epoch_manager
-            .get_committee_shard(block.epoch(), vn.shard_key)
+            .get_committee_shard(block.epoch(), foreign_vn.shard_key)
             .await?;
         let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-        self.validate_proposed_block(&from, &block, committee_shard.bucket(), local_shard.bucket())
-            .await?;
+        let foreign_proposal = ForeignProposal::new(committee_shard.bucket(), *block.id());
+        if self
+            .store
+            .with_read_tx(|tx| ForeignProposal::exists(tx, &foreign_proposal))?
+        {
+            // We already seen this block. And the block we saw was valid.
+            return Ok(());
+        }
+        self.validate_proposed_block(
+            block.proposed_by(),
+            &block,
+            committee_shard.bucket(),
+            local_shard.bucket(),
+        )
+        .await?;
         // Is this ok? Can foreign node send invalid block that should still increment the counter?
         self.foreign_receive_counter.increment(&committee_shard.bucket());
         self.store.with_write_tx(|tx| {
             self.foreign_receive_counter.save(tx)?;
-            ForeignProposal::new(committee_shard.bucket(), *block.id()).upsert(tx)?;
+            foreign_proposal.upsert(tx)?;
             self.on_receive_foreign_block(tx, &block, &committee_shard)
         })?;
 
+        // If we received the foreign proposal, we send it to the leader (if we are not the leader), the leader then
+        // redistributes the block to all other nodes. This way if the leader is not faulty O(n) messages will be send
+        // around. If the leader doesn't have the message it will take 2 delta (if the delta time is the maximum latency
+        // between any two nodes) to have it everywhere. If the leader has the message already it will be just 1 delta.
+        // Worst case scenario is when we have f faulty nodes, and 2f honest nodes have the message and 1 node doesnt,
+        // but he is the (f+1)th leader. In this case we send exactly 2f*f+2f+3f messages around. 2f*f to the
+        // faulty leaders, 2f to the honest leader, and 3f from the leader.
+        let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
+        let leaf_block = self.store.with_read_tx(|tx| LeafBlock::get(tx))?;
+        let is_leader = self
+            .leader_strategy
+            .is_leader(&our_vn.address, &local_committee, leaf_block.height());
+        if is_leader {
+            // We are the leader, so we distribute the block within the local committee (we didn't do it yet)
+            // If there leader is malicious and doesn't redistribute the block we should handle the redistribution again
+            // on leader rotation, from all the nodes that have this block. Because the next leader may not have this
+            // block.
+            self.tx_broadcast
+                .send((
+                    local_committee.clone(),
+                    HotstuffMessage::ForeignProposal(ProposalMessage { block: block.clone() }),
+                ))
+                .await
+                .map_err(|_| HotStuffError::InternalChannelClosed {
+                    context: "Redistributing foreign block",
+                })?;
+        } else {
+            let leader = self.leader_strategy.get_leader(&local_committee, leaf_block.height());
+            // We are not the leader, so we send the block to the leader
+            self.tx_leader
+                .send((
+                    leader.clone(),
+                    HotstuffMessage::ForeignProposal(ProposalMessage { block: block.clone() }),
+                ))
+                .await
+                .map_err(|_| HotStuffError::InternalChannelClosed {
+                    context: "Sending foreign block to leader",
+                })?;
+        }
         // We could have ready transactions at this point, so if we're the leader for the next block we can propose
         self.pacemaker.beat();
 

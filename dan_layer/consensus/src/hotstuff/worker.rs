@@ -144,6 +144,8 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 transaction_pool.clone(),
                 pacemaker.clone_handle(),
                 foreign_receive_counter,
+                leader_strategy.clone(),
+                tx_broadcast.clone(),
                 tx_leader.clone(),
             ),
             on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),

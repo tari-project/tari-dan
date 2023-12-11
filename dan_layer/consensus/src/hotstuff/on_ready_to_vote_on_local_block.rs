@@ -937,15 +937,8 @@ where TConsensusSpec: ConsensusSpec
 
     async fn propose_newly_locked_blocks(&self, blocks: Vec<Block<TConsensusSpec::Addr>>) -> Result<(), HotStuffError> {
         for block in blocks {
-            let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
-            let is_leader = self
-                .leader_strategy
-                .is_leader(&self.validator_addr, &local_committee, block.height());
-            // TODO: This will be changed to different strategy where not only leader is responsible for foreign block
-            // proposal.
-            if is_leader {
-                self.proposer.broadcast_proposal_foreignly(&block).await?;
-            }
+            // It's not guranteed that we will broadcast anything, see Proposer::broadcast_proposal_foreignly
+            self.proposer.broadcast_proposal_foreignly(&block).await?;
         }
         Ok(())
     }
