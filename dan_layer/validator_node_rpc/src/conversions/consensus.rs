@@ -30,6 +30,7 @@ use tari_consensus::messages::{
     HotstuffMessage,
     NewViewMessage,
     ProposalMessage,
+    RequestMissingForeignBlocksMessage,
     RequestMissingTransactionsMessage,
     RequestedTransactionMessage,
     SyncRequestMessage,
@@ -68,6 +69,9 @@ impl<TAddr: NodeAddressable> From<&HotstuffMessage<TAddr>> for proto::consensus:
                 proto::consensus::hot_stuff_message::Message::ForeignProposal(msg.into())
             },
             HotstuffMessage::Vote(msg) => proto::consensus::hot_stuff_message::Message::Vote(msg.into()),
+            HotstuffMessage::RequestMissingForeignBlocks(msg) => {
+                proto::consensus::hot_stuff_message::Message::RequestMissingForeignBlocks(msg.into())
+            },
             HotstuffMessage::RequestMissingTransactions(msg) => {
                 proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg.into())
             },
@@ -97,6 +101,9 @@ impl<TAddr: NodeAddressable + Serialize> TryFrom<proto::consensus::HotStuffMessa
             proto::consensus::hot_stuff_message::Message::Vote(msg) => HotstuffMessage::Vote(msg.try_into()?),
             proto::consensus::hot_stuff_message::Message::RequestMissingTransactions(msg) => {
                 HotstuffMessage::RequestMissingTransactions(msg.try_into()?)
+            },
+            proto::consensus::hot_stuff_message::Message::RequestMissingForeignBlocks(msg) => {
+                HotstuffMessage::RequestMissingForeignBlocks(msg.try_into()?)
             },
             proto::consensus::hot_stuff_message::Message::RequestedTransaction(msg) => {
                 HotstuffMessage::RequestedTransaction(msg.try_into()?)
@@ -188,6 +195,29 @@ impl<TAddr: NodeAddressable> TryFrom<proto::consensus::VoteMessage> for VoteMess
                 .signature
                 .ok_or_else(|| anyhow!("Signature is missing"))?
                 .try_into()?,
+        })
+    }
+}
+
+//---------------------------------- RequestMissingForeignBlocksMessage --------------------------------------------//
+impl From<&RequestMissingForeignBlocksMessage> for proto::consensus::RequestMissingForeignBlocksMessage {
+    fn from(msg: &RequestMissingForeignBlocksMessage) -> Self {
+        Self {
+            epoch: msg.epoch.as_u64(),
+            from: msg.from,
+            to: msg.to,
+        }
+    }
+}
+
+impl TryFrom<proto::consensus::RequestMissingForeignBlocksMessage> for RequestMissingForeignBlocksMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: proto::consensus::RequestMissingForeignBlocksMessage) -> Result<Self, Self::Error> {
+        Ok(RequestMissingForeignBlocksMessage {
+            epoch: Epoch(value.epoch),
+            from: value.from,
+            to: value.to,
         })
     }
 }

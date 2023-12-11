@@ -26,7 +26,7 @@ use diesel::{
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -578,6 +578,44 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         })?;
 
         block.try_convert(qc)
+    }
+
+    fn blocks_get_foreign_ids(
+        &mut self,
+        bucket: ShardBucket,
+        from: u64,
+        to: u64,
+    ) -> Result<Vec<Block<TAddr>>, StorageError> {
+        use crate::schema::{blocks, blocks_foreign_id_mapping, quorum_certificates};
+        // TODO: how slow is this? is it worth splitting into 2 queries?
+        let results = blocks::table
+            .left_join(blocks_foreign_id_mapping::table.on(blocks::block_id.eq(blocks_foreign_id_mapping::block_id)))
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .filter(blocks_foreign_id_mapping::foreign_bucket.eq(i64::from(bucket.as_u32())))
+            .filter(blocks_foreign_id_mapping::foreign_index.ge(from as i64))
+            .filter(blocks_foreign_id_mapping::foreign_index.le(to as i64))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .order_by(blocks_foreign_id_mapping::foreign_index.asc())
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_all_after_height",
+                source: e,
+            })?;
+
+        results
+            .into_iter()
+            .map(|(block, qc)| {
+                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "blocks_get_foreign_ids",
+                    details: format!(
+                        "block {} references non-existent quorum certificate {}",
+                        block.block_id, block.qc_id
+                    ),
+                })?;
+
+                block.try_convert(qc)
+            })
+            .collect()
     }
 
     fn blocks_get_tip(&mut self) -> Result<Block<TAddr>, StorageError> {

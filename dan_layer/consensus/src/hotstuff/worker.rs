@@ -19,7 +19,11 @@ use tari_shutdown::ShutdownSignal;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{broadcast, mpsc};
 
-use super::{on_receive_requested_transactions::OnReceiveRequestedTransactions, proposer::Proposer};
+use super::{
+    on_receive_request_missing_foreign_blocks::OnReceiveRequestMissingForeignBlocksHandler,
+    on_receive_requested_transactions::OnReceiveRequestedTransactions,
+    proposer::Proposer,
+};
 use crate::{
     hotstuff::{
         common::CommitteeAndMessage,
@@ -56,6 +60,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     on_receive_foreign_proposal: OnReceiveForeignProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
+    on_receive_request_missing_foreign_blocks: OnReceiveRequestMissingForeignBlocksHandler<TConsensusSpec>,
     on_receive_request_missing_txs: OnReceiveRequestMissingTransactions<TConsensusSpec>,
     on_receive_requested_txs: OnReceiveRequestedTransactions<TConsensusSpec>,
     on_propose: OnPropose<TConsensusSpec>,
@@ -139,6 +144,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 transaction_pool.clone(),
                 pacemaker.clone_handle(),
                 foreign_receive_counter,
+                tx_leader.clone(),
             ),
             on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
@@ -147,6 +153,11 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 epoch_manager.clone(),
                 pacemaker.clone_handle(),
                 vote_receiver,
+            ),
+            on_receive_request_missing_foreign_blocks: OnReceiveRequestMissingForeignBlocksHandler::new(
+                state_store.clone(),
+                epoch_manager.clone(),
+                tx_leader.clone(),
             ),
             on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(
                 state_store.clone(),
@@ -474,6 +485,10 @@ where TConsensusSpec: ConsensusSpec
                 );
                 Ok(())
             },
+            HotstuffMessage::RequestMissingForeignBlocks(msg) => log_err(
+                "on_receive_request_missing_foreign_blocks",
+                self.on_receive_request_missing_foreign_blocks.handle(from, msg).await,
+            ),
         }
     }
 

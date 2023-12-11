@@ -12,6 +12,9 @@ pub use proposal::*;
 mod vote;
 pub use vote::*;
 
+mod request_missing_foreign_blocks;
+pub use request_missing_foreign_blocks::*;
+
 mod request_missing_transaction;
 pub use request_missing_transaction::*;
 

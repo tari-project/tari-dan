@@ -146,4 +146,6 @@ pub enum ProposalValidationError {
     },
     #[error("Proposed block {block_id} {height} already has been processed")]
     BlockAlreadyProcessed { block_id: BlockId, height: NodeHeight },
+    #[error("Internal channel send error when {context}")]
+    InternalChannelClosed { context: &'static str },
 }

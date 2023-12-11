@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
@@ -116,6 +116,12 @@ pub trait StateStoreReadTransaction {
         asc_desc_created_at: Option<Ordering>,
     ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
+    fn blocks_get_foreign_ids(
+        &mut self,
+        bucket: ShardBucket,
+        from: u64,
+        to: u64,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
     fn blocks_get_tip(&mut self) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_get_all_between(
         &mut self,
