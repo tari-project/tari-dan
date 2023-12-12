@@ -51,6 +51,17 @@ where TCodec: messaging::Codec + Send + Clone + 'static
     pub gossipsub: gossipsub::Behaviour,
 }
 
+/// Returns true if the given Multiaddr is supported by the Tari swarm, otherwise false.
+/// NOTE: this function only currently returns false for onion addresses.
+pub fn is_supported_multiaddr(addr: &libp2p::Multiaddr) -> bool {
+    !addr.iter().any(|p| {
+        matches!(
+            p,
+            libp2p::core::multiaddr::Protocol::Onion(_, _) | libp2p::core::multiaddr::Protocol::Onion3(_)
+        )
+    })
+}
+
 pub fn create_swarm<TCodec>(
     identity: Keypair,
     supported_protocols: HashSet<StreamProtocol>,

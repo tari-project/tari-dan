@@ -32,14 +32,14 @@ use log::*;
 use serde_json::{self as json, json};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_dan_app_utilities::{keypair::RistrettoKeypair, template_manager::interface::TemplateManagerHandle};
-use tari_dan_common_types::{optional::Optional, PeerAddress, ShardId};
+use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, PeerAddress, ShardId};
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction, LeafBlock, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
     StateStore,
 };
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
-use tari_networking::{NetworkingHandle, NetworkingService};
+use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_validator_node_client::{
     types,
@@ -630,11 +630,19 @@ impl JsonRpcHandlers {
             wait_for_dial,
         } = value.parse_params()?;
 
+        if let Some(unsupported) = addresses.iter().find(|a| !is_supported_multiaddr(a)) {
+            return Err(JsonRpcResponse::error(
+                answer_id,
+                JsonRpcError::new(
+                    JsonRpcErrorReason::InvalidParams,
+                    format!("Unsupported multiaddr {unsupported}"),
+                    json::Value::Null,
+                ),
+            ));
+        }
+
         let mut networking = self.networking.clone();
-        let peer_id = networking
-            .add_peer(public_key, addresses.clone())
-            .await
-            .map_err(internal_error(answer_id))?;
+        let peer_id = public_key_to_peer_id(public_key);
 
         let dial_wait = networking
             .dial_peer(

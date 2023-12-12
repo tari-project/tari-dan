@@ -15,7 +15,6 @@ use libp2p::{
     futures::StreamExt,
     gossipsub,
     identify,
-    identity,
     kad,
     kad::{QueryResult, RoutingUpdate},
     mdns,
@@ -189,21 +188,6 @@ where
                         let _ignore = reply_tx.send(Err(err.into()));
                     },
                 }
-            },
-            NetworkingRequest::AddPeer {
-                public_key,
-                addresses,
-                reply_tx,
-            } => {
-                let kad_mut = &mut self.swarm.behaviour_mut().kad;
-                let peer_id = PeerId::from_public_key(&identity::PublicKey::from(identity::sr25519::PublicKey::from(
-                    public_key,
-                )));
-                for address in addresses {
-                    kad_mut.add_address(&peer_id, address);
-                }
-
-                let _ignore = reply_tx.send(Ok(peer_id));
             },
             NetworkingRequest::GetConnectedPeers { reply_tx } => {
                 let peers = self.swarm.connected_peers().copied().collect();
