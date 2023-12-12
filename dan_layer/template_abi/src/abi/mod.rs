@@ -63,6 +63,7 @@ pub fn call_engine<T: Serialize + fmt::Debug, U: DeserializeOwned>(op: EngineOp,
     })
 }
 
+/// Requests the engine to write debug data
 pub fn call_debug<T: AsRef<[u8]>>(data: T) {
     let ptr = data.as_ref().as_ptr();
     let len = data.as_ref().len();

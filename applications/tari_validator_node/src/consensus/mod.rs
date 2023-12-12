@@ -12,7 +12,7 @@ use tari_consensus::{
 };
 use tari_dan_common_types::committee::Committee;
 use tari_dan_p2p::{Message, OutboundService};
-use tari_dan_storage::consensus_models::TransactionPool;
+use tari_dan_storage::consensus_models::{ForeignReceiveCounters, TransactionPool};
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -50,6 +50,7 @@ pub async fn spawn(
     rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
     outbound_messaging: OutboundMessaging,
     client_factory: TariCommsValidatorNodeClientFactory,
+    foreign_receive_counter: ForeignReceiveCounters,
     shutdown_signal: ShutdownSignal,
 ) -> (
     JoinHandle<Result<(), anyhow::Error>>,
@@ -81,6 +82,7 @@ pub async fn spawn(
         tx_leader,
         tx_hotstuff_events.clone(),
         tx_mempool,
+        foreign_receive_counter,
         shutdown_signal.clone(),
     );
 

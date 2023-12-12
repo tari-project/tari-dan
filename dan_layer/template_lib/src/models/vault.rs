@@ -55,6 +55,7 @@ use crate::{
 
 const TAG: u64 = BinaryTag::VaultId as u64;
 
+/// A vault's unique identification in the Tari network
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct VaultId(BorTag<Hash, TAG>);
 
@@ -112,6 +113,7 @@ impl TryFrom<Vec<u8>> for VaultId {
 
 newtype_struct_serde_impl!(VaultId, BorTag<Hash, TAG>);
 
+/// Encapsulates all the ways that a vault can be referenced
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum VaultRef {
     Vault { address: ResourceAddress },
@@ -143,6 +145,7 @@ impl Display for VaultRef {
     }
 }
 
+/// A permanent container of resources. Vaults live after the end of a transaction.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Vault {
@@ -150,6 +153,7 @@ pub struct Vault {
 }
 
 impl Vault {
+    /// Returns a new vault with an empty balance
     pub fn new_empty(resource_address: ResourceAddress) -> Self {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: VaultRef::Vault {
@@ -164,6 +168,8 @@ impl Vault {
         }
     }
 
+    /// Returns a new vault that will contain all the tokens from the provided bucket.
+    /// The bucket will be empty after the call
     pub fn from_bucket(bucket: Bucket) -> Self {
         let resource_address = bucket.resource_address();
         let mut vault = Self::new_empty(resource_address);
@@ -171,6 +177,9 @@ impl Vault {
         vault
     }
 
+    /// Deposit all the tokens from the provided bucket into the vault.
+    /// The bucket will be empty after the call.
+    /// It will panic if the tokens in the bucket are from a different resource than the ones in the vault
     pub fn deposit(&mut self, bucket: Bucket) {
         let result: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -181,6 +190,7 @@ impl Vault {
         result.decode::<()>().expect("deposit failed");
     }
 
+    /// Withdraw an `amount` of tokens from the vault into a new bucket.
     pub fn withdraw(&mut self, amount: Amount) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -191,10 +201,14 @@ impl Vault {
         resp.decode().expect("failed to decode Bucket")
     }
 
+    /// Withdraw a single non-fungible token from the vault into a new bucket.
+    /// It will panic if the vault does not contain the specified non-fungible token
     pub fn withdraw_non_fungible(&mut self, id: NonFungibleId) -> Bucket {
         self.withdraw_non_fungibles(Some(id))
     }
 
+    /// Withdraw multiple non-fungible tokens from the vault into a new bucket.
+    /// It will panic if the vault does not contain the specified non-fungible tokens
     pub fn withdraw_non_fungibles<I: IntoIterator<Item = NonFungibleId>>(&mut self, ids: I) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -207,6 +221,8 @@ impl Vault {
         resp.decode().expect("failed to decode Bucket")
     }
 
+    /// Withdraws an amount (specified in the `proof`) of confidential tokens from the vault into a new bucket.
+    /// It will panic if the proof is invalid or there are not enough tokens in the vault
     pub fn withdraw_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -217,12 +233,13 @@ impl Vault {
         resp.decode().expect("failed to decode Bucket")
     }
 
-    /// Withdraws all fungible, non-fungible and revealed confidential amounts from the vault.
-    /// NOTE: blinded confidential amounts are not withdrawn as these require a ConfidentialWithdrawProof.
+    /// Withdraws all fungible, non-fungible and revealed confidential amounts from the vault into a new bucket.
+    /// NOTE: blinded confidential amounts are not withdrawn as these require a `ConfidentialWithdrawProof`.
     pub fn withdraw_all(&mut self) -> Bucket {
         self.withdraw(self.balance())
     }
 
+    /// Returns how many tokens this vault holds
     pub fn balance(&self) -> Amount {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -233,6 +250,7 @@ impl Vault {
         resp.decode().expect("failed to decode Amount")
     }
 
+    /// Returns how many Pederson commitments (related to confidential balances) this vault holds
     pub fn commitment_count(&self) -> u32 {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -243,6 +261,7 @@ impl Vault {
         resp.decode().expect("failed to decode commitment count")
     }
 
+    /// Returns the IDs of all the non-fungible this vault
     pub fn get_non_fungible_ids(&self) -> Vec<NonFungibleId> {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -254,6 +273,7 @@ impl Vault {
             .expect("get_non_fungible_ids returned invalid non fungible ids")
     }
 
+    /// Returns the resource address of the tokens that this vault holds
     pub fn resource_address(&self) -> ResourceAddress {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -265,10 +285,13 @@ impl Vault {
             .expect("GetResourceAddress returned invalid resource address")
     }
 
+    /// Returns the the type of resource that this vault holds
     pub fn resource_type(&self) -> ResourceType {
         ResourceManager::get(self.resource_address()).resource_type()
     }
 
+    /// Returns a new bucket with revealed funds, specified by the `proof`.
+    /// The amount of tokens will not change, only how many of those tokens will be known by everyone
     pub fn reveal_confidential(&mut self, proof: ConfidentialWithdrawProof) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -279,6 +302,8 @@ impl Vault {
         Bucket::from_id(resp.decode().expect("reveal_confidential returned invalid bucket"))
     }
 
+    /// Pay a transaction fee with the funds present in the vault.
+    /// Note that the vault must hold native Tari tokens to perform this operation
     pub fn pay_fee(&mut self, amount: Amount) {
         let _resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -287,6 +312,8 @@ impl Vault {
         });
     }
 
+    /// Pay a transaction fee with the confidential funds present in the vault.
+    /// Note that the vault must hold native Tari tokens to perform this operation
     pub fn pay_fee_confidential(&mut self, proof: ConfidentialWithdrawProof) {
         let _resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -298,21 +325,31 @@ impl Vault {
         });
     }
 
+    /// Deposit an amount (specified in the `proof`) of confidential tokens into the vault.
+    /// It will panic if the proof is invalid or the resource of the proof is not the same as the one in the vault
     pub fn join_confidential(&mut self, proof: ConfidentialWithdrawProof) {
         let bucket = self.withdraw_confidential(proof);
         self.deposit(bucket);
     }
 
+    /// Create a new proof that allows the holder to access the tokens in the vault with future instructions.
+    /// The tokens will be locked during the lifespan of the transaction until the proof is destroyed.
     pub fn authorize(&self) -> ProofAuth {
         let proof = self.create_proof();
         ProofAuth { id: proof.id() }
     }
 
+    /// Create a new proof that allows the holder to access the tokens in the vault with future instructions.
+    /// It will execute the provided function after the proof is generated.
+    /// The tokens will be locked during the lifespan of the transaction until the proof is destroyed
     pub fn authorize_with<F: FnOnce() -> R, R>(&self, f: F) -> R {
         let _auth = self.authorize();
         f()
     }
 
+    /// Returns a new proof that demonstrates ownership of all the vault's tokens.
+    /// The tokens will be locked during the lifespan of the transaction until the proof is destroyed.
+    /// Used mostly for cross-component calls
     pub fn create_proof(&self) -> Proof {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -323,6 +360,9 @@ impl Vault {
         resp.decode().expect("CreateProofOfResource failed")
     }
 
+    /// Returns a new proof that demonstrates ownership of a specific amount of tokens.
+    /// The tokens will be locked during the lifespan of the transaction until the proof is destroyed.
+    /// Used mostly for cross-component calls
     pub fn create_proof_by_amount(&self, amount: Amount) -> Proof {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
@@ -333,6 +373,9 @@ impl Vault {
         resp.decode().expect("CreateProofByFungibleAmount failed")
     }
 
+    /// Returns a new proof that demonstrates ownership of a specific set of non-fungibles.
+    /// The tokens will be locked during the lifespan of the transaction until the proof is destroyed.
+    /// Used mostly for cross-component calls
     pub fn create_proof_by_non_fungible_ids(&self, ids: BTreeSet<NonFungibleId>) -> Proof {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),

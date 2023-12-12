@@ -16,6 +16,9 @@ use tari_dan_storage::{
         BlockId,
         Decision,
         Evidence,
+        ForeignProposal,
+        ForeignReceiveCounters,
+        ForeignSendCounters,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -142,6 +145,7 @@ impl<'a, TAddr: NodeAddressable> SqliteStateStoreWriteTransaction<'a, TAddr> {
             parked_blocks::commands.eq(serialize_json(block.commands())?),
             parked_blocks::total_leader_fee.eq(block.total_leader_fee() as i64),
             parked_blocks::justify.eq(serialize_json(block.justify())?),
+            parked_blocks::foreign_indexes.eq(serialize_json(block.get_foreign_indexes())?),
         );
 
         diesel::insert_into(parked_blocks::table)
@@ -172,7 +176,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
     }
 
     fn blocks_insert(&mut self, block: &Block<TAddr>) -> Result<(), StorageError> {
-        use crate::schema::blocks;
+        use crate::schema::{blocks, blocks_foreign_id_mapping};
 
         let insert = (
             blocks::block_id.eq(serialize_hex(block.id())),
@@ -186,6 +190,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
             blocks::is_dummy.eq(block.is_dummy()),
             blocks::is_processed.eq(block.is_processed()),
+            blocks::foreign_indexes.eq(serialize_json(block.get_foreign_indexes())?),
         );
 
         diesel::insert_into(blocks::table)
@@ -195,6 +200,21 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                 operation: "blocks_insert",
                 source: e,
             })?;
+
+        for (bucket, index) in block.get_foreign_indexes() {
+            let insert = (
+                blocks_foreign_id_mapping::foreign_bucket.eq(i64::from(bucket.as_u32())),
+                blocks_foreign_id_mapping::foreign_index.eq(*index as i64),
+                blocks_foreign_id_mapping::block_id.eq(serialize_hex(block.id())),
+            );
+            diesel::insert_into(blocks_foreign_id_mapping::table)
+                .values(insert)
+                .execute(self.connection())
+                .map_err(|e| SqliteStorageError::DieselError {
+                    operation: "blocks_insert",
+                    source: e,
+                })?;
+        }
 
         Ok(())
     }
@@ -557,6 +577,86 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             .execute(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "high_qc_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_proposal_upsert(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let values = (
+            foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32),
+            foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)),
+            foreign_proposals::state.eq(foreign_proposal.state.to_string()),
+            foreign_proposals::mined_at.eq(foreign_proposal.mined_at.map(|h| h.as_u64() as i64)),
+        );
+
+        diesel::insert_into(foreign_proposals::table)
+            .values(&values)
+            .on_conflict((foreign_proposals::bucket, foreign_proposals::block_id))
+            .do_update()
+            .set(values.clone())
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_set",
+                source: e,
+            })?;
+        Ok(())
+    }
+
+    fn foreign_proposal_delete(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError> {
+        use crate::schema::foreign_proposals;
+
+        diesel::delete(foreign_proposals::table)
+            .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
+            .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_delete",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_send_counters_set(
+        &mut self,
+        foreign_send_counter: &ForeignSendCounters,
+        block_id: &BlockId,
+    ) -> Result<(), StorageError> {
+        use crate::schema::foreign_send_counters;
+
+        let insert = (
+            foreign_send_counters::block_id.eq(serialize_hex(block_id)),
+            foreign_send_counters::counters.eq(serialize_json(&foreign_send_counter.counters)?),
+        );
+
+        diesel::insert_into(foreign_send_counters::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_send_counters_set",
+                source: e,
+            })?;
+
+        Ok(())
+    }
+
+    fn foreign_receive_counters_set(
+        &mut self,
+        foreign_receive_counter: &ForeignReceiveCounters,
+    ) -> Result<(), StorageError> {
+        use crate::schema::foreign_receive_counters;
+
+        let insert = (foreign_receive_counters::counters.eq(serialize_json(&foreign_receive_counter.counters)?),);
+
+        diesel::insert_into(foreign_receive_counters::table)
+            .values(insert)
+            .execute(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_receive_counters_set",
                 source: e,
             })?;
 

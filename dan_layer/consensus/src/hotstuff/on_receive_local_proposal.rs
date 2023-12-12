@@ -5,16 +5,23 @@
 // ----[foreign:LocalPrepared]--->(LocalPrepared, true) ----cmd:AllPrepare ---> (AllPrepared, true) ---cmd:Accept --->
 // Complete
 
+use std::{collections::HashMap, ops::DerefMut};
+
 use log::*;
-use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight};
+use tari_dan_common_types::{
+    committee::{Committee, CommitteeShard},
+    optional::Optional,
+    shard_bucket::ShardBucket,
+    NodeHeight,
+};
 use tari_dan_storage::{
-    consensus_models::{Block, HighQc, TransactionPool, ValidBlock},
+    consensus_models::{Block, BlockId, ForeignSendCounters, HighQc, TransactionPool, ValidBlock},
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
 use tokio::sync::{broadcast, mpsc};
 
-use super::proposer::Proposer;
+use super::proposer::{self, Proposer};
 use crate::{
     hotstuff::{
         error::HotStuffError,
@@ -128,9 +135,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
             .epoch_manager
             .get_committee_by_validator_address(block.epoch(), block.proposed_by())
             .await?;
+        let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
         // First save the block in one db transaction
-        self.store.with_read_tx(|tx| {
-            match self.validate_local_proposed_block(tx, block, &local_committee) {
+        self.store.with_write_tx(|tx| {
+            match self.validate_local_proposed_block(tx, block, &local_committee, &local_committee_shard) {
                 Ok(validated) => Ok(Some(validated)),
                 // Validation errors should not cause a FAILURE state transition
                 Err(HotStuffError::ProposalValidationError(err)) => {
@@ -143,15 +151,36 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         })
     }
 
+    fn check_foreign_indexes(
+        &self,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
+        num_committees: u32,
+        local_bucket: ShardBucket,
+        block: &Block<TConsensusSpec::Addr>,
+        justify_block: &BlockId,
+    ) -> Result<bool, HotStuffError> {
+        let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), justify_block)?;
+        let non_local_buckets = proposer::get_non_local_buckets(tx.deref_mut(), block, num_committees, local_bucket)?;
+        let mut foreign_indexes = HashMap::new();
+        for non_local_bucket in non_local_buckets {
+            foreign_indexes
+                .entry(non_local_bucket)
+                .or_insert(foreign_counters.increment_counter(non_local_bucket));
+        }
+        foreign_counters.set(tx, block.id())?;
+        Ok(foreign_indexes == *block.get_foreign_indexes())
+    }
+
     /// Perform final block validations (TODO: implement all validations)
     /// We assume at this point that initial stateless validations have been done (in inbound messages)
     fn validate_local_proposed_block(
         &self,
-        tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         candidate_block: Block<TConsensusSpec::Addr>,
         local_committee: &Committee<TConsensusSpec::Addr>,
+        local_committee_shard: &CommitteeShard,
     ) -> Result<ValidBlock<TConsensusSpec::Addr>, HotStuffError> {
-        if Block::has_been_processed(tx, candidate_block.id())? {
+        if Block::has_been_processed(tx.deref_mut(), candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
                 block_id: *candidate_block.id(),
                 height: candidate_block.height(),
@@ -160,7 +189,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         }
 
         // Check that details included in the justify match previously added blocks
-        let Some(justify_block) = candidate_block.justify().get_block(tx).optional()? else {
+        let Some(justify_block) = candidate_block.justify().get_block(tx.deref_mut()).optional()? else {
             // This will trigger a sync
             return Err(ProposalValidationError::JustifyBlockNotFound {
                 proposed_by: candidate_block.proposed_by().to_string(),
@@ -197,6 +226,20 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         }
 
         let justify_block_height = justify_block.height();
+
+        if !self.check_foreign_indexes(
+            tx,
+            local_committee_shard.num_committees(),
+            local_committee_shard.bucket(),
+            &candidate_block,
+            justify_block.id(),
+        )? {
+            return Err(ProposalValidationError::InvalidForeignCounters {
+                proposed_by: candidate_block.proposed_by().to_string(),
+                hash: *candidate_block.id(),
+            }
+            .into());
+        }
 
         if justify_block.id() != candidate_block.parent() {
             let mut dummy_blocks =
@@ -241,7 +284,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
 
         // Now that we have all dummy blocks (if any) in place, we can check if the candidate block is safe.
         // Specifically, it should extend the locked block via the dummy blocks.
-        if !candidate_block.is_safe(tx)? {
+        if !candidate_block.is_safe(tx.deref_mut())? {
             return Err(ProposalValidationError::NotSafeBlock {
                 proposed_by: candidate_block.proposed_by().to_string(),
                 hash: *candidate_block.id(),

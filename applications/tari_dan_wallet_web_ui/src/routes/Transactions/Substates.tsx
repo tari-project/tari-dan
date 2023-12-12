@@ -41,7 +41,6 @@ function RowData({ info, state }: any, index: number) {
   const theme = useTheme();
   const itemKey = Object.keys(info[0])[0];
   const itemValue = Object.values(info[0])[0];
-  console.log(info);
   return (
     <>
       <TableRow key={`${index}-1`}>
@@ -75,6 +74,7 @@ function RowData({ info, state }: any, index: number) {
               />
             )}
             {state}
+            ({info?.[1]?.version !== undefined ? info[1].version : info?.[1]})
           </div>
         </DataTableCell>
         <DataTableCell>{itemKey}</DataTableCell>

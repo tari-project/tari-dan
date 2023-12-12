@@ -28,7 +28,7 @@ pub struct Transaction {
     inputs: Vec<ShardId>,
     /// Input objects that must exist but cannot be downed by this transaction
     input_refs: Vec<ShardId>,
-    /// Inputs filled by some authority. These are not part of the transaction hash. (TODO: Secure this somehow)
+    /// Inputs filled by some authority. These are not part of the transaction hash nor the signature
     filled_inputs: Vec<ShardId>,
     min_epoch: Option<Epoch>,
     max_epoch: Option<Epoch>,

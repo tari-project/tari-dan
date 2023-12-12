@@ -4,6 +4,7 @@
 use std::{collections::HashMap, path::PathBuf, str::FromStr};
 
 use tari_engine_types::{
+    commit_result::RejectReason,
     instruction::Instruction,
     substate::{SubstateAddress, SubstateDiff},
 };
@@ -215,7 +216,7 @@ pub async fn call_method(
     fq_component_name: String,
     outputs_name: String,
     method_call: String,
-) -> SubmitTransactionResponse {
+) -> Result<SubmitTransactionResponse, RejectReason> {
     let data_dir = get_cli_data_dir(world);
     let (input_group, component_name) = fq_component_name.split_once('/').unwrap_or_else(|| {
         panic!(
@@ -256,8 +257,8 @@ pub async fn call_method(
     let mut client = world.get_validator_node(&vn_name).get_client();
     let resp = handle_submit(args, data_dir, &mut client).await.unwrap();
 
-    if let Some(ref failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
-        panic!("Transaction failed: {:?}", failure);
+    if let Some(failure) = resp.dry_run_result.as_ref().unwrap().finalize.reject() {
+        return Err(failure.clone());
     }
     // store the account component address and other substate addresses for later reference
     add_substate_addresses(
@@ -265,7 +266,7 @@ pub async fn call_method(
         outputs_name,
         resp.dry_run_result.as_ref().unwrap().finalize.result.accept().unwrap(),
     );
-    resp
+    Ok(resp)
 }
 
 pub async fn submit_manifest(

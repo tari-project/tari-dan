@@ -63,6 +63,8 @@ pub enum MempoolError {
     NoInputs { transaction_id: TransactionId },
     #[error("Executed transaction {transaction_id} does not involved any shards")]
     NoInvolvedShards { transaction_id: TransactionId },
+    #[error("Invalid transaction signature")]
+    InvalidSignature,
 }
 
 impl From<mpsc::error::SendError<MempoolRequest>> for MempoolError {

@@ -20,10 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+//! A wrapper for engine calls related to events
+
 use tari_template_abi::{call_engine, EngineOp};
 
 use crate::{args::EmitEventArg, models::Metadata};
 
+/// Requests the engine to emit an event that will be permanently recorded in the transaction result
 pub fn emit_event<T: Into<String>, P: Into<Metadata>>(topic: T, payload: P) {
     call_engine::<_, ()>(EngineOp::EmitEvent, &EmitEventArg {
         topic: topic.into(),

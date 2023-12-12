@@ -15,6 +15,35 @@ diesel::table! {
         is_committed -> Bool,
         is_processed -> Bool,
         is_dummy -> Bool,
+        foreign_indexes -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    foreign_proposals (id) {
+        id -> Integer,
+        bucket -> Integer,
+        block_id -> Text,
+        state -> Text,
+        mined_at -> Nullable<BigInt>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    foreign_receive_counters (id) {
+        id -> Integer,
+        counters -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    foreign_send_counters (id) {
+        id -> Integer,
+        block_id -> Text,
+        counters -> Text,
         created_at -> Timestamp,
     }
 }
@@ -25,6 +54,16 @@ diesel::table! {
         block_id -> Text,
         block_height -> BigInt,
         qc_id -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    blocks_foreign_id_mapping (id) {
+        id -> Integer,
+        foreign_bucket -> BigInt,
+        foreign_index -> BigInt,
+        block_id -> Text,
         created_at -> Timestamp,
     }
 }
@@ -119,6 +158,7 @@ diesel::table! {
         command_count -> BigInt,
         commands -> Text,
         total_leader_fee -> BigInt,
+        foreign_indexes -> Text,
         created_at -> Timestamp,
     }
 }
@@ -248,6 +288,7 @@ diesel::table! {
 
 diesel::allow_tables_to_appear_in_same_query!(
     blocks,
+    blocks_foreign_id_mapping,
     high_qcs,
     last_executed,
     last_proposed,

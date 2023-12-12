@@ -92,6 +92,10 @@ pub enum ProposalValidationError {
     },
     #[error("Node proposed by {proposed_by} with hash {hash} did not satisfy the safeNode predicate")]
     NotSafeBlock { proposed_by: String, hash: BlockId },
+    #[error("Node proposed by {proposed_by} with hash {hash} is missing foreign index")]
+    MissingForeignCounters { proposed_by: String, hash: BlockId },
+    #[error("Node proposed by {proposed_by} with hash {hash} has invalid foreign counters")]
+    InvalidForeignCounters { proposed_by: String, hash: BlockId },
     #[error("Node proposed by {proposed_by} with hash {hash} is the genesis block")]
     ProposingGenesisBlock { proposed_by: String, hash: BlockId },
     #[error("Justification block {justify_block} for proposed block {block_description} by {proposed_by} not found")]
@@ -142,4 +146,6 @@ pub enum ProposalValidationError {
     },
     #[error("Proposed block {block_id} {height} already has been processed")]
     BlockAlreadyProcessed { block_id: BlockId, height: NodeHeight },
+    #[error("Internal channel send error when {context}")]
+    InternalChannelClosed { context: &'static str },
 }

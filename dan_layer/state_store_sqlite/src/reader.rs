@@ -17,6 +17,7 @@ use diesel::{
     ExpressionMethods,
     JoinOnDsl,
     NullableExpressionMethods,
+    OptionalExtension,
     QueryDsl,
     QueryableByName,
     RunQueryDsl,
@@ -25,11 +26,15 @@ use diesel::{
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
         BlockId,
+        Command,
+        ForeignProposal,
+        ForeignReceiveCounters,
+        ForeignSendCounters,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -369,6 +374,104 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         high_qc.try_into()
     }
 
+    fn foreign_proposal_exists(&mut self, foreign_proposal: &ForeignProposal) -> Result<bool, StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let foreign_proposals = foreign_proposals::table
+            .filter(foreign_proposals::bucket.eq(foreign_proposal.bucket.as_u32() as i32))
+            .filter(foreign_proposals::block_id.eq(serialize_hex(foreign_proposal.block_id)))
+            .count()
+            .limit(1)
+            .get_result::<i64>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_exists",
+                source: e,
+            })?;
+
+        Ok(foreign_proposals > 0)
+    }
+
+    fn foreign_proposal_get_all_new(&mut self) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::foreign_proposals;
+
+        let foreign_proposals = foreign_proposals::table
+            .filter(foreign_proposals::state.eq("New"))
+            .load::<sql_models::ForeignProposal>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_get_all",
+                source: e,
+            })?;
+
+        foreign_proposals.into_iter().map(|p| p.try_into()).collect()
+    }
+
+    fn foreign_proposal_get_all_pending(
+        &mut self,
+        from_block_id: &BlockId,
+        to_block_id: &BlockId,
+    ) -> Result<Vec<ForeignProposal>, StorageError> {
+        use crate::schema::blocks;
+
+        let blocks = self.get_block_ids_that_change_state_between(from_block_id, to_block_id)?;
+
+        let all_commands: Vec<String> = blocks::table
+            .select(blocks::commands)
+            .filter(blocks::command_count.gt(0)) // if there is no command, then there is definitely no foreign proposal command
+            .filter(blocks::block_id.eq_any(blocks))
+            .load::<String>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_proposal_get_all",
+                source: e,
+            })?;
+        let all_commands = all_commands
+            .into_iter()
+            .map(|commands| deserialize_json(commands.as_str()))
+            .collect::<Result<Vec<Vec<Command>>, _>>()?;
+        let all_commands = all_commands.into_iter().flatten().collect::<Vec<_>>();
+        Ok(all_commands
+            .into_iter()
+            .filter_map(|command| command.foreign_proposal().cloned())
+            .collect::<Vec<ForeignProposal>>())
+    }
+
+    fn foreign_send_counters_get(&mut self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError> {
+        use crate::schema::foreign_send_counters;
+
+        let counter = foreign_send_counters::table
+            .filter(foreign_send_counters::block_id.eq(serialize_hex(block_id)))
+            .first::<sql_models::ForeignSendCounters>(self.connection())
+            .optional()
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_send_counters_get",
+                source: e,
+            })?;
+
+        if let Some(counter) = counter {
+            counter.try_into()
+        } else {
+            Ok(ForeignSendCounters::default())
+        }
+    }
+
+    fn foreign_receive_counters_get(&mut self) -> Result<ForeignReceiveCounters, StorageError> {
+        use crate::schema::foreign_receive_counters;
+
+        let counter = foreign_receive_counters::table
+            .order_by(foreign_receive_counters::id.desc())
+            .first::<sql_models::ForeignReceiveCounters>(self.connection())
+            .optional()
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "foreign_receive_counters_get",
+                source: e,
+            })?;
+
+        if let Some(counter) = counter {
+            counter.try_into()
+        } else {
+            Ok(ForeignReceiveCounters::default())
+        }
+    }
+
     fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError> {
         use crate::schema::transactions;
 
@@ -475,6 +578,44 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         })?;
 
         block.try_convert(qc)
+    }
+
+    fn blocks_get_foreign_ids(
+        &mut self,
+        bucket: ShardBucket,
+        from: u64,
+        to: u64,
+    ) -> Result<Vec<Block<TAddr>>, StorageError> {
+        use crate::schema::{blocks, blocks_foreign_id_mapping, quorum_certificates};
+        // TODO: how slow is this? is it worth splitting into 2 queries?
+        let results = blocks::table
+            .left_join(blocks_foreign_id_mapping::table.on(blocks::block_id.eq(blocks_foreign_id_mapping::block_id)))
+            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
+            .filter(blocks_foreign_id_mapping::foreign_bucket.eq(i64::from(bucket.as_u32())))
+            .filter(blocks_foreign_id_mapping::foreign_index.ge(from as i64))
+            .filter(blocks_foreign_id_mapping::foreign_index.le(to as i64))
+            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
+            .order_by(blocks_foreign_id_mapping::foreign_index.asc())
+            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "blocks_all_after_height",
+                source: e,
+            })?;
+
+        results
+            .into_iter()
+            .map(|(block, qc)| {
+                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
+                    operation: "blocks_get_foreign_ids",
+                    details: format!(
+                        "block {} references non-existent quorum certificate {}",
+                        block.block_id, block.qc_id
+                    ),
+                })?;
+
+                block.try_convert(qc)
+            })
+            .collect()
     }
 
     fn blocks_get_tip(&mut self) -> Result<Block<TAddr>, StorageError> {

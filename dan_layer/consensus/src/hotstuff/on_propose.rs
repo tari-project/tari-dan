@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{collections::BTreeSet, num::NonZeroU64};
+use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
 use tari_dan_common_types::{
@@ -14,9 +14,12 @@ use tari_dan_storage::{
     consensus_models::{
         Block,
         Command,
+        ForeignProposal,
+        ForeignSendCounters,
         HighQc,
         LastProposed,
         LeafBlock,
+        LockedBlock,
         QuorumCertificate,
         TransactionPool,
         TransactionPoolStage,
@@ -29,7 +32,7 @@ use tokio::sync::mpsc;
 
 use super::common::CommitteeAndMessage;
 use crate::{
-    hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError},
+    hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, proposer},
     messages::{HotstuffMessage, ProposalMessage},
     traits::ConsensusSpec,
 };
@@ -109,7 +112,7 @@ where TConsensusSpec: ConsensusSpec
             let mut tx = self.store.create_write_tx()?;
             let high_qc = HighQc::get(&mut *tx)?;
             let high_qc = high_qc.get_quorum_certificate(&mut *tx)?;
-
+            let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), leaf_block.block_id())?;
             next_block = self.build_next_block(
                 &mut tx,
                 epoch,
@@ -120,6 +123,7 @@ where TConsensusSpec: ConsensusSpec
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
                 is_newview_propose,
+                &mut foreign_counters,
             )?;
 
             next_block.as_last_proposed().set(&mut tx)?;
@@ -184,6 +188,7 @@ where TConsensusSpec: ConsensusSpec
         proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
+        foreign_counters: &mut ForeignSendCounters,
     ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
@@ -194,17 +199,31 @@ where TConsensusSpec: ConsensusSpec
         };
 
         let mut total_leader_fee = 0;
-        let commands = batch
+        let locked_block = LockedBlock::get(tx)?;
+        let pending_proposals = ForeignProposal::get_all_pending(tx, locked_block.block_id(), parent_block.block_id())?;
+        let commands = ForeignProposal::get_all_new(tx)?
             .into_iter()
-            .map(|t| match t.current_stage() {
+            .filter_map(|foreign_proposal| {
+                if pending_proposals.iter().any(|pending_proposal| {
+                    pending_proposal.bucket == foreign_proposal.bucket &&
+                        pending_proposal.block_id == foreign_proposal.block_id
+                }) {
+                    None
+                } else {
+                    Some(Ok(Command::ForeignProposal(
+                        foreign_proposal.set_mined_at(parent_block.height().saturating_add(NodeHeight(1))),
+                    )))
+                }
+            })
+            .chain(batch.into_iter().map(|t| match t.current_stage() {
                 // If the transaction is New, propose to Prepare it
                 TransactionPoolStage::New => Ok(Command::Prepare(t.get_local_transaction_atom())),
                 // The transaction is Prepared, this stage is only _ready_ once we know that all local nodes
                 // accepted Prepared so we propose LocalPrepared
                 TransactionPoolStage::Prepared => Ok(Command::LocalPrepared(t.get_local_transaction_atom())),
                 // The transaction is LocalPrepared, meaning that we know that all foreign and local nodes have
-                // prepared. We can now propose to Accept it. We also propose the decision change which everyone should
-                // agree with if they received the same foreign LocalPrepare.
+                // prepared. We can now propose to Accept it. We also propose the decision change which everyone
+                // should agree with if they received the same foreign LocalPrepare.
                 TransactionPoolStage::LocalPrepared => {
                     let involved = local_committee_shard.count_distinct_buckets(t.transaction().evidence.shards_iter());
                     let involved = NonZeroU64::new(involved as u64).ok_or_else(|| {
@@ -217,16 +236,16 @@ where TConsensusSpec: ConsensusSpec
                     total_leader_fee += leader_fee;
                     Ok(Command::Accept(t.get_final_transaction_atom(leader_fee)))
                 },
-                // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes agreed
-                // with the Accept, more (possibly empty) blocks with QCs will be proposed and accepted,
-                // otherwise the Accept block will not be committed.
+                // Not reachable as there is nothing to propose for these stages. To confirm that all local nodes
+                // agreed with the Accept, more (possibly empty) blocks with QCs will be
+                // proposed and accepted, otherwise the Accept block will not be committed.
                 TransactionPoolStage::AllPrepared | TransactionPoolStage::SomePrepared => {
                     unreachable!(
                         "It is invalid for TransactionPoolStage::{} to be ready to propose",
                         t.current_stage()
                     )
                 },
-            })
+            }))
             .collect::<Result<BTreeSet<_>, HotStuffError>>()?;
 
         debug!(
@@ -234,6 +253,20 @@ where TConsensusSpec: ConsensusSpec
             "command(s) for next block: [{}]",
             commands.iter().map(|c| c.to_string()).collect::<Vec<_>>().join(",")
         );
+
+        let non_local_buckets = proposer::get_non_local_buckets_from_commands(
+            tx,
+            &commands,
+            local_committee_shard.num_committees(),
+            local_committee_shard.bucket(),
+        )?;
+
+        // let mut foreign_indexes = HashMap::new();
+
+        let foreign_indexes = non_local_buckets
+            .iter()
+            .map(|bucket| (*bucket, foreign_counters.increment_counter(*bucket)))
+            .collect();
 
         let next_block = Block::new(
             *parent_block.block_id(),
@@ -243,6 +276,7 @@ where TConsensusSpec: ConsensusSpec
             proposed_by,
             commands,
             total_leader_fee,
+            foreign_indexes,
         );
 
         Ok(next_block)

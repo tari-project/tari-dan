@@ -30,6 +30,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+/// Representation of a 32-byte hash value
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Hash([u8; 32]);
@@ -131,6 +132,7 @@ impl Display for Hash {
     }
 }
 
+/// Representation of a hash parsing error
 #[derive(Debug)]
 pub struct HashParseError;
 

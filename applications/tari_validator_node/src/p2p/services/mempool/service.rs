@@ -331,7 +331,8 @@ where
                         current_epoch,
                         NewTransactionMessage {
                             transaction: transaction.clone(),
-                            output_shards: vec![],
+                            output_shards: unverified_output_shards, /* Or send to local only when we are input shard
+                                                                      * and if we are output send after execution */
                         }
                         .into(),
                     )
@@ -344,7 +345,7 @@ where
                     );
                 }
 
-                // Only tx receipt shards propagate to foreign shards
+                // Only input shards propagate to foreign shards
                 if is_input_shard {
                     // Forward to foreign replicas.
                     // We assume that at least f other local replicas receive this transaction and also forward to their

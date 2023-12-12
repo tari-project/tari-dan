@@ -23,6 +23,8 @@
 import { Routes, Route } from 'react-router-dom';
 import Accounts from './routes/Accounts/Accounts';
 import AccountDetails from './routes/AccountDetails/AccountDetails';
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import Keys from './routes/Keys/Keys';
 import ErrorPage from './routes/ErrorPage';
 import Wallet from './routes/Wallet/Wallet';
@@ -32,6 +34,8 @@ import Transactions from './routes/Transactions/TransactionsLayout';
 import TransactionDetails from './routes/Transactions/TransactionDetails';
 import AssetVault from './routes/AssetVault/AssetVault';
 import SettingsPage from './routes/Settings/Settings';
+import { Dialog } from '@mui/material';
+import useAccountStore from './store/accountStore';
 
 export const breadcrumbRoutes = [
   {
@@ -82,6 +86,10 @@ export const breadcrumbRoutes = [
 ];
 
 function App() {
+  const { popup, setPopup } = useAccountStore();
+  const handleClose = () => {
+    setPopup({ visible: false });
+  }
   return (
     <div>
       <Routes>
@@ -98,6 +106,14 @@ function App() {
           <Route path="*" element={<ErrorPage />} />
         </Route>
       </Routes>
+      <Dialog open={popup.visible} onClose={handleClose}>
+        <DialogTitle>
+          {(popup?.error ? <div style={{ color: "red" }}>{popup?.title}</div> : <div>{popup?.title}</div>)}
+        </DialogTitle>
+        <DialogContent className="dialog-content">
+          {popup?.message}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

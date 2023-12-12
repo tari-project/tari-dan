@@ -182,5 +182,5 @@ export const webrtc = (signalingServerToken: string, permissions: string, name: 
 export const accountNFTsList = (offset: number, limit: number) => jsonRpc("nfts.list", [offset, limit]);
 
 // settings
-export const getIndexerUrl = () => jsonRpc("settings.get_indexer_url", []);
-export const setIndexerUrl = (indexer_url: string) => jsonRpc("settings.set_indexer_url", [indexer_url]);
+export const getSettings = () => jsonRpc("settings.get", []);
+export const setSettings = (settings: any) => jsonRpc("settings.set", settings);

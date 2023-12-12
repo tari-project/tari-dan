@@ -216,6 +216,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
             );
         }
         let rows = rows
+            .order(transactions::updated_at.desc())
             .load::<models::Transaction>(self.connection())
             .map_err(|e| WalletStorageError::general("transactions_fetch_all", e))?;
 

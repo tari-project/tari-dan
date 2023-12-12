@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
@@ -18,6 +18,9 @@ use crate::{
         BlockId,
         Decision,
         Evidence,
+        ForeignProposal,
+        ForeignReceiveCounters,
+        ForeignSendCounters,
         HighQc,
         LastExecuted,
         LastProposed,
@@ -90,6 +93,15 @@ pub trait StateStoreReadTransaction {
     fn locked_block_get(&mut self) -> Result<LockedBlock, StorageError>;
     fn leaf_block_get(&mut self) -> Result<LeafBlock, StorageError>;
     fn high_qc_get(&mut self) -> Result<HighQc, StorageError>;
+    fn foreign_proposal_exists(&mut self, foreign_proposal: &ForeignProposal) -> Result<bool, StorageError>;
+    fn foreign_proposal_get_all_new(&mut self) -> Result<Vec<ForeignProposal>, StorageError>;
+    fn foreign_proposal_get_all_pending(
+        &mut self,
+        from_block_id: &BlockId,
+        to_block_id: &BlockId,
+    ) -> Result<Vec<ForeignProposal>, StorageError>;
+    fn foreign_send_counters_get(&mut self, block_id: &BlockId) -> Result<ForeignSendCounters, StorageError>;
+    fn foreign_receive_counters_get(&mut self) -> Result<ForeignReceiveCounters, StorageError>;
     fn transactions_get(&mut self, tx_id: &TransactionId) -> Result<TransactionRecord, StorageError>;
     fn transactions_exists(&mut self, tx_id: &TransactionId) -> Result<bool, StorageError>;
 
@@ -104,6 +116,12 @@ pub trait StateStoreReadTransaction {
         asc_desc_created_at: Option<Ordering>,
     ) -> Result<Vec<TransactionRecord>, StorageError>;
     fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
+    fn blocks_get_foreign_ids(
+        &mut self,
+        bucket: ShardBucket,
+        from: u64,
+        to: u64,
+    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
     fn blocks_get_tip(&mut self) -> Result<Block<Self::Addr>, StorageError>;
     fn blocks_get_all_between(
         &mut self,
@@ -251,6 +269,17 @@ pub trait StateStoreWriteTransaction {
     fn leaf_block_set(&mut self, leaf_node: &LeafBlock) -> Result<(), StorageError>;
     fn locked_block_set(&mut self, locked_block: &LockedBlock) -> Result<(), StorageError>;
     fn high_qc_set(&mut self, high_qc: &HighQc) -> Result<(), StorageError>;
+    fn foreign_proposal_upsert(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError>;
+    fn foreign_proposal_delete(&mut self, foreign_proposal: &ForeignProposal) -> Result<(), StorageError>;
+    fn foreign_send_counters_set(
+        &mut self,
+        foreign_send_counter: &ForeignSendCounters,
+        block_id: &BlockId,
+    ) -> Result<(), StorageError>;
+    fn foreign_receive_counters_set(
+        &mut self,
+        foreign_send_counter: &ForeignReceiveCounters,
+    ) -> Result<(), StorageError>;
 
     // -------------------------------- Transaction -------------------------------- //
     fn transactions_insert(&mut self, transaction: &Transaction) -> Result<(), StorageError>;

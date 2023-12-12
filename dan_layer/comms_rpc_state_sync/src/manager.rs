@@ -410,7 +410,7 @@ where
             let locked_block = self
                 .state_store
                 .with_read_tx(|tx| LockedBlock::get(tx).optional())?
-                .unwrap_or_else(|| Block::<CommsPublicKey>::genesis().as_locked_block());
+                .unwrap_or_else(|| Block::<CommsPublicKey>::zero_block().as_locked_block());
 
             match self.sync_with_peer(&member, &locked_block).await {
                 Ok(()) => {

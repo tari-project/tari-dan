@@ -28,6 +28,7 @@ pub struct Block {
     pub is_committed: bool,
     pub is_processed: bool,
     pub is_dummy: bool,
+    pub foreign_indexes: String,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -52,6 +53,7 @@ impl Block {
             self.is_dummy,
             self.is_processed,
             self.is_committed,
+            deserialize_json(&self.foreign_indexes)?,
             self.created_at,
         ))
     }
@@ -69,6 +71,7 @@ pub struct ParkedBlock {
     pub command_count: i64,
     pub commands: String,
     pub total_leader_fee: i64,
+    pub foreign_indexes: String,
     pub created_at: PrimitiveDateTime,
 }
 
@@ -92,6 +95,7 @@ impl<TAddr: NodeAddressable> TryFrom<ParkedBlock> for consensus_models::Block<TA
             false,
             false,
             false,
+            deserialize_json(&value.foreign_indexes)?,
             value.created_at,
         ))
     }
