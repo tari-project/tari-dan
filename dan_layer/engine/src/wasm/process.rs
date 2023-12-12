@@ -54,7 +54,10 @@ use crate::{
         LoadedWasmTemplate,
     },
 };
+
 const LOG_TARGET: &str = "tari::dan::engine::wasm::process";
+pub const ENGINE_TARI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Debug)]
 pub struct WasmProcess {
     module: LoadedWasmTemplate,
@@ -69,6 +72,7 @@ impl WasmProcess {
         let tari_engine = Function::new_native_with_env(store, env.clone(), Self::tari_engine_entrypoint);
         let resolver = env.create_resolver(store, tari_engine);
         let instance = Instance::new(module.wasm_module(), &resolver)?;
+        Self::validate_template_tari_version(&module)?;
         env.init_with_instance(&instance)?;
         Ok(Self { module, env, instance })
     }
@@ -202,6 +206,22 @@ impl WasmProcess {
 
     fn encoded_abi_context(&self) -> Vec<u8> {
         encode(&AbiContext {}).unwrap()
+    }
+
+    /// Determine if the version of the template_lib crate in the WASM is valid.
+    /// This is just a placeholder that logs the result, as we don't manage version incompatiblities yet
+    fn validate_template_tari_version(module: &LoadedWasmTemplate) -> Result<(), WasmExecutionError> {
+        let template_tari_version = module.template_def().tari_version();
+
+        if template_tari_version != ENGINE_TARI_VERSION {
+            // For now we are going to ignore version mistmatches
+            // In the future we could load a different version of the template_lib in the engine
+            log::warn!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") does not matches the one used in the engine (\"{}\")", template_tari_version, ENGINE_TARI_VERSION);
+        } else {
+            log::info!(target: LOG_TARGET, "The Tari version version in the template WASM (\"{}\") matches the one used in the engine", template_tari_version);
+        }
+        
+        Ok(())
     }
 }
 

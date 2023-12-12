@@ -75,6 +75,3 @@ pub mod workspace;
 mod newtype_serde_macros;
 #[macro_use]
 pub mod macros;
-
-mod version;
-pub use version::VERSION;
