@@ -33,7 +33,7 @@ import {
   TableRow,
 } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import FetchStatusCheck from '../../Components/FetchStatusCheck';
 import StatusChip from '../../Components/StatusChip';
@@ -50,10 +50,13 @@ export default function Transactions({ accountName }: { accountName: string }) {
   const { data: accountsData } = useAccountsGet(accountName);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
-  const { data, isLoading, error, isError } = useGetAllTransactions(
+  const { data, isLoading, error, isError, refetch } = useGetAllTransactions(
     null,
     accountsData?.account.address.Component || null
   );
+  useEffect(() => {
+    refetch();
+  }, [accountsData?.account.address.Component]);
   const theme = useTheme();
 
   return (
