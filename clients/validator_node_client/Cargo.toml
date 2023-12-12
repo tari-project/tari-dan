@@ -8,12 +8,12 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_transaction = { path = "../../dan_layer/transaction" }
-tari_dan_storage = { path = "../../dan_layer/storage" }
+tari_dan_common_types = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_common_types = { workspace = true }
+tari_comms_logging = { workspace = true }
+tari_transaction = { workspace = true }
+tari_dan_storage = { workspace = true }
 
 reqwest = { version = "0.11.11", features = ["json"] }
 multiaddr = "0.14"

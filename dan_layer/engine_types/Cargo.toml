@@ -8,12 +8,12 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_bor = { path = "../tari_bor", features = ["json_encoding"] }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = { version = "0.19", features = ["borsh"] }
-tari_template_abi = { path = "../template_abi", features = ["std"] }
-tari_template_lib = { path = "../template_lib" }
-tari_utilities = "0.6"
+tari_bor = { workspace = true, features = ["json_encoding"] }
+tari_common_types = { workspace = true }
+tari_crypto = { workspace = true, features = ["borsh"] }
+tari_template_abi = { workspace = true, features = ["std"] }
+tari_template_lib = { workspace = true }
+tari_utilities = { workspace = true }
 
 borsh = "0.10"
 base64 = "0.21.0"

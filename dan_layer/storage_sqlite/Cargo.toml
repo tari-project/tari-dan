@@ -7,10 +7,10 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common_types" }
-tari_dan_common_types = { path = "../common_types" }
-tari_utilities = "0.6"
-tari_dan_storage = { path = "../storage" }
+tari_common_types = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_utilities = { workspace = true }
+tari_dan_storage = { workspace = true }
 
 diesel = { version = "2", default-features = false, features = [
   "sqlite",

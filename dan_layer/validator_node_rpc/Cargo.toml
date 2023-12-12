@@ -8,19 +8,19 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = "0.19"
+tari_common_types = { workspace = true }
+tari_comms = { workspace = true }
+tari_comms_rpc_macros = { workspace = true }
+tari_crypto = { workspace = true }
 
-tari_consensus = { path = "../consensus" }
-tari_dan_common_types = { path = "../common_types" }
-tari_dan_p2p = { path = "../p2p" }
-tari_dan_storage = { path = "../storage" }
-tari_engine_types = { path = "../engine_types" }
-tari_template_lib = { path = "../template_lib" }
-tari_transaction = { path = "../transaction" }
-tari_bor = { path = "../tari_bor" }
+tari_consensus = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_p2p = { workspace = true }
+tari_dan_storage = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
+tari_bor = { workspace = true }
 
 anyhow = "1.0.53"
 async-trait = "0.1"
@@ -32,9 +32,7 @@ thiserror = "1.0"
 tokio-stream = "0.1"
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common", features = [
-    "build",
-] }
+tari_common = { workspace = true, features = ["build"] }
 
 [package.metadata.cargo-machete]
 ignored = [

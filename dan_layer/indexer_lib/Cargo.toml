@@ -8,12 +8,12 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_dan_common_types = { path = "../common_types" }
-tari_epoch_manager = { path = "../epoch_manager" }
-tari_engine_types = { path = "../engine_types" }
-tari_transaction = { path = "../transaction" }
-tari_template_lib = { path = "../template_lib" }
-tari_validator_node_rpc = { path = "../validator_node_rpc" }
+tari_dan_common_types = { workspace = true }
+tari_epoch_manager = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_transaction = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_validator_node_rpc = { workspace = true }
 
 async-trait = "0.1.74"
 log = "0.4"

@@ -7,7 +7,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_dan_engine = { path = "../../dan_layer/engine"}
+tari_dan_engine = { workspace = true }
 
 clap = "3.2.25"
 liquid = "0.26.4"

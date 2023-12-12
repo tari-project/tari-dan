@@ -8,21 +8,21 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = "0.19"
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_dan_wallet_sdk = { path = "../../dan_layer/wallet/sdk" }
-tari_dan_wallet_storage_sqlite = { path = "../../dan_layer/wallet/storage_sqlite" }
-tari_transaction = { path = "../../dan_layer/transaction" }
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_wallet_daemon_client = { path = "../../clients/wallet_daemon_client" }
-tari_template_builtin = { path = "../../dan_layer/template_builtin" }
+minotari_app_utilities = { workspace = true }
+tari_common = { workspace = true }
+tari_crypto = { workspace = true }
+tari_common_types = { workspace = true }
+tari_shutdown = { workspace = true }
+tari_dan_wallet_sdk = { workspace = true }
+tari_dan_wallet_storage_sqlite = { workspace = true }
+tari_transaction = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_wallet_daemon_client = { workspace = true }
+tari_template_builtin = { workspace = true }
 # TODO: Ideally we should not have to include the WASM template lib, we should perhaps extract the address types into a separate crate (e.g. template_types)
-tari_template_lib = { path = "../../dan_layer/template_lib" }
-tari_indexer_client = { path = "../../clients/tari_indexer_client" }
+tari_template_lib = { workspace = true }
+tari_indexer_client = { workspace = true }
 
 anyhow = "1.0.69"
 axum = { version = "0.6", features = ["headers"] }

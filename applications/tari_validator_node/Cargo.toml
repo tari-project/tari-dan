@@ -8,40 +8,36 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-minotari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", default-features = false, features = [
-    "transactions",
-] }
-tari_crypto = "0.19"
-tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
-tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_dan_p2p = { path = "../../dan_layer/p2p" }
-tari_dan_engine = { path = "../../dan_layer/engine" }
-tari_dan_storage = { path = "../../dan_layer/storage" }
-tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
-tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_template_lib = { path = "../../dan_layer/template_lib" }
-tari_transaction = { path = "../../dan_layer/transaction" }
-tari_validator_node_client = { path = "../../clients/validator_node_client" }
-minotari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_base_node_client = { path = "../../clients/base_node_client" }
-tari_epoch_manager = { path = "../../dan_layer/epoch_manager", features = [
-    "base_layer",
-] }
-tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
-tari_comms_rpc_state_sync = { path = "../../dan_layer/comms_rpc_state_sync" }
-tari_bor = { path = "../../dan_layer/tari_bor" }
-tari_consensus = { path = "../../dan_layer/consensus" }
-tari_state_store_sqlite = { path = "../../dan_layer/state_store_sqlite" }
+minotari_app_grpc = { workspace = true }
+minotari_app_utilities = { workspace = true }
+minotari_wallet_grpc_client = { workspace = true }
+tari_common = { workspace = true }
+tari_common_types = {workspace = true }
+tari_comms = { workspace = true }
+tari_comms_logging = { workspace = true }
+tari_core = { workspace = true, default-features = false, features = ["transactions"] }
+tari_crypto = { workspace = true }
+tari_validator_node_rpc = { workspace = true }
+tari_dan_app_utilities = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_p2p = { workspace = true }
+tari_dan_engine = { workspace = true }
+tari_dan_storage = { workspace = true }
+tari_dan_storage_sqlite = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_p2p = { workspace = true }
+tari_shutdown = { workspace = true }
+tari_storage = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
+tari_validator_node_client = { workspace = true }
+tari_base_node_client = { workspace = true }
+tari_epoch_manager = { workspace = true, features = ["base_layer"] }
+tari_indexer_lib = { workspace = true }
+tari_comms_rpc_state_sync = {workspace = true }
+tari_bor = { workspace = true }
+tari_consensus = { workspace = true }
+tari_state_store_sqlite = { workspace = true }
 
 anyhow = "1.0.53"
 async-trait = "0.1.50"

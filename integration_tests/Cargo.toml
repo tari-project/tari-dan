@@ -8,38 +8,38 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-minotari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_node = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_node_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_console_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+minotari_app_grpc = { workspace = true }
+minotari_app_utilities = { workspace = true }
+minotari_node = { workspace = true }
+minotari_node_grpc_client = { workspace = true }
+tari_common = { workspace = true }
+tari_common_types = { workspace = true }
+tari_comms = { workspace = true }
+tari_comms_dht = { workspace = true }
+minotari_console_wallet = { workspace = true }
+minotari_wallet = { workspace = true }
+tari_p2p = { workspace = true }
+tari_shutdown = { workspace = true }
 
-tari_crypto = "0.19"
-tari_indexer = { path = "../applications/tari_indexer" }
-tari_validator_node_cli = { path = "../applications/tari_validator_node_cli" }
-tari_dan_common_types = { path = "../dan_layer/common_types" }
-tari_dan_engine = { path = "../dan_layer/engine" }
-tari_dan_storage = { path = "../dan_layer/storage" }
-tari_dan_wallet_daemon = { path = "../applications/tari_dan_wallet_daemon" }
-tari_engine_types = { path = "../dan_layer/engine_types" }
-tari_indexer_client = { path = "../clients/tari_indexer_client" }
-tari_template_builtin = { path = "../dan_layer/template_builtin" }
-tari_template_lib = { path = "../dan_layer/template_lib" }
-tari_transaction = { path = "../dan_layer/transaction" }
-tari_validator_node_client = { path = "../clients/validator_node_client" }
-tari_validator_node = { path = "../applications/tari_validator_node" }
-tari_wallet_daemon_client = { path = "../clients/wallet_daemon_client" }
-tari_base_node_client = { path = "../clients/base_node_client" }
-tari_transaction_manifest = { path = "../dan_layer/transaction_manifest" }
-tari_dan_wallet_sdk = { path = "../dan_layer/wallet/sdk" }
-#tari_consensus = { path = "../../dan_layer/consensus" }
+tari_crypto = { workspace = true }
+tari_indexer = { workspace = true }
+tari_validator_node_cli = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_engine = { workspace = true }
+tari_dan_storage = { workspace = true }
+tari_dan_wallet_daemon = { workspace = true}
+tari_engine_types = { workspace = true }
+tari_indexer_client = { workspace = true }
+tari_template_builtin = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
+tari_validator_node_client = { workspace = true }
+tari_validator_node = { workspace = true }
+tari_wallet_daemon_client = { workspace = true }
+tari_base_node_client = { workspace = true }
+tari_transaction_manifest = { workspace = true }
+tari_dan_wallet_sdk = { workspace = true }
+#tari_consensus = { workspace = true }
 
 anyhow = "1.0.53"
 base64 = "0.21.0"

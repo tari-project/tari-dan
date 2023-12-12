@@ -9,8 +9,8 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-transaction_generator = { path = "../transaction_generator" }
-tari_validator_node_client = { path = "../../clients/validator_node_client" }
+transaction_generator = { workspace = true }
+tari_validator_node_client = { workspace = true }
 
 anyhow = "1.0.72"
 clap = "4.3.21"

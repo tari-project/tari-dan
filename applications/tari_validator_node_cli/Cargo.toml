@@ -8,17 +8,17 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_crypto = "0.19"
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_dan_engine = { path = "../../dan_layer/engine" }
-tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_template_builtin = { path = "../../dan_layer/template_builtin" }
-tari_template_lib = { path = "../../dan_layer/template_lib" }
-tari_transaction = { path = "../../dan_layer/transaction" }
-tari_transaction_manifest = { path = "../../dan_layer/transaction_manifest" }
-tari_validator_node_client = { path = "../../clients/validator_node_client" }
-tari_dan_storage = { path = "../../dan_layer/storage" }
+tari_common_types = { workspace = true }
+tari_crypto = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_engine = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_template_builtin = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
+tari_transaction_manifest = { workspace = true }
+tari_validator_node_client = { workspace = true }
+tari_dan_storage = { workspace = true }
 
 anyhow = "1.0.65"
 clap = { version = "3.2.22", features = ["derive", "env"] }

@@ -7,5 +7,5 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_engine_types = { path = "../engine_types" }
+tari_engine_types = { workspace = true }
 lazy_static = "1.4.0"

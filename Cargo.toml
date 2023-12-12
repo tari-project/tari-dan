@@ -18,6 +18,7 @@ members = [
     "clients/base_node_client",
     "clients/validator_node_client",
     "clients/wallet_daemon_client",
+    "comms/tari_comms_logging",
     "dan_layer/comms_rpc_state_sync",
     "dan_layer/consensus",
     "dan_layer/consensus_tests",
@@ -45,6 +46,66 @@ members = [
     "utilities/transaction_submitter",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+
+# internal dependencies among workspace crates
+tari_base_node_client = { path = "clients/base_node_client" }
+tari_bor = { path = "dan_layer/tari_bor" }
+tari_comms_logging = { path = "comms/tari_comms_logging" }
+tari_comms_rpc_state_sync = { path = "dan_layer/comms_rpc_state_sync" }
+tari_consensus = { path = "dan_layer/consensus" }
+tari_dan_app_utilities = { path = "applications/tari_dan_app_utilities" }
+tari_dan_common_types = { path = "dan_layer/common_types" }
+tari_dan_engine = { path = "dan_layer/engine" }
+tari_dan_storage = { path = "dan_layer/storage" }
+tari_dan_storage_sqlite = { path = "dan_layer/storage_sqlite" }
+tari_dan_wallet_sdk = { path = "dan_layer/wallet/sdk" }
+tari_dan_wallet_storage_sqlite = { path = "dan_layer/wallet/storage_sqlite" }
+tari_dan_p2p = { path = "dan_layer/p2p" }
+tari_engine_types = { path = "dan_layer/engine_types" }
+tari_epoch_manager = { path = "dan_layer/epoch_manager" }
+tari_indexer = { path = "applications/tari_indexer" }
+tari_indexer_lib = { path = "dan_layer/indexer_lib" }
+tari_indexer_client = { path = "clients/tari_indexer_client" }
+tari_state_store_sqlite = { path = "dan_layer/state_store_sqlite" }
+tari_template_abi = { path = "dan_layer/template_abi" }
+tari_template_builtin = { path = "dan_layer/template_builtin" }
+tari_template_lib = { path = "dan_layer/template_lib" }
+tari_template_macros = { path = "dan_layer/template_macros" }
+tari_template_test_tooling = { path = "dan_layer/template_test_tooling" }
+tari_transaction = { path = "dan_layer/transaction" }
+tari_transaction_manifest = { path = "dan_layer/transaction_manifest" }
+tari_validator_node = { path = "applications/tari_validator_node" }
+tari_validator_node_cli = { path = "applications/tari_validator_node_cli" }
+tari_validator_node_client = { path = "clients/validator_node_client" }
+tari_validator_node_rpc = { path = "dan_layer/validator_node_rpc" }
+tari_dan_wallet_daemon = { path = "applications/tari_dan_wallet_daemon" }
+tari_wallet_daemon_client = { path = "clients/wallet_daemon_client" }
+transaction_generator = { path = "utilities/transaction_generator" }
+
+# external minotari/tari dependencies
+minotari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+minotari_console_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+minotari_node = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+minotari_node_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+minotari_wallet = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+minotari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_comms = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_comms_dht = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+# avoid including default features so each crate can choose which ones to import
+tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", default-features = false }
+tari_crypto = "0.19"
+tari_key_manager = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_storage = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_utilities = "0.6"
 
 # Shutdown when panicking so we can see the error, specifically for the wallet
 [profile.release]
