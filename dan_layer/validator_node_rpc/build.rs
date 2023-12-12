@@ -21,7 +21,7 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tari_common::build::ProtobufCompiler::new()
+    proto_builder::ProtobufCompiler::new()
         .proto_paths(&["proto"])
         .include_paths(&["proto"])
         .emit_rerun_if_changed_directives()

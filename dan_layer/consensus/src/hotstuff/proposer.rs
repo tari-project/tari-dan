@@ -43,7 +43,7 @@ where TConsensusSpec: ConsensusSpec
         }
     }
 
-    pub async fn broadcast_proposal_foreignly(&self, block: &Block<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+    pub async fn broadcast_proposal_foreignly(&self, block: &Block) -> Result<(), HotStuffError> {
         let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
 
         let validator = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
@@ -91,7 +91,7 @@ where TConsensusSpec: ConsensusSpec
 
 pub fn get_non_local_buckets<TTx: StateStoreReadTransaction>(
     tx: &mut TTx,
-    block: &Block<TTx::Addr>,
+    block: &Block,
     num_committees: u32,
     local_bucket: ShardBucket,
 ) -> Result<HashSet<ShardBucket>, HotStuffError> {

@@ -7,7 +7,9 @@ use std::{
 };
 
 use futures::{stream::FuturesUnordered, StreamExt};
+use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::hotstuff::HotstuffEvent;
+use tari_crypto::keys::{PublicKey as _, SecretKey};
 use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, Decision, TransactionPoolStage, TransactionRecord},
@@ -198,7 +200,7 @@ impl Test {
                 let mut heights = self
                     .validators
                     .values()
-                    .filter(|vn| committee.members.contains(&vn.address))
+                    .filter(|vn| committee.contains(&vn.address))
                     .filter(|vn| !except.contains(&vn.address))
                     .map(|v| {
                         let height = v.state_store.with_read_tx(|tx| Block::get_tip(tx)).unwrap().height();
@@ -316,8 +318,19 @@ impl TestBuilder {
     }
 
     pub fn add_committee<T: Into<ShardBucket>>(&mut self, bucket: T, addresses: Vec<&'static str>) -> &mut Self {
-        self.committees
-            .insert(bucket.into(), addresses.into_iter().map(TestAddress::new).collect());
+        let entry = self
+            .committees
+            .entry(bucket.into())
+            .or_insert_with(|| Committee::new(vec![]));
+
+        for addr in addresses {
+            let mut bytes = [0u8; 64];
+            bytes[0..addr.as_bytes().len()].copy_from_slice(addr.as_bytes());
+            let secret_key = PrivateKey::from_uniform_bytes(&bytes).unwrap();
+            entry
+                .members
+                .push((TestAddress::new(addr), PublicKey::from_secret_key(&secret_key)));
+        }
         self
     }
 
@@ -331,14 +344,14 @@ impl TestBuilder {
             .all_validators()
             .await
             .into_iter()
-            .map(|(address, bucket, shard)| {
+            .map(|(address, bucket, shard, pk)| {
                 let sql_address = self.sql_address.replace("{}", &address.0);
                 let (channels, validator) = Validator::builder()
                     .with_sql_url(sql_address)
-                    .with_address(address.clone())
+                    .with_address_and_public_key(address.clone(), pk.clone())
                     .with_shard(shard)
                     .with_bucket(bucket)
-                    .with_epoch_manager(epoch_manager.clone_for(address.clone(), shard))
+                    .with_epoch_manager(epoch_manager.clone_for(address.clone(), pk, shard))
                     .with_leader_strategy(*leader_strategy)
                     .spawn(shutdown_signal.clone());
                 (channels, (address, validator))
@@ -352,7 +365,7 @@ impl TestBuilder {
             for path in self
                 .committees
                 .values()
-                .flat_map(|committee| committee.iter().map(|addr| sql_file.replace("{}", &addr.0)))
+                .flat_map(|committee| committee.iter().map(|(addr, _)| sql_file.replace("{}", &addr.0)))
             {
                 let _ignore = std::fs::remove_file(&path);
             }

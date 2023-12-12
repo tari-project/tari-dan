@@ -24,25 +24,19 @@ mod service_impl;
 mod sync_task;
 
 pub use service_impl::ValidatorNodeRpcServiceImpl;
-use tari_common_types::types::PublicKey;
-use tari_dan_p2p::PeerProvider;
+use tari_dan_common_types::PeerAddress;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_validator_node_rpc::rpc_service::ValidatorNodeRpcServer;
 
 use crate::{p2p::services::mempool::MempoolHandle, virtual_substate::VirtualSubstateManager};
 
-pub fn create_tari_validator_node_rpc_service<TPeerProvider>(
-    peer_provider: TPeerProvider,
-    shard_store_store: SqliteStateStore<PublicKey>,
+pub fn create_tari_validator_node_rpc_service(
+    shard_store_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
-    virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PublicKey>, EpochManagerHandle>,
-) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl<TPeerProvider>>
-where
-    TPeerProvider: PeerProvider + Clone + Send + Sync + 'static,
-{
+    virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,
+) -> ValidatorNodeRpcServer<ValidatorNodeRpcServiceImpl> {
     ValidatorNodeRpcServer::new(ValidatorNodeRpcServiceImpl::new(
-        peer_provider,
         shard_store_store,
         mempool,
         virtual_substate_manager,

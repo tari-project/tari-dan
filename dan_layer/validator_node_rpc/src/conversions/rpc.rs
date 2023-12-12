@@ -4,13 +4,12 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::consensus_models::{SubstateCreatedProof, SubstateData, SubstateUpdate};
 use tari_engine_types::substate::{SubstateAddress, SubstateValue};
 
 use crate::proto;
 
-impl<TAddr: NodeAddressable> TryFrom<proto::rpc::SubstateCreatedProof> for SubstateCreatedProof<TAddr> {
+impl TryFrom<proto::rpc::SubstateCreatedProof> for SubstateCreatedProof {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::rpc::SubstateCreatedProof) -> Result<Self, Self::Error> {
@@ -29,8 +28,8 @@ impl<TAddr: NodeAddressable> TryFrom<proto::rpc::SubstateCreatedProof> for Subst
     }
 }
 
-impl<TAddr: NodeAddressable> From<SubstateCreatedProof<TAddr>> for proto::rpc::SubstateCreatedProof {
-    fn from(value: SubstateCreatedProof<TAddr>) -> Self {
+impl From<SubstateCreatedProof> for proto::rpc::SubstateCreatedProof {
+    fn from(value: SubstateCreatedProof) -> Self {
         Self {
             substate: Some(value.substate.into()),
             created_justify: Some((&value.created_qc).into()),
@@ -38,7 +37,7 @@ impl<TAddr: NodeAddressable> From<SubstateCreatedProof<TAddr>> for proto::rpc::S
     }
 }
 
-impl<TAddr: NodeAddressable> TryFrom<proto::rpc::SubstateUpdate> for SubstateUpdate<TAddr> {
+impl TryFrom<proto::rpc::SubstateUpdate> for SubstateUpdate {
     type Error = anyhow::Error;
 
     fn try_from(value: proto::rpc::SubstateUpdate) -> Result<Self, Self::Error> {
@@ -58,8 +57,8 @@ impl<TAddr: NodeAddressable> TryFrom<proto::rpc::SubstateUpdate> for SubstateUpd
     }
 }
 
-impl<TAddr: NodeAddressable> From<SubstateUpdate<TAddr>> for proto::rpc::SubstateUpdate {
-    fn from(value: SubstateUpdate<TAddr>) -> Self {
+impl From<SubstateUpdate> for proto::rpc::SubstateUpdate {
+    fn from(value: SubstateUpdate) -> Self {
         let update = match value {
             SubstateUpdate::Create(proof) => proto::rpc::substate_update::Update::Create(proof.into()),
             SubstateUpdate::Destroy {

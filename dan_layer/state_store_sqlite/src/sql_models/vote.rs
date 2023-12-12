@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::{Epoch, NodeAddressable};
+use tari_dan_common_types::Epoch;
 use tari_dan_storage::{consensus_models, consensus_models::QuorumDecision, StorageError};
 use time::PrimitiveDateTime;
 
@@ -23,7 +23,7 @@ pub struct Vote {
     pub created_at: PrimitiveDateTime,
 }
 
-impl<TAddr: NodeAddressable> TryFrom<Vote> for consensus_models::Vote<TAddr> {
+impl TryFrom<Vote> for consensus_models::Vote {
     type Error = StorageError;
 
     fn try_from(value: Vote) -> Result<Self, Self::Error> {

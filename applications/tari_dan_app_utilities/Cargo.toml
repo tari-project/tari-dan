@@ -6,12 +6,16 @@ edition = "2021"
 license = "BSD-3-Clause"
 
 [dependencies]
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", default-features = false, features = [
   "transactions",
 ] }
 tari_crypto = "0.19"
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+
+multiaddr = "0.18"
+libp2p-identity = "0.2.8"
 
 tari_dan_common_types = { path = "../../dan_layer/common_types" }
 tari_state_store_sqlite = { path = "../../dan_layer/state_store_sqlite" }
@@ -29,6 +33,7 @@ tari_transaction = { path = "../../dan_layer/transaction" }
 tari_validator_node_client = { path = "../../clients/validator_node_client" }
 tari_bor = { path = "../../dan_layer/tari_bor" }
 tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
+tari_networking = { path = "../../networking/core" }
 
 anyhow = "1.0.53"
 async-trait = "0.1.74"
@@ -38,13 +43,15 @@ chrono = "0.4.22"
 futures = { version = "^0.3.1" }
 log = { version = "0.4.8", features = ["std"] }
 mini-moka = "0.10.0"
+json5 = "0.4.1"
 dashmap = "5.5.0"
 std-semaphore = "0.1.0"
-prost = "0.9"
+prost = "0.12"
 reqwest = "0.11.11"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "^1.0.20"
+rand = "0.8.5"
 tokio = { version = "1.10", features = [
   "macros",
   "time",

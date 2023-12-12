@@ -20,9 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs::create_dir_all, path::PathBuf};
+use std::{fs::create_dir_all, marker::PhantomData, path::PathBuf};
 
 use diesel::{sql_query, Connection, RunQueryDsl, SqliteConnection};
+use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::{
     global::{DbFactory, GlobalDb},
     StorageError,
@@ -33,13 +34,17 @@ use crate::{error::SqliteStorageError, global::SqliteGlobalDbAdapter};
 const _LOG_TARGET: &str = "tari::dan::sqlite_storage";
 
 #[derive(Debug, Clone)]
-pub struct SqliteDbFactory {
+pub struct SqliteDbFactory<TAddr> {
     data_dir: PathBuf,
+    _addr: std::marker::PhantomData<TAddr>,
 }
 
-impl SqliteDbFactory {
+impl<TAddr> SqliteDbFactory<TAddr> {
     pub fn new(data_dir: PathBuf) -> Self {
-        Self { data_dir }
+        Self {
+            data_dir,
+            _addr: PhantomData,
+        }
     }
 
     fn connect(&self) -> Result<SqliteConnection, StorageError> {
@@ -51,8 +56,8 @@ impl SqliteDbFactory {
     }
 }
 
-impl DbFactory for SqliteDbFactory {
-    type GlobalDbAdapter = SqliteGlobalDbAdapter;
+impl<TAddr: NodeAddressable + 'static> DbFactory for SqliteDbFactory<TAddr> {
+    type GlobalDbAdapter = SqliteGlobalDbAdapter<TAddr>;
 
     fn get_or_create_global_db(&self) -> Result<GlobalDb<Self::GlobalDbAdapter>, StorageError> {
         let mut connection = self.connect()?;

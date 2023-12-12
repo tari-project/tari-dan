@@ -57,6 +57,18 @@ pub enum SqliteStorageError {
     MalformedMetadata { key: String },
     #[error("Serialization failed")]
     SerializationFailed(#[from] serde_json::Error),
+    #[error("Failed to decode for operation {operation} on {item}: {details}")]
+    DecodingError {
+        operation: &'static str,
+        item: &'static str,
+        details: String,
+    },
+    #[error("Failed to encode for operation {operation} on {item}: {details}")]
+    EncodingError {
+        operation: &'static str,
+        item: &'static str,
+        details: String,
+    },
 }
 
 impl From<SqliteStorageError> for StorageError {

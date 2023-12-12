@@ -13,18 +13,18 @@ tari_engine_types = { path = "../engine_types" }
 tari_bor = { path = "../tari_bor" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 
+libp2p-identity = { version = "0.2.8", features = ["sr25519", "serde", "peerid"] }
+
 blake2 = "0.10.6"
 newtype-ops = "0.1.4"
 rand = "0.8"
-prost = "0.9"
+prost = "0.12"
 prost-types = "0.9"
 serde = "1.0"
 ruint = "1.8.0"
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common", features = [
-  "build",
-] }
+tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common", features = ["build"] }
 
 [package.metadata.cargo-machete]
 ignored = ["prost", "prost-types"] # false positive, used in OUT_DIR structs

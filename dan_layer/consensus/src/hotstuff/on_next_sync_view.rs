@@ -20,7 +20,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_next_sync_view";
 
 pub struct OnNextSyncViewHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
 }
@@ -28,7 +28,7 @@ pub struct OnNextSyncViewHandler<TConsensusSpec: ConsensusSpec> {
 impl<TConsensusSpec: ConsensusSpec> OnNextSyncViewHandler<TConsensusSpec> {
     pub fn new(
         store: TConsensusSpec::StateStore,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
     ) -> Self {

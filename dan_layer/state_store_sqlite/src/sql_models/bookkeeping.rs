@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::Queryable;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, NodeHeight};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{self, QuorumDecision},
     StorageError,
@@ -161,7 +161,7 @@ pub struct LastSentVote {
     pub created_at: PrimitiveDateTime,
 }
 
-impl<TAddr: NodeAddressable> TryFrom<LastSentVote> for consensus_models::LastSentVote<TAddr> {
+impl TryFrom<LastSentVote> for consensus_models::LastSentVote {
     type Error = StorageError;
 
     fn try_from(value: LastSentVote) -> Result<Self, Self::Error> {

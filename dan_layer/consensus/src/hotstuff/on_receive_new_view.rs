@@ -60,7 +60,7 @@ where TConsensusSpec: ConsensusSpec
         &mut self,
         from: TConsensusSpec::Addr,
         new_height: NodeHeight,
-        high_qc: &QuorumCertificate<TConsensusSpec::Addr>,
+        high_qc: &QuorumCertificate,
     ) -> usize {
         let entry = self
             .newview_message_counts
@@ -71,11 +71,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     #[allow(clippy::too_many_lines)]
-    pub async fn handle(
-        &mut self,
-        from: TConsensusSpec::Addr,
-        message: NewViewMessage<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: NewViewMessage) -> Result<(), HotStuffError> {
         let NewViewMessage {
             high_qc,
             new_height,
@@ -149,7 +145,7 @@ where TConsensusSpec: ConsensusSpec
                 target: LOG_TARGET,
                 "🔥 Receive VOTE with NEWVIEW for node {} from {}", vote.block_id, from,
             );
-            self.vote_receiver.handle(vote, false).await?;
+            self.vote_receiver.handle(from.clone(), vote, false).await?;
         }
 
         // Are nodes requesting to create more than the minimum number of dummy blocks?
@@ -207,7 +203,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    fn validate_qc(&self, _qc: &QuorumCertificate<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+    fn validate_qc(&self, _qc: &QuorumCertificate) -> Result<(), HotStuffError> {
         // TODO
         Ok(())
     }

@@ -51,7 +51,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         pacemaker: PaceMakerHandle,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         vote_signing_service: TConsensusSpec::VoteSignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -78,7 +78,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         }
     }
 
-    pub async fn handle(&self, message: ProposalMessage<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+    pub async fn handle(&self, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
         debug!(
@@ -93,7 +93,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         Ok(())
     }
 
-    async fn process_block(&self, block: Block<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+    async fn process_block(&self, block: Block) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
                 epoch: block.epoch(),
@@ -117,7 +117,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         Ok(())
     }
 
-    fn save_block(&self, valid_block: &ValidBlock<TConsensusSpec::Addr>) -> Result<HighQc, HotStuffError> {
+    fn save_block(&self, valid_block: &ValidBlock) -> Result<HighQc, HotStuffError> {
         self.store.with_write_tx(|tx| {
             valid_block.block().justify().save(tx)?;
             valid_block.save_all_dummy_blocks(tx)?;
@@ -127,13 +127,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         })
     }
 
-    async fn validate_block(
-        &self,
-        block: Block<TConsensusSpec::Addr>,
-    ) -> Result<Option<ValidBlock<TConsensusSpec::Addr>>, HotStuffError> {
+    async fn validate_block(&self, block: Block) -> Result<Option<ValidBlock>, HotStuffError> {
         let local_committee = self
             .epoch_manager
-            .get_committee_by_validator_address(block.epoch(), block.proposed_by())
+            .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
         // First save the block in one db transaction
@@ -156,7 +153,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         num_committees: u32,
         local_bucket: ShardBucket,
-        block: &Block<TConsensusSpec::Addr>,
+        block: &Block,
         justify_block: &BlockId,
     ) -> Result<bool, HotStuffError> {
         let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), justify_block)?;
@@ -176,10 +173,10 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
     fn validate_local_proposed_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        candidate_block: Block<TConsensusSpec::Addr>,
+        candidate_block: Block,
         local_committee: &Committee<TConsensusSpec::Addr>,
         local_committee_shard: &CommitteeShard,
-    ) -> Result<ValidBlock<TConsensusSpec::Addr>, HotStuffError> {
+    ) -> Result<ValidBlock, HotStuffError> {
         if Block::has_been_processed(tx.deref_mut(), candidate_block.id())? {
             return Err(ProposalValidationError::BlockAlreadyProcessed {
                 block_id: *candidate_block.id(),
@@ -259,7 +256,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
                 }
 
                 let next_height = last_dummy_block.height() + NodeHeight(1);
-                let leader = self.leader_strategy.get_leader(local_committee, next_height);
+                let leader = self.leader_strategy.get_leader_public_key(local_committee, next_height);
 
                 // TODO: replace with actual leader's propose
                 dummy_blocks.push(Block::dummy_block(
