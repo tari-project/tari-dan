@@ -1,9 +1,10 @@
 [package]
 name = "tari_scaffolder"
-version = "0.2.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 tari_dan_engine = { path = "../../dan_layer/engine"}

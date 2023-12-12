@@ -1,11 +1,11 @@
 [package]
 name = "tari_indexer_lib"
-version = "0.50.0-pre.0"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "Network scanning and indexing library"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 tari_dan_common_types = { path = "../common_types" }

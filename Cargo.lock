@@ -1670,7 +1670,7 @@ dependencies = [
 
 [[package]]
 name = "consensus_tests"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3760,7 +3760,7 @@ checksum = "8bb03732005da905c88227371639bf1ad885cc712789c011c31c5fb3ab3ccf02"
 
 [[package]]
 name = "integration_tests"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64 0.21.5",
@@ -7700,7 +7700,7 @@ dependencies = [
 
 [[package]]
 name = "tari_comms_rpc_state_sync"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7718,7 +7718,7 @@ dependencies = [
 
 [[package]]
 name = "tari_consensus"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7943,7 +7943,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_p2p"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -8153,7 +8153,7 @@ dependencies = [
 
 [[package]]
 name = "tari_epoch_manager"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8254,7 +8254,7 @@ dependencies = [
 
 [[package]]
 name = "tari_indexer_lib"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "log",
@@ -8419,7 +8419,7 @@ dependencies = [
 
 [[package]]
 name = "tari_signaling_server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -8442,7 +8442,7 @@ dependencies = [
 
 [[package]]
 name = "tari_state_store_sqlite"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bigdecimal",
@@ -8706,7 +8706,7 @@ dependencies = [
 
 [[package]]
 name = "tari_validator_node_rpc"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9246,7 +9246,7 @@ dependencies = [
 
 [[package]]
 name = "transaction_generator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode 2.0.0-rc.3",
@@ -9264,7 +9264,7 @@ dependencies = [
 
 [[package]]
 name = "transaction_submitter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap 4.4.8",

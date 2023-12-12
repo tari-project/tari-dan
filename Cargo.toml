@@ -1,5 +1,11 @@
-[workspace]
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+authors = ["The Tari Development Community"]
+repository = "https://github.com/tari-project/tari-dan"
+license = "BSD-3-Clause"
 
+[workspace]
 members = [
     "applications/tari_dan_app_utilities",
     "applications/tari_dan_wallet_cli",
@@ -38,7 +44,6 @@ members = [
     "utilities/transaction_generator",
     "utilities/transaction_submitter",
 ]
-#
 resolver = "2"
 
 # Shutdown when panicking so we can see the error, specifically for the wallet

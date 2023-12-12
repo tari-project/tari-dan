@@ -1,11 +1,11 @@
 [package]
 name = "tari_validator_node"
-authors = ["The Tari Development Community"]
 description = "The Tari validator node implementation"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
-version = "0.2.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 minotari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }

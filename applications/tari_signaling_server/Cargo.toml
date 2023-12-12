@@ -1,11 +1,11 @@
 [package]
 name = "tari_signaling_server"
-version = "0.1.0"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "WebRTC signaling server implementation"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
 tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
