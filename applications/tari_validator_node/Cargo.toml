@@ -79,9 +79,7 @@ tower-layer = "0.3"
 mime_guess = "2.0.4"
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common", features = [
-    "build",
-] }
+tari_common = { workspace = true, features = ["build"] }
 
 [package.metadata.cargo-machete]
 ignored = [
