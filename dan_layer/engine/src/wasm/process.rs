@@ -213,12 +213,12 @@ impl WasmProcess {
     fn validate_template_tari_version(module: &LoadedWasmTemplate) -> Result<(), WasmExecutionError> {
         let template_tari_version = module.template_def().tari_version();
 
-        if template_tari_version != ENGINE_TARI_VERSION {
-            // For now we are going to ignore version mistmatches
+        if template_tari_version == ENGINE_TARI_VERSION {
+            log::info!(target: LOG_TARGET, "The Tari version version in the template WASM (\"{}\") matches the one used in the engine", template_tari_version);
+        } else {
+            // For now we are going to ignore version mismatches
             // In the future we could load a different version of the template_lib in the engine
             log::warn!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") does not matches the one used in the engine (\"{}\")", template_tari_version, ENGINE_TARI_VERSION);
-        } else {
-            log::info!(target: LOG_TARGET, "The Tari version version in the template WASM (\"{}\") matches the one used in the engine", template_tari_version);
         }
 
         Ok(())
