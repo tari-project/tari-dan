@@ -220,7 +220,7 @@ impl WasmProcess {
         } else {
             log::info!(target: LOG_TARGET, "The Tari version version in the template WASM (\"{}\") matches the one used in the engine", template_tari_version);
         }
-        
+
         Ok(())
     }
 }
