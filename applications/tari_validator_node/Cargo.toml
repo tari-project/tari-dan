@@ -39,44 +39,45 @@ tari_bor = { workspace = true, default-features = true }
 tari_consensus = { workspace = true }
 tari_state_store_sqlite = { workspace = true }
 
-anyhow = "1.0.53"
-async-trait = "0.1.50"
-axum = "0.6.0"
-axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
-blake2 = "0.10"
-clap = { version = "3.2.5", features = ["env"] }
-config = "0.13.0"
-futures = { version = "^0.3.1" }
-include_dir = "0.7.2"
-indexmap = "2.0.0"
-json5 = "0.2.2"
-libsqlite3-sys = { version = "0.25", features = ["bundled"] }
-lmdb-zero = "0.4.4"
-log = { version = "0.4.8", features = ["std"] }
-log4rs = { version = "1.1.1", features = [
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+axum-jrpc = { workspace = true, features = ["anyhow_error"] }
+blake2 = { workspace = true }
+clap = { workspace = true, features = ["env"] }
+config = { workspace = true }
+futures = { workspace = true }
+include_dir = { workspace = true }
+indexmap = { workspace = true }
+json5 = { workspace = true }
+libsqlite3-sys = { workspace = true, features = ["bundled"] }
+lmdb-zero = { workspace = true }
+log = { workspace = true, features = ["std"] }
+log4rs = { workspace = true, features = [
     "rolling_file_appender",
     "compound_policy",
     "size_trigger",
     "fixed_window_roller",
 ] }
-prost = "0.9"
-rand = "0.8"
-reqwest = "0.11.11"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "^1.0.20"
-time = "0.3.15"
-tokio = { version = "1.10", features = [
+mime_guess = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true, features = ["default", "derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true, features = [
+    "default",
     "macros",
     "time",
     "sync",
     "rt-multi-thread",
-] }
-tonic = "0.6.2"
-tower = "0.4"
-tower-http = { version = "0.3.0", features = ["cors"] }
-tower-layer = "0.3"
-mime_guess = "2.0.4"
+]}
+tonic = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true, features = ["default", "cors"] }
+tower-layer = { workspace = true }
 
 [build-dependencies]
 tari_common = { workspace = true, features = ["build"] }

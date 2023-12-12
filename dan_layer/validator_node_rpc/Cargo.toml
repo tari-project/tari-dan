@@ -22,14 +22,14 @@ tari_template_lib = { workspace = true }
 tari_transaction = { workspace = true }
 tari_bor = { workspace = true, default-features = true }
 
-anyhow = "1.0.53"
-async-trait = "0.1"
-chrono = "0.4.22"
-log = "0.4"
-prost = "0.9"
-serde = "1.0"
-thiserror = "1.0"
-tokio-stream = "0.1"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true, default-features = true }
+thiserror = { workspace = true }
+tokio-stream = { workspace = true }
 
 [build-dependencies]
 tari_common = { workspace = true, features = ["build"] }

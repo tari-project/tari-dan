@@ -19,22 +19,22 @@ tari_transaction = { workspace = true }
 tari_template_lib = { workspace = true }
 tari_utilities = { workspace = true }
 
-anyhow = "1.0"
-async-trait = "0.1"
-chacha20poly1305 = "0.10.1"
-blake2 = "0.10.6"
-chrono = "*"
-digest = "0.10"
-jsonwebtoken = "8.3.0"
-lazy_static = "1.4.0"
-log = "0.4.14"
-rand = "0.8"
-serde = "1.0"
-serde_json = "1.0"
-thiserror = "1.0.38"
-zeroize = "1"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chacha20poly1305 = { workspace = true }
+blake2 = { workspace = true }
+chrono = { workspace = true }
+digest = { workspace = true }
+jsonwebtoken = { workspace = true }
+lazy_static = { workspace = true }
+log = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+zeroize = { workspace = true }
 
 [dev-dependencies]
 tari_dan_wallet_storage_sqlite = { workspace = true }
 
-tempfile = "3.4.0"
+tempfile = { workspace = true }

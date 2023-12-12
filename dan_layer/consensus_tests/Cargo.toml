@@ -23,17 +23,17 @@ tari_mmr = { workspace = true }
 tari_shutdown = { workspace = true }
 tari_crypto = { workspace = true }
 
-anyhow = "1.0"
-async-trait = "0.1.68"
-log = "0.4"
-serde = "1.0"
-thiserror = "1.0"
-tokio = { version = "1", default-features = false, features = [
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true, default-features = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, default-features = false, features = [
   "sync",
   "rt-multi-thread",
 ] }
-rand = "0.8"
-futures = "0.3"
-fern = "0.6.2"
-humantime = "2.1.0"
-itertools = "0.11.0"
+rand = { workspace = true }
+futures = { workspace = true }
+fern = { workspace = true }
+humantime = { workspace = true }
+itertools = { workspace = true }

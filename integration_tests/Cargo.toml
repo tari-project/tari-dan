@@ -39,38 +39,38 @@ tari_wallet_daemon_client = { workspace = true }
 tari_base_node_client = { workspace = true }
 tari_transaction_manifest = { workspace = true }
 tari_dan_wallet_sdk = { workspace = true }
-#tari_consensus = { workspace = true }
 
-anyhow = "1.0.53"
-base64 = "0.21.0"
-config = "0.13.0"
-cucumber = { version = "0.18.0", features = [
+anyhow = { workspace = true }
+base64 = { workspace = true }
+config = { workspace = true }
+cucumber = { workspace = true, features = [
     "default",
     "libtest",
     "output-junit",
 ] }
-futures = "0.3.29"
-httpmock = "0.6.8"
-indexmap = "1.9.1"
-log = { version = "0.4.8", features = ["std"] }
-log4rs = { version = "1.1.1", features = [
+futures = { workspace = true }
+httpmock = { workspace = true }
+indexmap = { workspace = true }
+log = { workspace = true, features = ["std"] }
+log4rs = { workspace = true, features = [
     "rolling_file_appender",
     "compound_policy",
     "size_trigger",
     "fixed_window_roller",
 ] }
-rand = "0.8"
-reqwest = "0.11.11"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-time = "0.3.15"
-tokio = { version = "1.10", features = [
+rand = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true, features = ["default", "derive"] }
+serde_json = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true, features = [
+    "default",
     "macros",
     "time",
     "sync",
     "rt-multi-thread",
 ] }
-tonic = "0.6.2"
+tonic = { workspace = true }
 
 [[test]]
 name = "cucumber" # this should be the same as the filename of your test target

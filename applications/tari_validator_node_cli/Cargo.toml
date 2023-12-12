@@ -20,16 +20,16 @@ tari_transaction_manifest = { workspace = true }
 tari_validator_node_client = { workspace = true }
 tari_dan_storage = { workspace = true }
 
-anyhow = "1.0.65"
-clap = { version = "3.2.22", features = ["derive", "env"] }
-cargo_metadata = "0.15.3"
-dirs = "4.0.0"
-jfs = "0.7.1"
-log = "0.4.17"
-multiaddr = "0.14.0"
-reqwest = { version = "0.11.11", features = ["json"] }
-serde = "1.0"
-serde_json = "1.0"
-thiserror = "1.0.36"
-time = "0.3.15"
-tokio = { version = "1", features = ["macros", "time"] }
+anyhow = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+cargo_metadata = { workspace = true }
+dirs = { workspace = true }
+jfs = { workspace = true }
+log = { workspace = true }
+multiaddr = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true, features = ["default", "macros", "time"] }

@@ -19,11 +19,11 @@ tari_base_node_client = { workspace = true, optional = true }
 tari_crypto = { workspace = true }
 tari_mmr = { workspace = true, optional = true }
 
-anyhow = "1.0"
-async-trait = "0.1"
-log = { version = "0.4", optional = true }
-thiserror = "1.0"
-tokio = { version = "1", default-features = false, features = ["sync"] }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+log = { workspace = true , optional = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, default-features = false, features = ["sync"] }
 
 [features]
 base_layer = [

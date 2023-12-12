@@ -9,8 +9,8 @@ license.workspace = true
 
 [dependencies]
 tari_bor = { workspace = true, default-features = false }
-serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
-hashbrown = { version = "0.13.2", optional = true }
+serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
+hashbrown = { workspace = true, optional = true }
 
 [features]
 default = ["std"]

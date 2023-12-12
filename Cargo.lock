@@ -903,12 +903,6 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "base64"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ea22880d78093b0cbe17c89f64a7d457941e65759157ec6cb31a31d652b05e5"
-
-[[package]]
-name = "base64"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "35636a1494ede3b646cc98f74f8e62c773a38a659ebc777a2cf26b9b74171df9"
@@ -1206,16 +1200,6 @@ name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
-
-[[package]]
-name = "bytes"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "206fdffcfa2df7cbe15601ef46c813fce0965eb3286db6b56c583b814b51c81c"
-dependencies = [
- "byteorder",
- "iovec",
-]
 
 [[package]]
 name = "bytes"
@@ -3768,7 +3752,7 @@ dependencies = [
  "cucumber",
  "futures 0.3.29",
  "httpmock",
- "indexmap 1.9.3",
+ "indexmap 2.1.0",
  "log",
  "log4rs 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "minotari_app_grpc",
@@ -3844,15 +3828,6 @@ dependencies = [
  "hermit-abi 0.3.3",
  "libc",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "iovec"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2b3ea6ff95e175473f8ffe6a7eb7c00d054240321b84c57051175fe3c1e075e"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -8010,7 +7985,7 @@ name = "tari_dan_wallet_cli"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "base64 0.20.0",
+ "base64 0.21.5",
  "clap 3.2.25",
  "log",
  "multiaddr",
@@ -8040,7 +8015,7 @@ dependencies = [
  "anyhow",
  "axum",
  "axum-jrpc",
- "base64 0.20.0",
+ "base64 0.21.5",
  "clap 3.2.25",
  "config",
  "futures 0.3.29",
@@ -9250,7 +9225,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode 2.0.0-rc.3",
- "bytes 0.4.12",
+ "bytes 1.5.0",
  "clap 4.4.8",
  "once_cell",
  "rand",

@@ -17,8 +17,8 @@ tari_transaction = { workspace = true }
 
 tari_comms = { workspace = true }
 
-anyhow = "1.0.75"
-async-trait = "0.1.73"
-futures = "0.3.28"
-log = "0.4.20"
-thiserror = "1.0.48"
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }

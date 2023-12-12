@@ -24,41 +24,40 @@ tari_template_builtin = { workspace = true }
 tari_template_lib = { workspace = true }
 tari_indexer_client = { workspace = true }
 
-anyhow = "1.0.69"
-axum = { version = "0.6", features = ["headers"] }
-axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
-base64 = "0.20.0-alpha.1"
-clap = { version = "3.2.22", features = ["derive", "env"] }
-config = "0.13.0"
-humantime-serde = "1.1.1"
-futures = "0.3.26"
-include_dir = "0.7.2"
-log = "0.4.17"
-rand = "0.8"
-reqwest = "0.11.16"
-serde = "1.0"
-serde_json = "1.0"
-thiserror = "1.0.38"
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
-tower-http = { version = "0.3.5", default-features = false, features = [
-    "cors",
-    "trace",
-] }
-webrtc = "0.9.0"
-
-libsqlite3-sys = { version = "0.25", features = ["bundled"] }
-log4rs = { version = "1.1.1", features = [
+anyhow = { workspace = true }
+axum = { workspace = true, features = ["headers"] }
+axum-jrpc = { workspace = true, features = ["anyhow_error"] }
+base64 = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+config = { workspace = true }
+humantime-serde = { workspace = true }
+futures = { workspace = true }
+include_dir = { workspace = true }
+libsqlite3-sys = { workspace = true, features = ["bundled"] }
+log = { workspace = true }
+log4rs = { workspace = true, features = [
     "rolling_file_appender",
     "compound_policy",
     "size_trigger",
     "fixed_window_roller",
     "console_appender",
 ] }
-mime_guess = "2.0.4"
-url = "2.4.1"
+mime_guess =  { workspace = true }
+rand = { workspace = true }
+reqwest =  { workspace = true }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["default", "rt-multi-thread", "macros", "time"] }
+tower-http = { workspace = true, features = [
+    "cors",
+    "trace",
+] }
+url =  { workspace = true }
+webrtc = { workspace = true }
 
 [dev-dependencies]
-tari_utilities = "0.6"
+tari_utilities = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = [

@@ -21,14 +21,14 @@ tari_bor = { workspace = true, default-features = true }
 # Needed for VersionedSubstateAddress
 tari_dan_wallet_sdk = { workspace = true }
 
-anyhow = "1.0.65"
-base64 = "0.20.0-alpha.1"
-clap = { version = "3.2.22", features = ["derive", "env"] }
-log = "0.4.17"
-multiaddr = "0.14.0"
-reqwest = { version = "0.11.11", features = ["json"] }
-serde_json = "1.0"
-time = "0.3.15"
-thiserror = "1.0.36"
+anyhow = { workspace = true }
+base64 = { workspace = true }
+clap = { workspace = true, features = ["derive", "env"] }
+log = { workspace = true }
+multiaddr = { workspace = true }
+reqwest = { workspace = true, features = ["json"] }
+serde_json = { workspace = true }
+time = { workspace = true }
+thiserror = { workspace = true }
 tokio = { version = "1", features = ["macros"] }
-url = "2.3.1"
+url = { workspace = true }

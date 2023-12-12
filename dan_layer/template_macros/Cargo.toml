@@ -14,9 +14,9 @@ proc-macro = true
 tari_template_abi = { workspace = true }
 tari_bor = { workspace = true, default-features = true }
 
-proc-macro2 = "1.0.56"
-quote = "1.0"
-syn = { version = "1.0", features = ["full", "extra-traits"] }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true, features = ["full", "extra-traits"] }
 
 [dev-dependencies]
-indoc = "1.0.6"
+indoc = { workspace = true }

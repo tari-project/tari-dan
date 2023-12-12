@@ -19,10 +19,10 @@ tari_core = { workspace = true }
 tari_mmr = { workspace = true }
 tari_crypto = { workspace = true }
 
-anyhow = "1.0"
-chrono = "0.4.23"
-log = "0.4"
-rand = "0.8"
-thiserror = "1"
-serde = "1.0"
-time = { version = "0.3", features = ["serde"] }
+anyhow = { workspace = true }
+chrono = { workspace = true }
+log = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, default-features = true }
+time = { workspace = true, features = ["serde"] }

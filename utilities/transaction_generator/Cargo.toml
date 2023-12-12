@@ -13,13 +13,14 @@ tari_engine_types = { workspace = true }
 tari_template_builtin = { workspace = true }
 tari_crypto = { workspace = true }
 
-anyhow = "1.0.72"
-bincode = { version = "2.0.0-rc.3", features = ["serde"] }
-bytes = "0.4"
+anyhow = { workspace = true }
+bincode = { workspace = true, features = ["serde"] }
+bytes = { workspace = true }
+# if we set clap version 4 in the workspace it would break other crates
 clap = { version = "4.3.21", features = ["derive"] }
-rayon = "1.7.0"
-rand = "0.8"
-once_cell = { version = "1.18.0", features = ["critical-section"] }
+rayon = { workspace = true }
+rand = { workspace = true }
+once_cell = { workspace = true, features = ["critical-section"] }
 
 [package.metadata.cargo-machete]
 ignored = [

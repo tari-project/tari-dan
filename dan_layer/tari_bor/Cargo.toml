@@ -8,13 +8,12 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-# git rev: include fix from https://github.com/enarx/ciborium/pull/80
-ciborium = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
-ciborium-io = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
-serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
+ciborium = { workspace = true }
+ciborium-io = { workspace = true }
+serde = { workspace = true, default-features = false, features = ["alloc", "derive"] }
 
 [dev-dependencies]
-serde_json = "1.0"
+serde_json = { workspace = true }
 
 [features]
 default = ["std"]

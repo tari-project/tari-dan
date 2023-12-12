@@ -9,6 +9,6 @@ license.workspace = true
 [dependencies]
 tari_dan_engine = { workspace = true }
 
-clap = "3.2.25"
-liquid = "0.26.4"
-convert_case  ="0.6.0"
+clap = { workspace = true }
+liquid = { workspace = true }
+convert_case = { workspace = true }
