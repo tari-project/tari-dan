@@ -51,7 +51,8 @@ resolver = "2"
 
 # internal dependencies among workspace crates
 tari_base_node_client = { path = "clients/base_node_client" }
-tari_bor = { path = "dan_layer/tari_bor" }
+# avoid including default features so each crate can choose which ones to import
+tari_bor = { path = "dan_layer/tari_bor", default-features = false }
 tari_comms_logging = { path = "comms/tari_comms_logging" }
 tari_comms_rpc_state_sync = { path = "dan_layer/comms_rpc_state_sync" }
 tari_consensus = { path = "dan_layer/consensus" }

@@ -17,7 +17,7 @@ tari_wallet_daemon_client = { workspace = true }
 tari_template_lib = { workspace = true }
 tari_transaction = { workspace = true }
 tari_transaction_manifest = { workspace = true }
-tari_bor = { workspace = true }
+tari_bor = { workspace = true, default-features = true }
 # Needed for VersionedSubstateAddress
 tari_dan_wallet_sdk = { workspace = true }
 

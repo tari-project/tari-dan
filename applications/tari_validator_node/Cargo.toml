@@ -35,7 +35,7 @@ tari_base_node_client = { workspace = true }
 tari_epoch_manager = { workspace = true, features = ["base_layer"] }
 tari_indexer_lib = { workspace = true }
 tari_comms_rpc_state_sync = {workspace = true }
-tari_bor = { workspace = true }
+tari_bor = { workspace = true, default-features = true }
 tari_consensus = { workspace = true }
 tari_state_store_sqlite = { workspace = true }
 

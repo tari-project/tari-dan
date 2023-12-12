@@ -10,7 +10,7 @@ license.workspace = true
 tari_common_types = { workspace = true }
 tari_crypto = { workspace = true, features = ["borsh"] }
 tari_engine_types = { workspace = true }
-tari_bor = { workspace = true }
+tari_bor = { workspace = true, default-features = true }
 tari_mmr = { workspace = true }
 
 blake2 = "0.10.6"

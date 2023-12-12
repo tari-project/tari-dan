@@ -20,7 +20,7 @@ tari_dan_storage = { workspace = true }
 tari_engine_types = { workspace = true }
 tari_template_lib = { workspace = true }
 tari_transaction = { workspace = true }
-tari_bor = { workspace = true }
+tari_bor = { workspace = true, default-features = true }
 
 anyhow = "1.0.53"
 async-trait = "0.1"
