@@ -25,7 +25,13 @@ use tokio::sync::{
 
 use crate::support::{address::TestAddress, ValidatorChannels};
 
-pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: ShutdownSignal) -> TestNetwork {
+pub type HotstuffFilter = Box<dyn Fn(&TestAddress, &TestAddress, &HotstuffMessage) -> bool + Sync + Send + 'static>;
+
+pub fn spawn_network(
+    channels: Vec<ValidatorChannels>,
+    shutdown_signal: ShutdownSignal,
+    hotstuff_filter: Option<HotstuffFilter>,
+) -> TestNetwork {
     let tx_new_transactions = channels
         .iter()
         .map(|c| {
@@ -53,6 +59,7 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: Shutdown
     let (tx_network_status, network_status) = watch::channel(NetworkStatus::Paused);
     let (tx_on_message, rx_on_message) = watch::channel(None);
     let num_sent_messages = Arc::new(AtomicUsize::new(0));
+    let num_filtered_messages = Arc::new(AtomicUsize::new(0));
 
     let offline_destinations = Arc::new(RwLock::new(Vec::new()));
 
@@ -66,9 +73,11 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: Shutdown
         rx_mempool: Some(rx_mempool),
         on_message: tx_on_message,
         num_sent_messages: num_sent_messages.clone(),
+        num_filtered_messages: num_filtered_messages.clone(),
         transaction_store: Arc::new(Default::default()),
         offline_destinations: offline_destinations.clone(),
         shutdown_signal,
+        hotstuff_filter,
     }
     .spawn();
 
@@ -77,6 +86,7 @@ pub fn spawn_network(channels: Vec<ValidatorChannels>, shutdown_signal: Shutdown
         network_status: tx_network_status,
         offline_destinations,
         num_sent_messages,
+        num_filtered_messages,
         _on_message: rx_on_message,
     }
 }
@@ -98,6 +108,7 @@ pub struct TestNetwork {
     network_status: watch::Sender<NetworkStatus>,
     offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     num_sent_messages: Arc<AtomicUsize>,
+    num_filtered_messages: Arc<AtomicUsize>,
     _on_message: watch::Receiver<Option<HotstuffMessage>>,
 }
 
@@ -131,6 +142,10 @@ impl TestNetwork {
 
     pub fn total_messages_sent(&self) -> usize {
         self.num_sent_messages.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub fn total_messages_filtered(&self) -> usize {
+        self.num_filtered_messages.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -168,10 +183,12 @@ pub struct TestNetworkWorker {
     network_status: watch::Receiver<NetworkStatus>,
     on_message: watch::Sender<Option<HotstuffMessage>>,
     num_sent_messages: Arc<AtomicUsize>,
+    num_filtered_messages: Arc<AtomicUsize>,
     transaction_store: Arc<RwLock<HashMap<TransactionId, ExecutedTransaction>>>,
 
     offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     shutdown_signal: ShutdownSignal,
+    hotstuff_filter: Option<HotstuffFilter>,
 }
 
 impl TestNetworkWorker {
@@ -267,9 +284,14 @@ impl TestNetworkWorker {
 
     pub async fn handle_broadcast(&mut self, from: TestAddress, to: Committee<TestAddress>, msg: HotstuffMessage) {
         log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.addresses().join(", "));
-        self.num_sent_messages
-            .fetch_add(to.len(), std::sync::atomic::Ordering::Relaxed);
         for vn in to.addresses() {
+            if let Some(hotstuff_filter) = &self.hotstuff_filter {
+                if !hotstuff_filter(&from, &vn, &msg) {
+                    self.num_filtered_messages
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    continue;
+                }
+            }
             // TODO: support for taking a whole committee bucket offline
             if *vn != from && self.is_offline_destination(vn, u32::MAX.into()).await {
                 continue;
@@ -281,11 +303,20 @@ impl TestNetworkWorker {
                 .send((from.clone(), msg.clone()))
                 .await
                 .unwrap();
+            self.num_sent_messages
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         self.on_message.send(Some(msg.clone())).unwrap();
     }
 
     async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage) {
+        if let Some(hotstuff_filter) = &self.hotstuff_filter {
+            if !hotstuff_filter(&from, &to, &msg) {
+                self.num_filtered_messages
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                return;
+            }
+        }
         log::debug!("✉️ Message {} from {} to {}", msg, from, to);
         if from != to && self.is_offline_destination(&from, u32::MAX.into()).await {
             return;
