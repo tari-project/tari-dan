@@ -41,7 +41,8 @@ tari_transaction_manifest = { workspace = true }
 tari_dan_wallet_sdk = { workspace = true }
 
 anyhow = { workspace = true }
-base64 = { workspace = true }
+# if we set this version in the workspace it would break other crates
+base64 = "0.21.0"
 config = { workspace = true }
 cucumber = { workspace = true, features = [
     "default",
