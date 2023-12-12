@@ -7,8 +7,9 @@ use blake2::{
 };
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
+use tari_crypto::tari_utilities::ByteArray;
 
-use crate::{NodeAddressable, ShardId};
+use crate::ShardId;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ValidatorMetadata {
@@ -27,7 +28,7 @@ impl ValidatorMetadata {
     }
 }
 
-pub fn vn_node_hash<TAddr: NodeAddressable>(public_key: &TAddr, shard_id: &ShardId) -> FixedHash {
+pub fn vn_node_hash(public_key: &PublicKey, shard_id: &ShardId) -> FixedHash {
     Blake2b::<U32>::new()
         .chain_update(public_key.as_bytes())
         .chain_update(shard_id.as_bytes())

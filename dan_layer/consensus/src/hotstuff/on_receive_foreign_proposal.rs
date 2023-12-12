@@ -16,11 +16,10 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tokio::sync::mpsc;
 
 use crate::{
     hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle, ProposalValidationError},
-    messages::{HotstuffMessage, ProposalMessage, RequestMissingForeignBlocksMessage},
+    messages::ProposalMessage,
     traits::ConsensusSpec,
 };
 
@@ -32,7 +31,6 @@ pub struct OnReceiveForeignProposalHandler<TConsensusSpec: ConsensusSpec> {
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     pacemaker: PaceMakerHandle,
     foreign_receive_counter: ForeignReceiveCounters,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
 }
 
 impl<TConsensusSpec> OnReceiveForeignProposalHandler<TConsensusSpec>
@@ -44,7 +42,6 @@ where TConsensusSpec: ConsensusSpec
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         pacemaker: PaceMakerHandle,
         foreign_receive_counter: ForeignReceiveCounters,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
     ) -> Self {
         Self {
             store,
@@ -52,15 +49,10 @@ where TConsensusSpec: ConsensusSpec
             transaction_pool,
             pacemaker,
             foreign_receive_counter,
-            tx_leader,
         }
     }
 
-    pub async fn handle(
-        &mut self,
-        from: TConsensusSpec::Addr,
-        message: ProposalMessage<TConsensusSpec::Addr>,
-    ) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, from: TConsensusSpec::Addr, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
         debug!(
@@ -78,8 +70,7 @@ where TConsensusSpec: ConsensusSpec
             .get_committee_shard(block.epoch(), vn.shard_key)
             .await?;
         let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-        self.validate_proposed_block(&from, &block, committee_shard.bucket(), local_shard.bucket())
-            .await?;
+        self.validate_proposed_block(&from, &block, committee_shard.bucket(), local_shard.bucket())?;
         // Is this ok? Can foreign node send invalid block that should still increment the counter?
         self.foreign_receive_counter.increment(&committee_shard.bucket());
         self.store.with_write_tx(|tx| {
@@ -97,7 +88,7 @@ where TConsensusSpec: ConsensusSpec
     fn on_receive_foreign_block(
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
-        block: &Block<TConsensusSpec::Addr>,
+        block: &Block,
         foreign_committee_shard: &CommitteeShard,
     ) -> Result<(), HotStuffError> {
         let leaf = LeafBlock::get(tx.deref_mut())?;
@@ -158,10 +149,10 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn validate_proposed_block(
+    fn validate_proposed_block(
         &self,
         from: &TConsensusSpec::Addr,
-        candidate_block: &Block<TConsensusSpec::Addr>,
+        candidate_block: &Block,
         foreign_bucket: ShardBucket,
         local_bucket: ShardBucket,
     ) -> Result<(), ProposalValidationError> {
@@ -177,22 +168,8 @@ where TConsensusSpec: ConsensusSpec
         };
         let current_index = self.foreign_receive_counter.get_index(&foreign_bucket);
         if current_index + 1 != incoming_index {
-            debug!(target:LOG_TARGET, "We were expecting the index to be {expected_index}, but the index was {incoming_index}", expected_index = current_index + 1);
-            if current_index < incoming_index {
-                self.tx_leader
-                    .send((
-                        from.clone(),
-                        HotstuffMessage::RequestMissingForeignBlocks(RequestMissingForeignBlocksMessage {
-                            epoch: candidate_block.epoch(),
-                            from: current_index + 1,
-                            to: incoming_index,
-                        }),
-                    ))
-                    .await
-                    .map_err(|_| ProposalValidationError::InternalChannelClosed {
-                        context: "tx_leader in OnNextSyncViewHandler::send_to_leader",
-                    })?;
-            }
+            debug!(target:LOG_TARGET, "We were expecting the index to be {expected_index}, but the index was
+        {incoming_index}", expected_index = current_index + 1);
             return Err(ProposalValidationError::InvalidForeignCounters {
                 proposed_by: from.to_string(),
                 hash: *candidate_block.id(),

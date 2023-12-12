@@ -8,8 +8,8 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_common_types::types::{FixedHash, PublicKey};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
@@ -86,7 +86,7 @@ pub trait StateStore {
 pub trait StateStoreReadTransaction {
     type Addr: NodeAddressable;
 
-    fn last_sent_vote_get(&mut self) -> Result<LastSentVote<Self::Addr>, StorageError>;
+    fn last_sent_vote_get(&mut self) -> Result<LastSentVote, StorageError>;
     fn last_voted_get(&mut self) -> Result<LastVoted, StorageError>;
     fn last_executed_get(&mut self) -> Result<LastExecuted, StorageError>;
     fn last_proposed_get(&mut self) -> Result<LastProposed, StorageError>;
@@ -115,44 +115,34 @@ pub trait StateStoreReadTransaction {
         offset: u64,
         asc_desc_created_at: Option<Ordering>,
     ) -> Result<Vec<TransactionRecord>, StorageError>;
-    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<Self::Addr>, StorageError>;
-    fn blocks_get_foreign_ids(
-        &mut self,
-        bucket: ShardBucket,
-        from: u64,
-        to: u64,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
-    fn blocks_get_tip(&mut self) -> Result<Block<Self::Addr>, StorageError>;
+    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError>;
+    fn blocks_get_tip(&mut self) -> Result<Block, StorageError>;
     fn blocks_get_all_between(
         &mut self,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
+    ) -> Result<Vec<Block>, StorageError>;
     fn blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
     fn blocks_is_ancestor(&mut self, descendant: &BlockId, ancestor: &BlockId) -> Result<bool, StorageError>;
-    fn blocks_get_all_by_parent(&mut self, parent: &BlockId) -> Result<Vec<Block<Self::Addr>>, StorageError>;
-    fn blocks_get_parent_chain(
-        &mut self,
-        block_id: &BlockId,
-        limit: usize,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
+    fn blocks_get_all_by_parent(&mut self, parent: &BlockId) -> Result<Vec<Block>, StorageError>;
+    fn blocks_get_parent_chain(&mut self, block_id: &BlockId, limit: usize) -> Result<Vec<Block>, StorageError>;
     fn blocks_get_pending_transactions(&mut self, block_id: &BlockId) -> Result<Vec<TransactionId>, StorageError>;
     fn blocks_get_total_leader_fee_for_epoch(
         &mut self,
         epoch: Epoch,
-        validator_public_key: &Self::Addr,
+        validator_public_key: &PublicKey,
     ) -> Result<u64, StorageError>;
     fn blocks_get_any_with_epoch_range(
         &mut self,
         epoch_range: RangeInclusive<Epoch>,
-        validator_public_key: Option<&Self::Addr>,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
+        validator_public_key: Option<&PublicKey>,
+    ) -> Result<Vec<Block>, StorageError>;
     fn blocks_get_paginated(
         &mut self,
         limit: u64,
         offset: u64,
         asc_desc_created_at: Option<Ordering>,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError>;
+    ) -> Result<Vec<Block>, StorageError>;
     fn blocks_get_count(&mut self) -> Result<i64, StorageError>;
 
     fn blocks_max_height(&mut self) -> Result<NodeHeight, StorageError>;
@@ -160,15 +150,12 @@ pub trait StateStoreReadTransaction {
     fn parked_blocks_exists(&mut self, block_id: &BlockId) -> Result<bool, StorageError>;
 
     // -------------------------------- QuorumCertificate -------------------------------- //
-    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
+    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError>;
     fn quorum_certificates_get_all<'a, I: IntoIterator<Item = &'a QcId>>(
         &mut self,
         qc_ids: I,
-    ) -> Result<Vec<QuorumCertificate<Self::Addr>>, StorageError>;
-    fn quorum_certificates_get_by_block_id(
-        &mut self,
-        block_id: &BlockId,
-    ) -> Result<QuorumCertificate<Self::Addr>, StorageError>;
+    ) -> Result<Vec<QuorumCertificate>, StorageError>;
+    fn quorum_certificates_get_by_block_id(&mut self, block_id: &BlockId) -> Result<QuorumCertificate, StorageError>;
 
     // -------------------------------- Transaction Pools -------------------------------- //
     fn transaction_pool_get(
@@ -196,9 +183,9 @@ pub trait StateStoreReadTransaction {
         &mut self,
         block_id: &BlockId,
         sender_leaf_hash: &FixedHash,
-    ) -> Result<Vote<Self::Addr>, StorageError>;
+    ) -> Result<Vote, StorageError>;
     fn votes_count_for_block(&mut self, block_id: &BlockId) -> Result<u64, StorageError>;
-    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote<Self::Addr>>, StorageError>;
+    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError>;
     //---------------------------------- Substates --------------------------------------------//
     fn substates_get(&mut self, substate_id: &ShardId) -> Result<SubstateRecord, StorageError>;
     fn substates_get_any(&mut self, substate_ids: &HashSet<ShardId>) -> Result<Vec<SubstateRecord>, StorageError>;
@@ -248,7 +235,7 @@ pub trait StateStoreWriteTransaction {
     fn rollback(self) -> Result<(), StorageError>;
 
     // -------------------------------- Block -------------------------------- //
-    fn blocks_insert(&mut self, block: &Block<Self::Addr>) -> Result<(), StorageError>;
+    fn blocks_insert(&mut self, block: &Block) -> Result<(), StorageError>;
     fn blocks_set_flags(
         &mut self,
         block_id: &BlockId,
@@ -257,10 +244,10 @@ pub trait StateStoreWriteTransaction {
     ) -> Result<(), StorageError>;
 
     // -------------------------------- QuorumCertificate -------------------------------- //
-    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate<Self::Addr>) -> Result<(), StorageError>;
+    fn quorum_certificates_insert(&mut self, qc: &QuorumCertificate) -> Result<(), StorageError>;
 
     // -------------------------------- Bookkeeping -------------------------------- //
-    fn last_sent_vote_set(&mut self, last_sent_vote: &LastSentVote<Self::Addr>) -> Result<(), StorageError>;
+    fn last_sent_vote_set(&mut self, last_sent_vote: &LastSentVote) -> Result<(), StorageError>;
     fn last_voted_set(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
     fn last_votes_unset(&mut self, last_voted: &LastVoted) -> Result<(), StorageError>;
     fn last_executed_set(&mut self, last_exec: &LastExecuted) -> Result<(), StorageError>;
@@ -321,7 +308,7 @@ pub trait StateStoreWriteTransaction {
         IAwaiting: IntoIterator<Item = &'a TransactionId>,
     >(
         &mut self,
-        park_block: &Block<Self::Addr>,
+        park_block: &Block,
         missing_transaction_ids: IMissing,
         awaiting_transaction_ids: IAwaiting,
     ) -> Result<(), StorageError>;
@@ -330,10 +317,10 @@ pub trait StateStoreWriteTransaction {
         &mut self,
         current_height: NodeHeight,
         transaction_id: &TransactionId,
-    ) -> Result<Option<Block<Self::Addr>>, StorageError>;
+    ) -> Result<Option<Block>, StorageError>;
 
     // -------------------------------- Votes -------------------------------- //
-    fn votes_insert(&mut self, vote: &Vote<Self::Addr>) -> Result<(), StorageError>;
+    fn votes_insert(&mut self, vote: &Vote) -> Result<(), StorageError>;
 
     //---------------------------------- Substates --------------------------------------------//
     fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(

@@ -5,7 +5,7 @@ use std::{collections::HashSet, time::Instant};
 
 use async_trait::async_trait;
 use log::*;
-use tari_comms::types::CommsPublicKey;
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_engine::{runtime::VirtualSubstates, state_store::memory::MemoryStateStore};
 use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
@@ -38,8 +38,8 @@ impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
     TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
 where
     TStateStore: StateStore,
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
-    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
+    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
+    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TStateStore::Addr>,
     TSubstateCache: SubstateCache,
 {
     pub fn new(
@@ -119,7 +119,7 @@ where
 
     async fn resolve_remote_virtual_substates(
         &self,
-        claim_instructions: Vec<(Epoch, CommsPublicKey, ShardId)>,
+        claim_instructions: Vec<(Epoch, PublicKey, ShardId)>,
     ) -> Result<VirtualSubstates, SubstateResolverError> {
         let mut retrieved_substates = VirtualSubstates::with_capacity(claim_instructions.len());
         for (epoch, vn_pk, shard) in claim_instructions {
@@ -151,9 +151,9 @@ where
 impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache> SubstateResolver
     for TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
 where
-    TStateStore: StateStore<Addr = CommsPublicKey> + Sync + Send,
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
-    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey>,
+    TStateStore: StateStore + Sync + Send,
+    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
+    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TStateStore::Addr>,
     TSubstateCache: SubstateCache,
 {
     type Error = SubstateResolverError;
@@ -211,8 +211,8 @@ where
         let signer = transaction.signer_public_key();
         if let Some(vn) = validators.values().find(|vn| vn.fee_claim_public_key != *signer) {
             return Err(SubstateResolverError::UnauthorizedFeeClaim {
-                validator_address: vn.address.clone(),
-                signer: signer.clone(),
+                validator_address: vn.address.to_string(),
+                signer: signer.to_string(),
             });
         }
 
@@ -254,8 +254,5 @@ pub enum SubstateResolverError {
     #[error("Epoch manager error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
     #[error("Unauthorized fee claim: validator node {validator_address} (transaction signed by: {signer})")]
-    UnauthorizedFeeClaim {
-        validator_address: CommsPublicKey,
-        signer: CommsPublicKey,
-    },
+    UnauthorizedFeeClaim { validator_address: String, signer: String },
 }

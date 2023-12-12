@@ -20,46 +20,44 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{fs, io, sync::Arc};
+use std::{fs, io, str::FromStr};
 
-use minotari_app_utilities::{identity_management, identity_management::load_from_json};
+use libp2p::identity;
+use minotari_app_utilities::identity_management;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common::{
     configuration::bootstrap::{grpc_default_port, ApplicationType},
     exit_codes::{ExitCode, ExitError},
 };
-use tari_comms::{CommsNode, NodeIdentity};
+use tari_crypto::tari_utilities::ByteArray;
 use tari_dan_app_utilities::{
     base_layer_scanner,
     consensus_constants::ConsensusConstants,
+    keypair::RistrettoKeypair,
+    seed_peer::SeedPeer,
     template_manager::{self, implementation::TemplateManager},
 };
+use tari_dan_common_types::PeerAddress;
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
+use tari_networking::{NetworkingHandle, SwarmConfig};
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
-use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
+use tari_validator_node_rpc::{client::TariValidatorNodeRpcClientFactory, proto};
+use tokio::sync::mpsc;
 
-use crate::{
-    comms,
-    p2p::services::{comms_peer_provider::CommsPeerProvider, networking},
-    substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore,
-    ApplicationConfig,
-};
+use crate::{substate_storage_sqlite::sqlite_substate_store_factory::SqliteSubstateStore, ApplicationConfig};
 
 const _LOG_TARGET: &str = "tari_indexer::bootstrap";
 
 pub async fn spawn_services(
     config: &ApplicationConfig,
     shutdown: ShutdownSignal,
-    node_identity: Arc<NodeIdentity>,
-    global_db: GlobalDb<SqliteGlobalDbAdapter>,
+    keypair: RistrettoKeypair,
+    global_db: GlobalDb<SqliteGlobalDbAdapter<PeerAddress>>,
     consensus_constants: ConsensusConstants,
 ) -> Result<Services, anyhow::Error> {
-    let mut p2p_config = config.indexer.p2p.clone();
-    p2p_config.transport.tor.identity =
-        load_from_json(&config.indexer.tor_identity_file).map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
     ensure_directories_exist(config)?;
 
     // GRPC client connection to base node
@@ -69,19 +67,53 @@ pub async fn spawn_services(
             format!("127.0.0.1:{port}")
         }));
 
-    // Initialize comms
-    let (comms, _) = comms::initialize(node_identity.clone(), config, shutdown.clone()).await?;
+    // Initialize networking
+    let (tx_messages, mut rx_messages) = mpsc::channel(100);
+    let identity = identity::Keypair::sr25519_from_bytes(keypair.secret_key().as_bytes().to_vec()).map_err(|e| {
+        ExitError::new(
+            ExitCode::ConfigError,
+            format!("Failed to create libp2p identity from secret bytes: {}", e),
+        )
+    })?;
+    let seed_peers = config
+        .peer_seeds
+        .peer_seeds
+        .iter()
+        .map(|s| SeedPeer::from_str(s))
+        .collect::<anyhow::Result<Vec<SeedPeer>>>()?;
+    let seed_peers = seed_peers
+        .into_iter()
+        .flat_map(|p| {
+            let peer_id = p.to_peer_id();
+            p.addresses.into_iter().map(move |a| (peer_id, a))
+        })
+        .collect();
+    let (networking, _) = tari_networking::spawn::<proto::network::Message>(
+        identity,
+        tx_messages,
+        tari_networking::Config {
+            listener_port: config.indexer.p2p.listener_port,
+            swarm: SwarmConfig {
+                protocol_version: "/tari/devnet/0.0.1".try_into().unwrap(),
+                user_agent: "/tari/indexer/0.0.1".to_string(),
+                enable_mdns: config.indexer.p2p.enable_mdns,
+                ..Default::default()
+            },
+            reachability_mode: config.indexer.p2p.reachability_mode.into(),
+        },
+        seed_peers,
+        shutdown.clone(),
+    )?;
 
-    networking::spawn(
-        comms.node_identity(),
-        CommsPeerProvider::new(comms.peer_manager()),
-        comms.connectivity(),
-    );
+    // TODO: hack to consume messages if any are sent, we may use messaging later in the indexer or we should be able to
+    //       disable the messaging and gossipsub protocols
+    tokio::spawn(async move { while rx_messages.recv().await.is_some() {} });
+
     // Connect to substate db
     let substate_store = SqliteSubstateStore::try_create(config.indexer.state_db_path())?;
 
     // Epoch manager
-    let validator_node_client_factory = TariCommsValidatorNodeClientFactory::new(comms.connectivity());
+    let validator_node_client_factory = TariValidatorNodeRpcClientFactory::new(networking.clone());
     let (epoch_manager, _) = tari_epoch_manager::base_layer::spawn_service(
         EpochManagerConfig {
             base_layer_confirmations: consensus_constants.base_layer_confirmations,
@@ -89,7 +121,7 @@ pub async fn spawn_services(
         },
         global_db.clone(),
         base_node_client.clone(),
-        node_identity.public_key().clone(),
+        keypair.public_key().clone(),
         shutdown.clone(),
     );
 
@@ -115,15 +147,12 @@ pub async fn spawn_services(
         config.indexer.base_layer_scanning_interval,
     );
 
-    let comms = comms::spawn_comms_using_transport(comms, p2p_config.transport.clone())
-        .await
-        .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Could not spawn using transport: {}", e)))?;
-
     // Save final node identity after comms has initialized. This is required because the public_address can be
     // changed by comms during initialization when using tor.
-    save_identities(config, &comms)?;
+    save_identities(config, &keypair)?;
     Ok(Services {
-        comms,
+        keypair,
+        networking,
         epoch_manager,
         validator_node_client_factory,
         substate_store,
@@ -132,26 +161,22 @@ pub async fn spawn_services(
 }
 
 pub struct Services {
-    pub comms: CommsNode,
-    pub epoch_manager: EpochManagerHandle,
-    pub validator_node_client_factory: TariCommsValidatorNodeClientFactory,
+    pub keypair: RistrettoKeypair,
+    pub networking: NetworkingHandle<proto::network::Message>,
+    pub epoch_manager: EpochManagerHandle<PeerAddress>,
+    pub validator_node_client_factory: TariValidatorNodeRpcClientFactory,
     pub substate_store: SqliteSubstateStore,
-    pub template_manager: TemplateManager,
+    pub template_manager: TemplateManager<PeerAddress>,
 }
 
 fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
     fs::create_dir_all(&config.indexer.data_dir)?;
-    fs::create_dir_all(&config.indexer.p2p.datastore_path)?;
     Ok(())
 }
 
-fn save_identities(config: &ApplicationConfig, comms: &CommsNode) -> Result<(), ExitError> {
-    identity_management::save_as_json(&config.indexer.identity_file, &*comms.node_identity())
+fn save_identities(config: &ApplicationConfig, identity: &RistrettoKeypair) -> Result<(), ExitError> {
+    identity_management::save_as_json(&config.indexer.identity_file, identity)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save node identity: {}", e)))?;
 
-    if let Some(hs) = comms.hidden_service() {
-        identity_management::save_as_json(&config.indexer.tor_identity_file, hs.tor_identity())
-            .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Failed to save tor identity: {}", e)))?;
-    }
     Ok(())
 }

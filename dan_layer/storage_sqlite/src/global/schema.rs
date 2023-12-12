@@ -1,6 +1,13 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
+    bmt_cache (epoch) {
+        epoch -> BigInt,
+        bmt -> Binary,
+    }
+}
+
+diesel::table! {
     epochs (epoch) {
         epoch -> BigInt,
         validator_node_mr -> Binary,
@@ -40,14 +47,8 @@ diesel::table! {
         epoch -> BigInt,
         committee_bucket -> Nullable<BigInt>,
         fee_claim_public_key -> Binary,
+        address -> Text,
     }
 }
 
-diesel::table! {
-    bmt_cache(epoch) {
-        epoch -> BigInt,
-        bmt -> Binary,
-    }
-}
-
-diesel::allow_tables_to_appear_in_same_query!(epochs, metadata, templates, validator_nodes,);
+diesel::allow_tables_to_appear_in_same_query!(bmt_cache, epochs, metadata, templates, validator_nodes,);

@@ -19,11 +19,7 @@ use tari_shutdown::ShutdownSignal;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{broadcast, mpsc};
 
-use super::{
-    on_receive_request_missing_foreign_blocks::OnReceiveRequestMissingForeignBlocksHandler,
-    on_receive_requested_transactions::OnReceiveRequestedTransactions,
-    proposer::Proposer,
-};
+use super::{on_receive_requested_transactions::OnReceiveRequestedTransactions, proposer::Proposer};
 use crate::{
     hotstuff::{
         common::CommitteeAndMessage,
@@ -52,7 +48,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     validator_addr: TConsensusSpec::Addr,
 
     tx_events: broadcast::Sender<HotstuffEvent>,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     inbound_message_worker: OnInboundMessage<TConsensusSpec>,
 
     on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
@@ -60,7 +56,6 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
     on_receive_foreign_proposal: OnReceiveForeignProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
-    on_receive_request_missing_foreign_blocks: OnReceiveRequestMissingForeignBlocksHandler<TConsensusSpec>,
     on_receive_request_missing_txs: OnReceiveRequestMissingTransactions<TConsensusSpec>,
     on_receive_requested_txs: OnReceiveRequestedTransactions<TConsensusSpec>,
     on_propose: OnPropose<TConsensusSpec>,
@@ -80,7 +75,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         rx_new_transactions: mpsc::Receiver<TransactionId>,
-        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+        rx_hs_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
         state_store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -88,7 +83,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         tx_events: broadcast::Sender<HotstuffEvent>,
         tx_mempool: mpsc::UnboundedSender<Transaction>,
         foreign_receive_counter: ForeignReceiveCounters,
@@ -144,7 +139,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 transaction_pool.clone(),
                 pacemaker.clone_handle(),
                 foreign_receive_counter,
-                tx_leader.clone(),
             ),
             on_receive_vote: OnReceiveVoteHandler::new(vote_receiver.clone()),
             on_receive_new_view: OnReceiveNewViewHandler::new(
@@ -153,11 +147,6 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 epoch_manager.clone(),
                 pacemaker.clone_handle(),
                 vote_receiver,
-            ),
-            on_receive_request_missing_foreign_blocks: OnReceiveRequestMissingForeignBlocksHandler::new(
-                state_store.clone(),
-                epoch_manager.clone(),
-                tx_leader.clone(),
             ),
             on_receive_request_missing_txs: OnReceiveRequestMissingTransactions::new(
                 state_store.clone(),
@@ -458,14 +447,7 @@ where TConsensusSpec: ConsensusSpec
                 "on_receive_foreign_proposal",
                 self.on_receive_foreign_proposal.handle(from, msg).await,
             ),
-            HotstuffMessage::Vote(msg) => {
-                if msg.signature.public_key != from {
-                    warn!(target: LOG_TARGET, "❌ Discarding message: Received vote from {} that is signed by a different node {}", from, msg.signature.public_key);
-                    return Ok(());
-                }
-
-                log_err("on_receive_vote", self.on_receive_vote.handle(msg).await)
-            },
+            HotstuffMessage::Vote(msg) => log_err("on_receive_vote", self.on_receive_vote.handle(from, msg).await),
             HotstuffMessage::RequestMissingTransactions(msg) => log_err(
                 "on_receive_request_missing_transactions",
                 self.on_receive_request_missing_txs.handle(from, msg).await,
@@ -485,10 +467,6 @@ where TConsensusSpec: ConsensusSpec
                 );
                 Ok(())
             },
-            HotstuffMessage::RequestMissingForeignBlocks(msg) => log_err(
-                "on_receive_request_missing_foreign_blocks",
-                self.on_receive_request_missing_foreign_blocks.handle(from, msg).await,
-            ),
         }
     }
 

@@ -58,7 +58,7 @@ async fn handler(Extension(handlers): Extension<Arc<JsonRpcHandlers>>, value: Js
     debug!(target: LOG_TARGET, "🌐 JSON-RPC body: {:?}", value);
     match value.method.as_str() {
         "rpc.discover" => handlers.rpc_discover(value),
-        "get_identity" => handlers.get_identity(value),
+        "get_identity" => handlers.get_identity(value).await,
         "get_all_vns" => handlers.get_all_vns(value).await,
         "add_peer" => handlers.add_peer(value).await,
         "get_comms_stats" => handlers.get_comms_stats(value).await,

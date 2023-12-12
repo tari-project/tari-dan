@@ -23,6 +23,7 @@ use std::{
     collections::{HashMap, HashSet},
     convert::{TryFrom, TryInto},
     fmt::{Debug, Formatter},
+    marker::PhantomData,
     ops::RangeInclusive,
     sync::{Arc, Mutex},
 };
@@ -57,6 +58,7 @@ use tari_dan_storage::{
     },
     AtomicDb,
 };
+use tari_utilities::ByteArray;
 
 use super::{models, models::DbValidatorNode};
 use crate::{
@@ -64,19 +66,21 @@ use crate::{
     global::{
         models::{MetadataModel, NewEpoch, NewTemplateModel, TemplateModel, TemplateUpdateModel},
         schema::templates,
+        serialization::serialize_json,
     },
     SqliteTransaction,
 };
 
-#[derive(Clone)]
-pub struct SqliteGlobalDbAdapter {
+pub struct SqliteGlobalDbAdapter<TAddr> {
     connection: Arc<Mutex<SqliteConnection>>,
+    _addr: PhantomData<TAddr>,
 }
 
-impl SqliteGlobalDbAdapter {
+impl<TAddr> SqliteGlobalDbAdapter<TAddr> {
     pub fn new(connection: SqliteConnection) -> Self {
         Self {
             connection: Arc::new(Mutex::new(connection)),
+            _addr: PhantomData,
         }
     }
 
@@ -105,7 +109,7 @@ impl SqliteGlobalDbAdapter {
     }
 }
 
-impl AtomicDb for SqliteGlobalDbAdapter {
+impl<TAddr> AtomicDb for SqliteGlobalDbAdapter<TAddr> {
     type DbTransaction<'a> = SqliteTransaction<'a>;
     type Error = SqliteStorageError;
 
@@ -119,7 +123,9 @@ impl AtomicDb for SqliteGlobalDbAdapter {
     }
 }
 
-impl GlobalDbAdapter for SqliteGlobalDbAdapter {
+impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
+    type Addr = TAddr;
+
     fn set_metadata<T: Serialize>(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -332,6 +338,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     fn insert_validator_node(
         &self,
         tx: &mut Self::DbTransaction<'_>,
+        address: Self::Addr,
         public_key: PublicKey,
         shard_key: ShardId,
         epoch: Epoch,
@@ -339,24 +346,25 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 
-        diesel::insert_into(validator_nodes::table)
-            .values((
-                validator_nodes::public_key.eq(public_key.as_bytes()),
-                validator_nodes::shard_key.eq(shard_key.as_bytes()),
-                validator_nodes::epoch.eq(epoch.as_u64() as i64),
-                validator_nodes::fee_claim_public_key.eq(fee_claim_public_key.as_bytes()),
-            ))
+        // TODO: We update records for this validator node (incl all previous records) with the latest fee claim public
+        //       key. This is hacky and this behaviour is not clear to the caller nor trait implementor.
+        diesel::update(validator_nodes::table)
+            .filter(validator_nodes::public_key.eq(ByteArray::as_bytes(&public_key)))
+            .set(validator_nodes::fee_claim_public_key.eq(ByteArray::as_bytes(&fee_claim_public_key)))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
                 operation: "insert::validator_nodes".to_string(),
             })?;
 
-        // TODO: We update records for this validator node with the latest fee claim public key. This is hacky and this
-        //       behaviour is not clear to the caller/trait implementor.
-        diesel::update(validator_nodes::table)
-            .filter(validator_nodes::public_key.eq(public_key.as_bytes()))
-            .set(validator_nodes::fee_claim_public_key.eq(fee_claim_public_key.as_bytes()))
+        diesel::insert_into(validator_nodes::table)
+            .values((
+                validator_nodes::address.eq(serialize_json(&address)?),
+                validator_nodes::public_key.eq(ByteArray::as_bytes(&public_key)),
+                validator_nodes::shard_key.eq(shard_key.as_bytes()),
+                validator_nodes::epoch.eq(epoch.as_u64() as i64),
+                validator_nodes::fee_claim_public_key.eq(ByteArray::as_bytes(&fee_claim_public_key)),
+            ))
             .execute(tx.connection())
             .map_err(|source| SqliteStorageError::DieselError {
                 source,
@@ -366,19 +374,19 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         Ok(())
     }
 
-    fn get_validator_node(
+    fn get_validator_node_by_public_key(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        public_key: &[u8],
-    ) -> Result<ValidatorNode<PublicKey>, Self::Error> {
+        public_key: &PublicKey,
+    ) -> Result<ValidatorNode<Self::Addr>, Self::Error> {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let vn = dsl::validator_nodes
             .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
             .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
-            .filter(validator_nodes::public_key.eq(public_key))
+            .filter(validator_nodes::public_key.eq(ByteArray::as_bytes(public_key)))
             // Last one inserted
             .order_by(validator_nodes::id.desc())
             .first::<DbValidatorNode>(tx.connection())
@@ -459,7 +467,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         start_epoch: Epoch,
         end_epoch: Epoch,
         shard_range: RangeInclusive<ShardId>,
-    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error> {
+    ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error> {
         use crate::global::schema::validator_nodes;
 
         let validators: Vec<DbValidatorNode> = validator_nodes::table
@@ -485,7 +493,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         start_epoch: Epoch,
         end_epoch: Epoch,
         buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<PublicKey>>, Self::Error> {
+    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, Self::Error> {
         use crate::global::schema::validator_nodes;
 
         let validators: Vec<DbValidatorNode> = validator_nodes::table
@@ -508,7 +516,11 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
             let Some(bucket) = validator.committee_bucket else {
                 continue;
             };
-            committees.get_mut(&bucket).unwrap().members.push(validator.address);
+            committees
+                .get_mut(&bucket)
+                .unwrap()
+                .members
+                .push((validator.address, validator.public_key));
         }
 
         Ok(committees)
@@ -519,7 +531,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error> {
+    ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error> {
         use crate::global::schema::{validator_nodes, validator_nodes::dsl};
 
         let sqlite_vns = dsl::validator_nodes
@@ -534,6 +546,31 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
 
         // TODO: Perhaps we should overwrite duplicate validator node entries for the epoch
         distinct_validators_sorted(sqlite_vns)
+    }
+
+    fn get_validator_node_by_address(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+        address: &Self::Addr,
+    ) -> Result<ValidatorNode<Self::Addr>, Self::Error> {
+        use crate::global::schema::{validator_nodes, validator_nodes::dsl};
+
+        let vn = dsl::validator_nodes
+            .filter(validator_nodes::epoch.ge(start_epoch.as_u64() as i64))
+            .filter(validator_nodes::epoch.le(end_epoch.as_u64() as i64))
+            .filter(validator_nodes::address.eq(serialize_json(address)?))
+            // Last one inserted
+            .order_by(validator_nodes::id.desc())
+            .first::<DbValidatorNode>(tx.connection())
+            .map_err(|source| SqliteStorageError::DieselError {
+                source,
+                operation: "get::validator_node".to_string(),
+            })?;
+
+        let vn = vn.try_into()?;
+        Ok(vn)
     }
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error> {
@@ -614,7 +651,7 @@ impl GlobalDbAdapter for SqliteGlobalDbAdapter {
     }
 }
 
-impl Debug for SqliteGlobalDbAdapter {
+impl<TAddr> Debug for SqliteGlobalDbAdapter<TAddr> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SqliteGlobalDbAdapter")
             .field("db", &"Arc<Mutex<SqliteConnection>>")
@@ -622,7 +659,18 @@ impl Debug for SqliteGlobalDbAdapter {
     }
 }
 
-fn distinct_validators(sqlite_vns: Vec<DbValidatorNode>) -> Result<Vec<ValidatorNode<PublicKey>>, SqliteStorageError> {
+impl<TAddr> Clone for SqliteGlobalDbAdapter<TAddr> {
+    fn clone(&self) -> Self {
+        Self {
+            connection: self.connection.clone(),
+            _addr: PhantomData,
+        }
+    }
+}
+
+fn distinct_validators<TAddr: NodeAddressable>(
+    sqlite_vns: Vec<DbValidatorNode>,
+) -> Result<Vec<ValidatorNode<TAddr>>, SqliteStorageError> {
     let mut db_vns = Vec::with_capacity(sqlite_vns.len());
     let mut dedup_map = HashMap::with_capacity(sqlite_vns.len());
     for (i, vn) in sqlite_vns.into_iter().enumerate() {
@@ -636,9 +684,9 @@ fn distinct_validators(sqlite_vns: Vec<DbValidatorNode>) -> Result<Vec<Validator
     Ok(db_vns)
 }
 
-fn distinct_validators_sorted(
+fn distinct_validators_sorted<TAddr: NodeAddressable>(
     sqlite_vns: Vec<DbValidatorNode>,
-) -> Result<Vec<ValidatorNode<PublicKey>>, SqliteStorageError> {
+) -> Result<Vec<ValidatorNode<TAddr>>, SqliteStorageError> {
     let mut db_vns = distinct_validators(sqlite_vns)?;
     db_vns.sort_by(|a, b| a.shard_key.cmp(&b.shard_key));
     Ok(db_vns)

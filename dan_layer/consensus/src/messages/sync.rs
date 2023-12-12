@@ -13,14 +13,14 @@ pub struct SyncRequestMessage {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct SyncResponseMessage<TAddr> {
+pub struct SyncResponseMessage {
     pub epoch: Epoch,
-    pub blocks: Vec<FullBlock<TAddr>>,
+    pub blocks: Vec<FullBlock>,
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct FullBlock<TAddr> {
-    pub block: Block<TAddr>,
-    pub qcs: Vec<QuorumCertificate<TAddr>>,
+pub struct FullBlock {
+    pub block: Block,
+    pub qcs: Vec<QuorumCertificate>,
     pub transactions: Vec<Transaction>,
 }

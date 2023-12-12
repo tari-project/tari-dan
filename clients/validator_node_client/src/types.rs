@@ -20,7 +20,7 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::ops::RangeInclusive;
+use std::{ops::RangeInclusive, time::Duration};
 
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
@@ -42,9 +42,12 @@ use tari_transaction::{Transaction, TransactionId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetIdentityResponse {
-    pub node_id: String,
+    pub peer_id: String,
     pub public_key: PublicKey,
     pub public_addresses: Vec<Multiaddr>,
+    pub supported_protocols: Vec<String>,
+    pub protocol_version: String,
+    pub user_agent: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -190,17 +193,17 @@ pub struct ListBlocksRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListBlocksResponse {
-    pub blocks: Vec<Block<PublicKey>>,
+    pub blocks: Vec<Block>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetBlockResponse {
-    pub block: Block<PublicKey>,
+    pub block: Block,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetBlocksResponse {
-    pub blocks: Vec<Block<PublicKey>>,
+    pub blocks: Vec<Block>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,16 +232,16 @@ pub struct GetCommitteeRequest {
     pub shard_id: ShardId,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GetNetworkCommitteeResponse {
+pub struct GetNetworkCommitteeResponse<TAddr> {
     pub current_epoch: Epoch,
-    pub committees: Vec<CommitteeShardInfo>,
+    pub committees: Vec<CommitteeShardInfo<TAddr>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommitteeShardInfo {
+pub struct CommitteeShardInfo<TAddr> {
     pub bucket: ShardBucket,
     pub shard_range: RangeInclusive<ShardId>,
-    pub validators: Vec<ValidatorNode<PublicKey>>,
+    pub validators: Vec<ValidatorNode<TAddr>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -313,22 +316,22 @@ pub struct GetValidatorFeesRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetValidatorFeesResponse {
-    pub fees: Vec<ValidatorFee<PublicKey>>,
+    pub fees: Vec<ValidatorFee>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ValidatorFee<TAddr> {
-    pub validator_addr: TAddr,
+pub struct ValidatorFee {
+    pub validator_public_key: PublicKey,
     pub epoch: Epoch,
     pub block_id: BlockId,
     pub total_fee_due: u64,
     pub total_transaction_fee: u64,
 }
 
-impl<TAddr: Clone> From<Block<TAddr>> for ValidatorFee<TAddr> {
-    fn from(value: Block<TAddr>) -> Self {
+impl From<Block> for ValidatorFee {
+    fn from(value: Block) -> Self {
         Self {
-            validator_addr: value.proposed_by().clone(),
+            validator_public_key: value.proposed_by().clone(),
             epoch: value.epoch(),
             block_id: *value.id(),
             total_fee_due: value.total_leader_fee(),
@@ -352,4 +355,25 @@ pub struct GetBlocksRequest {
     pub limit: u64,
     pub offset: u64,
     pub ordering: Option<Ordering>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct Connection {
+    pub connection_id: String,
+    pub peer_id: String,
+    pub address: Multiaddr,
+    pub direction: ConnectionDirection,
+    pub age: Duration,
+    pub ping_latency: Option<Duration>,
+}
+
+#[derive(Serialize, Debug)]
+pub enum ConnectionDirection {
+    Inbound,
+    Outbound,
+}
+
+#[derive(Serialize, Debug)]
+pub struct GetConnectionsResponse {
+    pub connections: Vec<Connection>,
 }

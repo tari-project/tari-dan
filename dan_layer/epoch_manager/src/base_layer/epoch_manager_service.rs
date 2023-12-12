@@ -23,6 +23,7 @@
 use log::error;
 use tari_base_node_client::grpc::GrpcBaseNodeClient;
 use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{DerivableFromPublicKey, NodeAddressable};
 use tari_dan_storage::global::GlobalDb;
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_shutdown::ShutdownSignal;
@@ -43,18 +44,20 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::validator_node::epoch_manager";
 
-pub struct EpochManagerService<TGlobalStore, TBaseNodeClient> {
-    rx_request: Receiver<EpochManagerRequest>,
+pub struct EpochManagerService<TAddr, TGlobalStore, TBaseNodeClient> {
+    rx_request: Receiver<EpochManagerRequest<TAddr>>,
     inner: BaseLayerEpochManager<TGlobalStore, TBaseNodeClient>,
     events: broadcast::Sender<EpochManagerEvent>,
 }
 
-impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
+impl<TAddr: NodeAddressable + DerivableFromPublicKey + 'static>
+    EpochManagerService<TAddr, SqliteGlobalDbAdapter<TAddr>, GrpcBaseNodeClient>
+{
     pub fn spawn(
         config: EpochManagerConfig,
-        rx_request: Receiver<EpochManagerRequest>,
+        rx_request: Receiver<EpochManagerRequest<TAddr>>,
         shutdown: ShutdownSignal,
-        global_db: GlobalDb<SqliteGlobalDbAdapter>,
+        global_db: GlobalDb<SqliteGlobalDbAdapter<TAddr>>,
         base_node_client: GrpcBaseNodeClient,
         node_public_key: PublicKey,
     ) -> JoinHandle<anyhow::Result<()>> {
@@ -88,18 +91,33 @@ impl EpochManagerService<SqliteGlobalDbAdapter, GrpcBaseNodeClient> {
     }
 
     #[allow(clippy::too_many_lines)]
-    async fn handle_request(&mut self, req: EpochManagerRequest) {
+    async fn handle_request(&mut self, req: EpochManagerRequest<TAddr>) {
         match req {
             EpochManagerRequest::CurrentEpoch { reply } => handle(reply, Ok(self.inner.current_epoch())),
             EpochManagerRequest::CurrentBlockHeight { reply } => handle(reply, Ok(self.inner.current_block_height())),
             EpochManagerRequest::GetValidatorNode { epoch, addr, reply } => handle(
                 reply,
-                self.inner.get_validator_node(epoch, &addr).and_then(|x| {
+                self.inner.get_validator_node_by_address(epoch, &addr).and_then(|x| {
                     x.ok_or(EpochManagerError::ValidatorNodeNotRegistered {
                         address: addr.to_string(),
                         epoch,
                     })
                 }),
+            ),
+            EpochManagerRequest::GetValidatorNodeByPublicKey {
+                epoch,
+                public_key,
+                reply,
+            } => handle(
+                reply,
+                self.inner
+                    .get_validator_node_by_public_key(epoch, &public_key)
+                    .and_then(|x| {
+                        x.ok_or(EpochManagerError::ValidatorNodeNotRegistered {
+                            address: public_key.to_string(),
+                            epoch,
+                        })
+                    }),
             ),
             EpochManagerRequest::GetManyValidatorNodes { query, reply } => {
                 handle(reply, self.inner.get_many_validator_nodes(query));

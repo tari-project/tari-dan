@@ -34,7 +34,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for NoopStateManager {
     fn commit_transaction(
         &self,
         _tx: &mut TStateStore::WriteTransaction<'_>,
-        _block: &Block<TStateStore::Addr>,
+        _block: &Block,
         _transaction: &ExecutedTransaction,
         _local_committee_shard: &CommitteeShard,
     ) -> Result<(), Self::Error> {

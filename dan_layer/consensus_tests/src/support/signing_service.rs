@@ -5,18 +5,17 @@ use rand::rngs::OsRng;
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
 use tari_crypto::keys::PublicKey as _;
-use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSchnorrSignature, ValidatorSignature};
 
 #[derive(Debug, Clone)]
-pub struct TestVoteSignatureService<TAddr> {
-    pub public_key: TAddr,
+pub struct TestVoteSignatureService {
+    pub public_key: PublicKey,
     pub secret_key: PrivateKey,
     pub is_signature_valid: bool,
 }
 
-impl<TAddr> TestVoteSignatureService<TAddr> {
-    pub fn new(public_key: TAddr) -> Self {
+impl TestVoteSignatureService {
+    pub fn new(public_key: PublicKey) -> Self {
         let (secret_key, _public_key) = PublicKey::random_keypair(&mut OsRng);
         Self {
             public_key,
@@ -26,20 +25,20 @@ impl<TAddr> TestVoteSignatureService<TAddr> {
     }
 }
 
-impl<TAddr> ValidatorSignatureService<TAddr> for TestVoteSignatureService<TAddr> {
+impl ValidatorSignatureService for TestVoteSignatureService {
     fn sign<M: AsRef<[u8]>>(&self, message: M) -> ValidatorSchnorrSignature {
         ValidatorSchnorrSignature::sign(&self.secret_key, message, &mut OsRng).unwrap()
     }
 
-    fn public_key(&self) -> &TAddr {
+    fn public_key(&self) -> &PublicKey {
         &self.public_key
     }
 }
 
-impl<TAddr: NodeAddressable> VoteSignatureService<TAddr> for TestVoteSignatureService<TAddr> {
+impl VoteSignatureService for TestVoteSignatureService {
     fn verify(
         &self,
-        _signature: &ValidatorSignature<TAddr>,
+        _signature: &ValidatorSignature,
         _leaf_hash: &FixedHash,
         _block_id: &BlockId,
         _decision: &QuorumDecision,

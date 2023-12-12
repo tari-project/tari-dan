@@ -16,7 +16,7 @@ use diesel::{
 };
 use log::error;
 use serde::de::DeserializeOwned;
-use tari_common_types::types::{Commitment, PublicKey};
+use tari_common_types::types::Commitment;
 use tari_dan_wallet_sdk::{
     models::{
         Account,
@@ -177,10 +177,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
     }
 
     // -------------------------------- Transactions -------------------------------- //
-    fn transactions_get(
-        &mut self,
-        transaction_id: TransactionId,
-    ) -> Result<WalletTransaction<PublicKey>, WalletStorageError> {
+    fn transactions_get(&mut self, transaction_id: TransactionId) -> Result<WalletTransaction, WalletStorageError> {
         use crate::schema::transactions;
         let row = transactions::table
             .filter(transactions::hash.eq(transaction_id.to_string()))
@@ -201,7 +198,7 @@ impl WalletStoreReader for ReadTransaction<'_> {
         &mut self,
         status: Option<TransactionStatus>,
         component: Option<ComponentAddress>,
-    ) -> Result<Vec<WalletTransaction<PublicKey>>, WalletStorageError> {
+    ) -> Result<Vec<WalletTransaction>, WalletStorageError> {
         use crate::schema::transactions;
 
         let mut rows = transactions::table.into_boxed().filter(transactions::dry_run.eq(false));

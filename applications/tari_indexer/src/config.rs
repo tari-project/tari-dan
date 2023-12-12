@@ -34,9 +34,11 @@ use tari_common::{
     DefaultConfigLoader,
     SubConfigPath,
 };
-use tari_dan_app_utilities::template_manager::implementation::TemplateConfig;
+use tari_dan_app_utilities::{
+    config::{P2pConfig, PeerSeedsConfig},
+    template_manager::implementation::TemplateConfig,
+};
 use tari_engine_types::substate::SubstateAddress;
-use tari_p2p::{P2pConfig, PeerSeedsConfig};
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -110,17 +112,11 @@ impl IndexerConfig {
         if !self.data_dir.is_absolute() {
             self.data_dir = base_path.as_ref().join(&self.data_dir);
         }
-        self.p2p.set_base_path(base_path);
     }
 }
 
 impl Default for IndexerConfig {
     fn default() -> Self {
-        let p2p = P2pConfig {
-            datastore_path: PathBuf::from("data/peer_db"),
-            ..Default::default()
-        };
-
         Self {
             override_from: None,
             identity_file: PathBuf::from("indexer_id.json"),
@@ -128,7 +124,7 @@ impl Default for IndexerConfig {
             base_node_grpc_address: None,
             base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/indexer"),
-            p2p,
+            p2p: P2pConfig::default(),
             json_rpc_address: Some("127.0.0.1:18300".parse().unwrap()),
             graphql_address: Some("127.0.0.1:18301".parse().unwrap()),
             http_ui_address: Some("127.0.0.1:15000".parse().unwrap()),

@@ -206,7 +206,7 @@ pub async fn spawn_wallet(world: &mut TariWorld, wallet_name: String, base_node_
         );
         tokio::time::sleep(Duration::from_secs(1)).await;
         counter += 1;
-        if counter > 10 {
+        if counter > 20 {
             panic!("Wallet failed to connect to base node");
         }
         status = wallet_client.get_network_status(Empty {}).await.unwrap().into_inner();
