@@ -30,7 +30,7 @@ pub use config::*;
 pub use connection::*;
 pub use handle::*;
 pub use spawn::*;
-pub use tari_swarm::{Config as SwarmConfig, TariNetwork};
+pub use tari_swarm::{is_supported_multiaddr, Config as SwarmConfig, TariNetwork};
 
 #[async_trait]
 pub trait NetworkingService<TMsg> {
