@@ -47,9 +47,7 @@ impl Display for PeerAddress {
 
 impl From<RistrettoPublicKey> for PeerAddress {
     fn from(pk: RistrettoPublicKey) -> Self {
-        let pk = identity::PublicKey::from(identity::sr25519::PublicKey::from(pk));
-        let peer_id = pk.to_peer_id();
-        Self(peer_id)
+        Self(public_key_to_peer_id(pk))
     }
 }
 
@@ -72,6 +70,10 @@ impl PartialEq<PeerId> for PeerAddress {
 }
 
 impl DerivableFromPublicKey for PeerAddress {}
+
+pub fn public_key_to_peer_id(public_key: RistrettoPublicKey) -> PeerId {
+    identity::PublicKey::from(identity::sr25519::PublicKey::from(public_key)).to_peer_id()
+}
 
 #[cfg(test)]
 mod tests {
