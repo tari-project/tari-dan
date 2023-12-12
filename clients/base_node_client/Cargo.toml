@@ -1,6 +1,6 @@
 [package]
 name = "tari_base_node_client"
-version = "0.50.0-pre.0"
+version.workspace = true
 edition.workspace = true
 authors.workspace = true
 repository.workspace = true
