@@ -39,7 +39,7 @@ pub struct Cli {
     /// Bind address for JSON-rpc server
     #[clap(long, alias = "rpc-address")]
     pub json_rpc_address: Option<SocketAddr>,
-    #[clap(long, alias = "rpc-address")]
+    #[clap(long, alias = "http-ui-address")]
     pub http_ui_address: Option<SocketAddr>,
     #[clap(long, env = "TARI_VN_UI_CONNECT_ADDRESS")]
     pub ui_connect_address: Option<String>,
