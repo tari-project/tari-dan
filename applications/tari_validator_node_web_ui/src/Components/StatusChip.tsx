@@ -20,57 +20,42 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Chip, Avatar } from '@mui/material';
+import { Chip, Avatar } from "@mui/material";
 import {
   IoCheckmarkOutline,
   IoDiamondOutline,
   IoReload,
   IoHourglassOutline,
   IoCloseOutline,
-} from 'react-icons/io5';
+  IoBandageOutline,
+} from "react-icons/io5";
 
 interface StatusChipProps {
-  status:
-    | 'Commit'
-    | 'Abort'
-    | 'Loading'
+  status: "Commit" | "Abort" | "Loading" | "Dummy";
   showTitle?: boolean;
 }
 
 const colorList: Record<string, string> = {
-  Commit: '#5F9C91',
-  Loading: '#ECA86A',
-  Abort: '#DB7E7E',
+  Commit: "#5F9C91",
+  Loading: "#ECA86A",
+  Abort: "#DB7E7E",
+  Dummy: "#C0C0C0",
 };
 
 const iconList: Record<string, JSX.Element> = {
-  Commit: (
-    <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />
-  ),
-  Loading: (
-    <IoHourglassOutline style={{ height: 14, width: 14 }} color="#FFF" />
-  ),
+  Commit: <IoCheckmarkOutline style={{ height: 14, width: 14 }} color="#FFF" />,
+  Loading: <IoHourglassOutline style={{ height: 14, width: 14 }} color="#FFF" />,
   Abort: <IoCloseOutline style={{ height: 14, width: 14 }} color="#FFF" />,
+  Dummy: <IoBandageOutline style={{ height: 14, width: 14 }} color="#FFF" />,
 };
 
-export default function StatusChip({
-  status,
-  showTitle = true,
-}: StatusChipProps) {
+export default function StatusChip({ status, showTitle = true }: StatusChipProps) {
   if (!showTitle) {
-    return (
-      <Avatar sx={{ bgcolor: colorList[status], height: 22, width: 22 }}>
-        {iconList[status]}
-      </Avatar>
-    );
+    return <Avatar sx={{ bgcolor: colorList[status], height: 22, width: 22 }}>{iconList[status]}</Avatar>;
   } else {
     return (
       <Chip
-        avatar={
-          <Avatar sx={{ bgcolor: colorList[status] }}>
-            {iconList[status]}
-          </Avatar>
-        }
+        avatar={<Avatar sx={{ bgcolor: colorList[status] }}>{iconList[status]}</Avatar>}
         label={status}
         style={{ color: colorList[status], borderColor: colorList[status] }}
         variant="outlined"
