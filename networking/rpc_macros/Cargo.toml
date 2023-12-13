@@ -1,13 +1,11 @@
 [package]
 name = "tari_rpc_macros"
 description = "RPC service proc macro"
-repository = "https://github.com/tari-project/tari"
-homepage = "https://tari.com"
-readme = "README.md"
-version = "0.53.0-dan.0"
-edition = "2018"
-license.workspace = true
+version.workspace = true
+edition.workspace = true
 authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [lib]
 proc-macro = true
