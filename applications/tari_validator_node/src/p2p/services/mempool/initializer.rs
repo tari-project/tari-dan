@@ -20,11 +20,9 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::sync::Arc;
-
-use tari_common_types::types::PublicKey;
-use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use sqlite_message_logger::SqliteMessageLogger;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
+use tari_dan_common_types::PeerAddress;
 use tari_dan_p2p::NewTransactionMessage;
 use tari_dan_storage::consensus_models::ExecutedTransaction;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
@@ -36,22 +34,21 @@ use crate::{
     consensus::ConsensusHandle,
     p2p::services::{
         mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, SubstateResolver, Validator},
-        messaging::OutboundMessaging,
+        message_dispatcher::OutboundMessaging,
     },
     substate_resolver::SubstateResolverError,
 };
 
 pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
-    new_transactions: mpsc::Receiver<(CommsPublicKey, NewTransactionMessage)>,
-    outbound: OutboundMessaging,
+    new_transactions: mpsc::Receiver<(PeerAddress, NewTransactionMessage)>,
+    outbound: OutboundMessaging<PeerAddress, SqliteMessageLogger>,
     tx_executed_transactions: mpsc::Sender<TransactionId>,
-    epoch_manager: EpochManagerHandle,
-    node_identity: Arc<NodeIdentity>,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,
     validator: TValidator,
     after_executed_validator: TExecutedValidator,
-    state_store: SqliteStateStore<PublicKey>,
+    state_store: SqliteStateStore<PeerAddress>,
     rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
 ) -> (MempoolHandle, JoinHandle<anyhow::Result<()>>)
@@ -69,7 +66,6 @@ where
         outbound,
         tx_executed_transactions,
         epoch_manager,
-        node_identity,
         transaction_executor,
         substate_resolver,
         validator,

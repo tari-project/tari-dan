@@ -13,6 +13,8 @@ tari_engine_types = { workspace = true }
 tari_bor = { workspace = true, default-features = true }
 tari_mmr = { workspace = true }
 
+libp2p-identity = { workspace = true, features = ["sr25519", "serde", "peerid"] }
+
 blake2 = { workspace = true }
 newtype-ops = { workspace = true }
 rand = { workspace = true }

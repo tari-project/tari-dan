@@ -11,7 +11,7 @@ use std::{
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, ShardId};
 use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
 use tari_transaction::TransactionId;
 
@@ -234,14 +234,14 @@ impl SubstateRecord {
     pub fn get_created_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<QuorumCertificate<TTx::Addr>, StorageError> {
+    ) -> Result<QuorumCertificate, StorageError> {
         tx.quorum_certificates_get(self.created_justify())
     }
 
     pub fn get_destroyed_quorum_certificate<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<Option<QuorumCertificate<TTx::Addr>>, StorageError> {
+    ) -> Result<Option<QuorumCertificate>, StorageError> {
         self.destroyed()
             .map(|destroyed| tx.quorum_certificates_get(&destroyed.justify))
             .transpose()
@@ -268,9 +268,9 @@ impl SubstateRecord {
 }
 
 #[derive(Debug, Clone)]
-pub struct SubstateCreatedProof<TAddr> {
+pub struct SubstateCreatedProof {
     pub substate: SubstateData,
-    pub created_qc: QuorumCertificate<TAddr>,
+    pub created_qc: QuorumCertificate,
 }
 
 #[derive(Debug, Clone)]
@@ -293,16 +293,16 @@ impl From<SubstateRecord> for SubstateData {
 }
 
 #[derive(Debug, Clone)]
-pub enum SubstateUpdate<TAddr> {
-    Create(SubstateCreatedProof<TAddr>),
+pub enum SubstateUpdate {
+    Create(SubstateCreatedProof),
     Destroy {
         shard_id: ShardId,
-        proof: QuorumCertificate<TAddr>,
+        proof: QuorumCertificate,
         destroyed_by_transaction: TransactionId,
     },
 }
 
-impl<TAddr> SubstateUpdate<TAddr> {
+impl SubstateUpdate {
     pub fn is_create(&self) -> bool {
         matches!(self, Self::Create(_))
     }
@@ -312,10 +312,10 @@ impl<TAddr> SubstateUpdate<TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable> SubstateUpdate<TAddr> {
-    pub fn apply<TTx>(self, tx: &mut TTx, block: &Block<TAddr>) -> Result<(), StorageError>
+impl SubstateUpdate {
+    pub fn apply<TTx>(self, tx: &mut TTx, block: &Block) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
+        TTx: StateStoreWriteTransaction + DerefMut,
         TTx::Target: StateStoreReadTransaction,
     {
         match self {
@@ -368,8 +368,8 @@ impl<TAddr: NodeAddressable> SubstateUpdate<TAddr> {
     }
 }
 
-impl<TAddr> From<SubstateCreatedProof<TAddr>> for SubstateUpdate<TAddr> {
-    fn from(value: SubstateCreatedProof<TAddr>) -> Self {
+impl From<SubstateCreatedProof> for SubstateUpdate {
+    fn from(value: SubstateCreatedProof) -> Self {
         Self::Create(value)
     }
 }

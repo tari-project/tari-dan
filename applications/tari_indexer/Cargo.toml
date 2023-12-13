@@ -11,12 +11,8 @@ license.workspace = true
 minotari_app_utilities = { workspace = true }
 tari_common = { workspace = true }
 tari_common_types = { workspace = true }
-tari_comms = { workspace = true }
-tari_comms_logging = { workspace = true }
 tari_crypto = { workspace = true }
-tari_p2p = { workspace = true }
 tari_shutdown = { workspace = true }
-tari_storage = { workspace = true }
 
 tari_bor = { workspace = true, default-features = true }
 tari_dan_app_utilities = { workspace = true }
@@ -34,6 +30,8 @@ tari_template_lib = { workspace = true }
 tari_transaction = { workspace = true }
 tari_validator_node_rpc = { workspace = true }
 tari_dan_p2p = { workspace = true }
+tari_rpc_framework = { workspace = true }
+tari_networking = { workspace = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -48,9 +46,8 @@ diesel = { workspace = true, default-features = false, features = [
     "chrono",
 ] }
 diesel_migrations = { workspace = true }
-futures = { workspace = true }
 include_dir = { workspace = true }
-lmdb-zero = { workspace = true }
+libp2p = { workspace = true }
 log = { workspace = true, features = ["std"] }
 log4rs = { workspace = true, features = [
     "rolling_file_appender",
@@ -59,9 +56,8 @@ log4rs = { workspace = true, features = [
     "fixed_window_roller",
 ] }
 mime_guess = { workspace = true }
-prost = { workspace = true }
 reqwest = { workspace = true }
-serde = { version = "1.0", features = ["default", "derive"] }
+serde = { workspace = true, features = ["default", "derive"] }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = [
@@ -71,9 +67,6 @@ tokio = { workspace = true, features = [
     "sync",
     "rt-multi-thread",
 ] }
-tonic = { workspace = true }
-tower =  { workspace = true }
-tower-layer = { workspace = true }
 tower-http = { workspace = true, features = ["default", "cors"] }
 
 

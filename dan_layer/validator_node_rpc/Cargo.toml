@@ -9,9 +9,10 @@ license.workspace = true
 
 [dependencies]
 tari_common_types = { workspace = true }
-tari_comms = { workspace = true }
-tari_comms_rpc_macros = { workspace = true }
 tari_crypto = { workspace = true }
+tari_networking = { workspace = true }
+tari_rpc_framework = { workspace = true }
+tari_rpc_macros = { workspace = true }
 
 tari_consensus = { workspace = true }
 tari_dan_common_types = { workspace = true }
@@ -24,7 +25,6 @@ tari_bor = { workspace = true, default-features = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-chrono = { workspace = true }
 log = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true, default-features = true }
@@ -32,7 +32,8 @@ thiserror = { workspace = true }
 tokio-stream = { workspace = true }
 
 [build-dependencies]
-tari_common = { workspace = true, features = ["build"] }
+proto_builder = { workspace = true }
+prost-build = { workspace = true }
 
 [package.metadata.cargo-machete]
 ignored = [

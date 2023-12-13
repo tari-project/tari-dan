@@ -25,7 +25,6 @@ use std::{fs, future, io, panic, str::FromStr, time::Duration};
 
 use cucumber::{gherkin::Step, given, then, when, writer, writer::Verbosity, World, WriterExt};
 use integration_tests::{
-    base_node::spawn_base_node,
     http_server::{spawn_template_http_server, MockHttpServer},
     logging::{create_log_config_file, get_base_dir},
     miner::{mine_blocks, register_miner_process},
@@ -36,8 +35,8 @@ use integration_tests::{
     wallet_daemon_cli,
     TariWorld,
 };
+use libp2p::Multiaddr;
 use tari_common::initialize_logging;
-use tari_comms::multiaddr::Multiaddr;
 use tari_dan_engine::abi::Type;
 use tari_dan_storage::consensus_models::QuorumDecision;
 use tari_shutdown::Shutdown;
@@ -90,11 +89,6 @@ async fn main() {
         .await;
 
     shutdown.trigger();
-}
-
-#[given(expr = "a base node {word}")]
-async fn start_base_node(world: &mut TariWorld, bn_name: String) {
-    spawn_base_node(world, bn_name).await;
 }
 
 #[given(expr = "fees are disabled")]

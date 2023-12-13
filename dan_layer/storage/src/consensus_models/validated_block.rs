@@ -3,7 +3,8 @@
 
 use std::{fmt, fmt::Display, ops::DerefMut};
 
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{Epoch, NodeHeight};
 
 use crate::{
     consensus_models::{Block, BlockId},
@@ -12,24 +13,24 @@ use crate::{
     StorageError,
 };
 
-pub struct ValidBlock<TAddr> {
-    block: Block<TAddr>,
-    dummy_blocks: Vec<Block<TAddr>>,
+pub struct ValidBlock {
+    block: Block,
+    dummy_blocks: Vec<Block>,
 }
 
-impl<TAddr> ValidBlock<TAddr> {
-    pub fn new(block: Block<TAddr>) -> Self {
+impl ValidBlock {
+    pub fn new(block: Block) -> Self {
         Self {
             block,
             dummy_blocks: vec![],
         }
     }
 
-    pub fn with_dummy_blocks(block: Block<TAddr>, dummy_blocks: Vec<Block<TAddr>>) -> Self {
+    pub fn with_dummy_blocks(block: Block, dummy_blocks: Vec<Block>) -> Self {
         Self { block, dummy_blocks }
     }
 
-    pub fn block(&self) -> &Block<TAddr> {
+    pub fn block(&self) -> &Block {
         &self.block
     }
 
@@ -45,20 +46,20 @@ impl<TAddr> ValidBlock<TAddr> {
         self.block.epoch()
     }
 
-    pub fn proposed_by(&self) -> &TAddr {
+    pub fn proposed_by(&self) -> &PublicKey {
         self.block.proposed_by()
     }
 
-    pub fn dummy_blocks(&self) -> &[Block<TAddr>] {
+    pub fn dummy_blocks(&self) -> &[Block] {
         &self.dummy_blocks
     }
 }
 
-impl<TAddr: NodeAddressable> ValidBlock<TAddr> {
+impl ValidBlock {
     pub fn save_all_dummy_blocks<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
     where
-        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
-        TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
+        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx::Target: StateStoreReadTransaction,
     {
         for block in &self.dummy_blocks {
             block.save(tx)?;
@@ -67,7 +68,7 @@ impl<TAddr: NodeAddressable> ValidBlock<TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable> Display for ValidBlock<TAddr> {
+impl Display for ValidBlock {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ValidBlock({})", self.block)
     }

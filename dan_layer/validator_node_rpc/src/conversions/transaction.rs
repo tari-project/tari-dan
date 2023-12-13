@@ -173,7 +173,7 @@ impl TryFrom<proto::transaction::Instruction> for Instruction {
             .map(|a| a.try_into())
             .collect::<Result<_, _>>()?;
         let instruction_type =
-            InstructionType::from_i32(request.instruction_type).ok_or_else(|| anyhow!("invalid instruction_type"))?;
+            InstructionType::try_from(request.instruction_type).map_err(|e| anyhow!("invalid instruction_type {e}"))?;
         let instruction = match instruction_type {
             InstructionType::Function => {
                 let function = request.function;

@@ -27,17 +27,16 @@ interface IEpoch {
 }
 
 interface IIdentity {
-  node_id: string;
-  public_address: string;
+  peer_id: string;
+  public_addresses: string[];
   public_key: string;
 }
 
 interface CommitteeShard {
-  bucket: number,
-  num_committees: number,
-  num_members: number,
+  bucket: number;
+  num_committees: number;
+  num_members: number;
 }
-
 
 interface IFunction {
   name: string;

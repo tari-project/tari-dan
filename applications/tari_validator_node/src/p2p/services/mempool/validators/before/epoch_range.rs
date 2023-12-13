@@ -2,24 +2,25 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use async_trait::async_trait;
+use tari_dan_common_types::NodeAddressable;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_transaction::Transaction;
 
 use crate::p2p::services::mempool::{MempoolError, Validator};
 
 #[derive(Debug)]
-pub struct EpochRangeValidator {
-    epoch_manager: EpochManagerHandle,
+pub struct EpochRangeValidator<TAddr> {
+    epoch_manager: EpochManagerHandle<TAddr>,
 }
 
-impl EpochRangeValidator {
-    pub fn new(epoch_manager: EpochManagerHandle) -> Self {
+impl<TAddr> EpochRangeValidator<TAddr> {
+    pub fn new(epoch_manager: EpochManagerHandle<TAddr>) -> Self {
         Self { epoch_manager }
     }
 }
 
 #[async_trait]
-impl Validator<Transaction> for EpochRangeValidator {
+impl<TAddr: NodeAddressable> Validator<Transaction> for EpochRangeValidator<TAddr> {
     type Error = MempoolError;
 
     async fn validate(&self, transaction: &Transaction) -> Result<(), MempoolError> {

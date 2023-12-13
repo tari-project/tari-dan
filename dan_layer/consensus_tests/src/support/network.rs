@@ -98,7 +98,7 @@ pub struct TestNetwork {
     network_status: watch::Sender<NetworkStatus>,
     offline_destinations: Arc<RwLock<Vec<TestNetworkDestination>>>,
     num_sent_messages: Arc<AtomicUsize>,
-    _on_message: watch::Receiver<Option<HotstuffMessage<TestAddress>>>,
+    _on_message: watch::Receiver<Option<HotstuffMessage>>,
 }
 
 impl TestNetwork {
@@ -115,7 +115,7 @@ impl TestNetwork {
     }
 
     #[allow(dead_code)]
-    pub async fn on_message(&mut self) -> Option<HotstuffMessage<TestAddress>> {
+    pub async fn on_message(&mut self) -> Option<HotstuffMessage> {
         self._on_message.changed().await.unwrap();
         self._on_message.borrow().clone()
     }
@@ -159,14 +159,14 @@ pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
     tx_new_transactions:
         HashMap<TestAddress, (ShardBucket, mpsc::Sender<TransactionId>, SqliteStateStore<TestAddress>)>,
-    tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage<TestAddress>)>>,
+    tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
     #[allow(clippy::type_complexity)]
-    rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage<TestAddress>)>>>,
+    rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>>>,
     #[allow(clippy::type_complexity)]
-    rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage<TestAddress>)>>>,
+    rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage)>>>,
     rx_mempool: Option<HashMap<TestAddress, mpsc::UnboundedReceiver<Transaction>>>,
     network_status: watch::Receiver<NetworkStatus>,
-    on_message: watch::Sender<Option<HotstuffMessage<TestAddress>>>,
+    on_message: watch::Sender<Option<HotstuffMessage>>,
     num_sent_messages: Arc<AtomicUsize>,
     transaction_store: Arc<RwLock<HashMap<TransactionId, ExecutedTransaction>>>,
 
@@ -265,23 +265,18 @@ impl TestNetworkWorker {
         }
     }
 
-    pub async fn handle_broadcast(
-        &mut self,
-        from: TestAddress,
-        to: Committee<TestAddress>,
-        msg: HotstuffMessage<TestAddress>,
-    ) {
-        log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.iter().join(", "));
+    pub async fn handle_broadcast(&mut self, from: TestAddress, to: Committee<TestAddress>, msg: HotstuffMessage) {
+        log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.addresses().join(", "));
         self.num_sent_messages
             .fetch_add(to.len(), std::sync::atomic::Ordering::Relaxed);
-        for vn in to {
+        for vn in to.addresses() {
             // TODO: support for taking a whole committee bucket offline
-            if vn != from && self.is_offline_destination(&vn, u32::MAX.into()).await {
+            if *vn != from && self.is_offline_destination(vn, u32::MAX.into()).await {
                 continue;
             }
 
             self.tx_hs_message
-                .get(&vn)
+                .get(vn)
                 .unwrap()
                 .send((from.clone(), msg.clone()))
                 .await
@@ -290,7 +285,7 @@ impl TestNetworkWorker {
         self.on_message.send(Some(msg.clone())).unwrap();
     }
 
-    async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage<TestAddress>) {
+    async fn handle_leader(&mut self, from: TestAddress, to: TestAddress, msg: HotstuffMessage) {
         log::debug!("✉️ Message {} from {} to {}", msg, from, to);
         if from != to && self.is_offline_destination(&from, u32::MAX.into()).await {
             return;

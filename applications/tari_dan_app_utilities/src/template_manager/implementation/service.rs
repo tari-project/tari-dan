@@ -25,7 +25,7 @@ use std::convert::TryFrom;
 use log::*;
 use tari_common_types::types::FixedHash;
 use tari_core::transactions::transaction_components::TemplateType;
-use tari_dan_common_types::services::template_provider::TemplateProvider;
+use tari_dan_common_types::{services::template_provider::TemplateProvider, NodeAddressable};
 use tari_dan_engine::function_definitions::FlowFunctionDefinition;
 use tari_dan_storage::global::{DbTemplateType, DbTemplateUpdate, TemplateStatus};
 use tari_engine_types::calculate_template_binary_hash;
@@ -45,17 +45,17 @@ use crate::template_manager::interface::{TemplateManagerError, TemplateManagerRe
 
 const LOG_TARGET: &str = "tari::template_manager";
 
-pub struct TemplateManagerService {
+pub struct TemplateManagerService<TAddr> {
     rx_request: Receiver<TemplateManagerRequest>,
-    manager: TemplateManager,
+    manager: TemplateManager<TAddr>,
     completed_downloads: mpsc::Receiver<DownloadResult>,
     download_queue: mpsc::Sender<DownloadRequest>,
 }
 
-impl TemplateManagerService {
+impl<TAddr: NodeAddressable + 'static> TemplateManagerService<TAddr> {
     pub fn spawn(
         rx_request: Receiver<TemplateManagerRequest>,
-        manager: TemplateManager,
+        manager: TemplateManager<TAddr>,
         download_queue: mpsc::Sender<DownloadRequest>,
         completed_downloads: mpsc::Receiver<DownloadResult>,
         shutdown: ShutdownSignal,

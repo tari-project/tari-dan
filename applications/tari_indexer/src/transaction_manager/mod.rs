@@ -168,7 +168,7 @@ where
         let mut all_members = HashSet::new();
         for shard_id in shard_ids {
             let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
-            all_members.extend(committee);
+            all_members.extend(committee.into_addresses());
         }
 
         let committee_size = all_members.len();
@@ -185,7 +185,7 @@ where
                 Err(err) => {
                     warn!(
                         target: LOG_TARGET,
-                        "Failed to call validator node '{}': {}", validator, err
+                        "Failed to dial validator node '{}': {}", validator, err
                     );
                     continue;
                 },

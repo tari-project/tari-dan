@@ -32,6 +32,7 @@ use tari_dan_common_types::{
     hashing::ValidatorNodeBalancedMerkleTree,
     shard_bucket::ShardBucket,
     Epoch,
+    NodeAddressable,
     ShardId,
 };
 
@@ -46,6 +47,8 @@ use crate::{
 };
 
 pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
+    type Addr: NodeAddressable;
+
     fn get_metadata<T: DeserializeOwned>(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -79,6 +82,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
     fn insert_validator_node(
         &self,
         tx: &mut Self::DbTransaction<'_>,
+        address: Self::Addr,
         public_key: PublicKey,
         shard_key: ShardId,
         epoch: Epoch,
@@ -89,14 +93,21 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error>;
-    fn get_validator_node(
+    ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
+    fn get_validator_node_by_address(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        public_key: &[u8],
-    ) -> Result<ValidatorNode<PublicKey>, Self::Error>;
+        address: &Self::Addr,
+    ) -> Result<ValidatorNode<Self::Addr>, Self::Error>;
+    fn get_validator_node_by_public_key(
+        &self,
+        tx: &mut Self::DbTransaction<'_>,
+        start_epoch: Epoch,
+        end_epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ValidatorNode<Self::Addr>, Self::Error>;
     fn validator_nodes_count(
         &self,
         tx: &mut Self::DbTransaction<'_>,
@@ -124,7 +135,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         start_epoch: Epoch,
         end_epoch: Epoch,
         shard_range: RangeInclusive<ShardId>,
-    ) -> Result<Vec<ValidatorNode<PublicKey>>, Self::Error>;
+    ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
 
     fn validator_nodes_get_by_buckets(
         &self,
@@ -132,7 +143,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         start_epoch: Epoch,
         end_epoch: Epoch,
         buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<PublicKey>>, Self::Error>;
+    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, Self::Error>;
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;

@@ -12,11 +12,9 @@ tari_core = { workspace = true }
 tari_common_types = { workspace = true }
 tari_shutdown = { workspace = true }
 tari_dan_common_types = { workspace = true }
-tari_comms = { workspace = true, optional = true }
 tari_dan_storage = { workspace = true }
 tari_dan_storage_sqlite = { workspace = true, optional = true }
 tari_base_node_client = { workspace = true, optional = true }
-tari_crypto = { workspace = true }
 tari_mmr = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
@@ -27,9 +25,8 @@ tokio = { workspace = true, default-features = false, features = ["sync"] }
 
 [features]
 base_layer = [
-  "log",
-  "tari_base_node_client",
-  "tari_comms",
-  "tari_dan_storage_sqlite",
-  "tari_mmr",
+    "log",
+    "tari_base_node_client",
+    "tari_dan_storage_sqlite",
+    "tari_mmr",
 ]

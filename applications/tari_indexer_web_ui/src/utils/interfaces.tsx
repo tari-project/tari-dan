@@ -26,8 +26,8 @@ interface IEpoch {
 }
 
 interface IIdentity {
-  node_id: string;
-  public_address: string;
+  peer_id: string,
+  public_addresses: string[];
   public_key: string;
 }
 

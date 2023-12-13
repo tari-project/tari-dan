@@ -3,7 +3,6 @@
 
 use log::*;
 use tari_common_types::types::PublicKey;
-use tari_comms::types::CommsPublicKey;
 use tari_dan_common_types::Epoch;
 use tari_dan_engine::runtime::VirtualSubstates;
 use tari_dan_storage::{consensus_models::Block, StateStore, StorageError};
@@ -24,8 +23,8 @@ pub struct VirtualSubstateManager<TStateStore, TEpochManager> {
 
 impl<TStateStore, TEpochManager> VirtualSubstateManager<TStateStore, TEpochManager>
 where
-    TStateStore: StateStore<Addr = CommsPublicKey>,
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
+    TStateStore: StateStore,
+    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
 {
     pub fn new(state_store: TStateStore, epoch_manager: TEpochManager) -> Self {
         Self {
@@ -48,7 +47,7 @@ where
 
     pub fn get_virtual_substates(
         &self,
-        claim_instructions: Vec<(Epoch, CommsPublicKey)>,
+        claim_instructions: Vec<(Epoch, PublicKey)>,
     ) -> Result<VirtualSubstates, VirtualSubstateError> {
         let mut virtual_substates = VirtualSubstates::with_capacity(claim_instructions.len());
 
@@ -75,11 +74,11 @@ where
     fn generate_validator_fee_claim(
         &self,
         epoch: Epoch,
-        address: &PublicKey,
+        public_key: &PublicKey,
     ) -> Result<VirtualSubstate, VirtualSubstateError> {
         let claim = self
             .store
-            .with_read_tx(|tx| self.generate_validator_fee_claim_inner(tx, epoch, address))?;
+            .with_read_tx(|tx| self.generate_validator_fee_claim_inner(tx, epoch, public_key))?;
         Ok(VirtualSubstate::UnclaimedValidatorFee(claim))
     }
 
@@ -87,16 +86,16 @@ where
         &self,
         tx: &mut <TStateStore as StateStore>::ReadTransaction<'_>,
         epoch: Epoch,
-        address: &PublicKey,
+        public_key: &PublicKey,
     ) -> Result<FeeClaim, VirtualSubstateError> {
-        let validator_fee = Block::get_total_due_for_epoch(tx, epoch, address)?;
+        let validator_fee = Block::get_total_due_for_epoch(tx, epoch, public_key)?;
         // If validator_fee == 0:
         // A validator may claim without knowing that they have no fees for the epoch.
         // As long as they can pay the fee for the transaction, we can add the 0 claim.
 
         Ok(FeeClaim {
             epoch: epoch.as_u64(),
-            validator_public_key: address.clone(),
+            validator_public_key: public_key.clone(),
             amount: Amount::try_from(validator_fee).expect("Fee greater than Amount::MAX"),
         })
     }

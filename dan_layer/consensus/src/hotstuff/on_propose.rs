@@ -4,6 +4,7 @@
 use std::{collections::BTreeSet, num::NonZeroU64, ops::DerefMut};
 
 use log::*;
+use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
@@ -118,7 +119,7 @@ where TConsensusSpec: ConsensusSpec
                 epoch,
                 &leaf_block,
                 high_qc,
-                validator.address,
+                validator.public_key,
                 &local_committee_shard,
                 // TODO: This just avoids issues with proposed transactions causing leader failures. Not sure if this
                 //       is a good idea.
@@ -153,7 +154,7 @@ where TConsensusSpec: ConsensusSpec
 
     pub async fn broadcast_proposal_locally(
         &self,
-        next_block: Block<TConsensusSpec::Addr>,
+        next_block: Block,
         local_committee: Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         info!(
@@ -184,12 +185,12 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         epoch: Epoch,
         parent_block: &LeafBlock,
-        high_qc: QuorumCertificate<TConsensusSpec::Addr>,
-        proposed_by: <TConsensusSpec::EpochManager as EpochManagerReader>::Addr,
+        high_qc: QuorumCertificate,
+        proposed_by: PublicKey,
         local_committee_shard: &CommitteeShard,
         empty_block: bool,
         foreign_counters: &mut ForeignSendCounters,
-    ) -> Result<Block<TConsensusSpec::Addr>, HotStuffError> {
+    ) -> Result<Block, HotStuffError> {
         // TODO: Configure
         const TARGET_BLOCK_SIZE: usize = 1000;
         let batch = if empty_block {

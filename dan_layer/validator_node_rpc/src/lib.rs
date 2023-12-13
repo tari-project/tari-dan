@@ -24,7 +24,6 @@ mod block_sync;
 pub mod client;
 mod conversions;
 mod error;
-pub mod peer_sync;
 pub mod proto;
 pub mod rpc_service;
 mod utils;

@@ -33,7 +33,7 @@ impl LockedBlock {
         tx.locked_block_get()
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block<TTx::Addr>, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         tx.blocks_get(&self.block_id)
     }
 

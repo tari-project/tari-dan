@@ -6,9 +6,8 @@ use std::ops::DerefMut;
 use async_trait::async_trait;
 use futures::StreamExt;
 use log::*;
-use tari_comms::{protocol::rpc::RpcError, types::CommsPublicKey};
 use tari_consensus::traits::{SyncManager, SyncStatus};
-use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight};
+use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight, PeerAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -24,9 +23,10 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
+use tari_rpc_framework::RpcError;
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::{
-    client::{TariCommsValidatorNodeClientFactory, ValidatorNodeClientFactory},
+    client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
     proto::rpc::{GetHighQcRequest, SyncBlocksRequest},
     rpc_service::ValidatorNodeRpcClient,
 };
@@ -40,18 +40,18 @@ const MAX_SUBSTATE_UPDATES: usize = 10000;
 pub struct CommsRpcStateSyncManager<TEpochManager, TStateStore> {
     epoch_manager: TEpochManager,
     state_store: TStateStore,
-    client_factory: TariCommsValidatorNodeClientFactory,
+    client_factory: TariValidatorNodeRpcClientFactory,
 }
 
 impl<TEpochManager, TStateStore> CommsRpcStateSyncManager<TEpochManager, TStateStore>
 where
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey>,
-    TStateStore: StateStore<Addr = CommsPublicKey>,
+    TStateStore: StateStore<Addr = PeerAddress>,
+    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
 {
     pub fn new(
         epoch_manager: TEpochManager,
         state_store: TStateStore,
-        client_factory: TariCommsValidatorNodeClientFactory,
+        client_factory: TariValidatorNodeRpcClientFactory,
     ) -> Self {
         Self {
             epoch_manager,
@@ -60,18 +60,18 @@ where
         }
     }
 
-    async fn get_sync_peers(&self) -> Result<Committee<CommsPublicKey>, CommsRpcConsensusSyncError> {
+    async fn get_sync_peers(&self) -> Result<Committee<TStateStore::Addr>, CommsRpcConsensusSyncError> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let this_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
         let mut committee = self.epoch_manager.get_local_committee(current_epoch).await?;
-        committee.members.retain(|m| *m != this_vn.address);
+        committee.members.retain(|(addr, _)| *addr != this_vn.address);
         committee.shuffle();
         Ok(committee)
     }
 
     async fn sync_with_peer(
         &self,
-        addr: &CommsPublicKey,
+        addr: &TStateStore::Addr,
         locked_block: &LockedBlock,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         self.create_zero_block_if_required()?;
@@ -135,8 +135,7 @@ where
                 )));
             }
 
-            let block =
-                Block::<CommsPublicKey>::try_from(new_block).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
+            let block = Block::try_from(new_block).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
 
             let Some(resp) = stream.next().await else {
                 return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
@@ -150,7 +149,7 @@ where
 
             let qcs = qcs
                 .into_iter()
-                .map(QuorumCertificate::<CommsPublicKey>::try_from)
+                .map(QuorumCertificate::try_from)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
 
@@ -234,9 +233,9 @@ where
 
     fn process_block(
         &self,
-        block: Block<CommsPublicKey>,
-        qcs: Vec<QuorumCertificate<CommsPublicKey>>,
-        updates: Vec<SubstateUpdate<CommsPublicKey>>,
+        block: Block,
+        qcs: Vec<QuorumCertificate>,
+        updates: Vec<SubstateUpdate>,
         transactions: Vec<TransactionRecord>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         self.state_store.with_write_tx(|tx| {
@@ -291,7 +290,7 @@ where
     fn mark_block_committed(
         tx: &mut <TStateStore as StateStore>::WriteTransaction<'_>,
         last_executed: &LastExecuted,
-        block: &Block<TStateStore::Addr>,
+        block: &Block,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         if last_executed.height < block.height() {
             let parent = block.get_parent(tx.deref_mut())?;
@@ -312,8 +311,8 @@ where
 #[async_trait]
 impl<TEpochManager, TStateStore> SyncManager for CommsRpcStateSyncManager<TEpochManager, TStateStore>
 where
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey> + Send + Sync + 'static,
-    TStateStore: StateStore<Addr = CommsPublicKey> + Send + Sync + 'static,
+    TStateStore: StateStore<Addr = PeerAddress> + Send + Sync + 'static,
+    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr> + Send + Sync + 'static,
 {
     type Error = CommsRpcConsensusSyncError;
 
@@ -323,12 +322,12 @@ where
             warn!(target: LOG_TARGET, "No peers available for sync");
             return Ok(SyncStatus::UpToDate);
         }
-        let mut highest_qc: Option<QuorumCertificate<CommsPublicKey>> = None;
+        let mut highest_qc: Option<QuorumCertificate> = None;
         let mut num_succeeded = 0;
         let max_failures = committee.max_failures();
         let committee_size = committee.len();
-        for addr in committee {
-            let mut rpc_client = self.client_factory.create_client(&addr);
+        for addr in committee.addresses() {
+            let mut rpc_client = self.client_factory.create_client(addr);
             let mut client = match rpc_client.client_connection().await {
                 Ok(client) => client,
                 Err(err) => {
@@ -342,7 +341,7 @@ where
                 .map_err(CommsRpcConsensusSyncError::RpcError)
                 .and_then(|resp| {
                     resp.high_qc
-                        .map(QuorumCertificate::<CommsPublicKey>::try_from)
+                        .map(QuorumCertificate::try_from)
                         .transpose()
                         .map_err(CommsRpcConsensusSyncError::InvalidResponse)?
                         .ok_or_else(|| {
@@ -405,14 +404,14 @@ where
         }
 
         let mut sync_error = None;
-        for member in committee {
+        for member in committee.addresses() {
             // Refresh the HighQC each time because a partial sync could have been achieved from a peer
             let locked_block = self
                 .state_store
                 .with_read_tx(|tx| LockedBlock::get(tx).optional())?
-                .unwrap_or_else(|| Block::<CommsPublicKey>::zero_block().as_locked_block());
+                .unwrap_or_else(|| Block::zero_block().as_locked_block());
 
-            match self.sync_with_peer(&member, &locked_block).await {
+            match self.sync_with_peer(member, &locked_block).await {
                 Ok(()) => {
                     sync_error = None;
                     break;

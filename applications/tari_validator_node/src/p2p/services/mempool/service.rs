@@ -20,20 +20,19 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut, sync::Arc};
+use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
-use tari_common_types::types::PublicKey;
-use tari_comms::{types::CommsPublicKey, NodeIdentity};
+use sqlite_message_logger::SqliteMessageLogger;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
-use tari_dan_common_types::{optional::Optional, shard_bucket::ShardBucket, Epoch, ShardId};
+use tari_dan_common_types::{optional::Optional, shard_bucket::ShardBucket, Epoch, PeerAddress, ShardId};
 use tari_dan_p2p::NewTransactionMessage;
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, SubstateRecord, TransactionPool, TransactionRecord},
     StateStore,
 };
-use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerEvent, EpochManagerReader};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
 use tokio::sync::{mpsc, oneshot};
@@ -49,7 +48,7 @@ use crate::{
             traits::SubstateResolver,
             Validator,
         },
-        messaging::OutboundMessaging,
+        message_dispatcher::OutboundMessaging,
     },
     substate_resolver::SubstateResolverError,
 };
@@ -67,17 +66,17 @@ struct MempoolTransactionExecution {
 pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateResolver> {
     transactions: HashSet<TransactionId>,
     pending_executions: FuturesUnordered<BoxFuture<'static, MempoolTransactionExecution>>,
-    new_transactions: mpsc::Receiver<(CommsPublicKey, NewTransactionMessage)>,
+    new_transactions: mpsc::Receiver<(PeerAddress, NewTransactionMessage)>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     tx_executed_transactions: mpsc::Sender<TransactionId>,
-    epoch_manager: EpochManagerHandle,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     before_execute_validator: TValidator,
     after_execute_validator: TExecutedValidator,
     transaction_executor: TExecutor,
     substate_resolver: TSubstateResolver,
-    state_store: SqliteStateStore<PublicKey>,
-    transaction_pool: TransactionPool<SqliteStateStore<PublicKey>>,
-    gossip: Gossip,
+    state_store: SqliteStateStore<PeerAddress>,
+    transaction_pool: TransactionPool<SqliteStateStore<PeerAddress>>,
+    gossip: Gossip<PeerAddress>,
     rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
 }
@@ -90,24 +89,23 @@ where
     TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
     TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
-    #[allow(clippy::too_many_arguments)]
+    // #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        new_transactions: mpsc::Receiver<(CommsPublicKey, NewTransactionMessage)>,
+        new_transactions: mpsc::Receiver<(PeerAddress, NewTransactionMessage)>,
         mempool_requests: mpsc::Receiver<MempoolRequest>,
-        outbound: OutboundMessaging,
+        outbound: OutboundMessaging<PeerAddress, SqliteMessageLogger>,
         tx_executed_transactions: mpsc::Sender<TransactionId>,
-        epoch_manager: EpochManagerHandle,
-        node_identity: Arc<NodeIdentity>,
+        epoch_manager: EpochManagerHandle<PeerAddress>,
         transaction_executor: TExecutor,
         substate_resolver: TSubstateResolver,
         before_execute_validator: TValidator,
         after_execute_validator: TExecutedValidator,
-        state_store: SqliteStateStore<PublicKey>,
+        state_store: SqliteStateStore<PeerAddress>,
         rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
         consensus_handle: ConsensusHandle,
     ) -> Self {
         Self {
-            gossip: Gossip::new(epoch_manager.clone(), outbound, node_identity.public_key().clone()),
+            gossip: Gossip::new(epoch_manager.clone(), outbound),
             transactions: Default::default(),
             pending_executions: FuturesUnordered::new(),
             new_transactions,
@@ -126,6 +124,8 @@ where
     }
 
     pub async fn run(mut self) -> anyhow::Result<()> {
+        let mut events = self.epoch_manager.subscribe().await?;
+
         loop {
             tokio::select! {
                 Some(req) = self.mempool_requests.recv() => self.handle_request(req).await,
@@ -144,6 +144,14 @@ where
                         warn!(target: LOG_TARGET, "Mempool rejected transaction: {}", e);
                     }
                 }
+                Ok(event) = events.recv() => {
+                    if let EpochManagerEvent::EpochChanged(epoch) = event {
+                        if self.epoch_manager.is_this_validator_registered_for_epoch(epoch).await?{
+                            info!(target: LOG_TARGET, "Mempool service subscribing transaction messages for epoch {}", epoch);
+                            self.gossip.subscribe(epoch).await?;
+                        }
+                    }
+                },
 
                 else => {
                     info!(target: LOG_TARGET, "Mempool service shutting down");
@@ -151,6 +159,9 @@ where
                 }
             }
         }
+
+        self.gossip.unsubscribe().await?;
+
         Ok(())
     }
 
@@ -203,7 +214,7 @@ where
 
     async fn handle_new_transaction_from_remote(
         &mut self,
-        from: CommsPublicKey,
+        from: PeerAddress,
         msg: NewTransactionMessage,
     ) -> Result<(), MempoolError> {
         let NewTransactionMessage {

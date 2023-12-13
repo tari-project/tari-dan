@@ -25,8 +25,8 @@ use diesel::{
 };
 use log::*;
 use serde::{de::DeserializeOwned, Serialize};
-use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_common_types::types::{FixedHash, PublicKey};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, ShardId};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -57,6 +57,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_transaction::TransactionId;
+use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
@@ -290,7 +291,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         last_voted.try_into()
     }
 
-    fn last_sent_vote_get(&mut self) -> Result<LastSentVote<Self::Addr>, StorageError> {
+    fn last_sent_vote_get(&mut self) -> Result<LastSentVote, StorageError> {
         use crate::schema::last_sent_vote;
 
         let last_voted = last_sent_vote::table
@@ -556,7 +557,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .collect()
     }
 
-    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block<TAddr>, StorageError> {
+    fn blocks_get(&mut self, block_id: &BlockId) -> Result<Block, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
@@ -580,45 +581,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         block.try_convert(qc)
     }
 
-    fn blocks_get_foreign_ids(
-        &mut self,
-        bucket: ShardBucket,
-        from: u64,
-        to: u64,
-    ) -> Result<Vec<Block<TAddr>>, StorageError> {
-        use crate::schema::{blocks, blocks_foreign_id_mapping, quorum_certificates};
-        // TODO: how slow is this? is it worth splitting into 2 queries?
-        let results = blocks::table
-            .left_join(blocks_foreign_id_mapping::table.on(blocks::block_id.eq(blocks_foreign_id_mapping::block_id)))
-            .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
-            .filter(blocks_foreign_id_mapping::foreign_bucket.eq(i64::from(bucket.as_u32())))
-            .filter(blocks_foreign_id_mapping::foreign_index.ge(from as i64))
-            .filter(blocks_foreign_id_mapping::foreign_index.le(to as i64))
-            .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
-            .order_by(blocks_foreign_id_mapping::foreign_index.asc())
-            .get_results::<(sql_models::Block, Option<sql_models::QuorumCertificate>)>(self.connection())
-            .map_err(|e| SqliteStorageError::DieselError {
-                operation: "blocks_all_after_height",
-                source: e,
-            })?;
-
-        results
-            .into_iter()
-            .map(|(block, qc)| {
-                let qc = qc.ok_or_else(|| SqliteStorageError::DbInconsistency {
-                    operation: "blocks_get_foreign_ids",
-                    details: format!(
-                        "block {} references non-existent quorum certificate {}",
-                        block.block_id, block.qc_id
-                    ),
-                })?;
-
-                block.try_convert(qc)
-            })
-            .collect()
-    }
-
-    fn blocks_get_tip(&mut self) -> Result<Block<TAddr>, StorageError> {
+    fn blocks_get_tip(&mut self) -> Result<Block, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let (block, qc) = blocks::table
@@ -646,7 +609,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         &mut self,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+    ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let mut block_ids = self.get_block_ids_between(start_block_id_exclusive, end_block_id_inclusive)?;
@@ -684,7 +647,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .collect()
     }
 
-    fn blocks_get_all_by_parent(&mut self, parent_id: &BlockId) -> Result<Vec<Block<TAddr>>, StorageError> {
+    fn blocks_get_all_by_parent(&mut self, parent_id: &BlockId) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let results = blocks::table
@@ -714,11 +677,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .collect()
     }
 
-    fn blocks_get_parent_chain(
-        &mut self,
-        block_id: &BlockId,
-        limit: usize,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+    fn blocks_get_parent_chain(&mut self, block_id: &BlockId, limit: usize) -> Result<Vec<Block>, StorageError> {
         if !self.blocks_exists(block_id)? {
             return Err(StorageError::QueryError {
                 reason: format!("blocks_get_parent_chain: descendant block {} does not exist", block_id),
@@ -835,7 +794,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
     fn blocks_get_total_leader_fee_for_epoch(
         &mut self,
         epoch: Epoch,
-        validator_public_key: &Self::Addr,
+        validator_public_key: &PublicKey,
     ) -> Result<u64, StorageError> {
         use crate::schema::blocks;
 
@@ -856,8 +815,8 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
     fn blocks_get_any_with_epoch_range(
         &mut self,
         epoch_range: RangeInclusive<Epoch>,
-        validator_public_key: Option<&Self::Addr>,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+        validator_public_key: Option<&PublicKey>,
+    ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let mut query = blocks::table
@@ -898,7 +857,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         limit: u64,
         offset: u64,
         asc_desc_created_at: Option<Ordering>,
-    ) -> Result<Vec<Block<Self::Addr>>, StorageError> {
+    ) -> Result<Vec<Block>, StorageError> {
         use crate::schema::{blocks, quorum_certificates};
 
         let mut query = blocks::table
@@ -984,7 +943,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count > 0)
     }
 
-    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
+    fn quorum_certificates_get(&mut self, qc_id: &QcId) -> Result<QuorumCertificate, StorageError> {
         use crate::schema::quorum_certificates;
 
         let qc_json = quorum_certificates::table
@@ -1002,7 +961,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
     fn quorum_certificates_get_all<'a, I: IntoIterator<Item = &'a QcId>>(
         &mut self,
         qc_ids: I,
-    ) -> Result<Vec<QuorumCertificate<Self::Addr>>, StorageError> {
+    ) -> Result<Vec<QuorumCertificate>, StorageError> {
         use crate::schema::quorum_certificates;
 
         let qc_ids: Vec<String> = qc_ids.into_iter().map(serialize_hex).collect();
@@ -1032,10 +991,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         qc_json.iter().map(|j| deserialize_json(j)).collect()
     }
 
-    fn quorum_certificates_get_by_block_id(
-        &mut self,
-        block_id: &BlockId,
-    ) -> Result<QuorumCertificate<Self::Addr>, StorageError> {
+    fn quorum_certificates_get_by_block_id(&mut self, block_id: &BlockId) -> Result<QuorumCertificate, StorageError> {
         use crate::schema::quorum_certificates;
 
         let qc_json = quorum_certificates::table
@@ -1097,7 +1053,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count as u64)
     }
 
-    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote<Self::Addr>>, StorageError> {
+    fn votes_get_for_block(&mut self, block_id: &BlockId) -> Result<Vec<Vote>, StorageError> {
         use crate::schema::votes;
 
         let votes = votes::table
@@ -1115,7 +1071,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         &mut self,
         block_id: &BlockId,
         sender_leaf_hash: &FixedHash,
-    ) -> Result<Vote<Self::Addr>, StorageError> {
+    ) -> Result<Vote, StorageError> {
         use crate::schema::votes;
 
         let vote = votes::table

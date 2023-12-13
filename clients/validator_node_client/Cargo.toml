@@ -11,7 +11,6 @@ license.workspace = true
 tari_dan_common_types = { workspace = true }
 tari_engine_types = { workspace = true }
 tari_common_types = { workspace = true }
-tari_comms_logging = { workspace = true }
 tari_transaction = { workspace = true }
 tari_dan_storage = { workspace = true }
 

@@ -22,7 +22,6 @@
 
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::Arc,
     time::Duration,
 };
 
@@ -30,8 +29,8 @@ use log::{error, info, warn};
 use minotari_app_grpc::tari_rpc::RegisterValidatorNodeResponse;
 use tari_base_node_client::BaseNodeClientError;
 use tari_common::configuration::bootstrap::{grpc_default_port, ApplicationType};
-use tari_comms::NodeIdentity;
-use tari_dan_common_types::Epoch;
+use tari_dan_app_utilities::keypair::RistrettoKeypair;
+use tari_dan_common_types::{Epoch, PeerAddress};
 use tari_dan_storage_sqlite::error::SqliteStorageError;
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerError, EpochManagerEvent, EpochManagerReader};
 use tari_shutdown::ShutdownSignal;
@@ -64,8 +63,8 @@ pub enum AutoRegistrationError {
 
 pub async fn register(
     mut wallet_client: GrpcWalletClient,
-    node_identity: &NodeIdentity,
-    epoch_manager: &EpochManagerHandle,
+    keypair: &RistrettoKeypair,
+    epoch_manager: &EpochManagerHandle<PeerAddress>,
 ) -> Result<RegisterValidatorNodeResponse, AutoRegistrationError> {
     let balance = wallet_client.get_balance().await?;
     let constants = epoch_manager.get_base_layer_consensus_constants().await?;
@@ -86,7 +85,7 @@ pub async fn register(
 
     loop {
         match wallet_client
-            .register_validator_node(node_identity, &fee_claim_public_key)
+            .register_validator_node(keypair, &fee_claim_public_key)
             .await
         {
             Ok(resp) => {
@@ -127,22 +126,22 @@ pub async fn register(
 
 pub fn spawn(
     config: ApplicationConfig,
-    node_identity: Arc<NodeIdentity>,
-    epoch_manager: EpochManagerHandle,
+    keypair: RistrettoKeypair,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     shutdown: ShutdownSignal,
 ) -> JoinHandle<Result<(), anyhow::Error>> {
     info!(target: LOG_TARGET, "♽️ Node configured for auto registration");
 
     task::spawn(async move {
-        start(config, node_identity, epoch_manager, shutdown).await?;
+        start(config, keypair, epoch_manager, shutdown).await?;
         Ok(())
     })
 }
 
 async fn start(
     config: ApplicationConfig,
-    node_identity: Arc<NodeIdentity>,
-    epoch_manager: EpochManagerHandle,
+    keypair: RistrettoKeypair,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     mut shutdown: ShutdownSignal,
 ) -> Result<(), AutoRegistrationError> {
     let mut rx = epoch_manager.subscribe().await?;
@@ -152,7 +151,7 @@ async fn start(
             Ok(event) = rx.recv() => {
                 match event {
                     EpochManagerEvent::EpochChanged(epoch) => {
-                        if let Err(err) = handle_epoch_changed(&config, &node_identity, &epoch_manager).await {
+                        if let Err(err) = handle_epoch_changed(&config, &keypair, &epoch_manager).await {
                             error!(target: LOG_TARGET, "Auto-registration failed for epoch {} with error: {}", epoch, err);
                         }
                     },
@@ -168,8 +167,8 @@ async fn start(
 
 async fn handle_epoch_changed(
     config: &ApplicationConfig,
-    node_identity: &NodeIdentity,
-    epoch_manager: &EpochManagerHandle,
+    keypair: &RistrettoKeypair,
+    epoch_manager: &EpochManagerHandle<PeerAddress>,
 ) -> Result<(), AutoRegistrationError> {
     if epoch_manager.last_registration_epoch().await?.is_none() {
         info!(
@@ -186,7 +185,7 @@ async fn handle_epoch_changed(
             SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), port)
         }));
 
-        register(wallet_client, node_identity, epoch_manager).await?;
+        register(wallet_client, keypair, epoch_manager).await?;
     } else {
         info!(
             target: LOG_TARGET,

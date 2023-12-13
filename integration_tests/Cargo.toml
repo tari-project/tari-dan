@@ -8,6 +8,7 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tari_core = { workspace = true, default-features = true }
 minotari_app_grpc = { workspace = true }
 minotari_app_utilities = { workspace = true }
 minotari_node = { workspace = true }
@@ -24,6 +25,7 @@ tari_shutdown = { workspace = true }
 tari_crypto = { workspace = true }
 tari_indexer = { workspace = true }
 tari_validator_node_cli = { workspace = true }
+tari_dan_app_utilities = { workspace = true }
 tari_dan_common_types = { workspace = true }
 tari_dan_engine = { workspace = true }
 tari_dan_storage = { workspace = true }
@@ -38,7 +40,7 @@ tari_validator_node = { workspace = true }
 tari_wallet_daemon_client = { workspace = true }
 tari_base_node_client = { workspace = true }
 tari_transaction_manifest = { workspace = true }
-tari_dan_wallet_sdk = { workspace = true }
+#tari_dan_wallet_sdk = { workspace = true }
 
 anyhow = { workspace = true }
 # if we set this version in the workspace it would break other crates
@@ -49,9 +51,9 @@ cucumber = { workspace = true, features = [
     "libtest",
     "output-junit",
 ] }
-futures = { workspace = true }
 httpmock = { workspace = true }
 indexmap = { workspace = true }
+libp2p = { workspace = true }
 log = { workspace = true, features = ["std"] }
 log4rs = { workspace = true, features = [
     "rolling_file_appender",

@@ -15,7 +15,7 @@ const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_request_mis
 
 pub struct OnReceiveRequestMissingTransactions<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
-    tx_request_missing_tx: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+    tx_request_missing_tx: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
 }
 
 impl<TConsensusSpec> OnReceiveRequestMissingTransactions<TConsensusSpec>
@@ -23,7 +23,7 @@ where TConsensusSpec: ConsensusSpec
 {
     pub fn new(
         store: TConsensusSpec::StateStore,
-        tx_request_missing_tx: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage<TConsensusSpec::Addr>)>,
+        tx_request_missing_tx: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     ) -> Self {
         Self {
             store,

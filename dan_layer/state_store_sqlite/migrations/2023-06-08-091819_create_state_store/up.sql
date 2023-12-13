@@ -271,16 +271,6 @@ CREATE TABLE foreign_receive_counters
     created_at timestamp not NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE blocks_foreign_id_mapping
-(
-    id             integer   not NULL primary key AUTOINCREMENT,
-    foreign_bucket integer   not NULL,
-    foreign_index  integer   not NULL,
-    block_id       text      not NULL,
-    created_at     timestamp not NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (block_id) REFERENCES blocks (block_id)
-);
-
 -- Debug Triggers
 CREATE TABLE transaction_pool_history
 (

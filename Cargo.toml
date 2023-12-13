@@ -18,7 +18,6 @@ members = [
     "clients/base_node_client",
     "clients/validator_node_client",
     "clients/wallet_daemon_client",
-    "comms/tari_comms_logging",
     "dan_layer/comms_rpc_state_sync",
     "dan_layer/consensus",
     "dan_layer/consensus_tests",
@@ -41,7 +40,12 @@ members = [
     "dan_layer/wallet/sdk",
     "dan_layer/wallet/storage_sqlite",
     "integration_tests",
-
+    "networking/core",
+    "networking/swarm",
+    "networking/rpc_framework",
+    "networking/rpc_macros",
+    "networking/libp2p-substream",
+    "networking/sqlite_message_logger",
     "utilities/transaction_generator",
     "utilities/transaction_submitter",
 ]
@@ -50,10 +54,13 @@ resolver = "2"
 [workspace.dependencies]
 
 # internal dependencies among workspace crates
+libp2p-messaging = { path = "networking/libp2p-messaging"}
+libp2p-substream = { path = "networking/libp2p-substream" }
+proto_builder = { path = "networking/proto_builder" }
+sqlite_message_logger = { path = "networking/sqlite_message_logger" }
 tari_base_node_client = { path = "clients/base_node_client" }
 # avoid including default features so each crate can choose which ones to import
 tari_bor = { path = "dan_layer/tari_bor", default-features = false }
-tari_comms_logging = { path = "comms/tari_comms_logging" }
 tari_comms_rpc_state_sync = { path = "dan_layer/comms_rpc_state_sync" }
 tari_consensus = { path = "dan_layer/consensus" }
 tari_dan_app_utilities = { path = "applications/tari_dan_app_utilities" }
@@ -61,6 +68,7 @@ tari_dan_common_types = { path = "dan_layer/common_types" }
 tari_dan_engine = { path = "dan_layer/engine" }
 tari_dan_storage = { path = "dan_layer/storage" }
 tari_dan_storage_sqlite = { path = "dan_layer/storage_sqlite" }
+tari_dan_wallet_daemon = { path = "applications/tari_dan_wallet_daemon" }
 tari_dan_wallet_sdk = { path = "dan_layer/wallet/sdk" }
 tari_dan_wallet_storage_sqlite = { path = "dan_layer/wallet/storage_sqlite" }
 tari_dan_p2p = { path = "dan_layer/p2p" }
@@ -69,7 +77,11 @@ tari_epoch_manager = { path = "dan_layer/epoch_manager" }
 tari_indexer = { path = "applications/tari_indexer" }
 tari_indexer_lib = { path = "dan_layer/indexer_lib" }
 tari_indexer_client = { path = "clients/tari_indexer_client" }
+tari_networking = { path = "networking/core" }
+tari_rpc_framework = { path = "networking/rpc_framework" }
+tari_rpc_macros = { path = "networking/rpc_macros" }
 tari_state_store_sqlite = { path = "dan_layer/state_store_sqlite" }
+tari_swarm = { path = "networking/swarm" }
 tari_template_abi = { path = "dan_layer/template_abi" }
 tari_template_builtin = { path = "dan_layer/template_builtin" }
 tari_template_lib = { path = "dan_layer/template_lib" }
@@ -81,7 +93,6 @@ tari_validator_node = { path = "applications/tari_validator_node" }
 tari_validator_node_cli = { path = "applications/tari_validator_node_cli" }
 tari_validator_node_client = { path = "clients/validator_node_client" }
 tari_validator_node_rpc = { path = "dan_layer/validator_node_rpc" }
-tari_dan_wallet_daemon = { path = "applications/tari_dan_wallet_daemon" }
 tari_wallet_daemon_client = { path = "clients/wallet_daemon_client" }
 transaction_generator = { path = "utilities/transaction_generator" }
 
@@ -118,9 +129,10 @@ axum-jrpc = "0.3.2"
 base64 = "0.20.0"
 bigdecimal = "0.4.1"
 bincode = "2.0.0-rc.3"
+bitflags = "2.4"
 blake2 = "0.10.6"
 borsh = "0.10"
-bytes = "1"
+bytes = "1.5"
 cacache = "12.0.0"
 cargo_metadata = "0.15.3"
 cargo_toml = "0.11.5"
@@ -142,8 +154,9 @@ dirs = "4.0.0"
 env_logger = "0.10.0"
 fern = "0.6.2"
 futures = "0.3.29"
+futures-bounded = "0.2.3"
 jfs = "0.7.1"
-json5 = "0.2.2"
+json5 = "0.4.1"
 jsonwebtoken = "8.3.0"
 hashbrown = { version = "0.13.2" }
 hex = "0.4"
@@ -155,6 +168,8 @@ indexmap = "2.1.0"
 indoc = "1.0.6"
 itertools = "0.11.0"
 lazy_static = "1.4.0"
+libp2p = "0.53.1"
+libp2p-identity = "0.2.8"
 libsqlite3-sys = "0.25"
 liquid = "0.26.4"
 lmdb-zero = "0.4.4"
@@ -162,14 +177,16 @@ log = "0.4.20"
 log4rs = "1.1.1"
 mime_guess = "2.0.4"
 mini-moka = "0.10.0"
-multiaddr = "0.14.0"
+multiaddr = "0.18"
 newtype-ops = "0.1.4"
 once_cell = "1.18.0"
+pin-project = "1.1"
 proc-macro2 = "1.0.56"
-prost = "0.9"
+prost = "0.12"
+prost-build = "0.12"
 prost-types = "0.9"
-quote = "1.0"
-rand = "0.8"
+quote = "1.0.7"
+rand = "0.8.5"
 rayon = "1.7.0"
 reqwest = "0.11.16"
 ruint = "1.8.0"
@@ -177,17 +194,21 @@ serde = { version = "1.0", default-features = false }
 serde_json = "1.0"
 serde_with = "2.3"
 serde-byte-array = "0.1.2"
+sha2 = "0.10.8"
+smallvec = "2.0.0-alpha.1"
 std-semaphore = "0.1.0"
-syn = "1.0"
+syn = "1.0.38"
 tempfile = "3.3.0"
-thiserror = "1.0.48"
+thiserror = "1.0.50"
 time = "0.3.15"
-tokio = { version = "1.30.0", default-features = false }
+tokio = { version = "1.34", default-features = false }
 tokio-stream = "0.1.7"
+tokio-util = "0.7.10"
 tonic = "0.6.2"
 tower = "0.4"
 tower-http = { version = "0.3.5", default-features = false}
 tower-layer = "0.3"
+tracing = "0.1.40"
 url = "2.4.1"
 wasmer = "2.3.0"
 wasmer-middlewares = "2.3.0"
@@ -202,8 +223,12 @@ panic = 'abort'
 overflow-checks = true
 
 [patch.crates-io]
-# Temporarily lock pgp to commit (master branch at time of writing) because the currently release crate locks zeroize to =1.3
+# Temporarily lock pgp to commit (master branch at time of writing) because the currently released crate locks zeroize to =1.3
 liblmdb-sys = { git = "https://github.com/tari-project/lmdb-rs", tag = "0.7.6-tari.1" }
+# Use Tari's libp2p fork that adds support for Schnorr-Ristretto
+multiaddr = { git = "https://github.com/sdbondi/rust-libp2p.git", rev = "ae1c06a9615a0ac020e459904ec984a6ab253678" }
+#libp2p = { git = "https://github.com/sdbondi/rust-libp2p.git", rev = "ae1c06a9615a0ac020e459904ec984a6ab253678" }
+libp2p-identity = { git = "https://github.com/sdbondi/rust-libp2p.git", rev = "ae1c06a9615a0ac020e459904ec984a6ab253678" }
 
 # Make a copy of this code, uncomment and replace account and my-branch with the name of your fork and the branch you want to temporarily use
 #[patch."https://github.com/tari-project/tari.git"]
@@ -227,4 +252,3 @@ liblmdb-sys = { git = "https://github.com/tari-project/lmdb-rs", tag = "0.7.6-ta
 #minotari_console_wallet = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_service_framework = { git = "https://github.com/account/tari.git", branch = "my-branch" }
 #tari_comms_dht = { git = "https://github.com/account/tari.git", branch = "my-branch" }
-

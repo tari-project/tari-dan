@@ -7,10 +7,9 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tari_common = { workspace = true }
 tari_common_types = { workspace = true }
-tari_core = { workspace = true, default-features = false, features = [
-  "transactions",
-] }
+tari_core = { workspace = true, default-features = false, features = ["transactions"] }
 tari_crypto = { workspace = true }
 tari_shutdown = { workspace = true }
 
@@ -20,9 +19,7 @@ tari_dan_engine = { workspace = true }
 tari_dan_storage = { workspace = true }
 tari_dan_storage_sqlite = { workspace = true }
 tari_engine_types = { workspace = true }
-tari_epoch_manager = { workspace = true, features = [
-  "base_layer",
-] }
+tari_epoch_manager = { workspace = true, features = ["base_layer"] }
 tari_base_node_client = { workspace = true }
 tari_template_builtin = { workspace = true }
 tari_template_lib = { workspace = true }
@@ -30,18 +27,23 @@ tari_transaction = { workspace = true }
 tari_validator_node_client = { workspace = true }
 tari_bor = { workspace = true, default-features = true }
 tari_indexer_lib = { workspace = true }
+tari_networking = { path = "../../networking/core" }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bytes = { workspace = true }
 cacache = { workspace = true }
 chrono = { workspace = true }
+dashmap = { workspace = true }
 futures = { workspace = true }
+json5 = { workspace = true }
+libp2p-identity = { workspace = true }
 log = { workspace = true, features = ["std"] }
 mini-moka = { workspace = true }
-dashmap = { workspace = true }
+multiaddr = { workspace = true }
 std-semaphore = { workspace = true }
 prost = { workspace = true }
+rand = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true, features = ["default", "derive"] }
 serde_json = { workspace = true }

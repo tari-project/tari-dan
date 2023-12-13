@@ -8,9 +8,7 @@ edition = "2021"
 
 [dependencies]
 tari_template_abi = { path = "../../../../template_abi", default-features = false, features = ["alloc"] }
-tari_bor = { path = "../../../../tari_bor", default-features = false, features = ["alloc"] }
 lol_alloc = "0.4.0"
-
 
 [lib]
 crate-type = ["cdylib", "lib"]

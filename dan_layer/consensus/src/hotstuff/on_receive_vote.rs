@@ -20,12 +20,12 @@ where TConsensusSpec: ConsensusSpec
     }
 
     #[allow(clippy::too_many_lines)]
-    pub async fn handle(&self, message: VoteMessage<TConsensusSpec::Addr>) -> Result<(), HotStuffError> {
+    pub async fn handle(&self, from: TConsensusSpec::Addr, message: VoteMessage) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
             "🔥 Receive VOTE for node {} from {}", message.block_id, message.signature.public_key,
         );
 
-        self.vote_receiver.handle(message, true).await
+        self.vote_receiver.handle(from, message, true).await
     }
 }

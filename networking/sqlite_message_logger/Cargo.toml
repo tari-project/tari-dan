@@ -1,0 +1,16 @@
+[package]
+name = "sqlite_message_logger"
+description = "Debugging tool that logs all network messages in a SQLite database"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
+
+[dependencies]
+diesel = { workspace = true, features = ["sqlite", "chrono"] }
+diesel_migrations = { workspace = true }
+serde = { workspace = true, features = ["default", "derive"] }
+serde_json = { workspace = true }
+log = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
