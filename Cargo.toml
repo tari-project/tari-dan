@@ -170,7 +170,7 @@ indoc = "1.0.6"
 itertools = "0.11.0"
 lazy_static = "1.4.0"
 libp2p = "0.53.1"
-libp2p-identity = "0.2.8"
+libp2p-identity = { git = "https://github.com/sdbondi/rust-libp2p.git", rev = "ae1c06a9615a0ac020e459904ec984a6ab253678" }
 libsqlite3-sys = "0.25"
 liquid = "0.26.4"
 lmdb-zero = "0.4.4"
