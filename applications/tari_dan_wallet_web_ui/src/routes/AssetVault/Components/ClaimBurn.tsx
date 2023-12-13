@@ -95,7 +95,7 @@ export default function ClaimBurn() {
       await accountsClaimBurn(claimBurnFormState.account, JSON.parse(claimBurnFormState.claimProof), +claimBurnFormState.fee);
       setOpen(false);
       setPopup({ title: "Claimed", error: false });
-      setClaimBurnFormState({ account: "", claimProof: "", fee: "", filled: false, disabled: false });
+      setClaimBurnFormState({ account: "", claimProof: "", fee: "", is_valid_json: false, filled: false, disabled: false });
     } catch (e: any) {
       setClaimBurnFormState({ ...claimBurnFormState, disabled: false });
       setPopup({ title: "Claim burn failed: " + e.message, error: true });
