@@ -7,8 +7,8 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
-tari_shutdown = { git = "https://github.com/sdbondi/tari.git", rev = "e45751090dce2eeac208883fa13865591bdafb46" }
-tari_metrics = { git = "https://github.com/sdbondi/tari.git", rev = "e45751090dce2eeac208883fa13865591bdafb46", optional = true }
+tari_shutdown = { workspace = true }
+tari_metrics = { workspace = true, optional = true }
 
 async-trait = { workspace = true }
 bitflags = { workspace = true }

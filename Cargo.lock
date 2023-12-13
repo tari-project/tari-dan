@@ -1727,7 +1727,7 @@ dependencies = [
  "tari_engine_types",
  "tari_epoch_manager",
  "tari_mmr",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_state_store_sqlite",
  "tari_transaction",
  "thiserror",
@@ -4046,7 +4046,7 @@ dependencies = [
  "tari_indexer",
  "tari_indexer_client",
  "tari_p2p",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
@@ -5438,7 +5438,7 @@ dependencies = [
  "tari_key_manager",
  "tari_p2p",
  "tari_script",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -5489,7 +5489,7 @@ dependencies = [
  "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
  "tari_p2p",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_utilities",
  "thiserror",
@@ -5545,7 +5545,7 @@ dependencies = [
  "tari_p2p",
  "tari_script",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_utilities",
  "tempfile",
  "thiserror",
@@ -8816,7 +8816,7 @@ dependencies = [
  "tari_common",
  "tari_crypto",
  "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_utilities",
  "thiserror",
@@ -8855,7 +8855,7 @@ dependencies = [
  "tari_comms",
  "tari_comms_rpc_macros",
  "tari_crypto",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_utilities",
  "thiserror",
@@ -8905,7 +8905,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_epoch_manager",
  "tari_mmr",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_transaction",
  "thiserror",
  "tokio",
@@ -8935,7 +8935,7 @@ dependencies = [
  "tari_crypto",
  "tari_p2p",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -8994,7 +8994,7 @@ dependencies = [
  "tari_p2p",
  "tari_script",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_test_utils",
  "tari_utilities",
@@ -9062,7 +9062,7 @@ dependencies = [
  "tari_epoch_manager",
  "tari_indexer_lib",
  "tari_networking",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_state_store_sqlite",
  "tari_template_builtin",
  "tari_template_lib",
@@ -9245,7 +9245,7 @@ dependencies = [
  "tari_dan_wallet_storage_sqlite",
  "tari_engine_types",
  "tari_indexer_client",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
@@ -9347,7 +9347,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_mmr",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "thiserror",
  "tokio",
 ]
@@ -9397,7 +9397,7 @@ dependencies = [
  "tari_indexer_lib",
  "tari_networking",
  "tari_rpc_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_state_store_sqlite",
  "tari_template_lib",
  "tari_transaction",
@@ -9495,7 +9495,7 @@ dependencies = [
 [[package]]
 name = "tari_metrics"
 version = "0.1.0"
-source = "git+https://github.com/sdbondi/tari.git?rev=e45751090dce2eeac208883fa13865591bdafb46#e45751090dce2eeac208883fa13865591bdafb46"
+source = "git+https://github.com/tari-project/tari.git#f394fd815e89e56147a59a3640586cbbe0874338"
 dependencies = [
  "once_cell",
  "prometheus",
@@ -9528,7 +9528,7 @@ dependencies = [
  "rand",
  "tari_crypto",
  "tari_rpc_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_swarm",
  "thiserror",
  "tokio",
@@ -9556,7 +9556,7 @@ dependencies = [
  "tari_comms_dht",
  "tari_crypto",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_utilities",
  "thiserror",
@@ -9583,8 +9583,8 @@ dependencies = [
  "prost 0.12.3",
  "prost-build 0.12.3",
  "proto_builder",
- "tari_metrics 0.1.0 (git+https://github.com/sdbondi/tari.git?rev=e45751090dce2eeac208883fa13865591bdafb46)",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/sdbondi/tari.git?rev=e45751090dce2eeac208883fa13865591bdafb46)",
+ "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git)",
+ "tari_shutdown",
  "thiserror",
  "tokio",
  "tokio-util 0.7.10",
@@ -9637,7 +9637,7 @@ dependencies = [
  "async-trait",
  "futures 0.3.29",
  "log",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "thiserror",
  "tokio",
  "tower-service",
@@ -9647,14 +9647,6 @@ dependencies = [
 name = "tari_shutdown"
 version = "0.53.0-dan.0"
 source = "git+https://github.com/tari-project/tari.git?branch=feature-dan2#9a871656e4ce1464d54107a4e3fc52181ed13e02"
-dependencies = [
- "futures 0.3.29",
-]
-
-[[package]]
-name = "tari_shutdown"
-version = "0.53.0-dan.0"
-source = "git+https://github.com/sdbondi/tari.git?rev=e45751090dce2eeac208883fa13865591bdafb46#e45751090dce2eeac208883fa13865591bdafb46"
 dependencies = [
  "futures 0.3.29",
 ]
@@ -9676,7 +9668,7 @@ dependencies = [
  "tari_common",
  "tari_dan_common_types",
  "tari_dan_wallet_sdk",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tokio",
  "tower-http",
  "webrtc",
@@ -9797,7 +9789,7 @@ dependencies = [
  "futures 0.3.29",
  "rand",
  "tari_comms",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tempfile",
  "tokio",
 ]
@@ -9896,7 +9888,7 @@ dependencies = [
  "tari_indexer_lib",
  "tari_networking",
  "tari_rpc_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_state_store_sqlite",
  "tari_template_lib",
  "tari_transaction",

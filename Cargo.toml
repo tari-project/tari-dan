@@ -113,6 +113,7 @@ tari_comms_rpc_macros = { git = "https://github.com/tari-project/tari.git", bran
 tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", default-features = false }
 tari_crypto = "0.19"
 tari_key_manager = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_metrics = { git = "https://github.com/tari-project/tari.git" }
 tari_mmr = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_p2p = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
 tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
