@@ -33,13 +33,7 @@ import { Typography } from "@mui/material";
 import CommitteesWaterfall from "./CommitteesWaterfall";
 import { CommitteeShardInfo } from "../../utils/interfaces";
 
-function Committees({
-  committees,
-  publicKey,
-}: {
-  committees: CommitteeShardInfo[] | null;
-  publicKey: string;
-}) {
+function Committees({ committees, peerId }: { committees: CommitteeShardInfo[] | null; peerId: string }) {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
@@ -47,16 +41,13 @@ function Committees({
     return <Typography>Committees are loading</Typography>;
   }
 
-  const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - committees.length) : 0;
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - committees.length) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
@@ -79,7 +70,7 @@ function Committees({
                 begin={committee.shard_range.start}
                 end={committee.shard_range.end}
                 members={committee.validators}
-                publicKey={publicKey}
+                peerId={peerId}
               />
             ))}
             {emptyRows > 0 && (

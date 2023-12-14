@@ -78,7 +78,7 @@ interface IRecentTransaction {
 type IBlockId = string;
 
 export interface IQuorumCertificate {
-  block_id: IBlockId,
+  block_id: IBlockId;
   decision: string;
 }
 
@@ -90,7 +90,7 @@ type IPublicKey = string;
 
 type IFixedHash = string;
 
-export interface ICommand {}
+export interface ICommand { }
 
 export interface IBlock {
   id: IBlockId;
@@ -101,8 +101,9 @@ export interface IBlock {
   proposed_by: IPublicKey;
   total_leader_fee: number;
   merkle_root: IFixedHash;
-  stored_at: number[],
+  stored_at: number[];
   commands: ICommand[];
+  is_dummy: boolean;
 }
 
 export interface ITableBlock {
@@ -112,10 +113,11 @@ export interface ITableBlock {
   decision: string;
   total_leader_fee: number;
   proposed_by_me: boolean;
-  proposed_by:string;
+  proposed_by: string;
   transactions_cnt: number;
   block_time: number;
   stored_at: Date;
+  is_dummy: boolean;
   show?: boolean;
 }
 
@@ -151,7 +153,9 @@ function Blocks() {
       // resp.count = 100;
       setBlockCount(resp.count);
       listBlocks(null, resp.count).then((resp: IGetBlockReponse) => {
-        let times = Object.fromEntries(resp.blocks.map((block:IBlock) => [block.id, primitiveDateTimeToSecs(block.stored_at)]));
+        let times = Object.fromEntries(
+          resp.blocks.map((block: IBlock) => [block.id, primitiveDateTimeToSecs(block.stored_at)])
+        );
         setBlocks(
           resp.blocks.map((block: IBlock) => {
             return {
@@ -166,6 +170,7 @@ function Blocks() {
               stored_at: primitiveDateTimeToDate(block.stored_at),
               proposed_by: block.proposed_by,
               show: true,
+              is_dummy: block.is_dummy,
             };
           })
         );
@@ -422,29 +427,45 @@ function Blocks() {
             {blocks
               .filter(({ show }) => show === true)
               .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-              .map(({ id, epoch, height, decision, total_leader_fee, transactions_cnt, proposed_by_me,stored_at, block_time,proposed_by }) => {
-                return (
-                  <TableRow key={id}>
-                    <DataTableCell>
-                      <Link to={`/blocks/${id}`} style={{ textDecoration: "none" }}>
-                        {id.slice(0,8)}
-                      </Link>
-                    </DataTableCell>
-                    <DataTableCell>{epoch}</DataTableCell>
-                    <DataTableCell>{height}</DataTableCell>
-                    <DataTableCell>
-                      <StatusChip status={decision == "Accept" ? "Commit" : "Abort"} showTitle />
-                    </DataTableCell>
-                    <DataTableCell>{transactions_cnt}</DataTableCell>
-                    <DataTableCell>
-                      <div className={proposed_by_me ? "my_money" : ""}>{total_leader_fee}</div>
-                    </DataTableCell>
-                    <DataTableCell>{block_time} secs</DataTableCell>
-                    <DataTableCell>{stored_at.toLocaleString()}</DataTableCell>
-                    <DataTableCell><div className={proposed_by_me ? "my_money" : ""}>{proposed_by.slice(0,8)}</div></DataTableCell>
-                  </TableRow>
-                );
-              })}
+              .map(
+                ({
+                  id,
+                  epoch,
+                  height,
+                  decision,
+                  total_leader_fee,
+                  transactions_cnt,
+                  proposed_by_me,
+                  stored_at,
+                  block_time,
+                  proposed_by,
+                  is_dummy,
+                }) => {
+                  return (
+                    <TableRow key={id}>
+                      <DataTableCell>
+                        <Link to={`/blocks/${id}`} style={{ textDecoration: "none" }}>
+                          {id.slice(0, 8)}
+                        </Link>
+                      </DataTableCell>
+                      <DataTableCell>{epoch}</DataTableCell>
+                      <DataTableCell>{height}</DataTableCell>
+                      <DataTableCell>
+                        <StatusChip status={is_dummy ? "Dummy" : decision == "Accept" ? "Commit" : "Abort"} showTitle />
+                      </DataTableCell>
+                      <DataTableCell>{transactions_cnt}</DataTableCell>
+                      <DataTableCell>
+                        <div className={proposed_by_me ? "my_money" : ""}>{total_leader_fee}</div>
+                      </DataTableCell>
+                      <DataTableCell>{block_time} secs</DataTableCell>
+                      <DataTableCell>{stored_at.toLocaleString()}</DataTableCell>
+                      <DataTableCell>
+                        <div className={proposed_by_me ? "my_money" : ""}>{proposed_by.slice(0, 8)}</div>
+                      </DataTableCell>
+                    </TableRow>
+                  );
+                }
+              )}
             {blocks.filter(({ show }) => show === true).length === 0 && (
               <TableRow>
                 <TableCell colSpan={4} style={{ textAlign: "center" }}>

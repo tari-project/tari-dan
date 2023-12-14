@@ -68,7 +68,7 @@ function ValidatorNode() {
         <StyledPaper>
           {committees ? (
             <>
-              <Committees publicKey={identity.public_key} committees={committees.committees} />
+              <Committees peerId={identity.peer_id} committees={committees.committees} />
             </>
           ) : null}
         </StyledPaper>
