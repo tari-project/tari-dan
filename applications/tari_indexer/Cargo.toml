@@ -33,7 +33,6 @@ tari_rpc_framework = { workspace = true }
 tari_networking = { workspace = true }
 
 anyhow = { workspace = true }
-async-trait = { workspace = true }
 axum = { workspace = true }
 async-graphql = { workspace = true }
 async-graphql-axum = { workspace = true }

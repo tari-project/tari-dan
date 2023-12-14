@@ -56,6 +56,7 @@ resolver = "2"
 
 # internal dependencies among workspace crates
 libp2p-messaging = { path = "networking/libp2p-messaging"}
+libp2p-peersync = { path = "networking/libp2p-peersync"}
 libp2p-substream = { path = "networking/libp2p-substream" }
 proto_builder = { path = "networking/proto_builder" }
 sqlite_message_logger = { path = "networking/sqlite_message_logger" }
@@ -171,7 +172,8 @@ indoc = "1.0.6"
 itertools = "0.11.0"
 lazy_static = "1.4.0"
 libp2p = "0.53.1"
-libp2p-identity = { git = "https://github.com/sdbondi/rust-libp2p.git", rev = "ae1c06a9615a0ac020e459904ec984a6ab253678" }
+# Adds support for Schnorr-Ristretto (sr25519)
+libp2p-identity = { git = "https://github.com/tari-project/rust-libp2p.git", rev = "5459d4d7cc79437d091fe3e390e8609a5ac06ea3" }
 libsqlite3-sys = "0.25"
 liquid = "0.26.4"
 lmdb-zero = "0.4.4"
