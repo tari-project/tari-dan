@@ -29,14 +29,12 @@ tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
 tari_template_lib = { path = "../../dan_layer/template_lib" }
 tari_transaction = { path = "../../dan_layer/transaction" }
 tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
-tari_dan_p2p = { path = "../../dan_layer/p2p" }
 
 tari_rpc_framework = { path = "../../networking/rpc_framework" }
 tari_networking = { path = "../../networking/core" }
 libp2p = "0.53.1"
 
 anyhow = "1.0.53"
-async-trait = "0.1"
 axum = "0.6.0"
 async-graphql = "5.0.7"
 async-graphql-axum = "5.0.7"

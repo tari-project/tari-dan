@@ -25,11 +25,9 @@ tari_bor = { path = "../tari_bor" }
 
 anyhow = "1.0.53"
 async-trait = "0.1"
-log = "0.4"
 prost = "0.12"
 serde = "1.0"
 thiserror = "1.0"
-tokio-stream = "0.1"
 
 [build-dependencies]
 proto_builder = { path = "../../networking/proto_builder" }

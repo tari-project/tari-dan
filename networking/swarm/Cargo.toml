@@ -11,6 +11,5 @@ libp2p-messaging = { path = "../libp2p-messaging", features = ["prost"] }
 libp2p-substream = { path = "../libp2p-substream" }
 libp2p-peersync = { path = "../libp2p-peersync" }
 
-async-trait = "0.1.74"
 thiserror = "1.0.50"
 tokio = { version = "1.34", features = ["sync"] }
