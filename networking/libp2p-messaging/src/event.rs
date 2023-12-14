@@ -25,12 +25,19 @@ pub enum Event<TMsg> {
         stream_id: StreamId,
         error: Error,
     },
-    StreamClosed {
+    OutboundStreamOpened {
         peer_id: PeerId,
         stream_id: StreamId,
     },
+    InboundStreamOpened {
+        peer_id: PeerId,
+    },
     InboundStreamClosed {
         peer_id: PeerId,
+    },
+    StreamClosed {
+        peer_id: PeerId,
+        stream_id: StreamId,
     },
     Error(Error),
 }
