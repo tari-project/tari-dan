@@ -535,8 +535,8 @@ where
                 self.on_autonat_event(event)?;
             },
             PeerSync(peersync::Event::LocalPeerRecordUpdated { record }) => {
-                info!(target: LOG_TARGET, "📝 Local peer record updated: {:?} has_sent_announce = {}",record, self.has_sent_announce);
-                if !self.has_sent_announce && record.is_signed() {
+                info!(target: LOG_TARGET, "📝 Local peer record updated: {:?} announce enabled = {}, has_sent_announce = {}",record, self.config.announce, self.has_sent_announce);
+                if self.config.announce && !self.has_sent_announce && record.is_signed() {
                     info!(target: LOG_TARGET, "📣 Sending local peer announce with {} address(es)", record.addresses().len());
                     self.swarm
                         .behaviour_mut()
@@ -726,18 +726,28 @@ where
 
         let is_relay = info.protocols.iter().any(|p| *p == relay::HOP_PROTOCOL_NAME);
 
+        let is_connected_through_relay = self
+            .active_connections
+            .get(&peer_id)
+            .map(|conns| {
+                conns
+                    .iter()
+                    .any(|c| c.endpoint.is_dialer() && is_through_relay_address(c.endpoint.get_remote_address()))
+            })
+            .unwrap_or(false);
+
         for address in info.listen_addrs {
             if is_p2p_address(&address) && address.is_global_ip() {
                 // If the peer has a p2p-circuit address, immediately upgrade to a direct connection (DCUtR /
-                // hole-punching)
-                if is_p2p_circuit(&address) {
+                // hole-punching) if we're connected to them through a relay
+                if is_connected_through_relay {
                     info!(target: LOG_TARGET, "📡 Peer {} has a p2p-circuit address. Upgrading to DCUtR", peer_id);
                     // Ignore as connection failures are logged in events, or an error here is because the peer is
                     // already connected/being dialled
                     let _ignore = self
                         .swarm
                         .dial(DialOpts::peer_id(peer_id).addresses(vec![address.clone()]).build());
-                } else if is_relay {
+                } else if is_relay && !is_through_relay_address(&address) {
                     // Otherwise, if the peer advertises as a relay we'll add them
                     info!(target: LOG_TARGET, "📡 Adding peer {peer_id} {address} as a relay");
                     self.relays.add_possible_relay(peer_id, address.clone());
@@ -854,8 +864,21 @@ fn is_p2p_address(address: &Multiaddr) -> bool {
     address.iter().any(|p| matches!(p, Protocol::P2p(_)))
 }
 
-fn is_p2p_circuit(address: &Multiaddr) -> bool {
-    address.iter().any(|p| matches!(p, Protocol::P2pCircuit))
+fn is_through_relay_address(address: &Multiaddr) -> bool {
+    let mut found_p2p_circuit = false;
+    for protocol in address {
+        if !found_p2p_circuit {
+            if let Protocol::P2pCircuit = protocol {
+                found_p2p_circuit = true;
+                continue;
+            }
+            continue;
+        }
+        // Once we found a p2p-circuit protocol, this is followed by /p2p/<peer_id>
+        return matches!(protocol, Protocol::P2p(_));
+    }
+
+    false
 }
 
 fn is_dial_error_caused_by_remote(err: &DialError) -> bool {
