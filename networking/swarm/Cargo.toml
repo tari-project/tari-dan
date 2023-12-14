@@ -1,15 +1,17 @@
 [package]
 name = "tari_swarm"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-libp2p = { version = "0.53.2", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "dcutr", "gossipsub", "mdns", "autonat"] }
-libp2p-messaging = { path = "../libp2p-messaging", features = ["prost"] }
-libp2p-substream = { path = "../libp2p-substream" }
-libp2p-peersync = { path = "../libp2p-peersync" }
+libp2p = { workspace = true, features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "dcutr", "gossipsub", "mdns", "autonat"] }
+libp2p-messaging = { workspace = true, features = ["prost"] }
+libp2p-substream = { workspace = true }
+libp2p-peersync = { workspace = true }
 
-thiserror = "1.0.50"
-tokio = { version = "1.34", features = ["sync"] }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }

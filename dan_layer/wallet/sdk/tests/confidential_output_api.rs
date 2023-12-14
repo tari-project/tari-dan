@@ -36,7 +36,7 @@ fn outputs_locked_and_released() {
     let (inputs, total_value) = test
         .sdk()
         .confidential_outputs_api()
-        .lock_outputs_by_amount(&Test::test_vault_address(), Amount(50), proof_id)
+        .lock_outputs_by_amount(&Test::test_vault_address(), Amount(50), proof_id, false)
         .unwrap();
     assert_eq!(total_value, 74);
     assert_eq!(inputs.len(), 2);
@@ -74,7 +74,7 @@ fn outputs_locked_and_finalized() {
     let proof_id = test.new_proof();
 
     let (inputs, total_value) = outputs_api
-        .lock_outputs_by_amount(&Test::test_vault_address(), Amount(50), proof_id)
+        .lock_outputs_by_amount(&Test::test_vault_address(), Amount(50), proof_id, false)
         .unwrap();
     assert_eq!(total_value, 74);
     assert_eq!(inputs.len(), 2);

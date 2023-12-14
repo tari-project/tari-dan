@@ -1,19 +1,20 @@
 [package]
 name = "tari_networking"
-version = "0.1.0"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_swarm = { path = "../swarm" }
-tari_rpc_framework = { path = "../rpc_framework" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
+tari_swarm = { workspace = true }
+tari_rpc_framework = { workspace = true }
+tari_shutdown = { workspace = true }
 
-anyhow = "1.0"
-async-trait = "0.1.74"
-libp2p = { version = "0.53.1", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "dcutr", "gossipsub"] }
-log = "0.4.20"
-thiserror = "1.0.50"
-rand = "0.8"
-tokio = { version = "1.34", features = ["macros", "sync"] }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+libp2p = {  workspace = true, features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "dcutr", "gossipsub"] }
+log = { workspace = true }
+thiserror = { workspace = true }
+rand = { workspace = true }
+tokio = { workspace = true, features = ["default", "macros", "sync"] }

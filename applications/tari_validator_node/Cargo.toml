@@ -1,89 +1,83 @@
 [package]
 name = "tari_validator_node"
-authors = ["The Tari Development Community"]
 description = "The Tari validator node implementation"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
-version = "0.2.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-minotari_app_grpc = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-minotari_app_utilities = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_core = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", default-features = false, features = [
-    "transactions",
-] }
-tari_crypto = "0.19"
-tari_validator_node_rpc = { path = "../../dan_layer/validator_node_rpc" }
-tari_dan_app_utilities = { path = "../tari_dan_app_utilities" }
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_dan_p2p = { path = "../../dan_layer/p2p" }
-tari_dan_engine = { path = "../../dan_layer/engine" }
-tari_dan_storage = { path = "../../dan_layer/storage" }
-tari_dan_storage_sqlite = { path = "../../dan_layer/storage_sqlite" }
-tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_template_lib = { path = "../../dan_layer/template_lib" }
-tari_transaction = { path = "../../dan_layer/transaction" }
-tari_validator_node_client = { path = "../../clients/validator_node_client" }
-minotari_wallet_grpc_client = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_base_node_client = { path = "../../clients/base_node_client" }
-tari_epoch_manager = { path = "../../dan_layer/epoch_manager", features = [
-    "base_layer",
-] }
-tari_indexer_lib = { path = "../../dan_layer/indexer_lib" }
-tari_comms_rpc_state_sync = { path = "../../dan_layer/comms_rpc_state_sync" }
-tari_bor = { path = "../../dan_layer/tari_bor" }
-tari_consensus = { path = "../../dan_layer/consensus" }
-tari_state_store_sqlite = { path = "../../dan_layer/state_store_sqlite" }
+minotari_app_grpc = { workspace = true }
+minotari_app_utilities = { workspace = true }
+minotari_wallet_grpc_client = { workspace = true }
+tari_common = { workspace = true }
+tari_common_types = {workspace = true }
+tari_core = { workspace = true, default-features = false, features = ["transactions"] }
+tari_crypto = { workspace = true }
+tari_validator_node_rpc = { workspace = true }
+tari_dan_app_utilities = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_dan_p2p = { workspace = true }
+tari_dan_engine = { workspace = true }
+tari_dan_storage = { workspace = true }
+tari_dan_storage_sqlite = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_shutdown = { workspace = true }
+tari_template_lib = { workspace = true }
+tari_transaction = { workspace = true }
+tari_validator_node_client = { workspace = true }
+tari_base_node_client = { workspace = true }
+tari_epoch_manager = { workspace = true, features = ["base_layer"] }
+tari_indexer_lib = { workspace = true }
+tari_comms_rpc_state_sync = {workspace = true }
+tari_bor = { workspace = true, default-features = true }
+tari_consensus = { workspace = true }
+tari_state_store_sqlite = { workspace = true }
+tari_networking = { workspace = true }
+tari_rpc_framework = { workspace = true }
+sqlite_message_logger = { workspace = true }
 
-tari_networking = { path = "../../networking/core" }
-tari_rpc_framework = { path = "../../networking/rpc_framework" }
-sqlite_message_logger = { path = "../../networking/sqlite_message_logger" }
-
-libp2p = "0.53.1"
-anyhow = "1.0.53"
-async-trait = "0.1.50"
-axum = "0.6.0"
-axum-jrpc = { version = "0.3.2", features = ["anyhow_error"] }
-blake2 = "0.10"
-clap = { version = "3.2.5", features = ["env"] }
-config = "0.13.0"
-futures = { version = "^0.3.1" }
-include_dir = "0.7.2"
-indexmap = "2.0.0"
-json5 = "0.2.2"
-libsqlite3-sys = { version = "0.25", features = ["bundled"] }
-log = { version = "0.4.8", features = ["std"] }
-log4rs = { version = "1.1.1", features = [
+libp2p = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+axum-jrpc = { workspace = true, features = ["anyhow_error"] }
+blake2 = { workspace = true }
+clap = { workspace = true, features = ["env"] }
+config = { workspace = true }
+futures = { workspace = true }
+include_dir = { workspace = true }
+indexmap = { workspace = true }
+json5 = { workspace = true }
+libsqlite3-sys = { workspace = true, features = ["bundled"] }
+log = { workspace = true, features = ["std"] }
+log4rs = { workspace = true, features = [
     "rolling_file_appender",
     "compound_policy",
     "size_trigger",
     "fixed_window_roller",
 ] }
-prost = "0.12"
-rand = "0.8"
-reqwest = "0.11.11"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-thiserror = "^1.0.20"
-time = "0.3.15"
-tokio = { version = "1.10", features = [
+mime_guess = { workspace = true }
+prost = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true, features = ["default", "derive"] }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
+tokio = { workspace = true, features = [
+    "default",
     "macros",
     "time",
     "sync",
     "rt-multi-thread",
-] }
-tonic = "0.6.2"
-tower-http = { version = "0.3.0", features = ["cors"] }
-mime_guess = "2.0.4"
+]}
+tonic = { workspace = true }
+tower-http = { workspace = true, features = ["default", "cors"] }
 
 [build-dependencies]
-tari_common = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_common", features = [
-    "build",
-] }
+tari_common = { workspace = true, features = ["build"] }
 
 [package.metadata.cargo-machete]
 ignored = [

@@ -1,21 +1,21 @@
 [package]
 name = "tari_dan_storage_lmdb"
-version = "0.2.0"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "LMDB implementation of the Tari Storage API"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_bor = { path = "../tari_bor" }
-tari_dan_engine = { path = "../engine" }
-tari_dan_common_types = { path = "../common_types" }
-tari_storage = {  git = "https://github.com/tari-project/tari.git", branch = "feature-dan2", package = "tari_storage" }
+tari_bor = { workspace = true, default-features = true }
+tari_dan_engine = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_storage = { workspace = true }
 
-lmdb-zero = "0.4.4"
-hex = "0.4.3"
-serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
+lmdb-zero = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
 
 [dev-dependencies]
-tempfile = "3.3.0"
+tempfile = { workspace = true }

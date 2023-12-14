@@ -1,16 +1,19 @@
 [package]
 name = "libp2p-messaging"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-libp2p = "0.53.1"
+libp2p = { workspace = true }
 
-async-trait = "0.1.74"
-prost = { version = "0.12.3", optional = true }
-smallvec = "2.0.0-alpha.1"
-futures-bounded = "0.2.3"
-tracing = "0.1.40"
+async-trait = { workspace = true }
+prost = { workspace = true, optional = true }
+smallvec = { workspace = true }
+futures-bounded = { workspace = true }
+tracing = { workspace = true }
 
 [features]
 default = []
