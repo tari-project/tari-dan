@@ -39,6 +39,13 @@ async fn outbound_sync_task_inner<TPeerStore: PeerStore>(
 
         let mut new_peers = 0;
         while let Some(msg) = framed.next().await {
+            if new_peers + 1 > want_list.len() {
+                return Err(Error::InvalidMessage {
+                    peer_id: from_peer,
+                    details: format!("Peer {from_peer} sent us more peers than we requested"),
+                });
+            }
+
             match msg {
                 Ok(msg) => {
                     let Some(peer) = msg.peer else {
@@ -65,18 +72,12 @@ async fn outbound_sync_task_inner<TPeerStore: PeerStore>(
                         });
                     }
 
+                    new_peers += 1;
+
                     store
                         .put_if_newer(rec)
                         .await
                         .map_err(|err| Error::StoreError(err.to_string()))?;
-
-                    new_peers += 1;
-                    if new_peers > want_list.len() {
-                        return Err(Error::InvalidMessage {
-                            peer_id: from_peer,
-                            details: format!("Peer {from_peer} sent us more peers than we requested"),
-                        });
-                    }
                 },
                 Err(e) => {
                     let e = io::Error::from(e);
