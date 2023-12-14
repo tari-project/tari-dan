@@ -50,6 +50,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         vault_address: &SubstateAddress,
         amount: Amount,
         locked_by_proof_id: ConfidentialProofId,
+        dry_run: bool,
     ) -> Result<(Vec<ConfidentialOutputModel>, u64), ConfidentialOutputsApiError> {
         if amount.is_negative() {
             return Err(ConfidentialOutputsApiError::InvalidParameter {
@@ -76,7 +77,11 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
                 },
             }
         }
-        tx.commit()?;
+        if dry_run {
+            tx.rollback()?;
+        } else {
+            tx.commit()?;
+        }
         Ok((outputs, total_output_amount))
     }
 

@@ -351,7 +351,7 @@ pub async fn handle_reveal_funds(
 
         let (inputs, input_value) =
             sdk.confidential_outputs_api()
-                .lock_outputs_by_amount(&vault.address, amount_to_reveal, proof_id)?;
+                .lock_outputs_by_amount(&vault.address, amount_to_reveal, proof_id, false)?;
         let input_amount = Amount::try_from(input_value)?;
 
         let account_key = sdk
@@ -925,6 +925,32 @@ pub async fn handle_transfer(
 
     // send the transaction
     let required_inputs = inputs.into_iter().map(Into::into).collect();
+    if req.dry_run {
+        let result = sdk
+            .transaction_api()
+            .submit_dry_run_transaction(transaction, required_inputs)
+            .await?;
+        let execute_result = result.result.into_execute_result().unwrap();
+        return Ok(TransferResponse {
+            transaction_id: result.transaction_id,
+            fee: execute_result
+                .fee_receipt
+                .clone()
+                .map(|fee_receipt| fee_receipt.total_fees_paid)
+                .unwrap_or_default(),
+            fee_refunded: execute_result
+                .fee_receipt
+                .clone()
+                .map(|fee_receipt| fee_receipt.total_fee_payment)
+                .unwrap_or_default() -
+                execute_result
+                    .fee_receipt
+                    .clone()
+                    .map(|fee_receipt| fee_receipt.total_fees_paid)
+                    .unwrap_or_default(),
+            result: execute_result.finalize,
+        });
+    }
     let tx_id = sdk
         .transaction_api()
         .submit_transaction(transaction, required_inputs)
@@ -1059,7 +1085,7 @@ pub async fn handle_confidential_transfer(
         let total_amount = req.max_fee.unwrap_or(DEFAULT_FEE) + req.amount;
         let proof_id = outputs_api.add_proof(&src_vault.address)?;
         let (confidential_inputs, total_input_value) =
-            outputs_api.lock_outputs_by_amount(&src_vault.address, total_amount, proof_id)?;
+            outputs_api.lock_outputs_by_amount(&src_vault.address, total_amount, proof_id, req.dry_run)?;
 
         let output_mask = sdk.key_manager_api().next_key(key_manager::TRANSACTION_BRANCH)?;
         let (nonce, public_nonce) = PublicKey::random_keypair(&mut OsRng);
@@ -1092,18 +1118,20 @@ pub async fn handle_confidential_transfer(
                 &account_secret.key,
             )?;
 
-            outputs_api.add_output(ConfidentialOutputModel {
-                account_address: account.address,
-                vault_address: src_vault.address,
-                commitment: get_commitment_factory().commit_value(&change_mask.key, change_amount),
-                value: change_amount,
-                sender_public_nonce: Some(public_nonce.clone()),
-                encryption_secret_key_index: account_secret.key_index,
-                encrypted_data: encrypted_data.clone(),
-                public_asset_tag: None,
-                status: OutputStatus::LockedUnconfirmed,
-                locked_by_proof: Some(proof_id),
-            })?;
+            if !req.dry_run {
+                outputs_api.add_output(ConfidentialOutputModel {
+                    account_address: account.address,
+                    vault_address: src_vault.address,
+                    commitment: get_commitment_factory().commit_value(&change_mask.key, change_amount),
+                    value: change_amount,
+                    sender_public_nonce: Some(public_nonce.clone()),
+                    encryption_secret_key_index: account_secret.key_index,
+                    encrypted_data: encrypted_data.clone(),
+                    public_asset_tag: None,
+                    status: OutputStatus::LockedUnconfirmed,
+                    locked_by_proof: Some(proof_id),
+                })?;
+            }
 
             Some(ConfidentialProofStatement {
                 amount: change_amount.try_into()?,
@@ -1147,6 +1175,19 @@ pub async fn handle_confidential_transfer(
             .with_instructions(instructions)
             .sign(&account_secret.key)
             .build();
+
+        if req.dry_run {
+            let result = sdk
+                .transaction_api()
+                .submit_dry_run_transaction(transaction, inputs.into_iter().map(Into::into).collect())
+                .await?;
+            let execute_result = result.result.into_execute_result().unwrap();
+            return Ok(ConfidentialTransferResponse {
+                transaction_id: result.transaction_id,
+                fee: execute_result.fee_receipt.clone().unwrap().total_fees_paid,
+                result: execute_result.finalize,
+            });
+        }
 
         outputs_api.proofs_set_transaction_hash(proof_id, *transaction.id())?;
 
