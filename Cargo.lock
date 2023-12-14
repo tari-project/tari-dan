@@ -1148,7 +1148,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
 dependencies = [
  "borsh-derive",
- "hashbrown 0.12.3",
+ "hashbrown 0.11.2",
 ]
 
 [[package]]
@@ -4666,7 +4666,7 @@ dependencies = [
 [[package]]
 name = "libp2p-identity"
 version = "0.2.8"
-source = "git+https://github.com/sdbondi/rust-libp2p.git?rev=5459d4d7cc79437d091fe3e390e8609a5ac06ea3#5459d4d7cc79437d091fe3e390e8609a5ac06ea3"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=5459d4d7cc79437d091fe3e390e8609a5ac06ea3#5459d4d7cc79437d091fe3e390e8609a5ac06ea3"
 dependencies = [
  "bs58 0.5.0",
  "ed25519-dalek",
@@ -5722,7 +5722,7 @@ dependencies = [
 [[package]]
 name = "multiaddr"
 version = "0.18.1"
-source = "git+https://github.com/sdbondi/rust-libp2p.git?rev=5459d4d7cc79437d091fe3e390e8609a5ac06ea3#5459d4d7cc79437d091fe3e390e8609a5ac06ea3"
+source = "git+https://github.com/tari-project/rust-libp2p.git?rev=5459d4d7cc79437d091fe3e390e8609a5ac06ea3#5459d4d7cc79437d091fe3e390e8609a5ac06ea3"
 dependencies = [
  "arrayref",
  "byteorder",
