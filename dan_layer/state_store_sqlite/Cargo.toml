@@ -1,30 +1,30 @@
 [package]
 name = "tari_state_store_sqlite"
-authors = ["The Tari Development Community"]
 description = "The Tari DAN wallet daemon"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
-version = "0.50.0-pre.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_dan_storage = { path = "../storage" }
-tari_dan_common_types = { path = "../common_types" }
-tari_transaction = { path = "../transaction" }
+tari_dan_storage = { workspace = true }
+tari_dan_common_types = { workspace = true }
+tari_transaction = { workspace = true }
 # TODO: needed for FixedHash
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_utilities = "0.6"
+tari_common_types = { workspace = true }
+tari_utilities = { workspace = true }
 
-anyhow = "1.0"
-bigdecimal = "0.4.1"
-diesel = { version = "2", default-features = false, features = ["sqlite", "time", "numeric"] }
-diesel_migrations = "2"
-log = "0.4"
-hex = "0.4"
-serde = "1.0"
-serde_json = "1.0"
-thiserror = "1.0"
-time = "0.3"
+anyhow = { workspace = true }
+bigdecimal = { workspace = true }
+diesel = { workspace = true, default-features = false, features = ["sqlite", "time", "numeric"] }
+diesel_migrations = { workspace = true }
+log = { workspace = true }
+hex = { workspace = true }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
-rand = "0.8"
+rand = { workspace = true }

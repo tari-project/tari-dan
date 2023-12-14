@@ -1,21 +1,19 @@
 [package]
 name = "tari_rpc_macros"
 description = "RPC service proc macro"
-authors = ["The Tari Development Community"]
-repository = "https://github.com/tari-project/tari"
-homepage = "https://tari.com"
-readme = "README.md"
-license = "BSD-3-Clause"
-version = "0.53.0-dan.0"
-edition = "2018"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [lib]
 proc-macro = true
 
 [dependencies]
-proc-macro2 = "1.0.24"
-quote = "1.0.7"
-syn = { version = "1.0.38", features = ["fold"] }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true, features = ["fold"] }
 
 #[dev-dependencies]
 #tari_comms = {  path = "../core", features = ["rpc"] }

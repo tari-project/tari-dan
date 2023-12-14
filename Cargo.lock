@@ -1257,16 +1257,6 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "bytes"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "206fdffcfa2df7cbe15601ef46c813fce0965eb3286db6b56c583b814b51c81c"
-dependencies = [
- "byteorder",
- "iovec",
-]
-
-[[package]]
-name = "bytes"
 version = "0.5.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e4cec68f03f32e44924783795810fa50a7035d8c8ebe78580ad7e6c703fba38"
@@ -1704,7 +1694,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23738e11972c7643e4ec947840fc463b6a571afcd3e735bdfce7d03c7a784aca"
 dependencies = [
  "async-trait",
- "json5 0.4.1",
+ "json5",
  "lazy_static",
  "nom",
  "pathdiff",
@@ -1718,7 +1708,7 @@ dependencies = [
 
 [[package]]
 name = "consensus_tests"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1737,7 +1727,7 @@ dependencies = [
  "tari_engine_types",
  "tari_epoch_manager",
  "tari_mmr",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_state_store_sqlite",
  "tari_transaction",
  "thiserror",
@@ -4019,14 +4009,14 @@ checksum = "8bb03732005da905c88227371639bf1ad885cc712789c011c31c5fb3ab3ccf02"
 
 [[package]]
 name = "integration_tests"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base64 0.21.5",
  "config",
  "cucumber",
  "httpmock",
- "indexmap 1.9.3",
+ "indexmap 2.1.0",
  "libp2p",
  "log",
  "log4rs 1.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -4056,7 +4046,7 @@ dependencies = [
  "tari_indexer",
  "tari_indexer_client",
  "tari_p2p",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
@@ -4104,15 +4094,6 @@ dependencies = [
  "hermit-abi 0.3.3",
  "libc",
  "windows-sys 0.48.0",
-]
-
-[[package]]
-name = "iovec"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2b3ea6ff95e175473f8ffe6a7eb7c00d054240321b84c57051175fe3c1e075e"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -4233,17 +4214,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cee9c64da59eae3b50095c18d3e74f8b73c0b86d2792824ff01bbce68ba229ca"
 dependencies = [
  "wasm-bindgen",
-]
-
-[[package]]
-name = "json5"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8eb2522ff59fbfefb955e9bd44d04d5e5c2d0e8865bfc2c3d1ab3916183ef5ee"
-dependencies = [
- "pest",
- "pest_derive",
- "serde",
 ]
 
 [[package]]
@@ -4691,7 +4661,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-messaging"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "futures-bounded",
@@ -4837,7 +4807,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-substream"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "libp2p",
  "smallvec 1.11.2",
@@ -5414,7 +5384,7 @@ source = "git+https://github.com/tari-project/tari.git?branch=feature-dan2#9a871
 dependencies = [
  "clap 3.2.25",
  "futures 0.3.29",
- "json5 0.4.1",
+ "json5",
  "log",
  "rand",
  "serde",
@@ -5468,7 +5438,7 @@ dependencies = [
  "tari_key_manager",
  "tari_p2p",
  "tari_script",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -5519,7 +5489,7 @@ dependencies = [
  "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
  "tari_p2p",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_utilities",
  "thiserror",
@@ -5575,7 +5545,7 @@ dependencies = [
  "tari_p2p",
  "tari_script",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_utilities",
  "tempfile",
  "thiserror",
@@ -6971,7 +6941,7 @@ dependencies = [
 
 [[package]]
 name = "proto_builder"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "prost-build 0.12.3",
  "sha2",
@@ -8702,7 +8672,7 @@ dependencies = [
 
 [[package]]
 name = "tari_base_node_client"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "log",
@@ -8846,7 +8816,7 @@ dependencies = [
  "tari_common",
  "tari_crypto",
  "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_utilities",
  "thiserror",
@@ -8885,7 +8855,7 @@ dependencies = [
  "tari_comms",
  "tari_comms_rpc_macros",
  "tari_crypto",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_utilities",
  "thiserror",
@@ -8906,7 +8876,7 @@ dependencies = [
 
 [[package]]
 name = "tari_comms_rpc_state_sync"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8924,7 +8894,7 @@ dependencies = [
 
 [[package]]
 name = "tari_consensus"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8935,7 +8905,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_epoch_manager",
  "tari_mmr",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_transaction",
  "thiserror",
  "tokio",
@@ -8965,7 +8935,7 @@ dependencies = [
  "tari_crypto",
  "tari_p2p",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_utilities",
  "thiserror",
  "tokio",
@@ -9024,7 +8994,7 @@ dependencies = [
  "tari_p2p",
  "tari_script",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_test_utils",
  "tari_utilities",
@@ -9067,7 +9037,7 @@ dependencies = [
  "chrono",
  "dashmap",
  "futures 0.3.29",
- "json5 0.4.1",
+ "json5",
  "libp2p-identity",
  "log",
  "mini-moka",
@@ -9092,7 +9062,7 @@ dependencies = [
  "tari_epoch_manager",
  "tari_indexer_lib",
  "tari_networking",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_state_store_sqlite",
  "tari_template_builtin",
  "tari_template_lib",
@@ -9156,7 +9126,7 @@ dependencies = [
 
 [[package]]
 name = "tari_dan_p2p"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "serde",
@@ -9275,7 +9245,7 @@ dependencies = [
  "tari_dan_wallet_storage_sqlite",
  "tari_engine_types",
  "tari_indexer_client",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
@@ -9365,7 +9335,7 @@ dependencies = [
 
 [[package]]
 name = "tari_epoch_manager"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9377,7 +9347,7 @@ dependencies = [
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_mmr",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "thiserror",
  "tokio",
 ]
@@ -9427,7 +9397,7 @@ dependencies = [
  "tari_indexer_lib",
  "tari_networking",
  "tari_rpc_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_state_store_sqlite",
  "tari_template_lib",
  "tari_transaction",
@@ -9457,7 +9427,7 @@ dependencies = [
 
 [[package]]
 name = "tari_indexer_lib"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "log",
@@ -9525,7 +9495,7 @@ dependencies = [
 [[package]]
 name = "tari_metrics"
 version = "0.1.0"
-source = "git+https://github.com/sdbondi/tari.git?rev=e45751090dce2eeac208883fa13865591bdafb46#e45751090dce2eeac208883fa13865591bdafb46"
+source = "git+https://github.com/tari-project/tari.git#f394fd815e89e56147a59a3640586cbbe0874338"
 dependencies = [
  "once_cell",
  "prometheus",
@@ -9549,7 +9519,7 @@ dependencies = [
 
 [[package]]
 name = "tari_networking"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9558,7 +9528,7 @@ dependencies = [
  "rand",
  "tari_crypto",
  "tari_rpc_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_swarm",
  "thiserror",
  "tokio",
@@ -9586,7 +9556,7 @@ dependencies = [
  "tari_comms_dht",
  "tari_crypto",
  "tari_service_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_storage",
  "tari_utilities",
  "thiserror",
@@ -9599,7 +9569,7 @@ dependencies = [
 
 [[package]]
 name = "tari_rpc_framework"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "bitflags 2.4.1",
@@ -9613,8 +9583,8 @@ dependencies = [
  "prost 0.12.3",
  "prost-build 0.12.3",
  "proto_builder",
- "tari_metrics 0.1.0 (git+https://github.com/sdbondi/tari.git?rev=e45751090dce2eeac208883fa13865591bdafb46)",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/sdbondi/tari.git?rev=e45751090dce2eeac208883fa13865591bdafb46)",
+ "tari_metrics 0.1.0 (git+https://github.com/tari-project/tari.git)",
+ "tari_shutdown",
  "thiserror",
  "tokio",
  "tokio-util 0.7.10",
@@ -9624,7 +9594,7 @@ dependencies = [
 
 [[package]]
 name = "tari_rpc_macros"
-version = "0.53.0-dan.0"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9667,7 +9637,7 @@ dependencies = [
  "async-trait",
  "futures 0.3.29",
  "log",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "thiserror",
  "tokio",
  "tower-service",
@@ -9682,16 +9652,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tari_shutdown"
-version = "0.53.0-dan.0"
-source = "git+https://github.com/sdbondi/tari.git?rev=e45751090dce2eeac208883fa13865591bdafb46#e45751090dce2eeac208883fa13865591bdafb46"
-dependencies = [
- "futures 0.3.29",
-]
-
-[[package]]
 name = "tari_signaling_server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -9706,7 +9668,7 @@ dependencies = [
  "tari_common",
  "tari_dan_common_types",
  "tari_dan_wallet_sdk",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tokio",
  "tower-http",
  "webrtc",
@@ -9714,7 +9676,7 @@ dependencies = [
 
 [[package]]
 name = "tari_state_store_sqlite"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bigdecimal",
@@ -9748,7 +9710,7 @@ dependencies = [
 
 [[package]]
 name = "tari_swarm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "libp2p",
@@ -9827,7 +9789,7 @@ dependencies = [
  "futures 0.3.29",
  "rand",
  "tari_comms",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tempfile",
  "tokio",
 ]
@@ -9892,7 +9854,7 @@ dependencies = [
  "futures 0.3.29",
  "include_dir",
  "indexmap 2.1.0",
- "json5 0.2.8",
+ "json5",
  "libp2p",
  "libsqlite3-sys",
  "log",
@@ -9926,7 +9888,7 @@ dependencies = [
  "tari_indexer_lib",
  "tari_networking",
  "tari_rpc_framework",
- "tari_shutdown 0.53.0-dan.0 (git+https://github.com/tari-project/tari.git?branch=feature-dan2)",
+ "tari_shutdown",
  "tari_state_store_sqlite",
  "tari_template_lib",
  "tari_transaction",
@@ -9987,7 +9949,7 @@ dependencies = [
 
 [[package]]
 name = "tari_validator_node_rpc"
-version = "0.50.0-pre.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -10539,11 +10501,11 @@ dependencies = [
 
 [[package]]
 name = "transaction_generator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode 2.0.0-rc.3",
- "bytes 0.4.12",
+ "bytes 1.5.0",
  "clap 4.4.11",
  "once_cell",
  "rand",
@@ -10557,7 +10519,7 @@ dependencies = [
 
 [[package]]
 name = "transaction_submitter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap 4.4.11",
