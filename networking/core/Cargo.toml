@@ -13,8 +13,9 @@ tari_shutdown = { git = "https://github.com/tari-project/tari.git", branch = "fe
 
 anyhow = "1.0"
 async-trait = "0.1.74"
-libp2p = { version = "0.53.1", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "kad", "dcutr", "gossipsub"] }
+libp2p = { version = "0.53.1", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "dcutr", "gossipsub"] }
 log = "0.4.20"
 thiserror = "1.0.50"
 rand = "0.8"
+quick-protobuf-codec = "0.3"
 tokio = { version = "1.34", features = ["macros", "sync"] }

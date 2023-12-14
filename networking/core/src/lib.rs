@@ -39,7 +39,7 @@ pub trait NetworkingService<TMsg> {
     async fn dial_peer<T: Into<DialOpts> + Send + 'static>(
         &mut self,
         dial_opts: T,
-    ) -> Result<crate::Waiter<()>, NetworkingError>;
+    ) -> Result<Waiter<()>, NetworkingError>;
 
     async fn get_connected_peers(&mut self) -> Result<Vec<PeerId>, NetworkingError>;
 
@@ -59,6 +59,9 @@ pub trait NetworkingService<TMsg> {
 
     async fn subscribe_topic<T: Into<String> + Send>(&mut self, topic: T) -> Result<(), NetworkingError>;
     async fn unsubscribe_topic<T: Into<String> + Send>(&mut self, topic: T) -> Result<(), NetworkingError>;
+
+    async fn set_want_peers<I: IntoIterator<Item = PeerId> + Send>(&self, want_peers: I)
+        -> Result<(), NetworkingError>;
 }
 
 pub struct Waiter<T> {

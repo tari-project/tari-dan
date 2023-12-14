@@ -6,10 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-libp2p = { version = "0.53.1", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "kad", "dcutr", "gossipsub", "mdns", "autonat"] }
-#libp2p-messaging = { path = "../../../../code/libp2p-messaging", features = ["prost"] }
+libp2p = { version = "0.53.2", features = ["tokio", "noise", "macros", "ping", "tcp", "identify", "yamux", "relay", "quic", "dcutr", "gossipsub", "mdns", "autonat"] }
 libp2p-messaging = { path = "../libp2p-messaging", features = ["prost"] }
 libp2p-substream = { path = "../libp2p-substream" }
+libp2p-peersync = { path = "../libp2p-peersync" }
 
 async-trait = "0.1.74"
 thiserror = "1.0.50"

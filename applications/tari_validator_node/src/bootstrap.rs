@@ -164,6 +164,8 @@ pub async fn spawn_services(
                 ..Default::default()
             },
             reachability_mode: config.validator_node.p2p.reachability_mode.into(),
+            announce: true,
+            ..Default::default()
         },
         seed_peers,
         shutdown.clone(),
