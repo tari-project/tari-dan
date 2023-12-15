@@ -393,6 +393,7 @@ pub enum BucketAction {
     RevealConfidential,
     Burn,
     CreateProof,
+    GetNonFungibleIds,
 }
 
 /// A bucket burn operation argument

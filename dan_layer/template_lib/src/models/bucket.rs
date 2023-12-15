@@ -30,6 +30,8 @@ use crate::{
     prelude::ResourceType,
 };
 
+use super::NonFungibleId;
+
 const TAG: u64 = BinaryTag::BucketId.as_u64();
 
 /// A bucket's unique identification during the transaction execution
@@ -174,5 +176,17 @@ impl Bucket {
         });
 
         resp.decode().expect("Bucket CreateProof returned invalid proof")
+    }
+
+    /// Returns the IDs of all the non-fungibles in this bucket
+    pub fn get_non_fungible_ids(&self) -> Vec<NonFungibleId> {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::GetNonFungibleIds,
+            args: invoke_args![],
+        });
+
+        resp.decode()
+            .expect("get_non_fungible_ids returned invalid non fungible ids")
     }
 }
