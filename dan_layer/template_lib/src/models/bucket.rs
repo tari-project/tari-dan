@@ -24,13 +24,12 @@ use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{call_engine, rust::fmt, EngineOp};
 
+use super::NonFungibleId;
 use crate::{
     args::{BucketAction, BucketInvokeArg, BucketRef, InvokeResult},
     models::{Amount, BinaryTag, ConfidentialWithdrawProof, Proof, ResourceAddress},
     prelude::ResourceType,
 };
-
-use super::NonFungibleId;
 
 const TAG: u64 = BinaryTag::BucketId.as_u64();
 

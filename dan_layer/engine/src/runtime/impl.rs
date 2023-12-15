@@ -1238,10 +1238,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 self.tracker.write_with(|state| {
                     let bucket = state.get_bucket(bucket_id)?;
-                    let non_fungible_ids = bucket
-                        .non_fungible_ids()
-                        .iter()
-                        .collect::<Vec<_>>();
+                    let non_fungible_ids = bucket.non_fungible_ids().iter().collect::<Vec<_>>();
                     Ok(InvokeResult::encode(&non_fungible_ids)?)
                 })
             },
