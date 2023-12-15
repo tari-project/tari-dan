@@ -286,6 +286,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
         account,
         claim_proof,
         max_fee: fee.map(Into::into),
+        key_id: None,
     };
 
     let resp = client

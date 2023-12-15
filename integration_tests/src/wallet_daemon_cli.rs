@@ -93,6 +93,7 @@ pub async fn claim_burn(
             "range_proof": BASE64.encode(range_proof.as_bytes()),
         }),
         max_fee: Some(Amount(max_fee)),
+        key_id: None,
     };
 
     client.claim_burn(claim_burn_request).await
