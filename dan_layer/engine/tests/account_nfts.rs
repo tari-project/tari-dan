@@ -7,7 +7,7 @@ use tari_template_test_tooling::TemplateTest;
 
 #[test]
 fn basic_nft_mint() {
-    let mut account_nft_template_test = TemplateTest::new(vec!["../template_builtin/templates/account_nfts/"]);
+    let mut account_nft_template_test = TemplateTest::new::<_, &str>([]);
 
     let account_nft_template = account_nft_template_test.get_template_address("AccountNonFungible");
 
