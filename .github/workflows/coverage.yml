@@ -51,7 +51,7 @@ jobs:
 
       - name: archive-coverage
         id: archive-coverage
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           path: target/coveralls_coverage.json
           name: coveralls-coverage
