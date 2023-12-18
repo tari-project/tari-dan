@@ -25,11 +25,9 @@ tari_bor = { workspace = true, default-features = true }
 
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-log = { workspace = true }
 prost = { workspace = true }
 serde = { workspace = true, default-features = true }
 thiserror = { workspace = true }
-tokio-stream = { workspace = true }
 
 [build-dependencies]
 proto_builder = { workspace = true }

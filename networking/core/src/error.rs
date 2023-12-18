@@ -22,7 +22,7 @@
 
 use std::io;
 
-use libp2p::{gossipsub, gossipsub::SubscriptionError, kad::NoKnownPeers, swarm::DialError, TransportError};
+use libp2p::{gossipsub, gossipsub::SubscriptionError, swarm::DialError, TransportError};
 use tari_rpc_framework::RpcError;
 use tari_swarm::{messaging, substream, TariSwarmError};
 use tokio::sync::{mpsc, oneshot};
@@ -33,8 +33,6 @@ pub enum NetworkingError {
     CodecError(io::Error),
     #[error("Gossipsub publish error: {0}")]
     GossipPublishError(#[from] gossipsub::PublishError),
-    #[error(transparent)]
-    NoKnownPeers(#[from] NoKnownPeers),
     #[error("Failed to send message to peer: {0}")]
     SwarmError(#[from] TariSwarmError),
     #[error("Service has shutdown")]
@@ -53,6 +51,8 @@ pub enum NetworkingError {
     RpcError(#[from] RpcError),
     #[error("Transport error: {0}")]
     TransportError(#[from] TransportError<io::Error>),
+    #[error("Peer sync error: {0}")]
+    PeerSyncError(#[from] tari_swarm::peersync::Error),
 }
 
 impl From<oneshot::error::RecvError> for NetworkingError {

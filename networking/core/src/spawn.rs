@@ -31,12 +31,13 @@ where
     }
 
     config.swarm.enable_relay = config.swarm.enable_relay || !config.reachability_mode.is_private();
-    let swarm = tari_swarm::create_swarm::<ProstCodec<TMsg>>(identity, HashSet::new(), config.swarm.clone())?;
+    let swarm = tari_swarm::create_swarm::<ProstCodec<TMsg>>(identity.clone(), HashSet::new(), config.swarm.clone())?;
     let local_peer_id = *swarm.local_peer_id();
     let (tx, rx) = mpsc::channel(1);
     let (tx_events, _) = broadcast::channel(100);
     let handle = tokio::spawn(
         NetworkingWorker::<ProstCodec<TMsg>>::new(
+            identity,
             rx,
             tx_events.clone(),
             tx_messages,
