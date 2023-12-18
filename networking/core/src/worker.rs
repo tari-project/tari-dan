@@ -843,10 +843,7 @@ where
                 peer_id,
                 ..
             } => {
-                debug!(target: LOG_TARGET, "Outbound substream failed with stream id {stream_id}: {error}");
-                if matches!(&error, substream::Error::NoAddressesForPeer) {
-                    self.swarm.behaviour_mut().kad.get_closest_peers(peer_id);
-                }
+                debug!(target: LOG_TARGET, "Outbound substream failed with peer {peer_id}, stream {stream_id}: {error}");
                 if let Some(waiting_reply) = self.pending_substream_requests.remove(&stream_id) {
                     let _ignore = waiting_reply.send(Err(NetworkingError::FailedToOpenSubstream(error)));
                 }
