@@ -46,8 +46,8 @@ use crate::{
 pub struct Handler<TCodec: Codec> {
     peer_id: PeerId,
     protocol: StreamProtocol,
-    requested_streams: VecDeque<MessageStream<TCodec::Message>>,
-    pending_streams: VecDeque<MessageStream<TCodec::Message>>,
+    requested_stream: Option<MessageStream<TCodec::Message>>,
+    pending_stream: Option<MessageStream<TCodec::Message>>,
     pending_events: VecDeque<Event<TCodec::Message>>,
     pending_events_sender: mpsc::Sender<Event<TCodec::Message>>,
     pending_events_receiver: mpsc::Receiver<Event<TCodec::Message>>,
@@ -61,8 +61,8 @@ impl<TCodec: Codec> Handler<TCodec> {
         Self {
             peer_id,
             protocol,
-            requested_streams: VecDeque::new(),
-            pending_streams: VecDeque::new(),
+            requested_stream: None,
+            pending_stream: None,
             pending_events: VecDeque::new(),
             codec: TCodec::default(),
             pending_events_sender,
@@ -84,9 +84,9 @@ where TCodec: Codec + Send + Clone + 'static
 
     fn on_dial_upgrade_error(&mut self, error: DialUpgradeError<(), Protocol<StreamProtocol>>) {
         let stream = self
-            .requested_streams
-            .pop_front()
-            .expect("negotiated a stream without a pending message");
+            .requested_stream
+            .take()
+            .expect("negotiated a stream without a requested stream");
 
         match error.error {
             StreamUpgradeError::Timeout => {
@@ -114,7 +114,7 @@ where TCodec: Codec + Send + Clone + 'static
                     "outbound stream for request {} failed: {e}, retrying",
                     stream.stream_id()
                 );
-                self.requested_streams.push_back(stream);
+                self.requested_stream = Some(stream);
             },
         }
     }
@@ -124,11 +124,16 @@ where TCodec: Codec + Send + Clone + 'static
         let (mut peer_stream, _protocol) = outbound.protocol;
 
         let mut msg_stream = self
-            .requested_streams
-            .pop_front()
-            .expect("negotiated a stream without a pending message");
+            .requested_stream
+            .take()
+            .expect("negotiated outbound stream without a requested stream");
 
         let mut events = self.pending_events_sender.clone();
+
+        self.pending_events.push_back(Event::OutboundStreamOpened {
+            peer_id: self.peer_id,
+            stream_id: msg_stream.stream_id(),
+        });
 
         let fut = async move {
             let mut message_id = MessageId::default();
@@ -166,6 +171,8 @@ where TCodec: Codec + Send + Clone + 'static
         let peer_id = self.peer_id;
         let (mut stream, _protocol) = inbound.protocol;
         let mut events = self.pending_events_sender.clone();
+
+        self.pending_events.push_back(Event::InboundStreamOpened { peer_id });
 
         let fut = async move {
             loop {
@@ -243,27 +250,25 @@ where TCodec: Codec + Send + Clone + 'static
             return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
         }
 
-        // Emit outbound streams.
-        if let Some(stream) = self.pending_streams.pop_front() {
-            let protocol = self.protocol.clone();
-            self.requested_streams.push_back(stream);
+        // Open outbound stream.
+        if let Some(stream) = self.pending_stream.take() {
+            self.requested_stream = Some(stream);
 
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(Protocol { protocol }, ()),
+                protocol: SubstreamProtocol::new(
+                    Protocol {
+                        protocol: self.protocol.clone(),
+                    },
+                    (),
+                ),
             });
-        }
-
-        debug_assert!(self.pending_streams.is_empty());
-
-        if self.pending_streams.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
-            self.pending_streams.shrink_to_fit();
         }
 
         Poll::Pending
     }
 
     fn on_behaviour_event(&mut self, stream: Self::FromBehaviour) {
-        self.pending_streams.push_back(stream);
+        self.pending_stream = Some(stream);
     }
 
     fn on_connection_event(

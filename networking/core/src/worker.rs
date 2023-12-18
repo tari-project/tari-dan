@@ -206,23 +206,15 @@ where
                 peer,
                 message,
                 reply_tx,
-            } => {
-                match self
-                    .swarm
-                    .behaviour_mut()
-                    .messaging
-                    .enqueue_message(peer, message)
-                    .await
-                {
-                    Ok(_) => {
-                        debug!(target: LOG_TARGET, "📢 Queued message to peer {}", peer);
-                        let _ignore = reply_tx.send(Ok(()));
-                    },
-                    Err(err) => {
-                        debug!(target: LOG_TARGET, "🚨 Failed to queue message to peer {}: {}", peer, err);
-                        let _ignore = reply_tx.send(Err(err.into()));
-                    },
-                }
+            } => match self.swarm.behaviour_mut().messaging.send_message(peer, message).await {
+                Ok(_) => {
+                    debug!(target: LOG_TARGET, "📢 Queued message to peer {}", peer);
+                    let _ignore = reply_tx.send(Ok(()));
+                },
+                Err(err) => {
+                    debug!(target: LOG_TARGET, "🚨 Failed to queue message to peer {}: {}", peer, err);
+                    let _ignore = reply_tx.send(Err(err.into()));
+                },
             },
             NetworkingRequest::SendMulticast {
                 destination,
@@ -233,7 +225,7 @@ where
                 let messaging_mut = &mut self.swarm.behaviour_mut().messaging;
 
                 for peer in destination {
-                    match messaging_mut.enqueue_message(peer, message.clone()).await {
+                    match messaging_mut.send_message(peer, message.clone()).await {
                         Ok(_) => {},
                         Err(err) => {
                             debug!(target: LOG_TARGET, "🚨 Failed to queue message to peer {}: {}", peer, err);
@@ -521,7 +513,6 @@ where
                 debug!(target: LOG_TARGET, "ℹ️ Messaging event: {:?}", event);
             },
             Substream(event) => {
-                info!(target: LOG_TARGET, "ℹ️ Substream event: {:?}", event);
                 self.on_substream_event(event);
             },
             ConnectionLimits(_) => {
@@ -826,6 +817,7 @@ where
                 stream,
                 protocol,
             } => {
+                info!(target: LOG_TARGET, "📥 substream open: peer_id={}, stream_id={}, protocol={}", peer_id, stream_id, protocol);
                 let Some(reply) = self.pending_substream_requests.remove(&stream_id) else {
                     debug!(target: LOG_TARGET, "No pending requests for subtream protocol {protocol} for peer {peer_id}");
                     return;
@@ -835,6 +827,7 @@ where
                 let _ignore = reply.send(Ok(NegotiatedSubstream::new(peer_id, protocol, stream)));
             },
             InboundSubstreamOpen { notification } => {
+                info!(target: LOG_TARGET, "📥 Inbound substream open: protocol={}", notification.protocol);
                 self.substream_notifiers.notify(notification);
             },
             InboundFailure {
@@ -844,7 +837,13 @@ where
             } => {
                 debug!(target: LOG_TARGET, "Inbound substream failed from peer {peer_id} with stream id {stream_id}: {error}");
             },
-            OutboundFailure { error, stream_id, .. } => {
+            OutboundFailure {
+                error,
+                stream_id,
+                peer_id,
+                ..
+            } => {
+                debug!(target: LOG_TARGET, "Outbound substream failed with peer {peer_id}, stream {stream_id}: {error}");
                 if let Some(waiting_reply) = self.pending_substream_requests.remove(&stream_id) {
                     let _ignore = waiting_reply.send(Err(NetworkingError::FailedToOpenSubstream(error)));
                 }
