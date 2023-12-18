@@ -23,6 +23,8 @@
 use log::*;
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_dan_storage::{consensus_models::Block, StateStore};
+use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
+use tari_networking::NetworkingService;
 use tari_shutdown::ShutdownSignal;
 
 use crate::Services;
@@ -40,6 +42,7 @@ impl DanNode {
 
     pub async fn start(mut self, mut shutdown: ShutdownSignal) -> Result<(), anyhow::Error> {
         let mut hotstuff_events = self.services.consensus_handle.subscribe_to_hotstuff_events();
+        let mut epoch_manager_events = self.services.epoch_manager.subscribe().await?;
 
         // if let Err(err) = self.dial_local_shard_peers().await {
         //     error!(target: LOG_TARGET, "Failed to dial local shard peers: {}", err);
@@ -52,9 +55,12 @@ impl DanNode {
                      break;
                 },
 
-
                 Ok(event) = hotstuff_events.recv() => if let Err(err) = self.handle_hotstuff_event(event).await{
                     error!(target: LOG_TARGET, "Error handling hotstuff event: {}", err);
+                },
+
+                Ok(event) = epoch_manager_events.recv() => if let Err(err) = self.handle_epoch_manager_event(event).await{
+                    error!(target: LOG_TARGET, "Error handling epoch manager event: {}", err);
                 },
 
                 Err(err) = self.services.on_any_exit() => {
@@ -63,6 +69,18 @@ impl DanNode {
                 }
 
             }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_epoch_manager_event(&mut self, event: EpochManagerEvent) -> Result<(), anyhow::Error> {
+        if let EpochManagerEvent::EpochChanged(epoch) = event {
+            let all_vns = self.services.epoch_manager.get_all_validator_nodes(epoch).await?;
+            self.services
+                .networking
+                .set_want_peers(all_vns.into_iter().map(|vn| vn.address.as_peer_id()))
+                .await?;
         }
 
         Ok(())

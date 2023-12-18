@@ -54,7 +54,9 @@ use tari_dan_app_utilities::{
 };
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
+use tari_epoch_manager::{EpochManagerEvent, EpochManagerReader};
 use tari_indexer_lib::substate_scanner::SubstateScanner;
+use tari_networking::NetworkingService;
 use tari_shutdown::ShutdownSignal;
 use tokio::{task, time};
 
@@ -69,6 +71,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::indexer::app";
 
+#[allow(clippy::too_many_lines)]
 pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
     let keypair = setup_keypair_prompt(&config.indexer.identity_file, true)?;
 
@@ -89,6 +92,13 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
         ConsensusConstants::devnet(), // TODO: change this eventually
     )
     .await?;
+
+    let mut epoch_manager_events = services.epoch_manager.subscribe().await.map_err(|e| {
+        ExitError::new(
+            ExitCode::ConfigError,
+            format!("Epoch manager crashed on startup: {}", e),
+        )
+    })?;
 
     let substate_cache_dir = config.common.base_path.join("substate_cache");
     let substate_cache = SubstateFileCache::new(substate_cache_dir)
@@ -168,6 +178,13 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
                     Err(e) =>  error!(target: LOG_TARGET, "Substate auto-scan failed: {}", e),
                 }
             },
+
+            Ok(event) = epoch_manager_events.recv() => {
+                if let Err(err) = handle_epoch_manager_event(&services, event).await {
+                    error!(target: LOG_TARGET, "Error handling epoch manager event: {}", err);
+                }
+            },
+
             _ = shutdown_signal.wait() => {
                 dbg!("Shutting down run_substate_polling");
                 break;
@@ -176,6 +193,18 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     }
 
     shutdown_signal.wait().await;
+
+    Ok(())
+}
+
+async fn handle_epoch_manager_event(services: &Services, event: EpochManagerEvent) -> Result<(), anyhow::Error> {
+    if let EpochManagerEvent::EpochChanged(epoch) = event {
+        let all_vns = services.epoch_manager.get_all_validator_nodes(epoch).await?;
+        services
+            .networking
+            .set_want_peers(all_vns.into_iter().map(|vn| vn.address.as_peer_id()))
+            .await?;
+    }
 
     Ok(())
 }

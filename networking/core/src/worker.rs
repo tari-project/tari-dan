@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap},
     hash::Hash,
     time::{Duration, Instant},
 };
@@ -14,9 +14,9 @@ use libp2p::{
     dcutr,
     futures::StreamExt,
     gossipsub,
+    gossipsub::IdentTopic,
     identify,
-    kad,
-    kad::{QueryResult, RoutingUpdate},
+    identity,
     mdns,
     multiaddr::Protocol,
     ping,
@@ -35,8 +35,10 @@ use log::*;
 use tari_rpc_framework::Substream;
 use tari_shutdown::ShutdownSignal;
 use tari_swarm::{
+    is_supported_multiaddr,
     messaging,
     messaging::Codec,
+    peersync,
     substream,
     substream::{NegotiatedSubstream, ProtocolNotification, StreamId},
     ProtocolVersion,
@@ -62,21 +64,25 @@ const LOG_TARGET: &str = "tari::dan::networking::service::worker";
 
 type ReplyTx<T> = oneshot::Sender<Result<T, NetworkingError>>;
 
+const PEER_ANNOUNCE_TOPIC: &str = "peer-announce";
+
 pub struct NetworkingWorker<TCodec>
 where TCodec: Codec + Send + Clone + 'static
 {
+    _keypair: identity::Keypair,
     rx_request: mpsc::Receiver<NetworkingRequest<TCodec::Message>>,
     tx_events: broadcast::Sender<NetworkingEvent>,
     tx_messages: mpsc::Sender<(PeerId, TCodec::Message)>,
     active_connections: HashMap<PeerId, Vec<Connection>>,
     pending_substream_requests: HashMap<StreamId, ReplyTx<NegotiatedSubstream<Substream>>>,
     pending_dial_requests: HashMap<PeerId, Vec<ReplyTx<()>>>,
-    codec: TCodec,
+    message_codec: TCodec,
     substream_notifiers: Notifiers<Substream>,
     swarm: TariSwarm<TCodec>,
     config: crate::Config,
     relays: RelayState,
     is_initial_bootstrap_complete: bool,
+    has_sent_announce: bool,
     shutdown_signal: ShutdownSignal,
 }
 
@@ -86,6 +92,7 @@ where
     TCodec::Message: Clone,
 {
     pub(crate) fn new(
+        keypair: identity::Keypair,
         rx_request: mpsc::Receiver<NetworkingRequest<TCodec::Message>>,
         tx_events: broadcast::Sender<NetworkingEvent>,
         tx_messages: mpsc::Sender<(PeerId, TCodec::Message)>,
@@ -95,6 +102,7 @@ where
         shutdown_signal: ShutdownSignal,
     ) -> Self {
         Self {
+            _keypair: keypair,
             rx_request,
             tx_events,
             tx_messages,
@@ -102,11 +110,12 @@ where
             active_connections: HashMap::new(),
             pending_substream_requests: HashMap::new(),
             pending_dial_requests: HashMap::new(),
-            codec: TCodec::default(),
+            message_codec: TCodec::default(),
             relays: RelayState::new(known_relay_nodes),
             swarm,
             config,
             is_initial_bootstrap_complete: false,
+            has_sent_announce: false,
             shutdown_signal,
         }
     }
@@ -137,7 +146,12 @@ where
             self.attempt_relay_reservation();
         }
 
-        let mut bootstrap_interval = time::interval(Duration::from_secs(3600));
+        let mut check_connections_interval = time::interval(self.config.check_connections_interval);
+
+        self.swarm
+            .behaviour_mut()
+            .gossipsub
+            .subscribe(&IdentTopic::new(PEER_ANNOUNCE_TOPIC))?;
 
         loop {
             tokio::select! {
@@ -149,9 +163,9 @@ where
                         error!(target: LOG_TARGET, "🚨 Swarm event error: {}", err);
                     }
                 },
-                _ =  bootstrap_interval.tick() => {
-                    if let Err(err) = self.bootstrap_kad() {
-                        error!(target: LOG_TARGET, "🚨 Failed to bootstrap Kademlia: {}", err);
+                _ =  check_connections_interval.tick() => {
+                    if let Err(err) = self.bootstrap().await {
+                        error!(target: LOG_TARGET, "🚨 Failed to bootstrap: {}", err);
                     }
                 },
 
@@ -179,11 +193,6 @@ where
                         let _ignore = reply_tx.send(Ok(rx_waiter.into()));
                     },
                     Err(err) => {
-                        if let Some(peer_id) = maybe_peer_id {
-                            if matches!(err, DialError::NoAddresses) {
-                                self.swarm.behaviour_mut().kad.get_closest_peers(peer_id);
-                            }
-                        }
                         info!(target: LOG_TARGET, "🚨 Failed to dial peer: {}",  err);
                         let _ignore = reply_tx.send(Err(err.into()));
                     },
@@ -232,7 +241,7 @@ where
                 reply_tx,
             } => {
                 let mut buf = Vec::with_capacity(1024);
-                self.codec
+                self.message_codec
                     .encode_to(&mut buf, message)
                     .await
                     .map_err(NetworkingError::CodecError)?;
@@ -310,34 +319,43 @@ where
                 };
                 let _ignore = reply_tx.send(Ok(peer));
             },
+            NetworkingRequest::SetWantPeers(peers) => {
+                info!(target: LOG_TARGET, "🧭 Setting want peers to {:?}", peers);
+                self.swarm.behaviour_mut().peer_sync.want_peers(peers)?;
+            },
         }
 
         Ok(())
     }
 
-    fn bootstrap_kad(&mut self) -> Result<(), NetworkingError> {
-        if self.is_initial_bootstrap_complete {
-            info!(target: LOG_TARGET, "🥾 Bootstrapping kad");
-            // If there are no seed peers this will error
-            let _ignore = self.swarm.behaviour_mut().kad.bootstrap();
-        } else {
-            let mut has_seed_peers = false;
-            info!(target: LOG_TARGET, "🥾 Bootstrapping kad with {} known relay peers", self.relays.num_possible_relays());
+    async fn bootstrap(&mut self) -> Result<(), NetworkingError> {
+        if !self.is_initial_bootstrap_complete {
+            self.swarm
+                .behaviour_mut()
+                .peer_sync
+                .add_known_local_public_addresses(self.config.known_local_public_address.clone());
+        }
 
-            let local_peer_id = *self.swarm.local_peer_id();
-            for (peer_id, addresses) in self.relays.possible_relays() {
-                if *peer_id == local_peer_id {
-                    continue;
-                }
-                has_seed_peers = true;
-
-                for address in addresses {
-                    self.swarm.behaviour_mut().kad.add_address(peer_id, address.clone());
-                }
+        if self.active_connections.len() < self.relays.num_possible_relays() {
+            info!(target: LOG_TARGET, "🥾 Bootstrapping with {} known relay peers", self.relays.num_possible_relays());
+            for (peer, addrs) in self.relays.possible_relays() {
+                self.swarm
+                    .dial(
+                        DialOpts::peer_id(*peer)
+                            .addresses(addrs.iter().cloned().collect())
+                            .extend_addresses_through_behaviour()
+                            .build(),
+                    )
+                    .or_else(|err| {
+                        // Peer already has pending dial or established connection - OK
+                        if matches!(&err, DialError::DialPeerConditionFalse(_)) {
+                            Ok(())
+                        } else {
+                            Err(err)
+                        }
+                    })?;
             }
-            if has_seed_peers {
-                self.swarm.behaviour_mut().kad.bootstrap()?;
-            }
+            self.is_initial_bootstrap_complete = true;
         }
 
         Ok(())
@@ -382,7 +400,7 @@ where
                         debug!(target: LOG_TARGET, "Connection closed for peer {peer_id} but this connection is not in the active connections list");
                     },
                 }
-                check_and_shrink_hashmap(&mut self.active_connections);
+                shrink_hashmap_if_required(&mut self.active_connections);
             },
             SwarmEvent::OutgoingConnectionError {
                 peer_id: Some(peer_id),
@@ -393,7 +411,7 @@ where
                     debug!(target: LOG_TARGET, "No pending dial requests initiated by this service for peer {}", peer_id);
                     return Ok(());
                 };
-                check_and_shrink_hashmap(&mut self.pending_dial_requests);
+                shrink_hashmap_if_required(&mut self.pending_dial_requests);
 
                 for waiter in waiters {
                     let _ignore = waiter.send(Err(NetworkingError::OutgoingConnectionError(error.to_string())));
@@ -405,10 +423,8 @@ where
             SwarmEvent::Dialing { peer_id, connection_id } => {
                 if let Some(peer_id) = peer_id {
                     info!(target: LOG_TARGET, "🤝 Dialing peer {peer_id} for connection({connection_id})");
-                    // TODO: This helps us discover peers, however it seems like a better strategy should be found
-                    if !self.active_connections.contains_key(&peer_id) {
-                        self.swarm.behaviour_mut().kad.get_closest_peers(peer_id);
-                    }
+                } else {
+                    info!(target: LOG_TARGET, "🤝 Dialing unknown peer for connection({connection_id})");
                 }
             },
             e => {
@@ -480,12 +496,7 @@ where
             }) => match message.source {
                 Some(source) => {
                     info!(target: LOG_TARGET, "📢 Gossipsub message: [{topic}] {message_id} ({bytes} bytes) from {source}", topic = message.topic, bytes = message.data.len());
-                    let msg = self
-                        .codec
-                        .decode_from(&mut message.data.as_slice())
-                        .await
-                        .map_err(NetworkingError::CodecError)?;
-                    let _ignore = self.tx_messages.send((source, msg)).await;
+                    self.on_gossipsub_message(source, message).await?;
                 },
                 None => {
                     warn!(target: LOG_TARGET, "📢 Discarding Gossipsub message [{topic}] ({bytes} bytes) with no source propagated by {propagation_source}", topic=message.topic, bytes=message.data.len());
@@ -501,40 +512,6 @@ where
             Messaging(event) => {
                 debug!(target: LOG_TARGET, "ℹ️ Messaging event: {:?}", event);
             },
-            Kad(kad::Event::OutboundQueryProgressed {
-                id,
-                result,
-                stats,
-                step,
-            }) => {
-                debug!(target: LOG_TARGET, "🧭 Kad outbound query progressed: id={}, result={:?}, stats={:?}, step={:?}", id, result, stats, step);
-                match result {
-                    QueryResult::Bootstrap(b) => match b {
-                        Ok(ok) => {
-                            if ok.num_remaining == 0 {
-                                info!(target: LOG_TARGET, "🧭 Kad bootstrap complete");
-                                self.is_initial_bootstrap_complete = true;
-                            }
-                        },
-                        Err(err) => {
-                            info!(target: LOG_TARGET, "🧭 Kad bootstrap failed: {}", err);
-                        },
-                    },
-                    QueryResult::GetClosestPeers(Ok(ok)) => {
-                        info!(target: LOG_TARGET, "🧭 Kad get closest peers: {:?}", ok);
-                    },
-                    QueryResult::GetClosestPeers(Err(err)) => {
-                        info!(target: LOG_TARGET, "🧭 Kad get closest peers failed: {}", err);
-                    },
-                    q => {
-                        info!(target: LOG_TARGET, "🧭 Kad result: {q:?}");
-                    },
-                }
-            },
-            Kad(event) => {
-                debug!(target: LOG_TARGET, "🧭 Kad event: {:?}", event);
-            },
-
             Substream(event) => {
                 self.on_substream_event(event);
             },
@@ -548,48 +525,76 @@ where
             Autonat(event) => {
                 self.on_autonat_event(event)?;
             },
+            PeerSync(peersync::Event::LocalPeerRecordUpdated { record }) => {
+                info!(target: LOG_TARGET, "📝 Local peer record updated: {:?} announce enabled = {}, has_sent_announce = {}",record, self.config.announce, self.has_sent_announce);
+                if self.config.announce && !self.has_sent_announce && record.is_signed() {
+                    info!(target: LOG_TARGET, "📣 Sending local peer announce with {} address(es)", record.addresses().len());
+                    self.swarm
+                        .behaviour_mut()
+                        .gossipsub
+                        .publish(IdentTopic::new(PEER_ANNOUNCE_TOPIC), record.encode_to_proto()?)?;
+                    self.has_sent_announce = true;
+                }
+            },
+            PeerSync(peersync::Event::PeerBatchReceived { new_peers, from_peer }) => {
+                info!(target: LOG_TARGET, "📝 Peer batch received: from_peer={}, new_peers={}", from_peer, new_peers);
+            },
+            PeerSync(event) => {
+                info!(target: LOG_TARGET, "ℹ️ PeerSync event: {:?}", event);
+            },
         }
 
+        Ok(())
+    }
+
+    async fn on_gossipsub_message(
+        &mut self,
+        source: PeerId,
+        message: gossipsub::Message,
+    ) -> Result<(), NetworkingError> {
+        if message.topic == IdentTopic::new(PEER_ANNOUNCE_TOPIC).into() {
+            info!(target: LOG_TARGET, "📢 Peer announce message: ({bytes} bytes) from {source:?}", bytes = message.data.len(), source = message.source);
+            let rec = peersync::SignedPeerRecord::decode_from_proto(message.data.as_slice())?;
+            if let Some(addr) = rec.addresses.iter().find(|a| !is_supported_multiaddr(a)) {
+                warn!(target: LOG_TARGET, "📢 Discarding peer announce message with unsupported address {addr}");
+                return Ok(());
+            }
+            self.swarm
+                .behaviour_mut()
+                .peer_sync
+                .validate_and_add_peer_record(rec)
+                .await?;
+        } else {
+            let msg = self
+                .message_codec
+                .decode_from(&mut message.data.as_slice())
+                .await
+                .map_err(NetworkingError::CodecError)?;
+            let _ignore = self.tx_messages.send((source, msg)).await;
+        }
         Ok(())
     }
 
     fn on_mdns_event(&mut self, event: mdns::Event) -> Result<(), NetworkingError> {
         match event {
             mdns::Event::Discovered(peers_and_addrs) => {
-                let mut unique_discovered_peers = HashSet::new();
                 for (peer, addr) in peers_and_addrs {
                     info!(target: LOG_TARGET, "📡 mDNS discovered peer {} at {}", peer, addr);
-                    let route_update = self.swarm.behaviour_mut().kad.add_address(&peer, addr);
-                    debug!(target: LOG_TARGET, "🧭 kad route update: {:?}", route_update);
-                    unique_discovered_peers.insert(peer);
-                }
-                for peer in unique_discovered_peers {
-                    self.swarm.dial(peer).or_else(|err| {
-                        // Peer already has pending dial or established connection - OK
-                        if matches!(&err, DialError::DialPeerConditionFalse(_)) {
-                            Ok(())
-                        } else {
-                            Err(err)
-                        }
-                    })?;
+                    self.swarm
+                        .dial(DialOpts::peer_id(peer).addresses(vec![addr]).build())
+                        .or_else(|err| {
+                            // Peer already has pending dial or established connection - OK
+                            if matches!(&err, DialError::DialPeerConditionFalse(_)) {
+                                Ok(())
+                            } else {
+                                Err(err)
+                            }
+                        })?;
                 }
             },
             mdns::Event::Expired(addrs_list) => {
                 for (peer_id, multiaddr) in addrs_list {
                     debug!(target: LOG_TARGET, "MDNS got expired peer with ID: {peer_id:#?} and Address: {multiaddr:#?}");
-
-                    // Ensure that the peer was previously added by mDNS
-                    if self
-                        .swarm
-                        .behaviour()
-                        .mdns
-                        .as_ref()
-                        .expect("mdns is enabled")
-                        .discovered_nodes()
-                        .any(|&p| p == peer_id)
-                    {
-                        self.swarm.behaviour_mut().kad.remove_address(&peer_id, &multiaddr);
-                    }
                 }
             },
         }
@@ -701,7 +706,6 @@ where
             info!(target: LOG_TARGET, "🚨 Peer {} is using an incompatible protocol version: {}. Our version {}", peer_id, info.protocol_version, self.config.swarm.protocol_version);
             // Errors just indicate that there was no connection to the peer.
             let _ignore = self.swarm.disconnect_peer_id(peer_id);
-            self.swarm.behaviour_mut().kad.remove_peer(&peer_id);
             return Ok(());
         }
 
@@ -713,32 +717,33 @@ where
 
         let is_relay = info.protocols.iter().any(|p| *p == relay::HOP_PROTOCOL_NAME);
 
-        for address in info.listen_addrs {
-            if is_p2p_address(&address) {
-                if address.is_global_ip() {
-                    // If the peer has a p2p-circuit address, immediately upgrade to a direct connection (DCUtR /
-                    // hole-punching)
-                    if is_p2p_circuit(&address) {
-                        info!(target: LOG_TARGET, "📡 Peer {} has a p2p-circuit address. Upgrading to DCUtR", peer_id);
-                        // Ignore as connection failures are logged in events, or an error here is because the peer is
-                        // already connected/being dialled
-                        let _ignore = self
-                            .swarm
-                            .dial(DialOpts::peer_id(peer_id).addresses(vec![address.clone()]).build());
-                    } else if is_relay {
-                        // Otherwise, if the peer advertises as a relay we'll add them
-                        info!(target: LOG_TARGET, "📡 Adding peer {peer_id} {address} as a relay");
-                        self.relays.add_possible_relay(peer_id, address.clone());
-                    } else {
-                        // Nothing to do
-                    }
-                }
+        let is_connected_through_relay = self
+            .active_connections
+            .get(&peer_id)
+            .map(|conns| {
+                conns
+                    .iter()
+                    .any(|c| c.endpoint.is_dialer() && is_through_relay_address(c.endpoint.get_remote_address()))
+            })
+            .unwrap_or(false);
 
-                match self.swarm.behaviour_mut().kad.add_address(&peer_id, address) {
-                    RoutingUpdate::Success | RoutingUpdate::Pending => {},
-                    RoutingUpdate::Failed => {
-                        info!(target: LOG_TARGET, "🚨 Failed to add address to Kademlia for peer {}", peer_id);
-                    },
+        for address in info.listen_addrs {
+            if is_p2p_address(&address) && address.is_global_ip() {
+                // If the peer has a p2p-circuit address, immediately upgrade to a direct connection (DCUtR /
+                // hole-punching) if we're connected to them through a relay
+                if is_connected_through_relay {
+                    info!(target: LOG_TARGET, "📡 Peer {} has a p2p-circuit address. Upgrading to DCUtR", peer_id);
+                    // Ignore as connection failures are logged in events, or an error here is because the peer is
+                    // already connected/being dialled
+                    let _ignore = self
+                        .swarm
+                        .dial(DialOpts::peer_id(peer_id).addresses(vec![address.clone()]).build());
+                } else if is_relay && !is_through_relay_address(&address) {
+                    // Otherwise, if the peer advertises as a relay we'll add them
+                    info!(target: LOG_TARGET, "📡 Adding peer {peer_id} {address} as a relay");
+                    self.relays.add_possible_relay(peer_id, address.clone());
+                } else {
+                    // Nothing to do
                 }
             }
         }
@@ -778,9 +783,14 @@ where
         let Some(dialled_address) = relay.dialled_address.as_ref() else {
             return false;
         };
+        let circuit_addr = dialled_address.clone().with(Protocol::P2pCircuit);
 
-        match self.swarm.listen_on(dialled_address.clone().with(Protocol::P2pCircuit)) {
+        match self.swarm.listen_on(circuit_addr.clone()) {
             Ok(id) => {
+                self.swarm
+                    .behaviour_mut()
+                    .peer_sync
+                    .add_known_local_public_addresses(vec![circuit_addr]);
                 info!(target: LOG_TARGET, "🌍️ Peer {peer_id} is a relay. Listening (id={id:?}) for circuit connections");
                 let Some(relay_mut) = self.relays.selected_relay_mut() else {
                     // unreachable
@@ -812,7 +822,7 @@ where
                     debug!(target: LOG_TARGET, "No pending requests for subtream protocol {protocol} for peer {peer_id}");
                     return;
                 };
-                check_and_shrink_hashmap(&mut self.pending_substream_requests);
+                shrink_hashmap_if_required(&mut self.pending_substream_requests);
 
                 let _ignore = reply.send(Ok(NegotiatedSubstream::new(peer_id, protocol, stream)));
             },
@@ -856,8 +866,21 @@ fn is_p2p_address(address: &Multiaddr) -> bool {
     address.iter().any(|p| matches!(p, Protocol::P2p(_)))
 }
 
-fn is_p2p_circuit(address: &Multiaddr) -> bool {
-    address.iter().any(|p| matches!(p, Protocol::P2pCircuit))
+fn is_through_relay_address(address: &Multiaddr) -> bool {
+    let mut found_p2p_circuit = false;
+    for protocol in address {
+        if !found_p2p_circuit {
+            if let Protocol::P2pCircuit = protocol {
+                found_p2p_circuit = true;
+                continue;
+            }
+            continue;
+        }
+        // Once we found a p2p-circuit protocol, this is followed by /p2p/<peer_id>
+        return matches!(protocol, Protocol::P2p(_));
+    }
+
+    false
 }
 
 fn is_dial_error_caused_by_remote(err: &DialError) -> bool {
@@ -867,7 +890,7 @@ fn is_dial_error_caused_by_remote(err: &DialError) -> bool {
     )
 }
 
-fn check_and_shrink_hashmap<K, V>(map: &mut HashMap<K, V>)
+fn shrink_hashmap_if_required<K, V>(map: &mut HashMap<K, V>)
 where K: Eq + Hash {
     const HASHMAP_EXCESS_ENTRIES_SHRINK_THRESHOLD: usize = 50;
     if map.len() + HASHMAP_EXCESS_ENTRIES_SHRINK_THRESHOLD < map.capacity() {

@@ -100,6 +100,8 @@ pub async fn spawn_services(
                 ..Default::default()
             },
             reachability_mode: config.indexer.p2p.reachability_mode.into(),
+            announce: false,
+            ..Default::default()
         },
         seed_peers,
         shutdown.clone(),
