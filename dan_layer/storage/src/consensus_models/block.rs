@@ -10,14 +10,13 @@ use std::{
 
 use log::*;
 use serde::{Deserialize, Serialize};
-use tari_common_types::types::{FixedHash, FixedHashSizeError};
+use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
 use tari_dan_common_types::{
     hashing,
     optional::Optional,
     serde_with,
     shard_bucket::ShardBucket,
     Epoch,
-    NodeAddressable,
     NodeHeight,
     ShardId,
 };
@@ -48,14 +47,14 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage::consensus_models::block";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Block<TAddr> {
+pub struct Block {
     // Header
     id: BlockId,
     parent: BlockId,
-    justify: QuorumCertificate<TAddr>,
+    justify: QuorumCertificate,
     height: NodeHeight,
     epoch: Epoch,
-    proposed_by: TAddr,
+    proposed_by: PublicKey,
     total_leader_fee: u64,
 
     // Body
@@ -75,13 +74,13 @@ pub struct Block<TAddr> {
     stored_at: Option<PrimitiveDateTime>,
 }
 
-impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
+impl Block {
     pub fn new(
         parent: BlockId,
-        justify: QuorumCertificate<TAddr>,
+        justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
-        proposed_by: TAddr,
+        proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
         foreign_indexes: HashMap<ShardBucket, u64>,
@@ -110,10 +109,10 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
     pub fn load(
         id: BlockId,
         parent: BlockId,
-        justify: QuorumCertificate<TAddr>,
+        justify: QuorumCertificate,
         height: NodeHeight,
         epoch: Epoch,
-        proposed_by: TAddr,
+        proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
         is_dummy: bool,
@@ -147,7 +146,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             QuorumCertificate::genesis(),
             NodeHeight(0),
             Epoch(0),
-            TAddr::zero(),
+            PublicKey::default(),
             Default::default(),
             0,
             HashMap::new(),
@@ -162,7 +161,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
             justify: QuorumCertificate::genesis(),
             height: NodeHeight(0),
             epoch: Epoch(0),
-            proposed_by: TAddr::zero(),
+            proposed_by: PublicKey::default(),
             merkle_root: FixedHash::zero(),
             commands: Default::default(),
             total_leader_fee: 0,
@@ -176,9 +175,9 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
 
     pub fn dummy_block(
         parent: BlockId,
-        proposed_by: TAddr,
+        proposed_by: PublicKey,
         node_height: NodeHeight,
-        high_qc: QuorumCertificate<TAddr>,
+        high_qc: QuorumCertificate,
         epoch: Epoch,
     ) -> Self {
         let mut block = Self::new(
@@ -216,7 +215,7 @@ impl<TAddr: NodeAddressable + Serialize> Block<TAddr> {
     }
 }
 
-impl<TAddr> Block<TAddr> {
+impl Block {
     pub fn is_genesis(&self) -> bool {
         self.id.is_genesis()
     }
@@ -276,7 +275,7 @@ impl<TAddr> Block<TAddr> {
         &self.parent
     }
 
-    pub fn justify(&self) -> &QuorumCertificate<TAddr> {
+    pub fn justify(&self) -> &QuorumCertificate {
         &self.justify
     }
 
@@ -292,7 +291,7 @@ impl<TAddr> Block<TAddr> {
         self.total_leader_fee
     }
 
-    pub fn proposed_by(&self) -> &TAddr {
+    pub fn proposed_by(&self) -> &PublicKey {
         &self.proposed_by
     }
 
@@ -329,19 +328,16 @@ impl<TAddr> Block<TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable> Block<TAddr> {
-    pub fn get<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
-        tx: &mut TTx,
-        id: &BlockId,
-    ) -> Result<Self, StorageError> {
+impl Block {
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, id: &BlockId) -> Result<Self, StorageError> {
         tx.blocks_get(id)
     }
 
-    pub fn get_tip<TTx: StateStoreReadTransaction<Addr = TAddr>>(tx: &mut TTx) -> Result<Self, StorageError> {
+    pub fn get_tip<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<Self, StorageError> {
         tx.blocks_get_tip()
     }
 
-    pub fn get_all_blocks_between<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn get_all_blocks_between<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         start_block_id_exclusive: &BlockId,
         end_block_id_inclusive: &BlockId,
@@ -349,21 +345,15 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_get_all_between(start_block_id_exclusive, end_block_id_inclusive)
     }
 
-    pub fn exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<bool, StorageError> {
+    pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
         Self::record_exists(tx, self.id())
     }
 
-    pub fn parent_exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<bool, StorageError> {
+    pub fn parent_exists<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
         Self::record_exists(tx, self.parent())
     }
 
-    pub fn has_been_processed<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+    pub fn has_been_processed<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &mut TTx,
         block_id: &BlockId,
     ) -> Result<bool, StorageError> {
@@ -375,21 +365,18 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         Ok(is_processed)
     }
 
-    pub fn record_exists<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+    pub fn record_exists<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &mut TTx,
         block_id: &BlockId,
     ) -> Result<bool, StorageError> {
         tx.blocks_exists(block_id)
     }
 
-    pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr> + ?Sized>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<(), StorageError> {
+    pub fn insert<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.blocks_insert(self)
     }
 
-    pub fn get_paginated<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn get_paginated<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         limit: u64,
         offset: u64,
@@ -398,7 +385,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_get_paginated(limit, offset, ordering)
     }
 
-    pub fn get_count<TTx: StateStoreReadTransaction<Addr = TAddr>>(tx: &mut TTx) -> Result<i64, StorageError> {
+    pub fn get_count<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<i64, StorageError> {
         tx.blocks_get_count()
     }
 
@@ -406,8 +393,8 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
     /// otherwise false.
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut,
-        TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
+        TTx: StateStoreWriteTransaction + DerefMut,
+        TTx::Target: StateStoreReadTransaction,
     {
         let exists = self.exists(tx.deref_mut())?;
         if exists {
@@ -417,29 +404,26 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         Ok(true)
     }
 
-    pub fn commit<TTx: StateStoreWriteTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<(), StorageError> {
+    pub fn commit<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.blocks_set_flags(self.id(), Some(true), None)
     }
 
-    pub fn set_as_processed<TTx: StateStoreWriteTransaction<Addr = TAddr>>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<(), StorageError> {
+    pub fn set_as_processed<TTx: StateStoreWriteTransaction>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.blocks_set_flags(self.id(), None, Some(true))
     }
 
-    pub fn find_involved_shards<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn find_involved_shards<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
     ) -> Result<HashSet<ShardId>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
     }
 
-    pub fn max_height<TTx: StateStoreReadTransaction<Addr = TAddr>>(tx: &mut TTx) -> Result<NodeHeight, StorageError> {
+    pub fn max_height<TTx: StateStoreReadTransaction>(tx: &mut TTx) -> Result<NodeHeight, StorageError> {
         tx.blocks_max_height()
     }
 
-    pub fn extends<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn extends<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
         ancestor: &BlockId,
@@ -458,10 +442,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx.blocks_is_ancestor(self.parent(), ancestor)
     }
 
-    pub fn get_parent<TTx: StateStoreReadTransaction<Addr = TAddr>>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<Block<TAddr>, StorageError> {
+    pub fn get_parent<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         if self.id.is_genesis() {
             return Err(StorageError::NotFound {
                 item: "Block".to_string(),
@@ -471,45 +452,39 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         Block::get(tx, &self.parent)
     }
 
-    pub fn get_parent_chain<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn get_parent_chain<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
         limit: usize,
-    ) -> Result<Vec<Block<TAddr>>, StorageError> {
+    ) -> Result<Vec<Block>, StorageError> {
         tx.blocks_get_parent_chain(self.id(), limit)
     }
 
-    pub fn get_votes<TTx: StateStoreReadTransaction<Addr = TAddr>>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<Vec<Vote<TAddr>>, StorageError> {
+    pub fn get_votes<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Vec<Vote>, StorageError> {
         Vote::get_for_block(tx, &self.id)
     }
 
-    pub fn get_child_blocks<TTx: StateStoreReadTransaction<Addr = TAddr>>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<Vec<Self>, StorageError> {
+    pub fn get_child_blocks<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<Vec<Self>, StorageError> {
         tx.blocks_get_all_by_parent(self.id())
     }
 
-    pub fn get_total_due_for_epoch<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn get_total_due_for_epoch<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         epoch: Epoch,
-        validator_public_key: &TAddr,
+        validator_public_key: &PublicKey,
     ) -> Result<u64, StorageError> {
         tx.blocks_get_total_leader_fee_for_epoch(epoch, validator_public_key)
     }
 
-    pub fn get_any_with_epoch_range_for_validator<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn get_any_with_epoch_range_for_validator<TTx: StateStoreReadTransaction>(
         tx: &mut TTx,
         range: RangeInclusive<Epoch>,
-        validator_public_key: Option<&TAddr>,
+        validator_public_key: Option<&PublicKey>,
     ) -> Result<Vec<Self>, StorageError> {
         tx.blocks_get_any_with_epoch_range(range, validator_public_key)
     }
 
-    pub fn get_transactions<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn get_transactions<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
     ) -> Result<Vec<TransactionRecord>, StorageError> {
@@ -529,10 +504,10 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         Ok(found)
     }
 
-    pub fn get_substate_updates<TTx: StateStoreReadTransaction<Addr = TAddr>>(
+    pub fn get_substate_updates<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<Vec<SubstateUpdate<TAddr>>, StorageError> {
+    ) -> Result<Vec<SubstateUpdate>, StorageError> {
         let committed = self
             .commands()
             .iter()
@@ -579,13 +554,13 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
         tx: &mut TTx,
         on_lock_block: TFnOnLock,
         on_commit: TFnOnCommit,
-        locked_blocks: &mut Vec<Block<TAddr>>,
+        locked_blocks: &mut Vec<Block>,
     ) -> Result<HighQc, E>
     where
-        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
-        TTx::Target: StateStoreReadTransaction<Addr = TAddr>,
-        TFnOnLock: FnOnce(&mut TTx, &LockedBlock, &Block<TAddr>, &mut Vec<Block<TAddr>>) -> Result<(), E>,
-        TFnOnCommit: FnOnce(&mut TTx, &LastExecuted, &Block<TAddr>) -> Result<(), E>,
+        TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+        TTx::Target: StateStoreReadTransaction,
+        TFnOnLock: FnOnce(&mut TTx, &LockedBlock, &Block, &mut Vec<Block>) -> Result<(), E>,
+        TFnOnCommit: FnOnce(&mut TTx, &LastExecuted, &Block) -> Result<(), E>,
         E: From<StorageError>,
     {
         let high_qc = self.justify().update_high_qc(tx)?;
@@ -647,7 +622,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
     /// accept a proposal is the branch of m.node extends from the currently locked node lockedQC.node. On the other
     /// hand, the liveness rule is the replica will accept m if m.justify has a higher view than the current
     /// lockedQC. The predicate is true as long as either one of two rules holds.
-    pub fn is_safe<TTx: StateStoreReadTransaction<Addr = TAddr>>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
+    pub fn is_safe<TTx: StateStoreReadTransaction>(&self, tx: &mut TTx) -> Result<bool, StorageError> {
         let locked = LockedBlock::get(tx)?;
         let locked_block = locked.get_block(tx)?;
 
@@ -671,7 +646,7 @@ impl<TAddr: NodeAddressable> Block<TAddr> {
     }
 }
 
-impl<TAddr> Display for Block<TAddr> {
+impl Display for Block {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

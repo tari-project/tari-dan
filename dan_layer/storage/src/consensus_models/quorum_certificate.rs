@@ -17,7 +17,6 @@ use tari_dan_common_types::{
     optional::Optional,
     serde_with,
     Epoch,
-    NodeAddressable,
     NodeHeight,
 };
 use tari_mmr::MergedBalancedBinaryMerkleProof;
@@ -32,24 +31,24 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::storage::quorum_certificate";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct QuorumCertificate<TAddr> {
+pub struct QuorumCertificate {
     qc_id: QcId,
     block_id: BlockId,
     block_height: NodeHeight,
     epoch: Epoch,
-    signatures: Vec<ValidatorSignature<TAddr>>,
+    signatures: Vec<ValidatorSignature>,
     merged_proof: MergedValidatorNodeMerkleProof,
     #[serde(with = "serde_with::hex::vec")]
     leaf_hashes: Vec<FixedHash>,
     decision: QuorumDecision,
 }
 
-impl<TAddr: Serialize> QuorumCertificate<TAddr> {
+impl QuorumCertificate {
     pub fn new(
         block: BlockId,
         block_height: NodeHeight,
         epoch: Epoch,
-        signatures: Vec<ValidatorSignature<TAddr>>,
+        signatures: Vec<ValidatorSignature>,
         merged_proof: MergedBalancedBinaryMerkleProof<ValidatorNodeBmtHasherBlake2b>,
         mut leaf_hashes: Vec<FixedHash>,
         decision: QuorumDecision,
@@ -103,7 +102,7 @@ impl<TAddr: Serialize> QuorumCertificate<TAddr> {
     }
 }
 
-impl<TAddr> QuorumCertificate<TAddr> {
+impl QuorumCertificate {
     pub fn is_genesis(&self) -> bool {
         self.block_id.is_genesis()
     }
@@ -124,7 +123,7 @@ impl<TAddr> QuorumCertificate<TAddr> {
         &self.leaf_hashes
     }
 
-    pub fn signatures(&self) -> &[ValidatorSignature<TAddr>] {
+    pub fn signatures(&self) -> &[ValidatorSignature] {
         &self.signatures
     }
 
@@ -163,39 +162,30 @@ impl<TAddr> QuorumCertificate<TAddr> {
     }
 }
 
-impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
-    pub fn get<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
-        tx: &mut TTx,
-        qc_id: &QcId,
-    ) -> Result<Self, StorageError> {
+impl QuorumCertificate {
+    pub fn get<TTx: StateStoreReadTransaction + ?Sized>(tx: &mut TTx, qc_id: &QcId) -> Result<Self, StorageError> {
         tx.quorum_certificates_get(qc_id)
     }
 
-    pub fn get_all<'a, TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized, I: IntoIterator<Item = &'a QcId>>(
+    pub fn get_all<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a QcId>>(
         tx: &mut TTx,
         qc_ids: I,
     ) -> Result<Vec<Self>, StorageError> {
         tx.quorum_certificates_get_all(qc_ids)
     }
 
-    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<Block<TTx::Addr>, StorageError> {
+    pub fn get_block<TTx: StateStoreReadTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<Block, StorageError> {
         Block::get(tx, &self.block_id)
     }
 
-    pub fn get_by_block_id<TTx: StateStoreReadTransaction<Addr = TAddr> + ?Sized>(
+    pub fn get_by_block_id<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &mut TTx,
         block_id: &BlockId,
     ) -> Result<Self, StorageError> {
         tx.quorum_certificates_get_by_block_id(block_id)
     }
 
-    pub fn insert<TTx: StateStoreWriteTransaction<Addr = TAddr> + ?Sized>(
-        &self,
-        tx: &mut TTx,
-    ) -> Result<(), StorageError> {
+    pub fn insert<TTx: StateStoreWriteTransaction + ?Sized>(&self, tx: &mut TTx) -> Result<(), StorageError> {
         tx.quorum_certificates_insert(self)
     }
 
@@ -205,7 +195,7 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
 
     pub fn update_high_qc<TTx>(&self, tx: &mut TTx) -> Result<HighQc, StorageError>
     where
-        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
+        TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
         TTx::Target: StateStoreReadTransaction,
     {
         let mut high_qc = HighQc::get(tx.deref_mut())?;
@@ -231,7 +221,7 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
 
     pub fn save<TTx>(&self, tx: &mut TTx) -> Result<bool, StorageError>
     where
-        TTx: StateStoreWriteTransaction<Addr = TAddr> + DerefMut + ?Sized,
+        TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
         TTx::Target: StateStoreReadTransaction,
     {
         if self.exists(tx.deref_mut())? {
@@ -242,7 +232,7 @@ impl<TAddr: NodeAddressable> QuorumCertificate<TAddr> {
     }
 }
 
-impl<TAddr: Display> Display for QuorumCertificate<TAddr> {
+impl Display for QuorumCertificate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,

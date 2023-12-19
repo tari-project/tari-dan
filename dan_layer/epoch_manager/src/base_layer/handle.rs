@@ -9,13 +9,13 @@ use std::{
 use async_trait::async_trait;
 use tari_base_node_client::types::BaseLayerConsensusConstants;
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_comms::types::CommsPublicKey;
 use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::MergedValidatorNodeMerkleProof,
     shard_bucket::ShardBucket,
     Epoch,
+    NodeAddressable,
     ShardId,
 };
 use tari_dan_storage::global::models::ValidatorNode;
@@ -29,12 +29,12 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub struct EpochManagerHandle {
-    tx_request: mpsc::Sender<EpochManagerRequest>,
+pub struct EpochManagerHandle<TAddr> {
+    tx_request: mpsc::Sender<EpochManagerRequest<TAddr>>,
 }
 
-impl EpochManagerHandle {
-    pub fn new(tx_request: mpsc::Sender<EpochManagerRequest>) -> Self {
+impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
+    pub fn new(tx_request: mpsc::Sender<EpochManagerRequest<TAddr>>) -> Self {
         Self { tx_request }
     }
 
@@ -146,10 +146,7 @@ impl EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    pub async fn get_all_validator_nodes(
-        &self,
-        epoch: Epoch,
-    ) -> Result<Vec<ValidatorNode<CommsPublicKey>>, EpochManagerError> {
+    pub async fn get_all_validator_nodes(&self, epoch: Epoch) -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetValidatorNodesPerEpoch { epoch, reply: tx })
@@ -163,7 +160,7 @@ impl EpochManagerHandle {
         &self,
         epoch: Epoch,
         shards: HashSet<ShardId>,
-    ) -> Result<HashMap<ShardBucket, Committee<CommsPublicKey>>, EpochManagerError> {
+    ) -> Result<HashMap<ShardBucket, Committee<TAddr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittees {
@@ -179,8 +176,8 @@ impl EpochManagerHandle {
 }
 
 #[async_trait]
-impl EpochManagerReader for EpochManagerHandle {
-    type Addr = CommsPublicKey;
+impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
+    type Addr = TAddr;
 
     async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
@@ -241,10 +238,28 @@ impl EpochManagerReader for EpochManagerHandle {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
+    async fn get_validator_node_by_public_key(
+        &self,
+        epoch: Epoch,
+        public_key: &PublicKey,
+    ) -> Result<ValidatorNode<Self::Addr>, EpochManagerError> {
+        let (tx, rx) = oneshot::channel();
+        self.tx_request
+            .send(EpochManagerRequest::GetValidatorNodeByPublicKey {
+                epoch,
+                public_key: public_key.clone(),
+                reply: tx,
+            })
+            .await
+            .map_err(|_| EpochManagerError::SendError)?;
+
+        rx.await.map_err(|_| EpochManagerError::ReceiveError)?
+    }
+
     async fn get_many_validator_nodes(
         &self,
-        query: Vec<(Epoch, CommsPublicKey)>,
-    ) -> Result<HashMap<(Epoch, Self::Addr), ValidatorNode<Self::Addr>>, EpochManagerError> {
+        query: Vec<(Epoch, PublicKey)>,
+    ) -> Result<HashMap<(Epoch, PublicKey), ValidatorNode<Self::Addr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetManyValidatorNodes { query, reply: tx })
@@ -257,7 +272,7 @@ impl EpochManagerReader for EpochManagerHandle {
     async fn get_validator_set_merged_merkle_proof(
         &self,
         epoch: Epoch,
-        validator_set: Vec<Self::Addr>,
+        validator_set: Vec<PublicKey>,
     ) -> Result<MergedValidatorNodeMerkleProof, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request

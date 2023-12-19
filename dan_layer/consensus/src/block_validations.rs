@@ -1,14 +1,12 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::{committee::Committee, NodeAddressable};
+use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey, NodeAddressable};
 use tari_dan_storage::consensus_models::Block;
 
 use crate::{hotstuff::ProposalValidationError, traits::LeaderStrategy};
 
-pub fn check_hash_and_height<TAddr: NodeAddressable>(
-    candidate_block: &Block<TAddr>,
-) -> Result<(), ProposalValidationError> {
+pub fn check_hash_and_height(candidate_block: &Block) -> Result<(), ProposalValidationError> {
     if candidate_block.height().is_zero() || candidate_block.is_genesis() {
         return Err(ProposalValidationError::ProposingGenesisBlock {
             proposed_by: candidate_block.proposed_by().to_string(),
@@ -28,13 +26,13 @@ pub fn check_hash_and_height<TAddr: NodeAddressable>(
     Ok(())
 }
 
-pub fn check_proposed_by_leader<TAddr: NodeAddressable, TLeaderStrategy: LeaderStrategy<TAddr>>(
+pub fn check_proposed_by_leader<TAddr: DerivableFromPublicKey, TLeaderStrategy: LeaderStrategy<TAddr>>(
     leader_strategy: &TLeaderStrategy,
     local_committee: &Committee<TAddr>,
-    candidate_block: &Block<TAddr>,
+    candidate_block: &Block,
 ) -> Result<(), ProposalValidationError> {
     let leader = leader_strategy.get_leader(local_committee, candidate_block.height());
-    if leader != candidate_block.proposed_by() {
+    if !leader.eq_to_public_key(candidate_block.proposed_by()) {
         return Err(ProposalValidationError::NotLeader {
             proposed_by: candidate_block.proposed_by().to_string(),
             expected_leader: leader.to_string(),
@@ -46,7 +44,7 @@ pub fn check_proposed_by_leader<TAddr: NodeAddressable, TLeaderStrategy: LeaderS
 
 pub fn check_quorum_certificate<TAddr: NodeAddressable>(
     _local_committee: &Committee<TAddr>,
-    candidate_block: &Block<TAddr>,
+    candidate_block: &Block,
 ) -> Result<(), ProposalValidationError> {
     if candidate_block.height() < candidate_block.justify().block_height() {
         return Err(ProposalValidationError::CandidateBlockNotHigherThanJustify {

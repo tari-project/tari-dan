@@ -2,7 +2,6 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::{Queryable, QueryableByName};
-use tari_dan_common_types::NodeAddressable;
 use tari_dan_storage::{consensus_models, StorageError};
 use time::PrimitiveDateTime;
 
@@ -17,7 +16,7 @@ pub struct QuorumCertificate {
     pub created_at: PrimitiveDateTime,
 }
 
-impl<TAddr: NodeAddressable> TryFrom<QuorumCertificate> for consensus_models::QuorumCertificate<TAddr> {
+impl TryFrom<QuorumCertificate> for consensus_models::QuorumCertificate {
     type Error = StorageError;
 
     fn try_from(value: QuorumCertificate) -> Result<Self, Self::Error> {

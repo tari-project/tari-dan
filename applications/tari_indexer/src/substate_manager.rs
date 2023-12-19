@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_crypto::tari_utilities::message_format::MessageFormat;
 use tari_dan_app_utilities::substate_file_cache::SubstateFileCache;
+use tari_dan_common_types::PeerAddress;
 use tari_engine_types::{
     events::Event,
     substate::{Substate, SubstateAddress},
@@ -43,7 +44,7 @@ use tari_template_lib::{
     prelude::{ComponentAddress, Metadata},
 };
 use tari_transaction::TransactionId;
-use tari_validator_node_rpc::client::{SubstateResult, TariCommsValidatorNodeClientFactory};
+use tari_validator_node_rpc::client::{SubstateResult, TariValidatorNodeRpcClientFactory};
 
 use crate::substate_storage_sqlite::{
     models::{events::NewEvent, non_fungible_index::NewNonFungibleIndex, substate::NewSubstate},
@@ -80,14 +81,15 @@ pub struct EventResponse {
 }
 
 pub struct SubstateManager {
-    substate_scanner: Arc<SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>>,
+    substate_scanner:
+        Arc<SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>>,
     substate_store: SqliteSubstateStore,
 }
 
 impl SubstateManager {
     pub fn new(
         dan_layer_scanner: Arc<
-            SubstateScanner<EpochManagerHandle, TariCommsValidatorNodeClientFactory, SubstateFileCache>,
+            SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, SubstateFileCache>,
         >,
         substate_store: SqliteSubstateStore,
     ) -> Self {

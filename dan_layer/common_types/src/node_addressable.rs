@@ -8,15 +8,15 @@ use std::{
 
 use serde::{de::DeserializeOwned, Serialize};
 use tari_common_types::types::PublicKey;
-use tari_crypto::tari_utilities::ByteArray;
 
 pub trait NodeAddressable:
     Eq + Hash + Clone + Debug + Ord + Send + Sync + Display + Serialize + DeserializeOwned
 {
     fn zero() -> Self;
-    fn as_bytes(&self) -> &[u8];
 
-    fn from_bytes(bytes: &[u8]) -> Option<Self>;
+    fn try_from_public_key(_: &PublicKey) -> Option<Self> {
+        None
+    }
 }
 
 impl NodeAddressable for String {
@@ -24,12 +24,8 @@ impl NodeAddressable for String {
         "".to_string()
     }
 
-    fn as_bytes(&self) -> &[u8] {
-        self.as_bytes()
-    }
-
-    fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        String::from_utf8(bytes.to_vec()).ok()
+    fn try_from_public_key(_: &PublicKey) -> Option<Self> {
+        None
     }
 }
 
@@ -38,11 +34,20 @@ impl NodeAddressable for PublicKey {
         PublicKey::default()
     }
 
-    fn as_bytes(&self) -> &[u8] {
-        <PublicKey as ByteArray>::as_bytes(self)
-    }
-
-    fn from_bytes(bytes: &[u8]) -> Option<Self> {
-        ByteArray::from_canonical_bytes(bytes).ok()
+    fn try_from_public_key(public_key: &PublicKey) -> Option<Self> {
+        Some(public_key.clone())
     }
 }
+
+pub trait DerivableFromPublicKey: NodeAddressable {
+    fn derive_from_public_key(public_key: &PublicKey) -> Self {
+        Self::try_from_public_key(public_key)
+            .expect("Marker trait DerivableFromPublicKey must always return Some from try_from_public_key")
+    }
+
+    fn eq_to_public_key(&self, public_key: &PublicKey) -> bool {
+        *self == Self::derive_from_public_key(public_key)
+    }
+}
+
+impl DerivableFromPublicKey for PublicKey {}

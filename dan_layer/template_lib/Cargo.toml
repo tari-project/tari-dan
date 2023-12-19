@@ -1,25 +1,31 @@
 [package]
 name = "tari_template_lib"
-version = "0.2.0"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "Tari template library provides abstrations that interface with the Tari validator engine"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_template_abi = { version="0.1.0", path = "../template_abi" }
-tari_template_macros = { version="0.1.0", path = "../template_macros", optional = true }
-tari_bor = { version="0.1.0", path = "../tari_bor", default-features = false }
+tari_template_abi = { workspace = true }
+tari_template_macros = { workspace = true, optional = true }
+tari_bor = { workspace = true, default-features = false }
 
-newtype-ops = "0.1.4"
-serde = { version = "1.0", default-features = false, features = ["derive", "alloc"] }
-serde-byte-array = "0.1.2"
+newtype-ops = { workspace = true }
+serde = { workspace = true, default-features = false, features = ["derive", "alloc"] }
+serde-byte-array = { workspace = true }
 
 [dev-dependencies]
-serde_json = "1.0"
+serde_json = { workspace = true }
 
 [features]
 default = ["macro", "std"]
 macro = ["tari_template_macros"]
 std = ["serde/std", "tari_bor/std"]
+
+[package.metadata.cargo-machete]
+ignored = [
+    # Used but not detectable by machete
+    "serde-byte-array",
+]

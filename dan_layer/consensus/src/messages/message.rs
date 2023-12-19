@@ -6,30 +6,23 @@ use std::fmt::Display;
 use serde::Serialize;
 use tari_dan_common_types::Epoch;
 
-use super::{
-    NewViewMessage,
-    ProposalMessage,
-    RequestMissingForeignBlocksMessage,
-    RequestedTransactionMessage,
-    VoteMessage,
-};
+use super::{NewViewMessage, ProposalMessage, RequestedTransactionMessage, VoteMessage};
 use crate::messages::{RequestMissingTransactionsMessage, SyncRequestMessage, SyncResponseMessage};
 
 // Serialize is implemented for the message logger
 #[derive(Debug, Clone, Serialize)]
-pub enum HotstuffMessage<TAddr> {
-    NewView(NewViewMessage<TAddr>),
-    Proposal(ProposalMessage<TAddr>),
-    ForeignProposal(ProposalMessage<TAddr>),
-    Vote(VoteMessage<TAddr>),
+pub enum HotstuffMessage {
+    NewView(NewViewMessage),
+    Proposal(ProposalMessage),
+    ForeignProposal(ProposalMessage),
+    Vote(VoteMessage),
     RequestMissingTransactions(RequestMissingTransactionsMessage),
     RequestedTransaction(RequestedTransactionMessage),
     SyncRequest(SyncRequestMessage),
-    SyncResponse(SyncResponseMessage<TAddr>),
-    RequestMissingForeignBlocks(RequestMissingForeignBlocksMessage),
+    SyncResponse(SyncResponseMessage),
 }
 
-impl<TAddr> HotstuffMessage<TAddr> {
+impl HotstuffMessage {
     pub fn as_type_str(&self) -> &'static str {
         match self {
             HotstuffMessage::NewView(_) => "NewView",
@@ -40,7 +33,6 @@ impl<TAddr> HotstuffMessage<TAddr> {
             HotstuffMessage::RequestedTransaction(_) => "RequestedTransaction",
             HotstuffMessage::SyncRequest(_) => "SyncRequest",
             HotstuffMessage::SyncResponse(_) => "SyncResponse",
-            HotstuffMessage::RequestMissingForeignBlocks(_) => "RequestMissingForeignBlocks",
         }
     }
 
@@ -54,11 +46,10 @@ impl<TAddr> HotstuffMessage<TAddr> {
             Self::RequestedTransaction(msg) => msg.epoch,
             Self::SyncRequest(msg) => msg.epoch,
             Self::SyncResponse(msg) => msg.epoch,
-            Self::RequestMissingForeignBlocks(msg) => msg.epoch,
         }
     }
 
-    pub fn proposal(&self) -> Option<&ProposalMessage<TAddr>> {
+    pub fn proposal(&self) -> Option<&ProposalMessage> {
         match self {
             Self::Proposal(msg) => Some(msg),
             _ => None,
@@ -66,7 +57,7 @@ impl<TAddr> HotstuffMessage<TAddr> {
     }
 }
 
-impl<TAddr> Display for HotstuffMessage<TAddr> {
+impl Display for HotstuffMessage {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             HotstuffMessage::NewView(msg) => write!(f, "NewView({})", msg.new_height),
@@ -79,9 +70,6 @@ impl<TAddr> Display for HotstuffMessage<TAddr> {
             HotstuffMessage::RequestedTransaction(msg) => write!(f, "RequestedTransaction({})", msg.transactions.len()),
             HotstuffMessage::SyncRequest(msg) => write!(f, "SyncRequest({})", msg.high_qc),
             HotstuffMessage::SyncResponse(msg) => write!(f, "SyncResponse({} block(s))", msg.blocks.len()),
-            HotstuffMessage::RequestMissingForeignBlocks(msg) => {
-                write!(f, "RequestMissingForeignBlocks({}..{})", msg.from, msg.to)
-            },
         }
     }
 }

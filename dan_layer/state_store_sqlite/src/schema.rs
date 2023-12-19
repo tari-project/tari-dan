@@ -59,16 +59,6 @@ diesel::table! {
 }
 
 diesel::table! {
-    blocks_foreign_id_mapping (id) {
-        id -> Integer,
-        foreign_bucket -> BigInt,
-        foreign_index -> BigInt,
-        block_id -> Text,
-        created_at -> Timestamp,
-    }
-}
-
-diesel::table! {
     last_executed (id) {
         id -> Integer,
         block_id -> Text,
@@ -288,7 +278,6 @@ diesel::table! {
 
 diesel::allow_tables_to_appear_in_same_query!(
     blocks,
-    blocks_foreign_id_mapping,
     high_qcs,
     last_executed,
     last_proposed,

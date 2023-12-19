@@ -316,6 +316,7 @@ pub struct TransferRequest {
     pub resource_address: ResourceAddress,
     pub destination_public_key: PublicKey,
     pub max_fee: Option<Amount>,
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -375,6 +376,7 @@ pub struct ConfidentialTransferRequest {
     pub resource_address: ResourceAddress,
     pub destination_public_key: PublicKey,
     pub max_fee: Option<Amount>,
+    pub dry_run: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

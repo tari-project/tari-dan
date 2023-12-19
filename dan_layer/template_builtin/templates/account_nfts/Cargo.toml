@@ -5,7 +5,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tari_template_abi = { path = "../../../template_abi" }
 tari_template_lib = { path = "../../../template_lib" }
 
 [profile.release]

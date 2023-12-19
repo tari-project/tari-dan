@@ -5,6 +5,6 @@ use serde::Serialize;
 use tari_dan_storage::consensus_models::Block;
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ProposalMessage<TAddr> {
-    pub block: Block<TAddr>,
+pub struct ProposalMessage {
+    pub block: Block,
 }

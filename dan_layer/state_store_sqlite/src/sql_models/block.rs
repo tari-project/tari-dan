@@ -2,9 +2,10 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use diesel::{Queryable, QueryableByName};
-use serde::Serialize;
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{Epoch, NodeHeight};
 use tari_dan_storage::{consensus_models, StorageError};
+use tari_utilities::byte_array::ByteArray;
 use time::PrimitiveDateTime;
 
 use crate::{
@@ -33,20 +34,19 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn try_convert<TAddr: NodeAddressable + Serialize>(
-        self,
-        qc: sql_models::QuorumCertificate,
-    ) -> Result<consensus_models::Block<TAddr>, StorageError> {
+    pub fn try_convert(self, qc: sql_models::QuorumCertificate) -> Result<consensus_models::Block, StorageError> {
         Ok(consensus_models::Block::load(
             deserialize_hex_try_from(&self.block_id)?,
             deserialize_hex_try_from(&self.parent_block_id)?,
             qc.try_into()?,
             NodeHeight(self.height as u64),
             Epoch(self.epoch as u64),
-            TAddr::from_bytes(&deserialize_hex(&self.proposed_by)?).ok_or_else(|| StorageError::DecodingError {
-                operation: "try_convert",
-                item: "block",
-                details: format!("Block #{} proposed_by is malformed", self.id),
+            PublicKey::from_canonical_bytes(&deserialize_hex(&self.proposed_by)?).map_err(|_| {
+                StorageError::DecodingError {
+                    operation: "try_convert",
+                    item: "block",
+                    details: format!("Block #{} proposed_by is malformed", self.id),
+                }
             })?,
             deserialize_json(&self.commands)?,
             self.total_leader_fee as u64,
@@ -75,7 +75,7 @@ pub struct ParkedBlock {
     pub created_at: PrimitiveDateTime,
 }
 
-impl<TAddr: NodeAddressable> TryFrom<ParkedBlock> for consensus_models::Block<TAddr> {
+impl TryFrom<ParkedBlock> for consensus_models::Block {
     type Error = StorageError;
 
     fn try_from(value: ParkedBlock) -> Result<Self, Self::Error> {
@@ -85,10 +85,12 @@ impl<TAddr: NodeAddressable> TryFrom<ParkedBlock> for consensus_models::Block<TA
             deserialize_json(&value.justify)?,
             NodeHeight(value.height as u64),
             Epoch(value.epoch as u64),
-            TAddr::from_bytes(&deserialize_hex(&value.proposed_by)?).ok_or_else(|| StorageError::DecodingError {
-                operation: "try_convert",
-                item: "block",
-                details: format!("Block #{} proposed_by is malformed", value.id),
+            PublicKey::from_canonical_bytes(&deserialize_hex(&value.proposed_by)?).map_err(|_| {
+                StorageError::DecodingError {
+                    operation: "try_convert",
+                    item: "block",
+                    details: format!("Block #{} proposed_by is malformed", value.id),
+                }
             })?,
             deserialize_json(&value.commands)?,
             value.total_leader_fee as u64,

@@ -23,7 +23,7 @@ impl<TStateStore: StateStore> StateManager<TStateStore> for TariStateManager {
     fn commit_transaction(
         &self,
         tx: &mut TStateStore::WriteTransaction<'_>,
-        block: &Block<TStateStore::Addr>,
+        block: &Block,
         transaction: &ExecutedTransaction,
         local_committee_shard: &CommitteeShard,
     ) -> Result<(), Self::Error> {

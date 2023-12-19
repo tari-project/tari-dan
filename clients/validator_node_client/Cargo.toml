@@ -1,24 +1,21 @@
 [package]
 name = "tari_validator_node_client"
-version = "0.2.0"
-edition = "2021"
-authors = ["The Tari Development Community"]
 description = "Tari validator node client library"
-repository = "https://github.com/tari-project/tari-dan"
-license = "BSD-3-Clause"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+repository.workspace = true
+license.workspace = true
 
 [dependencies]
-tari_dan_common_types = { path = "../../dan_layer/common_types" }
-tari_engine_types = { path = "../../dan_layer/engine_types" }
-tari_common_types = { git = "https://github.com/tari-project/tari.git", branch = "feature-dan2" }
-tari_comms_logging = { path = "../../comms/tari_comms_logging" }
-tari_transaction = { path = "../../dan_layer/transaction" }
-tari_dan_storage = { path = "../../dan_layer/storage" }
+tari_dan_common_types = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_common_types = { workspace = true }
+tari_transaction = { workspace = true }
+tari_dan_storage = { workspace = true }
 
-reqwest = { version = "0.11.11", features = ["json"] }
-multiaddr = "0.14"
-serde = "1.0"
-serde_json = "1.0"
-thiserror = "1.0"
+reqwest = { workspace = true, features = ["json"] }
+multiaddr = { workspace = true }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

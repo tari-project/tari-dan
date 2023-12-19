@@ -27,6 +27,7 @@ use std::{
 };
 
 use config::Config;
+use libp2p::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_common::{
     configuration::{serializers, CommonConfig, Network},
@@ -34,10 +35,11 @@ use tari_common::{
     DefaultConfigLoader,
     SubConfigPath,
 };
-use tari_comms::multiaddr::Multiaddr;
 use tari_crypto::ristretto::RistrettoPublicKey;
-use tari_dan_app_utilities::template_manager::implementation::TemplateConfig;
-use tari_p2p::{P2pConfig, PeerSeedsConfig};
+use tari_dan_app_utilities::{
+    config::{P2pConfig, PeerSeedsConfig, RpcConfig},
+    template_manager::implementation::TemplateConfig,
+};
 
 #[derive(Debug, Clone)]
 pub struct ApplicationConfig {
@@ -68,10 +70,8 @@ pub struct ValidatorNodeConfig {
     pub shard_key_file: PathBuf,
     /// A path to the file that stores your node identity and secret key
     pub identity_file: PathBuf,
-    /// A path to the file that stores the tor hidden service private key, if using the tor transport
-    pub tor_identity_file: PathBuf,
-    /// The node's publicly-accessible hostname
-    pub public_address: Option<Multiaddr>,
+    //// The node's publicly-accessible hostname
+    // pub public_address: Option<Multiaddr>,
     /// The Tari base node's GRPC address
     pub base_node_grpc_address: Option<String>,
     /// The Tari console wallet's GRPC address
@@ -85,6 +85,8 @@ pub struct ValidatorNodeConfig {
     pub data_dir: PathBuf,
     /// The p2p configuration settings
     pub p2p: P2pConfig,
+    /// P2P RPC configuration
+    pub rpc: RpcConfig,
     /// GRPC address of the validator node  application
     pub grpc_address: Option<Multiaddr>,
     /// JSON-RPC address of the validator node  application
@@ -118,35 +120,25 @@ impl ValidatorNodeConfig {
         if !self.identity_file.is_absolute() {
             self.identity_file = base_path.as_ref().join(&self.identity_file);
         }
-        if !self.tor_identity_file.is_absolute() {
-            self.tor_identity_file = base_path.as_ref().join(&self.tor_identity_file);
-        }
         if !self.data_dir.is_absolute() {
             self.data_dir = base_path.as_ref().join(&self.data_dir);
         }
-        self.p2p.set_base_path(base_path);
     }
 }
 
 impl Default for ValidatorNodeConfig {
     fn default() -> Self {
-        let p2p = P2pConfig {
-            datastore_path: PathBuf::from("data/peer_db"),
-            ..Default::default()
-        };
-
         Self {
             override_from: None,
             shard_key_file: PathBuf::from("shard_key.json"),
             identity_file: PathBuf::from("validator_node_id.json"),
-            tor_identity_file: PathBuf::from("validator_node_tor_id.json"),
-            public_address: None,
             base_node_grpc_address: None,
             wallet_grpc_address: None,
             scan_base_layer: true,
             base_layer_scanning_interval: Duration::from_secs(10),
             data_dir: PathBuf::from("data/validator_node"),
-            p2p,
+            p2p: P2pConfig::default(),
+            rpc: RpcConfig::default(),
             grpc_address: Some("/ip4/127.0.0.1/tcp/18144".parse().unwrap()),
             json_rpc_address: Some("127.0.0.1:18200".parse().unwrap()),
             ui_connect_address: None,

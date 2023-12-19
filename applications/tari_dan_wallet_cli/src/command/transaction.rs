@@ -332,6 +332,7 @@ pub async fn handle_send(args: SendArgs, client: &mut WalletDaemonClient) -> Res
             resource_address,
             destination_public_key,
             max_fee: fee,
+            dry_run: false,
         })
         .await?;
 
@@ -365,6 +366,7 @@ pub async fn handle_confidential_transfer(
             resource_address: resource_address.unwrap_or(CONFIDENTIAL_TARI_RESOURCE_ADDRESS),
             destination_public_key,
             max_fee: common.max_fee.map(|f| f.try_into()).transpose()?,
+            dry_run: false,
         })
         .await?;
 

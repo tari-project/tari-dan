@@ -23,12 +23,11 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::info;
-use tari_comms::types::CommsPublicKey;
 use tari_dan_app_utilities::{
     template_manager::implementation::TemplateManager,
     transaction_executor::{TariDanTransactionProcessor, TransactionExecutor},
 };
-use tari_dan_common_types::{optional::IsNotFoundError, Epoch, ShardId};
+use tari_dan_common_types::{Epoch, PeerAddress, ShardId};
 use tari_dan_engine::{
     bootstrap_state,
     fees::FeeTable,
@@ -40,40 +39,43 @@ use tari_engine_types::{
     substate::{Substate, SubstateAddress},
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
-use tari_epoch_manager::EpochManagerReader;
+use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_lib::{
     substate_cache::SubstateCache,
     substate_scanner::SubstateScanner,
     transaction_autofiller::TransactionAutofiller,
 };
 use tari_transaction::{SubstateRequirement, Transaction};
-use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
+use tari_validator_node_rpc::client::{
+    SubstateResult,
+    TariValidatorNodeRpcClientFactory,
+    ValidatorNodeClientFactory,
+    ValidatorNodeRpcClient,
+};
 use tokio::task;
 
 use crate::dry_run::error::DryRunTransactionProcessorError;
 
 const LOG_TARGET: &str = "tari::indexer::dry_run_transaction_processor";
 
-pub struct DryRunTransactionProcessor<TEpochManager, TClientFactory, TSubstateCache> {
-    epoch_manager: TEpochManager,
-    client_provider: TClientFactory,
-    transaction_autofiller: TransactionAutofiller<TEpochManager, TClientFactory, TSubstateCache>,
-    template_manager: TemplateManager,
+pub struct DryRunTransactionProcessor<TSubstateCache> {
+    epoch_manager: EpochManagerHandle<PeerAddress>,
+    client_provider: TariValidatorNodeRpcClientFactory,
+    transaction_autofiller:
+        TransactionAutofiller<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>,
+    template_manager: TemplateManager<PeerAddress>,
 }
 
-impl<TEpochManager, TClientFactory, TSubstateCache>
-    DryRunTransactionProcessor<TEpochManager, TClientFactory, TSubstateCache>
-where
-    TEpochManager: EpochManagerReader<Addr = CommsPublicKey> + 'static,
-    TClientFactory: ValidatorNodeClientFactory<Addr = CommsPublicKey> + 'static,
-    <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError,
-    TSubstateCache: SubstateCache + 'static,
+impl<TSubstateCache> DryRunTransactionProcessor<TSubstateCache>
+where TSubstateCache: SubstateCache + 'static
 {
     pub fn new(
-        epoch_manager: TEpochManager,
-        client_provider: TClientFactory,
-        substate_scanner: Arc<SubstateScanner<TEpochManager, TClientFactory, TSubstateCache>>,
-        template_manager: TemplateManager,
+        epoch_manager: EpochManagerHandle<PeerAddress>,
+        client_provider: TariValidatorNodeRpcClientFactory,
+        substate_scanner: Arc<
+            SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>,
+        >,
+        template_manager: TemplateManager<PeerAddress>,
     ) -> Self {
         let transaction_autofiller = TransactionAutofiller::new(substate_scanner);
 
@@ -115,7 +117,10 @@ where
         Ok(result.into_result())
     }
 
-    fn build_payload_processor(&self, transaction: &Transaction) -> TariDanTransactionProcessor<TemplateManager> {
+    fn build_payload_processor(
+        &self,
+        transaction: &Transaction,
+    ) -> TariDanTransactionProcessor<TemplateManager<PeerAddress>> {
         // simulate fees if the transaction requires it
         let fee_table = if Self::transaction_includes_fees(transaction) {
             // TODO: should match the VN fee table, should the fee table values be a consensus constant?
@@ -167,9 +172,9 @@ where
         let mut nexist_count = 0;
         let mut err_count = 0;
 
-        for vn_public_key in &committee {
+        for vn_addr in committee.addresses() {
             // build a client with the VN
-            let mut client = self.client_provider.create_client(vn_public_key);
+            let mut client = self.client_provider.create_client(vn_addr);
 
             match client.get_substate(shard_id).await {
                 Ok(SubstateResult::Up { substate, address, .. }) => {
@@ -199,7 +204,7 @@ where
             epoch,
             nexist_count,
             err_count,
-            committee_size: committee.members().len(),
+            committee_size: committee.members().count(),
         })
     }
 

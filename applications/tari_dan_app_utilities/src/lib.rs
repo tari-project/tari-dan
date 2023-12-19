@@ -21,7 +21,10 @@
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 pub mod base_layer_scanner;
+pub mod config;
 pub mod consensus_constants;
+pub mod keypair;
+pub mod seed_peer;
 pub mod substate_file_cache;
 pub mod template_manager;
 pub mod transaction_executor;

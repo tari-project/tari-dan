@@ -20,15 +20,17 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::{committee::Committee, NodeAddressable, NodeHeight};
+use tari_common_types::types::PublicKey;
+use tari_dan_common_types::{committee::Committee, NodeHeight};
 
-pub trait LeaderStrategy<TAddr: NodeAddressable> {
+pub trait LeaderStrategy<TAddr> {
     fn calculate_leader(&self, committee: &Committee<TAddr>, height: NodeHeight) -> u32;
 
-    fn is_leader(&self, validator_addr: &TAddr, committee: &Committee<TAddr>, height: NodeHeight) -> bool {
+    fn is_leader(&self, validator_addr: &TAddr, committee: &Committee<TAddr>, height: NodeHeight) -> bool
+    where TAddr: PartialEq {
         let position = self.calculate_leader(committee, height);
-        if let Some(vn) = committee.members.get(position as usize) {
-            vn == validator_addr
+        if let Some((addr, _)) = committee.members.get(position as usize) {
+            addr == validator_addr
         } else {
             false
         }
@@ -40,13 +42,23 @@ pub trait LeaderStrategy<TAddr: NodeAddressable> {
         committee: &Committee<TAddr>,
         // block: &BlockId,
         height: NodeHeight,
-    ) -> bool {
+    ) -> bool
+    where
+        TAddr: PartialEq,
+    {
         self.is_leader(validator_addr, committee, height + NodeHeight(1))
     }
 
     fn get_leader<'b>(&self, committee: &'b Committee<TAddr>, height: NodeHeight) -> &'b TAddr {
         let index = self.calculate_leader(committee, height);
-        committee.members.get(index as usize).unwrap()
+        let (addr, _) = committee.members.get(index as usize).unwrap();
+        addr
+    }
+
+    fn get_leader_public_key<'b>(&self, committee: &'b Committee<TAddr>, height: NodeHeight) -> &'b PublicKey {
+        let index = self.calculate_leader(committee, height);
+        let (_, public_key) = committee.members.get(index as usize).unwrap();
+        public_key
     }
 
     fn get_leader_for_next_block<'b>(&self, committee: &'b Committee<TAddr>, height: NodeHeight) -> &'b TAddr {

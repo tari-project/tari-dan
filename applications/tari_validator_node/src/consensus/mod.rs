@@ -1,10 +1,6 @@
 //    Copyright 2023 The Tari Project
 //    SPDX-License-Identifier: BSD-3-Clause
 
-use std::sync::Arc;
-
-use tari_common_types::types::PublicKey;
-use tari_comms::{types::CommsPublicKey, NodeIdentity};
 use tari_comms_rpc_state_sync::CommsRpcStateSyncManager;
 use tari_consensus::{
     hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker},
@@ -17,7 +13,7 @@ use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
-use tari_validator_node_rpc::client::TariCommsValidatorNodeClientFactory;
+use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{
     sync::{broadcast, mpsc, watch},
     task::JoinHandle,
@@ -31,7 +27,6 @@ use crate::{
         state_manager::TariStateManager,
     },
     event_subscription::EventSubscription,
-    p2p::services::messaging::OutboundMessaging,
 };
 
 mod handle;
@@ -41,15 +36,20 @@ mod spec;
 mod state_manager;
 
 pub use handle::*;
+use sqlite_message_logger::SqliteMessageLogger;
+use tari_dan_app_utilities::keypair::RistrettoKeypair;
+use tari_dan_common_types::PeerAddress;
+
+use crate::p2p::services::message_dispatcher::OutboundMessaging;
 
 pub async fn spawn(
-    store: SqliteStateStore<PublicKey>,
-    node_identity: Arc<NodeIdentity>,
-    epoch_manager: EpochManagerHandle,
+    store: SqliteStateStore<PeerAddress>,
+    keypair: RistrettoKeypair,
+    epoch_manager: EpochManagerHandle<PeerAddress>,
     rx_new_transactions: mpsc::Receiver<TransactionId>,
-    rx_hs_message: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<PublicKey>)>,
-    outbound_messaging: OutboundMessaging,
-    client_factory: TariCommsValidatorNodeClientFactory,
+    rx_hs_message: mpsc::Receiver<(PeerAddress, HotstuffMessage)>,
+    outbound_messaging: OutboundMessaging<PeerAddress, SqliteMessageLogger>,
+    client_factory: TariValidatorNodeRpcClientFactory,
     foreign_receive_counter: ForeignReceiveCounters,
     shutdown_signal: ShutdownSignal,
 ) -> (
@@ -61,8 +61,8 @@ pub async fn spawn(
     let (tx_leader, rx_leader) = mpsc::channel(10);
     let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
-    let validator_addr = node_identity.public_key().clone();
-    let signing_service = TariSignatureService::new(node_identity);
+    let validator_addr = PeerAddress::from(keypair.public_key().clone());
+    let signing_service = TariSignatureService::new(keypair);
     let leader_strategy = RoundRobinLeaderStrategy::new();
     let transaction_pool = TransactionPool::new();
     let state_manager = TariStateManager::new();
@@ -111,9 +111,9 @@ pub async fn spawn(
 }
 
 struct ConsensusMessageWorker {
-    rx_broadcast: mpsc::Receiver<(Committee<CommsPublicKey>, HotstuffMessage<CommsPublicKey>)>,
-    rx_leader: mpsc::Receiver<(CommsPublicKey, HotstuffMessage<CommsPublicKey>)>,
-    outbound_messaging: OutboundMessaging,
+    rx_broadcast: mpsc::Receiver<(Committee<PeerAddress>, HotstuffMessage)>,
+    rx_leader: mpsc::Receiver<(PeerAddress, HotstuffMessage)>,
+    outbound_messaging: OutboundMessaging<PeerAddress, SqliteMessageLogger>,
 }
 
 impl ConsensusMessageWorker {
