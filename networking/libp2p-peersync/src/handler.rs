@@ -5,14 +5,14 @@ use std::{
     collections::VecDeque,
     convert::Infallible,
     future::{ready, Ready},
-    io,
+    sync::Arc,
     task::{Context, Poll},
-    time::Duration,
 };
 
+use async_semaphore::{Semaphore, SemaphoreGuardArc};
 use libp2p::{
     core::UpgradeInfo,
-    futures::{channel::mpsc, FutureExt, SinkExt, StreamExt},
+    futures::FutureExt,
     swarm::{
         handler::{
             ConnectionEvent,
@@ -34,65 +34,75 @@ use libp2p::{
 };
 
 use crate::{
-    codec::Codec,
+    behaviour::WantList,
     error::Error,
     event::Event,
-    stream::MessageStream,
+    inbound_task::inbound_sync_task,
+    outbound_task::outbound_sync_task,
+    proto,
+    store::PeerStore,
     Config,
-    MessageId,
     EMPTY_QUEUE_SHRINK_THRESHOLD,
+    MAX_MESSAGE_SIZE,
 };
 
-pub struct Handler<TCodec: Codec> {
+pub(crate) type Framed<In, Out = In> = asynchronous_codec::Framed<Stream, quick_protobuf_codec::Codec<In, Out>>;
+pub(crate) type FramedOutbound = Framed<proto::WantPeers, proto::WantPeerResponse>;
+pub(crate) type FramedInbound = Framed<proto::WantPeerResponse, proto::WantPeers>;
+
+pub struct Handler<TStore> {
     peer_id: PeerId,
     protocol: StreamProtocol,
-    requested_stream: Option<MessageStream<TCodec::Message>>,
-    pending_stream: Option<MessageStream<TCodec::Message>>,
-    pending_events: VecDeque<Event<TCodec::Message>>,
-    pending_events_sender: mpsc::Sender<Event<TCodec::Message>>,
-    pending_events_receiver: mpsc::Receiver<Event<TCodec::Message>>,
-    codec: TCodec,
-    tasks: futures_bounded::FuturesSet<Event<TCodec::Message>>,
+    must_request_substream: bool,
+    is_complete: bool,
+    failed_attempts: usize,
+    current_want_list: Arc<WantList>,
+    pending_events: VecDeque<Event>,
+    tasks: futures_bounded::FuturesSet<Event>,
+    config: Config,
+    store: TStore,
+    semaphore: Arc<Semaphore>,
+    aquired: Option<SemaphoreGuardArc>,
 }
 
-impl<TCodec: Codec> Handler<TCodec> {
-    pub fn new(peer_id: PeerId, protocol: StreamProtocol, config: &Config) -> Self {
-        let (pending_events_sender, pending_events_receiver) = mpsc::channel(10);
+impl<TStore: PeerStore> Handler<TStore> {
+    pub fn new(
+        peer_id: PeerId,
+        store: TStore,
+        protocol: StreamProtocol,
+        config: &Config,
+        want_list: WantList,
+        semaphore: Arc<Semaphore>,
+    ) -> Self {
         Self {
+            store,
             peer_id,
             protocol,
-            requested_stream: None,
-            pending_stream: None,
+            is_complete: false,
+            failed_attempts: 0,
+            current_want_list: Arc::new(want_list),
             pending_events: VecDeque::new(),
-            codec: TCodec::default(),
-            pending_events_sender,
-            pending_events_receiver,
-            tasks: futures_bounded::FuturesSet::new(
-                Duration::from_secs(10000 * 24 * 60 * 60),
-                config.max_concurrent_streams_per_peer,
-            ),
+            must_request_substream: true,
+            tasks: futures_bounded::FuturesSet::new(config.sync_timeout, config.max_concurrent_streams),
+            config: Default::default(),
+            semaphore,
+            aquired: None,
         }
     }
 }
 
-impl<TCodec> Handler<TCodec>
-where TCodec: Codec + Send + Clone + 'static
+impl<TStore> Handler<TStore>
+where TStore: PeerStore
 {
     fn on_listen_upgrade_error(&self, error: ListenUpgradeError<(), Protocol<StreamProtocol>>) {
         tracing::warn!("unexpected listen upgrade error: {:?}", error.error);
     }
 
     fn on_dial_upgrade_error(&mut self, error: DialUpgradeError<(), Protocol<StreamProtocol>>) {
-        let stream = self
-            .requested_stream
-            .take()
-            .expect("negotiated a stream without a requested stream");
-
         match error.error {
             StreamUpgradeError::Timeout => {
                 self.pending_events.push_back(Event::OutboundFailure {
                     peer_id: self.peer_id,
-                    stream_id: stream.stream_id(),
                     error: Error::DialUpgradeError,
                 });
             },
@@ -104,113 +114,60 @@ where TCodec: Codec + Send + Clone + 'static
                 // the remote peer does not support the requested protocol(s).
                 self.pending_events.push_back(Event::OutboundFailure {
                     peer_id: self.peer_id,
-                    stream_id: stream.stream_id(),
                     error: Error::ProtocolNotSupported,
                 });
             },
             StreamUpgradeError::Apply(_) => {},
             StreamUpgradeError::Io(e) => {
-                tracing::debug!(
-                    "outbound stream for request {} failed: {e}, retrying",
-                    stream.stream_id()
-                );
-                self.requested_stream = Some(stream);
+                tracing::debug!("outbound stream for request failed: {e}, retrying",);
+                self.must_request_substream = true;
             },
         }
     }
 
     fn on_fully_negotiated_outbound(&mut self, outbound: FullyNegotiatedOutbound<Protocol<StreamProtocol>, ()>) {
-        let mut codec = self.codec.clone();
-        let (mut peer_stream, _protocol) = outbound.protocol;
-
-        let mut msg_stream = self
-            .requested_stream
-            .take()
-            .expect("negotiated outbound stream without a requested stream");
-
-        let mut events = self.pending_events_sender.clone();
-
-        self.pending_events.push_back(Event::OutboundStreamOpened {
-            peer_id: self.peer_id,
-            stream_id: msg_stream.stream_id(),
-        });
-
-        let fut = async move {
-            let mut message_id = MessageId::default();
-            let stream_id = msg_stream.stream_id();
-            let peer_id = *msg_stream.peer_id();
-            loop {
-                let Some(msg) = msg_stream.recv().await else {
-                    break Event::StreamClosed { peer_id, stream_id };
-                };
-
-                match codec.encode_to(&mut peer_stream, msg).await {
-                    Ok(()) => {
-                        events
-                            .send(Event::MessageSent { message_id, stream_id })
-                            .await
-                            .expect("Can never be closed because receiver is held in this instance");
-                    },
-                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                        break Event::StreamClosed { peer_id, stream_id };
-                    },
-                    Err(e) => break Event::Error(Error::CodecError(e)),
-                }
-                message_id = message_id.wrapping_add(1);
-            }
+        if self.current_want_list.is_empty() {
+            tracing::debug!("No peers wanted, ignoring outbound stream");
+            return;
         }
-        .boxed();
+        let (stream, _protocol) = outbound.protocol;
+        let framed = new_framed_codec(stream, MAX_MESSAGE_SIZE);
+        let store = self.store.clone();
+        if self.current_want_list.is_empty() {
+            tracing::debug!("No peers wanted, ignoring outbound stream");
+            return;
+        }
+
+        let fut = outbound_sync_task(self.peer_id, framed, store, self.current_want_list.clone()).boxed();
 
         if self.tasks.try_push(fut).is_err() {
-            tracing::warn!("Dropping outbound stream because we are at capacity")
+            tracing::warn!("Dropping outbound peer sync because we are at capacity")
         }
     }
 
     fn on_fully_negotiated_inbound(&mut self, inbound: FullyNegotiatedInbound<Protocol<StreamProtocol>, ()>) {
-        let mut codec = self.codec.clone();
-        let peer_id = self.peer_id;
-        let (mut stream, _protocol) = inbound.protocol;
-        let mut events = self.pending_events_sender.clone();
+        let (stream, _protocol) = inbound.protocol;
+        let config = self.config.clone();
+        let framed = new_framed_codec(stream, MAX_MESSAGE_SIZE);
+        let store = self.store.clone();
 
-        self.pending_events.push_back(Event::InboundStreamOpened { peer_id });
-
-        let fut = async move {
-            loop {
-                match codec.decode_from(&mut stream).await {
-                    Ok(msg) => {
-                        events
-                            .send(Event::ReceivedMessage { peer_id, message: msg })
-                            .await
-                            .expect("Can never be closed because receiver is held in this instance");
-                        // TODO
-                        // Event::ReceivedMessage { peer_id, message }
-                    },
-                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                        break Event::InboundStreamClosed { peer_id };
-                    },
-                    Err(e) => {
-                        break Event::Error(Error::CodecError(e));
-                    },
-                }
-            }
-        }
-        .boxed();
+        let fut = inbound_sync_task(self.peer_id, framed, store, config).boxed();
 
         if self.tasks.try_push(fut).is_err() {
-            tracing::warn!("Dropping inbound stream because we are at capacity")
+            tracing::warn!("Dropping inbound peer sync because we are at capacity")
         }
     }
 }
 
-impl<TCodec> ConnectionHandler for Handler<TCodec>
-where TCodec: Codec + Send + Clone + 'static
+impl<TStore> ConnectionHandler for Handler<TStore>
+where TStore: PeerStore
 {
-    type FromBehaviour = MessageStream<TCodec::Message>;
+    type FromBehaviour = Arc<WantList>;
     type InboundOpenInfo = ();
     type InboundProtocol = Protocol<StreamProtocol>;
     type OutboundOpenInfo = ();
     type OutboundProtocol = Protocol<StreamProtocol>;
-    type ToBehaviour = Event<TCodec::Message>;
+    type ToBehaviour = Event;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         SubstreamProtocol::new(
@@ -225,8 +182,31 @@ where TCodec: Codec + Send + Clone + 'static
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::ToBehaviour>> {
+        // Work on the tasks
         match self.tasks.poll_unpin(cx) {
             Poll::Ready(Ok(event)) => {
+                match event {
+                    // Anything happens with the outbound stream, we're done
+                    Event::OutboundFailure { .. } | Event::Error(_) | Event::OutboundStreamInterrupted { .. } => {
+                        // Release the semaphore, and retry. If we've retried too many times, give up.
+                        self.aquired = None;
+                        self.failed_attempts += 1;
+                        if self.failed_attempts > self.config.max_failure_retries {
+                            self.is_complete = true;
+                            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(Event::Error(
+                                Error::MaxFailedAttemptsReached,
+                            )));
+                        } else {
+                            self.must_request_substream = true;
+                        }
+                    },
+                    Event::PeerBatchReceived { .. } => {
+                        // We're done, release the semaphore
+                        self.aquired = None;
+                        self.is_complete = true;
+                    },
+                    _ => {},
+                }
                 return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
             },
             Poll::Ready(Err(err)) => {
@@ -245,30 +225,55 @@ where TCodec: Codec + Send + Clone + 'static
             self.pending_events.shrink_to_fit();
         }
 
-        // Emit pending events produced by handler tasks
-        if let Poll::Ready(Some(event)) = self.pending_events_receiver.poll_next_unpin(cx) {
-            return Poll::Ready(ConnectionHandlerEvent::NotifyBehaviour(event));
+        // If we've synced from the peer already, there's nothing further to do except release the semaphore lock
+        if self.is_complete {
+            return Poll::Pending;
         }
 
-        // Open outbound stream.
-        if let Some(stream) = self.pending_stream.take() {
-            self.requested_stream = Some(stream);
+        // If we do not want any peers, there's nothing further to do
+        if self.current_want_list.is_empty() {
+            tracing::debug!(
+                "peer-sync[{}]: No peers wanted, waiting until peers are wanted",
+                self.peer_id
+            );
+            return Poll::Pending;
+        }
+        tracing::debug!(
+            "peer-sync[{}]: Want {} peers",
+            self.peer_id,
+            self.current_want_list.len()
+        );
 
+        // Otherwise, wait until another sync is complete
+        if self.aquired.is_none() {
+            match self.semaphore.try_acquire_arc() {
+                Some(guard) => {
+                    self.aquired = Some(guard);
+                },
+                None => {
+                    return Poll::Pending;
+                },
+            }
+        }
+
+        tracing::debug!("peer-sync[{}]: Acquired semaphore", self.peer_id);
+
+        // Our turn, open the substream
+        if self.must_request_substream {
+            let protocol = self.protocol.clone();
+            self.must_request_substream = false;
+
+            tracing::debug!("peer-sync[{}]: Requesting substream open", self.peer_id);
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(
-                    Protocol {
-                        protocol: self.protocol.clone(),
-                    },
-                    (),
-                ),
+                protocol: SubstreamProtocol::new(Protocol { protocol }, ()),
             });
         }
 
         Poll::Pending
     }
 
-    fn on_behaviour_event(&mut self, stream: Self::FromBehaviour) {
-        self.pending_stream = Some(stream);
+    fn on_behaviour_event(&mut self, want_list: Self::FromBehaviour) {
+        self.current_want_list = want_list;
     }
 
     fn on_connection_event(
@@ -333,4 +338,11 @@ where P: AsRef<str> + Clone
     fn upgrade_outbound(self, io: Stream, protocol: Self::Info) -> Self::Future {
         ready(Ok((io, protocol)))
     }
+}
+
+fn new_framed_codec<In: quick_protobuf::MessageWrite, Out: for<'a> quick_protobuf::MessageRead<'a>>(
+    stream: Stream,
+    max_message_length: usize,
+) -> Framed<In, Out> {
+    asynchronous_codec::Framed::new(stream, quick_protobuf_codec::Codec::<In, Out>::new(max_message_length))
 }

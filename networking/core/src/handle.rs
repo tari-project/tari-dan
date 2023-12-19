@@ -98,6 +98,7 @@ pub enum NetworkingRequest<TMsg> {
     GetLocalPeerInfo {
         reply_tx: oneshot::Sender<Result<PeerInfo, NetworkingError>>,
     },
+    SetWantPeers(HashSet<PeerId>),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -371,6 +372,18 @@ impl<TMsg: Send + 'static> NetworkingService<TMsg> for NetworkingHandle<TMsg> {
             .await
             .map_err(|_| NetworkingHandleError::ServiceHasShutdown)?;
         rx.await?
+    }
+
+    async fn set_want_peers<I: IntoIterator<Item = PeerId> + Send>(
+        &self,
+        want_peers: I,
+    ) -> Result<(), NetworkingError> {
+        let want_peers = want_peers.into_iter().collect();
+        self.tx_request
+            .send(NetworkingRequest::SetWantPeers(want_peers))
+            .await
+            .map_err(|_| NetworkingHandleError::ServiceHasShutdown)?;
+        Ok(())
     }
 }
 
