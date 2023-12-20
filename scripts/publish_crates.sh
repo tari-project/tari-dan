@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # NB: The order these are listed in is IMPORTANT! Dependencies must go first
 
+#dan_layer/tari_bor
+#dan_layer/template_abi
+#dan_layer/template_macros
+#dan_layer/template_lib
+
 packages=${@:-'
 dan_layer/tari_bor
 dan_layer/template_abi
