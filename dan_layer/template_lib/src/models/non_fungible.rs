@@ -340,6 +340,7 @@ impl Display for ParseNonFungibleIdError {
 }
 
 /// All the types of errors that can occur when parsing a non-fungible addresses
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseNonFungibleAddressError {
     InvalidFormat,
