@@ -1,3 +1,4 @@
+# NOTE: When editing this version, also edit the versions in template_built_in/templates/account and account_nft
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
@@ -141,8 +142,8 @@ bytes = "1.5"
 cacache = "12.0.0"
 cargo_metadata = "0.15.3"
 cargo_toml = "0.11.5"
-ciborium = { version="0.2.1", default-features = false }
-ciborium-io = { version="0.2.1", default-features = false }
+ciborium = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
+ciborium-io = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
 clap = "3.2.25"
 chacha20poly1305 = "0.10.1"
 chrono = "0.4.24"
