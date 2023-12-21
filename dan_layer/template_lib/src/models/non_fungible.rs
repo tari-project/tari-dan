@@ -253,7 +253,7 @@ impl FromStr for NonFungibleAddress {
                     let resource_addr = ResourceAddress::from_str(resource_str)
                         .map_err(|e| ParseNonFungibleAddressError::InvalidResource(e.to_string()))?;
                     let id = NonFungibleId::try_from_canonical_string(id_str)
-                        .map_err(|e| ParseNonFungibleAddressError::InvalidId(e))?;
+                        .map_err(ParseNonFungibleAddressError::InvalidId)?;
                     Ok(NonFungibleAddress::new(resource_addr, id))
                 },
                 _ => Err(ParseNonFungibleAddressError::InvalidFormat),
