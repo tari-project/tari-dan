@@ -5,7 +5,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{
     call_engine,
-    rust::{fmt, fmt::Display, write},
+    rust::{fmt, fmt::Display, str::FromStr, write},
     EngineOp,
 };
 
@@ -242,6 +242,27 @@ impl NonFungibleAddress {
     }
 }
 
+impl FromStr for NonFungibleAddress {
+    type Err = ParseNonFungibleAddressError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // the expected format is "resource_xxxx nft_xxxxx"
+        match s.split_once(' ') {
+            Some((resource_str, addr_str)) => match addr_str.split_once('_') {
+                Some(("nft", id_str)) => {
+                    let resource_addr = ResourceAddress::from_str(resource_str)
+                        .map_err(|e| ParseNonFungibleAddressError::InvalidResource(e.to_string()))?;
+                    let id = NonFungibleId::try_from_canonical_string(id_str)
+                        .map_err(|e| ParseNonFungibleAddressError::InvalidId(e))?;
+                    Ok(NonFungibleAddress::new(resource_addr, id))
+                },
+                _ => Err(ParseNonFungibleAddressError::InvalidFormat),
+            },
+            None => Err(ParseNonFungibleAddressError::InvalidFormat),
+        }
+    }
+}
+
 impl From<NonFungibleAddressContents> for NonFungibleAddress {
     fn from(contents: NonFungibleAddressContents) -> Self {
         Self(BorTag::new(contents))
@@ -310,6 +331,26 @@ pub enum ParseNonFungibleIdError {
     InvalidUuid,
     InvalidUint32,
     InvalidUint64,
+}
+
+impl Display for ParseNonFungibleIdError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+/// All the types of errors that can occur when parsing a non-fungible addresses
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseNonFungibleAddressError {
+    InvalidFormat,
+    InvalidResource(String),
+    InvalidId(ParseNonFungibleIdError),
+}
+
+impl Display for ParseNonFungibleAddressError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 #[cfg(test)]
@@ -442,6 +483,42 @@ mod tests {
             // Deserialize from CBOR
             let r = tari_bor::decode::<NonFungibleAddress>(&cbor).unwrap();
             assert_eq!(r, v);
+        }
+    }
+
+    mod non_fungible_address_string {
+        use super::*;
+
+        #[test]
+        fn it_parses_valid_strings() {
+            NonFungibleAddress::from_str(
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nft_str:SpecialNft",
+            )
+            .unwrap();
+            NonFungibleAddress::from_str(
+                "resource_a7cf4fd18ada7f367b1c102a9c158abc3754491665033231c5eb907fa14dfe2b \
+                 nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32",
+            )
+            .unwrap();
+        }
+
+        #[test]
+        fn it_rejects_invalid_strings() {
+            NonFungibleAddress::from_str(
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nft_xxxxx:SpecialNft",
+            )
+            .unwrap_err();
+            NonFungibleAddress::from_str("nft_uuid:7f19c3fe5fa13ff66a0d379fe5f9e3508acbd338db6bedd7350d8d565b2c5d32")
+                .unwrap_err();
+            NonFungibleAddress::from_str("resource_x nft_str:SpecialNft").unwrap_err();
+            NonFungibleAddress::from_str(
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nft_str:",
+            )
+            .unwrap_err();
+            NonFungibleAddress::from_str(
+                "resource_7cbfe29101c24924b1b6ccefbfff98986d648622272ae24f7585dab55ff1ff64 nftx_str:SpecialNft",
+            )
+            .unwrap_err();
         }
     }
 }

@@ -31,7 +31,6 @@ use tari_template_lib::{
     models::{
         ComponentAddress,
         NonFungibleAddress,
-        NonFungibleId,
         NonFungibleIndexAddress,
         ResourceAddress,
         UnclaimedConfidentialOutputAddress,
@@ -296,12 +295,10 @@ impl FromStr for SubstateAddress {
                 match addr.split_once(' ') {
                     Some((resource_str, addr)) => match addr.split_once('_') {
                         // resource_xxxx nft_xxxxx
-                        Some(("nft", addr)) => {
-                            let resource_addr = ResourceAddress::from_hex(resource_str)
-                                .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                            let id = NonFungibleId::try_from_canonical_string(addr)
-                                .map_err(|_| InvalidSubstateAddressFormat(s.to_string()))?;
-                            Ok(SubstateAddress::NonFungible(NonFungibleAddress::new(resource_addr, id)))
+                        Some(("nft", _)) => {
+                            let nft_address = NonFungibleAddress::from_str(s)
+                                .map_err(|e| InvalidSubstateAddressFormat(e.to_string()))?;
+                            Ok(SubstateAddress::NonFungible(nft_address))
                         },
                         // resource_xxxx index_
                         Some(("index", index_str)) => {
