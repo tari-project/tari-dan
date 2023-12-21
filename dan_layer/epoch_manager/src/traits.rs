@@ -79,6 +79,8 @@ pub trait EpochManagerReader: Send + Sync {
         Ok(results)
     }
 
+    async fn get_validator_node_merkle_root(&self, epoch: Epoch) -> Result<Vec<u8>, EpochManagerError>;
+
     async fn get_validator_set_merged_merkle_proof(
         &self,
         epoch: Epoch,

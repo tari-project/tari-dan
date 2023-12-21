@@ -1,13 +1,10 @@
 //   Copyright 2022 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use blake2::{
-    digest::{consts::U32, Digest},
-    Blake2b,
-};
+use blake2::{digest::consts::U32, Blake2b};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey, Signature};
-use tari_crypto::tari_utilities::ByteArray;
+use tari_core::{consensus::DomainSeparatedConsensusHasher, transactions::TransactionHashDomain};
 
 use crate::ShardId;
 
@@ -29,9 +26,9 @@ impl ValidatorMetadata {
 }
 
 pub fn vn_node_hash(public_key: &PublicKey, shard_id: &ShardId) -> FixedHash {
-    Blake2b::<U32>::new()
-        .chain_update(public_key.as_bytes())
-        .chain_update(shard_id.as_bytes())
+    DomainSeparatedConsensusHasher::<TransactionHashDomain, Blake2b<U32>>::new("validator_node")
+        .chain(public_key)
+        .chain(&shard_id.0)
         .finalize()
         .into()
 }

@@ -155,6 +155,12 @@ impl EpochManagerReader for TestEpochManager {
         Ok(self.inner.lock().await.committees.len() as u32)
     }
 
+    async fn get_validator_node_merkle_root(&self, _epoch: Epoch) -> Result<Vec<u8>, EpochManagerError> {
+        let leaves = vec![];
+        let tree = ValidatorNodeBalancedMerkleTree::create(leaves);
+        Ok(tree.get_merkle_root())
+    }
+
     async fn get_validator_set_merged_merkle_proof(
         &self,
         _epoch: Epoch,

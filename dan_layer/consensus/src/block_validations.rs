@@ -1,10 +1,14 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey, NodeAddressable};
+use tari_dan_common_types::{committee::Committee, DerivableFromPublicKey};
 use tari_dan_storage::consensus_models::Block;
+use tari_epoch_manager::EpochManagerReader;
 
-use crate::{hotstuff::ProposalValidationError, traits::LeaderStrategy};
+use crate::{
+    hotstuff::{HotStuffError, ProposalValidationError},
+    traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
+};
 
 pub fn check_hash_and_height(candidate_block: &Block) -> Result<(), ProposalValidationError> {
     if candidate_block.height().is_zero() || candidate_block.is_genesis() {
@@ -66,17 +70,54 @@ pub fn check_signature(candidate_block: &Block) -> Result<(), ProposalValidation
     Ok(())
 }
 
-pub fn check_quorum_certificate<TAddr: NodeAddressable>(
-    _local_committee: &Committee<TAddr>,
+pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     candidate_block: &Block,
-) -> Result<(), ProposalValidationError> {
+    vote_signing_service: &TConsensusSpec::VoteSignatureService,
+    epoch_manager: &TConsensusSpec::EpochManager,
+) -> Result<(), HotStuffError> {
+    if candidate_block.justify().epoch().as_u64() == 0 {
+        // Ignore genesis block.
+        return Ok(());
+    }
     if candidate_block.height() < candidate_block.justify().block_height() {
         return Err(ProposalValidationError::CandidateBlockNotHigherThanJustify {
             justify_block_height: candidate_block.justify().block_height(),
             candidate_block_height: candidate_block.height(),
-        });
+        }
+        .into());
     }
-    // TODO: validate QC
+    let mut vns = vec![];
+    for signature in candidate_block.justify().signatures() {
+        let vn = epoch_manager
+            .get_validator_node_by_public_key(candidate_block.justify().epoch(), signature.public_key())
+            .await?;
+        vns.push(vn.node_hash());
+    }
+    let merkle_root = epoch_manager
+        .get_validator_node_merkle_root(candidate_block.justify().epoch())
+        .await?;
+    let qc = candidate_block.justify();
+    let proof = qc.merged_proof().clone();
+    if !proof.verify_consume(&merkle_root, vns.iter().map(|hash| hash.to_vec()).collect())? {
+        return Err(ProposalValidationError::QCisNotValid { qc: qc.clone() }.into());
+    }
 
+    let mut votes_for_decision = 0;
+    for (sign, leaf) in qc.signatures().iter().zip(vns.iter()) {
+        let challenge = vote_signing_service.create_challenge(leaf, qc.block_id(), &qc.decision());
+        // The verify can fail if the signature is not valid or if the challenge is for opposite decision. We
+        // don't care if it's not valid. We count the valid ones and they need to reach the
+        // quorum.
+        if sign.verify(challenge) {
+            votes_for_decision += 1;
+        }
+    }
+    let committee_shard = epoch_manager
+        .get_committee_shard_by_validator_public_key(candidate_block.epoch(), candidate_block.proposed_by())
+        .await?;
+
+    if committee_shard.quorum_threshold() > votes_for_decision {
+        return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
+    }
     Ok(())
 }
