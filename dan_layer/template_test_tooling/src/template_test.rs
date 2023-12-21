@@ -26,9 +26,9 @@ use tari_dan_engine::{
         AtomicDb,
         StateWriter,
     },
-    template::{LoadedTemplate, TemplateModuleLoader},
+    template::LoadedTemplate,
     transaction::{TransactionError, TransactionProcessor},
-    wasm::{LoadedWasmTemplate, WasmModule},
+    wasm::LoadedWasmTemplate,
 };
 use tari_engine_types::{
     commit_result::{ExecuteResult, RejectReason},
@@ -39,7 +39,7 @@ use tari_engine_types::{
     vault::Vault,
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
-use tari_template_builtin::{get_template_builtin, ACCOUNT_TEMPLATE_ADDRESS};
+use tari_template_builtin::{ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args,
     args::Arg,
@@ -74,12 +74,15 @@ pub struct TemplateTest {
 impl TemplateTest {
     pub fn new<I: IntoIterator<Item = P>, P: AsRef<Path>>(template_paths: I) -> Self {
         let mut builder = Package::builder();
-        // Add Account template builtin
-        let wasm = get_template_builtin(&ACCOUNT_TEMPLATE_ADDRESS);
-        let template = WasmModule::from_code(wasm.to_vec()).load_template().unwrap();
-        builder.add_loaded_template(*ACCOUNT_TEMPLATE_ADDRESS, template);
 
+        // Add builtin templates
+        builder.add_builtin_template(&ACCOUNT_TEMPLATE_ADDRESS);
+        builder.add_builtin_template(&ACCOUNT_NFT_TEMPLATE_ADDRESS);
+
+        // Add the faucet template for fungible tokens
         builder.add_template(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/faucet"));
+
+        // Add all of the templates specified in the argument
         for path in template_paths {
             builder.add_template(path);
         }
