@@ -286,7 +286,7 @@ impl TestNetworkWorker {
         log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.addresses().join(", "));
         for vn in to.addresses() {
             if let Some(hotstuff_filter) = &self.hotstuff_filter {
-                if !hotstuff_filter(&from, &vn, &msg) {
+                if !hotstuff_filter(&from, vn, &msg) {
                     self.num_filtered_messages
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     continue;
