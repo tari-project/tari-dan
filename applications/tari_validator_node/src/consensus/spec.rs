@@ -20,8 +20,8 @@ impl ConsensusSpec for TariConsensusSpec {
     type Addr = PeerAddress;
     type EpochManager = EpochManagerHandle<Self::Addr>;
     type LeaderStrategy = RoundRobinLeaderStrategy;
+    type SignatureService = TariSignatureService;
     type StateManager = TariStateManager;
     type StateStore = SqliteStateStore<Self::Addr>;
     type SyncManager = CommsRpcStateSyncManager<Self::EpochManager, Self::StateStore>;
-    type VoteSignatureService = TariSignatureService;
 }

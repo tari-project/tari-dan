@@ -35,7 +35,7 @@ use super::common::CommitteeAndMessage;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, proposer},
     messages::{HotstuffMessage, ProposalMessage},
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, ValidatorSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
@@ -44,6 +44,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
+    signing_service: TConsensusSpec::SignatureService,
     tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
 }
 
@@ -54,12 +55,14 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
+        signing_service: TConsensusSpec::SignatureService,
         tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
     ) -> Self {
         Self {
             store,
             epoch_manager,
             transaction_pool,
+            signing_service,
             tx_broadcast,
         }
     }
@@ -269,7 +272,7 @@ where TConsensusSpec: ConsensusSpec
             .map(|bucket| (*bucket, foreign_counters.increment_counter(*bucket)))
             .collect();
 
-        let next_block = Block::new(
+        let mut next_block = Block::new(
             *parent_block.block_id(),
             high_qc,
             parent_block.height() + NodeHeight(1),
@@ -278,7 +281,11 @@ where TConsensusSpec: ConsensusSpec
             commands,
             total_leader_fee,
             foreign_indexes,
+            None,
         );
+
+        let signature = self.signing_service.sign(next_block.id());
+        next_block.set_signature(signature);
 
         Ok(next_block)
     }

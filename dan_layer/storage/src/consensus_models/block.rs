@@ -23,7 +23,7 @@ use tari_dan_common_types::{
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
 
-use super::{ForeignProposal, QuorumCertificate};
+use super::{ForeignProposal, QuorumCertificate, ValidatorSchnorrSignature};
 use crate::{
     consensus_models::{
         Command,
@@ -72,6 +72,8 @@ pub struct Block {
     foreign_indexes: HashMap<ShardBucket, u64>,
     /// Timestamp when was this stored.
     stored_at: Option<PrimitiveDateTime>,
+    /// Signature of block by the proposer.
+    signature: Option<ValidatorSchnorrSignature>,
 }
 
 impl Block {
@@ -84,6 +86,7 @@ impl Block {
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
         foreign_indexes: HashMap<ShardBucket, u64>,
+        signature: Option<ValidatorSchnorrSignature>,
     ) -> Self {
         let mut block = Self {
             id: BlockId::genesis(),
@@ -101,6 +104,7 @@ impl Block {
             is_committed: false,
             foreign_indexes,
             stored_at: None,
+            signature,
         };
         block.id = block.calculate_hash().into();
         block
@@ -119,6 +123,7 @@ impl Block {
         is_processed: bool,
         is_committed: bool,
         foreign_indexes: HashMap<ShardBucket, u64>,
+        signature: Option<ValidatorSchnorrSignature>,
         created_at: PrimitiveDateTime,
     ) -> Self {
         Self {
@@ -137,6 +142,7 @@ impl Block {
             is_committed,
             foreign_indexes,
             stored_at: Some(created_at),
+            signature,
         }
     }
 
@@ -150,6 +156,7 @@ impl Block {
             Default::default(),
             0,
             HashMap::new(),
+            None,
         )
     }
 
@@ -170,6 +177,7 @@ impl Block {
             is_committed: true,
             foreign_indexes: HashMap::new(),
             stored_at: None,
+            signature: None,
         }
     }
 
@@ -189,6 +197,7 @@ impl Block {
             Default::default(),
             0,
             HashMap::new(),
+            None,
         );
         block.is_dummy = true;
         block.is_processed = false;
@@ -325,6 +334,14 @@ impl Block {
 
     pub fn get_foreign_indexes(&self) -> &HashMap<ShardBucket, u64> {
         &self.foreign_indexes
+    }
+
+    pub fn get_signature(&self) -> Option<&ValidatorSchnorrSignature> {
+        self.signature.as_ref()
+    }
+
+    pub fn set_signature(&mut self, signature: ValidatorSchnorrSignature) {
+        self.signature = Some(signature);
     }
 }
 

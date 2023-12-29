@@ -50,6 +50,7 @@ message Block {
   repeated Command commands = 8;
   uint64 total_leader_fee = 9;
   bytes foreign_indexes = 10;
+  tari.dan.common.Signature signature = 11;
 }
 
 message Command {

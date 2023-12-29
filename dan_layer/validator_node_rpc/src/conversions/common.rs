@@ -43,8 +43,8 @@ impl<H: DomainSeparation> TryFrom<proto::common::Signature> for SchnorrSignature
     }
 }
 
-impl<H: DomainSeparation> From<SchnorrSignature<PublicKey, PrivateKey, H>> for proto::common::Signature {
-    fn from(sig: SchnorrSignature<PublicKey, PrivateKey, H>) -> Self {
+impl<H: DomainSeparation> From<&SchnorrSignature<PublicKey, PrivateKey, H>> for proto::common::Signature {
+    fn from(sig: &SchnorrSignature<PublicKey, PrivateKey, H>) -> Self {
         Self {
             public_nonce: sig.get_public_nonce().to_vec(),
             signature: sig.get_signature().to_vec(),

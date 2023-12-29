@@ -16,6 +16,7 @@ diesel::table! {
         is_processed -> Bool,
         is_dummy -> Bool,
         foreign_indexes -> Text,
+        signature -> Nullable<Text>,
         created_at -> Timestamp,
     }
 }
@@ -149,6 +150,7 @@ diesel::table! {
         commands -> Text,
         total_leader_fee -> BigInt,
         foreign_indexes -> Text,
+        signature -> Nullable<Text>,
         created_at -> Timestamp,
     }
 }
