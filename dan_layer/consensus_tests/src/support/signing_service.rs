@@ -4,7 +4,7 @@
 use rand::rngs::OsRng;
 use tari_common_types::types::{FixedHash, PrivateKey, PublicKey};
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
-use tari_crypto::keys::{PublicKey as _, SecretKey};
+use tari_crypto::keys::SecretKey;
 use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSchnorrSignature, ValidatorSignature};
 
 use super::TestAddress;
