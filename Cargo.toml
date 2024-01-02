@@ -1,3 +1,4 @@
+# NOTE: When editing this version, also edit the versions in template_built_in/templates/account and account_nft
 [workspace.package]
 version = "0.3.0"
 edition = "2021"
@@ -53,6 +54,8 @@ members = [
 resolver = "2"
 
 [workspace.dependencies]
+# version numbers are required for deploying to crates.io. Hopefully we can work out a way of
+# specifying them in a single place and having them applied to all crates
 
 # internal dependencies among workspace crates
 libp2p-messaging = { path = "networking/libp2p-messaging"}
@@ -62,7 +65,7 @@ proto_builder = { path = "networking/proto_builder" }
 sqlite_message_logger = { path = "networking/sqlite_message_logger" }
 tari_base_node_client = { path = "clients/base_node_client" }
 # avoid including default features so each crate can choose which ones to import
-tari_bor = { path = "dan_layer/tari_bor", default-features = false }
+tari_bor = { version = "0.3.0", path = "dan_layer/tari_bor", default-features = false }
 tari_comms_rpc_state_sync = { path = "dan_layer/comms_rpc_state_sync" }
 tari_consensus = { path = "dan_layer/consensus" }
 tari_dan_app_utilities = { path = "applications/tari_dan_app_utilities" }
@@ -84,10 +87,10 @@ tari_rpc_framework = { path = "networking/rpc_framework" }
 tari_rpc_macros = { path = "networking/rpc_macros" }
 tari_state_store_sqlite = { path = "dan_layer/state_store_sqlite" }
 tari_swarm = { path = "networking/swarm" }
-tari_template_abi = { path = "dan_layer/template_abi" }
+tari_template_abi = { version="0.3.0", path = "dan_layer/template_abi" }
 tari_template_builtin = { path = "dan_layer/template_builtin" }
 tari_template_lib = { path = "dan_layer/template_lib" }
-tari_template_macros = { path = "dan_layer/template_macros" }
+tari_template_macros = { version="0.3.0", path = "dan_layer/template_macros" }
 tari_template_test_tooling = { path = "dan_layer/template_test_tooling" }
 tari_transaction = { path = "dan_layer/transaction" }
 tari_transaction_manifest = { path = "dan_layer/transaction_manifest" }
@@ -139,7 +142,6 @@ bytes = "1.5"
 cacache = "12.0.0"
 cargo_metadata = "0.15.3"
 cargo_toml = "0.11.5"
-# git rev: include fix from https://github.com/enarx/ciborium/pull/80
 ciborium = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
 ciborium-io = { git = "https://github.com/enarx/ciborium.git", rev = "114614d2a61102eb2321c68e53799d1e6f087aef", default-features = false }
 clap = "3.2.25"

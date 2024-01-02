@@ -21,7 +21,7 @@ pub fn read_transactions<R: Read + Seek + Send + 'static>(
         while remaining > 0 {
             let mut len_bytes = [0u8; 2];
             reader.read_exact(&mut len_bytes).unwrap();
-            let len = u64::try_from(u16::from_le_bytes(len_bytes)).unwrap();
+            let len = u64::from(u16::from_le_bytes(len_bytes));
 
             if skip_remaining > 0 {
                 skip_remaining -= 1;

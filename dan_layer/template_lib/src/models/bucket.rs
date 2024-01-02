@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use tari_bor::BorTag;
 use tari_template_abi::{call_engine, rust::fmt, EngineOp};
 
+use super::NonFungibleId;
 use crate::{
     args::{BucketAction, BucketInvokeArg, BucketRef, InvokeResult},
     models::{Amount, BinaryTag, ConfidentialWithdrawProof, Proof, ResourceAddress},
@@ -174,5 +175,17 @@ impl Bucket {
         });
 
         resp.decode().expect("Bucket CreateProof returned invalid proof")
+    }
+
+    /// Returns the IDs of all the non-fungibles in this bucket
+    pub fn get_non_fungible_ids(&self) -> Vec<NonFungibleId> {
+        let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
+            bucket_ref: BucketRef::Ref(self.id),
+            action: BucketAction::GetNonFungibleIds,
+            args: invoke_args![],
+        });
+
+        resp.decode()
+            .expect("get_non_fungible_ids returned invalid non fungible ids")
     }
 }

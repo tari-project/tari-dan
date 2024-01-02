@@ -1229,6 +1229,19 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     Ok(InvokeResult::encode(&proof_id)?)
                 })
             },
+            BucketAction::GetNonFungibleIds => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "GetNonFungibleIds bucket action requires a bucket id".to_string(),
+                })?;
+                args.assert_no_args("Bucket::GetNonFungibleIds")?;
+
+                self.tracker.write_with(|state| {
+                    let bucket = state.get_bucket(bucket_id)?;
+                    let non_fungible_ids = bucket.non_fungible_ids().iter().collect::<Vec<_>>();
+                    Ok(InvokeResult::encode(&non_fungible_ids)?)
+                })
+            },
         }
     }
 
