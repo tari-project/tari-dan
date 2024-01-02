@@ -170,6 +170,7 @@ where
 fn get_message_id(message: &gossipsub::Message) -> gossipsub::MessageId {
     let mut hasher = DefaultHasher::new();
     hasher.write(&message.data);
+    hasher.write(message.topic.as_str().as_bytes());
     gossipsub::MessageId::from(hasher.finish().to_be_bytes())
 }
 
