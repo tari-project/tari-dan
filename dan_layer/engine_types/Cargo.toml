@@ -16,7 +16,7 @@ tari_template_lib = { workspace = true }
 tari_utilities = { workspace = true }
 
 borsh = { workspace = true }
-# if we set this version in the workspace it would break other crates
+# if we set this version in the workspace it would break other crates
 base64 = "0.21.0"
 blake2 = { workspace = true }
 rand = { workspace = true }
@@ -26,7 +26,6 @@ lazy_static = { workspace = true }
 serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-
 
 [features]
 default = ["debugging"]
