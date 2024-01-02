@@ -83,7 +83,7 @@ impl ValidatorBuilder {
         let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
-        let signing_service = TestVoteSignatureService::new(self.public_key.clone());
+        let signing_service = TestVoteSignatureService::new(self.public_key.clone(), self.address.clone());
         let transaction_pool = TransactionPool::new();
         let noop_state_manager = NoopStateManager::new();
         let (tx_events, _) = broadcast::channel(100);

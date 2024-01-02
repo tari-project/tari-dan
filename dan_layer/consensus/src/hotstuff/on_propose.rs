@@ -265,8 +265,6 @@ where TConsensusSpec: ConsensusSpec
             local_committee_shard.bucket(),
         )?;
 
-        // let mut foreign_indexes = HashMap::new();
-
         let foreign_indexes = non_local_buckets
             .iter()
             .map(|bucket| (*bucket, foreign_counters.increment_counter(*bucket)))
