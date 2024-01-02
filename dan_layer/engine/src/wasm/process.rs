@@ -259,7 +259,7 @@ impl Invokable for WasmProcess {
             },
         };
         let ptr = val
-            .get(0)
+            .first()
             .and_then(|v| v.i32())
             .ok_or(WasmExecutionError::ExpectedPointerReturn { function: main_name })?;
 

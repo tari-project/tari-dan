@@ -285,7 +285,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
     let req = ClaimBurnRequest {
         account,
         claim_proof,
-        max_fee: fee.map(|f| f.try_into()).transpose()?,
+        max_fee: fee.map(Into::into),
     };
 
     let resp = client
@@ -370,7 +370,7 @@ pub async fn handle_reveal_funds(args: RevealFundsArgs, client: &mut WalletDaemo
         .accounts_reveal_funds(RevealFundsRequest {
             account,
             amount_to_reveal: Amount::try_from(reveal_amount).expect("Reveal amount too large"),
-            max_fee: max_fee.map(|f| f.try_into()).transpose()?,
+            max_fee: max_fee.map(Into::into),
             pay_fee_from_reveal: pay_from_reveal,
         })
         .await?;
