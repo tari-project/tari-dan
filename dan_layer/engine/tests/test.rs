@@ -293,6 +293,16 @@ fn test_random() {
     assert_ne!(value, vec![0; 300]);
 }
 
+#[test]
+#[should_panic(
+    expected = "called `Result::unwrap()` on an `Err` value: Transaction failed: Execution failure: RuntimeError: \
+                unreachable\n    at tari_free (<module>[327]:0x2390c)"
+)]
+fn test_break_infinity_loop() {
+    let mut template_test = TemplateTest::new(vec!["tests/templates/infinity_loop"]);
+    template_test.call_function::<()>("InfinityLoopTest", "infinity_loop", args![], vec![]);
+}
+
 mod errors {
 
     use super::*;
