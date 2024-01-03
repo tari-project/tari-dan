@@ -52,7 +52,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         leader_strategy: TConsensusSpec::LeaderStrategy,
         pacemaker: PaceMakerHandle,
         tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
-        vote_signing_service: TConsensusSpec::VoteSignatureService,
+        vote_signing_service: TConsensusSpec::SignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         tx_events: broadcast::Sender<HotstuffEvent>,

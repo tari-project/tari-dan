@@ -19,7 +19,7 @@ use tari_transaction::TransactionId;
 use tokio::{sync::mpsc, time};
 
 use crate::{
-    block_validations::{check_hash_and_height, check_proposed_by_leader, check_quorum_certificate},
+    block_validations::{check_hash_and_height, check_proposed_by_leader, check_quorum_certificate, check_signature},
     hotstuff::{error::HotStuffError, pacemaker_handle::PaceMakerHandle},
     messages::{HotstuffMessage, ProposalMessage, RequestMissingTransactionsMessage},
     traits::ConsensusSpec,
@@ -163,6 +163,7 @@ where TConsensusSpec: ConsensusSpec
             .get_committee_by_validator_public_key(block.epoch(), block.proposed_by())
             .await?;
         check_proposed_by_leader(&self.leader_strategy, &committee_for_block, &block)?;
+        check_signature(&block)?;
         check_quorum_certificate(&committee_for_block, &block)?;
 
         let Some(ready_block) = self.handle_missing_transactions(block).await? else {

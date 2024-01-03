@@ -42,6 +42,30 @@ pub fn check_proposed_by_leader<TAddr: DerivableFromPublicKey, TLeaderStrategy: 
     Ok(())
 }
 
+pub fn check_signature(candidate_block: &Block) -> Result<(), ProposalValidationError> {
+    if candidate_block.is_dummy() {
+        // Dummy blocks don't have signatures
+        return Ok(());
+    }
+    if candidate_block.is_genesis() {
+        // Genesis block doesn't have signatures
+        return Ok(());
+    }
+    let validator_signature = candidate_block
+        .get_signature()
+        .ok_or(ProposalValidationError::MissingSignature {
+            block_id: *candidate_block.id(),
+            height: candidate_block.height(),
+        })?;
+    if !validator_signature.verify(candidate_block.proposed_by(), candidate_block.id()) {
+        return Err(ProposalValidationError::InvalidSignature {
+            block_id: *candidate_block.id(),
+            height: candidate_block.height(),
+        });
+    }
+    Ok(())
+}
+
 pub fn check_quorum_certificate<TAddr: NodeAddressable>(
     _local_committee: &Committee<TAddr>,
     candidate_block: &Block,

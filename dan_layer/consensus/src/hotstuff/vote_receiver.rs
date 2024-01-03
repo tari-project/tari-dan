@@ -25,7 +25,7 @@ pub struct VoteReceiver<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     epoch_manager: TConsensusSpec::EpochManager,
-    vote_signature_service: TConsensusSpec::VoteSignatureService,
+    vote_signature_service: TConsensusSpec::SignatureService,
     pacemaker: PaceMakerHandle,
 }
 
@@ -36,7 +36,7 @@ where TConsensusSpec: ConsensusSpec
         store: TConsensusSpec::StateStore,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         epoch_manager: TConsensusSpec::EpochManager,
-        vote_signature_service: TConsensusSpec::VoteSignatureService,
+        vote_signature_service: TConsensusSpec::SignatureService,
         pacemaker: PaceMakerHandle,
     ) -> Self {
         Self {

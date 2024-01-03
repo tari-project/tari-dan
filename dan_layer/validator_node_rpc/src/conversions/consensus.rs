@@ -259,6 +259,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             total_leader_fee: value.total_leader_fee(),
             commands: value.commands().iter().map(Into::into).collect(),
             foreign_indexes: encode(value.get_foreign_indexes()).unwrap(),
+            signature: value.get_signature().map(Into::into),
         }
     }
 }
@@ -284,6 +285,7 @@ impl TryFrom<proto::consensus::Block> for tari_dan_storage::consensus_models::Bl
                 .collect::<Result<_, _>>()?,
             value.total_leader_fee,
             decode_exact(&value.foreign_indexes)?,
+            value.signature.map(TryInto::try_into).transpose()?,
         ))
     }
 }
@@ -505,7 +507,7 @@ impl From<ValidatorMetadata> for proto::consensus::ValidatorMetadata {
         Self {
             public_key: msg.public_key.to_vec(),
             vn_shard_key: msg.vn_shard_key.as_bytes().to_vec(),
-            signature: Some(msg.signature.into()),
+            signature: Some((&msg.signature).into()),
         }
     }
 }

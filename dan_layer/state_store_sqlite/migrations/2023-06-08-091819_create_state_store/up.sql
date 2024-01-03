@@ -26,6 +26,7 @@ create table blocks
     is_processed     boolean   not NULL,
     is_dummy         boolean   not NULL,
     foreign_indexes  text      not NULL,
+    signature        text      NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (qc_id) REFERENCES quorum_certificates (qc_id)
 );
@@ -46,6 +47,7 @@ create table parked_blocks
     commands         text      not NULL,
     total_leader_fee bigint    not NULL,
     foreign_indexes  text      not NULL,
+    signature        text      NULL,
     created_at       timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
