@@ -86,10 +86,12 @@ impl Gossip<PeerAddress> {
         exclude_bucket: Option<ShardBucket>,
     ) -> Result<(), MempoolError> {
         let n = self.epoch_manager.get_num_committees(epoch).await?;
+        let local_shard = self.epoch_manager.get_local_committee_shard(epoch).await?;
+        let local_bucket = local_shard.bucket();
         let buckets = shards
             .into_iter()
             .map(|s| s.to_committee_bucket(n))
-            .filter(|b| exclude_bucket.as_ref() != Some(b))
+            .filter(|b| exclude_bucket.as_ref() != Some(b) && b != &local_bucket)
             .collect::<HashSet<_>>();
 
         for bucket in buckets {
