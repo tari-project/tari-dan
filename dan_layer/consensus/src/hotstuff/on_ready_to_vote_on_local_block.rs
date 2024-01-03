@@ -938,12 +938,19 @@ where TConsensusSpec: ConsensusSpec
     async fn propose_newly_locked_blocks(&self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
         for block in blocks {
             let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
-            let is_leader = self
-                .leader_strategy
-                .is_leader(&self.validator_addr, &local_committee, block.height());
-            // TODO: This will be changed to different strategy where not only leader is responsible for foreign block
-            // proposal.
-            if is_leader {
+            let our_addr = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
+            let leader_index = self.leader_strategy.calculate_leader(&local_committee, block.height());
+            let my_index = local_committee
+                .addresses()
+                .position(|addr| *addr == our_addr.address)
+                .ok_or_else(|| HotStuffError::InvariantError("Our address not found in local committee".to_string()))?;
+            // There are other ways to approach this. But for simplicty is better just to make sure at least one honest
+            // node will send it to the whole foreign committee. So we select the leader and f other nodes. It has to be
+            // deterministic so we select by index (leader, leader+1, ..., leader+f). FYI: The messages between
+            // committees and within committees are not different in terms of size, speed, etc.
+            let diff_from_leader = (my_index + local_committee.len() - leader_index as usize) % local_committee.len();
+            // f+1 nodes (always including the leader) send the proposal to the foreign committee
+            if diff_from_leader <= local_committee.len() / 3 {
                 self.proposer.broadcast_proposal_foreignly(&block).await?;
             }
         }
