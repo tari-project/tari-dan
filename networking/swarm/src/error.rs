@@ -11,6 +11,8 @@ pub enum TariSwarmError {
     InvalidProtocol(#[from] InvalidProtocol),
     #[error("Behaviour error: {0}")]
     BehaviourError(String),
-    #[error("Failed to parse protocol version field '{field}'")]
-    ProtocolVersionParseFailed { field: &'static str },
+    #[error("'{given}' is not a valid protocol version string")]
+    ProtocolVersionParseFailed { given: String },
+    #[error("Invalid version string: {given}")]
+    InvalidVersionString { given: String },
 }
