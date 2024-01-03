@@ -30,4 +30,5 @@ mod template;
 pub use template::{calculate_template_binary_hash, parse_template_address, TemplateAddress};
 
 mod argument_parser;
+
 pub use argument_parser::parse_arg;

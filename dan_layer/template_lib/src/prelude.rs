@@ -40,6 +40,7 @@ pub use crate::{
     events::emit_event,
     invoke_args,
     models::{
+        AddressAllocation,
         Amount,
         Bucket,
         BucketId,

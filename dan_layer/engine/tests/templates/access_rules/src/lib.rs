@@ -2,13 +2,13 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_template_lib::prelude::*;
+const BADGE_NAMES: [&str; 4] = ["mint", "burn", "withdraw", "deposit"];
 
 pub fn create_badge_resource(recall_rule: AccessRule) -> Bucket {
     ResourceBuilder::non_fungible()
-        .with_non_fungible(NonFungibleId::from_string("mint"), &(), &())
-        .with_non_fungible(NonFungibleId::from_string("burn"), &(), &())
-        .with_non_fungible(NonFungibleId::from_string("withdraw"), &(), &())
-        .with_non_fungible(NonFungibleId::from_string("deposit"), &(), &())
+        .mint_many_with(BADGE_NAMES, |name| {
+            (NonFungibleId::from_string(name), (Vec::new(), Vec::new()))
+        })
         .recallable(recall_rule)
         .build_bucket()
 }
@@ -126,6 +126,29 @@ mod access_rules_template {
             .create()
         }
 
+        pub fn resource_actions_restricted_to_component() -> Component<AccessRulesTest> {
+            let badges = create_badge_resource(AccessRule::AllowAll);
+
+            let allocation = CallerContext::allocate_component_address();
+            let tokens = ResourceBuilder::fungible()
+                .initial_supply(1000)
+                .mintable(AccessRule::Restricted(RestrictedAccessRule::Require(
+                    RequireRule::Require(allocation.address().clone().into()),
+                )))
+                // Only access rules apply, this just makes the test simpler because we do not need to change the transaction signer
+                .with_owner_rule(OwnerRule::None)
+                .build_bucket();
+
+            Component::new(Self {
+                value: 0,
+                tokens: Vault::from_bucket(tokens),
+                badges: Vault::from_bucket(badges),
+            })
+            .with_address_allocation(allocation)
+            .with_access_rules(ComponentAccessRules::new().default(AccessRule::AllowAll))
+            .create()
+        }
+
         pub fn take_badge_by_name(&mut self, name: String) -> Bucket {
             self.badges.withdraw_non_fungible(NonFungibleId::from_string(&name))
         }
@@ -177,6 +200,19 @@ mod access_rules_template {
 
         pub fn create_proof_from_bucket(bucket: Bucket) -> Proof {
             bucket.create_proof()
+        }
+
+        pub fn mint_resource(resource: ResourceAddress) -> Bucket {
+            let manager = ResourceManager::get(resource);
+            match manager.resource_type() {
+                ResourceType::Fungible => manager.mint_fungible(1000.into()),
+                ResourceType::NonFungible => manager.mint_non_fungible(NonFungibleId::random(), &(), &()),
+                ty => panic!("Unsupported resource type {:?}", ty),
+            }
+        }
+
+        pub fn mint_more_tokens(&mut self, amount: Amount) -> Bucket {
+            ResourceManager::get(self.tokens.resource_address()).mint_fungible(amount)
         }
     }
 }

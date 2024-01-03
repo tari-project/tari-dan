@@ -33,6 +33,7 @@ use crate::{
     auth::{OwnerRule, ResourceAccessRules},
     crypto::PedersonCommitmentBytes,
     models::{
+        AddressAllocation,
         Amount,
         BucketId,
         ComponentAddress,
@@ -157,6 +158,7 @@ pub struct CreateComponentArg {
     pub owner_rule: OwnerRule,
     pub access_rules: ComponentAccessRules,
     pub component_id: Option<Hash>,
+    pub address_allocation: Option<AddressAllocation<ComponentAddress>>,
 }
 
 // -------------------------------- Events -------------------------------- //
@@ -478,6 +480,7 @@ pub struct CallerContextInvokeArg {
 pub enum CallerContextAction {
     GetCallerPublicKey,
     GetComponentAddress,
+    AllocateNewComponentAddress,
 }
 
 // -------------------------------- CallInvoke -------------------------------- //

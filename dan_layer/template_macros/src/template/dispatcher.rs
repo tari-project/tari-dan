@@ -201,7 +201,13 @@ fn replace_self_in_single_value(type_path: &TypePath) -> Option<Stmt> {
     if type_ident == "Self" {
         // When we return self we use default rules - which only permit the owner of the component to call methods
         return Some(parse_quote! {
-            let rtn = engine().create_component(rtn, ::tari_template_lib::auth::OwnerRule::default(), ::tari_template_lib::auth::ComponentAccessRules::new(), None);
+            let rtn = engine().create_component(
+                rtn,
+                ::tari_template_lib::auth::OwnerRule::default(),
+                ::tari_template_lib::auth::ComponentAccessRules::new(),
+                None,
+                None,
+            );
         });
     }
 
@@ -219,9 +225,16 @@ fn replace_self_in_tuple(type_tuple: &TypeTuple) -> Stmt {
                 let ident = path.path.segments[0].ident.clone();
                 let field_expr = build_tuple_field_expr("rtn".to_string(), i as u32);
                 if ident == "Self" {
-                    // When we return self we use default rules - which only permit the owner of the component to call methods
+                    // When we return self we use default rules - which only permit the owner of the component to call
+                    // methods
                     parse_quote! {
-                        engine().create_component(#field_expr, ::tari_template_lib::auth::OwnerRule::default(), ::tari_template_lib::auth::ComponentAccessRules::new(), None)
+                        engine().create_component(
+                            #field_expr,
+                            ::tari_template_lib::auth::OwnerRule::default(),
+                            :tari_template_lib::auth::ComponentAccessRules::new(),
+                            None,
+                            None,
+                        )
                     }
                 } else {
                     field_expr

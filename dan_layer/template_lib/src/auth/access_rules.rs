@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use tari_template_abi::rust::collections::BTreeMap;
 
-use crate::models::{NonFungibleAddress, ResourceAddress};
+use crate::models::{ComponentAddress, NonFungibleAddress, ResourceAddress, TemplateAddress};
 
 /// Represents the types of possible access control rules over a component method or resource
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,31 +54,49 @@ impl RestrictedAccessRule {
     }
 }
 
-/// An enum that allows passing either a resource or a non-fungible argument
+/// Specifies a requirement for a [RequireRule].
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ResourceOrNonFungibleAddress {
+pub enum RuleRequirement {
+    /// Requires ownership of a specific resource
     Resource(ResourceAddress),
+    /// Requires ownership of a specific non-fungible token
     NonFungibleAddress(NonFungibleAddress),
+    /// Requires execution within a specific component
+    ScopedToComponent(ComponentAddress),
+    /// Requires execution within a specific template
+    ScopedToTemplate(TemplateAddress),
 }
 
-impl From<ResourceAddress> for ResourceOrNonFungibleAddress {
+impl From<ResourceAddress> for RuleRequirement {
     fn from(address: ResourceAddress) -> Self {
         Self::Resource(address)
     }
 }
 
-impl From<NonFungibleAddress> for ResourceOrNonFungibleAddress {
+impl From<NonFungibleAddress> for RuleRequirement {
     fn from(address: NonFungibleAddress) -> Self {
         Self::NonFungibleAddress(address)
+    }
+}
+
+impl From<ComponentAddress> for RuleRequirement {
+    fn from(address: ComponentAddress) -> Self {
+        Self::ScopedToComponent(address)
+    }
+}
+
+impl From<TemplateAddress> for RuleRequirement {
+    fn from(address: TemplateAddress) -> Self {
+        Self::ScopedToTemplate(address)
     }
 }
 
 /// An enum that represents the possible ways to require access to components or resources
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum RequireRule {
-    Require(ResourceOrNonFungibleAddress),
-    AnyOf(Vec<ResourceOrNonFungibleAddress>),
-    AllOf(Vec<ResourceOrNonFungibleAddress>),
+    Require(RuleRequirement),
+    AnyOf(Vec<RuleRequirement>),
+    AllOf(Vec<RuleRequirement>),
 }
 
 /// Information needed to specify access rules to methods of a component
