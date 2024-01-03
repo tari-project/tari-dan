@@ -241,7 +241,7 @@ fn cost_function(op: &Operator) -> u64 {
         Operator::CatchAll |
         Operator::Drop |
         Operator::Select |
-        Operator::TypedSelect { .. } => 0,
+        Operator::TypedSelect { .. } => 1,
         _ => 1,
     }
 }
