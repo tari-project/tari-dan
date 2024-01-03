@@ -191,6 +191,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             blocks::qc_id.eq(serialize_hex(block.justify().id())),
             blocks::is_dummy.eq(block.is_dummy()),
             blocks::is_processed.eq(block.is_processed()),
+            blocks::signature.eq(block.get_signature().map(serialize_json).transpose()?),
             blocks::foreign_indexes.eq(serialize_json(block.get_foreign_indexes())?),
         );
 
