@@ -116,6 +116,8 @@ pub struct ClaimBurnArgs {
     proof_json: Option<serde_json::Value>,
     #[clap(long, short = 'f')]
     fee: Option<u32>,
+    #[clap(long)]
+    key_id: Option<u64>,
 }
 
 #[derive(Debug, Args, Clone)]
@@ -262,6 +264,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
         proof_json,
         fee,
         proof_file,
+        key_id,
     } = args;
 
     let claim_proof = if let Some(proof_json) = proof_json {
@@ -286,6 +289,7 @@ pub async fn handle_claim_burn(args: ClaimBurnArgs, client: &mut WalletDaemonCli
         account,
         claim_proof,
         max_fee: fee.map(Into::into),
+        key_id,
     };
 
     let resp = client

@@ -392,6 +392,7 @@ pub struct ClaimBurnRequest {
     pub account: Option<ComponentAddressOrName>,
     pub claim_proof: serde_json::Value,
     pub max_fee: Option<Amount>,
+    pub key_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
