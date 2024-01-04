@@ -23,6 +23,9 @@
 //! The collection of all struct definitions that represent data in the Tari network (e.g., resources, components,
 //! proofs, etc.)
 
+mod address_allocation;
+pub use address_allocation::AddressAllocation;
+
 mod non_fungible_index;
 pub use non_fungible_index::NonFungibleIndexAddress;
 

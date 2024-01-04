@@ -134,4 +134,8 @@ impl ComponentManager {
             .decode()
             .expect("failed to decode component template address from engine")
     }
+
+    pub fn component_address(&self) -> ComponentAddress {
+        self.address
+    }
 }

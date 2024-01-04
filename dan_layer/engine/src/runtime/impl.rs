@@ -282,6 +282,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     .map(|l| l.address().as_component_address().unwrap());
                 Ok(InvokeResult::encode(&maybe_address)?)
             }),
+            CallerContextAction::AllocateNewComponentAddress => self.tracker.write_with(|state| {
+                let (template, _) = state.current_template()?;
+                let address = self.tracker.id_provider().new_component_address(*template, None)?;
+                let allocation = state.new_address_allocation(address)?;
+                Ok(InvokeResult::encode(&allocation)?)
+            }),
         }
     }
 
@@ -322,6 +328,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     arg.owner_rule,
                     arg.access_rules,
                     arg.component_id,
+                    arg.address_allocation,
                 )?;
                 Ok(InvokeResult::encode(&component_address)?)
             },

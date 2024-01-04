@@ -8,7 +8,7 @@ use tari_template_abi::{call_engine, EngineOp};
 use crate::{
     args::{CallerContextAction, CallerContextInvokeArg, InvokeResult},
     crypto::RistrettoPublicKeyBytes,
-    models::ComponentAddress,
+    models::{AddressAllocation, ComponentAddress},
 };
 
 /// Allows a template to access information about the current instruction's caller
@@ -34,5 +34,14 @@ impl CallerContext {
         resp.decode::<Option<ComponentAddress>>()
             .expect("Failed to decode Option<ComponentAddress>")
             .expect("Not in a component instance context")
+    }
+
+    pub fn allocate_component_address() -> AddressAllocation<ComponentAddress> {
+        let resp: InvokeResult = call_engine(EngineOp::CallerContextInvoke, &CallerContextInvokeArg {
+            action: CallerContextAction::AllocateNewComponentAddress,
+        });
+
+        resp.decode()
+            .expect("Failed to decode AddressAllocation<ComponentAddress>")
     }
 }
