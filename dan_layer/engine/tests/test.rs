@@ -38,7 +38,7 @@ use tari_template_lib::{
     models::{Amount, ComponentAddress, NonFungibleAddress},
     prelude::{NonFungibleId, ResourceAddress},
 };
-use tari_template_test_tooling::{SubstateType, TemplateTest};
+use tari_template_test_tooling::{support::assert_error::assert_reject_reason, SubstateType, TemplateTest};
 use tari_transaction::Transaction;
 use tari_transaction_manifest::ManifestValue;
 use tari_utilities::hex::to_hex;
@@ -294,13 +294,17 @@ fn test_random() {
 }
 
 #[test]
-#[should_panic(
-    expected = "called `Result::unwrap()` on an `Err` value: Transaction failed: Execution failure: RuntimeError: \
-                unreachable\n    at tari_free (<module>[327]:0x2390c)"
-)]
-fn test_break_infinity_loop() {
-    let mut template_test = TemplateTest::new(vec!["tests/templates/infinity_loop"]);
-    template_test.call_function::<()>("InfinityLoopTest", "infinity_loop", args![], vec![]);
+fn test_errors_on_infinite_loop() {
+    let mut test = TemplateTest::new(vec!["tests/templates/infinity_loop"]);
+    let reason = test.execute_expect_failure(
+        Transaction::builder()
+            .call_function(test.get_template_address("InfinityLoopTest"), "infinity_loop", args![])
+            .sign(test.get_test_secret_key())
+            .build(),
+        vec![],
+    );
+    // Transaction failed: Execution failure: RuntimeError: unreachable\n    at tari_free (<module>[327]:0x2390c)
+    assert_reject_reason(reason, wasmer::RuntimeError::new("unreachable"))
 }
 
 mod errors {
