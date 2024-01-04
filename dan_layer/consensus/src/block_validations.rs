@@ -102,21 +102,17 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         return Err(ProposalValidationError::QCisNotValid { qc: qc.clone() }.into());
     }
 
-    let mut votes_for_decision = 0;
     for (sign, leaf) in qc.signatures().iter().zip(vns.iter()) {
         let challenge = vote_signing_service.create_challenge(leaf, qc.block_id(), &qc.decision());
-        // The verify can fail if the signature is not valid or if the challenge is for opposite decision. We
-        // don't care if it's not valid. We count the valid ones and they need to reach the
-        // quorum.
-        if sign.verify(challenge) {
-            votes_for_decision += 1;
+        if !sign.verify(challenge) {
+            return Err(ProposalValidationError::QCInvalidSignature { qc: qc.clone() }.into());
         }
     }
     let committee_shard = epoch_manager
         .get_committee_shard_by_validator_public_key(candidate_block.epoch(), candidate_block.proposed_by())
         .await?;
 
-    if committee_shard.quorum_threshold() > votes_for_decision {
+    if committee_shard.quorum_threshold() > u32::try_from(qc.signatures().len()).unwrap() {
         return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
     }
     Ok(())

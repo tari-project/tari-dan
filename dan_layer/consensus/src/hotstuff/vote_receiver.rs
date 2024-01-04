@@ -204,6 +204,10 @@ where TConsensusSpec: ConsensusSpec
             let mut signatures = Vec::with_capacity(votes.len());
             let mut leaf_hashes = Vec::with_capacity(votes.len());
             for vote in votes {
+                if vote.decision != quorum_decision {
+                    // We don't include votes that don't match the quorum decision
+                    continue;
+                }
                 signatures.push(vote.signature);
                 leaf_hashes.push(vote.sender_leaf_hash);
             }

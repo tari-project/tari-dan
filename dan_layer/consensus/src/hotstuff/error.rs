@@ -154,6 +154,8 @@ pub enum ProposalValidationError {
     InvalidSignature { block_id: BlockId, height: NodeHeight },
     #[error("QC is not valid: {qc}")]
     QCisNotValid { qc: QuorumCertificate },
+    #[error("QC has invalid signature: {qc}")]
+    QCInvalidSignature { qc: QuorumCertificate },
     #[error("Quorum was not reached: {qc}")]
     QuorumWasNotReached { qc: QuorumCertificate },
     #[error("Merkle proof error: {0}")]
