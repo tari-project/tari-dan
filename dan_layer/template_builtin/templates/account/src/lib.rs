@@ -26,6 +26,7 @@ use tari_template_lib::prelude::*;
 #[template]
 mod account_template {
     use super::*;
+
     pub struct Account {
         // TODO: Lazy key value map/store
         vaults: BTreeMap<ResourceAddress, Vault>,
@@ -233,6 +234,12 @@ mod account_template {
             ]);
             let v = self.get_vault_mut(resource);
             v.create_proof_by_amount(amount)
+        }
+
+        /// Utility function to allow bucket NFT content to be inspected. An empty vec is returned if the bucket does
+        /// not contain any NFTs or does not contain a NonFungible resource.
+        pub fn get_non_fungible_ids_for_bucket(bucket: Bucket) -> Vec<NonFungibleId> {
+            bucket.get_non_fungible_ids()
         }
     }
 }
