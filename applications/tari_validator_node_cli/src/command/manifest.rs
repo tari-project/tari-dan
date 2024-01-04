@@ -39,7 +39,8 @@ impl ManifestSubcommand {
                 let contents = get_contents(args.manifest)?;
                 let instructions = tari_transaction_manifest::parse_manifest(&contents, Default::default())?;
                 // TODO: improve output
-                println!("Instructions: {:#?}", instructions);
+                println!("Instructions: {:#?}", instructions.instructions);
+                println!("Fee Instructions: {:#?}", instructions.fee_instructions);
             },
             ManifestSubcommand::New(args) => {
                 let mut out_stream = if let Some(ref path) = args.manifest {

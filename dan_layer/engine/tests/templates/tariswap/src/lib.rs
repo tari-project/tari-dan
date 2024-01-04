@@ -44,7 +44,7 @@ mod tariswap {
             Self::check_resource_is_fungible(b_addr);
 
             // the fee represents a percentage, so it must be between 0 and 100
-            let valid_fee_range = 0..1000;
+            let valid_fee_range = 0..100;
             assert!(valid_fee_range.contains(&fee), "Invalid fee {}", fee);
 
             // create the vaults to store the funds
@@ -223,9 +223,10 @@ mod tariswap {
         }
 
         fn check_resource_is_fungible(resource: ResourceAddress) {
+            let resource_type = ResourceManager::get(resource).resource_type();
             assert!(
-                ResourceManager::get(resource).resource_type() == ResourceType::Fungible,
-                "Resource {} is not fungible",
+                matches!(resource_type, ResourceType::Fungible | ResourceType::Confidential),
+                "Resource {} is not fungible nor confidential",
                 resource
             );
         }

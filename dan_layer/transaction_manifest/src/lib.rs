@@ -36,9 +36,17 @@ mod generator;
 mod parser;
 mod value;
 
-pub fn parse_manifest(input: &str, globals: HashMap<String, ManifestValue>) -> Result<Vec<Instruction>, ManifestError> {
+pub fn parse_manifest(
+    input: &str,
+    globals: HashMap<String, ManifestValue>,
+) -> Result<ManifestInstructions, ManifestError> {
     let tokens = TokenStream::from_str(input).map_err(|e| ManifestError::LexError(e.to_string()))?;
     let ast = parse2::<ManifestAst>(tokens)?;
 
     ManifestInstructionGenerator::new(globals).generate_instructions(ast)
+}
+
+pub struct ManifestInstructions {
+    pub instructions: Vec<Instruction>,
+    pub fee_instructions: Vec<Instruction>,
 }

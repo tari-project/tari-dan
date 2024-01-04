@@ -1616,9 +1616,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.4.11"
+version = "4.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfaff671f6b22ca62406885ece523383b9b64022e341e53e009a62ebc47a45f2"
+checksum = "52bdc885e4cacc7f7c9eedc1ef6da641603180c783c41a15c264944deeaab642"
 dependencies = [
  "clap_builder",
  "clap_derive 4.4.7",
@@ -1626,9 +1626,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.4.11"
+version = "4.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a216b506622bb1d316cd51328dce24e07bdff4a6128a47c7e7fad11878d5adbb"
+checksum = "fb7fb5e4e979aec3be7791562fcba452f94ad85e954da024396433e0e25a79e9"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2134,7 +2134,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "atty",
- "clap 4.4.11",
+ "clap 4.4.13",
  "console",
  "cucumber-codegen",
  "cucumber-expressions",
@@ -9712,7 +9712,7 @@ dependencies = [
  "axum",
  "axum-jrpc",
  "chrono",
- "clap 4.4.11",
+ "clap 4.4.13",
  "dirs",
  "jsonwebtoken",
  "log",
@@ -10558,7 +10558,7 @@ dependencies = [
  "anyhow",
  "bincode 2.0.0-rc.3",
  "bytes 1.5.0",
- "clap 4.4.11",
+ "clap 4.4.13",
  "once_cell",
  "rand",
  "rayon",
@@ -10567,6 +10567,7 @@ dependencies = [
  "tari_template_builtin",
  "tari_template_lib",
  "tari_transaction",
+ "tari_transaction_manifest",
 ]
 
 [[package]]
@@ -10574,7 +10575,8 @@ name = "transaction_submitter"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "clap 4.4.11",
+ "clap 4.4.13",
+ "tari_transaction",
  "tari_validator_node_client",
  "tokio",
  "transaction_generator",

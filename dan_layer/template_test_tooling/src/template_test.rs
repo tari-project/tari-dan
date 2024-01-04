@@ -559,7 +559,7 @@ impl TemplateTest {
             variables.into_iter().map(|(a, b)| (a.to_string(), b)).collect(),
         )
         .unwrap();
-        self.execute_and_commit(instructions, proofs)
+        self.execute_and_commit(instructions.instructions, proofs)
     }
 
     pub fn print_state(&self) {

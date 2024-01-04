@@ -96,6 +96,10 @@ impl TransactionRecord {
         self.execution_time
     }
 
+    pub fn is_finalized(&self) -> bool {
+        self.final_decision.is_some()
+    }
+
     pub fn abort_details(&self) -> Option<&String> {
         self.abort_details.as_ref()
     }

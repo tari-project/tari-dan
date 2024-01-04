@@ -308,7 +308,7 @@ impl JsonRpcHandlers {
         let request: GetTransactionResultRequest = value.parse_params()?;
 
         let mut tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
-        let executed = ExecutedTransaction::get(&mut tx, &request.transaction_id)
+        let transaction = TransactionRecord::get(&mut tx, &request.transaction_id)
             .optional()
             .map_err(internal_error(answer_id))?
             .ok_or_else(|| {
@@ -323,8 +323,9 @@ impl JsonRpcHandlers {
             })?;
 
         let response = GetTransactionResultResponse {
-            is_finalized: executed.is_finalized(),
-            result: executed.into_final_result(),
+            is_finalized: transaction.is_finalized(),
+            execution_time: transaction.execution_time(),
+            result: transaction.into_final_result(),
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }

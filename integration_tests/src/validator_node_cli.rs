@@ -348,7 +348,7 @@ pub async fn submit_manifest(
         account_template_address: None,
         dry_run: false,
     };
-    let resp = submit_transaction(instructions, args, data_dir, &mut client)
+    let resp = submit_transaction(instructions.instructions, args, data_dir, &mut client)
         .await
         .unwrap();
 

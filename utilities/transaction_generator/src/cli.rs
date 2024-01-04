@@ -33,6 +33,12 @@ pub struct WriteArgs {
     pub output_file: PathBuf,
     #[clap(long)]
     pub overwrite: bool,
+    #[clap(long, short = 'm')]
+    pub manifest: Option<PathBuf>,
+    #[clap(long, short = 'g', alias = "global")]
+    pub manifest_globals: Vec<String>,
+    #[clap(long, short = 'k', alias = "signer")]
+    pub signer_secret_key: Option<String>,
 }
 #[derive(Args, Debug)]
 pub struct ReadArgs {

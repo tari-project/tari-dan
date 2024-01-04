@@ -450,7 +450,7 @@ pub async fn submit_manifest_with_signing_keys(
     let instructions = parse_manifest(&manifest_content, globals).unwrap();
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: Some(account.key_index),
-        instructions,
+        instructions: instructions.instructions,
         fee_instructions: vec![],
         override_inputs: false,
         is_dry_run: false,
@@ -522,7 +522,7 @@ pub async fn submit_manifest(
 
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,
-        instructions,
+        instructions: instructions.instructions,
         fee_instructions: vec![],
         override_inputs: false,
         is_dry_run: false,
