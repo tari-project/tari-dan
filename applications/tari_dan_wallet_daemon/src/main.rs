@@ -22,7 +22,8 @@
 
 use std::{fs, panic, process};
 
-use tari_common::{initialize_logging, load_configuration};
+use tari_common::initialize_logging;
+use tari_dan_app_utilities::configuration::load_configuration;
 use tari_dan_wallet_daemon::{cli::Cli, config::ApplicationConfig, run_tari_dan_wallet_daemon};
 use tari_shutdown::Shutdown;
 
