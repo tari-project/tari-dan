@@ -228,16 +228,22 @@ impl WalletStoreWriter for WriteTransaction<'_> {
             .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
 
         if exists {
-            sql_query("UPDATE config SET value = ?, is_encrypted = ?, updated_at = CURRENT_TIMESTAMP WHERE key = ?")
-                .bind::<Text, _>(serialize_json(value)?)
-                .bind::<Text, _>(key)
+            diesel::update(config::table)
+                .set((
+                    config::value.eq(serialize_json(value)?),
+                    config::is_encrypted.eq(is_encrypted),
+                    config::updated_at.eq(diesel::dsl::now),
+                ))
+                .filter(config::key.eq(key))
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
         } else {
-            sql_query("INSERT INTO config (key, value, is_encrypted) VALUES (?, ?, ?)")
-                .bind::<Text, _>(key)
-                .bind::<Text, _>(serialize_json(value)?)
-                .bind::<Bool, _>(is_encrypted)
+            diesel::insert_into(config::table)
+                .values((
+                    config::key.eq(key),
+                    config::value.eq(serialize_json(value)?),
+                    config::is_encrypted.eq(is_encrypted),
+                ))
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general("key_manager_set_index", e))?;
         }

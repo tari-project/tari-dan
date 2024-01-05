@@ -73,7 +73,6 @@ pub async fn run_tari_dan_wallet_daemon(
     let sdk_config = WalletSdkConfig {
         // TODO: Configure
         password: None,
-        indexer_jrpc_endpoint: config.dan_wallet_daemon.indexer_node_json_rpc_url,
         jwt_expiry: config.dan_wallet_daemon.jwt_expiry.unwrap(),
         jwt_secret_key: config.dan_wallet_daemon.jwt_secret_key.unwrap(),
     };
@@ -81,7 +80,7 @@ pub async fn run_tari_dan_wallet_daemon(
     let indexer_jrpc_endpoint = if let Some(indexer_url) = config_api.get(ConfigKey::IndexerUrl).optional()? {
         indexer_url
     } else {
-        sdk_config.indexer_jrpc_endpoint.clone()
+        config.dan_wallet_daemon.indexer_node_json_rpc_url.clone()
     };
     let indexer = IndexerJsonRpcNetworkInterface::new(indexer_jrpc_endpoint);
     let wallet_sdk = DanWalletSdk::initialize(store, indexer, sdk_config)?;

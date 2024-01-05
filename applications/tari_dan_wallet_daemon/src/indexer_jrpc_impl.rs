@@ -46,6 +46,15 @@ impl IndexerJsonRpcNetworkInterface {
         let client = IndexerJsonRpcClient::connect((*self.indexer_jrpc_address.lock().unwrap()).clone())?;
         Ok(client)
     }
+
+    pub fn set_endpoint(&mut self, endpoint: &str) -> Result<(), IndexerJrpcError> {
+        *self.indexer_jrpc_address.lock().unwrap() = Url::parse(endpoint)?;
+        Ok(())
+    }
+
+    pub fn get_endpoint(&self) -> Url {
+        (*self.indexer_jrpc_address.lock().unwrap()).clone()
+    }
 }
 
 #[async_trait]
@@ -123,11 +132,6 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
             transaction_id,
             result: convert_indexer_result_to_wallet_result(resp.result),
         })
-    }
-
-    fn set_endpoint(&mut self, endpoint: &str) -> Result<(), Self::Error> {
-        *self.indexer_jrpc_address.lock().unwrap() = Url::parse(endpoint)?;
-        Ok(())
     }
 }
 
