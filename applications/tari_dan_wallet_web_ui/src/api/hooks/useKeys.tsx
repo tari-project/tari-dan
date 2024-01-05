@@ -38,7 +38,7 @@ export const useKeysList = () => {
 };
 
 export const useKeysCreate = () => {
-  return useMutation(() => jsonRpc('keys.create', []), {
+  return useMutation(() => jsonRpc('keys.create', {}), {
     onError: (error: apiError) => {
       error;
     },

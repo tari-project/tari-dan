@@ -128,12 +128,13 @@ export const transactionsWaitResult = (hash: string, timeoutSecs: number | null)
   jsonRpc("transactions.wait_result", [hash, timeoutSecs]);
 
 // accounts
-export const accountsClaimBurn = (account: string, claimProof: any, fee: number) =>
+export const accountsClaimBurn = (account: string, claimProof: any, fee: number, key_id: number) =>
   // Fees are passed as strings because Amount is tagged
   jsonRpc("accounts.claim_burn", {
     account,
     claim_proof: claimProof,
-    fee: fee,
+    fee,
+    key_id,
   });
 export const accountsCreate = (
   accountName: string | undefined,
