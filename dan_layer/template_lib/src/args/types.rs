@@ -48,7 +48,8 @@ use crate::{
     },
     prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
     resource::ResourceType,
-    Hash, template::BuiltinTemplate,
+    template::BuiltinTemplate,
+    Hash,
 };
 
 // -------------------------------- LOGS -------------------------------- //

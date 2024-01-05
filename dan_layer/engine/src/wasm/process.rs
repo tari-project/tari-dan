@@ -27,6 +27,7 @@ use tari_template_abi::{CallInfo, EngineOp, FunctionDef};
 use tari_template_lib::{
     args::{
         BucketInvokeArg,
+        BuiltinTemplateInvokeArg,
         CallInvokeArg,
         CallerContextInvokeArg,
         ComponentInvokeArg,
@@ -39,7 +40,7 @@ use tari_template_lib::{
         ProofInvokeArg,
         ResourceInvokeArg,
         VaultInvokeArg,
-        WorkspaceInvokeArg, BuiltinTemplateInvokeArg,
+        WorkspaceInvokeArg,
     },
     AbiContext,
 };
@@ -165,7 +166,7 @@ impl WasmProcess {
                     .interface()
                     .proof_invoke(arg.proof_ref, arg.action, arg.args.into())
             }),
-            EngineOp::BuiltinTemplateInvoke =>  Self::handle(env, arg, |env, arg: BuiltinTemplateInvokeArg| {
+            EngineOp::BuiltinTemplateInvoke => Self::handle(env, arg, |env, arg: BuiltinTemplateInvokeArg| {
                 env.state().interface().builtin_template_invoke(arg.action)
             }),
         };
