@@ -35,8 +35,10 @@ pub struct WriteArgs {
     pub overwrite: bool,
     #[clap(long, short = 'm')]
     pub manifest: Option<PathBuf>,
-    #[clap(long, short = 'g', alias = "global")]
-    pub manifest_globals: Vec<String>,
+    #[clap(long, short = 'a', alias = "arg")]
+    pub manifest_args: Vec<String>,
+    #[clap(long, alias = "args-file")]
+    pub manifest_args_file: Option<PathBuf>,
     #[clap(long, short = 'k', alias = "signer")]
     pub signer_secret_key: Option<String>,
 }

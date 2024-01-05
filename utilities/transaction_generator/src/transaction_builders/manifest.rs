@@ -18,7 +18,7 @@ pub fn builder<P: AsRef<Path>>(
     let instructions = tari_transaction_manifest::parse_manifest(&contents, globals)?;
     Ok(Box::new(move |_| {
         Transaction::builder()
-            .with_fee_instructions_builder(|builder| builder.with_instructions(instructions.fee_instructions.clone()))
+            .with_fee_instructions(instructions.fee_instructions.clone())
             .with_instructions(instructions.instructions.clone())
             .sign(&signer_secret_key)
             .build()
