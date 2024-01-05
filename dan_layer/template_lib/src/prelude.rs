@@ -60,5 +60,5 @@ pub use crate::{
     },
     rand,
     resource::{ResourceBuilder, ResourceManager, ResourceType},
-    template::TemplateManager,
+    template::{TemplateManager, BuiltinTemplate},
 };

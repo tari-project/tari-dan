@@ -44,6 +44,7 @@ use tari_engine_types::{
     TemplateAddress,
 };
 use tari_template_abi::TemplateDef;
+use tari_template_builtin::{ACCOUNT_TEMPLATE_ADDRESS, ACCOUNT_NFT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args::{
         BucketAction,
@@ -76,12 +77,13 @@ use tari_template_lib::{
         VaultCreateProofByNonFungiblesArg,
         VaultWithdrawArg,
         WorkspaceAction,
+        BuiltinTemplateAction,
     },
     auth::{ComponentAccessRules, ResourceAccessRules, ResourceAuthAction},
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, NotAuthorized, VaultRef},
-    prelude::ResourceType,
+    prelude::ResourceType, template::BuiltinTemplate,
 };
 
 use super::{tracker::FinalizeData, Runtime};
@@ -1693,6 +1695,19 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn pop_call_frame(&self) -> Result<(), RuntimeError> {
         self.tracker.pop_call_frame()?;
         Ok(())
+    }
+
+    fn builtin_template_invoke(&self, action: BuiltinTemplateAction) -> Result<InvokeResult, RuntimeError> {
+        let address = match action {
+            BuiltinTemplateAction::GetTemplateAddress { bultin } => {
+                match bultin {
+                    BuiltinTemplate::Account => *ACCOUNT_TEMPLATE_ADDRESS,
+                    BuiltinTemplate::AccountNft => *ACCOUNT_NFT_TEMPLATE_ADDRESS,
+                }
+            },
+        };
+
+        Ok(InvokeResult::encode(&address)?)
     }
 }
 

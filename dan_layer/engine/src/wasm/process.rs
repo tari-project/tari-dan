@@ -39,7 +39,7 @@ use tari_template_lib::{
         ProofInvokeArg,
         ResourceInvokeArg,
         VaultInvokeArg,
-        WorkspaceInvokeArg,
+        WorkspaceInvokeArg, BuiltinTemplateInvokeArg,
     },
     AbiContext,
 };
@@ -164,6 +164,9 @@ impl WasmProcess {
                 env.state()
                     .interface()
                     .proof_invoke(arg.proof_ref, arg.action, arg.args.into())
+            }),
+            EngineOp::BuiltinTemplateInvoke =>  Self::handle(env, arg, |env, arg: BuiltinTemplateInvokeArg| {
+                env.state().interface().builtin_template_invoke(arg.action)
             }),
         };
 

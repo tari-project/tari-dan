@@ -83,7 +83,7 @@ use tari_template_lib::{
         ResourceAction,
         ResourceRef,
         VaultAction,
-        WorkspaceAction,
+        WorkspaceAction, BuiltinTemplateAction,
     },
     invoke_args,
     models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, VaultRef},
@@ -169,6 +169,8 @@ pub trait RuntimeInterface: Send + Sync {
     fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError>;
 
     fn call_invoke(&self, action: CallAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
+
+    fn builtin_template_invoke(&self, action: BuiltinTemplateAction) -> Result<InvokeResult, RuntimeError>;
 
     fn check_component_access_rules(&self, method: &str, locked: &LockedSubstate) -> Result<(), RuntimeError>;
 

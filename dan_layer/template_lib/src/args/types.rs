@@ -48,7 +48,7 @@ use crate::{
     },
     prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
     resource::ResourceType,
-    Hash,
+    Hash, template::BuiltinTemplate,
 };
 
 // -------------------------------- LOGS -------------------------------- //
@@ -586,4 +586,18 @@ pub struct VaultCreateProofByNonFungiblesArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateProofOfResourceByConfidentialArg {
     // pub proof: ConfidentialProofOfKnowledge
+}
+
+// -------------------------------- BuiltinTemplate -------------------------------- //
+
+/// A template builtin operation argument
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BuiltinTemplateInvokeArg {
+    pub action: BuiltinTemplateAction,
+}
+
+/// The possible actions that can be performed related to builtin templates
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum BuiltinTemplateAction {
+    GetTemplateAddress { bultin: BuiltinTemplate },
 }
