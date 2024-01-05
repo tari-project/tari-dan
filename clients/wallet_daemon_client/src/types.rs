@@ -557,6 +557,7 @@ pub struct GetValidatorFeesResponse {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct ClaimValidatorFeesRequest {
+    #[serde(default, deserialize_with = "opt_string_or_struct")]
     pub account: Option<ComponentAddressOrName>,
     pub max_fee: Option<Amount>,
     pub validator_public_key: PublicKey,
