@@ -30,8 +30,6 @@ pub enum Error {
     InvalidMessage { peer_id: PeerId, details: String },
     #[error("Failed to decode multiaddr: {0}")]
     DecodeMultiaddr(#[from] multiaddr::Error),
-    #[error("ProtoBuf peer record has no signature")]
-    ProtoBufMissingSignature,
 
     #[error("Invalid signed peer receord from peer `{peer_id}`: {details}")]
     InvalidSignedPeer { peer_id: PeerId, details: String },
