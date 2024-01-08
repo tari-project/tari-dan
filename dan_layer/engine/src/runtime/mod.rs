@@ -69,6 +69,7 @@ use tari_template_lib::{
         Arg,
         BucketAction,
         BucketRef,
+        BuiltinTemplateAction,
         CallAction,
         CallerContextAction,
         ComponentAction,
@@ -169,6 +170,8 @@ pub trait RuntimeInterface: Send + Sync {
     fn caller_context_invoke(&self, action: CallerContextAction) -> Result<InvokeResult, RuntimeError>;
 
     fn call_invoke(&self, action: CallAction, args: EngineArgs) -> Result<InvokeResult, RuntimeError>;
+
+    fn builtin_template_invoke(&self, action: BuiltinTemplateAction) -> Result<InvokeResult, RuntimeError>;
 
     fn check_component_access_rules(&self, method: &str, locked: &LockedSubstate) -> Result<(), RuntimeError>;
 

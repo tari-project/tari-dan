@@ -1,4 +1,4 @@
-//   Copyright 2023. The Tari Project
+//   Copyright 2024. The Tari Project
 //
 //   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //   following conditions are met:
@@ -20,10 +20,27 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-//! Utilities related to templates
+use serde::{Deserialize, Serialize};
+use tari_template_abi::{call_engine, EngineOp};
 
-mod builtin;
-pub use builtin::BuiltinTemplate;
+use crate::{
+    args::{BuiltinTemplateAction, BuiltinTemplateInvokeArg, InvokeResult},
+    prelude::TemplateAddress,
+};
 
-mod manager;
-pub use manager::TemplateManager;
+/// All the templates that are included by default in the Tari network
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BuiltinTemplate {
+    Account,
+    AccountNft,
+}
+
+impl BuiltinTemplate {
+    pub fn address(self) -> TemplateAddress {
+        let resp: InvokeResult = call_engine(EngineOp::BuiltinTemplateInvoke, &BuiltinTemplateInvokeArg {
+            action: BuiltinTemplateAction::GetTemplateAddress { bultin: self },
+        });
+
+        resp.decode().expect("Failed to decode TemplateAddress")
+    }
+}

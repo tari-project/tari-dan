@@ -1,4 +1,4 @@
-//   Copyright 2023. The Tari Project
+//   Copyright 2024. The Tari Project
 //
 //   Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //   following conditions are met:
@@ -20,10 +20,21 @@
 //   WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //   USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-//! Utilities related to templates
+use tari_template_lib::prelude::*;
 
-mod builtin;
-pub use builtin::BuiltinTemplate;
+#[template]
+mod builtin_templates {
+    use super::*;
 
-mod manager;
-pub use manager::TemplateManager;
+    pub struct BuiltinTest {}
+
+    impl BuiltinTest {
+        pub fn get_account_template_address() -> TemplateAddress {
+            BuiltinTemplate::Account.address()
+        }
+
+        pub fn get_account_nft_template_address() -> TemplateAddress {
+            BuiltinTemplate::AccountNft.address()
+        }
+    }
+}
