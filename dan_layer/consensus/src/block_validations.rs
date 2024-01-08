@@ -112,7 +112,9 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         .get_committee_shard_by_validator_public_key(candidate_block.epoch(), candidate_block.proposed_by())
         .await?;
 
-    if committee_shard.quorum_threshold() > u32::try_from(qc.signatures().len()).unwrap() {
+    if committee_shard.quorum_threshold() >
+        u32::try_from(qc.signatures().len()).map_err(|_| ProposalValidationError::QCisNotValid { qc: qc.clone() })?
+    {
         return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
     }
     Ok(())
