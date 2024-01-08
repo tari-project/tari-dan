@@ -1700,7 +1700,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
     fn builtin_template_invoke(&self, action: BuiltinTemplateAction) -> Result<InvokeResult, RuntimeError> {
         self.invoke_modules_on_runtime_call("builtin_template_invoke")?;
-        
+
         let address = match action {
             BuiltinTemplateAction::GetTemplateAddress { bultin } => match bultin {
                 BuiltinTemplate::Account => *ACCOUNT_TEMPLATE_ADDRESS,
