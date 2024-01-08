@@ -72,7 +72,7 @@ pub fn check_signature(candidate_block: &Block) -> Result<(), ProposalValidation
 
 pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
     candidate_block: &Block,
-    vote_signing_service: &TConsensusSpec::VoteSignatureService,
+    vote_signing_service: &TConsensusSpec::SignatureService,
     epoch_manager: &TConsensusSpec::EpochManager,
 ) -> Result<(), HotStuffError> {
     if candidate_block.justify().epoch().as_u64() == 0 {
