@@ -557,6 +557,7 @@ impl TemplateTest {
         let instructions = parse_manifest(
             &manifest,
             variables.into_iter().map(|(a, b)| (a.to_string(), b)).collect(),
+            Default::default(),
         )
         .unwrap();
         self.execute_and_commit(instructions.instructions, proofs)

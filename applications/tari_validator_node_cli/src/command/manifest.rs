@@ -37,7 +37,8 @@ impl ManifestSubcommand {
         match self {
             ManifestSubcommand::Check(args) => {
                 let contents = get_contents(args.manifest)?;
-                let instructions = tari_transaction_manifest::parse_manifest(&contents, Default::default())?;
+                let instructions =
+                    tari_transaction_manifest::parse_manifest(&contents, HashMap::default(), HashMap::default())?;
                 // TODO: improve output
                 println!("Instructions: {:#?}", instructions.instructions);
                 println!("Fee Instructions: {:#?}", instructions.fee_instructions);

@@ -148,11 +148,12 @@ impl FinalizeResult {
         }
     }
 
+    pub fn is_full_accept(&self) -> bool {
+        matches!(self.result, TransactionResult::Accept(_))
+    }
+
     pub fn is_accept(&self) -> bool {
-        matches!(
-            self.result,
-            TransactionResult::Accept(_) | TransactionResult::AcceptFeeRejectRest(_, _)
-        )
+        self.is_full_accept() || self.is_fee_only()
     }
 
     pub fn is_fee_only(&self) -> bool {

@@ -340,7 +340,7 @@ impl StateTracker {
             });
             Ok(())
         } else {
-            Err(RuntimeError::NoCheckpoint)
+            Err(RuntimeError::NoFeeCheckpoint)
         }
     }
 

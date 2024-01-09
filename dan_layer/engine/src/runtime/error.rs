@@ -157,8 +157,8 @@ pub enum RuntimeError {
     TemplateNotFound { template_address: TemplateAddress },
     #[error("Insufficient fees paid: required {required_fee}, paid {fees_paid}")]
     InsufficientFeesPaid { required_fee: Amount, fees_paid: Amount },
-    #[error("No checkpoint")]
-    NoCheckpoint,
+    #[error("No fee checkpoint")]
+    NoFeeCheckpoint,
     #[error("Component address must be sequential. Index before {index} was not found")]
     ComponentAddressMustBeSequential { index: u32 },
     #[error("Failed to load template '{address}': {details}")]

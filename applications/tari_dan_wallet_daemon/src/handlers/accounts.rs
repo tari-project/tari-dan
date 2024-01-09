@@ -104,7 +104,7 @@ pub async fn handle_create(
     let default_account = sdk.accounts_api().get_default()?;
     let inputs = sdk
         .substate_api()
-        .locate_dependent_substates(&[&default_account.address])
+        .locate_dependent_substates(&[default_account.address.clone()])
         .await?;
 
     // We aren't mutating the resources
@@ -122,14 +122,14 @@ pub async fn handle_create(
         target: LOG_TARGET,
         "Creating account with owner token {}. Fees are paid using account '{}' {}",
         owner_pk,
-        default_account.name,
+        default_account.name.as_deref().unwrap_or("<None>"),
         default_account.address
     );
 
     let max_fee = req.max_fee.unwrap_or(DEFAULT_FEE);
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
-        .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
+        .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
         .with_input_refs(input_refs.iter().map(|s| ShardId::from_address(&s.address, s.version)))
         .with_inputs(
             inputs
@@ -697,7 +697,7 @@ async fn finish_claiming<T: WalletStore>(
             RistrettoPublicKeyBytes::from_bytes(account_public_key.as_bytes()).unwrap(),
         );
         instructions.push(Instruction::CallFunction {
-            template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+            template_address: ACCOUNT_TEMPLATE_ADDRESS,
             function: "create_with_bucket".to_string(),
             args: args![owner_token, Workspace("bucket")],
         });
@@ -1021,7 +1021,7 @@ async fn get_or_create_account_address(
                 RistrettoPublicKeyBytes::from_bytes(public_key.as_bytes()).unwrap(),
             );
             instructions.insert(0, Instruction::CallFunction {
-                template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+                template_address: ACCOUNT_TEMPLATE_ADDRESS,
                 function: "create".to_string(),
                 args: args![owner_token],
             });
@@ -1230,6 +1230,6 @@ fn is_account_substate(substate: &Substate) -> bool {
     substate
         .substate_value()
         .component()
-        .filter(|c| c.template_address == *ACCOUNT_TEMPLATE_ADDRESS)
+        .filter(|c| c.template_address == ACCOUNT_TEMPLATE_ADDRESS)
         .is_some()
 }

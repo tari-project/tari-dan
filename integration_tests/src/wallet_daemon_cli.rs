@@ -447,7 +447,7 @@ pub async fn submit_manifest_with_signing_keys(
     let account_name = ComponentAddressOrName::Name(account_signing_key);
     let AccountGetResponse { account, .. } = client.accounts_get(account_name).await.unwrap();
 
-    let instructions = parse_manifest(&manifest_content, globals).unwrap();
+    let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: Some(account.key_index),
         instructions: instructions.instructions,
@@ -518,7 +518,7 @@ pub async fn submit_manifest(
         .map(|(_, addr)| SubstateRequirement::new(addr.address.clone(), Some(addr.version)))
         .collect::<Vec<_>>();
 
-    let instructions = parse_manifest(&manifest_content, globals).unwrap();
+    let instructions = parse_manifest(&manifest_content, globals, HashMap::new()).unwrap();
 
     let transaction_submit_req = TransactionSubmitRequest {
         signing_key_index: None,

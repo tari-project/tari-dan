@@ -100,7 +100,7 @@ fn get_transaction_builder(args: &WriteArgs) -> anyhow::Result<BoxedTransactionB
                     manifest_args.extend(parse_arg(line));
                 }
             }
-            manifest::builder(signer_key, manifest, manifest_args)
+            manifest::builder(signer_key, manifest, manifest_args, HashMap::new())
         },
         None => Ok(Box::new(free_coins::builder)),
     }

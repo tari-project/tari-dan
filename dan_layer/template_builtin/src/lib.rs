@@ -19,20 +19,17 @@
 //  SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-use lazy_static::lazy_static;
 use tari_engine_types::TemplateAddress;
 
-lazy_static! {
-    pub static ref ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
-    pub static ref ACCOUNT_NFT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
-    ]);
-}
+pub const ACCOUNT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([0; 32]);
+pub const ACCOUNT_NFT_TEMPLATE_ADDRESS: TemplateAddress = TemplateAddress::from_array([
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+]);
 
 pub fn get_template_builtin(address: &TemplateAddress) -> &'static [u8] {
-    if *address == *ACCOUNT_TEMPLATE_ADDRESS {
+    if *address == ACCOUNT_TEMPLATE_ADDRESS {
         include_bytes!("../templates/account/account.wasm")
-    } else if *address == *ACCOUNT_NFT_TEMPLATE_ADDRESS {
+    } else if *address == ACCOUNT_NFT_TEMPLATE_ADDRESS {
         include_bytes!("../templates/account_nfts/account_nfts.wasm")
     } else {
         panic!("Unknown builtin template address")

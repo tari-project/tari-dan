@@ -25,7 +25,7 @@ pub fn builder(_: u64) -> Transaction {
                     output: None,
                 })
                 .put_last_instruction_output_on_workspace(b"free_coins")
-                .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create_with_bucket", args![
+                .call_function(ACCOUNT_TEMPLATE_ADDRESS, "create_with_bucket", args![
                     owner_token,
                     Workspace("free_coins")
                 ])

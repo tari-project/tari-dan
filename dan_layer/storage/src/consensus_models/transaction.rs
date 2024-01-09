@@ -236,6 +236,7 @@ impl From<ExecutedTransaction> for TransactionRecord {
         let abort_details = tx.abort_details().cloned();
         let resulting_outputs = tx.resulting_outputs().to_vec();
         let (transaction, result) = tx.dissolve();
+
         Self {
             transaction,
             result: Some(result),

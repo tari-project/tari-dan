@@ -30,14 +30,14 @@ impl<'a, TStore: WalletStore> AccountsApi<'a, TStore> {
         is_default: bool,
     ) -> Result<(), AccountsApiError> {
         let mut tx = self.store.create_write_tx()?;
-        let account_name = account_name
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| account_address.to_string());
-        if tx.accounts_get_by_name(&account_name).optional()?.is_some() {
-            tx.rollback()?;
-            return Err(AccountsApiError::AccountNameAlreadyExists { name: account_name });
+        let account_name = account_name.map(|s| s.to_string());
+        if let Some(ref name) = account_name {
+            if tx.accounts_get_by_name(name).optional()?.is_some() {
+                tx.rollback()?;
+                return Err(AccountsApiError::AccountNameAlreadyExists { name: name.clone() });
+            }
         }
-        tx.accounts_insert(&account_name, account_address, owner_key_index, is_default)?;
+        tx.accounts_insert(account_name.as_deref(), account_address, owner_key_index, is_default)?;
         tx.commit()?;
         Ok(())
     }

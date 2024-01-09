@@ -42,7 +42,7 @@ pub enum ManifestIntent {
 
 #[derive(Debug, Clone)]
 pub struct ManifestImport {
-    pub template_address: TemplateAddress,
+    pub template_address: Option<TemplateAddress>,
     pub alias: Ident,
 }
 
@@ -99,7 +99,7 @@ impl ManifestParser {
         let mut fee_instruction_intents = vec![];
         let mut defines = vec![];
         defines.push(ManifestImport {
-            template_address: *ACCOUNT_TEMPLATE_ADDRESS,
+            template_address: Some(ACCOUNT_TEMPLATE_ADDRESS),
             alias: Ident::new("Account", proc_macro2::Span::call_site()),
         });
 
@@ -117,8 +117,18 @@ impl ManifestParser {
                         .ok_or_else(|| syn::Error::new_spanned(rename.clone(), "Invalid template address"))?;
 
                     defines.push(ManifestImport {
-                        template_address,
+                        template_address: Some(template_address),
                         alias: rename.rename,
+                    });
+                },
+                // use Name; // (predefined template)
+                Stmt::Item(Item::Use(ItemUse {
+                    tree: UseTree::Name(name),
+                    ..
+                })) => {
+                    defines.push(ManifestImport {
+                        template_address: None,
+                        alias: name.ident,
                     });
                 },
                 Stmt::Item(Item::Fn(ItemFn {

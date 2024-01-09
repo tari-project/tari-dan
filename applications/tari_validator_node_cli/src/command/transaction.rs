@@ -207,7 +207,11 @@ async fn handle_submit_manifest(
     client: &mut ValidatorNodeClient,
 ) -> Result<SubmitTransactionResponse, anyhow::Error> {
     let contents = std::fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
-    let instructions = parse_manifest(&contents, manifest::parse_globals(args.input_variables)?)?;
+    let instructions = parse_manifest(
+        &contents,
+        manifest::parse_globals(args.input_variables)?,
+        Default::default(),
+    )?;
     submit_transaction(instructions.instructions, args.common, base_dir, client).await
 }
 

@@ -282,7 +282,7 @@ async fn handle_submit_manifest(
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
     let contents = fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
-    let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?)?;
+    let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?, Default::default())?;
     let common = args.common;
 
     let fee_account;

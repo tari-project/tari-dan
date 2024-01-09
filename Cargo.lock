@@ -1701,6 +1701,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "acbf1af155f9b9ef647e42cdc158db4b64a1b61f743629225fde6f3e0be2a7c7"
 
 [[package]]
+name = "colored"
+version = "1.9.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5a5f741c91823341bebf717d4c71bda820630ce065443b58bd1b7451af008355"
+dependencies = [
+ "is-terminal",
+ "lazy_static",
+ "winapi",
+]
+
+[[package]]
 name = "concurrent-queue"
 version = "2.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2994,6 +3005,7 @@ version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9f0c14694cbd524c8720dd69b0e3179344f04ebb5f90f2e4a440c6ea3b2f1ee"
 dependencies = [
+ "colored",
  "log",
 ]
 
@@ -9787,7 +9799,6 @@ dependencies = [
 name = "tari_template_builtin"
 version = "0.3.0"
 dependencies = [
- "lazy_static",
  "tari_engine_types",
 ]
 
@@ -10045,6 +10056,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "tariswap_bench"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "clap 4.4.13",
+ "fern",
+ "futures 0.3.29",
+ "lazy_static",
+ "log",
+ "minotari_app_grpc",
+ "tari_crypto",
+ "tari_dan_common_types",
+ "tari_dan_wallet_daemon",
+ "tari_dan_wallet_sdk",
+ "tari_dan_wallet_storage_sqlite",
+ "tari_engine_types",
+ "tari_indexer_lib",
+ "tari_template_builtin",
+ "tari_template_lib",
+ "tari_transaction",
+ "tari_transaction_manifest",
+ "tari_validator_node_client",
+ "tokio",
+ "transaction_generator",
+ "url",
+]
+
+[[package]]
 name = "tempfile"
 version = "3.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10070,9 +10109,9 @@ dependencies = [
 
 [[package]]
 name = "termcolor"
-version = "1.4.0"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff1bc3d3f05aff0403e8ac0d92ced918ec05b666a43f83297ccef5bea8a3d449"
+checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
 dependencies = [
  "winapi-util",
 ]

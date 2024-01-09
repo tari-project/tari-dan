@@ -104,7 +104,7 @@ pub async fn handle_submit(
         // If we are not overriding inputs, we will use inputs that we know about in the local substate address db
         let mut substates = get_referenced_substate_addresses(&req.instructions)?;
         substates.extend(get_referenced_substate_addresses(&req.fee_instructions)?);
-        let substates = substates.iter().collect::<Vec<_>>();
+        let substates = substates.into_iter().collect::<Vec<_>>();
         let loaded_dependent_substates = sdk
             .substate_api()
             .locate_dependent_substates(&substates)

@@ -61,7 +61,7 @@ fn manifest_smoke_test() {
     let ManifestInstructions {
         instructions,
         fee_instructions,
-    } = parse_manifest(&input, globals).unwrap();
+    } = parse_manifest(&input, globals, Default::default()).unwrap();
 
     let expected = vec![
         Instruction::CallFunction {

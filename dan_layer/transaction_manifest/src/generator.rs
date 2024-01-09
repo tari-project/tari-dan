@@ -25,15 +25,17 @@ pub struct ManifestInstructionGenerator {
     global_aliases: HashMap<String, ManifestValue>,
     globals: HashMap<String, ManifestValue>,
     variables: HashSet<String>,
+    templates: HashMap<String, TemplateAddress>,
 }
 
 impl ManifestInstructionGenerator {
-    pub fn new(globals: HashMap<String, ManifestValue>) -> Self {
+    pub fn new(globals: HashMap<String, ManifestValue>, templates: HashMap<String, TemplateAddress>) -> Self {
         Self {
             imported_templates: HashMap::new(),
             global_aliases: HashMap::new(),
             globals,
             variables: HashSet::new(),
+            templates,
         }
     }
 
@@ -42,8 +44,18 @@ impl ManifestInstructionGenerator {
             .parsed
             .defines
             .into_iter()
-            .map(|import| (import.alias, import.template_address))
-            .collect();
+            .map(|import| match import.template_address {
+                Some(addr) => Ok((import.alias, addr)),
+                None => {
+                    let alias_str = import.alias.to_string();
+                    self.templates
+                        .get(&alias_str)
+                        .copied()
+                        .map(|addr| (import.alias, addr))
+                        .ok_or(ManifestError::TemplateAliasNotDefined { alias: alias_str })
+                },
+            })
+            .collect::<Result<_, _>>()?;
 
         let mut instructions = Vec::with_capacity(ast.parsed.instruction_intents.len());
         for intent in ast.parsed.instruction_intents {

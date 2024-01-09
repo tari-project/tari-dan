@@ -1,18 +1,19 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fmt::Display, str::FromStr};
+use std::{collections::HashSet, fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
+    indexed_value::{IndexedValue, IndexedValueError},
     instruction::Instruction,
     serde_with,
     substate::SubstateAddress,
 };
-use tari_template_lib::Hash;
+use tari_template_lib::{models::ComponentAddress, Hash};
 
 use crate::{builder::TransactionBuilder, transaction_id::TransactionId, TransactionSignature};
 
@@ -161,6 +162,52 @@ impl Transaction {
 
     pub fn max_epoch(&self) -> Option<Epoch> {
         self.max_epoch
+    }
+
+    pub fn as_referenced_components(&self) -> impl Iterator<Item = &ComponentAddress> + '_ {
+        self.instructions()
+            .iter()
+            .chain(self.fee_instructions())
+            .filter_map(|instruction| {
+                if let Instruction::CallMethod { component_address, .. } = instruction {
+                    Some(component_address)
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Returns all substates addresses referenced by this transaction
+    pub fn to_referenced_substates(&self) -> Result<HashSet<SubstateAddress>, IndexedValueError> {
+        let all_instructions = self.instructions().iter().chain(self.fee_instructions());
+
+        let mut substates = HashSet::new();
+        for instruction in all_instructions {
+            match instruction {
+                Instruction::CallFunction { args, .. } => {
+                    for arg in args.iter().filter_map(|a| a.as_literal_bytes()) {
+                        let value = IndexedValue::from_raw(arg)?;
+                        substates.extend(value.referenced_substates());
+                    }
+                },
+                Instruction::CallMethod {
+                    component_address,
+                    args,
+                    ..
+                } => {
+                    substates.insert(SubstateAddress::Component(*component_address));
+                    for arg in args.iter().filter_map(|a| a.as_literal_bytes()) {
+                        let value = IndexedValue::from_raw(arg)?;
+                        substates.extend(value.referenced_substates());
+                    }
+                },
+                Instruction::ClaimBurn { claim } => {
+                    substates.insert(SubstateAddress::UnclaimedConfidentialOutput(claim.output_address));
+                },
+                _ => {},
+            }
+        }
+        Ok(substates)
     }
 }
 

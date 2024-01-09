@@ -48,7 +48,8 @@ members = [
     "networking/libp2p-peersync",
     "networking/libp2p-substream",
     "networking/sqlite_message_logger",
-    "utilities/transaction_generator",
+    "utilities/tariswap_test_bench",
+    "utilities/transaction_submitter",
     "utilities/transaction_submitter",
 ]
 resolver = "2"
