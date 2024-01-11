@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, decode_exact, encode};
 use tari_dan_common_types::{NodeAddressable, PeerAddress, ShardId};
-use tari_dan_storage::consensus_models::Decision;
+use tari_dan_storage::consensus_models::{Decision, QuorumCertificate};
 use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateAddress, SubstateValue},
@@ -66,12 +66,14 @@ pub enum SubstateResult {
         address: SubstateAddress,
         substate: Substate,
         created_by_tx: TransactionId,
+        quorum_certificates: Vec<QuorumCertificate>,
     },
     Down {
         address: SubstateAddress,
         version: u32,
         created_by_tx: TransactionId,
         deleted_by_tx: TransactionId,
+        quorum_certificates: Vec<QuorumCertificate>,
     },
 }
 
@@ -135,11 +137,6 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
             ))
         })?;
 
-        // TODO: verify the quorum certificates
-        // for qc in resp.quorum_certificates {
-        //     let qc = QuorumCertificate::try_from(&qc)?;
-        // }
-
         match status {
             SubstateStatus::Up => {
                 let tx_hash = resp.created_transaction_hash.try_into().map_err(|_| {
@@ -149,11 +146,17 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
                 })?;
                 let substate = SubstateValue::from_bytes(&resp.substate)
                     .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?;
+                let quorum_certificates = resp.quorum_certificates
+                    .into_iter()
+                    .map(|qc| qc.try_into())
+                    .collect::<Result<_, _>>()
+                    .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Node returned invalid quorum certificates")))?;
                 Ok(SubstateResult::Up {
                     substate: Substate::new(resp.version, substate),
                     address: SubstateAddress::from_bytes(&resp.address)
                         .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?,
                     created_by_tx: tx_hash,
+                    quorum_certificates
                 })
             },
             SubstateStatus::Down => {
@@ -167,12 +170,18 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
                         "Node returned an invalid or empty destroyed transaction hash"
                     ))
                 })?;
+                let quorum_certificates = resp.quorum_certificates
+                    .into_iter()
+                    .map(|qc| qc.try_into())
+                    .collect::<Result<_, _>>()
+                    .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Node returned invalid quorum certificates")))?;
                 Ok(SubstateResult::Down {
                     address: SubstateAddress::from_bytes(&resp.address)
                         .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?,
                     version: resp.version,
                     deleted_by_tx,
                     created_by_tx,
+                    quorum_certificates,
                 })
             },
             SubstateStatus::DoesNotExist => Ok(SubstateResult::DoesNotExist),

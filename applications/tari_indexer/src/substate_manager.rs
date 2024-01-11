@@ -229,6 +229,7 @@ impl SubstateManager {
                 address,
                 substate,
                 created_by_tx,
+                quorum_certificates: _,
             } => Ok(Some(SubstateResponse {
                 address,
                 version: substate.version(),
