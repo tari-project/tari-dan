@@ -44,10 +44,12 @@ use tari_engine_types::{
     TemplateAddress,
 };
 use tari_template_abi::TemplateDef;
+use tari_template_builtin::{ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
     args::{
         BucketAction,
         BucketRef,
+        BuiltinTemplateAction,
         CallAction,
         CallFunctionArg,
         CallMethodArg,
@@ -82,6 +84,7 @@ use tari_template_lib::{
     crypto::RistrettoPublicKeyBytes,
     models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, NotAuthorized, VaultRef},
     prelude::ResourceType,
+    template::BuiltinTemplate,
 };
 
 use super::{tracker::FinalizeData, Runtime};
@@ -282,6 +285,12 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     .map(|l| l.address().as_component_address().unwrap());
                 Ok(InvokeResult::encode(&maybe_address)?)
             }),
+            CallerContextAction::AllocateNewComponentAddress => self.tracker.write_with(|state| {
+                let (template, _) = state.current_template()?;
+                let address = self.tracker.id_provider().new_component_address(*template, None)?;
+                let allocation = state.new_address_allocation(address)?;
+                Ok(InvokeResult::encode(&allocation)?)
+            }),
         }
     }
 
@@ -322,6 +331,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                     arg.owner_rule,
                     arg.access_rules,
                     arg.component_id,
+                    arg.address_allocation,
                 )?;
                 Ok(InvokeResult::encode(&component_address)?)
             },
@@ -887,12 +897,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 self.tracker.write_with(|state| {
                     let vault_lock = state.lock_substate(&SubstateAddress::Vault(vault_id), LockFlag::Read)?;
-                    // NOTE: A BTreeSet does not decode when received in the WASM
-                    let non_fungible_ids = state
-                        .get_vault(&vault_lock)?
-                        .get_non_fungible_ids()
-                        .iter()
-                        .collect::<Vec<_>>();
+                    let non_fungible_ids = state.get_vault(&vault_lock)?.get_non_fungible_ids();
                     let result = InvokeResult::encode(&non_fungible_ids)?;
                     state.unlock_substate(vault_lock)?;
                     Ok(result)
@@ -1238,8 +1243,7 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
 
                 self.tracker.write_with(|state| {
                     let bucket = state.get_bucket(bucket_id)?;
-                    let non_fungible_ids = bucket.non_fungible_ids().iter().collect::<Vec<_>>();
-                    Ok(InvokeResult::encode(&non_fungible_ids)?)
+                    Ok(InvokeResult::encode(bucket.non_fungible_ids())?)
                 })
             },
         }
@@ -1692,6 +1696,19 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
     fn pop_call_frame(&self) -> Result<(), RuntimeError> {
         self.tracker.pop_call_frame()?;
         Ok(())
+    }
+
+    fn builtin_template_invoke(&self, action: BuiltinTemplateAction) -> Result<InvokeResult, RuntimeError> {
+        self.invoke_modules_on_runtime_call("builtin_template_invoke")?;
+
+        let address = match action {
+            BuiltinTemplateAction::GetTemplateAddress { bultin } => match bultin {
+                BuiltinTemplate::Account => *ACCOUNT_TEMPLATE_ADDRESS,
+                BuiltinTemplate::AccountNft => *ACCOUNT_NFT_TEMPLATE_ADDRESS,
+            },
+        };
+
+        Ok(InvokeResult::encode(&address)?)
     }
 }
 

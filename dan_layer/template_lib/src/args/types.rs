@@ -33,6 +33,7 @@ use crate::{
     auth::{OwnerRule, ResourceAccessRules},
     crypto::PedersonCommitmentBytes,
     models::{
+        AddressAllocation,
         Amount,
         BucketId,
         ComponentAddress,
@@ -47,6 +48,7 @@ use crate::{
     },
     prelude::{ComponentAccessRules, ConfidentialOutputProof, TemplateAddress},
     resource::ResourceType,
+    template::BuiltinTemplate,
     Hash,
 };
 
@@ -157,6 +159,7 @@ pub struct CreateComponentArg {
     pub owner_rule: OwnerRule,
     pub access_rules: ComponentAccessRules,
     pub component_id: Option<Hash>,
+    pub address_allocation: Option<AddressAllocation<ComponentAddress>>,
 }
 
 // -------------------------------- Events -------------------------------- //
@@ -478,6 +481,7 @@ pub struct CallerContextInvokeArg {
 pub enum CallerContextAction {
     GetCallerPublicKey,
     GetComponentAddress,
+    AllocateNewComponentAddress,
 }
 
 // -------------------------------- CallInvoke -------------------------------- //
@@ -583,4 +587,18 @@ pub struct VaultCreateProofByNonFungiblesArg {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CreateProofOfResourceByConfidentialArg {
     // pub proof: ConfidentialProofOfKnowledge
+}
+
+// -------------------------------- BuiltinTemplate -------------------------------- //
+
+/// A template builtin operation argument
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BuiltinTemplateInvokeArg {
+    pub action: BuiltinTemplateAction,
+}
+
+/// The possible actions that can be performed related to builtin templates
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum BuiltinTemplateAction {
+    GetTemplateAddress { bultin: BuiltinTemplate },
 }

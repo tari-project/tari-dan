@@ -263,6 +263,17 @@ impl From<TransactionReceiptAddress> for SubstateAddress {
     }
 }
 
+impl TryFrom<SubstateAddress> for ComponentAddress {
+    type Error = SubstateAddress;
+
+    fn try_from(value: SubstateAddress) -> Result<Self, Self::Error> {
+        match value {
+            SubstateAddress::Component(addr) => Ok(addr),
+            _ => Err(value),
+        }
+    }
+}
+
 impl Display for SubstateAddress {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -36,6 +36,7 @@ use tari_template_lib::{
     args::{MintArg, ResourceDiscriminator},
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{
+        AddressAllocation,
         Amount,
         BucketId,
         ComponentAddress,
@@ -73,6 +74,8 @@ pub(super) struct WorkingState {
     events: Vec<Event>,
     logs: Vec<LogEntry>,
     buckets: HashMap<BucketId, Bucket>,
+    address_allocations: HashMap<u32, SubstateAddress>,
+    address_allocation_id: u32,
     proofs: HashMap<ProofId, Proof>,
 
     store: WorkingStateStore,
@@ -103,6 +106,8 @@ impl WorkingState {
             logs: Vec::new(),
             buckets: HashMap::new(),
             proofs: HashMap::new(),
+            address_allocation_id: 0,
+            address_allocations: HashMap::new(),
 
             store: WorkingStateStore::new(state_store),
 
@@ -313,6 +318,13 @@ impl WorkingState {
         if !self.proofs.is_empty() {
             return Err(TransactionCommitError::DanglingProofs {
                 count: self.proofs.len(),
+            }
+            .into());
+        }
+
+        if !self.address_allocations.is_empty() {
+            return Err(TransactionCommitError::DanglingAddressAllocations {
+                count: self.address_allocations.len(),
             }
             .into());
         }
@@ -655,6 +667,28 @@ impl WorkingState {
         Ok(())
     }
 
+    pub fn new_address_allocation<T: Into<SubstateAddress> + Clone>(
+        &mut self,
+        address: T,
+    ) -> Result<AddressAllocation<T>, RuntimeError> {
+        let id = self.address_allocation_id;
+        self.address_allocation_id += 1;
+        self.address_allocations.insert(id, address.clone().into());
+        let allocation = AddressAllocation::new(id, address);
+        Ok(allocation)
+    }
+
+    pub fn take_allocated_address<T: TryFrom<SubstateAddress, Error = SubstateAddress>>(
+        &mut self,
+        id: u32,
+    ) -> Result<T, RuntimeError> {
+        let address = self
+            .address_allocations
+            .remove(&id)
+            .ok_or(RuntimeError::AddressAllocationNotFound { id })?;
+        T::try_from(address).map_err(|address| RuntimeError::AddressAllocationTypeMismatch { address })
+    }
+
     pub fn pay_fee(&mut self, resource: ResourceContainer, return_vault: VaultId) -> Result<(), RuntimeError> {
         self.fee_state.fee_payments.push((resource, return_vault));
         Ok(())
@@ -843,6 +877,15 @@ impl WorkingState {
             .last()
             .map(|frame| frame.current_template())
             .ok_or(RuntimeError::NoActiveCallScope)
+    }
+
+    /// Returns the component that is currently in scope (if any)
+    pub fn current_component(&self) -> Result<Option<ComponentAddress>, RuntimeError> {
+        let frame = self.call_frames.last().ok_or(RuntimeError::NoActiveCallScope)?;
+        Ok(frame
+            .scope()
+            .get_current_component_lock()
+            .and_then(|lock| lock.address().as_component_address()))
     }
 
     pub fn push_frame(&mut self, mut new_frame: CallFrame, max_call_depth: usize) -> Result<(), RuntimeError> {

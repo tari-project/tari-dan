@@ -56,3 +56,4 @@ tokio = { workspace = true, features = [
   "rt-multi-thread",
 ]}
 tokio-stream = { workspace = true, features = ["sync"] }
+config = { workspace = true }

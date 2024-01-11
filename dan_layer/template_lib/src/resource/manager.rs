@@ -96,7 +96,7 @@ impl ResourceManager {
     /// * `metadata` - Collection of information used to describe the resource
     /// * `mint_arg` - Specification of the initial tokens that will be minted on resource creation
     pub fn create(
-        &mut self,
+        &self,
         resource_type: ResourceType,
         owner_rule: OwnerRule,
         access_rules: ResourceAccessRules,
@@ -130,7 +130,7 @@ impl ResourceManager {
     ///
     /// * `proof` - A zero-knowledge proof that specifies the amount of tokens to be minted and returned back to the
     ///   caller
-    pub fn mint_confidential(&mut self, proof: ConfidentialOutputProof) -> Bucket {
+    pub fn mint_confidential(&self, proof: ConfidentialOutputProof) -> Bucket {
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::Confidential { proof: Box::new(proof) },
         })
@@ -150,7 +150,7 @@ impl ResourceManager {
     /// * `mutable_data` - Initial data that the token will hold and that can potentially be updated in future
     ///   instructions
     pub fn mint_non_fungible<T: Serialize, U: Serialize>(
-        &mut self,
+        &self,
         id: NonFungibleId,
         metadata: &T,
         mutable_data: &U,
@@ -178,7 +178,7 @@ impl ResourceManager {
     ///   instructions
     /// * `supply` - The amount of new tokens to be minted
     pub fn mint_many_non_fungible<T: Serialize, U: Serialize>(
-        &mut self,
+        &self,
         metadata: &T,
         mutable_data: &U,
         supply: usize,
@@ -204,7 +204,7 @@ impl ResourceManager {
     /// # Arguments
     ///
     /// * `amount` - The amount of new tokens to be minted
-    pub fn mint_fungible(&mut self, amount: Amount) -> Bucket {
+    pub fn mint_fungible(&self, amount: Amount) -> Bucket {
         self.mint_internal(MintResourceArg {
             mint_arg: MintArg::Fungible { amount },
         })
@@ -368,7 +368,7 @@ impl ResourceManager {
         Bucket::from_id(bucket_id)
     }
 
-    fn mint_internal(&mut self, arg: MintResourceArg) -> Bucket {
+    fn mint_internal(&self, arg: MintResourceArg) -> Bucket {
         let resp: InvokeResult = call_engine(EngineOp::ResourceInvoke, &ResourceInvokeArg {
             resource_ref: self.expect_resource_address(),
             action: ResourceAction::Mint,

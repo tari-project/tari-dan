@@ -220,6 +220,11 @@ pub enum RuntimeError {
     DuplicateBucket { bucket_id: BucketId },
     #[error("Duplicate proof {proof_id}")]
     DuplicateProof { proof_id: ProofId },
+
+    #[error("Address allocation not found with id {id}")]
+    AddressAllocationNotFound { id: u32 },
+    #[error("Address allocation type mismatch: {address}")]
+    AddressAllocationTypeMismatch { address: SubstateAddress },
 }
 
 impl RuntimeError {
@@ -251,6 +256,8 @@ pub enum TransactionCommitError {
     DanglingProofs { count: usize },
     #[error("Locked value (amount: {locked_amount}) remaining in vault {vault_id}")]
     DanglingLockedValueInVault { vault_id: VaultId, locked_amount: Amount },
+    #[error("{count} dangling address allocations remain after transaction execution")]
+    DanglingAddressAllocations { count: usize },
     #[error("{} orphaned substate(s) detected: {}", .substates.len(), .substates.join(", "))]
     OrphanedSubstates { substates: Vec<String> },
     #[error("{count} dangling items in workspace after transaction execution")]

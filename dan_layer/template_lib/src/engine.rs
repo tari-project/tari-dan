@@ -30,7 +30,7 @@ use crate::{
     component::ComponentManager,
     context::Context,
     get_context,
-    models::ComponentAddress,
+    models::{AddressAllocation, ComponentAddress},
     prelude::ComponentAccessRules,
     Hash,
 };
@@ -57,6 +57,7 @@ impl TariEngine {
         owner_rule: OwnerRule,
         access_rules: ComponentAccessRules,
         component_id: Option<Hash>,
+        address_allocation: Option<AddressAllocation<ComponentAddress>>,
     ) -> ComponentAddress {
         let encoded_state = to_value(&initial_state).unwrap();
 
@@ -68,6 +69,7 @@ impl TariEngine {
                 owner_rule,
                 access_rules,
                 component_id,
+                address_allocation
             }],
         });
 

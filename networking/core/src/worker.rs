@@ -14,7 +14,7 @@ use libp2p::{
     dcutr,
     futures::StreamExt,
     gossipsub,
-    gossipsub::IdentTopic,
+    gossipsub::{IdentTopic, MessageId},
     identify,
     identity,
     mdns,
@@ -496,7 +496,8 @@ where
             }) => match message.source {
                 Some(source) => {
                     info!(target: LOG_TARGET, "📢 Gossipsub message: [{topic}] {message_id} ({bytes} bytes) from {source}", topic = message.topic, bytes = message.data.len());
-                    self.on_gossipsub_message(source, message).await?;
+                    self.on_gossipsub_message(message_id, propagation_source, source, message)
+                        .await?;
                 },
                 None => {
                     warn!(target: LOG_TARGET, "📢 Discarding Gossipsub message [{topic}] ({bytes} bytes) with no source propagated by {propagation_source}", topic=message.topic, bytes=message.data.len());
@@ -549,6 +550,8 @@ where
 
     async fn on_gossipsub_message(
         &mut self,
+        message_id: MessageId,
+        propagation_source: PeerId,
         source: PeerId,
         message: gossipsub::Message,
     ) -> Result<(), NetworkingError> {
@@ -559,18 +562,57 @@ where
                 warn!(target: LOG_TARGET, "📢 Discarding peer announce message with unsupported address {addr}");
                 return Ok(());
             }
-            self.swarm
-                .behaviour_mut()
-                .peer_sync
-                .validate_and_add_peer_record(rec)
-                .await?;
+            let behaviour_mut = self.swarm.behaviour_mut();
+            match behaviour_mut.peer_sync.validate_and_add_peer_record(rec).await {
+                Ok(_) => {
+                    info!(target: LOG_TARGET, "📢 Peer announce message added to peer store");
+                    behaviour_mut.gossipsub.report_message_validation_result(
+                        &message_id,
+                        &propagation_source,
+                        gossipsub::MessageAcceptance::Accept,
+                    )?;
+                },
+                // Invalid message
+                Err(err @ peersync::Error::InvalidMessage { .. }) |
+                Err(err @ peersync::Error::DecodeMultiaddr { .. }) |
+                Err(err @ peersync::Error::InvalidSignedPeer { .. }) => {
+                    behaviour_mut.gossipsub.report_message_validation_result(
+                        &message_id,
+                        &propagation_source,
+                        gossipsub::MessageAcceptance::Reject,
+                    )?;
+                    return Err(err.into());
+                },
+                // Some other internal error
+                Err(err) => {
+                    warn!(target: LOG_TARGET, "📢 Peer announce message failed to add to peer store: {}", err);
+                    behaviour_mut.gossipsub.report_message_validation_result(
+                        &message_id,
+                        &propagation_source,
+                        gossipsub::MessageAcceptance::Accept,
+                    )?;
+                },
+            }
         } else {
-            let msg = self
-                .message_codec
-                .decode_from(&mut message.data.as_slice())
-                .await
-                .map_err(NetworkingError::CodecError)?;
-            let _ignore = self.tx_messages.send((source, msg)).await;
+            match self.message_codec.decode_from(&mut message.data.as_slice()).await {
+                Ok(msg) => {
+                    let _ignore = self.tx_messages.send((source, msg)).await;
+                    self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
+                        &message_id,
+                        &propagation_source,
+                        gossipsub::MessageAcceptance::Accept,
+                    )?;
+                },
+                Err(err) => {
+                    warn!(target: LOG_TARGET, "📢 Gossipsub message failed to decode: {}", err);
+                    self.swarm.behaviour_mut().gossipsub.report_message_validation_result(
+                        &message_id,
+                        &propagation_source,
+                        gossipsub::MessageAcceptance::Reject,
+                    )?;
+                    return Err(NetworkingError::CodecError(err));
+                },
+            }
         }
         Ok(())
     }

@@ -43,7 +43,7 @@ use tari_engine_types::{
 use tari_template_lib::{
     auth::{ComponentAccessRules, OwnerRule},
     crypto::RistrettoPublicKeyBytes,
-    models::{Amount, BucketId, ComponentAddress, Metadata, UnclaimedConfidentialOutputAddress},
+    models::{AddressAllocation, Amount, BucketId, ComponentAddress, Metadata, UnclaimedConfidentialOutputAddress},
     Hash,
 };
 use tari_transaction::id_provider::IdProvider;
@@ -161,14 +161,18 @@ impl StateTracker {
         owner_rule: OwnerRule,
         access_rules: ComponentAccessRules,
         component_id: Option<Hash>,
+        address_allocation: Option<AddressAllocation<ComponentAddress>>,
     ) -> Result<ComponentAddress, RuntimeError> {
         self.write_with(|state| {
             let (template_address, module_name) =
                 state.current_template().map(|(addr, name)| (*addr, name.to_string()))?;
 
-            let component_address = self
-                .id_provider()
-                .new_component_address(template_address, component_id)?;
+            let component_address = match address_allocation {
+                Some(address_allocation) => state.take_allocated_address(address_allocation.id())?,
+                None => self
+                    .id_provider()
+                    .new_component_address(template_address, component_id)?,
+            };
 
             let component = ComponentBody { state: component_state };
             let component = ComponentHeader {

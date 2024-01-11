@@ -28,7 +28,7 @@ use tari_common::{
     exit_codes::ExitError,
 };
 use tari_crypto::tari_utilities::{hex::Hex, message_format::MessageFormat};
-use tari_dan_app_utilities::config::PeerSeedsConfig;
+use tari_dan_app_utilities::p2p_config::PeerSeedsConfig;
 use tari_engine_types::substate::SubstateAddress;
 use tari_indexer::{
     config::{ApplicationConfig, IndexerConfig},

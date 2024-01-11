@@ -40,7 +40,7 @@ impl TemplateManager {
         Self { template_address }
     }
 
-    /// Executes a function of the template. Used for template composability.
+    /// Executes a function in the template.
     /// Template functions can be called from another template function or from component methods.
     pub fn call<F: Into<String>, T: DeserializeOwned>(&self, function: F, args: Vec<Arg>) -> T {
         self.call_internal(CallFunctionArg {
@@ -59,5 +59,11 @@ impl TemplateManager {
         result
             .decode()
             .expect("failed to decode template function call result from engine")
+    }
+
+    /// Calls a function in the template. The invoked function must return a unit type or a panic will occur.
+    /// Equivalent to `call::<_, ()>(function, args)`.
+    pub fn invoke<F: Into<String>>(&self, function: F, args: Vec<Arg>) {
+        self.call(function, args)
     }
 }

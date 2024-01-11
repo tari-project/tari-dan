@@ -1,7 +1,6 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
-
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use tari_dan_engine::runtime::{ActionIdent, RuntimeError};
 use tari_template_lib::{
@@ -224,7 +223,6 @@ mod component_access_rules {
 }
 
 mod resource_access_rules {
-    use std::collections::HashMap;
 
     use super::*;
 
@@ -884,6 +882,68 @@ mod resource_access_rules {
                 .sign(&owner_key)
                 .build(),
             vec![user_proof],
+        );
+    }
+
+    #[test]
+    fn it_restricts_resource_actions_to_component() {
+        let mut test = TemplateTest::new(["tests/templates/access_rules"]);
+
+        // Create sender and receiver accounts
+        let (owner_account, owner_proof, owner_key) = test.create_empty_account();
+
+        let access_rules_template = test.get_template_address("AccessRulesTest");
+
+        let result = test.execute_expect_success(
+            Transaction::builder()
+                .call_function(
+                    access_rules_template,
+                    "resource_actions_restricted_to_component",
+                    args![],
+                )
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        let component_address = result.finalize.execution_results[0]
+            .decode::<ComponentAddress>()
+            .unwrap();
+        // Find the resource address for the tokens from the output substates
+        let token_resource = result
+            .finalize
+            .result
+            .accept()
+            .unwrap()
+            .up_iter()
+            .filter_map(|(addr, s)| s.substate_value().as_resource().map(|r| (addr, r)))
+            .filter(|(_, r)| r.resource_type().is_fungible())
+            .map(|(addr, _)| addr.as_resource_address().unwrap())
+            .next()
+            .unwrap();
+
+        // Minting using a template function will fail
+        let reason = test.execute_expect_failure(
+            Transaction::builder()
+                .call_function(access_rules_template, "mint_resource", args![token_resource])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(owner_account, "deposit", args![Workspace("tokens")])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof.clone()],
+        );
+
+        assert_access_denied_for_action(reason, ResourceAuthAction::Mint);
+
+        // Minting in a component context will succeed
+        test.execute_expect_success(
+            Transaction::builder()
+                .call_method(component_address, "mint_more_tokens", args![Amount(1000)])
+                .put_last_instruction_output_on_workspace("tokens")
+                .call_method(owner_account, "deposit", args![Workspace("tokens")])
+                .sign(&owner_key)
+                .build(),
+            vec![owner_proof],
         );
     }
 }

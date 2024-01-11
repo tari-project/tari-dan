@@ -8,8 +8,7 @@ use tari_bor::{Deserialize, Serialize};
 use tari_common::{configuration::StringList, SubConfigPath};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-// TODO: update configs
-// #[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct P2pConfig {
     pub enable_mdns: bool,
     pub listener_port: u16,
