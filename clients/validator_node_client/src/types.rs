@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::{transaction::TxId, types::PublicKey};
 use tari_dan_common_types::{committee::CommitteeShard, shard_bucket::ShardBucket, Epoch, ShardId};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord},
+    consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord, QuorumCertificate},
     global::models::ValidatorNode,
     Ordering,
 };
@@ -271,6 +271,7 @@ pub struct GetSubstateResponse {
     pub value: Option<SubstateValue>,
     pub created_by_tx: Option<TransactionId>,
     pub status: SubstateStatus,
+    pub quorum_certificates: Vec<QuorumCertificate>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

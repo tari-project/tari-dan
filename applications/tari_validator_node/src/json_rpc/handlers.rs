@@ -335,32 +335,54 @@ impl JsonRpcHandlers {
     pub async fn get_substate(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let data: GetSubstateRequest = value.parse_params()?;
+        let shard_id = ShardId::from_address(&data.address, data.version);
 
-        let maybe_substate = self
+        let mut tx = self
             .state_store
-            .with_read_tx(|tx| {
-                let shard_id = ShardId::from_address(&data.address, data.version);
-                SubstateRecord::get(tx, &shard_id).optional()
-            })
+            .create_read_tx()
             .map_err(internal_error(answer_id))?;
 
-        match maybe_substate {
-            Some(substate) if substate.is_destroyed() => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                status: SubstateStatus::Down,
-                created_by_tx: Some(substate.created_by_transaction),
-                value: None,
-            })),
-            Some(substate) => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                status: SubstateStatus::Up,
-                created_by_tx: Some(substate.created_by_transaction),
-                value: Some(substate.into_substate_value()),
-            })),
-            None => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
+        let maybe_substate = SubstateRecord::get(&mut tx, &shard_id)
+            .optional()
+            .map_err(internal_error(answer_id))?;
+
+        let Some(substate) = maybe_substate else {
+            return Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
                 status: SubstateStatus::DoesNotExist,
                 created_by_tx: None,
                 value: None,
-            })),
-        }
+                quorum_certificates: vec![],
+            }));
+        };
+
+        let created_qc = substate
+            .get_created_quorum_certificate(&mut tx)
+            .map_err(internal_error(answer_id))?;
+
+        let resp = if substate.is_destroyed() {
+            let destroyed_qc = substate
+                .get_destroyed_quorum_certificate(&mut tx)
+                .map_err(internal_error(answer_id))?;
+            GetSubstateResponse {
+                status: SubstateStatus::Down,
+                created_by_tx: Some(substate.created_by_transaction),
+                value: None,
+                quorum_certificates: Some(created_qc)
+                    .into_iter()
+                    .chain(destroyed_qc)
+                    .map(|qc| qc.into())
+                    .collect()
+            }
+        } else {
+            GetSubstateResponse {
+                status: SubstateStatus::Up,
+                created_by_tx: Some(substate.created_by_transaction),
+                value: Some(substate.into_substate_value()),
+                quorum_certificates: vec![created_qc.into()],
+            }
+        };
+
+        Ok(JsonRpcResponse::success(answer_id, resp))
     }
 
     pub async fn get_substates_created_by_transaction(&self, value: JsonRpcExtractor) -> JrpcResult {
