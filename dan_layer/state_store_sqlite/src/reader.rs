@@ -625,10 +625,10 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             .left_join(quorum_certificates::table.on(blocks::qc_id.eq(quorum_certificates::qc_id)))
             .select((blocks::all_columns, quorum_certificates::all_columns.nullable()))
             .filter(blocks::block_id.eq_any(block_ids))
-            .boxed();
+            .into_boxed();
 
-        if include_dummy_blocks {
-            query = query.filter(blocks::is_dummy.eq(false)).boxed();
+        if !include_dummy_blocks {
+            query = query.filter(blocks::is_dummy.eq(false));
         }
 
         let results = query

@@ -1,5 +1,5 @@
 [package]
-name = "tari_comms_rpc_state_sync"
+name = "tari_rpc_state_sync"
 description = "Tari template runtime engine"
 version.workspace = true
 edition.workspace = true

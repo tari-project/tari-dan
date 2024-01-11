@@ -288,6 +288,10 @@ impl Block {
         &self.justify
     }
 
+    pub fn justifies_parent(&self) -> bool {
+        *self.justify.block_id() == self.parent
+    }
+
     pub fn height(&self) -> NodeHeight {
         self.height
     }
