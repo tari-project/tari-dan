@@ -41,7 +41,6 @@ use tari_swarm::{
     peersync,
     substream,
     substream::{NegotiatedSubstream, ProtocolNotification, StreamId},
-    ProtocolVersion,
     TariNodeBehaviourEvent,
     TariSwarm,
 };
@@ -739,14 +738,10 @@ where
     }
 
     fn on_peer_identified(&mut self, peer_id: PeerId, info: identify::Info) -> Result<(), NetworkingError> {
-        if !self
-            .config
-            .swarm
-            .protocol_version
-            .is_compatible(&ProtocolVersion::try_from(info.protocol_version.as_str())?)
-        {
+        if !self.config.swarm.protocol_version.is_compatible(&info.protocol_version) {
             info!(target: LOG_TARGET, "🚨 Peer {} is using an incompatible protocol version: {}. Our version {}", peer_id, info.protocol_version, self.config.swarm.protocol_version);
-            // Errors just indicate that there was no connection to the peer.
+            // Error can be ignored as the docs indicate that an error only occurs if there was no connection to the
+            // peer.
             let _ignore = self.swarm.disconnect_peer_id(peer_id);
             return Ok(());
         }

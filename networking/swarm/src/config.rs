@@ -9,7 +9,7 @@ use crate::protocol_version::ProtocolVersion;
 
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub protocol_version: ProtocolVersion<'static>,
+    pub protocol_version: ProtocolVersion,
     pub user_agent: String,
     pub messaging_protocol: String,
     pub ping: ping::Config,
@@ -22,7 +22,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            protocol_version: "/tari/devnet/0.0.1".try_into().unwrap(),
+            protocol_version: "/tari/localnet/0.0.1".parse().unwrap(),
             user_agent: "/tari/unknown/0.0.1".to_string(),
             messaging_protocol: "/tari/messaging/0.0.1".to_string(),
             ping: ping::Config::default(),
