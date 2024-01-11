@@ -37,6 +37,7 @@ use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction, LeafBlock, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
     StateStore,
+    StateStoreReadTransaction,
 };
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_networking::{is_supported_multiaddr, NetworkingHandle, NetworkingService};
@@ -289,6 +290,16 @@ impl JsonRpcHandlers {
             .map_err(internal_error(answer_id))?;
 
         let res = ListBlocksResponse { blocks };
+        Ok(JsonRpcResponse::success(answer_id, res))
+    }
+
+    pub async fn get_tx_pool(&self, value: JsonRpcExtractor) -> JrpcResult {
+        let answer_id = value.get_answer_id();
+        let tx_pool = self
+            .state_store
+            .with_read_tx(|tx| tx.transaction_pool_get_all())
+            .map_err(internal_error(answer_id))?;
+        let res = json!({ "tx_pool": tx_pool });
         Ok(JsonRpcResponse::success(answer_id, res))
     }
 
