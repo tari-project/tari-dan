@@ -80,8 +80,6 @@ jobs:
         run: cargo lints clippy --all-targets --all-features
 
   machete:
-    # Debug machete
-    if: ${{ false }}
     # Checks for unused dependencies.
     name: machete
     runs-on: ubuntu-latest
