@@ -1185,8 +1185,8 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                 continue;
             }
             let evidence = deserialize_json::<Evidence>(&update.evidence)?;
-            let evidence = evidence.shards_iter().cloned().collect::<HashSet<_>>();
-            processed_substates.insert(deserialize_hex_try_from(&tx_id)?, evidence);
+            let evidence = evidence.shards_iter().copied().collect::<HashSet<_>>();
+            processed_substates.insert(deserialize_hex_try_from(tx_id)?, evidence);
         }
 
         ready_txs
@@ -1200,11 +1200,11 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                                 .transaction()
                                 .evidence
                                 .shards_iter()
-                                .cloned()
+                                .copied()
                                 .collect::<HashSet<_>>();
                             if tx_substates.is_disjoint(&used_substates) &&
                                 processed_substates.iter().all(|(tx_id, substates)| {
-                                    tx_id == rec.transaction_id() || tx_substates.is_disjoint(&substates)
+                                    tx_id == rec.transaction_id() || tx_substates.is_disjoint(substates)
                                 })
                             {
                                 used_substates.extend(tx_substates);
