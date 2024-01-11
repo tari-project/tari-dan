@@ -222,10 +222,22 @@ where TConsensusSpec: ConsensusSpec
             );
 
             tokio::select! {
-                msg_or_sync = self.inbound_message_worker.next(current_height) => {
+                msg_or_sync = self.inbound_message_worker.message_buffer.next(current_height) => {
                     if let Err(e) = self.on_new_hs_message(msg_or_sync).await {
                         self.on_failure("on_new_hs_message", &e).await;
                         return Err(e);
+                    }
+                },
+
+                Some((from, msg)) = self.inbound_message_worker.rx_hotstuff_message.recv() => {
+                    if let Err(err) = self.inbound_message_worker.handle_hotstuff_message(current_height, from, msg).await {
+                        error!(target: LOG_TARGET, "Error handling message: {}", err);
+                    }
+                },
+
+                Some(tx_id) = self.inbound_message_worker.rx_new_transactions.recv() => {
+                    if let Err(err) = self.inbound_message_worker.check_if_parked_blocks_ready(current_height, &tx_id).await {
+                        error!(target: LOG_TARGET, "Error checking parked blocks: {}", err);
                     }
                 },
 

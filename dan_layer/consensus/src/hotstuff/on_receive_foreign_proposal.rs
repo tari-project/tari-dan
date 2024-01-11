@@ -69,13 +69,26 @@ where TConsensusSpec: ConsensusSpec
             .epoch_manager
             .get_committee_shard(block.epoch(), vn.shard_key)
             .await?;
+        let foreign_proposal = ForeignProposal::new(committee_shard.bucket(), *block.id());
+        if self
+            .store
+            .with_read_tx(|tx| ForeignProposal::exists(tx, &foreign_proposal))?
+        {
+            warn!(
+                target: LOG_TARGET,
+                "🔥 FOREIGN PROPOSAL: Already received proposal for block {}",
+                block.id(),
+            );
+            return Ok(());
+        }
+
         let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
         self.validate_proposed_block(&from, &block, committee_shard.bucket(), local_shard.bucket())?;
         // Is this ok? Can foreign node send invalid block that should still increment the counter?
         self.foreign_receive_counter.increment(&committee_shard.bucket());
         self.store.with_write_tx(|tx| {
             self.foreign_receive_counter.save(tx)?;
-            ForeignProposal::new(committee_shard.bucket(), *block.id()).upsert(tx)?;
+            foreign_proposal.upsert(tx)?;
             self.on_receive_foreign_block(tx, &block, &committee_shard)
         })?;
 
