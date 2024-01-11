@@ -4,6 +4,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::*;
+use tari_consensus::traits::VoteSignatureService;
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_engine_types::{
     indexed_value::IndexedValueError,
@@ -33,18 +34,19 @@ pub enum TransactionAutofillerError {
     JoinError(#[from] JoinError),
 }
 
-pub struct TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache> {
-    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
+pub struct TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache, TSignatureService> {
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>,
 }
 
-impl<TEpochManager, TVnClient, TAddr, TSubstateCache> TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache>
+impl<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService> TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache, TSignatureService>
 where
     TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr> + 'static,
     TAddr: NodeAddressable + 'static,
     TSubstateCache: SubstateCache + 'static,
+    TSignatureService: VoteSignatureService + Send + Sync + Clone + 'static,
 {
-    pub fn new(substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>) -> Self {
+    pub fn new(substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>) -> Self {
         Self { substate_scanner }
     }
 
@@ -147,8 +149,8 @@ where
     }
 }
 
-pub async fn get_substate_requirement<TEpochManager, TVnClient, TAddr, TSubstateCache>(
-    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
+pub async fn get_substate_requirement<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService>(
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>,
     transaction: Arc<Transaction>,
     req: SubstateRequirement,
 ) -> Result<Option<(SubstateAddress, Substate)>, IndexerError>
@@ -157,6 +159,7 @@ where
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
     TAddr: NodeAddressable,
     TSubstateCache: SubstateCache,
+    TSignatureService: VoteSignatureService,
 {
     let scan_res = match req.version() {
         Some(version) => {
@@ -200,8 +203,8 @@ where
     }
 }
 
-pub async fn get_substate<TEpochManager, TVnClient, TAddr, TSubstateCache>(
-    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
+pub async fn get_substate<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService>(
+    substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>,
     substate_address: SubstateAddress,
     version_hint: Option<u32>,
 ) -> Result<SubstateResult, IndexerError>
@@ -210,6 +213,7 @@ where
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
     TAddr: NodeAddressable,
     TSubstateCache: SubstateCache,
+    TSignatureService: VoteSignatureService,
 {
     substate_scanner.get_substate(&substate_address, version_hint).await
 }

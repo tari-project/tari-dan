@@ -25,7 +25,7 @@ use std::{collections::HashMap, sync::Arc};
 use log::info;
 use tari_dan_app_utilities::{
     template_manager::implementation::TemplateManager,
-    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor},
+    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor}, signature_service::TariSignatureService,
 };
 use tari_dan_common_types::{Epoch, PeerAddress, ShardId};
 use tari_dan_engine::{
@@ -62,7 +62,7 @@ pub struct DryRunTransactionProcessor<TSubstateCache> {
     epoch_manager: EpochManagerHandle<PeerAddress>,
     client_provider: TariValidatorNodeRpcClientFactory,
     transaction_autofiller:
-        TransactionAutofiller<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>,
+        TransactionAutofiller<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache, TariSignatureService>,
     template_manager: TemplateManager<PeerAddress>,
 }
 
@@ -73,7 +73,7 @@ where TSubstateCache: SubstateCache + 'static
         epoch_manager: EpochManagerHandle<PeerAddress>,
         client_provider: TariValidatorNodeRpcClientFactory,
         substate_scanner: Arc<
-            SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache>,
+            SubstateScanner<EpochManagerHandle<PeerAddress>, TariValidatorNodeRpcClientFactory, TSubstateCache, TariSignatureService>,
         >,
         template_manager: TemplateManager<PeerAddress>,
     ) -> Self {

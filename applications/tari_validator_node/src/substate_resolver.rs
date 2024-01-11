@@ -6,6 +6,7 @@ use std::{collections::HashSet, time::Instant};
 use async_trait::async_trait;
 use log::*;
 use tari_common_types::types::PublicKey;
+use tari_consensus::traits::VoteSignatureService;
 use tari_dan_common_types::{Epoch, ShardId};
 use tari_dan_engine::{runtime::VirtualSubstates, state_store::memory::MemoryStateStore};
 use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
@@ -27,24 +28,25 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::substate_resolver";
 
 #[derive(Debug, Clone)]
-pub struct TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache> {
+pub struct TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService> {
     store: TStateStore,
-    scanner: SubstateScanner<TEpochManager, TValidatorNodeClientFactory, TSubstateCache>,
+    scanner: SubstateScanner<TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>,
     epoch_manager: TEpochManager,
     virtual_substate_manager: VirtualSubstateManager<TStateStore, TEpochManager>,
 }
 
-impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
-    TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
+impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>
+    TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>
 where
     TStateStore: StateStore,
     TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
     TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TStateStore::Addr>,
     TSubstateCache: SubstateCache,
+    TSignatureService: VoteSignatureService,
 {
     pub fn new(
         store: TStateStore,
-        scanner: SubstateScanner<TEpochManager, TValidatorNodeClientFactory, TSubstateCache>,
+        scanner: SubstateScanner<TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>,
         epoch_manager: TEpochManager,
         virtual_substate_manager: VirtualSubstateManager<TStateStore, TEpochManager>,
     ) -> Self {
@@ -148,13 +150,14 @@ where
 }
 
 #[async_trait]
-impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache> SubstateResolver
-    for TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache>
+impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService> SubstateResolver
+    for TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>
 where
     TStateStore: StateStore + Sync + Send,
     TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
     TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TStateStore::Addr>,
     TSubstateCache: SubstateCache,
+    TSignatureService: VoteSignatureService + Send + Sync,
 {
     type Error = SubstateResolverError;
 

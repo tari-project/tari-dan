@@ -26,4 +26,6 @@ pub enum IndexerError {
     FailedToParseTransactionHash(String),
     #[error("Substate cache operation failed: {0}")]
     SubstateCacheError(#[from] SubstateCacheError),
+    #[error("Invalid quorum certificate")]
+    InvalidQuorumCertificate,
 }

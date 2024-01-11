@@ -13,6 +13,7 @@ tari_core = { workspace = true, default-features = false, features = ["transacti
 tari_crypto = { workspace = true }
 tari_shutdown = { workspace = true }
 
+tari_consensus = { workspace = true }
 tari_dan_common_types = { workspace = true }
 tari_state_store_sqlite = { workspace = true }
 tari_dan_engine = { workspace = true }

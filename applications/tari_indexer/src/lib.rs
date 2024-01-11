@@ -50,7 +50,7 @@ use tari_common::{
 use tari_dan_app_utilities::{
     consensus_constants::ConsensusConstants,
     keypair::setup_keypair_prompt,
-    substate_file_cache::SubstateFileCache,
+    substate_file_cache::SubstateFileCache, signature_service::TariSignatureService,
 };
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
@@ -104,10 +104,12 @@ pub async fn run_indexer(config: ApplicationConfig, mut shutdown_signal: Shutdow
     let substate_cache = SubstateFileCache::new(substate_cache_dir)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Substate cache error: {}", e)))?;
 
+    let signing_service = TariSignatureService::new(keypair.clone());
     let dan_layer_scanner = Arc::new(SubstateScanner::new(
         services.epoch_manager.clone(),
         services.validator_node_client_factory.clone(),
         substate_cache,
+        signing_service,
     ));
 
     let substate_manager = Arc::new(SubstateManager::new(

@@ -14,6 +14,8 @@ tari_engine_types = { workspace = true }
 tari_transaction = { workspace = true }
 tari_template_lib = { workspace = true }
 tari_validator_node_rpc = { workspace = true }
+tari_dan_storage = { workspace = true }
+tari_consensus = { workspace = true }
 
 async-trait = { workspace = true }
 log = { workspace = true }

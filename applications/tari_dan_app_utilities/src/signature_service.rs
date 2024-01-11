@@ -1,4 +1,4 @@
-// Copyright 2023. The Tari Project
+// Copyright 2024. The Tari Project
 //
 // Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 // following conditions are met:
@@ -20,13 +20,42 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-pub mod base_layer_scanner;
-pub mod configuration;
-pub mod consensus_constants;
-pub mod keypair;
-pub mod p2p_config;
-pub mod seed_peer;
-pub mod signature_service;
-pub mod substate_file_cache;
-pub mod template_manager;
-pub mod transaction_executor;
+use rand::rngs::OsRng;
+use tari_common_types::types::{FixedHash, PublicKey};
+use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
+use crate::keypair::RistrettoKeypair;
+use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSchnorrSignature, ValidatorSignature};
+
+#[derive(Debug, Clone)]
+pub struct TariSignatureService {
+    keypair: RistrettoKeypair,
+}
+
+impl TariSignatureService {
+    pub fn new(keypair: RistrettoKeypair) -> Self {
+        Self { keypair }
+    }
+}
+
+impl ValidatorSignatureService for TariSignatureService {
+    fn sign<M: AsRef<[u8]>>(&self, message: M) -> ValidatorSchnorrSignature {
+        ValidatorSchnorrSignature::sign(self.keypair.secret_key(), message, &mut OsRng).unwrap()
+    }
+
+    fn public_key(&self) -> &PublicKey {
+        self.keypair.public_key()
+    }
+}
+
+impl VoteSignatureService for TariSignatureService {
+    fn verify(
+        &self,
+        signature: &ValidatorSignature,
+        leaf_hash: &FixedHash,
+        block_id: &BlockId,
+        decision: &QuorumDecision,
+    ) -> bool {
+        let challenge = self.create_challenge(leaf_hash, block_id, decision);
+        signature.verify(challenge)
+    }
+}

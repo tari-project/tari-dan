@@ -22,6 +22,7 @@
 
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
+use tari_consensus::traits::VoteSignatureService;
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_engine_types::{
     events::Event,
@@ -35,7 +36,7 @@ use tari_template_lib::{
 };
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
-
+use tari_dan_storage::consensus_models::QuorumCertificate;
 use crate::{
     error::IndexerError,
     substate_cache::{SubstateCache, SubstateCacheEntry},
@@ -45,28 +46,32 @@ use crate::{
 const LOG_TARGET: &str = "tari::indexer::dan_layer_scanner";
 
 #[derive(Debug, Clone)]
-pub struct SubstateScanner<TEpochManager, TVnClient, TSubstateCache> {
+pub struct SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService> {
     committee_provider: TEpochManager,
     validator_node_client_factory: TVnClient,
     substate_cache: TSubstateCache,
+    signing_service: TSignatureService,
 }
 
-impl<TEpochManager, TVnClient, TAddr, TSubstateCache> SubstateScanner<TEpochManager, TVnClient, TSubstateCache>
+impl<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService> SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>
 where
     TAddr: NodeAddressable,
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
     TSubstateCache: SubstateCache,
+    TSignatureService: VoteSignatureService,
 {
     pub fn new(
         committee_provider: TEpochManager,
         validator_node_client_factory: TVnClient,
         substate_cache: TSubstateCache,
+        signing_service: TSignatureService,
     ) -> Self {
         Self {
             committee_provider,
             validator_node_client_factory,
             substate_cache,
+            signing_service
         }
     }
 
@@ -311,7 +316,69 @@ where
             .get_substate(shard)
             .await
             .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
+
+        // validate the qc
+        match &result {
+            SubstateResult::DoesNotExist => (),
+            SubstateResult::Up { quorum_certificates, .. } => self.validate_qcs(&quorum_certificates, shard).await?,
+            SubstateResult::Down { quorum_certificates, .. } => self.validate_qcs(&quorum_certificates, shard).await?,
+        }
+
         Ok(result)
+    }
+
+    /// Validates Quorum Certificates associated with a substate
+    async fn validate_qcs(&self, qcs: &Vec<QuorumCertificate>, shard_id: ShardId) -> Result<(), IndexerError> {
+        let qc = qcs.last()
+            .ok_or(IndexerError::InvalidQuorumCertificate)?;
+        
+        // ignore genesis block.
+        if qc.epoch().as_u64() == 0 {
+            return Ok(());
+        }
+
+        // TODO: how to validate the block height?
+
+        // fetch the committee members that should have signed the QC
+        let mut vns = vec![];
+        for signature in qc.signatures() {
+            let vn = self.committee_provider
+                .get_validator_node_by_public_key(qc.epoch(), signature.public_key())
+                .await?;
+            vns.push(vn.node_hash());
+        }
+
+        // validate the QC's merkle proof
+        let merkle_root = self.committee_provider
+            .get_validator_node_merkle_root(qc.epoch())
+            .await?;
+        let proof = qc.merged_proof().clone();
+        let vns_bytes = vns.iter().map(|hash| hash.to_vec()).collect();
+        let is_proof_valid = proof.verify_consume(&merkle_root, vns_bytes)
+            .map_err(|_| IndexerError::InvalidQuorumCertificate)?;
+        if !is_proof_valid {
+            return Err(IndexerError::InvalidQuorumCertificate);
+        }
+
+        // validate each signature in the QC
+        for (sign, leaf) in qc.signatures().iter().zip(vns.iter()) {
+            let challenge = self.signing_service.create_challenge(leaf, qc.block_id(), &qc.decision());
+            if !sign.verify(challenge) {
+                return Err(IndexerError::InvalidQuorumCertificate);
+            }
+        }
+
+        // validate that enough committee members have signed the QC
+        let committee_shard = self.committee_provider
+            .get_committee_shard(qc.epoch(), shard_id)
+            .await?;
+        let num_signatures_in_qc = u32::try_from(qc.signatures().len())
+            .map_err(|_| IndexerError::InvalidQuorumCertificate)?;
+        if committee_shard.quorum_threshold() > num_signatures_in_qc {
+            return Err(IndexerError::InvalidQuorumCertificate);
+        }
+        
+        Ok(())
     }
 
     /// Queries the network to obtain events emitted in a single transaction

@@ -45,7 +45,7 @@ use tari_dan_app_utilities::{
     substate_file_cache::SubstateFileCache,
     template_manager,
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
-    transaction_executor::TariDanTransactionProcessor,
+    transaction_executor::TariDanTransactionProcessor, signature_service::TariSignatureService,
 };
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, ShardId};
 use tari_dan_engine::fees::FeeTable;
@@ -249,12 +249,16 @@ pub async fn spawn_services(
     let substate_cache = SubstateFileCache::new(substate_cache_dir)
         .map_err(|e| ExitError::new(ExitCode::ConfigError, format!("Substate cache error: {}", e)))?;
 
+    // Signature service
+    let signing_service = TariSignatureService::new(keypair.clone());
+
     // Mempool
     let virtual_substate_manager = VirtualSubstateManager::new(state_store.clone(), epoch_manager.clone());
     let scanner = SubstateScanner::new(
         epoch_manager.clone(),
         validator_node_client_factory.clone(),
         substate_cache,
+        signing_service
     );
     let substate_resolver = TariSubstateResolver::new(
         state_store.clone(),
