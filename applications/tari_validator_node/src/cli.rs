@@ -25,7 +25,7 @@ use std::net::SocketAddr;
 use clap::Parser;
 use minotari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::{ConfigOverrideProvider, Network};
-use tari_dan_app_utilities::config::ReachabilityMode;
+use tari_dan_app_utilities::p2p_config::ReachabilityMode;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
