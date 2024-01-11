@@ -26,7 +26,11 @@ use std::{fs, panic, process};
 
 use clap::Parser;
 use log::*;
-use tari_common::{exit_codes::ExitError, initialize_logging, load_configuration};
+use tari_common::{
+    exit_codes::{ExitCode, ExitError},
+    initialize_logging,
+};
+use tari_dan_app_utilities::configuration::load_configuration;
 use tari_shutdown::Shutdown;
 use tari_validator_node::{cli::Cli, run_validator_node, ApplicationConfig};
 
@@ -62,7 +66,7 @@ async fn main() {
 async fn main_inner() -> Result<(), ExitError> {
     let cli = Cli::parse();
     let config_path = cli.common.config_path();
-    let cfg = load_configuration(config_path, true, &cli)?;
+    let cfg = load_configuration(config_path, true, &cli).map_err(|e| ExitError::new(ExitCode::ConfigError, e))?;
     let config = ApplicationConfig::load_from(&cfg)?;
     println!("Starting validator node on network {}", config.network);
 

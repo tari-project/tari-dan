@@ -3,17 +3,17 @@
 
 use std::{fmt, fmt::Display, str::FromStr};
 
-use crate::{TariNetwork, TariSwarmError};
+use crate::TariSwarmError;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ProtocolVersion<'a> {
-    domain: &'a str,
-    network: TariNetwork,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProtocolVersion {
+    domain: String,
+    network: String,
     version: Version,
 }
 
-impl<'a> ProtocolVersion<'a> {
-    pub const fn new(domain: &'a str, network: TariNetwork, version: Version) -> Self {
+impl ProtocolVersion {
+    pub const fn new(domain: String, network: String, version: Version) -> Self {
         Self {
             domain,
             network,
@@ -21,66 +21,75 @@ impl<'a> ProtocolVersion<'a> {
         }
     }
 
-    pub const fn domain(&self) -> &'a str {
-        self.domain
+    pub fn domain(&self) -> &str {
+        &self.domain
     }
 
-    pub const fn network(&self) -> TariNetwork {
-        self.network
+    pub fn network(&self) -> &str {
+        &self.network
     }
 
     pub const fn version(&self) -> Version {
         self.version
     }
 
-    pub fn is_compatible(&self, other: &ProtocolVersion) -> bool {
-        self.domain == other.domain && self.network == other.network && self.version.semantic_version_eq(&other.version)
+    pub fn is_compatible(&self, protocol_str: &str) -> bool {
+        let Some((domain, network, version)) = parse_protocol_str(protocol_str) else {
+            return false;
+        };
+        self.domain == domain && self.network == network && self.version.semantic_version_eq(&version)
     }
 }
 
-impl PartialEq<String> for ProtocolVersion<'_> {
+impl PartialEq<String> for ProtocolVersion {
     fn eq(&self, other: &String) -> bool {
-        let mut parts = other.split('/');
-        let Some(domain) = parts.next() else {
+        let Some((domain, network, version)) = parse_protocol_str(other) else {
             return false;
         };
-
-        let Some(network) = parts.next() else {
-            return false;
-        };
-
-        let Some(version) = parts.next().and_then(|s| s.parse().ok()) else {
-            return false;
-        };
-
-        self.domain == domain && self.network.as_str() == network && self.version == version
+        self.domain == domain && self.network == network && self.version == version
     }
 }
 
-impl<'a> TryFrom<&'a str> for ProtocolVersion<'a> {
-    type Error = TariSwarmError;
+impl Display for ProtocolVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "/{}/{}/{}", self.domain, self.network, self.version)
+    }
+}
 
-    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+impl FromStr for ProtocolVersion {
+    type Err = TariSwarmError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         let mut parts = value.split('/');
         // Must have a leading '/'
         let leading = parts.next();
         if leading.filter(|l| l.is_empty()).is_none() {
-            return Err(TariSwarmError::ProtocolVersionParseFailed { field: "leading '/'" });
+            return Err(TariSwarmError::ProtocolVersionParseFailed {
+                given: value.to_string(),
+            });
         }
 
-        let mut next = move |field| parts.next().ok_or(TariSwarmError::ProtocolVersionParseFailed { field });
-        Ok(Self::new(
-            next("domain")?,
-            next("network")?.parse()?,
-            next("version")?.parse()?,
-        ))
+        let Some((domain, network, version)) = parse_protocol_str(value) else {
+            return Err(TariSwarmError::ProtocolVersionParseFailed {
+                given: value.to_string(),
+            });
+        };
+        Ok(Self::new(domain.to_string(), network.to_string(), version))
     }
 }
 
-impl Display for ProtocolVersion<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "/{}/{}/{}", self.domain, self.network, self.version)
+fn parse_protocol_str(protocol_str: &str) -> Option<(&str, &str, Version)> {
+    let mut parts = protocol_str.split('/');
+    // Must have a leading '/'
+    let leading = parts.next()?;
+    if !leading.is_empty() {
+        return None;
     }
+
+    let domain = parts.next()?;
+    let network = parts.next()?;
+    let version = parts.next().and_then(|s| s.parse().ok())?;
+    Some((domain, network, version))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,17 +138,17 @@ impl FromStr for Version {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.split('.');
 
-        let mut next = move |field| {
+        let mut next = move || {
             parts
                 .next()
-                .ok_or(TariSwarmError::ProtocolVersionParseFailed { field })?
+                .ok_or(TariSwarmError::InvalidVersionString { given: s.to_string() })?
                 .parse()
-                .map_err(|_| TariSwarmError::ProtocolVersionParseFailed { field })
+                .map_err(|_| TariSwarmError::InvalidVersionString { given: s.to_string() })
         };
         Ok(Self {
-            major: next("version.major")?,
-            minor: next("version.minor")?,
-            patch: next("version.patch")?,
+            major: next()?,
+            minor: next()?,
+            patch: next()?,
         })
     }
 }
@@ -156,13 +165,13 @@ mod tests {
 
     #[test]
     fn it_parses_correctly() {
-        let version = ProtocolVersion::try_from("/tari/devnet/0.0.1").unwrap();
+        let version = ProtocolVersion::from_str("/tari/igor/1.2.3").unwrap();
         assert_eq!(version.domain(), "tari");
-        assert_eq!(version.network(), TariNetwork::DevNet);
+        assert_eq!(version.network(), "igor");
         assert_eq!(version.version(), Version {
-            major: 0,
-            minor: 0,
-            patch: 1
+            major: 1,
+            minor: 2,
+            patch: 3
         });
     }
 }

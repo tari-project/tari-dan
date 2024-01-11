@@ -35,7 +35,7 @@ use tari_common::{
     SubConfigPath,
 };
 use tari_dan_app_utilities::{
-    config::{P2pConfig, PeerSeedsConfig},
+    p2p_config::{P2pConfig, PeerSeedsConfig},
     template_manager::implementation::TemplateConfig,
 };
 use tari_engine_types::substate::SubstateAddress;

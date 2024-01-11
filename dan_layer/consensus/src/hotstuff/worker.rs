@@ -108,6 +108,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 epoch_manager.clone(),
                 leader_strategy.clone(),
                 pacemaker.clone_handle(),
+                signing_service.clone(),
                 rx_hs_message,
                 tx_leader.clone(),
                 rx_new_transactions,
