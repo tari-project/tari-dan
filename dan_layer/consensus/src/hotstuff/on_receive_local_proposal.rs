@@ -36,7 +36,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_local_proposal";
 
-pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
+pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -44,7 +44,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
 }
 
-impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
+impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec> {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         store: TConsensusSpec::StateStore,

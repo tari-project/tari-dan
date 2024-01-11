@@ -148,7 +148,7 @@ pub enum ProposalValidationError {
     },
     #[error("Proposed block {block_id} {height} already has been processed")]
     BlockAlreadyProcessed { block_id: BlockId, height: NodeHeight },
-    #[error("Proposed block {block_id} {height} doesn't have signature")]
+    #[error("Proposed block {block_id} {height} doesn't have a signature")]
     MissingSignature { block_id: BlockId, height: NodeHeight },
     #[error("Proposed block {block_id} {height} has invalid signature")]
     InvalidSignature { block_id: BlockId, height: NodeHeight },
