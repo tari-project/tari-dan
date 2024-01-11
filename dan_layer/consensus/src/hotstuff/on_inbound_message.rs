@@ -34,6 +34,7 @@ pub struct OnInboundMessage<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
     pacemaker: PaceMakerHandle,
+    vote_signing_service: TConsensusSpec::SignatureService,
     rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
     tx_outbound_message: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
     tx_msg_ready: mpsc::UnboundedSender<(TConsensusSpec::Addr, HotstuffMessage)>,
@@ -50,6 +51,7 @@ where TConsensusSpec: ConsensusSpec
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         pacemaker: PaceMakerHandle,
+        vote_signing_service: TConsensusSpec::SignatureService,
         rx_hotstuff_message: mpsc::Receiver<(TConsensusSpec::Addr, HotstuffMessage)>,
         tx_outbound_message: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
         rx_new_transactions: mpsc::Receiver<TransactionId>,
@@ -61,6 +63,7 @@ where TConsensusSpec: ConsensusSpec
             epoch_manager,
             leader_strategy,
             pacemaker,
+            vote_signing_service,
             rx_hotstuff_message,
             tx_outbound_message,
             tx_msg_ready,
@@ -164,7 +167,7 @@ where TConsensusSpec: ConsensusSpec
             .await?;
         check_proposed_by_leader(&self.leader_strategy, &committee_for_block, &block)?;
         check_signature(&block)?;
-        check_quorum_certificate(&committee_for_block, &block)?;
+        check_quorum_certificate::<TConsensusSpec>(&block, &self.vote_signing_service, &self.epoch_manager).await?;
 
         let Some(ready_block) = self.handle_missing_transactions(block).await? else {
             // Block not ready
