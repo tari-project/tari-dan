@@ -87,6 +87,7 @@ where
             // Gossipsub
             let gossipsub_config = gossipsub::ConfigBuilder::default()
                 .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
+                .validate_messages()
                 .message_id_fn(get_message_id) // content-address messages. No two messages of the same content will be propagated.
                 .build()
                 .unwrap();
