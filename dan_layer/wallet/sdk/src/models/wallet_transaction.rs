@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
 use chrono::NaiveDateTime;
@@ -20,6 +20,8 @@ pub struct WalletTransaction {
     pub final_fee: Option<Amount>,
     pub qcs: Vec<QuorumCertificate>,
     pub json_result: Option<Vec<Value>>,
+    pub execution_time: Option<Duration>,
+    pub finalized_time: Option<Duration>,
     pub is_dry_run: bool,
     pub last_update_time: NaiveDateTime,
 }

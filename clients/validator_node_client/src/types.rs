@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::{transaction::TxId, types::PublicKey};
 use tari_dan_common_types::{committee::CommitteeShard, shard_bucket::ShardBucket, Epoch, ShardId};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord},
+    consensus_models::{Block, BlockId, Decision, ExecutedTransaction, QuorumDecision, SubstateRecord},
     global::models::ValidatorNode,
     Ordering,
 };
@@ -172,7 +172,9 @@ pub struct GetTransactionResultRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetTransactionResultResponse {
     pub result: Option<ExecuteResult>,
-    pub is_finalized: bool,
+    pub execution_time: Duration,
+    pub final_decision: Option<Decision>,
+    pub finalized_time: Option<Duration>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

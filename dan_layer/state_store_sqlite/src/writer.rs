@@ -44,7 +44,7 @@ use tari_dan_storage::{
 };
 use tari_transaction::{Transaction, TransactionId};
 use tari_utilities::ByteArray;
-use time::PrimitiveDateTime;
+use time::{OffsetDateTime, PrimitiveDateTime};
 
 use crate::{
     error::SqliteStorageError,
@@ -688,6 +688,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
             resulting_outputs: Option<String>,
             execution_time_ms: Option<Option<i64>>,
             final_decision: Option<Option<String>>,
+            finalized_at: Option<Option<PrimitiveDateTime>>,
             abort_details: Option<Option<String>>,
         }
 
@@ -701,6 +702,10 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
                     .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX)),
             ),
             final_decision: Some(transaction_rec.final_decision().map(|d| d.to_string())),
+            finalized_at: Some(transaction_rec.final_decision().map(|_| {
+                let now = OffsetDateTime::now_utc();
+                PrimitiveDateTime::new(now.date(), now.time())
+            })),
             abort_details: Some(transaction_rec.abort_details.clone()),
         };
 

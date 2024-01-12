@@ -307,7 +307,7 @@ async fn wait_for_transaction_result(
             .optional()?;
 
         if let Some(resp) = resp {
-            if resp.is_finalized {
+            if resp.finalized_time.is_some() {
                 let result = resp
                     .result
                     .ok_or_else(|| anyhow!("Transaction finalized but no result returned"))?;

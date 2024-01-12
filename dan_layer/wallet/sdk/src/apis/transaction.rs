@@ -57,7 +57,15 @@ where
             .map_err(|e| TransactionApiError::NetworkInterfaceError(e.to_string()))?;
 
         self.store.with_write_tx(|tx| {
-            tx.transactions_set_result_and_status(transaction_id, None, None, None, TransactionStatus::Pending)
+            tx.transactions_set_result_and_status(
+                transaction_id,
+                None,
+                None,
+                None,
+                TransactionStatus::Pending,
+                None,
+                None,
+            )
         })?;
 
         Ok(transaction_id)
@@ -83,7 +91,12 @@ where
                     "Pending execution result returned from dry run".to_string(),
                 ));
             },
-            TransactionFinalizedResult::Finalized { execution_result, .. } => {
+            TransactionFinalizedResult::Finalized {
+                execution_result,
+                finalized_time,
+                execution_time,
+                ..
+            } => {
                 self.store.with_write_tx(|tx| {
                     tx.transactions_set_result_and_status(
                         query.transaction_id,
@@ -94,6 +107,8 @@ where
                             .map(|f| f.total_fees_charged()),
                         None,
                         TransactionStatus::DryRun,
+                        Some(*execution_time),
+                        Some(*finalized_time),
                     )
                 })?;
             },
@@ -141,6 +156,8 @@ where
             TransactionFinalizedResult::Finalized {
                 final_decision,
                 execution_result,
+                execution_time,
+                finalized_time,
                 abort_details: _,
                 json_results,
             } => {
@@ -190,6 +207,8 @@ where
                         None,
                         // Some(&qc_resp.qcs),
                         new_status,
+                        Some(execution_time),
+                        Some(finalized_time),
                     )?;
                     if !transaction.is_dry_run {
                         // if the transaction being processed is confidential,
@@ -219,6 +238,8 @@ where
                     // qcs: qc_resp.qcs,
                     qcs: vec![],
                     is_dry_run: transaction.is_dry_run,
+                    execution_time: Some(execution_time),
+                    finalized_time: Some(finalized_time),
                     json_result: Some(json_results),
                     // This is not precise, we should read it back from DB, but it's not critical
                     last_update_time: chrono::Utc::now().naive_utc(),

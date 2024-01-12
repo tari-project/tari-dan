@@ -27,6 +27,7 @@ pub struct ExecutedTransaction {
     resulting_outputs: Vec<ShardId>,
     execution_time: Duration,
     final_decision: Option<Decision>,
+    finalized_time: Option<Duration>,
     abort_details: Option<String>,
 }
 
@@ -43,6 +44,7 @@ impl ExecutedTransaction {
             execution_time,
             resulting_outputs,
             final_decision: None,
+            finalized_time: None,
             abort_details: None,
         }
     }
@@ -144,6 +146,10 @@ impl ExecutedTransaction {
 
     pub fn final_decision(&self) -> Option<Decision> {
         self.final_decision
+    }
+
+    pub fn finalized_time(&self) -> Option<Duration> {
+        self.finalized_time
     }
 
     pub fn abort_details(&self) -> Option<&String> {
@@ -292,6 +298,7 @@ impl TryFrom<TransactionRecord> for ExecutedTransaction {
             result: value.result.unwrap(),
             execution_time: value.execution_time.unwrap_or_default(),
             final_decision: value.final_decision,
+            finalized_time: value.finalized_time,
             resulting_outputs: value.resulting_outputs,
             abort_details: value.abort_details,
         })
