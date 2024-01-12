@@ -950,6 +950,7 @@ where TConsensusSpec: ConsensusSpec
             // committees and within committees are not different in terms of size, speed, etc.
             let diff_from_leader = (my_index + local_committee.len() - leader_index as usize) % local_committee.len();
             // f+1 nodes (always including the leader) send the proposal to the foreign committee
+            // if diff_from_leader <= (local_committee.len() - 1) / 3 + 1 {
             if diff_from_leader <= local_committee.len() / 3 {
                 self.proposer.broadcast_proposal_foreignly(&block).await?;
             }
