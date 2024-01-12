@@ -20,14 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { useState, useEffect } from "react";
+import { useLocation, useParams } from "react-router-dom";
 // import { transactionsGet } from '../../utils/json_rpc';
 import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
-} from '../../Components/Accordion';
+} from "../../Components/Accordion";
 import {
   Grid,
   Table,
@@ -38,50 +38,97 @@ import {
   Button,
   Fade,
   Alert,
-} from '@mui/material';
-import Typography from '@mui/material/Typography';
-import { DataTableCell, StyledPaper } from '../../Components/StyledComponents';
-import PageHeading from '../../Components/PageHeading';
-import Events from './Events';
-import Logs from './Logs';
-import FeeInstructions from './FeeInstructions';
-import Instructions from './Instructions';
-import Substates from './Substates';
-import StatusChip from '../../Components/StatusChip';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import Loading from '../../Components/Loading';
-import { getUpSubstates, getTransaction, getDownSubstates } from '../../utils/json_rpc';
+} from "@mui/material";
+import Typography from "@mui/material/Typography";
+import { DataTableCell, StyledPaper } from "../../Components/StyledComponents";
+import PageHeading from "../../Components/PageHeading";
+import Events from "./Events";
+import Logs from "./Logs";
+import FeeInstructions from "./FeeInstructions";
+import Instructions from "./Instructions";
+import Substates from "./Substates";
+import StatusChip from "../../Components/StatusChip";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import Loading from "../../Components/Loading";
+import {
+  getUpSubstates,
+  getTransaction,
+  getDownSubstates,
+} from "../../utils/json_rpc";
+import { displayDuration } from "../../utils/helpers";
 
 export default function TransactionDetails() {
-  const {transactionHash} = useParams();
+  const { transactionHash } = useParams();
   const [state, setState] = useState<any>([]);
   const [upSubstate, setUpSubstate] = useState<any>([]);
   const [downSubstate, setDownSubstate] = useState<any>([]);
-  const [events,setEvents] = useState<any>();
+  const [events, setEvents] = useState<any>();
   const [fee, setFee] = useState<any>();
-  const [logs,setLogs] = useState<any>();
+  const [logs, setLogs] = useState<any>();
   const [expandedPanels, setExpandedPanels] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<String>();
-  const { execution_time, final_decision, result, transaction } = state;
-  const location = useLocation();
+  const {
+    execution_time,
+    result,
+    transaction,
+    finalized_time,
+    final_decision,
+  } = state;
+
   const getTransactionByHash = () => {
     setLoading(true);
-    Promise.all([getUpSubstates(String(transactionHash)), getDownSubstates(String(transactionHash)), getTransaction(String(transactionHash))]).then(([upSubstates,downSubstates, transaction]) => {
-      setState(transaction["transaction"]);
-      setError(undefined);
-      setUpSubstate(upSubstates["substates"]);
-      setDownSubstate(downSubstates["substates"]);
-      setEvents(upSubstates["substates"].reduce((acc:any,cur:any) => cur?.substate_value?.TransactionReceipt?.events?acc.concat(cur?.substate_value?.TransactionReceipt?.events):acc, []))
-      setLogs(upSubstates["substates"].reduce((acc:any,cur:any) => cur?.substate_value?.TransactionReceipt?.events?acc.concat(cur?.substate_value?.TransactionReceipt?.logs):acc, []))
-      setFee(upSubstates["substates"].reduce((acc:number,cur:any) => acc+Number(cur?.substate_value?.TransactionReceipt?.fee_receipt?.fee_resource?.Confidential?.revealed_amount || 0), 0))
-    }).catch((err) => {
-      setError(err && err.message ? err.message : `Unknown error: ${JSON.stringify(err)}`)
-    })
-    .finally(() => {
-      setLoading(false);
-    });
+    Promise.all([
+      getUpSubstates(String(transactionHash)),
+      getDownSubstates(String(transactionHash)),
+      getTransaction(String(transactionHash)),
+    ])
+      .then(([upSubstates, downSubstates, transaction]) => {
+        setState(transaction["transaction"]);
+        setError(undefined);
+        setUpSubstate(upSubstates["substates"]);
+        setDownSubstate(downSubstates["substates"]);
+        setEvents(
+          upSubstates["substates"].reduce(
+            (acc: any, cur: any) =>
+              cur?.substate_value?.TransactionReceipt?.events
+                ? acc.concat(cur?.substate_value?.TransactionReceipt?.events)
+                : acc,
+            [],
+          ),
+        );
+        setLogs(
+          upSubstates["substates"].reduce(
+            (acc: any, cur: any) =>
+              cur?.substate_value?.TransactionReceipt?.events
+                ? acc.concat(cur?.substate_value?.TransactionReceipt?.logs)
+                : acc,
+            [],
+          ),
+        );
+        setFee(
+          upSubstates["substates"].reduce(
+            (acc: number, cur: any) =>
+              acc +
+              Number(
+                cur?.substate_value?.TransactionReceipt?.fee_receipt
+                  ?.fee_resource?.Confidential?.revealed_amount || 0,
+              ),
+            0,
+          ),
+        );
+      })
+      .catch((err) => {
+        setError(
+          err && err.message
+            ? err.message
+            : `Unknown error: ${JSON.stringify(err)}`,
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   };
 
   useEffect(() => {
@@ -102,28 +149,34 @@ export default function TransactionDetails() {
   const renderResult = (result: any) => {
     if (result) {
       if (result.finalize.result.Accept) {
-        return (
-         <span>Accepted</span>);
+        return <span>Accepted</span>;
       }
       if (result.finalize.result.AcceptFeeRejectRest) {
         return (
-            <span>{result.finalize.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>
+          <span>
+            {result.finalize.result.AcceptFeeRejectRest[1].ExecutionFailure}
+          </span>
         );
       }
       if (result.finalize.result.Reject) {
         return (
-            <span>{Object.keys(result.finalize.result.Reject)[0]} - {result.finalize.result.Reject[Object.keys(result.finalize.result.Reject)[0]]}</span>
-        )
+          <span>
+            {Object.keys(result.finalize.result.Reject)[0]} -{" "}
+            {
+              result.finalize.result.Reject[
+                Object.keys(result.finalize.result.Reject)[0]
+              ]
+            }
+          </span>
+        );
       }
     } else {
-      return (
-        <span>In progress</span>
-      );
+      return <span>In progress</span>;
     }
-  }
+  };
 
   const expandAll = () => {
-    setExpandedPanels(['panel1', 'panel2', 'panel3', 'panel4', 'panel5']);
+    setExpandedPanels(["panel1", "panel2", "panel3", "panel4", "panel5"]);
   };
 
   const collapseAll = () => {
@@ -158,9 +211,7 @@ export default function TransactionDetails() {
                           </TableRow>
                           <TableRow>
                             <TableCell>Total Fees</TableCell>
-                            <DataTableCell>
-                              {fee}
-                            </DataTableCell>
+                            <DataTableCell>{fee}</DataTableCell>
                           </TableRow>
                           <TableRow>
                             <TableCell>Status</TableCell>
@@ -170,32 +221,43 @@ export default function TransactionDetails() {
                           </TableRow>
                           <TableRow>
                             <TableCell>Result</TableCell>
-                            <DataTableCell>{renderResult(result)}</DataTableCell>
+                            <DataTableCell>
+                              {renderResult(result)}
+                              <br />
+                              Executed in{" "}
+                              {execution_time
+                                ? displayDuration(execution_time)
+                                : "--"}
+                              , Finalized in{" "}
+                              {finalized_time
+                                ? displayDuration(finalized_time)
+                                : "--"}
+                            </DataTableCell>
                           </TableRow>
                         </TableBody>
                       </Table>
                     </TableContainer>
                     <div
                       style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '2rem 1rem 0.5rem 1rem',
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "2rem 1rem 0.5rem 1rem",
                       }}
                       // className="flex-container"
                     >
                       <Typography variant="h5">More Info</Typography>
                       <div
                         style={{
-                          display: 'flex',
-                          justifyContent: 'flex-end',
-                          gap: '1rem',
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          gap: "1rem",
                         }}
                       >
                         <Button
                           onClick={expandAll}
                           style={{
-                            fontSize: '0.85rem',
+                            fontSize: "0.85rem",
                           }}
                           startIcon={<KeyboardArrowDownIcon />}
                         >
@@ -204,10 +266,10 @@ export default function TransactionDetails() {
                         <Button
                           onClick={collapseAll}
                           style={{
-                            fontSize: '0.85rem',
+                            fontSize: "0.85rem",
                           }}
                           startIcon={<KeyboardArrowUpIcon />}
-                          disabled={expandedPanels.length === 0 ? true : false}
+                          disabled={expandedPanels.length === 0}
                         >
                           Collapse All
                         </Button>
@@ -217,8 +279,8 @@ export default function TransactionDetails() {
                 )}
                 {transaction?.fee_instructions && (
                   <Accordion
-                    expanded={expandedPanels.includes('panel1')}
-                    onChange={handleChange('panel1')}
+                    expanded={expandedPanels.includes("panel1")}
+                    onChange={handleChange("panel1")}
                   >
                     <AccordionSummary
                       aria-controls="panel1bh-content"
@@ -233,8 +295,8 @@ export default function TransactionDetails() {
                 )}
                 {transaction?.instructions && (
                   <Accordion
-                    expanded={expandedPanels.includes('panel2')}
-                    onChange={handleChange('panel2')}
+                    expanded={expandedPanels.includes("panel2")}
+                    onChange={handleChange("panel2")}
                   >
                     <AccordionSummary
                       aria-controls="panel2bh-content"
@@ -249,8 +311,8 @@ export default function TransactionDetails() {
                 )}
                 {result && (
                   <Accordion
-                    expanded={expandedPanels.includes('panel3')}
-                    onChange={handleChange('panel3')}
+                    expanded={expandedPanels.includes("panel3")}
+                    onChange={handleChange("panel3")}
                   >
                     <AccordionSummary
                       aria-controls="panel3bh-content"
@@ -265,8 +327,8 @@ export default function TransactionDetails() {
                 )}
                 {result && (
                   <Accordion
-                    expanded={expandedPanels.includes('panel4')}
-                    onChange={handleChange('panel4')}
+                    expanded={expandedPanels.includes("panel4")}
+                    onChange={handleChange("panel4")}
                   >
                     <AccordionSummary
                       aria-controls="panel4bh-content"
@@ -281,8 +343,8 @@ export default function TransactionDetails() {
                 )}
                 {upSubstate && (
                   <Accordion
-                    expanded={expandedPanels.includes('panel5')}
-                    onChange={handleChange('panel5')}
+                    expanded={expandedPanels.includes("panel5")}
+                    onChange={handleChange("panel5")}
                   >
                     <AccordionSummary
                       aria-controls="panel5bh-content"

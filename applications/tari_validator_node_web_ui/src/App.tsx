@@ -184,12 +184,12 @@ export default function App() {
     <>
       <VNContext.Provider value={{ epoch, identity, shardKey, error }}>
         <Routes>
-          <Route path="/" element={<Layout />}>
+          <Route path="/" element={<Layout />} errorElement={<ErrorPage />}>
             <Route index element={<ValidatorNode />} />
             <Route path="committees" element={<Committees />} />
             <Route path="connections" element={<Connections />} />
             <Route path="fees" element={<Fees />} />
-            <Route path="blocks" element={<Blocks/>} />
+            <Route path="blocks" element={<Blocks />} />
             <Route path="templates" element={<Templates />} />
             <Route path="vns" element={<ValidatorNodes />} />
             <Route path="mempool" element={<Mempool />} />

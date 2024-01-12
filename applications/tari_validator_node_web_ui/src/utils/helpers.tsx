@@ -58,7 +58,8 @@ const renderJson = (json: any) => {
       </>
     );
   } else {
-    if (typeof json === "string") return <span className="string">"{json}"</span>;
+    if (typeof json === "string")
+      return <span className="string">"{json}"</span>;
     return <span className="other">{json}</span>;
   }
 };
@@ -89,26 +90,81 @@ function emptyRows(page: number, rowsPerPage: number, array: any[]) {
   return page > 0 ? Math.max(0, (1 + page) * rowsPerPage - array.length) : 0;
 }
 
-function handleChangePage(event: unknown, newPage: number, setPage: React.Dispatch<React.SetStateAction<number>>) {
+function handleChangePage(
+  event: unknown,
+  newPage: number,
+  setPage: React.Dispatch<React.SetStateAction<number>>,
+) {
   setPage(newPage);
 }
 
 function handleChangeRowsPerPage(
   event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   setRowsPerPage: React.Dispatch<React.SetStateAction<number>>,
-  setPage: React.Dispatch<React.SetStateAction<number>>
+  setPage: React.Dispatch<React.SetStateAction<number>>,
 ) {
   setRowsPerPage(parseInt(event.target.value, 10));
   setPage(0);
 }
 
-function primitiveDateTimeToDate([year, dayOfTheYear, hour, minute, second, nanos]: number[]): Date {
+function primitiveDateTimeToDate([
+  year,
+  dayOfTheYear,
+  hour,
+  minute,
+  second,
+  nanos,
+]: number[]): Date {
   return new Date(year, 0, dayOfTheYear, hour, minute, second, nanos / 1000000);
 }
 
-function primitiveDateTimeToSecs([year, dayOfTheYear, hour, minute, second, nanos]: number[]): number {
+function primitiveDateTimeToSecs([
+  year,
+  dayOfTheYear,
+  hour,
+  minute,
+  second,
+  nanos,
+]: number[]): number {
   // The datetime is in format [year, day of the year, hour, minute, second, nanos]
-  return new Date(year, 0, dayOfTheYear, hour, minute, second, nanos / 1000000).valueOf() / 1000;
+  return (
+    new Date(
+      year,
+      0,
+      dayOfTheYear,
+      hour,
+      minute,
+      second,
+      nanos / 1000000,
+    ).valueOf() / 1000
+  );
+}
+
+interface Duration {
+  secs: number;
+  nanos: number;
+}
+function displayDuration(duration: Duration) {
+  if (duration.secs === 0) {
+    if (duration.nanos > 1000000) {
+      return `${(duration.nanos / 1000000).toFixed(2)}ms`;
+    }
+    if (duration.nanos > 1000) {
+      return `${(duration.nanos / 1000).toFixed(2)}µs`;
+    }
+    return `${duration.nanos / 1000}ns`;
+  }
+  if (duration.secs > 60 * 60) {
+    return `${(duration.secs / 60 / 60).toFixed(0)}h${(
+      duration.secs / 60
+    ).toFixed(0)}m`;
+  }
+  if (duration.secs > 60) {
+    return `${(duration.secs / 60).toFixed(0)}m${(duration.secs % 60).toFixed(
+      0,
+    )}s`;
+  }
+  return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0)}s`;
 }
 
 export {
@@ -121,4 +177,6 @@ export {
   removeTagged,
   renderJson,
   shortenString,
+  displayDuration,
 };
+export type { Duration };

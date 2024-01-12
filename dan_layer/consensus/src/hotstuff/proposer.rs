@@ -51,6 +51,9 @@ where TConsensusSpec: ConsensusSpec
         let non_local_buckets = self
             .store
             .with_read_tx(|tx| get_non_local_buckets(tx, block, num_committees, local_bucket))?;
+        if non_local_buckets.is_empty() {
+            return Ok(());
+        }
         info!(
             target: LOG_TARGET,
             "🌿 PROPOSING foreignly new locked block {} to {} foreign shards. justify: {} ({}), parent: {}",
