@@ -32,6 +32,8 @@ use tari_dan_storage::{
         Block,
         BlockId,
         Command,
+        Decision,
+        Evidence,
         ForeignProposal,
         ForeignReceiveCounters,
         ForeignSendCounters,
@@ -61,7 +63,7 @@ use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
-    serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex},
+    serialization::{deserialize_hex_try_from, deserialize_json, parse_from_string, serialize_hex},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -95,7 +97,7 @@ impl<'a, TAddr> SqliteStateStoreReadTransaction<'a, TAddr> {
 }
 
 impl<'a, TAddr: NodeAddressable + Serialize + DeserializeOwned> SqliteStateStoreReadTransaction<'a, TAddr> {
-    pub(super) fn get_transaction_atom_state_updates_between_blocks<'i, ITx>(
+    pub fn get_transaction_atom_state_updates_between_blocks<'i, ITx>(
         &mut self,
         from_block_id: &BlockId,
         to_block_id: &BlockId,
@@ -1181,6 +1183,23 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             updates.len()
         );
 
+        let mut used_substates = HashSet::<ShardId>::new();
+        let mut processed_substates = HashMap::<TransactionId, HashSet<ShardId>>::new();
+        for (tx_id, update) in &updates {
+            if let Some(Decision::Abort) = update
+                .local_decision
+                .as_ref()
+                .map(|decision| parse_from_string(decision.as_str()))
+                .transpose()?
+            {
+                // The aborted transaction don't lock any substates
+                continue;
+            }
+            let evidence = deserialize_json::<Evidence>(&update.evidence)?;
+            let evidence = evidence.shards_iter().copied().collect::<HashSet<_>>();
+            processed_substates.insert(deserialize_hex_try_from(tx_id)?, evidence);
+        }
+
         ready_txs
             .into_iter()
             .filter_map(|rec| {
@@ -1188,7 +1207,24 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                 match rec.try_convert(maybe_update) {
                     Ok(rec) => {
                         if rec.is_ready() {
-                            Some(Ok(rec))
+                            let tx_substates: HashSet<ShardId> = rec
+                                .transaction()
+                                .evidence
+                                .shards_iter()
+                                .copied()
+                                .collect::<HashSet<_>>();
+                            if tx_substates.is_disjoint(&used_substates) &&
+                                processed_substates.iter().all(|(tx_id, substates)| {
+                                    tx_id == rec.transaction_id() || tx_substates.is_disjoint(substates)
+                                })
+                            {
+                                used_substates.extend(tx_substates);
+                                Some(Ok(rec))
+                            } else {
+                                // TODO: If we don't switch to "no version" transaction, then we can abort these here.
+                                // That also requires changes to the on_ready_to_vote_on_local_block
+                                None
+                            }
                         } else {
                             None
                         }
