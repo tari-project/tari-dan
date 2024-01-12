@@ -1,6 +1,7 @@
 //   Copyright 2024 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use log::info;
 use tari_dan_common_types::ShardId;
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
 use tari_template_lib::{
@@ -97,6 +98,7 @@ impl Runner {
             for tx_id in tx_ids.drain(..) {
                 self.wait_for_transaction(tx_id).await?;
             }
+            info!("⏳️ Added liquidity to pools {}-{}", i * 200, (i + 1) * 200);
         }
 
         Ok(())
