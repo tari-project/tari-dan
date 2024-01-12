@@ -137,6 +137,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         self.store.with_write_tx(|tx| {
             match self.validate_local_proposed_block(tx, block, &local_committee, &local_committee_shard) {
                 Ok(validated) => Ok(Some(validated)),
+                // Propagate this error out as sync is needed in the case where we have a valid QC but do not know the
+                // block
+                Err(
+                    err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
+                        ..
+                    }),
+                ) => Err(err),
                 // Validation errors should not cause a FAILURE state transition
                 Err(HotStuffError::ProposalValidationError(err)) => {
                     warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);

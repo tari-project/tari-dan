@@ -494,10 +494,6 @@ where TConsensusSpec: ConsensusSpec
             self.pacemaker.current_height()
         );
 
-        self.pacemaker
-            .reset_view(high_qc.block_height(), high_qc.block_height())
-            .await?;
-
         let current_epoch = self.epoch_manager.current_epoch().await?;
         // Send the request message
         if self
