@@ -1136,6 +1136,17 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         Ok(count > 0)
     }
 
+    fn transaction_pool_get_all(&mut self) -> Result<Vec<TransactionPoolRecord>, StorageError> {
+        use crate::schema::transaction_pool;
+        let txs = transaction_pool::table
+            .get_results::<sql_models::TransactionPoolRecord>(self.connection())
+            .map_err(|e| SqliteStorageError::DieselError {
+                operation: "transaction_pool_get_all",
+                source: e,
+            })?;
+        txs.into_iter().map(|tx| tx.try_convert(None)).collect()
+    }
+
     fn transaction_pool_get_many_ready(&mut self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError> {
         use crate::schema::transaction_pool;
 

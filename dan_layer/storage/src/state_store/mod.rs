@@ -165,6 +165,7 @@ pub trait StateStoreReadTransaction {
         transaction_id: &TransactionId,
     ) -> Result<TransactionPoolRecord, StorageError>;
     fn transaction_pool_exists(&mut self, transaction_id: &TransactionId) -> Result<bool, StorageError>;
+    fn transaction_pool_get_all(&mut self) -> Result<Vec<TransactionPoolRecord>, StorageError>;
     fn transaction_pool_get_many_ready(&mut self, max_txs: usize) -> Result<Vec<TransactionPoolRecord>, StorageError>;
     fn transaction_pool_count(
         &mut self,

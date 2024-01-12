@@ -9,6 +9,7 @@ use std::{
 };
 
 use log::*;
+use serde::Serialize;
 use tari_dan_common_types::{
     committee::CommitteeShard,
     optional::{IsNotFoundError, Optional},
@@ -25,7 +26,7 @@ use crate::{
 
 const _LOG_TARGET: &str = "tari::dan::storage::transaction_pool";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum TransactionPoolStage {
     /// Transaction has just come in and has never been proposed
     New,
@@ -215,7 +216,7 @@ impl<TStateStore: StateStore> TransactionPool<TStateStore> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TransactionPoolRecord {
     transaction: TransactionAtom,
     stage: TransactionPoolStage,
