@@ -4,4 +4,5 @@
 mod block_validations;
 pub mod hotstuff;
 pub mod messages;
+pub mod quorum_certificate_validations;
 pub mod traits;

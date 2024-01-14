@@ -5,7 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use log::*;
 use tari_consensus::traits::VoteSignatureService;
-use tari_dan_common_types::{NodeAddressable, ShardId};
+use tari_dan_common_types::{ShardId, DerivableFromPublicKey};
 use tari_engine_types::{
     indexed_value::IndexedValueError,
     substate::{Substate, SubstateAddress},
@@ -42,9 +42,9 @@ impl<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService> Transac
 where
     TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr> + 'static,
-    TAddr: NodeAddressable + 'static,
+    TAddr: DerivableFromPublicKey + 'static,
     TSubstateCache: SubstateCache + 'static,
-    TSignatureService: VoteSignatureService + Send + Sync + Clone + 'static,
+    TSignatureService: VoteSignatureService + Send + Sync + 'static,
 {
     pub fn new(substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>) -> Self {
         Self { substate_scanner }
@@ -157,7 +157,7 @@ pub async fn get_substate_requirement<TEpochManager, TVnClient, TAddr, TSubstate
 where
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
-    TAddr: NodeAddressable,
+    TAddr: DerivableFromPublicKey,
     TSubstateCache: SubstateCache,
     TSignatureService: VoteSignatureService,
 {
@@ -211,7 +211,7 @@ pub async fn get_substate<TEpochManager, TVnClient, TAddr, TSubstateCache, TSign
 where
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
-    TAddr: NodeAddressable,
+    TAddr: DerivableFromPublicKey,
     TSubstateCache: SubstateCache,
     TSignatureService: VoteSignatureService,
 {

@@ -7,7 +7,7 @@ use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
     hotstuff::{HotStuffError, ProposalValidationError},
-    traits::{ConsensusSpec, LeaderStrategy, VoteSignatureService},
+    traits::{ConsensusSpec, LeaderStrategy}, quorum_certificate_validations::validate_quorum_certificate,
 };
 
 pub fn check_hash_and_height(candidate_block: &Block) -> Result<(), ProposalValidationError> {
@@ -86,36 +86,13 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         }
         .into());
     }
-    let mut vns = vec![];
-    for signature in candidate_block.justify().signatures() {
-        let vn = epoch_manager
-            .get_validator_node_by_public_key(candidate_block.justify().epoch(), signature.public_key())
-            .await?;
-        vns.push(vn.node_hash());
-    }
-    let merkle_root = epoch_manager
-        .get_validator_node_merkle_root(candidate_block.justify().epoch())
-        .await?;
-    let qc = candidate_block.justify();
-    let proof = qc.merged_proof().clone();
-    if !proof.verify_consume(&merkle_root, vns.iter().map(|hash| hash.to_vec()).collect())? {
-        return Err(ProposalValidationError::QCisNotValid { qc: qc.clone() }.into());
-    }
 
-    for (sign, leaf) in qc.signatures().iter().zip(vns.iter()) {
-        let challenge = vote_signing_service.create_challenge(leaf, qc.block_id(), &qc.decision());
-        if !sign.verify(challenge) {
-            return Err(ProposalValidationError::QCInvalidSignature { qc: qc.clone() }.into());
-        }
-    }
     let committee_shard = epoch_manager
         .get_committee_shard_by_validator_public_key(candidate_block.epoch(), candidate_block.proposed_by())
         .await?;
 
-    if committee_shard.quorum_threshold() >
-        u32::try_from(qc.signatures().len()).map_err(|_| ProposalValidationError::QCisNotValid { qc: qc.clone() })?
-    {
-        return Err(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into());
-    }
+    validate_quorum_certificate(&candidate_block.justify(), &committee_shard, vote_signing_service, epoch_manager).await
+        .map_err(|e| ProposalValidationError::QuorumCertificateValidationError(e))?;
+
     Ok(())
 }

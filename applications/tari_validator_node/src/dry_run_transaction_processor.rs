@@ -70,7 +70,7 @@ pub enum DryRunTransactionProcessorError {
     VirtualSubstateError(#[from] VirtualSubstateError),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct DryRunTransactionProcessor {
     substate_resolver: TariSubstateResolver<
         SqliteStateStore<PeerAddress>,

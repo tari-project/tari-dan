@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_consensus::traits::VoteSignatureService;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, ShardId, DerivableFromPublicKey};
 use tari_dan_engine::{runtime::VirtualSubstates, state_store::memory::MemoryStateStore};
 use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
 use tari_engine_types::{
@@ -35,12 +35,13 @@ pub struct TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClient
     virtual_substate_manager: VirtualSubstateManager<TStateStore, TEpochManager>,
 }
 
-impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>
+impl<TAddr, TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>
     TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>
 where
-    TStateStore: StateStore,
-    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
-    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TStateStore::Addr>,
+    TAddr: DerivableFromPublicKey,
+    TStateStore: StateStore<Addr = TAddr>,
+    TEpochManager: EpochManagerReader<Addr = TAddr>,
+    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TAddr>,
     TSubstateCache: SubstateCache,
     TSignatureService: VoteSignatureService,
 {
@@ -150,12 +151,13 @@ where
 }
 
 #[async_trait]
-impl<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService> SubstateResolver
+impl<TAddr, TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService> SubstateResolver
     for TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>
 where
-    TStateStore: StateStore + Sync + Send,
-    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
-    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TStateStore::Addr>,
+    TAddr: DerivableFromPublicKey,
+    TStateStore: StateStore<Addr = TAddr> + Sync + Send,
+    TEpochManager: EpochManagerReader<Addr = TAddr>,
+    TValidatorNodeClientFactory: ValidatorNodeClientFactory<Addr = TAddr>,
     TSubstateCache: SubstateCache,
     TSignatureService: VoteSignatureService + Send + Sync,
 {

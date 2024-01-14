@@ -28,8 +28,7 @@ use log::*;
 use tari_consensus::traits::VoteSignatureService;
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
-    NodeAddressable,
-    ShardId,
+    ShardId, DerivableFromPublicKey,
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_epoch_manager::EpochManagerReader;
@@ -59,7 +58,7 @@ pub struct TransactionManager<TEpochManager, TClientFactory, TSubstateCache, TSi
 impl<TEpochManager, TClientFactory, TAddr, TSubstateCache, TSignatureService>
     TransactionManager<TEpochManager, TClientFactory, TSubstateCache, TSignatureService>
 where
-    TAddr: NodeAddressable + 'static,
+    TAddr: DerivableFromPublicKey + 'static,
     TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,
     TClientFactory: ValidatorNodeClientFactory<Addr = TAddr> + 'static,
     <TClientFactory::Client as ValidatorNodeRpcClient>::Error: IsNotFoundError + 'static,

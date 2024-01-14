@@ -1,6 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_consensus::quorum_certificate_validations::QuorumCertificateValidationError;
 use tari_engine_types::substate::SubstateAddress;
 use tari_epoch_manager::EpochManagerError;
 
@@ -26,6 +27,8 @@ pub enum IndexerError {
     FailedToParseTransactionHash(String),
     #[error("Substate cache operation failed: {0}")]
     SubstateCacheError(#[from] SubstateCacheError),
-    #[error("Invalid quorum certificate")]
-    InvalidQuorumCertificate,
+    #[error("Quorum certificate validation error: {0}")]
+    QuorumCertificateValidationError(#[from] QuorumCertificateValidationError),
+    #[error("Missing quorum certificate")]
+    MissingQuorumCertificate,
 }

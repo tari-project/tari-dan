@@ -22,8 +22,6 @@ use tokio::{
 use crate::{
     consensus::{
         leader_selection::RoundRobinLeaderStrategy,
-        signature_service::TariSignatureService,
-        spec::TariConsensusSpec,
         state_manager::TariStateManager,
     },
     event_subscription::EventSubscription,
@@ -32,7 +30,9 @@ use crate::{
 mod handle;
 mod leader_selection;
 mod signature_service;
+pub use signature_service::TariSignatureService;
 mod spec;
+pub use spec::TariConsensusSpec;
 mod state_manager;
 
 pub use handle::*;
