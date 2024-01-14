@@ -318,6 +318,8 @@ where
             .map_err(|e| IndexerError::ValidatorNodeClientError(e.to_string()))?;
 
         // validate the qc
+        // TODO: currently there is no way to check that the QC validates the substate value we receive
+        //       we are only checking that the QC is valid in isolation
         match &result {
             SubstateResult::DoesNotExist => (),
             SubstateResult::Up { quorum_certificates, .. } => self.validate_substate_qcs(&quorum_certificates, shard).await?,

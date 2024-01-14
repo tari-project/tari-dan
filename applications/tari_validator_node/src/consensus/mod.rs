@@ -29,15 +29,13 @@ use crate::{
 
 mod handle;
 mod leader_selection;
-mod signature_service;
-pub use signature_service::TariSignatureService;
 mod spec;
 pub use spec::TariConsensusSpec;
 mod state_manager;
 
 pub use handle::*;
 use sqlite_message_logger::SqliteMessageLogger;
-use tari_dan_app_utilities::keypair::RistrettoKeypair;
+use tari_dan_app_utilities::{keypair::RistrettoKeypair, signature_service::TariSignatureService};
 use tari_dan_common_types::PeerAddress;
 
 use crate::p2p::services::message_dispatcher::OutboundMessaging;
