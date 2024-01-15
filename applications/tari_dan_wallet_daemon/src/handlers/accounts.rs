@@ -107,6 +107,9 @@ pub async fn handle_create(
         .locate_dependent_substates(&[&default_account.address])
         .await?;
 
+    // We aren't mutating the resources
+    let (input_refs, inputs) = inputs.into_iter().partition::<Vec<_>, _>(|s| s.address.is_resource());
+
     let signing_key_index = req.key_id.unwrap_or(default_account.key_index);
     let signing_key = key_manager_api.derive_key(key_manager::TRANSACTION_BRANCH, signing_key_index)?;
 
@@ -127,6 +130,7 @@ pub async fn handle_create(
     let transaction = Transaction::builder()
         .fee_transaction_pay_from_component(default_account.address.as_component_address().unwrap(), max_fee)
         .call_function(*ACCOUNT_TEMPLATE_ADDRESS, "create", args![owner_token])
+        .with_input_refs(input_refs.iter().map(|s| ShardId::from_address(&s.address, s.version)))
         .with_inputs(
             inputs
                 .iter()
