@@ -370,7 +370,6 @@ impl JsonRpcHandlers {
                 quorum_certificates: Some(created_qc)
                     .into_iter()
                     .chain(destroyed_qc)
-                    .map(|qc| qc.into())
                     .collect()
             }
         } else {
@@ -378,7 +377,7 @@ impl JsonRpcHandlers {
                 status: SubstateStatus::Up,
                 created_by_tx: Some(substate.created_by_transaction),
                 value: Some(substate.into_substate_value()),
-                quorum_certificates: vec![created_qc.into()],
+                quorum_certificates: vec![created_qc],
             }
         };
 

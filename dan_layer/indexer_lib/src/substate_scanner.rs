@@ -322,15 +322,15 @@ where
         //       we are only checking that the QC is valid in isolation
         match &result {
             SubstateResult::DoesNotExist => (),
-            SubstateResult::Up { quorum_certificates, .. } => self.validate_substate_qcs(&quorum_certificates, shard).await?,
-            SubstateResult::Down { quorum_certificates, .. } => self.validate_substate_qcs(&quorum_certificates, shard).await?,
+            SubstateResult::Up { quorum_certificates, .. } => self.validate_substate_qcs(quorum_certificates, shard).await?,
+            SubstateResult::Down { quorum_certificates, .. } => self.validate_substate_qcs(quorum_certificates, shard).await?,
         }
 
         Ok(result)
     }
 
     /// Validates Quorum Certificates associated with a substate
-    async fn validate_substate_qcs(&self, qcs: &Vec<QuorumCertificate>, shard_id: ShardId) -> Result<(), IndexerError> {
+    async fn validate_substate_qcs(&self, qcs: &[QuorumCertificate], shard_id: ShardId) -> Result<(), IndexerError> {
         let qc = qcs.last()
             .ok_or(IndexerError::MissingQuorumCertificate)?;
 
