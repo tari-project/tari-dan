@@ -28,7 +28,8 @@ use log::*;
 use tari_consensus::traits::VoteSignatureService;
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
-    ShardId, DerivableFromPublicKey,
+    DerivableFromPublicKey,
+    ShardId,
 };
 use tari_engine_types::substate::SubstateAddress;
 use tari_epoch_manager::EpochManagerReader;

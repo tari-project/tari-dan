@@ -27,7 +27,7 @@ use serde::{Deserialize, Serialize};
 use tari_common_types::{transaction::TxId, types::PublicKey};
 use tari_dan_common_types::{committee::CommitteeShard, shard_bucket::ShardBucket, Epoch, ShardId};
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord, QuorumCertificate},
+    consensus_models::{Block, BlockId, ExecutedTransaction, QuorumCertificate, QuorumDecision, SubstateRecord},
     global::models::ValidatorNode,
     Ordering,
 };

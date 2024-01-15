@@ -23,8 +23,9 @@
 use rand::rngs::OsRng;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_consensus::traits::{ValidatorSignatureService, VoteSignatureService};
-use crate::keypair::RistrettoKeypair;
 use tari_dan_storage::consensus_models::{BlockId, QuorumDecision, ValidatorSchnorrSignature, ValidatorSignature};
+
+use crate::keypair::RistrettoKeypair;
 
 #[derive(Debug, Clone)]
 pub struct TariSignatureService {

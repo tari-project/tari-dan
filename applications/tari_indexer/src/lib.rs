@@ -50,7 +50,8 @@ use tari_common::{
 use tari_dan_app_utilities::{
     consensus_constants::ConsensusConstants,
     keypair::setup_keypair_prompt,
-    substate_file_cache::SubstateFileCache, signature_service::TariSignatureService,
+    signature_service::TariSignatureService,
+    substate_file_cache::SubstateFileCache,
 };
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;

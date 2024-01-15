@@ -146,17 +146,22 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
                 })?;
                 let substate = SubstateValue::from_bytes(&resp.substate)
                     .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?;
-                let quorum_certificates = resp.quorum_certificates
+                let quorum_certificates = resp
+                    .quorum_certificates
                     .into_iter()
                     .map(|qc| qc.try_into())
                     .collect::<Result<_, _>>()
-                    .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Node returned invalid quorum certificates")))?;
+                    .map_err(|_| {
+                        ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                            "Node returned invalid quorum certificates"
+                        ))
+                    })?;
                 Ok(SubstateResult::Up {
                     substate: Substate::new(resp.version, substate),
                     address: SubstateAddress::from_bytes(&resp.address)
                         .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?,
                     created_by_tx: tx_hash,
-                    quorum_certificates
+                    quorum_certificates,
                 })
             },
             SubstateStatus::Down => {
@@ -170,11 +175,16 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
                         "Node returned an invalid or empty destroyed transaction hash"
                     ))
                 })?;
-                let quorum_certificates = resp.quorum_certificates
+                let quorum_certificates = resp
+                    .quorum_certificates
                     .into_iter()
                     .map(|qc| qc.try_into())
                     .collect::<Result<_, _>>()
-                    .map_err(|_| ValidatorNodeRpcClientError::InvalidResponse(anyhow!("Node returned invalid quorum certificates")))?;
+                    .map_err(|_| {
+                        ValidatorNodeRpcClientError::InvalidResponse(anyhow!(
+                            "Node returned invalid quorum certificates"
+                        ))
+                    })?;
                 Ok(SubstateResult::Down {
                     address: SubstateAddress::from_bytes(&resp.address)
                         .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?,

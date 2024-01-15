@@ -7,7 +7,8 @@ use tari_epoch_manager::EpochManagerReader;
 
 use crate::{
     hotstuff::{HotStuffError, ProposalValidationError},
-    traits::{ConsensusSpec, LeaderStrategy}, quorum_certificate_validations::validate_quorum_certificate,
+    quorum_certificate_validations::validate_quorum_certificate,
+    traits::{ConsensusSpec, LeaderStrategy},
 };
 
 pub fn check_hash_and_height(candidate_block: &Block) -> Result<(), ProposalValidationError> {
@@ -91,8 +92,14 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         .get_committee_shard_by_validator_public_key(candidate_block.epoch(), candidate_block.proposed_by())
         .await?;
 
-    validate_quorum_certificate(candidate_block.justify(), &committee_shard, vote_signing_service, epoch_manager).await
-        .map_err(ProposalValidationError::QuorumCertificateValidationError)?;
+    validate_quorum_certificate(
+        candidate_block.justify(),
+        &committee_shard,
+        vote_signing_service,
+        epoch_manager,
+    )
+    .await
+    .map_err(ProposalValidationError::QuorumCertificateValidationError)?;
 
     Ok(())
 }

@@ -8,10 +8,7 @@ use tari_dan_common_types::PeerAddress;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
 
-use crate::consensus::{
-    leader_selection::RoundRobinLeaderStrategy,
-    state_manager::TariStateManager,
-};
+use crate::consensus::{leader_selection::RoundRobinLeaderStrategy, state_manager::TariStateManager};
 
 #[derive(Clone)]
 pub struct TariConsensusSpec;

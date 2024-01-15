@@ -20,10 +20,7 @@ use tokio::{
 };
 
 use crate::{
-    consensus::{
-        leader_selection::RoundRobinLeaderStrategy,
-        state_manager::TariStateManager,
-    },
+    consensus::{leader_selection::RoundRobinLeaderStrategy, state_manager::TariStateManager},
     event_subscription::EventSubscription,
 };
 

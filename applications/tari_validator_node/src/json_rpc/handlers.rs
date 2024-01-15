@@ -337,10 +337,7 @@ impl JsonRpcHandlers {
         let data: GetSubstateRequest = value.parse_params()?;
         let shard_id = ShardId::from_address(&data.address, data.version);
 
-        let mut tx = self
-            .state_store
-            .create_read_tx()
-            .map_err(internal_error(answer_id))?;
+        let mut tx = self.state_store.create_read_tx().map_err(internal_error(answer_id))?;
 
         let maybe_substate = SubstateRecord::get(&mut tx, &shard_id)
             .optional()
@@ -367,10 +364,7 @@ impl JsonRpcHandlers {
                 status: SubstateStatus::Down,
                 created_by_tx: Some(substate.created_by_transaction),
                 value: None,
-                quorum_certificates: Some(created_qc)
-                    .into_iter()
-                    .chain(destroyed_qc)
-                    .collect()
+                quorum_certificates: Some(created_qc).into_iter().chain(destroyed_qc).collect(),
             }
         } else {
             GetSubstateResponse {

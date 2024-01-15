@@ -20,11 +20,11 @@
 // WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 // USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use crate::traits::VoteSignatureService;
-use tari_dan_common_types::{committee::CommitteeShard, NodeHeight, DerivableFromPublicKey};
+use tari_dan_common_types::{committee::CommitteeShard, DerivableFromPublicKey, NodeHeight};
 use tari_dan_storage::consensus_models::QuorumCertificate;
-use tari_epoch_manager::{EpochManagerReader, EpochManagerError};
+use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 
+use crate::traits::VoteSignatureService;
 
 #[derive(Debug, thiserror::Error)]
 pub enum QuorumCertificateValidationError {
@@ -48,12 +48,14 @@ pub enum QuorumCertificateValidationError {
 /// Validates Quorum Certificates in isolation
 pub async fn validate_quorum_certificate<
     TAddr: DerivableFromPublicKey,
-    TEpochManager:  EpochManagerReader<Addr = TAddr>,
-    TSignatureService: VoteSignatureService>
-    (qc: &QuorumCertificate, committee_shard: &CommitteeShard,
+    TEpochManager: EpochManagerReader<Addr = TAddr>,
+    TSignatureService: VoteSignatureService,
+>(
+    qc: &QuorumCertificate,
+    committee_shard: &CommitteeShard,
     vote_signing_service: &TSignatureService,
     epoch_manager: &TEpochManager,
-) -> Result<(), QuorumCertificateValidationError> {        
+) -> Result<(), QuorumCertificateValidationError> {
     // ignore genesis block.
     if qc.epoch().as_u64() == 0 {
         return Ok(());
@@ -69,12 +71,11 @@ pub async fn validate_quorum_certificate<
     }
 
     // validate the QC's merkle proof
-    let merkle_root = epoch_manager
-        .get_validator_node_merkle_root(qc.epoch())
-        .await?;
+    let merkle_root = epoch_manager.get_validator_node_merkle_root(qc.epoch()).await?;
     let proof = qc.merged_proof().clone();
     let vns_bytes = vns.iter().map(|hash| hash.to_vec()).collect();
-    let is_proof_valid = proof.verify_consume(&merkle_root, vns_bytes)
+    let is_proof_valid = proof
+        .verify_consume(&merkle_root, vns_bytes)
         .map_err(|_| QuorumCertificateValidationError::InvalidMerkleProof)?;
     if !is_proof_valid {
         return Err(QuorumCertificateValidationError::InvalidMerkleProof);
@@ -89,11 +90,11 @@ pub async fn validate_quorum_certificate<
     }
 
     // validate that enough committee members have signed the QC
-    let num_signatures_in_qc = u32::try_from(qc.signatures().len())
-        .map_err(|_| QuorumCertificateValidationError::MalformedCertificate)?;
+    let num_signatures_in_qc =
+        u32::try_from(qc.signatures().len()).map_err(|_| QuorumCertificateValidationError::MalformedCertificate)?;
     if committee_shard.quorum_threshold() > num_signatures_in_qc {
         return Err(QuorumCertificateValidationError::QuorumWasNotReached);
     }
-    
+
     Ok(())
 }

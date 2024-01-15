@@ -22,9 +22,10 @@
 
 use log::info;
 use tari_dan_app_utilities::{
+    signature_service::TariSignatureService,
     substate_file_cache::SubstateFileCache,
     template_manager::implementation::TemplateManager,
-    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor, TransactionProcessorError}, signature_service::TariSignatureService,
+    transaction_executor::{TariDanTransactionProcessor, TransactionExecutor, TransactionProcessorError},
 };
 use tari_dan_common_types::PeerAddress;
 use tari_dan_engine::{
@@ -77,7 +78,7 @@ pub struct DryRunTransactionProcessor {
         EpochManagerHandle<PeerAddress>,
         TariValidatorNodeRpcClientFactory,
         SubstateFileCache,
-        TariSignatureService
+        TariSignatureService,
     >,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     payload_processor: TariDanTransactionProcessor<TemplateManager<PeerAddress>>,

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_consensus::traits::VoteSignatureService;
-use tari_dan_common_types::{Epoch, ShardId, DerivableFromPublicKey};
+use tari_dan_common_types::{DerivableFromPublicKey, Epoch, ShardId};
 use tari_dan_engine::{runtime::VirtualSubstates, state_store::memory::MemoryStateStore};
 use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
 use tari_engine_types::{
@@ -28,7 +28,13 @@ use crate::{
 const LOG_TARGET: &str = "tari::dan::substate_resolver";
 
 #[derive(Debug, Clone)]
-pub struct TariSubstateResolver<TStateStore, TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService> {
+pub struct TariSubstateResolver<
+    TStateStore,
+    TEpochManager,
+    TValidatorNodeClientFactory,
+    TSubstateCache,
+    TSignatureService,
+> {
     store: TStateStore,
     scanner: SubstateScanner<TEpochManager, TValidatorNodeClientFactory, TSubstateCache, TSignatureService>,
     epoch_manager: TEpochManager,

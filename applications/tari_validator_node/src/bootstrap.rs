@@ -42,10 +42,11 @@ use tari_dan_app_utilities::{
     consensus_constants::ConsensusConstants,
     keypair::RistrettoKeypair,
     seed_peer::SeedPeer,
+    signature_service::TariSignatureService,
     substate_file_cache::SubstateFileCache,
     template_manager,
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
-    transaction_executor::TariDanTransactionProcessor, signature_service::TariSignatureService,
+    transaction_executor::TariDanTransactionProcessor,
 };
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, ShardId};
 use tari_dan_engine::fees::FeeTable;
@@ -258,7 +259,7 @@ pub async fn spawn_services(
         epoch_manager.clone(),
         validator_node_client_factory.clone(),
         substate_cache,
-        signing_service
+        signing_service,
     );
     let substate_resolver = TariSubstateResolver::new(
         state_store.clone(),

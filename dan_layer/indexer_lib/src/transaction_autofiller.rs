@@ -5,7 +5,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use log::*;
 use tari_consensus::traits::VoteSignatureService;
-use tari_dan_common_types::{ShardId, DerivableFromPublicKey};
+use tari_dan_common_types::{DerivableFromPublicKey, ShardId};
 use tari_engine_types::{
     indexed_value::IndexedValueError,
     substate::{Substate, SubstateAddress},
@@ -38,7 +38,8 @@ pub struct TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache, TSign
     substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>,
 }
 
-impl<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService> TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache, TSignatureService>
+impl<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService>
+    TransactionAutofiller<TEpochManager, TVnClient, TSubstateCache, TSignatureService>
 where
     TEpochManager: EpochManagerReader<Addr = TAddr> + 'static,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr> + 'static,
@@ -46,7 +47,9 @@ where
     TSubstateCache: SubstateCache + 'static,
     TSignatureService: VoteSignatureService + Send + Sync + 'static,
 {
-    pub fn new(substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>) -> Self {
+    pub fn new(
+        substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>>,
+    ) -> Self {
         Self { substate_scanner }
     }
 

@@ -22,8 +22,9 @@
 
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
-use tari_consensus::{traits::VoteSignatureService, quorum_certificate_validations::validate_quorum_certificate};
-use tari_dan_common_types::{ShardId, DerivableFromPublicKey};
+use tari_consensus::{quorum_certificate_validations::validate_quorum_certificate, traits::VoteSignatureService};
+use tari_dan_common_types::{DerivableFromPublicKey, ShardId};
+use tari_dan_storage::consensus_models::QuorumCertificate;
 use tari_engine_types::{
     events::Event,
     substate::{SubstateAddress, SubstateValue},
@@ -36,7 +37,7 @@ use tari_template_lib::{
 };
 use tari_transaction::TransactionId;
 use tari_validator_node_rpc::client::{SubstateResult, ValidatorNodeClientFactory, ValidatorNodeRpcClient};
-use tari_dan_storage::consensus_models::QuorumCertificate;
+
 use crate::{
     error::IndexerError,
     substate_cache::{SubstateCache, SubstateCacheEntry},
@@ -53,7 +54,8 @@ pub struct SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureS
     signing_service: TSignatureService,
 }
 
-impl<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService> SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>
+impl<TEpochManager, TVnClient, TAddr, TSubstateCache, TSignatureService>
+    SubstateScanner<TEpochManager, TVnClient, TSubstateCache, TSignatureService>
 where
     TAddr: DerivableFromPublicKey,
     TEpochManager: EpochManagerReader<Addr = TAddr>,
@@ -71,7 +73,7 @@ where
             committee_provider,
             validator_node_client_factory,
             substate_cache,
-            signing_service
+            signing_service,
         }
     }
 
@@ -322,8 +324,12 @@ where
         //       we are only checking that the QC is valid in isolation
         match &result {
             SubstateResult::DoesNotExist => (),
-            SubstateResult::Up { quorum_certificates, .. } => self.validate_substate_qcs(quorum_certificates, shard).await?,
-            SubstateResult::Down { quorum_certificates, .. } => self.validate_substate_qcs(quorum_certificates, shard).await?,
+            SubstateResult::Up {
+                quorum_certificates, ..
+            } => self.validate_substate_qcs(quorum_certificates, shard).await?,
+            SubstateResult::Down {
+                quorum_certificates, ..
+            } => self.validate_substate_qcs(quorum_certificates, shard).await?,
         }
 
         Ok(result)
@@ -331,13 +337,13 @@ where
 
     /// Validates Quorum Certificates associated with a substate
     async fn validate_substate_qcs(&self, qcs: &[QuorumCertificate], shard_id: ShardId) -> Result<(), IndexerError> {
-        let qc = qcs.last()
-            .ok_or(IndexerError::MissingQuorumCertificate)?;
+        let qc = qcs.last().ok_or(IndexerError::MissingQuorumCertificate)?;
 
-        let committee_shard = self.committee_provider
+        let committee_shard = self
+            .committee_provider
             .get_committee_shard(qc.epoch(), shard_id)
             .await?;
-        
+
         validate_quorum_certificate(qc, &committee_shard, &self.signing_service, &self.committee_provider).await?;
 
         Ok(())
