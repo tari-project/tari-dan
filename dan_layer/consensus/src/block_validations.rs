@@ -109,7 +109,13 @@ pub async fn check_quorum_certificate<TConsensusSpec: ConsensusSpec>(
         }
     }
     let committee_shard = epoch_manager
-        .get_committee_shard_by_validator_public_key(candidate_block.epoch(), candidate_block.proposed_by())
+        .get_committee_shard_by_validator_public_key(
+            qc.epoch(),
+            qc.signatures()
+                .first()
+                .ok_or::<HotStuffError>(ProposalValidationError::QuorumWasNotReached { qc: qc.clone() }.into())?
+                .public_key(),
+        )
         .await?;
 
     if committee_shard.quorum_threshold() >
