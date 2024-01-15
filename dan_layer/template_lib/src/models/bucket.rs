@@ -197,7 +197,6 @@ impl Bucket {
             args: invoke_args![],
         });
 
-        resp.decode()
-            .expect("get_non_fungible_ids returned invalid non fungible ids")
+        resp.decode().expect("get_non_fungibles returned invalid non fungibles")
     }
 }

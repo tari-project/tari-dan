@@ -33,7 +33,7 @@ use tari_template_abi::{
     EngineOp,
 };
 
-use super::{BinaryTag, Proof, ProofAuth};
+use super::{BinaryTag, NonFungible, Proof, ProofAuth};
 use crate::{
     args::{
         ConfidentialRevealArg,
@@ -271,6 +271,17 @@ impl Vault {
 
         resp.decode()
             .expect("get_non_fungible_ids returned invalid non fungible ids")
+    }
+
+    /// Returns the all the non-fungibles in this vault
+    pub fn get_non_fungibles(&self) -> Vec<NonFungible> {
+        let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
+            vault_ref: self.vault_ref(),
+            action: VaultAction::GetNonFungibles,
+            args: invoke_args![],
+        });
+
+        resp.decode().expect("get_non_fungibles returned invalid non fungibles")
     }
 
     /// Returns the resource address of the tokens that this vault holds
