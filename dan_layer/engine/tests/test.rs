@@ -860,6 +860,7 @@ mod basic_nft {
                 r#"
             let sparkle_nft = var!["nft"];
             sparkle_nft.get_non_fungibles_from_bucket();
+            sparkle_nft.get_non_fungibles_from_vault();
         "#,
                 vars.clone(),
                 vec![account_owner],
@@ -870,6 +871,12 @@ mod basic_nft {
 
         // sparkle_nft.get_non_fungibles_from_bucket()
         let nfts_from_bucket = result.finalize.execution_results[1]
+            .decode::<Vec<NonFungible>>()
+            .unwrap();
+        assert_eq!(nfts_from_bucket.len(), 4);
+
+        // sparkle_nft.get_non_fungibles_from_vault()
+        let nfts_from_bucket = result.finalize.execution_results[2]
             .decode::<Vec<NonFungible>>()
             .unwrap();
         assert_eq!(nfts_from_bucket.len(), 4);

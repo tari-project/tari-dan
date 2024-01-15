@@ -316,6 +316,7 @@ pub enum VaultAction {
     CreateProofByFungibleAmount,
     CreateProofByNonFungibles,
     CreateProofByConfidentialResource,
+    GetNonFungibles,
 }
 
 /// A vault withdraw operation argument

@@ -138,5 +138,9 @@ mod sparkle_nft_template {
 
             nfts
         }
+
+        pub fn get_non_fungibles_from_vault(&self) -> Vec<NonFungible> {
+            self.vault.get_non_fungibles()
+        }
     }
 }
