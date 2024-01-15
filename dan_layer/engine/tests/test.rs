@@ -870,13 +870,13 @@ mod basic_nft {
         result.finalize.result.expect("execution failed");
 
         // sparkle_nft.get_non_fungibles_from_bucket()
-        let nfts_from_bucket = result.finalize.execution_results[1]
+        let nfts_from_bucket = result.finalize.execution_results[0]
             .decode::<Vec<NonFungible>>()
             .unwrap();
         assert_eq!(nfts_from_bucket.len(), 4);
 
         // sparkle_nft.get_non_fungibles_from_vault()
-        let nfts_from_bucket = result.finalize.execution_results[2]
+        let nfts_from_bucket = result.finalize.execution_results[1]
             .decode::<Vec<NonFungible>>()
             .unwrap();
         assert_eq!(nfts_from_bucket.len(), 4);
