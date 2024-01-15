@@ -189,7 +189,7 @@ impl Bucket {
             .expect("get_non_fungible_ids returned invalid non fungible ids")
     }
 
-    /// Returns the all the non-fungibles in this bucket
+    /// Returns all the non-fungibles in this bucket
     pub fn get_non_fungibles(&self) -> Vec<NonFungible> {
         let resp: InvokeResult = call_engine(EngineOp::BucketInvoke, &BucketInvokeArg {
             bucket_ref: BucketRef::Ref(self.id),

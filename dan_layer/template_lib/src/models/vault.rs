@@ -273,7 +273,7 @@ impl Vault {
             .expect("get_non_fungible_ids returned invalid non fungible ids")
     }
 
-    /// Returns the all the non-fungibles in this vault
+    /// Returns all the non-fungibles in this vault
     pub fn get_non_fungibles(&self) -> Vec<NonFungible> {
         let resp: InvokeResult = call_engine(EngineOp::VaultInvoke, &VaultInvokeArg {
             vault_ref: self.vault_ref(),
