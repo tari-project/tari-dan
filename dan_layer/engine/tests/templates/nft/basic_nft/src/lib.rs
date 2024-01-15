@@ -129,5 +129,14 @@ mod sparkle_nft_template {
             // native instruction can be used instead
             bucket.burn();
         }
+
+        pub fn get_non_fungibles_from_bucket(&mut self) -> Vec<NonFungible> {
+            let bucket = self.vault.withdraw_all();
+            let nfts = bucket.get_non_fungibles();
+            // deposit the nfts back into the vault
+            self.vault.deposit(bucket);
+
+            nfts
+        }
     }
 }

@@ -397,6 +397,7 @@ pub enum BucketAction {
     Burn,
     CreateProof,
     GetNonFungibleIds,
+    GetNonFungibles,
 }
 
 /// A bucket burn operation argument
