@@ -82,7 +82,7 @@ use tari_template_lib::{
     auth::{ComponentAccessRules, ResourceAccessRules, ResourceAuthAction},
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     crypto::RistrettoPublicKeyBytes,
-    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungibleAddress, NotAuthorized, VaultRef},
+    models::{Amount, BucketId, ComponentAddress, Metadata, NonFungible, NonFungibleAddress, NotAuthorized, VaultRef},
     prelude::ResourceType,
     template::BuiltinTemplate,
 };
@@ -1086,6 +1086,28 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 })
             },
             VaultAction::CreateProofByConfidentialResource => todo!("CreateProofByConfidentialResource"),
+            VaultAction::GetNonFungibles => {
+                let vault_id = vault_ref.vault_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "vault_ref",
+                    reason: "GetNonFungibles vault action requires a vault id".to_string(),
+                })?;
+                args.assert_no_args("Vault::GetNonFungibles")?;
+
+                self.tracker.write_with(|state| {
+                    let vault_lock = state.lock_substate(&SubstateAddress::Vault(vault_id), LockFlag::Read)?;
+                    let resource_address = state.get_vault(&vault_lock)?.resource_address();
+                    let nft_ids = state.get_vault(&vault_lock)?.get_non_fungible_ids();
+                    let nfts: Vec<NonFungible> = nft_ids
+                        .iter()
+                        .map(|id| NonFungibleAddress::new(*resource_address, id.clone()))
+                        .map(NonFungible::new)
+                        .collect();
+
+                    let result = InvokeResult::encode(&nfts)?;
+                    state.unlock_substate(vault_lock)?;
+                    Ok(result)
+                })
+            },
         }
     }
 
@@ -1244,6 +1266,26 @@ impl<TTemplateProvider: TemplateProvider<Template = LoadedTemplate>> RuntimeInte
                 self.tracker.write_with(|state| {
                     let bucket = state.get_bucket(bucket_id)?;
                     Ok(InvokeResult::encode(bucket.non_fungible_ids())?)
+                })
+            },
+            BucketAction::GetNonFungibles => {
+                let bucket_id = bucket_ref.bucket_id().ok_or_else(|| RuntimeError::InvalidArgument {
+                    argument: "bucket_ref",
+                    reason: "GetNonFungibles bucket action requires a bucket id".to_string(),
+                })?;
+                args.assert_no_args("Bucket::GetNonFungibles")?;
+
+                self.tracker.write_with(|state| {
+                    let bucket = state.get_bucket(bucket_id)?;
+                    let resource_address = bucket.resource_address();
+                    let nft_ids = bucket.non_fungible_ids();
+                    let nfts: Vec<NonFungible> = nft_ids
+                        .iter()
+                        .map(|id| NonFungibleAddress::new(*resource_address, id.clone()))
+                        .map(NonFungible::new)
+                        .collect();
+
+                    Ok(InvokeResult::encode(&nfts)?)
                 })
             },
         }
