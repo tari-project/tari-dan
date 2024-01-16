@@ -46,6 +46,7 @@ use tari_template_lib::{
 };
 use wasmer::{Function, Instance, Module, Val, WasmerEnv};
 
+use super::version::are_versions_compatible;
 use crate::{
     runtime::Runtime,
     traits::Invokable,
@@ -217,12 +218,14 @@ impl WasmProcess {
     fn validate_template_tari_version(module: &LoadedWasmTemplate) -> Result<(), WasmExecutionError> {
         let template_tari_version = module.template_def().tari_version();
 
-        if template_tari_version == ENGINE_TARI_VERSION {
-            log::info!(target: LOG_TARGET, "The Tari version version in the template WASM (\"{}\") matches the one used in the engine", template_tari_version);
+        if are_versions_compatible(template_tari_version, ENGINE_TARI_VERSION)? {
+            log::info!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") is compatible with the one used in the engine", template_tari_version);
         } else {
-            // For now we are going to ignore version mismatches
-            // In the future we could load a different version of the template_lib in the engine
-            log::warn!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") does not matches the one used in the engine (\"{}\")", template_tari_version, ENGINE_TARI_VERSION);
+            log::error!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") is incompatible with the one used in the engine (\"{}\")", template_tari_version, ENGINE_TARI_VERSION);
+            return Err(WasmExecutionError::TemplateVersionMismatch {
+                engine_version: ENGINE_TARI_VERSION.to_owned(),
+                template_version: template_tari_version.to_owned(),
+            });
         }
 
         Ok(())
