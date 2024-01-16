@@ -21,6 +21,7 @@ tari_crypto = { workspace = true }
 
 anyhow = { workspace = true }
 chrono = { workspace = true }
+indexmap = { workspace = true, features = ["serde"] }
 log = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }

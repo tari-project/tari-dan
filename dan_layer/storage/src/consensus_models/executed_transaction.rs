@@ -8,13 +8,17 @@ use std::{
     time::Duration,
 };
 
+use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
 use tari_dan_common_types::{optional::Optional, ShardId};
-use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
+use tari_engine_types::{
+    commit_result::{ExecuteResult, FinalizeResult, RejectReason},
+    lock::LockFlag,
+};
 use tari_transaction::{Transaction, TransactionId};
 
 use crate::{
-    consensus_models::{Decision, Evidence, TransactionAtom, TransactionRecord},
+    consensus_models::{Decision, Evidence, ShardEvidence, TransactionAtom, TransactionRecord},
     StateStoreReadTransaction,
     StateStoreWriteTransaction,
     StorageError,
@@ -131,11 +135,29 @@ impl ExecutedTransaction {
     }
 
     pub fn to_initial_evidence(&self) -> Evidence {
-        self.transaction
-            .all_inputs_iter()
-            .chain(self.resulting_outputs())
-            .map(|shard| (*shard, vec![]))
-            .collect()
+        let mut evidence = Evidence::empty();
+        evidence.extend(self.transaction.inputs().iter().map(|input| {
+            (*input, ShardEvidence {
+                qc_ids: IndexSet::new(),
+                lock: LockFlag::Write,
+            })
+        }));
+
+        evidence.extend(self.transaction.input_refs().iter().map(|input_ref| {
+            (*input_ref, ShardEvidence {
+                qc_ids: IndexSet::new(),
+                lock: LockFlag::Read,
+            })
+        }));
+
+        evidence.extend(self.resulting_outputs.iter().map(|output| {
+            (*output, ShardEvidence {
+                qc_ids: IndexSet::new(),
+                lock: LockFlag::Write,
+            })
+        }));
+
+        evidence
     }
 
     pub fn is_finalized(&self) -> bool {

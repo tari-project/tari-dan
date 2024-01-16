@@ -32,14 +32,18 @@ impl Decision {
             Decision::Abort => Decision::Abort,
         }
     }
+
+    pub const fn as_str(&self) -> &'static str {
+        match self {
+            Decision::Commit => "Commit",
+            Decision::Abort => "Abort",
+        }
+    }
 }
 
 impl Display for Decision {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            Decision::Commit => write!(f, "Commit"),
-            Decision::Abort => write!(f, "Abort"),
-        }
+        f.write_str(self.as_str())
     }
 }
 

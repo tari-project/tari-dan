@@ -4012,6 +4012,7 @@ checksum = "d530e1a18b1cb4c484e6e34556a0d948706958449fca0cab753d649f2bce3d1f"
 dependencies = [
  "equivalent",
  "hashbrown 0.14.3",
+ "serde",
 ]
 
 [[package]]
@@ -9192,6 +9193,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "indexmap 2.1.0",
  "log",
  "rand",
  "serde",
@@ -9740,6 +9742,7 @@ dependencies = [
  "tari_common_types",
  "tari_dan_common_types",
  "tari_dan_storage",
+ "tari_engine_types",
  "tari_transaction",
  "tari_utilities",
  "thiserror",
