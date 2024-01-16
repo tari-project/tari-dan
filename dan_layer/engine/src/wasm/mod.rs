@@ -15,3 +15,5 @@ mod metering;
 mod process;
 
 pub use process::WasmProcess;
+
+mod version;

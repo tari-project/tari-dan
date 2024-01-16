@@ -26,6 +26,7 @@ d3ne = { workspace = true }
 log = { workspace = true, features = ["std"] }
 rand = { workspace = true }
 indexmap = { workspace = true }
+semver ={ workspace = true }
 serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
