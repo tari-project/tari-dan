@@ -154,7 +154,7 @@ function displayDuration(duration: Duration) {
     }
     return `${duration.nanos}ns`;
   }
-  if (duration.secs > 60 * 60) {
+  if (duration.secs >= 60 * 60) {
     return `${(duration.secs / 60 / 60).toFixed(0)}h${(
       duration.secs / 60
     ).toFixed(0)}m`;
