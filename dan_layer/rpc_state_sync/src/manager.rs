@@ -1,16 +1,20 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use std::ops::DerefMut;
+use std::{fmt::Display, ops::DerefMut};
 
 use async_trait::async_trait;
 use futures::StreamExt;
 use log::*;
-use tari_consensus::traits::{SyncManager, SyncStatus};
+use tari_consensus::{
+    hotstuff::ProposalValidationError,
+    traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
+};
 use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight, PeerAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
+        BlockId,
         HighQc,
         LastExecuted,
         LockedBlock,
@@ -37,30 +41,31 @@ const LOG_TARGET: &str = "tari::dan::comms_rpc_state_sync";
 
 const MAX_SUBSTATE_UPDATES: usize = 10000;
 
-pub struct CommsRpcStateSyncManager<TEpochManager, TStateStore> {
-    epoch_manager: TEpochManager,
-    state_store: TStateStore,
+pub struct RpcStateSyncManager<TConsensusSpec: ConsensusSpec> {
+    epoch_manager: TConsensusSpec::EpochManager,
+    state_store: TConsensusSpec::StateStore,
+    leader_strategy: TConsensusSpec::LeaderStrategy,
     client_factory: TariValidatorNodeRpcClientFactory,
 }
 
-impl<TEpochManager, TStateStore> CommsRpcStateSyncManager<TEpochManager, TStateStore>
-where
-    TStateStore: StateStore<Addr = PeerAddress>,
-    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr>,
+impl<TConsensusSpec> RpcStateSyncManager<TConsensusSpec>
+where TConsensusSpec: ConsensusSpec<Addr = PeerAddress>
 {
     pub fn new(
-        epoch_manager: TEpochManager,
-        state_store: TStateStore,
+        epoch_manager: TConsensusSpec::EpochManager,
+        state_store: TConsensusSpec::StateStore,
+        leader_strategy: TConsensusSpec::LeaderStrategy,
         client_factory: TariValidatorNodeRpcClientFactory,
     ) -> Self {
         Self {
             epoch_manager,
             state_store,
+            leader_strategy,
             client_factory,
         }
     }
 
-    async fn get_sync_peers(&self) -> Result<Committee<TStateStore::Addr>, CommsRpcConsensusSyncError> {
+    async fn get_sync_peers(&self) -> Result<Committee<TConsensusSpec::Addr>, CommsRpcConsensusSyncError> {
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let this_vn = self.epoch_manager.get_our_validator_node(current_epoch).await?;
         let mut committee = self.epoch_manager.get_local_committee(current_epoch).await?;
@@ -71,7 +76,7 @@ where
 
     async fn sync_with_peer(
         &self,
-        addr: &TStateStore::Addr,
+        addr: &TConsensusSpec::Addr,
         locked_block: &LockedBlock,
     ) -> Result<(), CommsRpcConsensusSyncError> {
         self.create_zero_block_if_required()?;
@@ -127,15 +132,14 @@ where
                 CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!("Expected peer to return a newblock",))
             })?;
 
-            if new_block.height != expected_height.as_u64() {
+            let block = Block::try_from(new_block).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
+            if block.justifies_parent() && block.height() != expected_height {
                 return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
                     "Peer returned block at height {} but expected {}",
-                    new_block.height,
+                    block.height(),
                     expected_height,
                 )));
             }
-
-            let block = Block::try_from(new_block).map_err(CommsRpcConsensusSyncError::InvalidResponse)?;
 
             let Some(resp) = stream.next().await else {
                 return Err(CommsRpcConsensusSyncError::InvalidResponse(anyhow::anyhow!(
@@ -222,32 +226,76 @@ where
             if counter % 100 == 0 {
                 info!(target: LOG_TARGET, "🌐 Syncing block {block}");
             }
-            expected_height += NodeHeight(1);
-            self.process_block(block, qcs, updates, transactions)?;
+            if block.justifies_parent() {
+                expected_height += NodeHeight(1);
+            } else {
+                expected_height = block.height() + NodeHeight(1);
+            }
+            self.process_block(block, qcs, updates, transactions).await?;
         }
 
-        info!(target: LOG_TARGET, "🌐 {counter} blocks synced to height {expected_height}");
+        info!(target: LOG_TARGET, "🌐 {counter} blocks synced to height {}", expected_height - NodeHeight(1));
 
         Ok(())
     }
 
-    fn process_block(
+    async fn process_block(
         &self,
         block: Block,
         qcs: Vec<QuorumCertificate>,
         updates: Vec<SubstateUpdate>,
         transactions: Vec<TransactionRecord>,
     ) -> Result<(), CommsRpcConsensusSyncError> {
-        self.state_store.with_write_tx(|tx| {
-            if !block.is_safe(tx.deref_mut())? {
-                return Err(CommsRpcConsensusSyncError::BlockNotSafe { block_id: *block.id() });
-            }
+        // Note: this is only used for dummy block calculation, so we avoid the epoch manager call unless it is needed.
+        // Otherwise, the committee is empty.
+        let local_committee = if block.justifies_parent() {
+            Committee::new(vec![])
+        } else {
+            self.epoch_manager.get_local_committee(block.epoch()).await?
+        };
 
+        self.state_store.with_write_tx(|tx| {
             for transaction in transactions {
                 transaction.save(tx)?;
             }
 
             block.justify().save(tx)?;
+
+            // Check if we need to calculate dummy blocks
+            // TODO: Validate before doing this. e.g. block.height() is maliciously larger then block.justify().block_height()
+            if !block.justifies_parent() {
+                let mut last_dummy_block = BlockIdAndHeight {id: *block.justify().block_id(), height: block.justify().block_height()};
+                // if the block parent is not the justify parent, then we have experienced a leader failure
+                // and should make dummy blocks to fill in the gaps.
+                while last_dummy_block.id != *block.parent() {
+                    if last_dummy_block.height >= block.height() {
+                        warn!(target: LOG_TARGET, "🔥 Bad proposal, dummy block height {} is greater than new height {}", last_dummy_block, block);
+                        return Err( ProposalValidationError::CandidateBlockDoesNotExtendJustify {
+                            justify_block_height: block.justify().block_height(),
+                            candidate_block_height: block.height(),
+                        }.into());
+                    }
+
+                    let next_height = last_dummy_block.height + NodeHeight(1);
+                    let leader = self.leader_strategy.get_leader_public_key(&local_committee, next_height);
+
+                    let dummy_block = Block::dummy_block(
+                        last_dummy_block.id,
+                        leader.clone(),
+                        next_height,
+                        block.justify().clone(),
+                        block.epoch(),
+                    );
+                    dummy_block.save(tx)?;
+                    last_dummy_block = BlockIdAndHeight { id: *dummy_block.id(), height: next_height };
+                    debug!(target: LOG_TARGET, "🍼 DUMMY BLOCK: {}. Leader: {}", last_dummy_block, leader);
+                }
+            }
+
+            if !block.is_safe(tx.deref_mut())? {
+                return Err(CommsRpcConsensusSyncError::BlockNotSafe { block_id: *block.id() });
+            }
+
             if !block.save(tx)? {
                 // We've already seen this block. This could happen because we're syncing from high qc and we receive a
                 // block that we already have
@@ -273,6 +321,7 @@ where
                 },
                 &mut Vec::new(),
             )?;
+            // Ensure we dont vote on a synced block
             block.as_last_voted().set(tx)?;
             let (ups, downs) = updates.into_iter().partition::<Vec<_>, _>(|u| u.is_create());
             // First do UPs then do DOWNs
@@ -288,7 +337,7 @@ where
     }
 
     fn mark_block_committed(
-        tx: &mut <TStateStore as StateStore>::WriteTransaction<'_>,
+        tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         last_executed: &LastExecuted,
         block: &Block,
     ) -> Result<(), CommsRpcConsensusSyncError> {
@@ -309,10 +358,8 @@ where
 }
 
 #[async_trait]
-impl<TEpochManager, TStateStore> SyncManager for CommsRpcStateSyncManager<TEpochManager, TStateStore>
-where
-    TStateStore: StateStore<Addr = PeerAddress> + Send + Sync + 'static,
-    TEpochManager: EpochManagerReader<Addr = TStateStore::Addr> + Send + Sync + 'static,
+impl<TConsensusSpec> SyncManager for RpcStateSyncManager<TConsensusSpec>
+where TConsensusSpec: ConsensusSpec<Addr = PeerAddress> + Send + Sync + 'static
 {
     type Error = CommsRpcConsensusSyncError;
 
@@ -429,5 +476,16 @@ where
         }
 
         Ok(())
+    }
+}
+
+struct BlockIdAndHeight {
+    id: BlockId,
+    height: NodeHeight,
+}
+
+impl Display for BlockIdAndHeight {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Block: {} (#{})", self.id, self.height)
     }
 }

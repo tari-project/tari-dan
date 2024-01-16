@@ -127,7 +127,7 @@ where TConsensusSpec: ConsensusSpec
         );
 
         if block.height() < current_height {
-            debug!(
+            info!(
                 target: LOG_TARGET,
                 "🔥 Block {} is lower than current height {}. Ignoring.",
                 block,
@@ -302,7 +302,11 @@ impl<TAddr: NodeAddressable> MessageBuffer<TAddr> {
                 },
                 // Buffer message for future height
                 Some(h) if h > current_height => {
-                    debug!(target: LOG_TARGET, "Message {} is for future block {}. Current height {}", msg, h, current_height);
+                    if msg.proposal().is_some() {
+                        info!(target: LOG_TARGET, "Proposal {} is for future block {}. Current height {}", msg, h, current_height);
+                    } else {
+                        debug!(target: LOG_TARGET, "Message {} is for future height {}. Current height {}", msg, h, current_height);
+                    }
                     self.push_to_buffer(h, from, msg);
                     continue;
                 },

@@ -12,7 +12,7 @@ minotari_app_grpc = { workspace = true }
 minotari_app_utilities = { workspace = true }
 minotari_wallet_grpc_client = { workspace = true }
 tari_common = { workspace = true }
-tari_common_types = {workspace = true }
+tari_common_types = { workspace = true }
 tari_core = { workspace = true, default-features = false, features = ["transactions"] }
 tari_crypto = { workspace = true }
 tari_validator_node_rpc = { workspace = true }
@@ -30,7 +30,7 @@ tari_validator_node_client = { workspace = true }
 tari_base_node_client = { workspace = true }
 tari_epoch_manager = { workspace = true, features = ["base_layer"] }
 tari_indexer_lib = { workspace = true }
-tari_comms_rpc_state_sync = {workspace = true }
+tari_rpc_state_sync = { workspace = true }
 tari_bor = { workspace = true, default-features = true }
 tari_consensus = { workspace = true }
 tari_state_store_sqlite = { workspace = true }
@@ -72,7 +72,7 @@ tokio = { workspace = true, features = [
     "time",
     "sync",
     "rt-multi-thread",
-]}
+] }
 tonic = { workspace = true }
 tower-http = { workspace = true, features = ["default", "cors"] }
 

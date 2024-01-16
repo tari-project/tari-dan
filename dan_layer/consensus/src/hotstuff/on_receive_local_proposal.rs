@@ -36,7 +36,7 @@ use crate::{
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_local_proposal";
 
-pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
+pub struct OnReceiveLocalProposalHandler<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
     leader_strategy: TConsensusSpec::LeaderStrategy,
@@ -44,7 +44,7 @@ pub struct OnReceiveProposalHandler<TConsensusSpec: ConsensusSpec> {
     on_ready_to_vote_on_local_block: OnReadyToVoteOnLocalBlock<TConsensusSpec>,
 }
 
-impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
+impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec> {
     pub fn new(
         validator_addr: TConsensusSpec::Addr,
         store: TConsensusSpec::StateStore,
@@ -137,6 +137,13 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveProposalHandler<TConsensusSpec> {
         self.store.with_write_tx(|tx| {
             match self.validate_local_proposed_block(tx, block, &local_committee, &local_committee_shard) {
                 Ok(validated) => Ok(Some(validated)),
+                // Propagate this error out as sync is needed in the case where we have a valid QC but do not know the
+                // block
+                Err(
+                    err @ HotStuffError::ProposalValidationError(ProposalValidationError::JustifyBlockNotFound {
+                        ..
+                    }),
+                ) => Err(err),
                 // Validation errors should not cause a FAILURE state transition
                 Err(HotStuffError::ProposalValidationError(err)) => {
                     warn!(target: LOG_TARGET, "❌ Block failed validation: {}", err);

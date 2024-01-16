@@ -29,7 +29,7 @@ use crate::{
         on_next_sync_view::OnNextSyncViewHandler,
         on_propose::OnPropose,
         on_receive_foreign_proposal::OnReceiveForeignProposalHandler,
-        on_receive_local_proposal::OnReceiveProposalHandler,
+        on_receive_local_proposal::OnReceiveLocalProposalHandler,
         on_receive_new_view::OnReceiveNewViewHandler,
         on_receive_request_missing_transactions::OnReceiveRequestMissingTransactions,
         on_receive_vote::OnReceiveVoteHandler,
@@ -54,7 +54,7 @@ pub struct HotstuffWorker<TConsensusSpec: ConsensusSpec> {
 
     on_inbound_message: OnInboundMessage<TConsensusSpec>,
     on_next_sync_view: OnNextSyncViewHandler<TConsensusSpec>,
-    on_receive_local_proposal: OnReceiveProposalHandler<TConsensusSpec>,
+    on_receive_local_proposal: OnReceiveLocalProposalHandler<TConsensusSpec>,
     on_receive_foreign_proposal: OnReceiveForeignProposalHandler<TConsensusSpec>,
     on_receive_vote: OnReceiveVoteHandler<TConsensusSpec>,
     on_receive_new_view: OnReceiveNewViewHandler<TConsensusSpec>,
@@ -123,7 +123,7 @@ impl<TConsensusSpec: ConsensusSpec> HotstuffWorker<TConsensusSpec> {
                 leader_strategy.clone(),
                 epoch_manager.clone(),
             ),
-            on_receive_local_proposal: OnReceiveProposalHandler::new(
+            on_receive_local_proposal: OnReceiveLocalProposalHandler::new(
                 validator_addr,
                 state_store.clone(),
                 epoch_manager.clone(),
@@ -505,10 +505,6 @@ where TConsensusSpec: ConsensusSpec
             from,
             self.pacemaker.current_height()
         );
-
-        self.pacemaker
-            .reset_view(high_qc.block_height(), high_qc.block_height())
-            .await?;
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
         // Send the request message
