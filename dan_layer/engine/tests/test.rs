@@ -478,6 +478,7 @@ mod fungible {
 
 mod basic_nft {
     use serde::{Deserialize, Serialize};
+    use tari_template_lib::models::NonFungible;
 
     use super::*;
 
@@ -839,6 +840,46 @@ mod basic_nft {
                 vec![],
             )
             .unwrap_err();
+    }
+
+    #[test]
+    fn get_non_fungibles_from_containers() {
+        let (mut template_test, (account_address, account_owner), nft_component, nft_resx) = setup();
+
+        let vars = vec![
+            ("account", account_address.into()),
+            ("nft", nft_component.into()),
+            ("nft_resx", nft_resx.into()),
+        ];
+
+        let total_supply: Amount = template_test.call_method(nft_component, "total_supply", args![], vec![]);
+        assert_eq!(total_supply, Amount(4));
+
+        let result = template_test
+            .execute_and_commit_manifest(
+                r#"
+            let sparkle_nft = var!["nft"];
+            sparkle_nft.get_non_fungibles_from_bucket();
+            sparkle_nft.get_non_fungibles_from_vault();
+        "#,
+                vars.clone(),
+                vec![account_owner],
+            )
+            .unwrap();
+
+        result.finalize.result.expect("execution failed");
+
+        // sparkle_nft.get_non_fungibles_from_bucket()
+        let nfts_from_bucket = result.finalize.execution_results[0]
+            .decode::<Vec<NonFungible>>()
+            .unwrap();
+        assert_eq!(nfts_from_bucket.len(), 4);
+
+        // sparkle_nft.get_non_fungibles_from_vault()
+        let nfts_from_bucket = result.finalize.execution_results[1]
+            .decode::<Vec<NonFungible>>()
+            .unwrap();
+        assert_eq!(nfts_from_bucket.len(), 4);
     }
 }
 

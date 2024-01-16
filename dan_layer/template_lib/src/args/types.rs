@@ -316,6 +316,7 @@ pub enum VaultAction {
     CreateProofByFungibleAmount,
     CreateProofByNonFungibles,
     CreateProofByConfidentialResource,
+    GetNonFungibles,
 }
 
 /// A vault withdraw operation argument
@@ -397,6 +398,7 @@ pub enum BucketAction {
     Burn,
     CreateProof,
     GetNonFungibleIds,
+    GetNonFungibles,
 }
 
 /// A bucket burn operation argument
