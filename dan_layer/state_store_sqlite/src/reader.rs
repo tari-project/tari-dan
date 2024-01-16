@@ -58,12 +58,13 @@ use tari_dan_storage::{
     StateStoreReadTransaction,
     StorageError,
 };
+use tari_engine_types::lock::LockFlag;
 use tari_transaction::TransactionId;
 use tari_utilities::ByteArray;
 
 use crate::{
     error::SqliteStorageError,
-    serialization::{deserialize_hex_try_from, deserialize_json, parse_from_string, serialize_hex},
+    serialization::{deserialize_hex_try_from, deserialize_json, serialize_hex},
     sql_models,
     sqlite_transaction::SqliteTransaction,
 };
@@ -1183,20 +1184,18 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
             updates.len()
         );
 
-        let mut used_substates = HashSet::<ShardId>::new();
-        let mut processed_substates = HashMap::<TransactionId, HashSet<ShardId>>::new();
+        let mut used_substates = HashMap::<ShardId, LockFlag>::new();
+        let mut processed_substates = HashMap::<TransactionId, HashSet<(ShardId, _)>>::with_capacity(updates.len());
         for (tx_id, update) in &updates {
-            if let Some(Decision::Abort) = update
-                .local_decision
-                .as_ref()
-                .map(|decision| parse_from_string(decision.as_str()))
-                .transpose()?
-            {
+            if update.local_decision.as_deref() == Some(Decision::Abort.as_str()) {
                 // The aborted transaction don't lock any substates
                 continue;
             }
             let evidence = deserialize_json::<Evidence>(&update.evidence)?;
-            let evidence = evidence.shards_iter().copied().collect::<HashSet<_>>();
+            let evidence = evidence
+                .iter()
+                .map(|(shard, evidence)| (*shard, evidence.lock))
+                .collect::<HashSet<(ShardId, _)>>();
             processed_substates.insert(deserialize_hex_try_from(tx_id)?, evidence);
         }
 
@@ -1206,26 +1205,56 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
                 let maybe_update = updates.remove(&rec.transaction_id);
                 match rec.try_convert(maybe_update) {
                     Ok(rec) => {
-                        if rec.is_ready() {
-                            let tx_substates: HashSet<ShardId> = rec
-                                .transaction()
-                                .evidence
-                                .shards_iter()
-                                .copied()
-                                .collect::<HashSet<_>>();
-                            if tx_substates.is_disjoint(&used_substates) &&
-                                processed_substates.iter().all(|(tx_id, substates)| {
-                                    tx_id == rec.transaction_id() || tx_substates.is_disjoint(substates)
-                                })
-                            {
-                                used_substates.extend(tx_substates);
-                                Some(Ok(rec))
+                        if !rec.is_ready() {
+                            return None;
+                        }
+
+                        let tx_substates = rec
+                            .transaction()
+                            .evidence
+                            .iter()
+                            .map(|(shard, evidence)| (*shard, evidence.lock))
+                            .collect::<HashMap<_, _>>();
+
+                        // Are there any conflicts between the currently selected set and this transaction?
+                        if tx_substates.iter().any(|(shard, lock)| {
+                            if lock.is_write() {
+                                // Write lock must have no conflicts
+                                used_substates.contains_key(shard)
                             } else {
-                                // TODO: If we don't switch to "no version" transaction, then we can abort these here.
-                                // That also requires changes to the on_ready_to_vote_on_local_block
-                                None
+                                // If there is a Shard conflict, then it must not be a write lock
+                                used_substates
+                                    .get(shard)
+                                    .map(|tx_lock| tx_lock.is_write())
+                                    .unwrap_or(false)
                             }
+                        }) {
+                            return None;
+                        }
+
+                        // Are there any conflicts between this transaction and other transactions to be included in the
+                        // block?
+                        if processed_substates
+                                .iter()
+                                // Check other transactions
+                                .filter(|(tx_id, _)| *tx_id != rec.transaction_id())
+                                .all(|(_, evidence)| {
+                                    evidence.iter().all(|(shard, lock)| {
+                                        if lock.is_write() {
+                                            // Write lock must have no conflicts
+                                            !tx_substates.contains_key(shard)
+                                        } else {
+                                            // If there is a Shard conflict, then it must be a read lock
+                                            tx_substates.get(shard).map(|tx_lock| tx_lock.is_read()).unwrap_or(true)
+                                        }
+                                    })
+                                })
+                        {
+                            used_substates.extend(tx_substates);
+                            Some(Ok(rec))
                         } else {
+                            // TODO: If we don't switch to "no version" transaction, then we can abort these here.
+                            // That also requires changes to the on_ready_to_vote_on_local_block
                             None
                         }
                     },
