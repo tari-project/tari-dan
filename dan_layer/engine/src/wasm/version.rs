@@ -75,6 +75,6 @@ mod tests {
     fn it_rejects_incompatible_versions() {
         assert!(!are_versions_compatible("0.0.1", "0.0.2").unwrap());
         assert!(!are_versions_compatible("0.1.0", "0.2.0").unwrap());
-        assert!(!are_versions_compatible("1.1.0", "2.0.0").unwrap()); 
+        assert!(!are_versions_compatible("1.1.0", "2.0.0").unwrap());
     }
 }

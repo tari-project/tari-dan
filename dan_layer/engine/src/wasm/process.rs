@@ -46,6 +46,7 @@ use tari_template_lib::{
 };
 use wasmer::{Function, Instance, Module, Val, WasmerEnv};
 
+use super::version::are_versions_compatible;
 use crate::{
     runtime::Runtime,
     traits::Invokable,
@@ -55,8 +56,6 @@ use crate::{
         LoadedWasmTemplate,
     },
 };
-
-use super::version::are_versions_compatible;
 
 const LOG_TARGET: &str = "tari::dan::engine::wasm::process";
 pub const ENGINE_TARI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -223,7 +222,10 @@ impl WasmProcess {
             log::info!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") is compatible with the one used in the engine", template_tari_version);
         } else {
             log::error!(target: LOG_TARGET, "The Tari version in the template WASM (\"{}\") is incompatible with the one used in the engine (\"{}\")", template_tari_version, ENGINE_TARI_VERSION);
-            return Err(WasmExecutionError::TemplateVersionMismatch { engine_version: ENGINE_TARI_VERSION.to_owned(), template_version: template_tari_version.to_owned() });
+            return Err(WasmExecutionError::TemplateVersionMismatch {
+                engine_version: ENGINE_TARI_VERSION.to_owned(),
+                template_version: template_tari_version.to_owned(),
+            });
         }
 
         Ok(())

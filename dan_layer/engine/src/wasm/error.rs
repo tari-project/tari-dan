@@ -60,7 +60,7 @@ pub enum WasmExecutionError {
     #[error("Template version {template_version} is incompatible with current engine version {engine_version}")]
     TemplateVersionMismatch {
         engine_version: String,
-        template_version: String
+        template_version: String,
     },
 }
 impl From<wasmer::InstantiationError> for WasmExecutionError {
