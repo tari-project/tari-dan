@@ -164,7 +164,7 @@ function displayDuration(duration: Duration) {
       0,
     )}s`;
   }
-  return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0)}s`;
+  return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0).padStart(3,0).replace(/0+$/,'')}s`;
 }
 
 export {
