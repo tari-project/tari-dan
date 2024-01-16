@@ -159,7 +159,7 @@ function displayDuration(duration: Duration) {
       duration.secs / 60
     ).toFixed(0)}m`;
   }
-  if (duration.secs > 60) {
+  if (duration.secs >= 60) {
     return `${(duration.secs / 60).toFixed(0)}m${(duration.secs % 60).toFixed(
       0,
     )}s`;
