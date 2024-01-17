@@ -20,34 +20,28 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import { Form } from 'react-router-dom';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Box from '@mui/material/Box';
-import Snackbar from '@mui/material/Snackbar';
-import { useAccountsCreate } from '../../../api/hooks/useAccounts';
-import { useTheme } from '@mui/material/styles';
-import queryClient from '../../../api/queryClient';
+import { useState } from "react";
+import { Form } from "react-router-dom";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
+import Dialog from "@mui/material/Dialog";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import Box from "@mui/material/Box";
+import Snackbar from "@mui/material/Snackbar";
+import { useAccountsCreate } from "../../../api/hooks/useAccounts";
+import { useTheme } from "@mui/material/styles";
+import queryClient from "../../../api/queryClient";
 
-function AddAccount({
-  open,
-  setOpen,
-}: {
-  open: boolean;
-  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
-}) {
+function AddAccount({ open, setOpen }: { open: boolean; setOpen: React.Dispatch<React.SetStateAction<boolean>> }) {
   const [accountFormState, setAccountFormState] = useState({
-    accountName: '',
+    accountName: "",
   });
   const { mutateAsync: mutateAddAccount } = useAccountsCreate(
     accountFormState.accountName,
     undefined,
     undefined,
-    false
+    false,
   );
   const theme = useTheme();
 
@@ -59,10 +53,10 @@ function AddAccount({
     mutateAddAccount(undefined, {
       onSettled: () => {
         setAccountFormState({
-          accountName: '',
+          accountName: "",
         });
         setOpen(false);
-        queryClient.invalidateQueries(['accounts']);
+        queryClient.invalidateQueries(["accounts"]);
       },
     });
   };
@@ -93,7 +87,7 @@ function AddAccount({
           <Box
             className="flex-container"
             style={{
-              justifyContent: 'flex-end',
+              justifyContent: "flex-end",
             }}
           >
             <Button variant="outlined" onClick={handleClose}>

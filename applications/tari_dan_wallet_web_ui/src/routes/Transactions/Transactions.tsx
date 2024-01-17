@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { ChevronRight } from '@mui/icons-material';
+import { ChevronRight } from "@mui/icons-material";
 import {
   Fade,
   IconButton,
@@ -31,20 +31,16 @@ import {
   TableHead,
   TablePagination,
   TableRow,
-} from '@mui/material';
-import { useTheme } from '@mui/material/styles';
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import FetchStatusCheck from '../../Components/FetchStatusCheck';
-import StatusChip from '../../Components/StatusChip';
-import { DataTableCell } from '../../Components/StyledComponents';
-import { useGetAllTransactions } from '../../api/hooks/useTransactions';
-import {
-  emptyRows,
-  handleChangePage,
-  handleChangeRowsPerPage,
-} from '../../utils/helpers';
-import { useAccountsGet } from '../../api/hooks/useAccounts';
+} from "@mui/material";
+import { useTheme } from "@mui/material/styles";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import FetchStatusCheck from "../../Components/FetchStatusCheck";
+import StatusChip from "../../Components/StatusChip";
+import { DataTableCell } from "../../Components/StyledComponents";
+import { useGetAllTransactions } from "../../api/hooks/useTransactions";
+import { emptyRows, handleChangePage, handleChangeRowsPerPage } from "../../utils/helpers";
+import { useAccountsGet } from "../../api/hooks/useAccounts";
 
 export default function Transactions({ accountName }: { accountName: string }) {
   const { data: accountsData } = useAccountsGet(accountName);
@@ -52,7 +48,7 @@ export default function Transactions({ accountName }: { accountName: string }) {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const { data, isLoading, error, isError, refetch } = useGetAllTransactions(
     null,
-    accountsData?.account.address.Component || null
+    accountsData?.account.address.Component || null,
   );
   useEffect(() => {
     refetch();
@@ -64,7 +60,7 @@ export default function Transactions({ accountName }: { accountName: string }) {
       <FetchStatusCheck
         isLoading={isLoading}
         isError={isError}
-        errorMessage={error?.message || 'Error fetching data'}
+        errorMessage={error?.message || "Error fetching data"}
       />
       <Fade in={!isLoading && !isError}>
         <TableContainer>
@@ -78,50 +74,45 @@ export default function Transactions({ accountName }: { accountName: string }) {
               </TableRow>
             </TableHead>
             <TableBody>
-              {data?.transactions
-                ?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                .map((t: any) => {
-                  if (t?.[0]?.id !== undefined) {
-                    const hash = t[0].id;
-                    return (
-                      <TableRow key={hash}>
-                        <DataTableCell>
-                          <Link
-                            to={`/transactions/${hash}`}
-                            style={{
-                              textDecoration: 'none',
-                              color: theme.palette.text.secondary,
-                            }}
-                          >
-                            {hash}
-                          </Link>
-                        </DataTableCell>
-                        <DataTableCell>
-                          <StatusChip status={t[2]} showTitle />
-                        </DataTableCell>
-                        <DataTableCell>
-                          {t?.[1]?.cost_breakdown?.total_fees_charged || 0}
-                        </DataTableCell>
-                        <DataTableCell>
-                          <IconButton
-                            component={Link}
-                            to={`/transactions/${hash}`}
-                            style={{
-                              color: theme.palette.text.secondary,
-                            }}
-                          >
-                            <ChevronRight />
-                          </IconButton>
-                        </DataTableCell>
-                      </TableRow>
-                    );
-                  }
-                })}
+              {data?.transactions?.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((t: any) => {
+                if (t?.[0]?.id !== undefined) {
+                  const hash = t[0].id;
+                  return (
+                    <TableRow key={hash}>
+                      <DataTableCell>
+                        <Link
+                          to={`/transactions/${hash}`}
+                          style={{
+                            textDecoration: "none",
+                            color: theme.palette.text.secondary,
+                          }}
+                        >
+                          {hash}
+                        </Link>
+                      </DataTableCell>
+                      <DataTableCell>
+                        <StatusChip status={t[2]} showTitle />
+                      </DataTableCell>
+                      <DataTableCell>{t?.[1]?.cost_breakdown?.total_fees_charged || 0}</DataTableCell>
+                      <DataTableCell>
+                        <IconButton
+                          component={Link}
+                          to={`/transactions/${hash}`}
+                          style={{
+                            color: theme.palette.text.secondary,
+                          }}
+                        >
+                          <ChevronRight />
+                        </IconButton>
+                      </DataTableCell>
+                    </TableRow>
+                  );
+                }
+              })}
               {emptyRows(page, rowsPerPage, data?.transactions) > 0 && (
                 <TableRow
                   style={{
-                    height:
-                      57 * emptyRows(page, rowsPerPage, data?.transactions),
+                    height: 57 * emptyRows(page, rowsPerPage, data?.transactions),
                   }}
                 >
                   <TableCell colSpan={3} />
@@ -136,12 +127,8 @@ export default function Transactions({ accountName }: { accountName: string }) {
               count={data.transactions.length}
               rowsPerPage={rowsPerPage}
               page={page}
-              onPageChange={(event, newPage) =>
-                handleChangePage(event, newPage, setPage)
-              }
-              onRowsPerPageChange={(event) =>
-                handleChangeRowsPerPage(event, setRowsPerPage, setPage)
-              }
+              onPageChange={(event, newPage) => handleChangePage(event, newPage, setPage)}
+              onRowsPerPageChange={(event) => handleChangeRowsPerPage(event, setRowsPerPage, setPage)}
             />
           )}
         </TableContainer>

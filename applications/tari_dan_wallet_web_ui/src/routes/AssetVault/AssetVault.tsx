@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useAccountsList } from '../../api/hooks/useAccounts';
-import useAccountStore from '../../store/accountStore';
-import Onboarding from '../Onboarding/Onboarding';
-import MyAssets from './Components/MyAssets';
+import { useAccountsList } from "../../api/hooks/useAccounts";
+import useAccountStore from "../../store/accountStore";
+import Onboarding from "../Onboarding/Onboarding";
+import MyAssets from "./Components/MyAssets";
 
 function AssetVault() {
   const { accountName, setAccountName } = useAccountStore();

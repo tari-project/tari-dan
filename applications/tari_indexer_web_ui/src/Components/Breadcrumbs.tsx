@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from 'react';
-import { Link as RouterLink } from 'react-router-dom';
-import { Breadcrumbs, Link } from '@mui/material';
-import useBreadcrumbs from 'use-react-router-breadcrumbs';
+import React from "react";
+import { Link as RouterLink } from "react-router-dom";
+import { Breadcrumbs, Link } from "@mui/material";
+import useBreadcrumbs from "use-react-router-breadcrumbs";
 
 interface BreadcrumbsItem {
   label: string;
@@ -42,13 +42,7 @@ const BreadcrumbsComponent: React.FC<BreadcrumbsProps> = ({ items }) => {
     const breadcrumbLabel = breadcrumb.props.children;
     const { label, path, dynamic } = match.route;
     return (
-      <Link
-        key={breadcrumbLabel}
-        component={RouterLink}
-        to={path}
-        underline="none"
-        color="inherit"
-      >
+      <Link key={breadcrumbLabel} component={RouterLink} to={path} underline="none" color="inherit">
         {dynamic ? breadcrumbLabel.toLowerCase() : label}
       </Link>
     );
@@ -60,8 +54,8 @@ const BreadcrumbsComponent: React.FC<BreadcrumbsProps> = ({ items }) => {
         aria-label="breadcrumb"
         separator="›"
         style={{
-          fontSize: '0.8rem',
-          paddingBottom: '1rem',
+          fontSize: "0.8rem",
+          paddingBottom: "1rem",
         }}
       >
         {links}

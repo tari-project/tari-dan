@@ -122,12 +122,12 @@ export class NonFungibleId {
   }
   toJSON() {
     switch (typeof this.value) {
-      case 'string':
-        return { 'string': this.value };
-      case 'number':
-        return { 'Uint64': this.value };
+      case "string":
+        return { string: this.value };
+      case "number":
+        return { Uint64: this.value };
     }
-    return { 'U256': this.value };
+    return { U256: this.value };
   }
 }
 
@@ -267,7 +267,7 @@ export class TariPermissionAccountInfo {
     return `AccountInfo`;
   }
   toJSON() {
-    return "AccountInfo"
+    return "AccountInfo";
   }
 }
 
@@ -298,7 +298,7 @@ export class TariPermissionKeyList {
     return `KeyList`;
   }
   toJSON() {
-    return "KeyList"
+    return "KeyList";
   }
 }
 
@@ -308,7 +308,7 @@ export class TariPermissionTransactionGet {
     return `TransactionGet`;
   }
   toJSON() {
-    return "TransactionGet"
+    return "TransactionGet";
   }
 }
 export class TariPermissionTransactionSend {
@@ -324,11 +324,11 @@ export class TariPermissionTransactionSend {
     }
   }
   toJSON() {
-    console.log('JSON TariPermissionTransactionSend', this.value)
+    console.log("JSON TariPermissionTransactionSend", this.value);
     if (this.value === undefined) {
-      return { "TransactionSend": null }
+      return { TransactionSend: null };
     } else {
-      return { "TransactionSend": this.value }
+      return { TransactionSend: this.value };
     }
   }
 }
@@ -343,15 +343,13 @@ export class TariPermissionGetNft {
   toString() {
     let svalue0, svalue1;
     if (this.value0) {
-      svalue0 = this.value0.toString()
-    }
-    else {
+      svalue0 = this.value0.toString();
+    } else {
       svalue0 = "any";
     }
     if (this.value1) {
-      svalue1 = this.value1.toString()
-    }
-    else {
+      svalue1 = this.value1.toString();
+    } else {
       svalue1 = "any";
     }
     return `GetNft(${svalue0},${svalue1})`;
@@ -369,8 +367,7 @@ export class TariPermissionNftGetOwnershipProof {
   toString() {
     if (this.value) {
       return `NftGetOwnershipProof(${this.value?.toString()})`;
-    }
-    else {
+    } else {
       return `NftGetOwnershipProof(any)`;
     }
   }

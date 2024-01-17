@@ -55,7 +55,7 @@ function Fees() {
         setMinEpoch(min_epoch);
         setMaxEpoch(max_epoch);
         setTotalFeesPerEpoch(
-          Array.from({ length: max_epoch - min_epoch + 1 }, (_, i) => total_fees[i + min_epoch] || 0)
+          Array.from({ length: max_epoch - min_epoch + 1 }, (_, i) => total_fees[i + min_epoch] || 0),
         );
         setDueFeesPerEpoch(Array.from({ length: max_epoch - min_epoch + 1 }, (_, i) => fees_due[i + min_epoch] || 0));
       });

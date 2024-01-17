@@ -20,22 +20,21 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import Paper from '@mui/material/Paper';
-import TableCell from '@mui/material/TableCell';
-import { styled } from '@mui/material/styles';
-import Box from '@mui/material/Box';
-import IconButton from '@mui/material/IconButton';
-import theme from '../theme/theme';
-import Typography from '@mui/material/Typography';
+import Paper from "@mui/material/Paper";
+import TableCell from "@mui/material/TableCell";
+import { styled } from "@mui/material/styles";
+import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import theme from "../theme/theme";
+import Typography from "@mui/material/Typography";
 
 interface IAccordionIconButton {
   open: boolean;
 }
 
 export const AccordionIconButton = styled(IconButton)<IAccordionIconButton>`
-  background-color: ${({ open }) =>
-    open ? theme.palette.primary.main : '#fff'};
-  color: ${({ open }) => (open ? '#fff' : theme.palette.primary.main)};
+  background-color: ${({ open }) => (open ? theme.palette.primary.main : "#fff")};
+  color: ${({ open }) => (open ? "#fff" : theme.palette.primary.main)};
   &:hover {
     background-color: ${theme.palette.primary.main};
     color: #fff;
@@ -44,7 +43,7 @@ export const AccordionIconButton = styled(IconButton)<IAccordionIconButton>`
 
 export const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
-  boxShadow: '10px 14px 28px rgba(35, 11, 73, 0.05)',
+  boxShadow: "10px 14px 28px rgba(35, 11, 73, 0.05)",
 }));
 
 export const DataTableCell = styled(TableCell)(({ theme }) => ({
@@ -52,29 +51,29 @@ export const DataTableCell = styled(TableCell)(({ theme }) => ({
 }));
 
 export const CodeBlock = styled(Box)(({ theme }) => ({
-  backgroundColor: '#F5F5F7',
+  backgroundColor: "#F5F5F7",
   borderRadius: theme.shape.borderRadius,
   padding: theme.spacing(3),
-  maxHeight: '400px',
-  overflowY: 'scroll',
+  maxHeight: "400px",
+  overflowY: "scroll",
 }));
 
 export const BoxHeading = styled(Box)(({ theme }) => ({
-  backgroundColor: '#fafafa',
+  backgroundColor: "#fafafa",
   borderRadius: theme.shape.borderRadius,
   padding: theme.spacing(3),
   fontFamily: "'Courier New', Courier, monospace",
-  boxShadow: '0px 5px 5px rgba(35, 11, 73, 0.10)',
-  margin: '10px 5px',
+  boxShadow: "0px 5px 5px rgba(35, 11, 73, 0.10)",
+  margin: "10px 5px",
 }));
 
 export const BoxHeading2 = styled(Box)(({ theme }) => ({
   padding: theme.spacing(2),
-  borderBottom: '1px solid #f5f5f5',
+  borderBottom: "1px solid #f5f5f5",
 }));
 
 export const SubHeading = styled(Typography)(() => ({
-  marginTop: '20px',
-  marginBottom: '20px',
-  textAlign: 'center',
+  marginTop: "20px",
+  marginBottom: "20px",
+  textAlign: "center",
 }));

@@ -20,14 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import PageHeading from '../../Components/PageHeading';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import Accounts from '../Wallet/Components/Accounts';
-import Keys from '../Wallet/Components/Keys';
-import AccessTokens from '../Wallet/Components/AccessTokens';
-import SettingsTabs from './Components/SettingsTabs';
-import GeneralSettings from './Components/GeneralSettings';
+import PageHeading from "../../Components/PageHeading";
+import Grid from "@mui/material/Grid";
+import { StyledPaper } from "../../Components/StyledComponents";
+import Accounts from "../Wallet/Components/Accounts";
+import Keys from "../Wallet/Components/Keys";
+import AccessTokens from "../Wallet/Components/AccessTokens";
+import SettingsTabs from "./Components/SettingsTabs";
+import GeneralSettings from "./Components/GeneralSettings";
 
 export interface ISettingsMenu {
   label: string;
@@ -38,23 +38,23 @@ export interface ISettingsMenu {
 function SettingsPage() {
   const menuItems = [
     {
-      label: 'General',
-      title: 'General Settings',
+      label: "General",
+      title: "General Settings",
       content: <GeneralSettings />,
     },
     {
-      label: 'Accounts',
-      title: 'Manage Accounts',
+      label: "Accounts",
+      title: "Manage Accounts",
       content: <Accounts />,
     },
     {
-      label: 'Keys',
-      title: 'Manage Keys',
+      label: "Keys",
+      title: "Manage Keys",
       content: <Keys />,
     },
     {
-      label: 'Access Tokens',
-      title: 'Manage Access Tokens',
+      label: "Access Tokens",
+      title: "Manage Access Tokens",
       content: <AccessTokens />,
     },
   ];

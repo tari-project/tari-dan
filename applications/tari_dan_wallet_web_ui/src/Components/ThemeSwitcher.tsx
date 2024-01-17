@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Button } from '@mui/material';
-import { IoMoonOutline, IoSunny } from 'react-icons/io5';
-import useThemeStore from '../store/themeStore';
-import { useTheme } from '@mui/material/styles';
+import { Button } from "@mui/material";
+import { IoMoonOutline, IoSunny } from "react-icons/io5";
+import useThemeStore from "../store/themeStore";
+import { useTheme } from "@mui/material/styles";
 
 const ThemeSwitcher = () => {
   const { themeMode, setThemeMode } = useThemeStore();
@@ -31,23 +31,23 @@ const ThemeSwitcher = () => {
 
   return (
     <Button
-      onClick={() => setThemeMode(themeMode === 'light' ? 'dark' : 'light')}
+      onClick={() => setThemeMode(themeMode === "light" ? "dark" : "light")}
       style={{
         borderRadius: 0,
         color: theme.palette.text.secondary,
-        padding: '0.8rem 28px',
-        width: '100%',
-        justifyContent: 'flex-start',
+        padding: "0.8rem 28px",
+        width: "100%",
+        justifyContent: "flex-start",
       }}
-      startIcon={themeMode === 'light' ? <IoMoonOutline /> : <IoSunny />}
+      startIcon={themeMode === "light" ? <IoMoonOutline /> : <IoSunny />}
     >
       <span
         style={{
-          marginLeft: '1rem',
-          fontSize: '14px',
+          marginLeft: "1rem",
+          fontSize: "14px",
         }}
       >
-        {themeMode === 'light' ? 'Dark Mode' : 'Light Mode'}
+        {themeMode === "light" ? "Dark Mode" : "Light Mode"}
       </span>
     </Button>
   );

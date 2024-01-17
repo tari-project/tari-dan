@@ -55,7 +55,7 @@ export default function SendMoney() {
     transferFormState.publicKey,
     estimatedFee,
     transferFormState.confidential,
-    false
+    false,
   );
 
   const { mutateAsync: calculateFeeEstimate } = useAccountsTransfer(
@@ -65,7 +65,7 @@ export default function SendMoney() {
     transferFormState.publicKey,
     1000,
     transferFormState.confidential,
-    true
+    true,
   );
 
   const onPublicKeyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -100,15 +100,22 @@ export default function SendMoney() {
     if (accountName) {
       setDisabled(true);
       if (estimatedFee) {
-        sendIt().then(() => {
-          setTransferFormState({ publicKey: "", confidential: false, amount: "" });
-          setOpen(false);
-          setPopup({ title: "Send successful", error: false });
-        }).catch((e) => {
-          setPopup({ title: "Send failed", error: true, message: e.message });
-        }).finally(() => {
-          setDisabled(false);
-        });
+        sendIt()
+          .then(() => {
+            setTransferFormState({
+              publicKey: "",
+              confidential: false,
+              amount: "",
+            });
+            setOpen(false);
+            setPopup({ title: "Send successful", error: false });
+          })
+          .catch((e) => {
+            setPopup({ title: "Send failed", error: true, message: e.message });
+          })
+          .finally(() => {
+            setDisabled(false);
+          });
       } else {
         let result = await calculateFeeEstimate();
         setEstimatedFee(result.fee);
@@ -182,9 +189,9 @@ export default function SendMoney() {
                 {estimatedFee ? "Send" : "Estimate fee"}
               </Button>
             </Box>
-          </Form >
-        </DialogContent >
-      </Dialog >
-    </div >
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

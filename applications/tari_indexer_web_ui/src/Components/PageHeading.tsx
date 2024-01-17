@@ -20,7 +20,7 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import theme from '../theme/theme';
+import theme from "../theme/theme";
 
 interface Props {
   children: string;
@@ -30,18 +30,18 @@ function PageHeading({ children }: Props) {
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        width: '100%',
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: "100%",
       }}
     >
       <h1>{children}</h1>
       <div
         style={{
           background: theme.palette.primary.main,
-          width: '100px',
-          height: '3px',
+          width: "100px",
+          height: "3px",
         }}
       ></div>
     </div>
