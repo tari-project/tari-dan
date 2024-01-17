@@ -33,6 +33,7 @@ use serde_json::{self as json, json};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_dan_app_utilities::{keypair::RistrettoKeypair, template_manager::interface::TemplateManagerHandle};
 use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, PeerAddress, ShardId};
+use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction, LeafBlock, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
@@ -88,7 +89,6 @@ use tari_validator_node_client::{
         TemplateRegistrationResponse,
     },
 };
-use tari_validator_node_rpc::proto;
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
@@ -107,7 +107,7 @@ pub struct JsonRpcHandlers {
     mempool: MempoolHandle,
     template_manager: TemplateManagerHandle,
     epoch_manager: EpochManagerHandle<PeerAddress>,
-    networking: NetworkingHandle<proto::network::Message>,
+    networking: NetworkingHandle<TariMessagingSpec>,
     base_node_client: GrpcBaseNodeClient,
     state_store: SqliteStateStore<PeerAddress>,
     dry_run_transaction_processor: DryRunTransactionProcessor,

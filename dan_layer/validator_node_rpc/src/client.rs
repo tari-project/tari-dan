@@ -8,21 +8,21 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, decode_exact, encode};
 use tari_dan_common_types::{NodeAddressable, PeerAddress, ShardId};
+use tari_dan_p2p::{
+    proto,
+    proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SubmitTransactionRequest, SubstateStatus},
+    TariMessagingSpec,
+};
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
     substate::{Substate, SubstateAddress, SubstateValue},
     virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
 };
-use tari_networking::NetworkingHandle;
+use tari_networking::{MessageSpec, NetworkingHandle};
 use tari_transaction::{Transaction, TransactionId};
 
-use crate::{
-    proto,
-    proto::rpc::{GetTransactionResultRequest, PayloadResultStatus, SubmitTransactionRequest, SubstateStatus},
-    rpc_service,
-    ValidatorNodeRpcClientError,
-};
+use crate::{rpc_service, ValidatorNodeRpcClientError};
 
 pub trait ValidatorNodeClientFactory: Send + Sync {
     type Addr: NodeAddressable;
@@ -75,13 +75,13 @@ pub enum SubstateResult {
     },
 }
 
-pub struct TariValidatorNodeRpcClient {
-    networking: NetworkingHandle<proto::network::Message>,
+pub struct TariValidatorNodeRpcClient<TMsg: MessageSpec> {
+    networking: NetworkingHandle<TMsg>,
     address: PeerAddress,
     connection: Option<rpc_service::ValidatorNodeRpcClient>,
 }
 
-impl TariValidatorNodeRpcClient {
+impl<TMsg: MessageSpec> TariValidatorNodeRpcClient<TMsg> {
     pub async fn client_connection(
         &mut self,
     ) -> Result<rpc_service::ValidatorNodeRpcClient, ValidatorNodeRpcClientError> {
@@ -99,7 +99,7 @@ impl TariValidatorNodeRpcClient {
 }
 
 #[async_trait]
-impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
+impl<TMsg: MessageSpec> ValidatorNodeRpcClient for TariValidatorNodeRpcClient<TMsg> {
     type Addr = PeerAddress;
     type Error = ValidatorNodeRpcClientError;
 
@@ -123,7 +123,7 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
     async fn get_substate(&mut self, shard: ShardId) -> Result<SubstateResult, Self::Error> {
         let mut client = self.client_connection().await?;
 
-        let request = crate::proto::rpc::GetSubstateRequest {
+        let request = proto::rpc::GetSubstateRequest {
             shard: shard.as_bytes().to_vec(),
         };
 
@@ -244,23 +244,23 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
 
 #[derive(Clone, Debug)]
 pub struct TariValidatorNodeRpcClientFactory {
-    networking: NetworkingHandle<proto::network::Message>,
+    networking: NetworkingHandle<TariMessagingSpec>,
 }
 
 impl TariValidatorNodeRpcClientFactory {
-    pub fn new(networking: NetworkingHandle<proto::network::Message>) -> Self {
+    pub fn new(networking: NetworkingHandle<TariMessagingSpec>) -> Self {
         Self { networking }
     }
 }
 
 impl ValidatorNodeClientFactory for TariValidatorNodeRpcClientFactory {
     type Addr = PeerAddress;
-    type Client = TariValidatorNodeRpcClient;
+    type Client = TariValidatorNodeRpcClient<TariMessagingSpec>;
 
     fn create_client(&self, address: &Self::Addr) -> Self::Client {
         TariValidatorNodeRpcClient {
             networking: self.networking.clone(),
-            address: address.clone(),
+            address: *address,
             connection: None,
         }
     }

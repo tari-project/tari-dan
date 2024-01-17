@@ -20,10 +20,8 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use sqlite_message_logger::SqliteMessageLogger;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_common_types::PeerAddress;
-use tari_dan_p2p::NewTransactionMessage;
 use tari_dan_storage::consensus_models::ExecutedTransaction;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -34,14 +32,13 @@ use crate::{
     consensus::ConsensusHandle,
     p2p::services::{
         mempool::{handle::MempoolHandle, service::MempoolService, MempoolError, SubstateResolver, Validator},
-        message_dispatcher::OutboundMessaging,
+        messaging::Gossip,
     },
     substate_resolver::SubstateResolverError,
 };
 
 pub fn spawn<TExecutor, TValidator, TExecutedValidator, TSubstateResolver>(
-    new_transactions: mpsc::Receiver<(PeerAddress, NewTransactionMessage)>,
-    outbound: OutboundMessaging<PeerAddress, SqliteMessageLogger>,
+    gossip: Gossip,
     tx_executed_transactions: mpsc::Sender<TransactionId>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
     transaction_executor: TExecutor,
@@ -61,9 +58,8 @@ where
     let (tx_mempool_request, rx_mempool_request) = mpsc::channel(100000);
 
     let mempool = MempoolService::new(
-        new_transactions,
         rx_mempool_request,
-        outbound,
+        gossip,
         tx_executed_transactions,
         epoch_manager,
         transaction_executor,

@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use tari_consensus::{hotstuff::HotstuffEvent, messages::HotstuffMessage};
-use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, ShardId};
 use tari_dan_storage::{consensus_models::LeafBlock, StateStore, StateStoreReadTransaction};
 use tari_state_store_sqlite::SqliteStateStore;
 use tari_transaction::{Transaction, TransactionId};
@@ -26,7 +26,7 @@ pub struct ValidatorChannels {
 
     pub tx_new_transactions: mpsc::Sender<TransactionId>,
     pub tx_hs_message: mpsc::Sender<(TestAddress, HotstuffMessage)>,
-    pub rx_broadcast: mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>,
+    pub rx_broadcast: mpsc::Receiver<(Vec<TestAddress>, HotstuffMessage)>,
     pub rx_leader: mpsc::Receiver<(TestAddress, HotstuffMessage)>,
     pub rx_mempool: mpsc::UnboundedReceiver<Transaction>,
 }

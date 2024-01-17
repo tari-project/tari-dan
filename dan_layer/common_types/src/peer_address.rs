@@ -9,7 +9,7 @@ use tari_crypto::ristretto::RistrettoPublicKey;
 
 use crate::{DerivableFromPublicKey, NodeAddressable};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize)]
 pub struct PeerAddress(PeerId);
 
 impl PeerAddress {
@@ -35,6 +35,12 @@ impl NodeAddressable for PeerAddress {
 
 impl From<identity::PublicKey> for PeerAddress {
     fn from(peer_pk: identity::PublicKey) -> Self {
+        peer_pk.to_peer_id().into()
+    }
+}
+
+impl From<&identity::PublicKey> for PeerAddress {
+    fn from(peer_pk: &identity::PublicKey) -> Self {
         peer_pk.to_peer_id().into()
     }
 }

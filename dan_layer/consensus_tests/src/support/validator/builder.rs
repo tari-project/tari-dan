@@ -12,6 +12,7 @@ use tokio::sync::{broadcast, mpsc, watch};
 use crate::support::{
     address::TestAddress,
     epoch_manager::TestEpochManager,
+    messaging_impls::{TestInboundMessaging, TestOutboundMessaging},
     signing_service::TestVoteSignatureService,
     sync::AlwaysSyncedSyncManager,
     NoopStateManager,
@@ -82,6 +83,9 @@ impl ValidatorBuilder {
         let (tx_leader, rx_leader) = mpsc::channel(100);
         let (tx_mempool, rx_mempool) = mpsc::unbounded_channel();
 
+        let (outbound_messaging, rx_loopback) = TestOutboundMessaging::create(tx_leader, tx_broadcast);
+        let inbound_messaging = TestInboundMessaging::new(self.address.clone(), rx_hs_message, rx_loopback);
+
         let store = SqliteStateStore::connect(&self.sql_url).unwrap();
         let signing_service = TestVoteSignatureService::new(self.public_key.clone(), self.address.clone());
         let transaction_pool = TransactionPool::new();
@@ -95,16 +99,15 @@ impl ValidatorBuilder {
                 .clone_for(self.address.clone(), self.public_key.clone(), self.shard);
         let worker = HotstuffWorker::<TestConsensusSpec>::new(
             self.address.clone(),
+            inbound_messaging,
+            outbound_messaging,
             rx_new_transactions,
-            rx_hs_message,
             store.clone(),
             epoch_manager.clone(),
             self.leader_strategy,
             signing_service,
             noop_state_manager.clone(),
             transaction_pool,
-            tx_broadcast,
-            tx_leader,
             tx_events.clone(),
             tx_mempool,
             ForeignReceiveCounters::default(),

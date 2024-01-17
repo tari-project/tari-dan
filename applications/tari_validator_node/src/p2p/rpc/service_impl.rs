@@ -25,16 +25,7 @@ use std::convert::{TryFrom, TryInto};
 use log::*;
 use tari_bor::{decode_exact, encode};
 use tari_dan_common_types::{optional::Optional, PeerAddress, ShardId};
-use tari_dan_storage::{
-    consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
-    StateStore,
-};
-use tari_engine_types::virtual_substate::VirtualSubstateAddress;
-use tari_epoch_manager::base_layer::EpochManagerHandle;
-use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
-use tari_state_store_sqlite::SqliteStateStore;
-use tari_transaction::{Transaction, TransactionId};
-use tari_validator_node_rpc::{
+use tari_dan_p2p::{
     proto,
     proto::rpc::{
         GetHighQcRequest,
@@ -48,8 +39,17 @@ use tari_validator_node_rpc::{
         SyncBlocksRequest,
         SyncBlocksResponse,
     },
-    rpc_service::ValidatorNodeRpcService,
 };
+use tari_dan_storage::{
+    consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
+    StateStore,
+};
+use tari_engine_types::virtual_substate::VirtualSubstateAddress;
+use tari_epoch_manager::base_layer::EpochManagerHandle;
+use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
+use tari_state_store_sqlite::SqliteStateStore;
+use tari_transaction::{Transaction, TransactionId};
+use tari_validator_node_rpc::rpc_service::ValidatorNodeRpcService;
 use tokio::{sync::mpsc, task};
 
 use crate::{

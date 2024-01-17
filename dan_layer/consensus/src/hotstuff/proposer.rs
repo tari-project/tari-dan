@@ -11,19 +11,18 @@ use tari_dan_storage::{
     StateStoreReadTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tokio::sync::mpsc;
 
-use super::{common::CommitteeAndMessage, HotStuffError};
+use super::HotStuffError;
 use crate::{
     messages::{HotstuffMessage, ProposalMessage},
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, OutboundMessaging},
 };
 
 #[derive(Clone)]
 pub struct Proposer<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
     epoch_manager: TConsensusSpec::EpochManager,
-    tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
 }
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_foreignly";
@@ -34,16 +33,16 @@ where TConsensusSpec: ConsensusSpec
     pub fn new(
         store: TConsensusSpec::StateStore,
         epoch_manager: TConsensusSpec::EpochManager,
-        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
     ) -> Self {
         Self {
             store,
             epoch_manager,
-            tx_broadcast,
+            outbound_messaging,
         }
     }
 
-    pub async fn broadcast_proposal_foreignly(&self, block: &Block) -> Result<(), HotStuffError> {
+    pub async fn broadcast_proposal_foreignly(&mut self, block: &Block) -> Result<(), HotStuffError> {
         let num_committees = self.epoch_manager.get_num_committees(block.epoch()).await?;
 
         let validator = self.epoch_manager.get_our_validator_node(block.epoch()).await?;
@@ -75,16 +74,14 @@ where TConsensusSpec: ConsensusSpec
             block,
             non_local_committees.len(),
         );
-        self.tx_broadcast
-            .send((
-                non_local_committees.into_values().collect(),
+        self.outbound_messaging
+            .multicast(
+                non_local_committees
+                    .values()
+                    .flat_map(|c| c.iter().map(|(addr, _)| addr)),
                 HotstuffMessage::ForeignProposal(ProposalMessage { block: block.clone() }),
-            ))
-            .await
-            .map_err(|_| HotStuffError::InternalChannelClosed {
-                context: "proposing locked block to foreing committees",
-            })?;
-
+            )
+            .await?;
         Ok(())
     }
 }

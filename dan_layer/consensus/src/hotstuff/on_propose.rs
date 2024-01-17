@@ -29,13 +29,11 @@ use tari_dan_storage::{
     StateStoreWriteTransaction,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tokio::sync::mpsc;
 
-use super::common::CommitteeAndMessage;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, proposer},
     messages::{HotstuffMessage, ProposalMessage},
-    traits::{ConsensusSpec, ValidatorSignatureService},
+    traits::{ConsensusSpec, OutboundMessaging, ValidatorSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_propose_locally";
@@ -45,7 +43,7 @@ pub struct OnPropose<TConsensusSpec: ConsensusSpec> {
     epoch_manager: TConsensusSpec::EpochManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
     signing_service: TConsensusSpec::SignatureService,
-    tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
 }
 
 impl<TConsensusSpec> OnPropose<TConsensusSpec>
@@ -56,21 +54,21 @@ where TConsensusSpec: ConsensusSpec
         epoch_manager: TConsensusSpec::EpochManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
         signing_service: TConsensusSpec::SignatureService,
-        tx_broadcast: mpsc::Sender<CommitteeAndMessage<TConsensusSpec::Addr>>,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
     ) -> Self {
         Self {
             store,
             epoch_manager,
             transaction_pool,
             signing_service,
-            tx_broadcast,
+            outbound_messaging,
         }
     }
 
     pub async fn handle(
-        &self,
+        &mut self,
         epoch: Epoch,
-        local_committee: Committee<TConsensusSpec::Addr>,
+        local_committee: &Committee<TConsensusSpec::Addr>,
         leaf_block: LeafBlock,
         is_newview_propose: bool,
     ) -> Result<(), HotStuffError> {
@@ -132,11 +130,6 @@ where TConsensusSpec: ConsensusSpec
 
             next_block.as_last_proposed().set(&mut tx)?;
 
-            // Get involved shards for all LocalPrepared commands in the block.
-            // This allows us to broadcast the proposal only to the relevant committees that would be interested in the
-            // LocalPrepared.
-            // TODO: we should never broadcast to foreign shards here. The soonest we can broadcast is once we have
-            //       locked the block
             tx.commit()?;
         }
 
@@ -156,9 +149,9 @@ where TConsensusSpec: ConsensusSpec
     }
 
     pub async fn broadcast_proposal_locally(
-        &self,
+        &mut self,
         next_block: Block,
-        local_committee: Committee<TConsensusSpec::Addr>,
+        local_committee: &Committee<TConsensusSpec::Addr>,
     ) -> Result<(), HotStuffError> {
         info!(
             target: LOG_TARGET,
@@ -168,17 +161,14 @@ where TConsensusSpec: ConsensusSpec
         );
 
         // Broadcast to local and foreign committees
-        self.tx_broadcast
-            .send((
-                local_committee,
+        self.outbound_messaging
+            .multicast(
+                local_committee.iter().map(|(addr, _)| addr),
                 HotstuffMessage::Proposal(ProposalMessage {
                     block: next_block.clone(),
                 }),
-            ))
-            .await
-            .map_err(|_| HotStuffError::InternalChannelClosed {
-                context: "proposing a new block",
-            })?;
+            )
+            .await?;
 
         Ok(())
     }

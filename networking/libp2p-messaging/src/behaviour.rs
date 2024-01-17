@@ -77,7 +77,7 @@ where TCodec: Codec + Send + Clone + 'static
         }
     }
 
-    pub async fn send_message(&mut self, peer_id: PeerId, message: TCodec::Message) -> Result<(), Error> {
+    pub fn send_message(&mut self, peer_id: PeerId, message: TCodec::Message) -> Result<(), Error> {
         self.obtain_message_channel(peer_id).send(message)?;
         Ok(())
     }

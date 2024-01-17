@@ -34,16 +34,13 @@ use tari_dan_storage::{
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::Transaction;
-use tokio::sync::{
-    broadcast,
-    mpsc::{self},
-};
+use tokio::sync::broadcast;
 
 use super::proposer::Proposer;
 use crate::{
     hotstuff::{common::EXHAUST_DIVISOR, error::HotStuffError, event::HotstuffEvent, ProposalValidationError},
     messages::{HotstuffMessage, VoteMessage},
-    traits::{ConsensusSpec, LeaderStrategy, StateManager, VoteSignatureService},
+    traits::{ConsensusSpec, LeaderStrategy, OutboundMessaging, StateManager, VoteSignatureService},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_lock_block_ready";
@@ -56,7 +53,7 @@ pub struct OnReadyToVoteOnLocalBlock<TConsensusSpec: ConsensusSpec> {
     leader_strategy: TConsensusSpec::LeaderStrategy,
     state_manager: TConsensusSpec::StateManager,
     transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-    tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
     tx_events: broadcast::Sender<HotstuffEvent>,
     proposer: Proposer<TConsensusSpec>,
 }
@@ -72,7 +69,7 @@ where TConsensusSpec: ConsensusSpec
         leader_strategy: TConsensusSpec::LeaderStrategy,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
         tx_events: broadcast::Sender<HotstuffEvent>,
         proposer: Proposer<TConsensusSpec>,
     ) -> Self {
@@ -84,13 +81,13 @@ where TConsensusSpec: ConsensusSpec
             leader_strategy,
             state_manager,
             transaction_pool,
-            tx_leader,
+            outbound_messaging,
             tx_events,
             proposer,
         }
     }
 
-    pub async fn handle(&self, valid_block: ValidBlock) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, valid_block: ValidBlock) -> Result<(), HotStuffError> {
         debug!(
             target: LOG_TARGET,
             "🔥 LOCAL PROPOSAL READY: {}",
@@ -311,7 +308,7 @@ where TConsensusSpec: ConsensusSpec
     }
 
     async fn send_vote_to_leader(
-        &self,
+        &mut self,
         local_committee: &Committee<TConsensusSpec::Addr>,
         vote: VoteMessage,
         block: &Block,
@@ -327,17 +324,9 @@ where TConsensusSpec: ConsensusSpec
             block.proposed_by(),
             leader,
         );
-        if self
-            .tx_leader
-            .send((leader.clone(), HotstuffMessage::Vote(vote.clone())))
-            .await
-            .is_err()
-        {
-            debug!(
-                target: LOG_TARGET,
-                "tx_leader in OnLocalProposalReady::send_vote_to_leader is closed",
-            );
-        }
+        self.outbound_messaging
+            .send(leader.clone(), HotstuffMessage::Vote(vote.clone()))
+            .await?;
         self.store.with_write_tx(|tx| {
             let last_sent_vote = LastSentVote {
                 epoch: vote.epoch,
@@ -935,7 +924,7 @@ where TConsensusSpec: ConsensusSpec
         Ok(())
     }
 
-    async fn propose_newly_locked_blocks(&self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
+    async fn propose_newly_locked_blocks(&mut self, blocks: Vec<Block>) -> Result<(), HotStuffError> {
         for block in blocks {
             let local_committee = self.epoch_manager.get_local_committee(block.epoch()).await?;
             let our_addr = self.epoch_manager.get_our_validator_node(block.epoch()).await?;

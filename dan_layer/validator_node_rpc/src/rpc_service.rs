@@ -1,10 +1,9 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
+use tari_dan_p2p::proto::rpc as proto;
 use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
 use tari_rpc_macros::tari_rpc;
-
-use crate::proto::rpc as proto;
 
 #[tari_rpc(protocol_name = "/tari/validator/1.0.0", server_struct = ValidatorNodeRpcServer, client_struct = ValidatorNodeRpcClient)]
 pub trait ValidatorNodeRpcService: Send + Sync + 'static {

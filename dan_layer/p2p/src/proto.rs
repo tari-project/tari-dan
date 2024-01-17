@@ -1,4 +1,4 @@
-//  Copyright 2021. The Tari Project
+//  Copyright 2023, The Tari Project
 //
 //  Redistribution and use in source and binary forms, with or without modification, are permitted provided that the
 //  following conditions are met:
@@ -20,42 +20,23 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use libp2p::PeerId;
-use tari_dan_common_types::PeerAddress;
-use tari_dan_p2p::Message;
-use tari_validator_node_rpc::proto;
-use tokio::sync::mpsc;
-
-const _LOG_TARGET: &str = "tari::validator_node::p2p::services::messaging::inbound";
-
-pub struct InboundMessaging<TAddr> {
-    our_node_addr: TAddr,
-    inbound_messages: mpsc::Receiver<(PeerId, proto::network::Message)>,
-    loopback_receiver: mpsc::Receiver<Message>,
+pub mod transaction {
+    include!(concat!(env!("OUT_DIR"), "/tari.dan.transaction.rs"));
 }
 
-impl InboundMessaging<PeerAddress> {
-    pub fn new(
-        our_node_addr: PeerAddress,
-        inbound_messages: mpsc::Receiver<(PeerId, proto::network::Message)>,
-        loopback_receiver: mpsc::Receiver<Message>,
-    ) -> Self {
-        Self {
-            our_node_addr,
-            inbound_messages,
-            loopback_receiver,
-        }
-    }
+pub mod consensus {
+    include!(concat!(env!("OUT_DIR"), "/tari.dan.consensus.rs"));
+}
 
-    pub async fn next_message(&mut self) -> Option<anyhow::Result<(PeerAddress, Message)>> {
-        tokio::select! {
-           // BIASED: messaging priority is loopback, then other
-           biased;
-           maybe_msg = self.loopback_receiver.recv() => maybe_msg.map(|msg| Ok((self.our_node_addr.clone(), msg))),
-           maybe_msg = self.inbound_messages.recv() => {
-                let (from, msg) = maybe_msg?;
-               Some( msg.try_into().map(|msg| (PeerAddress::from(from), msg)))
-           },
-        }
-    }
+pub mod network {
+    #![allow(clippy::large_enum_variant)]
+    include!(concat!(env!("OUT_DIR"), "/tari.dan.network.rs"));
+}
+
+pub mod rpc {
+    include!(concat!(env!("OUT_DIR"), "/tari.dan.rpc.rs"));
+}
+
+pub mod common {
+    include!(concat!(env!("OUT_DIR"), "/tari.dan.common.rs"));
 }

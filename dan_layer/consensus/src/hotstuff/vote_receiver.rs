@@ -198,7 +198,7 @@ where TConsensusSpec: ConsensusSpec
             // database
             if votes.iter().all(|x| x.signature.public_key != our_vn.public_key) {
                 warn!(target: LOG_TARGET, "❓️ Received enough votes but not our own vote for block {}", message.block_id);
-                return Ok(true);
+                // return Ok(true);
             }
 
             let mut signatures = Vec::with_capacity(votes.len());

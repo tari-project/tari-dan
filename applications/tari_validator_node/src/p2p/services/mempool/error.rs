@@ -14,17 +14,17 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessorError,
-    p2p::services::{mempool::MempoolRequest, message_dispatcher::MessagingError},
+    p2p::services::mempool::MempoolRequest,
     substate_resolver::SubstateResolverError,
     virtual_substate::VirtualSubstateError,
 };
 
 #[derive(thiserror::Error, Debug)]
 pub enum MempoolError {
+    #[error("Invalid message: {0}")]
+    InvalidMessage(#[from] anyhow::Error),
     #[error("Epoch Manager Error: {0}")]
     EpochManagerError(#[from] EpochManagerError),
-    #[error("Broadcast failed: {0}")]
-    BroadcastFailed(#[from] MessagingError),
     #[error("Internal service request cancelled")]
     RequestCancelled,
     #[error("DryRunTransactionProcessor Error: {0}")]
