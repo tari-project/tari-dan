@@ -13,7 +13,7 @@ use tari_crypto::{
     ristretto::{RistrettoComSig, RistrettoPublicKey},
     tari_utilities::ByteArray,
 };
-use tari_dan_common_types::{optional::Optional, ShardId};
+use tari_dan_common_types::{optional::Optional, SubstateAddress};
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager, substate::ValidatorScanResult},
     confidential::{get_commitment_factory, ConfidentialProofStatement},
@@ -135,12 +135,12 @@ pub async fn handle_create(
         .with_input_refs(
             input_refs
                 .iter()
-                .map(|s| ShardId::from_address(&s.substate_id, s.version)),
+                .map(|s| SubstateAddress::from_address(&s.substate_id, s.version)),
         )
         .with_inputs(
             inputs
                 .iter()
-                .map(|addr| ShardId::from_address(&addr.substate_id, addr.version)),
+                .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version)),
         )
         .sign(&signing_key.key)
         .build();
@@ -238,7 +238,7 @@ pub async fn handle_invoke(
 
     let inputs = inputs
         .into_iter()
-        .map(|s| ShardId::from_address(&s.substate_id, s.version));
+        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
 
     let account_address = account.address.as_component_address().unwrap();
     let transaction = Transaction::builder()
@@ -452,7 +452,7 @@ pub async fn handle_reveal_funds(
 
         let inputs = inputs
             .into_iter()
-            .map(|addr| ShardId::from_address(&addr.substate_id, addr.version));
+            .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version));
 
         let transaction = builder.with_inputs(inputs).sign(&account_key.key).build();
 
@@ -717,7 +717,7 @@ async fn finish_claiming<T: WalletStore>(
     });
     let inputs = inputs
         .into_iter()
-        .map(|s| ShardId::from_address(&s.substate_id, s.version));
+        .map(|s| SubstateAddress::from_address(&s.substate_id, s.version));
     let transaction = Transaction::builder()
         .with_fee_instructions(instructions)
         .with_inputs(inputs)
@@ -855,7 +855,7 @@ fn get_or_create_account<T: WalletStore>(
             let component_id = Hash::try_from(account_pk.as_bytes())?;
             let account_address = new_component_address_from_parts(&ACCOUNT_TEMPLATE_ADDRESS, &component_id);
 
-            // We have no involved shards, so we need to add an output
+            // We have no involved substate addresses, so we need to add an output
             (account_address.into(), account_secret_key, Some(name.to_string()))
         },
     };
@@ -891,7 +891,7 @@ pub async fn handle_transfer(
         .substate_api()
         .scan_for_substate(&SubstateId::Resource(req.resource_address), None)
         .await?;
-    let resource_shard_id = ShardId::from_address(
+    let resource_substate_address = SubstateAddress::from_address(
         &resource_substate.address.substate_id,
         resource_substate.address.version,
     );
@@ -935,7 +935,7 @@ pub async fn handle_transfer(
     let transaction = Transaction::builder()
         .with_fee_instructions(fee_instructions)
         .with_instructions(instructions)
-        .with_input_refs(vec![resource_shard_id])
+        .with_input_refs(vec![resource_substate_address])
         .sign(&account_secret_key.key)
         .build();
 

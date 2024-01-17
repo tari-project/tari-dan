@@ -25,7 +25,7 @@ use std::{ops::RangeInclusive, time::Duration};
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_common_types::{transaction::TxId, types::PublicKey};
-use tari_dan_common_types::{committee::CommitteeShard, shard_bucket::ShardBucket, Epoch, ShardId};
+use tari_dan_common_types::{committee::CommitteeShard, shard_bucket::ShardBucket, Epoch, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord},
     global::models::ValidatorNode,
@@ -229,7 +229,7 @@ pub enum LogLevel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetCommitteeRequest {
     pub epoch: Epoch,
-    pub shard_id: ShardId,
+    pub substate_address: SubstateAddress,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetNetworkCommitteeResponse<TAddr> {
@@ -240,7 +240,7 @@ pub struct GetNetworkCommitteeResponse<TAddr> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitteeShardInfo<TAddr> {
     pub bucket: ShardBucket,
-    pub shard_range: RangeInclusive<ShardId>,
+    pub shard_range: RangeInclusive<SubstateAddress>,
     pub validators: Vec<ValidatorNode<TAddr>>,
 }
 
@@ -252,7 +252,7 @@ pub struct GetShardKey {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetStateRequest {
-    pub shard_id: ShardId,
+    pub address: SubstateAddress,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -5,7 +5,7 @@ use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_engine_types::{serde_with, substate::SubstateId};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -16,8 +16,8 @@ pub struct VersionedSubstateId {
 }
 
 impl VersionedSubstateId {
-    pub fn to_shard_id(&self) -> ShardId {
-        ShardId::from_address(&self.substate_id, self.version)
+    pub fn to_substate_address(&self) -> SubstateAddress {
+        SubstateAddress::from_address(&self.substate_id, self.version)
     }
 }
 

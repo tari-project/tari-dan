@@ -7,7 +7,7 @@ use anyhow::anyhow;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use tari_bor::{decode, decode_exact, encode};
-use tari_dan_common_types::{NodeAddressable, PeerAddress, ShardId};
+use tari_dan_common_types::{NodeAddressable, PeerAddress, SubstateAddress};
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
@@ -42,7 +42,7 @@ pub trait ValidatorNodeRpcClient: Send + Sync {
         transaction_id: TransactionId,
     ) -> Result<TransactionResultStatus, Self::Error>;
 
-    async fn get_substate(&mut self, shard: ShardId) -> Result<SubstateResult, Self::Error>;
+    async fn get_substate(&mut self, shard: SubstateAddress) -> Result<SubstateResult, Self::Error>;
     async fn get_virtual_substate(&mut self, address: VirtualSubstateId) -> Result<VirtualSubstate, Self::Error>;
 }
 
@@ -63,12 +63,12 @@ pub struct FinalizedResult {
 pub enum SubstateResult {
     DoesNotExist,
     Up {
-        address: SubstateId,
+        id: SubstateId,
         substate: Substate,
         created_by_tx: TransactionId,
     },
     Down {
-        address: SubstateId,
+        id: SubstateId,
         version: u32,
         created_by_tx: TransactionId,
         deleted_by_tx: TransactionId,
@@ -120,11 +120,11 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
         Ok(id)
     }
 
-    async fn get_substate(&mut self, shard: ShardId) -> Result<SubstateResult, Self::Error> {
+    async fn get_substate(&mut self, address: SubstateAddress) -> Result<SubstateResult, Self::Error> {
         let mut client = self.client_connection().await?;
 
         let request = crate::proto::rpc::GetSubstateRequest {
-            shard: shard.as_bytes().to_vec(),
+            address: address.as_bytes().to_vec(),
         };
 
         let resp = client.get_substate(request).await?;
@@ -151,7 +151,7 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
                     .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?;
                 Ok(SubstateResult::Up {
                     substate: Substate::new(resp.version, substate),
-                    address: SubstateId::from_bytes(&resp.address)
+                    id: SubstateId::from_bytes(&resp.address)
                         .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?,
                     created_by_tx: tx_hash,
                 })
@@ -168,7 +168,7 @@ impl ValidatorNodeRpcClient for TariValidatorNodeRpcClient {
                     ))
                 })?;
                 Ok(SubstateResult::Down {
-                    address: SubstateId::from_bytes(&resp.address)
+                    id: SubstateId::from_bytes(&resp.address)
                         .map_err(|e| ValidatorNodeRpcClientError::InvalidResponse(anyhow!(e)))?,
                     version: resp.version,
                     deleted_by_tx,

@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, SubstateAddress};
 use tari_dan_storage::global::models::ValidatorNode;
 use tari_utilities::ByteArray;
 
@@ -46,7 +46,7 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
 
     fn try_from(vn: DbValidatorNode) -> Result<Self, Self::Error> {
         Ok(Self {
-            shard_key: ShardId::try_from(vn.shard_key).map_err(|_| {
+            shard_key: SubstateAddress::try_from(vn.shard_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!("Invalid shard id in validator node record id={}", vn.id))
             })?,
             address: deserialize_json(&vn.address)?,

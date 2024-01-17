@@ -16,7 +16,7 @@ use tari_dan_common_types::{
     shard_bucket::ShardBucket,
     Epoch,
     NodeAddressable,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tokio::sync::{broadcast, mpsc, oneshot};
@@ -159,7 +159,7 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
     pub async fn get_committees_by_shards(
         &self,
         epoch: Epoch,
-        shards: HashSet<ShardId>,
+        shards: HashSet<SubstateAddress>,
     ) -> Result<HashMap<ShardBucket, Committee<TAddr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -188,7 +188,11 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError> {
+    async fn get_committee(
+        &self,
+        epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittee {
@@ -205,7 +209,7 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
     async fn get_committee_within_shard_range(
         &self,
         epoch: Epoch,
-        shard_range: RangeInclusive<ShardId>,
+        shard_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
@@ -316,7 +320,11 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, EpochManagerError> {
+    async fn get_committee_shard(
+        &self,
+        epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<CommitteeShard, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommitteeShard {

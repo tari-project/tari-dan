@@ -14,7 +14,7 @@ use tari_dan_common_types::{
     hashing::{MergedValidatorNodeMerkleProof, ValidatorNodeBalancedMerkleTree, ValidatorNodeMerkleProof},
     shard_bucket::ShardBucket,
     Epoch,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tari_epoch_manager::{EpochManagerError, EpochManagerEvent, EpochManagerReader};
@@ -56,7 +56,7 @@ impl TestEpochManager {
         self.inner.lock().await
     }
 
-    pub fn clone_for(&self, address: TestAddress, public_key: PublicKey, shard_key: ShardId) -> Self {
+    pub fn clone_for(&self, address: TestAddress, public_key: PublicKey, shard_key: SubstateAddress) -> Self {
         let mut copy = self.clone();
         copy.our_validator_node = Some(ValidatorNode {
             address,
@@ -74,10 +74,10 @@ impl TestEpochManager {
         let num_committees = committees.len() as u32;
         for (bucket, committee) in committees {
             for (address, pk) in &committee.members {
-                let shard_id = random_shard_in_bucket(bucket, num_committees);
+                let substate_address = random_shard_in_bucket(bucket, num_committees);
                 state
                     .validator_shards
-                    .insert(address.clone(), (bucket, shard_id, pk.clone()));
+                    .insert(address.clone(), (bucket, substate_address, pk.clone()));
                 state.address_bucket.insert(address.clone(), bucket);
             }
 
@@ -85,7 +85,7 @@ impl TestEpochManager {
         }
     }
 
-    pub async fn all_validators(&self) -> Vec<(TestAddress, ShardBucket, ShardId, PublicKey)> {
+    pub async fn all_validators(&self) -> Vec<(TestAddress, ShardBucket, SubstateAddress, PublicKey)> {
         self.state_lock()
             .await
             .validator_shards
@@ -107,7 +107,11 @@ impl EpochManagerReader for TestEpochManager {
         Ok(self.tx_epoch_events.subscribe())
     }
 
-    async fn get_committee(&self, _epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError> {
+    async fn get_committee(
+        &self,
+        _epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let state = self.state_lock().await;
         let bucket = shard.to_committee_bucket(state.committees.len() as u32);
         Ok(state.committees[&bucket].clone())
@@ -186,7 +190,11 @@ impl EpochManagerReader for TestEpochManager {
             .collect())
     }
 
-    async fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, EpochManagerError> {
+    async fn get_committee_shard(
+        &self,
+        epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<CommitteeShard, EpochManagerError> {
         let num_committees = self.get_num_committees(epoch).await?;
         let committee = self.get_committee(epoch, shard).await?;
         let bucket = shard.to_committee_bucket(num_committees);
@@ -197,7 +205,7 @@ impl EpochManagerReader for TestEpochManager {
     // async fn get_committees_by_shards(
     //     &self,
     //     epoch: Epoch,
-    //     shards: &HashSet<ShardId>,
+    //     shards: &HashSet<SubstateAddress>,
     // ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, EpochManagerError> { let num_committees =
     //   self.get_num_committees(epoch).await?;
     //
@@ -217,7 +225,7 @@ impl EpochManagerReader for TestEpochManager {
     async fn get_committee_within_shard_range(
         &self,
         _epoch: Epoch,
-        range: RangeInclusive<ShardId>,
+        range: RangeInclusive<SubstateAddress>,
     ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let lock = self.state_lock().await;
         Ok(Committee::new(
@@ -256,7 +264,7 @@ impl EpochManagerReader for TestEpochManager {
 pub struct TestEpochManagerState {
     pub current_epoch: Epoch,
     pub is_epoch_active: bool,
-    pub validator_shards: HashMap<TestAddress, (ShardBucket, ShardId, PublicKey)>,
+    pub validator_shards: HashMap<TestAddress, (ShardBucket, SubstateAddress, PublicKey)>,
     pub committees: HashMap<ShardBucket, Committee<TestAddress>>,
     pub address_bucket: HashMap<TestAddress, ShardBucket>,
 }

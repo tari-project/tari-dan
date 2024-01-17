@@ -18,7 +18,7 @@ use tari_dan_common_types::{
     shard_bucket::ShardBucket,
     Epoch,
     NodeHeight,
-    ShardId,
+    SubstateAddress,
 };
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
@@ -437,7 +437,7 @@ impl Block {
     pub fn find_involved_shards<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<HashSet<ShardId>, StorageError> {
+    ) -> Result<HashSet<SubstateAddress>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
     }
 
@@ -554,7 +554,7 @@ impl Block {
                         }));
                     } else {
                         updates.push(SubstateUpdate::Destroy {
-                            shard_id: substate.to_shard_id(),
+                            address: substate.to_substate_address(),
                             proof: QuorumCertificate::get(tx, &destroyed.justify)?,
                             destroyed_by_transaction: destroyed.by_transaction,
                         });

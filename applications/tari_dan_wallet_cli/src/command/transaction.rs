@@ -34,7 +34,7 @@ use anyhow::anyhow;
 use clap::{Args, Subcommand};
 use tari_bor::decode_exact;
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason, TransactionResult},
@@ -389,7 +389,7 @@ pub async fn submit_transaction(
     println!();
     println!("✅ Transaction {} submitted.", resp.transaction_id);
     println!();
-    // TODO: Would be great if we could display the substate ids as well as shard ids
+    // TODO: Would be great if we could display the substate ids as well as substate addresses
     summarize_request(&request, &resp.inputs);
 
     println!();
@@ -421,8 +421,8 @@ fn summarize_request(request: &TransactionSubmitRequest, inputs: &[SubstateRequi
     if inputs.is_empty() {
         println!("  None");
     } else {
-        for shard_id in inputs {
-            println!("- {}", shard_id);
+        for address in inputs {
+            println!("- {}", address);
         }
     }
     println!();
@@ -469,7 +469,10 @@ fn summarize(resp: &TransactionWaitResultResponse, time_taken: Duration) {
 pub fn print_substate_diff(diff: &SubstateDiff) {
     for (address, substate) in diff.up_iter() {
         println!("️🌲 UP substate {} (v{})", address, substate.version(),);
-        println!("      🧩 Shard: {}", ShardId::from_address(address, substate.version()));
+        println!(
+            "      🧩 Substate address: {}",
+            SubstateAddress::from_address(address, substate.version())
+        );
         match substate.substate_value() {
             SubstateValue::Component(component) => {
                 println!("      ▶ component ({}): {}", component.module_name, address,);
@@ -506,7 +509,10 @@ pub fn print_substate_diff(diff: &SubstateDiff) {
     }
     for (address, version) in diff.down_iter() {
         println!("🗑️ DOWN substate {} v{}", address, version,);
-        println!("      🧩 Shard: {}", ShardId::from_address(address, *version));
+        println!(
+            "      🧩 Substate address: {}",
+            SubstateAddress::from_address(address, *version)
+        );
         println!();
     }
 }

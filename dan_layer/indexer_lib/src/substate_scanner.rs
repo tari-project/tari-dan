@@ -22,7 +22,7 @@
 
 use log::*;
 use rand::{prelude::*, rngs::OsRng};
-use tari_dan_common_types::{NodeAddressable, ShardId};
+use tari_dan_common_types::{NodeAddressable, SubstateAddress};
 use tari_engine_types::{
     events::Event,
     substate::{SubstateId, SubstateValue},
@@ -213,14 +213,14 @@ where
         substate_address: &SubstateId,
         version: u32,
     ) -> Result<SubstateResult, IndexerError> {
-        let shard = ShardId::from_address(substate_address, version);
+        let shard = SubstateAddress::from_address(substate_address, version);
         self.get_specific_substate_from_committee_by_shard(shard).await
     }
 
     /// Returns a specific version. If this is not found an error is returned.
     pub async fn get_specific_substate_from_committee_by_shard(
         &self,
-        shard: ShardId,
+        shard: SubstateAddress,
     ) -> Result<SubstateResult, IndexerError> {
         let epoch = self.committee_provider.current_epoch().await?;
         let mut committee = self.committee_provider.get_committee(epoch, shard).await?;
@@ -268,7 +268,7 @@ where
     pub async fn get_virtual_substate_from_committee(
         &self,
         address: VirtualSubstateId,
-        shard_location: ShardId,
+        shard_location: SubstateAddress,
     ) -> Result<VirtualSubstate, IndexerError> {
         let epoch = self.committee_provider.current_epoch().await?;
         let mut committee = self.committee_provider.get_committee(epoch, shard_location).await?;
@@ -304,7 +304,11 @@ where
     }
 
     /// Gets a substate directly from querying a VN
-    async fn get_substate_from_vn(&self, vn_addr: &TAddr, shard: ShardId) -> Result<SubstateResult, IndexerError> {
+    async fn get_substate_from_vn(
+        &self,
+        vn_addr: &TAddr,
+        shard: SubstateAddress,
+    ) -> Result<SubstateResult, IndexerError> {
         // build a client with the VN
         let mut client = self.validator_node_client_factory.create_client(vn_addr);
         let result = client
@@ -338,16 +342,16 @@ where
         substate_id: &SubstateId,
         version: u32,
     ) -> Result<TransactionId, IndexerError> {
-        let shard_id = ShardId::from_address(substate_id, version);
+        let substate_address = SubstateAddress::from_address(substate_id, version);
 
         let epoch = self.committee_provider.current_epoch().await?;
-        let mut committee = self.committee_provider.get_committee(epoch, shard_id).await?;
+        let mut committee = self.committee_provider.get_committee(epoch, substate_address).await?;
 
         committee.members.shuffle(&mut OsRng);
 
         let mut transaction_hash = None;
         for member in committee.addresses() {
-            match self.get_substate_from_vn(member, shard_id).await {
+            match self.get_substate_from_vn(member, substate_address).await {
                 Ok(substate_result) => match substate_result {
                     SubstateResult::Up {
                         created_by_tx: tx_hash, ..

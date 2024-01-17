@@ -29,7 +29,7 @@ use std::{
 
 use anyhow::anyhow;
 use clap::{Args, Subcommand};
-use tari_dan_common_types::{optional::Optional, ShardId};
+use tari_dan_common_types::{optional::Optional, SubstateAddress};
 use tari_dan_engine::abi::Type;
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
@@ -232,13 +232,13 @@ pub async fn submit_transaction(
     // Convert to shard id
     let inputs = inputs
         .into_iter()
-        .map(|versioned_addr| versioned_addr.to_shard_id())
+        .map(|versioned_addr| versioned_addr.to_substate_address())
         .collect::<Vec<_>>();
 
     let input_refs = common
         .input_refs
         .into_iter()
-        .map(|versioned_addr| versioned_addr.to_shard_id())
+        .map(|versioned_addr| versioned_addr.to_substate_address())
         .collect::<Vec<_>>();
 
     summarize_request(&instructions, &inputs, 1, common.dry_run);
@@ -324,7 +324,7 @@ async fn wait_for_transaction_result(
     }
 }
 
-fn summarize_request(instructions: &[Instruction], inputs: &[ShardId], fee: u64, is_dry_run: bool) {
+fn summarize_request(instructions: &[Instruction], inputs: &[SubstateAddress], fee: u64, is_dry_run: bool) {
     if is_dry_run {
         println!("NOTE: Dry run is enabled. This transaction will not be processed by the network.");
         println!();
@@ -334,8 +334,8 @@ fn summarize_request(instructions: &[Instruction], inputs: &[ShardId], fee: u64,
     if inputs.is_empty() {
         println!("  None");
     } else {
-        for shard_id in inputs {
-            println!("- {}", shard_id);
+        for substate_address in inputs {
+            println!("- {}", substate_address);
         }
     }
     println!();
@@ -365,7 +365,10 @@ fn summarize(result: &ExecuteResult, time_taken: Duration) {
 fn print_substate_diff(diff: &SubstateDiff) {
     for (address, substate) in diff.up_iter() {
         println!("️🌲 UP substate {} (v{})", address, substate.version(),);
-        println!("      🧩 Shard: {}", ShardId::from_address(address, substate.version()));
+        println!(
+            "      🧩 Shard: {}",
+            SubstateAddress::from_address(address, substate.version())
+        );
         match substate.substate_value() {
             SubstateValue::Component(component) => {
                 println!("      ▶ component ({}): {}", component.module_name, address,);
@@ -399,7 +402,7 @@ fn print_substate_diff(diff: &SubstateDiff) {
     }
     for (address, version) in diff.down_iter() {
         println!("🗑️ DOWN substate {} v{}", address, version,);
-        println!("      🧩 Shard: {}", ShardId::from_address(address, *version));
+        println!("      🧩 Shard: {}", SubstateAddress::from_address(address, *version));
         println!();
     }
 }

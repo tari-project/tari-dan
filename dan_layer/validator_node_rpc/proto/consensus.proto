@@ -95,7 +95,7 @@ message Evidence {
 }
 
 message ShardPledge {
-  bytes shard_id = 1;
+  bytes substate_address = 1;
   bytes node_hash = 2;
   ObjectPledge pledge = 3;
 }
@@ -141,7 +141,7 @@ enum QuorumDecision {
 }
 
 message ObjectPledge {
-  bytes shard_id = 1;
+  bytes substate_address = 1;
   SubstateState current_state = 2;
   bytes pledged_to_payload = 3;
 }

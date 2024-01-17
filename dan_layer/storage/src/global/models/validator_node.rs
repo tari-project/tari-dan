@@ -3,13 +3,13 @@
 
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
-use tari_dan_common_types::{shard_bucket::ShardBucket, vn_node_hash, Epoch, NodeAddressable, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, vn_node_hash, Epoch, NodeAddressable, SubstateAddress};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ValidatorNode<TAddr> {
     pub address: TAddr,
     pub public_key: PublicKey,
-    pub shard_key: ShardId,
+    pub shard_key: SubstateAddress,
     pub epoch: Epoch,
     pub committee_bucket: Option<ShardBucket>,
     pub fee_claim_public_key: PublicKey,

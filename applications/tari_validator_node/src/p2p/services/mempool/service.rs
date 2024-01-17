@@ -26,7 +26,7 @@ use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt}
 use log::*;
 use sqlite_message_logger::SqliteMessageLogger;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
-use tari_dan_common_types::{optional::Optional, shard_bucket::ShardBucket, Epoch, PeerAddress, ShardId};
+use tari_dan_common_types::{optional::Optional, shard_bucket::ShardBucket, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::NewTransactionMessage;
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, SubstateRecord, TransactionPool, TransactionRecord},
@@ -279,7 +279,7 @@ where
     async fn handle_new_transaction(
         &mut self,
         transaction: Transaction,
-        unverified_output_shards: Vec<ShardId>,
+        unverified_output_shards: Vec<SubstateAddress>,
         should_propagate: bool,
         sender_bucket: Option<ShardBucket>,
     ) -> Result<(), MempoolError> {
@@ -313,7 +313,7 @@ where
         }
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
-        let tx_shard_id = ShardId::for_transaction_receipt(transaction.id().into_array().into());
+        let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_array().into());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
 
@@ -324,7 +324,7 @@ where
         let is_output_shard = local_committee_shard.includes_any_shard(
             // Known output shards
             // This is to allow for the txreceipt output
-            iter::once(&tx_shard_id)
+            iter::once(&tx_substate_address)
                 .chain(unverified_output_shards.iter())
                 .chain(claim_shards.iter()),
         );

@@ -7,7 +7,7 @@ use rand::{rngs::OsRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::PublicKey;
 
-use crate::{shard_bucket::ShardBucket, ShardId};
+use crate::{shard_bucket::ShardBucket, SubstateAddress};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Default, Hash)]
 pub struct Committee<TAddr> {
@@ -197,32 +197,38 @@ impl CommitteeShard {
         self.bucket
     }
 
-    pub fn includes_shard(&self, shard_id: &ShardId) -> bool {
-        let b = shard_id.to_committee_bucket(self.num_committees);
+    pub fn includes_shard(&self, substate_address: &SubstateAddress) -> bool {
+        let b = substate_address.to_committee_bucket(self.num_committees);
         self.bucket == b
     }
 
-    pub fn includes_all_shards<I: IntoIterator<Item = B>, B: Borrow<ShardId>>(&self, shard_ids: I) -> bool {
-        shard_ids
+    pub fn includes_all_shards<I: IntoIterator<Item = B>, B: Borrow<SubstateAddress>>(
+        &self,
+        substate_addresses: I,
+    ) -> bool {
+        substate_addresses
             .into_iter()
-            .all(|shard_id| self.includes_shard(shard_id.borrow()))
+            .all(|substate_address| self.includes_shard(substate_address.borrow()))
     }
 
-    pub fn includes_any_shard<I: IntoIterator<Item = B>, B: Borrow<ShardId>>(&self, shard_ids: I) -> bool {
-        shard_ids
+    pub fn includes_any_shard<I: IntoIterator<Item = B>, B: Borrow<SubstateAddress>>(
+        &self,
+        substate_addresses: I,
+    ) -> bool {
+        substate_addresses
             .into_iter()
-            .any(|shard_id| self.includes_shard(shard_id.borrow()))
+            .any(|substate_address| self.includes_shard(substate_address.borrow()))
     }
 
-    pub fn filter<'a, I, B: Borrow<ShardId>>(&'a self, items: I) -> impl Iterator<Item = B> + '_
+    pub fn filter<'a, I, B: Borrow<SubstateAddress>>(&'a self, items: I) -> impl Iterator<Item = B> + '_
     where I: IntoIterator<Item = B> + 'a {
         items
             .into_iter()
-            .filter(|shard_id| self.includes_shard(shard_id.borrow()))
+            .filter(|substate_address| self.includes_shard(substate_address.borrow()))
     }
 
     /// Calculates the number of distinct buckets for a given shard set
-    pub fn count_distinct_buckets<'a, I: IntoIterator<Item = &'a ShardId>>(&self, shards: I) -> usize {
+    pub fn count_distinct_buckets<'a, I: IntoIterator<Item = &'a SubstateAddress>>(&self, shards: I) -> usize {
         shards
             .into_iter()
             .map(|shard| shard.to_committee_bucket(self.num_committees))

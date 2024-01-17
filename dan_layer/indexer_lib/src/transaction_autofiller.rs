@@ -4,7 +4,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use log::*;
-use tari_dan_common_types::{NodeAddressable, ShardId};
+use tari_dan_common_types::{NodeAddressable, SubstateAddress};
 use tari_engine_types::{
     indexed_value::IndexedValueError,
     substate::{Substate, SubstateId},
@@ -74,7 +74,7 @@ where
         for handle in handles {
             let res = handle.await??;
             if let Some((address, substate)) = res {
-                let shard = ShardId::from_address(&address, substate.version());
+                let shard = SubstateAddress::from_address(&address, substate.version());
                 input_shards.push(shard);
                 found_substates.insert(address, substate);
             }
@@ -114,19 +114,19 @@ where
             for (address, handle) in handles {
                 let scan_res = handle.await??;
 
-                if let SubstateResult::Up { substate, address, .. } = scan_res {
+                if let SubstateResult::Up { substate, id, .. } = scan_res {
                     info!(
                         target: LOG_TARGET,
                         "✏️ Filling related substate {}:v{}",
-                        address,
+                        id,
                         substate.version()
                     );
-                    let shard = ShardId::from_address(&address, substate.version());
-                    if autofilled_transaction.all_inputs_iter().any(|s| *s == shard) {
+                    let substate_address = SubstateAddress::from_address(&id, substate.version());
+                    if autofilled_transaction.all_inputs_iter().any(|s| *s == substate_address) {
                         // Shard is already an input (TODO: what a waste)
                         continue;
                     }
-                    autofilled_inputs.push(ShardId::from_address(&address, substate.version()));
+                    autofilled_inputs.push(SubstateAddress::from_address(&id, substate.version()));
                     found_substates.insert(address, substate);
                 //       found_this_round += 1;
                 } else {
@@ -160,7 +160,7 @@ where
 {
     let scan_res = match req.version() {
         Some(version) => {
-            let shard = ShardId::from_address(req.address(), version);
+            let shard = SubstateAddress::from_address(req.address(), version);
             if transaction.all_inputs_iter().any(|s| *s == shard) {
                 // Shard is already an input
                 return Ok(None);
@@ -177,20 +177,20 @@ where
         },
     };
 
-    if let SubstateResult::Up { substate, address, .. } = &scan_res {
+    if let SubstateResult::Up { substate, id, .. } = &scan_res {
         info!(
             target: LOG_TARGET,
             "Filling input substate {}:v{}",
-            address,
+            id,
             substate.version()
         );
-        let shard = ShardId::from_address(address, substate.version());
+        let shard = SubstateAddress::from_address(id, substate.version());
         if transaction.all_inputs_iter().any(|s| *s == shard) {
             // Shard is already an input (TODO: what a waste)
             return Ok(None);
         }
 
-        Ok(Some((address.clone(), substate.clone())))
+        Ok(Some((id.clone(), substate.clone())))
     } else {
         warn!(
             target: LOG_TARGET,

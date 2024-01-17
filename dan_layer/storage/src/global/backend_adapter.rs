@@ -33,7 +33,7 @@ use tari_dan_common_types::{
     shard_bucket::ShardBucket,
     Epoch,
     NodeAddressable,
-    ShardId,
+    SubstateAddress,
 };
 
 use super::DbEpoch;
@@ -84,7 +84,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         address: Self::Addr,
         public_key: PublicKey,
-        shard_key: ShardId,
+        shard_key: SubstateAddress,
         epoch: Epoch,
         fee_claim_public_key: PublicKey,
     ) -> Result<(), Self::Error>;
@@ -125,7 +125,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
     fn validator_nodes_set_committee_bucket(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        shard_key: ShardId,
+        shard_key: SubstateAddress,
         bucket: ShardBucket,
     ) -> Result<(), Self::Error>;
 
@@ -134,7 +134,7 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        shard_range: RangeInclusive<ShardId>,
+        shard_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error>;
 
     fn validator_nodes_get_by_buckets(

@@ -45,7 +45,7 @@ impl TryFrom<proto::rpc::SubstateUpdate> for SubstateUpdate {
         match update {
             proto::rpc::substate_update::Update::Create(substate_proof) => Ok(Self::Create(substate_proof.try_into()?)),
             proto::rpc::substate_update::Update::Destroy(proof) => Ok(Self::Destroy {
-                shard_id: proof.shard_id.try_into()?,
+                address: proof.address.try_into()?,
                 proof: proof
                     .destroyed_justify
                     .map(TryInto::try_into)
@@ -63,10 +63,10 @@ impl From<SubstateUpdate> for proto::rpc::SubstateUpdate {
             SubstateUpdate::Create(proof) => proto::rpc::substate_update::Update::Create(proof.into()),
             SubstateUpdate::Destroy {
                 proof,
-                shard_id,
+                address,
                 destroyed_by_transaction,
             } => proto::rpc::substate_update::Update::Destroy(proto::rpc::SubstateDestroyedProof {
-                shard_id: shard_id.as_bytes().to_vec(),
+                address: address.as_bytes().to_vec(),
                 destroyed_justify: Some((&proof).into()),
                 destroyed_by_transaction: destroyed_by_transaction.as_bytes().to_vec(),
             }),

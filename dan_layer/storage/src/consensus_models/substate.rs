@@ -11,7 +11,7 @@ use std::{
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, ShardId};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, SubstateAddress};
 use tari_engine_types::substate::{Substate, SubstateId, SubstateValue};
 use tari_transaction::TransactionId;
 
@@ -71,11 +71,11 @@ impl SubstateRecord {
         }
     }
 
-    pub fn to_shard_id(&self) -> ShardId {
-        ShardId::from_address(&self.address, self.version)
+    pub fn to_substate_address(&self) -> SubstateAddress {
+        SubstateAddress::from_address(&self.address, self.version)
     }
 
-    pub fn substate_address(&self) -> &SubstateId {
+    pub fn substate_id(&self) -> &SubstateId {
         &self.address
     }
 
@@ -125,7 +125,7 @@ impl SubstateRecord {
 }
 
 impl SubstateRecord {
-    pub fn try_lock_all<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn try_lock_all<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a SubstateAddress>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,
         inputs: I,
@@ -134,7 +134,7 @@ impl SubstateRecord {
         tx.substates_try_lock_many(locked_by_tx, inputs, lock_flag)
     }
 
-    pub fn check_lock_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn check_lock_all<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a SubstateAddress>>(
         tx: &mut TTx,
         inputs: I,
         lock_flag: SubstateLockFlag,
@@ -142,7 +142,7 @@ impl SubstateRecord {
         tx.substates_check_lock_many(inputs, lock_flag)
     }
 
-    pub fn try_unlock_many<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn try_unlock_many<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a SubstateAddress>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,
         inputs: I,
@@ -152,7 +152,7 @@ impl SubstateRecord {
         Ok(())
     }
 
-    pub fn unlock_any<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn unlock_any<'a, TTx: StateStoreWriteTransaction, I: IntoIterator<Item = &'a SubstateAddress>>(
         tx: &mut TTx,
         locked_by_tx: &TransactionId,
         inputs: I,
@@ -169,13 +169,13 @@ impl SubstateRecord {
 
     pub fn exists<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &mut TTx,
-        shard: &ShardId,
+        shard: &SubstateAddress,
     ) -> Result<bool, StorageError> {
         // TODO: optimise
         Ok(Self::get(tx, shard).optional()?.is_some())
     }
 
-    pub fn any_exist<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = S>, S: Borrow<ShardId>>(
+    pub fn any_exist<TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = S>, S: Borrow<SubstateAddress>>(
         tx: &mut TTx,
         substates: I,
     ) -> Result<bool, StorageError> {
@@ -191,28 +191,28 @@ impl SubstateRecord {
 
     pub fn get<TTx: StateStoreReadTransaction + ?Sized>(
         tx: &mut TTx,
-        shard: &ShardId,
+        shard: &SubstateAddress,
     ) -> Result<SubstateRecord, StorageError> {
         tx.substates_get(shard)
     }
 
-    pub fn get_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a ShardId>>(
+    pub fn get_any<'a, TTx: StateStoreReadTransaction + ?Sized, I: IntoIterator<Item = &'a SubstateAddress>>(
         tx: &mut TTx,
         shards: I,
-    ) -> Result<(Vec<SubstateRecord>, HashSet<ShardId>), StorageError> {
+    ) -> Result<(Vec<SubstateRecord>, HashSet<SubstateAddress>), StorageError> {
         let mut shards = shards.into_iter().copied().collect::<HashSet<_>>();
         let found = tx.substates_get_any(&shards)?;
         for f in &found {
-            shards.remove(&f.to_shard_id());
+            shards.remove(&f.to_substate_address());
         }
 
         Ok((found, shards))
     }
 
-    pub fn get_many_within_range<TTx: StateStoreReadTransaction, B: Borrow<RangeInclusive<ShardId>>>(
+    pub fn get_many_within_range<TTx: StateStoreReadTransaction, B: Borrow<RangeInclusive<SubstateAddress>>>(
         tx: &mut TTx,
         bounds: B,
-        excluded_shards: &[ShardId],
+        excluded_shards: &[SubstateAddress],
     ) -> Result<Vec<SubstateRecord>, StorageError> {
         tx.substates_get_many_within_range(bounds.borrow().start(), bounds.borrow().end(), excluded_shards)
     }
@@ -247,9 +247,9 @@ impl SubstateRecord {
             .transpose()
     }
 
-    pub fn destroy_many<TTx: StateStoreWriteTransaction, I: IntoIterator<Item = ShardId>>(
+    pub fn destroy_many<TTx: StateStoreWriteTransaction, I: IntoIterator<Item = SubstateAddress>>(
         tx: &mut TTx,
-        shard_ids: I,
+        substate_addresses: I,
         epoch: Epoch,
         destroyed_by_block: &BlockId,
         destroyed_justify: &QcId,
@@ -257,7 +257,7 @@ impl SubstateRecord {
         require_locks: bool,
     ) -> Result<(), StorageError> {
         tx.substate_down_many(
-            shard_ids,
+            substate_addresses,
             epoch,
             destroyed_by_block,
             destroyed_by_transaction,
@@ -296,7 +296,7 @@ impl From<SubstateRecord> for SubstateData {
 pub enum SubstateUpdate {
     Create(SubstateCreatedProof),
     Destroy {
-        shard_id: ShardId,
+        address: SubstateAddress,
         proof: QuorumCertificate,
         destroyed_by_transaction: TransactionId,
     },
@@ -341,20 +341,20 @@ impl SubstateUpdate {
                 .create(tx)?;
             },
             Self::Destroy {
-                shard_id,
+                address,
                 proof,
                 destroyed_by_transaction,
             } => {
                 debug!(
                     target: LOG_TARGET,
                     "🔥 Applying substate DESTROY for shard {} (transaction {})",
-                    shard_id,
+                    address,
                     destroyed_by_transaction
                 );
                 proof.save(tx)?;
                 SubstateRecord::destroy_many(
                     tx,
-                    iter::once(shard_id),
+                    iter::once(address),
                     block.epoch(),
                     block.id(),
                     proof.id(),

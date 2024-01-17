@@ -5,7 +5,7 @@ use diesel::{Connection, SqliteConnection};
 use rand::rngs::OsRng;
 use tari_common_types::types::PublicKey;
 use tari_crypto::keys::PublicKey as _;
-use tari_dan_common_types::{Epoch, PeerAddress, ShardId};
+use tari_dan_common_types::{Epoch, PeerAddress, SubstateAddress};
 use tari_dan_storage::global::{GlobalDb, ValidatorNodeDb};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_utilities::ByteArray;
@@ -21,8 +21,8 @@ fn new_public_key() -> PublicKey {
     PublicKey::random_keypair(&mut OsRng).1
 }
 
-fn derived_shard_id(public_key: &PublicKey) -> ShardId {
-    ShardId::from_bytes(public_key.as_bytes()).unwrap()
+fn derived_substate_address(public_key: &PublicKey) -> SubstateAddress {
+    SubstateAddress::from_bytes(public_key.as_bytes()).unwrap()
 }
 
 fn insert_vns(
@@ -44,7 +44,7 @@ fn insert_vn_with_public_key(
         .insert_validator_node(
             public_key.clone().into(),
             public_key.clone(),
-            derived_shard_id(&public_key),
+            derived_substate_address(&public_key),
             epoch,
             public_key,
         )
@@ -93,8 +93,8 @@ fn insert_and_get_within_shard_range_duplicate_public_keys() {
     let pk2 = new_public_key();
     insert_vn_with_public_key(&mut validator_nodes, pk2.clone(), Epoch(1));
 
-    let shard_id = derived_shard_id(&pk);
-    let shard_id2 = derived_shard_id(&pk2);
+    let shard_id = derived_substate_address(&pk);
+    let shard_id2 = derived_substate_address(&pk2);
     let (start, end) = if shard_id > shard_id2 {
         (shard_id2, shard_id)
     } else {

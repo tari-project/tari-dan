@@ -5,7 +5,7 @@ use std::collections::HashSet;
 
 use log::*;
 use sqlite_message_logger::SqliteMessageLogger;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, PeerAddress, ShardId};
+use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::{DanMessage, OutboundService};
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_networking::NetworkingService;
@@ -81,7 +81,7 @@ impl Gossip<PeerAddress> {
     pub async fn forward_to_foreign_replicas(
         &mut self,
         epoch: Epoch,
-        shards: HashSet<ShardId>,
+        shards: HashSet<SubstateAddress>,
         msg: DanMessage,
         exclude_bucket: Option<ShardBucket>,
     ) -> Result<(), MempoolError> {
@@ -167,7 +167,7 @@ impl Gossip<PeerAddress> {
     pub async fn gossip_to_foreign_replicas(
         &mut self,
         epoch: Epoch,
-        shards: HashSet<ShardId>,
+        shards: HashSet<SubstateAddress>,
         msg: DanMessage,
     ) -> Result<(), MempoolError> {
         // let committees = self.epoch_manager.get_committees_by_shards(epoch, shards).await?;

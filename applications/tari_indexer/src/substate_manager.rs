@@ -226,11 +226,11 @@ impl SubstateManager {
         let substate_result = self.substate_scanner.get_substate(substate_address, version).await?;
         match substate_result {
             SubstateResult::Up {
-                address,
+                id,
                 substate,
                 created_by_tx,
             } => Ok(Some(SubstateResponse {
-                address,
+                address: id,
                 version: substate.version(),
                 substate,
                 created_by_transaction: created_by_tx,

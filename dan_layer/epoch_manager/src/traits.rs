@@ -33,7 +33,7 @@ use tari_dan_common_types::{
     shard_bucket::ShardBucket,
     Epoch,
     NodeAddressable,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tokio::sync::broadcast;
@@ -46,11 +46,15 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn subscribe(&self) -> Result<broadcast::Receiver<EpochManagerEvent>, EpochManagerError>;
 
-    async fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError>;
+    async fn get_committee(
+        &self,
+        epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<Committee<Self::Addr>, EpochManagerError>;
     async fn get_committee_within_shard_range(
         &self,
         epoch: Epoch,
-        range: RangeInclusive<ShardId>,
+        range: RangeInclusive<SubstateAddress>,
     ) -> Result<Committee<Self::Addr>, EpochManagerError>;
     async fn get_validator_node(
         &self,
@@ -89,7 +93,11 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn get_our_validator_node(&self, epoch: Epoch) -> Result<ValidatorNode<Self::Addr>, EpochManagerError>;
     async fn get_local_committee_shard(&self, epoch: Epoch) -> Result<CommitteeShard, EpochManagerError>;
-    async fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, EpochManagerError>;
+    async fn get_committee_shard(
+        &self,
+        epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<CommitteeShard, EpochManagerError>;
 
     async fn get_committee_shard_by_validator_public_key(
         &self,
@@ -138,7 +146,10 @@ pub trait EpochManagerReader: Send + Sync {
         Ok(committee.contains(validator_addr))
     }
 
-    async fn get_current_epoch_committee(&self, shard: ShardId) -> Result<Committee<Self::Addr>, EpochManagerError> {
+    async fn get_current_epoch_committee(
+        &self,
+        shard: SubstateAddress,
+    ) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let current_epoch = self.current_epoch().await?;
         self.get_committee(current_epoch, shard).await
     }

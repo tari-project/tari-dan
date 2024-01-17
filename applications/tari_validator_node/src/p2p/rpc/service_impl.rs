@@ -24,7 +24,7 @@ use std::convert::{TryFrom, TryInto};
 
 use log::*;
 use tari_bor::{decode_exact, encode};
-use tari_dan_common_types::{optional::Optional, PeerAddress, ShardId};
+use tari_dan_common_types::{optional::Optional, PeerAddress, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
     StateStore,
@@ -112,15 +112,15 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
     async fn get_substate(&self, req: Request<GetSubstateRequest>) -> Result<Response<GetSubstateResponse>, RpcStatus> {
         let req = req.into_message();
 
-        let shard_id = ShardId::from_bytes(&req.shard)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded shard id: {}", e)))?;
+        let address = SubstateAddress::from_bytes(&req.address)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate id: {}", e)))?;
 
         let mut tx = self
             .shard_state_store
             .create_read_tx()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
-        let maybe_substate = SubstateRecord::get(&mut tx, &shard_id)
+        let maybe_substate = SubstateRecord::get(&mut tx, &address)
             .optional()
             .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
 
@@ -141,7 +141,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
                 .map_err(RpcStatus::log_internal_error(LOG_TARGET))?;
             GetSubstateResponse {
                 status: SubstateStatus::Down as i32,
-                address: substate.substate_address().to_bytes(),
+                address: substate.substate_id().to_bytes(),
                 version: substate.version(),
                 created_transaction_hash: substate.created_by_transaction().into_array().to_vec(),
                 destroyed_transaction_hash: substate
@@ -158,7 +158,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         } else {
             GetSubstateResponse {
                 status: SubstateStatus::Up as i32,
-                address: substate.substate_address().to_bytes(),
+                address: substate.substate_id().to_bytes(),
                 version: substate.version(),
                 substate: substate.substate_value().to_bytes(),
                 created_transaction_hash: substate.created_by_transaction().into_array().to_vec(),

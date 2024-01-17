@@ -26,7 +26,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
     apis::jwt::Claims,
     models::{Account, ConfidentialProofId, TransactionStatus},
@@ -152,8 +152,8 @@ pub struct TransactionWaitResultResponse {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TransactionClaimBurnResponse {
     pub transaction_id: TransactionId,
-    pub inputs: Vec<ShardId>,
-    pub outputs: Vec<ShardId>,
+    pub inputs: Vec<SubstateAddress>,
+    pub outputs: Vec<SubstateAddress>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

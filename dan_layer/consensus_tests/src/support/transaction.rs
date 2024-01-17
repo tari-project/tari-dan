@@ -4,7 +4,7 @@
 use std::{iter, time::Duration};
 
 use tari_common_types::types::PrivateKey;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_dan_storage::consensus_models::{Decision, ExecutedTransaction};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason, TransactionResult},
@@ -19,7 +19,7 @@ pub fn build_transaction_from(
     tx: Transaction,
     decision: Decision,
     fee: u64,
-    resulting_outputs: Vec<ShardId>,
+    resulting_outputs: Vec<SubstateAddress>,
 ) -> ExecutedTransaction {
     let tx_id = *tx.id();
     ExecutedTransaction::new(

@@ -7,7 +7,7 @@ use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::{
     consensus_models::{
@@ -717,7 +717,7 @@ where TConsensusSpec: ConsensusSpec
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         transaction: &Transaction,
         local_committee_shard: &CommitteeShard,
-        locked_inputs: &mut HashSet<ShardId>,
+        locked_inputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
         let inputs = local_committee_shard
             .filter(transaction.inputs().iter().chain(transaction.filled_inputs()))
@@ -816,7 +816,7 @@ where TConsensusSpec: ConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::ReadTransaction<'_>,
         transaction: &ExecutedTransaction,
-        locked_outputs: &mut HashSet<ShardId>,
+        locked_outputs: &mut HashSet<SubstateAddress>,
     ) -> Result<bool, HotStuffError> {
         let state = LockedOutput::check_locks(tx, transaction.resulting_outputs())?;
 

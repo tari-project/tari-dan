@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     uint::{U256, U256_ONE},
-    ShardId,
+    SubstateAddress,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -19,9 +19,9 @@ impl ShardBucket {
         self.0
     }
 
-    pub fn to_shard_range(self, num_committees: u32) -> RangeInclusive<ShardId> {
+    pub fn to_shard_range(self, num_committees: u32) -> RangeInclusive<SubstateAddress> {
         if num_committees == 0 {
-            return RangeInclusive::new(ShardId::zero(), ShardId::from_u256(U256::MAX));
+            return RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::from_u256(U256::MAX));
         }
         let bucket = U256::from(self.0);
         let num_committees = U256::from(num_committees);
@@ -33,7 +33,7 @@ impl ShardBucket {
         if next_bucket != num_committees && bucket_remainder <= bucket {
             end -= U256_ONE;
         }
-        RangeInclusive::new(ShardId::from_u256(start), ShardId::from_u256(end))
+        RangeInclusive::new(SubstateAddress::from_u256(start), SubstateAddress::from_u256(end))
     }
 }
 

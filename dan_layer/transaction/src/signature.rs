@@ -8,7 +8,7 @@ use tari_crypto::{
     keys::PublicKey as PublicKeyT,
     ristretto::{RistrettoPublicKey, RistrettoSecretKey},
 };
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_engine_types::{
     hashing::{hasher64, EngineHashDomainLabel},
     instruction::Instruction,
@@ -18,8 +18,8 @@ use tari_engine_types::{
 pub struct TransactionSignatureFields {
     pub fee_instructions: Vec<Instruction>,
     pub instructions: Vec<Instruction>,
-    pub inputs: Vec<ShardId>,
-    pub input_refs: Vec<ShardId>,
+    pub inputs: Vec<SubstateAddress>,
+    pub input_refs: Vec<SubstateAddress>,
     pub min_epoch: Option<Epoch>,
     pub max_epoch: Option<Epoch>,
 }

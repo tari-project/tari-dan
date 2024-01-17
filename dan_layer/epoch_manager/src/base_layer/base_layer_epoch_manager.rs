@@ -38,7 +38,7 @@ use tari_dan_common_types::{
     DerivableFromPublicKey,
     Epoch,
     NodeAddressable,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::global::{models::ValidatorNode, DbEpoch, GlobalDb, MetadataKey};
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
@@ -58,7 +58,7 @@ pub struct BaseLayerEpochManager<TGlobalStore, TBaseNodeClient> {
     current_block_height: u64,
     tx_events: broadcast::Sender<EpochManagerEvent>,
     node_public_key: PublicKey,
-    current_shard_key: Option<ShardId>,
+    current_shard_key: Option<SubstateAddress>,
     base_layer_consensus_constants: Option<BaseLayerConsensusConstants>,
     is_initial_base_layer_sync_complete: bool,
 }
@@ -368,7 +368,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     pub fn get_committees(
         &self,
         epoch: Epoch,
-        shards: &HashSet<ShardId>,
+        shards: &HashSet<SubstateAddress>,
     ) -> Result<HashMap<ShardBucket, Committee<TAddr>>, EpochManagerError> {
         let num_committees = self.get_number_of_committees(epoch)?;
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
@@ -385,12 +385,15 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     pub fn get_committee_vns_from_shard_key(
         &self,
         epoch: Epoch,
-        shard: ShardId,
+        substate_address: SubstateAddress,
     ) -> Result<Vec<ValidatorNode<TAddr>>, EpochManagerError> {
         // retrieve the validator nodes for this epoch from database, sorted by shard_key
         let vns = self.get_validator_nodes_per_epoch(epoch)?;
         if vns.is_empty() {
-            return Err(EpochManagerError::NoCommitteeVns { shard_id: shard, epoch });
+            return Err(EpochManagerError::NoCommitteeVns {
+                substate_address,
+                epoch,
+            });
         }
 
         let num_committees = calculate_num_committees(vns.len() as u64, self.config.committee_size);
@@ -399,7 +402,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         }
 
         // A shard bucket is a equal slice of the shard space that a validator fits into
-        let shard_bucket = shard.to_committee_bucket(num_committees);
+        let shard_bucket = substate_address.to_committee_bucket(num_committees);
 
         let selected_vns = vns
             .into_iter()
@@ -413,7 +416,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(selected_vns)
     }
 
-    pub fn get_committee(&self, epoch: Epoch, shard: ShardId) -> Result<Committee<TAddr>, EpochManagerError> {
+    pub fn get_committee(&self, epoch: Epoch, shard: SubstateAddress) -> Result<Committee<TAddr>, EpochManagerError> {
         let result = self.get_committee_vns_from_shard_key(epoch, shard)?;
         Ok(Committee::new(
             result.into_iter().map(|v| (v.address, v.public_key)).collect(),
@@ -423,7 +426,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     pub fn is_validator_in_committee(
         &self,
         epoch: Epoch,
-        shard: ShardId,
+        shard: SubstateAddress,
         identity: &TAddr,
     ) -> Result<bool, EpochManagerError> {
         let (start_epoch, end_epoch) = self.get_epoch_range(epoch)?;
@@ -560,7 +563,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         &self,
         epoch: Epoch,
         addr: &TAddr,
-    ) -> Result<RangeInclusive<ShardId>, EpochManagerError> {
+    ) -> Result<RangeInclusive<SubstateAddress>, EpochManagerError> {
         let vn = self.get_validator_node_by_address(epoch, addr)?.ok_or_else(|| {
             EpochManagerError::ValidatorNodeNotRegistered {
                 address: addr.to_string(),
@@ -579,7 +582,7 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
     pub fn get_committee_for_shard_range(
         &self,
         epoch: Epoch,
-        shard_range: RangeInclusive<ShardId>,
+        shard_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Committee<TAddr>, EpochManagerError> {
         let num_committees = self.get_number_of_committees(epoch)?;
 
@@ -627,7 +630,11 @@ impl<TAddr: NodeAddressable + DerivableFromPublicKey>
         Ok(num_committees)
     }
 
-    pub fn get_committee_shard(&self, epoch: Epoch, shard: ShardId) -> Result<CommitteeShard, EpochManagerError> {
+    pub fn get_committee_shard(
+        &self,
+        epoch: Epoch,
+        shard: SubstateAddress,
+    ) -> Result<CommitteeShard, EpochManagerError> {
         let num_committees = self.get_number_of_committees(epoch)?;
         let bucket = shard.to_committee_bucket(num_committees);
         let mut tx = self.global_db.create_transaction()?;

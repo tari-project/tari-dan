@@ -8,7 +8,7 @@ use std::{
 
 use indexmap::{IndexMap, IndexSet};
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_engine_types::lock::LockFlag;
 use tari_transaction::TransactionId;
 
@@ -21,7 +21,7 @@ use crate::{
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct Evidence {
-    evidence: IndexMap<ShardId, ShardEvidence>,
+    evidence: IndexMap<SubstateAddress, ShardEvidence>,
 }
 
 impl Evidence {
@@ -44,8 +44,8 @@ impl Evidence {
         self.evidence.len()
     }
 
-    pub fn get(&self, shard_id: &ShardId) -> Option<&ShardEvidence> {
-        self.evidence.get(shard_id)
+    pub fn get(&self, substate_address: &SubstateAddress) -> Option<&ShardEvidence> {
+        self.evidence.get(substate_address)
     }
 
     pub fn num_complete_shards(&self) -> usize {
@@ -55,15 +55,15 @@ impl Evidence {
             .count()
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&ShardId, &ShardEvidence)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&SubstateAddress, &ShardEvidence)> {
         self.evidence.iter()
     }
 
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&ShardId, &mut ShardEvidence)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (&SubstateAddress, &mut ShardEvidence)> {
         self.evidence.iter_mut()
     }
 
-    pub fn shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+    pub fn shards_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         self.evidence.keys()
     }
 
@@ -72,8 +72,8 @@ impl Evidence {
     }
 
     pub fn merge(&mut self, other: Evidence) -> &mut Self {
-        for (shard_id, shard_evidence) in other.evidence {
-            let entry = self.evidence.entry(shard_id).or_insert_with(|| ShardEvidence {
+        for (substate_address, shard_evidence) in other.evidence {
+            let entry = self.evidence.entry(substate_address).or_insert_with(|| ShardEvidence {
                 qc_ids: IndexSet::new(),
                 lock: shard_evidence.lock,
             });
@@ -83,16 +83,16 @@ impl Evidence {
     }
 }
 
-impl FromIterator<(ShardId, ShardEvidence)> for Evidence {
-    fn from_iter<T: IntoIterator<Item = (ShardId, ShardEvidence)>>(iter: T) -> Self {
+impl FromIterator<(SubstateAddress, ShardEvidence)> for Evidence {
+    fn from_iter<T: IntoIterator<Item = (SubstateAddress, ShardEvidence)>>(iter: T) -> Self {
         Evidence {
             evidence: iter.into_iter().collect(),
         }
     }
 }
 
-impl Extend<(ShardId, ShardEvidence)> for Evidence {
-    fn extend<T: IntoIterator<Item = (ShardId, ShardEvidence)>>(&mut self, iter: T) {
+impl Extend<(SubstateAddress, ShardEvidence)> for Evidence {
+    fn extend<T: IntoIterator<Item = (SubstateAddress, ShardEvidence)>>(&mut self, iter: T) {
         self.evidence.extend(iter.into_iter())
     }
 }
@@ -233,7 +233,7 @@ impl Command {
         }
     }
 
-    pub fn involved_shards(&self) -> impl Iterator<Item = &ShardId> + '_ {
+    pub fn involved_shards(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         match self {
             Command::Prepare(tx) => tx.evidence.shards_iter(),
             Command::LocalPrepared(tx) => tx.evidence.shards_iter(),

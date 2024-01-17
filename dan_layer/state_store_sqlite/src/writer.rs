@@ -9,7 +9,7 @@ use std::{
 
 use diesel::{AsChangeset, ExpressionMethods, OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::*;
-use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight, ShardId};
+use tari_dan_common_types::{optional::Optional, Epoch, NodeAddressable, NodeHeight, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -1016,7 +1016,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+    fn substates_try_lock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
@@ -1085,7 +1085,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(SubstateLockState::LockAcquired)
     }
 
-    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a ShardId>>(
+    fn substates_try_unlock_many<'a, I: IntoIterator<Item = &'a SubstateAddress>>(
         &mut self,
         locked_by_tx: &TransactionId,
         objects: I,
@@ -1181,7 +1181,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         Ok(())
     }
 
-    fn substate_down_many<I: IntoIterator<Item = ShardId>>(
+    fn substate_down_many<I: IntoIterator<Item = SubstateAddress>>(
         &mut self,
         shard_ids: I,
         epoch: Epoch,
@@ -1247,7 +1247,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
         use crate::schema::substates;
 
         let values = (
-            substates::shard_id.eq(serialize_hex(substate.to_shard_id())),
+            substates::shard_id.eq(serialize_hex(substate.to_substate_address())),
             substates::address.eq(substate.address.to_string()),
             substates::version.eq(substate.version as i32),
             substates::data.eq(serialize_json(&substate.substate_value)?),
@@ -1282,7 +1282,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
     ) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<ShardId>,
+        B: Borrow<SubstateAddress>,
     {
         use crate::schema::locked_outputs;
         let block_id_hex = serialize_hex(block_id);
@@ -1320,7 +1320,7 @@ impl<TAddr: NodeAddressable> StateStoreWriteTransaction for SqliteStateStoreWrit
     fn locked_outputs_release_all<I, B>(&mut self, output_shards: I) -> Result<Vec<LockedOutput>, StorageError>
     where
         I: IntoIterator<Item = B>,
-        B: Borrow<ShardId>,
+        B: Borrow<SubstateAddress>,
     {
         use crate::schema::locked_outputs;
 

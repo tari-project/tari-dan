@@ -44,7 +44,7 @@ use tari_dan_common_types::{
     shard_bucket::ShardBucket,
     Epoch,
     NodeAddressable,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::{
     global::{
@@ -340,7 +340,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         tx: &mut Self::DbTransaction<'_>,
         address: Self::Addr,
         public_key: PublicKey,
-        shard_key: ShardId,
+        shard_key: SubstateAddress,
         epoch: Epoch,
         fee_claim_public_key: PublicKey,
     ) -> Result<(), Self::Error> {
@@ -444,7 +444,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
     fn validator_nodes_set_committee_bucket(
         &self,
         tx: &mut Self::DbTransaction<'_>,
-        shard_key: ShardId,
+        shard_key: SubstateAddress,
         bucket: ShardBucket,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
@@ -466,7 +466,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        shard_range: RangeInclusive<ShardId>,
+        shard_range: RangeInclusive<SubstateAddress>,
     ) -> Result<Vec<ValidatorNode<Self::Addr>>, Self::Error> {
         use crate::global::schema::validator_nodes;
 

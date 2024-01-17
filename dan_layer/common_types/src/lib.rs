@@ -23,8 +23,8 @@ pub use node_addressable::*;
 
 pub mod services;
 
-mod shard_id;
-pub use shard_id::ShardId;
+mod substate_address;
+pub use substate_address::SubstateAddress;
 
 mod peer_address;
 pub use peer_address::*;

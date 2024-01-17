@@ -14,7 +14,7 @@ use tari_dan_common_types::{
     hashing::MergedValidatorNodeMerkleProof,
     shard_bucket::ShardBucket,
     Epoch,
-    ShardId,
+    SubstateAddress,
 };
 use tari_dan_storage::global::models::ValidatorNode;
 use tokio::sync::{broadcast, oneshot};
@@ -68,17 +68,17 @@ pub enum EpochManagerRequest<TAddr> {
     },
     GetCommittees {
         epoch: Epoch,
-        shards: HashSet<ShardId>,
+        shards: HashSet<SubstateAddress>,
         reply: Reply<HashMap<ShardBucket, Committee<TAddr>>>,
     },
     GetCommittee {
         epoch: Epoch,
-        shard: ShardId,
+        shard: SubstateAddress,
         reply: Reply<Committee<TAddr>>,
     },
     GetCommitteeForShardRange {
         epoch: Epoch,
-        shard_range: RangeInclusive<ShardId>,
+        shard_range: RangeInclusive<SubstateAddress>,
         reply: Reply<Committee<TAddr>>,
     },
     GetValidatorNodesPerEpoch {
@@ -95,7 +95,7 @@ pub enum EpochManagerRequest<TAddr> {
         reply: Reply<Vec<u8>>,
     },
     IsValidatorInCommitteeForCurrentEpoch {
-        shard: ShardId,
+        shard: SubstateAddress,
         identity: TAddr,
         reply: Reply<bool>,
     },
@@ -114,7 +114,7 @@ pub enum EpochManagerRequest<TAddr> {
     GetLocalShardRange {
         epoch: Epoch,
         for_addr: TAddr,
-        reply: Reply<RangeInclusive<ShardId>>,
+        reply: Reply<RangeInclusive<SubstateAddress>>,
     },
     GetOurValidatorNode {
         epoch: Epoch,
@@ -122,7 +122,7 @@ pub enum EpochManagerRequest<TAddr> {
     },
     GetCommitteeShard {
         epoch: Epoch,
-        shard: ShardId,
+        shard: SubstateAddress,
         reply: Reply<CommitteeShard>,
     },
     GetLocalCommitteeShard {
