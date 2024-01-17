@@ -26,6 +26,7 @@ mod state_machine;
 mod vote_receiver;
 mod worker;
 
+pub use common::*;
 pub use error::*;
 pub use event::*;
 pub use state_machine::*;

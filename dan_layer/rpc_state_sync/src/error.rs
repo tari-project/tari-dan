@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_consensus::hotstuff::HotStuffError;
+use tari_consensus::hotstuff::{HotStuffError, ProposalValidationError};
 use tari_dan_storage::{
     consensus_models::{BlockId, TransactionPoolError},
     StorageError,
@@ -28,6 +28,8 @@ pub enum CommsRpcConsensusSyncError {
     BlockNotSafe { block_id: BlockId },
     #[error("No peers available. The committee size is {committee_size}")]
     NoPeersAvailable { committee_size: usize },
+    #[error("Proposal validation error: {0}")]
+    ProposalValidationError(#[from] ProposalValidationError),
 }
 
 impl From<CommsRpcConsensusSyncError> for HotStuffError {
