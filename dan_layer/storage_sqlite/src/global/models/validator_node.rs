@@ -21,7 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 use tari_common_types::types::PublicKey;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeAddressable, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeAddressable, SubstateAddress};
 use tari_dan_storage::global::models::ValidatorNode;
 use tari_utilities::ByteArray;
 
@@ -54,7 +54,7 @@ impl<TAddr: NodeAddressable> TryFrom<DbValidatorNode> for ValidatorNode<TAddr> {
                 SqliteStorageError::MalformedDbData(format!("Invalid public key in validator node record id={}", vn.id))
             })?,
             epoch: Epoch(vn.epoch as u64),
-            committee_bucket: vn.committee_bucket.map(|v| v as u32).map(ShardBucket::from),
+            committee_shard: vn.committee_bucket.map(|v| v as u32).map(Shard::from),
 
             fee_claim_public_key: PublicKey::from_canonical_bytes(&vn.fee_claim_public_key).map_err(|_| {
                 SqliteStorageError::MalformedDbData(format!(

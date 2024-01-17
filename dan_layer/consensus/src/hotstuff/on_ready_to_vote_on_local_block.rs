@@ -595,7 +595,7 @@ where TConsensusSpec: ConsensusSpec
                         }
 
                         let distinct_shards =
-                            local_committee_shard.count_distinct_buckets(tx_rec.transaction().evidence.shards_iter());
+                            local_committee_shard.count_distinct_shards(tx_rec.transaction().evidence.shards_iter());
                         let distinct_shards = NonZeroU64::new(distinct_shards as u64).ok_or_else(|| {
                             HotStuffError::InvariantError(format!(
                                 "Distinct shards is zero for transaction {} in block {}",

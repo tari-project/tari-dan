@@ -37,7 +37,7 @@ use tari_consensus::messages::{
     VoteMessage,
 };
 use tari_crypto::tari_utilities::ByteArray;
-use tari_dan_common_types::{shard_bucket::ShardBucket, Epoch, NodeHeight, ValidatorMetadata};
+use tari_dan_common_types::{shard::Shard, Epoch, NodeHeight, ValidatorMetadata};
 use tari_dan_storage::consensus_models::{
     BlockId,
     Command,
@@ -400,7 +400,7 @@ impl TryFrom<proto::consensus::ForeignProposal> for ForeignProposal {
 
     fn try_from(value: proto::consensus::ForeignProposal) -> Result<Self, Self::Error> {
         Ok(ForeignProposal {
-            bucket: ShardBucket::from(value.bucket),
+            bucket: Shard::from(value.bucket),
             block_id: BlockId::try_from(value.block_id)?,
             state: proto::consensus::ForeignProposalState::try_from(value.state)
                 .map_err(|_| anyhow!("Invalid foreign proposal state value {}", value.state))?

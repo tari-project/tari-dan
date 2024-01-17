@@ -30,7 +30,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::MergedValidatorNodeMerkleProof,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     NodeAddressable,
     SubstateAddress,
@@ -113,11 +113,11 @@ pub trait EpochManagerReader: Send + Sync {
 
     async fn get_num_committees(&self, epoch: Epoch) -> Result<u32, EpochManagerError>;
 
-    async fn get_committees_by_buckets(
+    async fn get_committees_by_shards(
         &self,
         epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, EpochManagerError>;
+        shards: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError>;
 
     async fn get_local_committee(&self, epoch: Epoch) -> Result<Committee<Self::Addr>, EpochManagerError> {
         let validator = self.get_our_validator_node(epoch).await?;

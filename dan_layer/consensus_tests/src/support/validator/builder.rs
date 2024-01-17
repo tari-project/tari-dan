@@ -3,7 +3,7 @@
 
 use tari_common_types::types::PublicKey;
 use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
-use tari_dan_common_types::{shard_bucket::ShardBucket, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, SubstateAddress};
 use tari_dan_storage::consensus_models::{ForeignReceiveCounters, TransactionPool};
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -25,7 +25,7 @@ pub struct ValidatorBuilder {
     pub address: TestAddress,
     pub public_key: PublicKey,
     pub shard: SubstateAddress,
-    pub bucket: ShardBucket,
+    pub bucket: Shard,
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub epoch_manager: Option<TestEpochManager>,
@@ -37,7 +37,7 @@ impl ValidatorBuilder {
             address: TestAddress::new("default"),
             public_key: PublicKey::default(),
             shard: SubstateAddress::zero(),
-            bucket: ShardBucket::from(0),
+            bucket: Shard::from(0),
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
             epoch_manager: None,
@@ -50,7 +50,7 @@ impl ValidatorBuilder {
         self
     }
 
-    pub fn with_bucket(&mut self, bucket: ShardBucket) -> &mut Self {
+    pub fn with_bucket(&mut self, bucket: Shard) -> &mut Self {
         self.bucket = bucket;
         self
     }

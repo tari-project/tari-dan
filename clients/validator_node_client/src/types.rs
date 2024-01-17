@@ -25,7 +25,7 @@ use std::{ops::RangeInclusive, time::Duration};
 use multiaddr::Multiaddr;
 use serde::{Deserialize, Serialize};
 use tari_common_types::{transaction::TxId, types::PublicKey};
-use tari_dan_common_types::{committee::CommitteeShard, shard_bucket::ShardBucket, Epoch, SubstateAddress};
+use tari_dan_common_types::{committee::CommitteeShard, shard::Shard, Epoch, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, ExecutedTransaction, QuorumDecision, SubstateRecord},
     global::models::ValidatorNode,
@@ -239,7 +239,7 @@ pub struct GetNetworkCommitteeResponse<TAddr> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitteeShardInfo<TAddr> {
-    pub bucket: ShardBucket,
+    pub bucket: Shard,
     pub shard_range: RangeInclusive<SubstateAddress>,
     pub validators: Vec<ValidatorNode<TAddr>>,
 }

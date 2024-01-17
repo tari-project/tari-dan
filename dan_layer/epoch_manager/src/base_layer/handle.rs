@@ -13,7 +13,7 @@ use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::MergedValidatorNodeMerkleProof,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     NodeAddressable,
     SubstateAddress,
@@ -160,7 +160,7 @@ impl<TAddr: NodeAddressable> EpochManagerHandle<TAddr> {
         &self,
         epoch: Epoch,
         shards: HashSet<SubstateAddress>,
-    ) -> Result<HashMap<ShardBucket, Committee<TAddr>>, EpochManagerError> {
+    ) -> Result<HashMap<Shard, Committee<TAddr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommittees {
@@ -368,11 +368,11 @@ impl<TAddr: NodeAddressable> EpochManagerReader for EpochManagerHandle<TAddr> {
         rx.await.map_err(|_| EpochManagerError::ReceiveError)?
     }
 
-    async fn get_committees_by_buckets(
+    async fn get_committees_by_shards(
         &self,
         epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, EpochManagerError> {
+        buckets: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, EpochManagerError> {
         let (tx, rx) = oneshot::channel();
         self.tx_request
             .send(EpochManagerRequest::GetCommitteesByBuckets {

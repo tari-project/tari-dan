@@ -19,7 +19,7 @@ use tari_engine_types::{
     transaction_receipt::TransactionReceiptAddress,
 };
 
-use crate::{shard_bucket::ShardBucket, uint::U256};
+use crate::{shard::Shard, uint::U256};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 pub struct SubstateAddress(#[serde(with = "serde_with::hex")] pub [u8; 32]);
@@ -76,22 +76,22 @@ impl SubstateAddress {
         U256::from_be_bytes(self.0)
     }
 
-    /// Calculates and returns the bucket number that this SubstateAddress belongs.
-    /// A bucket is an equal division of the 256-bit shard space.
-    pub fn to_committee_bucket(&self, num_committees: u32) -> ShardBucket {
+    /// Calculates and returns the shard number that this SubstateAddress belongs.
+    /// A shard is an equal division of the 256-bit shard space.
+    pub fn to_committee_shard(&self, num_committees: u32) -> Shard {
         if num_committees == 0 {
-            return ShardBucket::from(0u32);
+            return Shard::from(0u32);
         }
-        let bucket_size = U256::MAX / U256::from(num_committees);
+        let shard_size = U256::MAX / U256::from(num_committees);
         // 4,294,967,295 committees.
-        u32::try_from(self.to_u256() / bucket_size)
-            .expect("to_committee_bucket: num_committees is a u32, so this cannot fail")
+        u32::try_from(self.to_u256() / shard_size)
+            .expect("to_committee_shard: num_committees is a u32, so this cannot fail")
             .into()
     }
 
     pub fn to_committee_range(&self, num_committees: u32) -> RangeInclusive<SubstateAddress> {
-        let bucket = self.to_committee_bucket(num_committees);
-        bucket.to_shard_range(num_committees)
+        let shard = self.to_committee_shard(num_committees);
+        shard.to_shard_range(num_committees)
     }
 }
 
@@ -179,25 +179,25 @@ mod tests {
     }
 
     #[test]
-    fn buckets() {
-        let bucket = SubstateAddress::max().to_committee_bucket(0);
-        assert_eq!(bucket, 0);
-        let bucket = divide_floor(SubstateAddress::max(), 5).to_committee_bucket(20);
-        assert_eq!(bucket, 4);
-        let bucket = divide_floor(SubstateAddress::max(), 2).to_committee_bucket(10);
-        assert_eq!(bucket, 5);
-        let bucket = divide_floor(SubstateAddress::max(), 2).to_committee_bucket(256);
-        assert_eq!(bucket, 128);
+    fn shards() {
+        let shard = SubstateAddress::max().to_committee_shard(0);
+        assert_eq!(shard, 0);
+        let shard = divide_floor(SubstateAddress::max(), 5).to_committee_shard(20);
+        assert_eq!(shard, 4);
+        let shard = divide_floor(SubstateAddress::max(), 2).to_committee_shard(10);
+        assert_eq!(shard, 5);
+        let shard = divide_floor(SubstateAddress::max(), 2).to_committee_shard(256);
+        assert_eq!(shard, 128);
     }
 
     #[test]
     fn max_committees() {
-        let bucket = SubstateAddress::max().to_committee_bucket(u32::MAX);
-        assert_eq!(bucket, u32::MAX);
+        let shard = SubstateAddress::max().to_committee_shard(u32::MAX);
+        assert_eq!(shard, u32::MAX);
     }
 
-    fn shard(bucket: u32, of: u32) -> SubstateAddress {
-        SubstateAddress::from_u256(U256::from(bucket) * (U256::MAX / U256::from(of)))
+    fn shard(shard: u32, of: u32) -> SubstateAddress {
+        SubstateAddress::from_u256(U256::from(shard) * (U256::MAX / U256::from(of)))
     }
 
     fn divide_floor(shard: SubstateAddress, by: u32) -> SubstateAddress {

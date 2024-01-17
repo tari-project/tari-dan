@@ -2,9 +2,9 @@
 //    SPDX-License-Identifier: BSD-3-Clause
 
 use rand::{rngs::OsRng, Rng};
-use tari_dan_common_types::{shard_bucket::ShardBucket, uint::U256, SubstateAddress};
+use tari_dan_common_types::{shard::Shard, uint::U256, SubstateAddress};
 
-pub(crate) fn random_shard_in_bucket(bucket: ShardBucket, num_committees: u32) -> SubstateAddress {
+pub(crate) fn random_shard_in_bucket(bucket: Shard, num_committees: u32) -> SubstateAddress {
     let shard_size = U256::MAX / U256::from(num_committees);
     // Hack to get a random u256 in a range since U256 doesnt implement UniformSample
     let mut bytes = [0u8; 16];

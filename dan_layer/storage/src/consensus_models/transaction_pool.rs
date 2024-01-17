@@ -351,7 +351,7 @@ impl TransactionPoolRecord {
     pub fn add_evidence(&mut self, committee_shard: &CommitteeShard, qc_id: QcId) -> &mut Self {
         let evidence = &mut self.transaction.evidence;
         for (shard, evidence_mut) in evidence.iter_mut() {
-            if committee_shard.includes_shard(shard) {
+            if committee_shard.includes_substate_address(shard) {
                 evidence_mut.qc_ids.insert(qc_id);
             }
         }

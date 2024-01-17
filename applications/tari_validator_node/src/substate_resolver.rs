@@ -223,7 +223,7 @@ where
         let mut remote_claim_vns = Vec::new();
         claim_instructions.into_iter().for_each(|(epoch, public_key)| {
             let vn = validators.get(&(epoch, public_key.clone())).unwrap();
-            if local_committee_shard.includes_shard(&vn.shard_key) {
+            if local_committee_shard.includes_substate_address(&vn.shard_key) {
                 local_claim_vns.push((epoch, public_key))
             } else {
                 remote_claim_vns.push((epoch, public_key, vn.shard_key))

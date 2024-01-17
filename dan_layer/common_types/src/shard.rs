@@ -12,9 +12,9 @@ use crate::{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ShardBucket(u32);
+pub struct Shard(u32);
 
-impl ShardBucket {
+impl Shard {
     pub fn as_u32(self) -> u32 {
         self.0
     }
@@ -37,24 +37,24 @@ impl ShardBucket {
     }
 }
 
-impl From<u32> for ShardBucket {
+impl From<u32> for Shard {
     fn from(v: u32) -> Self {
         Self(v)
     }
 }
 
-impl PartialEq<u32> for ShardBucket {
+impl PartialEq<u32> for Shard {
     fn eq(&self, other: &u32) -> bool {
         self.0 == *other
     }
 }
-impl PartialEq<ShardBucket> for u32 {
-    fn eq(&self, other: &ShardBucket) -> bool {
+impl PartialEq<Shard> for u32 {
+    fn eq(&self, other: &Shard) -> bool {
         *self == other.as_u32()
     }
 }
 
-impl Display for ShardBucket {
+impl Display for Shard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.as_u32())
     }
@@ -71,7 +71,7 @@ mod test {
             let mut min_committee_size = U256::MAX;
             let mut max_committee_size = U256::ZERO;
             for bucket_index in 0..num_of_committees {
-                let bucket = super::ShardBucket::from(bucket_index);
+                let bucket = super::Shard::from(bucket_index);
                 let range = bucket.to_shard_range(num_of_committees);
                 if bucket_index > 0 {
                     assert_eq!(

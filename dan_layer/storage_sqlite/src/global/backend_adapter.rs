@@ -41,7 +41,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::Committee,
     hashing::ValidatorNodeBalancedMerkleTree,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     NodeAddressable,
     SubstateAddress,
@@ -423,7 +423,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        bucket: ShardBucket,
+        bucket: Shard,
     ) -> Result<u64, Self::Error> {
         let count = sql_query(
             "SELECT COUNT(distinct public_key) as cnt FROM validator_nodes WHERE epoch >= ? AND epoch <= ? AND \
@@ -445,7 +445,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: SubstateAddress,
-        bucket: ShardBucket,
+        bucket: Shard,
     ) -> Result<(), Self::Error> {
         use crate::global::schema::validator_nodes;
 
@@ -492,8 +492,8 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, Self::Error> {
+        buckets: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error> {
         use crate::global::schema::validator_nodes;
 
         let validators: Vec<DbValidatorNode> = validator_nodes::table
@@ -513,7 +513,7 @@ impl<TAddr: NodeAddressable> GlobalDbAdapter for SqliteGlobalDbAdapter<TAddr> {
         }
 
         for validator in distinct_validators_sorted(validators)? {
-            let Some(bucket) = validator.committee_bucket else {
+            let Some(bucket) = validator.committee_shard else {
                 continue;
             };
             committees

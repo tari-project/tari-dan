@@ -12,7 +12,7 @@ use tari_core::transactions::transaction_components::ValidatorNodeRegistration;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     hashing::MergedValidatorNodeMerkleProof,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     SubstateAddress,
 };
@@ -69,7 +69,7 @@ pub enum EpochManagerRequest<TAddr> {
     GetCommittees {
         epoch: Epoch,
         shards: HashSet<SubstateAddress>,
-        reply: Reply<HashMap<ShardBucket, Committee<TAddr>>>,
+        reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
     GetCommittee {
         epoch: Epoch,
@@ -135,8 +135,8 @@ pub enum EpochManagerRequest<TAddr> {
     },
     GetCommitteesByBuckets {
         epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-        reply: Reply<HashMap<ShardBucket, Committee<TAddr>>>,
+        buckets: HashSet<Shard>,
+        reply: Reply<HashMap<Shard, Committee<TAddr>>>,
     },
     GetFeeClaimPublicKey {
         reply: Reply<Option<PublicKey>>,

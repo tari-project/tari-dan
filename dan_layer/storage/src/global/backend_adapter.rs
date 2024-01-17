@@ -30,7 +30,7 @@ use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{
     committee::Committee,
     hashing::ValidatorNodeBalancedMerkleTree,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     NodeAddressable,
     SubstateAddress,
@@ -119,14 +119,14 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        bucket: ShardBucket,
+        bucket: Shard,
     ) -> Result<u64, Self::Error>;
 
     fn validator_nodes_set_committee_bucket(
         &self,
         tx: &mut Self::DbTransaction<'_>,
         shard_key: SubstateAddress,
-        bucket: ShardBucket,
+        bucket: Shard,
     ) -> Result<(), Self::Error>;
 
     fn validator_nodes_get_by_shard_range(
@@ -142,8 +142,8 @@ pub trait GlobalDbAdapter: AtomicDb + Send + Sync + Clone {
         tx: &mut Self::DbTransaction<'_>,
         start_epoch: Epoch,
         end_epoch: Epoch,
-        buckets: HashSet<ShardBucket>,
-    ) -> Result<HashMap<ShardBucket, Committee<Self::Addr>>, Self::Error>;
+        buckets: HashSet<Shard>,
+    ) -> Result<HashMap<Shard, Committee<Self::Addr>>, Self::Error>;
 
     fn insert_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: DbEpoch) -> Result<(), Self::Error>;
     fn get_epoch(&self, tx: &mut Self::DbTransaction<'_>, epoch: u64) -> Result<Option<DbEpoch>, Self::Error>;

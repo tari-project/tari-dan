@@ -12,7 +12,7 @@ pub mod hashing;
 pub mod optional;
 
 mod node_height;
-pub mod shard_bucket;
+pub mod shard;
 pub use node_height::NodeHeight;
 
 mod validator_metadata;
