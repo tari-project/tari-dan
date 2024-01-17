@@ -36,8 +36,8 @@ use tari_dan_engine::{
 };
 use tari_engine_types::{
     commit_result::ExecuteResult,
-    substate::{Substate, SubstateAddress},
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    substate::{Substate, SubstateId},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
 use tari_epoch_manager::{base_layer::EpochManagerHandle, EpochManagerReader};
 use tari_indexer_lib::{
@@ -145,7 +145,7 @@ where TSubstateCache: SubstateCache + 'static
         &self,
         transaction: &Transaction,
         epoch: Epoch,
-    ) -> Result<HashMap<SubstateAddress, Substate>, DryRunTransactionProcessorError> {
+    ) -> Result<HashMap<SubstateId, Substate>, DryRunTransactionProcessorError> {
         let mut substates = HashMap::new();
 
         for shard_id in transaction.inputs().iter().chain(transaction.input_refs()) {
@@ -165,7 +165,7 @@ where TSubstateCache: SubstateCache + 'static
         &self,
         shard_id: ShardId,
         epoch: Epoch,
-    ) -> Result<(SubstateAddress, Substate), DryRunTransactionProcessorError> {
+    ) -> Result<(SubstateId, Substate), DryRunTransactionProcessorError> {
         let mut committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
         committee.shuffle();
 
@@ -212,7 +212,7 @@ where TSubstateCache: SubstateCache + 'static
         let mut virtual_substates = VirtualSubstates::new();
 
         virtual_substates.insert(
-            VirtualSubstateAddress::CurrentEpoch,
+            VirtualSubstateId::CurrentEpoch,
             VirtualSubstate::CurrentEpoch(epoch.as_u64()),
         );
 

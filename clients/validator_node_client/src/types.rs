@@ -35,7 +35,7 @@ use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult},
     fees::FeeCostBreakdown,
     serde_with,
-    substate::{SubstateAddress, SubstateValue},
+    substate::{SubstateId, SubstateValue},
     TemplateAddress,
 };
 use tari_transaction::{Transaction, TransactionId};
@@ -262,7 +262,7 @@ pub struct GetStateResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateRequest {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: u32,
 }
 

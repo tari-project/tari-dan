@@ -9,18 +9,18 @@ use std::{
 use tari_dan_common_types::optional::IsNotFoundError;
 use tari_engine_types::{
     lock::{LockFlag, LockId},
-    substate::SubstateAddress,
+    substate::SubstateId,
 };
 
 #[derive(Debug, Default, Clone)]
 pub struct LockedSubstates {
-    lock_ids: HashMap<LockId, SubstateAddress>,
-    locks: HashMap<SubstateAddress, LockState>,
+    lock_ids: HashMap<LockId, SubstateId>,
+    locks: HashMap<SubstateId, LockState>,
     id_counter: LockId,
 }
 
 impl LockedSubstates {
-    pub fn try_lock(&mut self, addr: &SubstateAddress, lock_flag: LockFlag) -> Result<LockId, LockError> {
+    pub fn try_lock(&mut self, addr: &SubstateId, lock_flag: LockFlag) -> Result<LockId, LockError> {
         match self.locks.get(addr) {
             Some(state @ LockState::Read(count)) => {
                 if lock_flag.is_write() {
@@ -167,13 +167,13 @@ impl Display for LockState {
 
 #[derive(Debug, Clone)]
 pub struct LockedSubstate {
-    address: SubstateAddress,
+    address: SubstateId,
     lock_id: u32,
     lock_flag: LockFlag,
 }
 
 impl LockedSubstate {
-    pub(super) fn new(address: SubstateAddress, lock_id: u32, lock_flag: LockFlag) -> Self {
+    pub(super) fn new(address: SubstateId, lock_id: u32, lock_flag: LockFlag) -> Self {
         Self {
             address,
             lock_id,
@@ -181,7 +181,7 @@ impl LockedSubstate {
         }
     }
 
-    pub fn address(&self) -> &SubstateAddress {
+    pub fn address(&self) -> &SubstateId {
         &self.address
     }
 
@@ -210,20 +210,20 @@ pub enum LockError {
     #[error("Lock ID not found: {lock_id}")]
     LockIdNotFound { lock_id: LockId },
     #[error("Substate {address} not locked")]
-    SubstateNotLocked { address: SubstateAddress },
+    SubstateNotLocked { address: SubstateId },
     #[error("BUG: Invariant error: {details}")]
     InvariantError { function: &'static str, details: String },
     #[error("Requested {requested_lock} lock on substate {address} but it is already locked with {lock_state}")]
     InvalidLockRequest {
-        address: SubstateAddress,
+        address: SubstateId,
         requested_lock: LockFlag,
         lock_state: LockState,
     },
     #[error("Multiple write locks requested for substate {address}")]
-    MultipleWriteLockRequested { address: SubstateAddress },
+    MultipleWriteLockRequested { address: SubstateId },
     #[error("Lock for {address} does not have the required access. Requested: {requested}, Actual: {actual}")]
     InvalidLockAccess {
-        address: SubstateAddress,
+        address: SubstateId,
         requested: LockFlag,
         actual: LockFlag,
     },

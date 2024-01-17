@@ -53,7 +53,7 @@ use tari_dan_storage::consensus_models::{
     SubstateRecord,
     TransactionAtom,
 };
-use tari_engine_types::substate::{SubstateAddress, SubstateValue};
+use tari_engine_types::substate::{SubstateId, SubstateValue};
 use tari_transaction::TransactionId;
 
 use crate::proto::{self};
@@ -535,7 +535,7 @@ impl TryFrom<proto::consensus::Substate> for SubstateRecord {
 
     fn try_from(value: proto::consensus::Substate) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: SubstateAddress::from_bytes(&value.address)?,
+            address: SubstateId::from_bytes(&value.address)?,
             version: value.version,
             substate_value: SubstateValue::from_bytes(&value.substate)?,
             state_hash: Default::default(),

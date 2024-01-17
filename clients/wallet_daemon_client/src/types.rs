@@ -36,7 +36,7 @@ use tari_engine_types::{
     instruction::Instruction,
     instruction_result::InstructionResult,
     serde_with,
-    substate::SubstateAddress,
+    substate::SubstateId,
 };
 use tari_template_lib::{
     args::Arg,
@@ -197,7 +197,7 @@ pub struct AccountsCreateRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsCreateResponse {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub public_key: PublicKey,
     pub result: FinalizeResult,
 }
@@ -244,13 +244,13 @@ pub struct AccountsGetBalancesRequest {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct AccountsGetBalancesResponse {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub balances: Vec<BalanceEntry>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct BalanceEntry {
-    pub vault_address: SubstateAddress,
+    pub vault_address: SubstateId,
     #[serde(with = "serde_with::string")]
     pub resource_address: ResourceAddress,
     pub balance: Amount,

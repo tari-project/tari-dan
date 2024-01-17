@@ -7,7 +7,7 @@ use log::*;
 use tari_dan_common_types::{NodeAddressable, ShardId};
 use tari_engine_types::{
     indexed_value::IndexedValueError,
-    substate::{Substate, SubstateAddress},
+    substate::{Substate, SubstateId},
 };
 use tari_epoch_manager::EpochManagerReader;
 use tari_transaction::{SubstateRequirement, Transaction};
@@ -52,7 +52,7 @@ where
         &self,
         original_transaction: Transaction,
         substate_requirements: Vec<SubstateRequirement>,
-    ) -> Result<(Transaction, HashMap<SubstateAddress, Substate>), TransactionAutofillerError> {
+    ) -> Result<(Transaction, HashMap<SubstateId, Substate>), TransactionAutofillerError> {
         // we will include the inputs and outputs into the "involved_objects" field
         // note that the transaction hash will not change as the "involved_objects" is not part of the hash
         let mut autofilled_transaction = original_transaction;
@@ -91,7 +91,7 @@ where
             // TODO: we are going to only check the first level of recursion, for composability we may want to do it
             // recursively (with a recursion limit)
             let mut autofilled_inputs = vec![];
-            let related_addresses: Vec<Vec<SubstateAddress>> = found_substates
+            let related_addresses: Vec<Vec<SubstateId>> = found_substates
                 .values()
                 .map(find_related_substates)
                 .collect::<Result<_, _>>()?;
@@ -151,7 +151,7 @@ pub async fn get_substate_requirement<TEpochManager, TVnClient, TAddr, TSubstate
     substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
     transaction: Arc<Transaction>,
     req: SubstateRequirement,
-) -> Result<Option<(SubstateAddress, Substate)>, IndexerError>
+) -> Result<Option<(SubstateId, Substate)>, IndexerError>
 where
     TEpochManager: EpochManagerReader<Addr = TAddr>,
     TVnClient: ValidatorNodeClientFactory<Addr = TAddr>,
@@ -202,7 +202,7 @@ where
 
 pub async fn get_substate<TEpochManager, TVnClient, TAddr, TSubstateCache>(
     substate_scanner: Arc<SubstateScanner<TEpochManager, TVnClient, TSubstateCache>>,
-    substate_address: SubstateAddress,
+    substate_address: SubstateId,
     version_hint: Option<u32>,
 ) -> Result<SubstateResult, IndexerError>
 where

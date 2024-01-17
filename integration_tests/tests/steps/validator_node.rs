@@ -18,7 +18,7 @@ use libp2p::Multiaddr;
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::{optional::Optional, Epoch, ShardId};
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_template_lib::Hash;
 use tari_validator_node_client::types::{AddPeerRequest, GetStateRequest, GetTemplateRequest, ListBlocksRequest};
 
@@ -297,10 +297,7 @@ async fn then_validator_node_has_state_at(world: &mut TariWorld, vn_name: String
         .unwrap_or_else(|| panic!("Address {} not found", state_address_name));
     let vn = world.get_validator_node(&vn_name);
     let mut client = vn.create_client();
-    let shard_id = ShardId::from_address(
-        &SubstateAddress::from_str(state_address).expect("Invalid state address"),
-        0,
-    );
+    let shard_id = ShardId::from_address(&SubstateId::from_str(state_address).expect("Invalid state address"), 0);
     if let Err(e) = client.get_state(GetStateRequest { shard_id }).await {
         println!("Failed to get state: {}", e);
         panic!("Failed to get state: {}", e);

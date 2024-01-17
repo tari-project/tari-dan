@@ -11,8 +11,8 @@ use tari_dan_engine::{runtime::VirtualSubstates, state_store::memory::MemoryStat
 use tari_dan_storage::{consensus_models::SubstateRecord, StateStore, StorageError};
 use tari_engine_types::{
     instruction::Instruction,
-    substate::SubstateAddress,
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    substate::SubstateId,
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
 use tari_epoch_manager::{EpochManagerError, EpochManagerReader};
 use tari_indexer_lib::{error::IndexerError, substate_cache::SubstateCache, substate_scanner::SubstateScanner};
@@ -124,7 +124,7 @@ where
         let mut retrieved_substates = VirtualSubstates::with_capacity(claim_instructions.len());
         for (epoch, vn_pk, shard) in claim_instructions {
             let timer = Instant::now();
-            let address = VirtualSubstateAddress::UnclaimedValidatorFee {
+            let address = VirtualSubstateId::UnclaimedValidatorFee {
                 epoch: epoch.as_u64(),
                 address: vn_pk,
             };
@@ -193,7 +193,7 @@ where
 
         let mut virtual_substates = VirtualSubstates::new();
         virtual_substates.insert(
-            VirtualSubstateAddress::CurrentEpoch,
+            VirtualSubstateId::CurrentEpoch,
             VirtualSubstate::CurrentEpoch(current_epoch.as_u64()),
         );
 
@@ -248,7 +248,7 @@ pub enum SubstateResolverError {
     #[error("Input substate does not exist: {shard}")]
     InputSubstateDoesNotExist { shard: ShardId },
     #[error("Input substate is downed: {address} (version: {version})")]
-    InputSubstateDowned { address: SubstateAddress, version: u32 },
+    InputSubstateDowned { address: SubstateId, version: u32 },
     #[error("Virtual substate error: {0}")]
     VirtualSubstateError(#[from] VirtualSubstateError),
     #[error("Epoch manager error: {0}")]

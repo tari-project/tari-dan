@@ -29,7 +29,7 @@ use tari_dan_storage::{
     consensus_models::{Block, BlockId, HighQc, LockedBlock, QuorumCertificate, SubstateRecord, TransactionRecord},
     StateStore,
 };
-use tari_engine_types::virtual_substate::VirtualSubstateAddress;
+use tari_engine_types::virtual_substate::VirtualSubstateId;
 use tari_epoch_manager::base_layer::EpochManagerHandle;
 use tari_rpc_framework::{Request, Response, RpcStatus, Streaming};
 use tari_state_store_sqlite::SqliteStateStore;
@@ -113,7 +113,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
         let req = req.into_message();
 
         let shard_id = ShardId::from_bytes(&req.shard)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate address: {}", e)))?;
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded shard id: {}", e)))?;
 
         let mut tx = self
             .shard_state_store
@@ -176,8 +176,8 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
     ) -> Result<Response<proto::rpc::GetVirtualSubstateResponse>, RpcStatus> {
         let req = req.into_message();
 
-        let address = decode_exact::<VirtualSubstateAddress>(&req.address)
-            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate address: {}", e)))?;
+        let address = decode_exact::<VirtualSubstateId>(&req.address)
+            .map_err(|e| RpcStatus::bad_request(&format!("Invalid encoded substate id: {}", e)))?;
 
         let substate = self
             .virtual_substate_manager
@@ -187,7 +187,7 @@ impl ValidatorNodeRpcService for ValidatorNodeRpcServiceImpl {
 
         let resp = proto::rpc::GetVirtualSubstateResponse {
             substate: encode(&substate)
-                .map_err(|e| RpcStatus::general(&format!("Unable to encode substate address: {}", e)))?,
+                .map_err(|e| RpcStatus::general(&format!("Unable to encode substate: {}", e)))?,
             // TODO: evidence for the correctness of the substate
             quorum_certificates: vec![],
         };

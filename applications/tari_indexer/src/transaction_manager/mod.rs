@@ -30,7 +30,7 @@ use tari_dan_common_types::{
     NodeAddressable,
     ShardId,
 };
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::EpochManagerReader;
 use tari_indexer_lib::{
     substate_cache::SubstateCache,
@@ -128,7 +128,7 @@ where
 
     pub async fn get_substate(
         &self,
-        substate_address: SubstateAddress,
+        substate_address: SubstateId,
         version: u32,
     ) -> Result<SubstateResult, TransactionManagerError> {
         let shard = ShardId::from_address(&substate_address, version);

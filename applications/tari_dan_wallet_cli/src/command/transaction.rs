@@ -41,7 +41,7 @@ use tari_engine_types::{
     instruction::Instruction,
     instruction_result::InstructionResult,
     parse_template_address,
-    substate::{SubstateAddress, SubstateDiff, SubstateValue},
+    substate::{SubstateDiff, SubstateId, SubstateValue},
     TemplateAddress,
 };
 use tari_template_lib::{
@@ -162,7 +162,7 @@ pub enum CliInstruction {
         args: Vec<CliArg>,
     },
     CallMethod {
-        component_address: SubstateAddress,
+        component_address: SubstateId,
         method_name: String,
         #[clap(long, short = 'a')]
         args: Vec<CliArg>,
@@ -389,7 +389,7 @@ pub async fn submit_transaction(
     println!();
     println!("✅ Transaction {} submitted.", resp.transaction_id);
     println!();
-    // TODO: Would be great if we could display the Substate addresses as well as shard ids
+    // TODO: Would be great if we could display the substate ids as well as shard ids
     summarize_request(&request, &resp.inputs);
 
     println!();
@@ -490,7 +490,7 @@ pub fn print_substate_diff(diff: &SubstateDiff) {
                 println!("      ▶ Layer 1 commitment: {}", address);
             },
             SubstateValue::NonFungibleIndex(index) => {
-                let referenced_address = SubstateAddress::from(index.referenced_address().clone());
+                let referenced_address = SubstateId::from(index.referenced_address().clone());
                 println!("      ▶ NFT index {} referencing {}", address, referenced_address);
             },
             SubstateValue::FeeClaim(fee_claim) => {
@@ -701,7 +701,7 @@ pub enum CliArg {
     Bool(bool),
     Blob(tari_bor::Value),
     NonFungibleId(NonFungibleId),
-    SubstateAddress(SubstateAddress),
+    SubstateId(SubstateId),
     TemplateAddress(TemplateAddress),
 }
 
@@ -742,8 +742,8 @@ impl FromStr for CliArg {
             return Ok(CliArg::Bool(v));
         }
 
-        if let Ok(v) = s.parse::<SubstateAddress>() {
-            return Ok(CliArg::SubstateAddress(v));
+        if let Ok(v) = s.parse::<SubstateId>() {
+            return Ok(CliArg::SubstateId(v));
         }
 
         if let Some(v) = parse_template_address(s.to_owned()) {
@@ -781,15 +781,15 @@ impl CliArg {
             CliArg::I8(v) => arg!(v),
             CliArg::Bool(v) => arg!(v),
             CliArg::Blob(v) => Arg::literal(v).unwrap(),
-            CliArg::SubstateAddress(v) => match v {
-                SubstateAddress::Component(v) => arg!(v),
-                SubstateAddress::Resource(v) => arg!(v),
-                SubstateAddress::Vault(v) => arg!(v),
-                SubstateAddress::UnclaimedConfidentialOutput(v) => arg!(v),
-                SubstateAddress::NonFungible(v) => arg!(v),
-                SubstateAddress::NonFungibleIndex(v) => arg!(v),
-                SubstateAddress::TransactionReceipt(v) => arg!(v),
-                SubstateAddress::FeeClaim(v) => arg!(v),
+            CliArg::SubstateId(v) => match v {
+                SubstateId::Component(v) => arg!(v),
+                SubstateId::Resource(v) => arg!(v),
+                SubstateId::Vault(v) => arg!(v),
+                SubstateId::UnclaimedConfidentialOutput(v) => arg!(v),
+                SubstateId::NonFungible(v) => arg!(v),
+                SubstateId::NonFungibleIndex(v) => arg!(v),
+                SubstateId::TransactionReceipt(v) => arg!(v),
+                SubstateId::FeeClaim(v) => arg!(v),
             },
             CliArg::TemplateAddress(v) => arg!(v),
             CliArg::NonFungibleId(v) => arg!(v),
@@ -825,8 +825,8 @@ pub struct SpecificNonFungibleMintOutput {
 }
 
 impl SpecificNonFungibleMintOutput {
-    pub fn to_substate_address(&self) -> SubstateAddress {
-        SubstateAddress::NonFungible(NonFungibleAddress::new(
+    pub fn to_substate_address(&self) -> SubstateId {
+        SubstateId::NonFungible(NonFungibleAddress::new(
             self.resource_address,
             self.non_fungible_id.clone(),
         ))
@@ -840,7 +840,7 @@ impl FromStr for SpecificNonFungibleMintOutput {
         let (resource_address, non_fungible_id) = s
             .split_once(',')
             .ok_or_else(|| anyhow!("Expected resource address and non-fungible id"))?;
-        let resource_address = SubstateAddress::from_str(resource_address)?;
+        let resource_address = SubstateId::from_str(resource_address)?;
         let resource_address = resource_address
             .as_resource_address()
             .ok_or_else(|| anyhow!("Expected resource address but got {}", resource_address))?;
@@ -868,7 +868,7 @@ impl FromStr for NewNonFungibleMintOutput {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (resource_address, count_str) = s.split_once(',').unwrap_or((s, "1"));
-        let resource_address = SubstateAddress::from_str(resource_address)?;
+        let resource_address = SubstateId::from_str(resource_address)?;
         let resource_address = resource_address
             .as_resource_address()
             .ok_or_else(|| anyhow!("Expected resource address but got {}", resource_address))?;
@@ -890,7 +890,7 @@ impl FromStr for NewNonFungibleIndexOutput {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (parent_address, index_str) = s.split_once(',').unwrap_or((s, "0"));
-        let parent_address = SubstateAddress::from_str(parent_address)?;
+        let parent_address = SubstateId::from_str(parent_address)?;
         let parent_address = parent_address
             .as_resource_address()
             .ok_or_else(|| anyhow!("Expected resource address but got {}", parent_address))?;

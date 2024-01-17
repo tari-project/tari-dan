@@ -28,8 +28,8 @@ use tari_dan_engine::{
 use tari_engine_types::{
     commit_result::{FinalizeResult, RejectReason},
     instruction::Instruction,
-    substate::SubstateAddress,
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    substate::SubstateId,
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
     TemplateAddress,
 };
 use tari_template_builtin::{ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
@@ -380,7 +380,7 @@ mod consensus {
 
         // set the value of current epoch to "1" and call the template function again to check that it reads the new
         // value
-        template_test.set_virtual_substate(VirtualSubstateAddress::CurrentEpoch, VirtualSubstate::CurrentEpoch(1));
+        template_test.set_virtual_substate(VirtualSubstateId::CurrentEpoch, VirtualSubstate::CurrentEpoch(1));
         let result: u64 = template_test.call_function("TestConsensus", "current_epoch", args![], vec![]);
         assert_eq!(result, 1);
     }
@@ -486,7 +486,7 @@ mod basic_nft {
         TemplateTest,
         (ComponentAddress, NonFungibleAddress),
         ComponentAddress,
-        SubstateAddress,
+        SubstateId,
     ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/basic_nft"]);
 
@@ -727,7 +727,7 @@ mod basic_nft {
         let nfts = diff
             .up_iter()
             .filter_map(|(a, _)| match a {
-                SubstateAddress::NonFungible(address) => Some(address.id()),
+                SubstateId::NonFungible(address) => Some(address.id()),
                 _ => None,
             })
             .collect::<Vec<_>>();
@@ -1179,7 +1179,7 @@ mod tickets {
             ("account", account_address.into()),
             ("ticket_seller", ticket_seller.into()),
             // TODO: it's weird that the "redeem_ticket" method accepts a NonFungibleId, but we are passing a
-            // SubstateAddress variable
+            // SubstateId variable
             ("ticket_addr", ManifestValue::NonFungibleId(ticket_id.clone())),
         ];
 
@@ -1202,7 +1202,7 @@ mod tickets {
             pub is_redeemed: bool,
         }
 
-        let ticket_substate_addr = SubstateAddress::NonFungible(NonFungibleAddress::new(ticket_resource, ticket_id));
+        let ticket_substate_addr = SubstateId::NonFungible(NonFungibleAddress::new(ticket_resource, ticket_id));
         let ticket_nft = template_test
             .read_only_state_store()
             .get_substate(&ticket_substate_addr)
@@ -1229,7 +1229,7 @@ mod nft_indexes {
         TemplateTest,
         (ComponentAddress, NonFungibleAddress),
         ComponentAddress,
-        SubstateAddress,
+        SubstateId,
     ) {
         let mut template_test = TemplateTest::new(vec!["tests/templates/nft/nft_list"]);
 

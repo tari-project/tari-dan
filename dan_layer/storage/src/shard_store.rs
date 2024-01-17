@@ -33,7 +33,7 @@ use tari_dan_common_types::{
     SubstateState,
     TreeNodeHash,
 };
-use tari_engine_types::substate::{Substate, SubstateAddress};
+use tari_engine_types::substate::{Substate, SubstateId};
 
 use crate::{
     models::{
@@ -250,7 +250,7 @@ pub trait ShardStoreWriteTransaction<TAddr: NodeAddressable, TPayload: Payload> 
     fn save_burnt_utxo(
         &mut self,
         substate: &Substate,
-        commitment_address: SubstateAddress,
+        commitment_address: SubstateId,
         shard_id: ShardId,
     ) -> Result<(), StorageError>;
 }

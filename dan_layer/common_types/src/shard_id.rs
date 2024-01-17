@@ -15,7 +15,7 @@ use tari_crypto::tari_utilities::hex::{from_hex, Hex};
 use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     serde_with,
-    substate::SubstateAddress,
+    substate::SubstateId,
     transaction_receipt::TransactionReceiptAddress,
 };
 
@@ -25,8 +25,8 @@ use crate::{shard_bucket::ShardBucket, uint::U256};
 pub struct ShardId(#[serde(with = "serde_with::hex")] pub [u8; 32]);
 
 impl ShardId {
-    /// Defines the mapping of SubstateAddress to ShardId
-    pub fn from_address(addr: &SubstateAddress, version: u32) -> Self {
+    /// Defines the mapping of SubstateId to ShardId
+    pub fn from_address(addr: &SubstateId, version: u32) -> Self {
         Self::from_hash(&addr.to_canonical_hash(), version)
     }
 

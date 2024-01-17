@@ -31,7 +31,7 @@ use tari_dan_p2p::NewTransactionMessage;
 use tari_engine_types::{
     confidential::{ConfidentialClaim, ConfidentialOutput},
     instruction::Instruction,
-    substate::SubstateAddress,
+    substate::SubstateId,
 };
 use tari_template_lib::{
     args::Arg,
@@ -347,7 +347,7 @@ impl TryFrom<proto::transaction::SubstateRequirement> for SubstateRequirement {
     type Error = anyhow::Error;
 
     fn try_from(val: proto::transaction::SubstateRequirement) -> Result<Self, Self::Error> {
-        let address = SubstateAddress::from_bytes(&val.address)?;
+        let address = SubstateId::from_bytes(&val.address)?;
         let version = val.version.map(|v| v.version);
         let substate_specification = SubstateRequirement::new(address, version);
         Ok(substate_specification)

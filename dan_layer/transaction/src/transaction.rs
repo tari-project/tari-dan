@@ -10,7 +10,7 @@ use tari_engine_types::{
     hashing::{hasher32, EngineHashDomainLabel},
     instruction::Instruction,
     serde_with,
-    substate::SubstateAddress,
+    substate::SubstateId,
 };
 use tari_template_lib::Hash;
 
@@ -167,17 +167,20 @@ impl Transaction {
 #[derive(Debug, Clone, Deserialize, Serialize, Eq, PartialEq)]
 pub struct SubstateRequirement {
     #[serde(with = "serde_with::string")]
-    address: SubstateAddress,
+    substate_id: SubstateId,
     version: Option<u32>,
 }
 
 impl SubstateRequirement {
-    pub fn new(address: SubstateAddress, version: Option<u32>) -> Self {
-        Self { address, version }
+    pub fn new(address: SubstateId, version: Option<u32>) -> Self {
+        Self {
+            substate_id: address,
+            version,
+        }
     }
 
-    pub fn address(&self) -> &SubstateAddress {
-        &self.address
+    pub fn address(&self) -> &SubstateId {
+        &self.substate_id
     }
 
     pub fn version(&self) -> Option<u32> {
@@ -191,11 +194,11 @@ impl FromStr for SubstateRequirement {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.split(':');
 
-        // parse the substate address
+        // parse the substate id
         let address = parts
             .next()
             .ok_or_else(|| SubstateRequirementParseError(s.to_string()))?;
-        let address = SubstateAddress::from_str(address).map_err(|_| SubstateRequirementParseError(s.to_string()))?;
+        let address = SubstateId::from_str(address).map_err(|_| SubstateRequirementParseError(s.to_string()))?;
 
         // parse the version (optional)
         let version = match parts.next() {
@@ -206,15 +209,18 @@ impl FromStr for SubstateRequirement {
             None => None,
         };
 
-        Ok(Self { address, version })
+        Ok(Self {
+            substate_id: address,
+            version,
+        })
     }
 }
 
 impl Display for SubstateRequirement {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.version {
-            Some(v) => write!(f, "{}:{}", self.address, v),
-            None => write!(f, "{}", self.address),
+            Some(v) => write!(f, "{}:{}", self.substate_id, v),
+            None => write!(f, "{}", self.substate_id),
         }
     }
 }

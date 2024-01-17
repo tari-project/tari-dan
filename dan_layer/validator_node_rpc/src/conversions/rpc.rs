@@ -5,7 +5,7 @@ use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
 use tari_dan_storage::consensus_models::{SubstateCreatedProof, SubstateData, SubstateUpdate};
-use tari_engine_types::substate::{SubstateAddress, SubstateValue};
+use tari_engine_types::substate::{SubstateId, SubstateValue};
 
 use crate::proto;
 
@@ -81,7 +81,7 @@ impl TryFrom<proto::rpc::SubstateData> for SubstateData {
 
     fn try_from(value: proto::rpc::SubstateData) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: SubstateAddress::from_bytes(&value.address)?,
+            address: SubstateId::from_bytes(&value.address)?,
             version: value.version,
             substate_value: SubstateValue::from_bytes(&value.substate_value)?,
             created_by_transaction: value.created_transaction.try_into()?,

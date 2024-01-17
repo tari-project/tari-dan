@@ -22,7 +22,7 @@
 
 use tari_dan_app_utilities::transaction_executor::TransactionProcessorError;
 use tari_dan_common_types::{Epoch, ShardId};
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::EpochManagerError;
 use tari_indexer_lib::transaction_autofiller::TransactionAutofillerError;
 use tari_rpc_framework::RpcStatus;
@@ -33,7 +33,7 @@ pub enum DryRunTransactionProcessorError {
     #[error(transparent)]
     TransactionAutofillerError(#[from] TransactionAutofillerError),
     #[error("Substate {address} v{version} is DOWN")]
-    SubstateDowned { address: SubstateAddress, version: u32 },
+    SubstateDowned { address: SubstateId, version: u32 },
     #[error("EpochManager error: {0}")]
     EpochManager(#[from] EpochManagerError),
     #[error("Rpc error: {0}")]

@@ -12,7 +12,7 @@ use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::FixedHash;
 use tari_dan_common_types::{optional::Optional, Epoch, NodeHeight, ShardId};
-use tari_engine_types::substate::{Substate, SubstateAddress, SubstateValue};
+use tari_engine_types::substate::{Substate, SubstateId, SubstateValue};
 use tari_transaction::TransactionId;
 
 use crate::{
@@ -26,7 +26,7 @@ const LOG_TARGET: &str = "tari::dan::storage::consensus_models::substate";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubstateRecord {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: u32,
     pub substate_value: SubstateValue,
     pub state_hash: FixedHash,
@@ -48,7 +48,7 @@ pub struct SubstateDestroyed {
 
 impl SubstateRecord {
     pub fn new(
-        address: SubstateAddress,
+        address: SubstateId,
         version: u32,
         substate_value: SubstateValue,
         created_at_epoch: Epoch,
@@ -75,7 +75,7 @@ impl SubstateRecord {
         ShardId::from_address(&self.address, self.version)
     }
 
-    pub fn substate_address(&self) -> &SubstateAddress {
+    pub fn substate_address(&self) -> &SubstateId {
         &self.address
     }
 
@@ -275,7 +275,7 @@ pub struct SubstateCreatedProof {
 
 #[derive(Debug, Clone)]
 pub struct SubstateData {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: u32,
     pub substate_value: SubstateValue,
     pub created_by_transaction: TransactionId,
