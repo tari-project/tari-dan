@@ -535,7 +535,7 @@ impl TryFrom<proto::consensus::Substate> for SubstateRecord {
 
     fn try_from(value: proto::consensus::Substate) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: SubstateId::from_bytes(&value.address)?,
+            substate_id: SubstateId::from_bytes(&value.substate_id)?,
             version: value.version,
             substate_value: SubstateValue::from_bytes(&value.substate)?,
             state_hash: Default::default(),
@@ -554,7 +554,7 @@ impl TryFrom<proto::consensus::Substate> for SubstateRecord {
 impl From<SubstateRecord> for proto::consensus::Substate {
     fn from(value: SubstateRecord) -> Self {
         Self {
-            address: value.address.to_bytes(),
+            substate_id: value.substate_id.to_bytes(),
             version: value.version,
             substate: value.substate_value.to_bytes(),
 

@@ -26,7 +26,7 @@ const LOG_TARGET: &str = "tari::dan::storage::consensus_models::substate";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubstateRecord {
-    pub address: SubstateId,
+    pub substate_id: SubstateId,
     pub version: u32,
     pub substate_value: SubstateValue,
     pub state_hash: FixedHash,
@@ -48,7 +48,7 @@ pub struct SubstateDestroyed {
 
 impl SubstateRecord {
     pub fn new(
-        address: SubstateId,
+        substate_id: SubstateId,
         version: u32,
         substate_value: SubstateValue,
         created_at_epoch: Epoch,
@@ -58,7 +58,7 @@ impl SubstateRecord {
         created_justify: QcId,
     ) -> Self {
         Self {
-            address,
+            substate_id,
             version,
             substate_value,
             state_hash: Default::default(),
@@ -72,11 +72,11 @@ impl SubstateRecord {
     }
 
     pub fn to_substate_address(&self) -> SubstateAddress {
-        SubstateAddress::from_address(&self.address, self.version)
+        SubstateAddress::from_address(&self.substate_id, self.version)
     }
 
     pub fn substate_id(&self) -> &SubstateId {
-        &self.address
+        &self.substate_id
     }
 
     pub fn substate_value(&self) -> &SubstateValue {
@@ -275,7 +275,7 @@ pub struct SubstateCreatedProof {
 
 #[derive(Debug, Clone)]
 pub struct SubstateData {
-    pub address: SubstateId,
+    pub substate_id: SubstateId,
     pub version: u32,
     pub substate_value: SubstateValue,
     pub created_by_transaction: TransactionId,
@@ -284,7 +284,7 @@ pub struct SubstateData {
 impl From<SubstateRecord> for SubstateData {
     fn from(value: SubstateRecord) -> Self {
         Self {
-            address: value.address,
+            substate_id: value.substate_id,
             version: value.version,
             substate_value: value.substate_value,
             created_by_transaction: value.created_by_transaction,
@@ -323,11 +323,11 @@ impl SubstateUpdate {
                 debug!(
                     target: LOG_TARGET,
                     "🌲 Applying substate CREATE for {} v{}",
-                    proof.substate.address, proof.substate.version
+                    proof.substate.substate_id, proof.substate.version
                 );
                 proof.created_qc.save(tx)?;
                 SubstateRecord {
-                    address: proof.substate.address,
+                    substate_id: proof.substate.substate_id,
                     version: proof.substate.version,
                     substate_value: proof.substate.substate_value,
                     state_hash: Default::default(),

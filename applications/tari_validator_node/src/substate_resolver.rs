@@ -74,7 +74,7 @@ where
         out.set_all(
             local_substates
                 .into_iter()
-                .map(|s| (s.address.clone(), s.into_substate())),
+                .map(|s| (s.substate_id.clone(), s.into_substate())),
         );
 
         Ok(missing_shards)

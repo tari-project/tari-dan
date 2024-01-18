@@ -179,7 +179,7 @@ impl SubstateRequirement {
         }
     }
 
-    pub fn address(&self) -> &SubstateId {
+    pub fn substate_id(&self) -> &SubstateId {
         &self.substate_id
     }
 

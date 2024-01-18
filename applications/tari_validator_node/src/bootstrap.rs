@@ -442,7 +442,7 @@ where
     if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
         // Create the resource for public identity
         SubstateRecord {
-            address: substate_id,
+            substate_id,
             version: 0,
             substate_value: Resource::new(
                 ResourceType::NonFungible,
@@ -469,7 +469,7 @@ where
     metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
     if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
         SubstateRecord {
-            address: substate_id,
+            substate_id,
             version: 0,
             substate_value: Resource::new(
                 ResourceType::Confidential,

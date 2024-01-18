@@ -362,7 +362,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
     }
 
     async fn register_burnt_utxo(&mut self, output: &TransactionOutput) -> Result<(), BaseLayerScannerError> {
-        let address = SubstateId::UnclaimedConfidentialOutput(
+        let substate_id = SubstateId::UnclaimedConfidentialOutput(
             UnclaimedConfidentialOutputAddress::try_from_commitment(output.commitment.as_bytes()).map_err(|e|
                 // Technically impossible, but anyway
                 BaseLayerScannerError::InvalidSideChainUtxoResponse(format!("Invalid commitment: {}", e)))?,
@@ -378,7 +378,7 @@ impl<TAddr: NodeAddressable + 'static> BaseLayerScanner<TAddr> {
 
                 // TODO: This should be proposed in a block...
                 SubstateRecord {
-                    address,
+                    substate_id,
                     version: 0,
                     substate_value: substate,
                     state_hash: Default::default(),

@@ -347,9 +347,9 @@ impl TryFrom<proto::transaction::SubstateRequirement> for SubstateRequirement {
     type Error = anyhow::Error;
 
     fn try_from(val: proto::transaction::SubstateRequirement) -> Result<Self, Self::Error> {
-        let address = SubstateId::from_bytes(&val.address)?;
+        let substate_id = SubstateId::from_bytes(&val.substate_id)?;
         let version = val.version.map(|v| v.version);
-        let substate_specification = SubstateRequirement::new(address, version);
+        let substate_specification = SubstateRequirement::new(substate_id, version);
         Ok(substate_specification)
     }
 }
@@ -357,7 +357,7 @@ impl TryFrom<proto::transaction::SubstateRequirement> for SubstateRequirement {
 impl From<SubstateRequirement> for proto::transaction::SubstateRequirement {
     fn from(val: SubstateRequirement) -> Self {
         Self {
-            address: val.address().to_bytes(),
+            substate_id: val.substate_id().to_bytes(),
             version: val.version().map(|v| OptionalVersion { version: v }),
         }
     }
@@ -366,7 +366,7 @@ impl From<SubstateRequirement> for proto::transaction::SubstateRequirement {
 impl From<&SubstateRequirement> for proto::transaction::SubstateRequirement {
     fn from(val: &SubstateRequirement) -> Self {
         Self {
-            address: val.address().to_bytes(),
+            substate_id: val.substate_id().to_bytes(),
             version: val.version().map(|v| OptionalVersion { version: v }),
         }
     }

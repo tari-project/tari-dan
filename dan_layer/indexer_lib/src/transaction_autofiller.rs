@@ -101,7 +101,7 @@ where
             let related_addresses = related_addresses
                 .into_iter()
                 .flatten()
-                .filter(|s| !substate_requirements.iter().any(|r| r.address() == s));
+                .filter(|s| !substate_requirements.iter().any(|r| r.substate_id() == s));
 
             // we need to fetch (in parallel) the latest version of all the related substates
             let mut handles = HashMap::new();
@@ -160,7 +160,7 @@ where
 {
     let scan_res = match req.version() {
         Some(version) => {
-            let shard = SubstateAddress::from_address(req.address(), version);
+            let shard = SubstateAddress::from_address(req.substate_id(), version);
             if transaction.all_inputs_iter().any(|s| *s == shard) {
                 // Shard is already an input
                 return Ok(None);
@@ -168,12 +168,12 @@ where
 
             // if the client specified a version, we need to retrieve it
             substate_scanner
-                .get_specific_substate_from_committee(req.address(), version)
+                .get_specific_substate_from_committee(req.substate_id(), version)
                 .await?
         },
         None => {
             // if the client didn't specify a version, we fetch the latest one
-            substate_scanner.get_substate(req.address(), None).await?
+            substate_scanner.get_substate(req.substate_id(), None).await?
         },
     };
 

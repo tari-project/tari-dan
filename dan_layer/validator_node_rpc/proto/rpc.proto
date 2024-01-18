@@ -169,7 +169,7 @@ message SubstateCreatedProof {
 
 // Minimal substate data
 message SubstateData {
-  bytes address = 1;
+  bytes substate_id = 1;
   uint32 version = 2;
   bytes substate_value = 3;
   bytes created_transaction = 7;

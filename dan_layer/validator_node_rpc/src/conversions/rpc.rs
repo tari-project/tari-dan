@@ -81,7 +81,7 @@ impl TryFrom<proto::rpc::SubstateData> for SubstateData {
 
     fn try_from(value: proto::rpc::SubstateData) -> Result<Self, Self::Error> {
         Ok(Self {
-            address: SubstateId::from_bytes(&value.address)?,
+            substate_id: SubstateId::from_bytes(&value.substate_id)?,
             version: value.version,
             substate_value: SubstateValue::from_bytes(&value.substate_value)?,
             created_by_transaction: value.created_transaction.try_into()?,
@@ -92,7 +92,7 @@ impl TryFrom<proto::rpc::SubstateData> for SubstateData {
 impl From<SubstateData> for proto::rpc::SubstateData {
     fn from(value: SubstateData) -> Self {
         Self {
-            address: value.address.to_bytes(),
+            substate_id: value.substate_id.to_bytes(),
             version: value.version,
             substate_value: value.substate_value.to_bytes(),
             created_transaction: value.created_by_transaction.as_bytes().to_vec(),

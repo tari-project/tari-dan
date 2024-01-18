@@ -1322,7 +1322,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         use crate::schema::substates;
 
         let substate = substates::table
-            .filter(substates::shard_id.eq(serialize_hex(address)))
+            .filter(substates::address.eq(serialize_hex(address)))
             .first::<sql_models::SubstateRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get",
@@ -1336,7 +1336,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         use crate::schema::substates;
 
         let substates = substates::table
-            .filter(substates::shard_id.eq_any(addresses.iter().map(serialize_hex)))
+            .filter(substates::address.eq_any(addresses.iter().map(serialize_hex)))
             .get_results::<sql_models::SubstateRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get_any",
@@ -1348,13 +1348,13 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
 
     fn substates_any_exist<I: IntoIterator<Item = S>, S: Borrow<SubstateAddress>>(
         &mut self,
-        shard_ids: I,
+        addresses: I,
     ) -> Result<bool, StorageError> {
         use crate::schema::substates;
 
         let count = substates::table
             .count()
-            .filter(substates::shard_id.eq_any(shard_ids.into_iter().map(|s| serialize_hex(s.borrow()))))
+            .filter(substates::address.eq_any(addresses.into_iter().map(|s| serialize_hex(s.borrow()))))
             .limit(1)
             .get_result::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
@@ -1388,13 +1388,13 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
         &mut self,
         start: &SubstateAddress,
         end: &SubstateAddress,
-        exclude_shards: &[SubstateAddress],
+        exclude: &[SubstateAddress],
     ) -> Result<Vec<SubstateRecord>, StorageError> {
         use crate::schema::substates;
 
         let substates = substates::table
-            .filter(substates::shard_id.between(serialize_hex(start), serialize_hex(end)))
-            .filter(substates::shard_id.ne_all(exclude_shards.iter().map(serialize_hex)))
+            .filter(substates::address.between(serialize_hex(start), serialize_hex(end)))
+            .filter(substates::address.ne_all(exclude.iter().map(serialize_hex)))
             .get_results::<sql_models::SubstateRecord>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "substates_get_many_within_range",
@@ -1503,7 +1503,7 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
 
         let locked_details = substates::table
             .select((substates::is_locked_w, substates::destroyed_by_transaction))
-            .filter(substates::shard_id.eq_any(&objects))
+            .filter(substates::address.eq_any(&objects))
             .get_results::<(bool, Option<String>)>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "transactions_try_lock_many",
@@ -1534,21 +1534,21 @@ impl<TAddr: NodeAddressable + Serialize + DeserializeOwned> StateStoreReadTransa
     }
 
     // -------------------------------- LockedOutputs -------------------------------- //
-    fn locked_outputs_check_all<I, B>(&mut self, output_shards: I) -> Result<SubstateLockState, StorageError>
+    fn locked_outputs_check_all<I, B>(&mut self, output_addresses: I) -> Result<SubstateLockState, StorageError>
     where
         I: IntoIterator<Item = B>,
         B: Borrow<SubstateAddress>,
     {
         use crate::schema::locked_outputs;
 
-        let outputs_hex = output_shards
+        let outputs_hex = output_addresses
             .into_iter()
-            .map(|shard_id| serialize_hex(shard_id.borrow()))
+            .map(|address| serialize_hex(address.borrow()))
             .collect::<Vec<_>>();
 
         let has_conflict = locked_outputs::table
             .count()
-            .filter(locked_outputs::shard_id.eq_any(outputs_hex))
+            .filter(locked_outputs::substate_address.eq_any(outputs_hex))
             .first::<i64>(self.connection())
             .map_err(|e| SqliteStorageError::DieselError {
                 operation: "locked_outputs_check_all",
