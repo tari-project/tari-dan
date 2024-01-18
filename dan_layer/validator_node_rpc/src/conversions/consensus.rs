@@ -258,7 +258,7 @@ impl From<&tari_dan_storage::consensus_models::Block> for proto::consensus::Bloc
             justify: Some(value.justify().into()),
             total_leader_fee: value.total_leader_fee(),
             commands: value.commands().iter().map(Into::into).collect(),
-            foreign_indexes: encode(value.get_foreign_indexes()).unwrap(),
+            foreign_indexes: encode(value.foreign_indexes()).unwrap(),
             signature: value.get_signature().map(Into::into),
         }
     }

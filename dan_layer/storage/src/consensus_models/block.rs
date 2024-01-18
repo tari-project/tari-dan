@@ -2,12 +2,13 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeSet, HashSet},
     fmt::{Debug, Display, Formatter},
     hash::Hash,
     ops::{DerefMut, RangeInclusive},
 };
 
+use indexmap::IndexMap;
 use log::*;
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, FixedHashSizeError, PublicKey};
@@ -23,7 +24,7 @@ use tari_dan_common_types::{
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
 
-use super::{ForeignProposal, QuorumCertificate, ValidatorSchnorrSignature};
+use super::{ForeignProposal, ForeignSendCounters, QuorumCertificate, ValidatorSchnorrSignature};
 use crate::{
     consensus_models::{
         Command,
@@ -69,7 +70,7 @@ pub struct Block {
     /// Flag that indicates that the block has been committed.
     is_committed: bool,
     /// Counter for each foreign shard for reliable broadcast.
-    foreign_indexes: HashMap<Shard, u64>,
+    foreign_indexes: IndexMap<Shard, u64>,
     /// Timestamp when was this stored.
     stored_at: Option<PrimitiveDateTime>,
     /// Signature of block by the proposer.
@@ -85,7 +86,7 @@ impl Block {
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
-        foreign_indexes: HashMap<Shard, u64>,
+        sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
     ) -> Self {
         let mut block = Self {
@@ -102,7 +103,7 @@ impl Block {
             is_dummy: false,
             is_processed: false,
             is_committed: false,
-            foreign_indexes,
+            foreign_indexes: sorted_foreign_indexes,
             stored_at: None,
             signature,
         };
@@ -122,7 +123,7 @@ impl Block {
         is_dummy: bool,
         is_processed: bool,
         is_committed: bool,
-        foreign_indexes: HashMap<Shard, u64>,
+        sorted_foreign_indexes: IndexMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
         created_at: PrimitiveDateTime,
     ) -> Self {
@@ -140,7 +141,7 @@ impl Block {
             is_dummy,
             is_processed,
             is_committed,
-            foreign_indexes,
+            foreign_indexes: sorted_foreign_indexes,
             stored_at: Some(created_at),
             signature,
         }
@@ -155,7 +156,7 @@ impl Block {
             PublicKey::default(),
             Default::default(),
             0,
-            HashMap::new(),
+            IndexMap::new(),
             None,
         )
     }
@@ -175,7 +176,7 @@ impl Block {
             is_dummy: false,
             is_processed: false,
             is_committed: true,
-            foreign_indexes: HashMap::new(),
+            foreign_indexes: IndexMap::new(),
             stored_at: None,
             signature: None,
         }
@@ -196,7 +197,7 @@ impl Block {
             proposed_by,
             Default::default(),
             0,
-            HashMap::new(),
+            IndexMap::new(),
             None,
         );
         block.is_dummy = true;
@@ -213,7 +214,7 @@ impl Block {
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
             .chain(&self.commands)
-            .chain(&self.foreign_indexes.iter().collect::<Vec<(&Shard, &u64)>>().sort())
+            .chain(&self.foreign_indexes)
             .result()
     }
 }
@@ -326,11 +327,11 @@ impl Block {
         self.is_committed
     }
 
-    pub fn get_foreign_index(&self, bucket: &Shard) -> Option<&u64> {
-        self.foreign_indexes.get(bucket)
+    pub fn get_foreign_counter(&self, bucket: &Shard) -> Option<u64> {
+        self.foreign_indexes.get(bucket).copied()
     }
 
-    pub fn get_foreign_indexes(&self) -> &HashMap<Shard, u64> {
+    pub fn foreign_indexes(&self) -> &IndexMap<Shard, u64> {
         &self.foreign_indexes
     }
 
@@ -659,6 +660,22 @@ impl Block {
             locked_block,
         );
         Ok(false)
+    }
+
+    pub fn save_foreign_send_counters<TTx>(&self, tx: &mut TTx) -> Result<(), StorageError>
+    where
+        TTx: StateStoreWriteTransaction + DerefMut + ?Sized,
+        TTx::Target: StateStoreReadTransaction,
+    {
+        let mut counters = ForeignSendCounters::get_or_default(tx.deref_mut(), self.justify().block_id())?;
+        // Add counters for this block and carry over the counters from the justify block, if any
+        for shard in self.foreign_indexes.keys() {
+            counters.increment_counter(*shard);
+        }
+        if !counters.is_empty() {
+            counters.set(tx, self.id())?;
+        }
+        Ok(())
     }
 }
 

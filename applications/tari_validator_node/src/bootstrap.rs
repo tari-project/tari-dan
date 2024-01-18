@@ -50,7 +50,7 @@ use tari_dan_app_utilities::{
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, SubstateAddress};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_storage::{
-    consensus_models::{Block, BlockId, ExecutedTransaction, ForeignReceiveCounters, SubstateRecord},
+    consensus_models::{Block, BlockId, ExecutedTransaction, SubstateRecord},
     global::GlobalDb,
     StateStore,
     StateStoreReadTransaction,
@@ -229,7 +229,6 @@ pub async fn spawn_services(
 
     // Consensus
     let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
-    let foreign_receive_counter = state_store.with_read_tx(|tx| ForeignReceiveCounters::get(tx))?;
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
         state_store.clone(),
         keypair.clone(),
@@ -238,7 +237,6 @@ pub async fn spawn_services(
         rx_consensus_message,
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
-        foreign_receive_counter,
         shutdown.clone(),
     )
     .await;

@@ -8920,6 +8920,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "indexmap 2.1.0",
  "log",
  "serde",
  "tari_common_types",
