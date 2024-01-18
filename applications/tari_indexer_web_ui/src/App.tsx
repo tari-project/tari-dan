@@ -20,50 +20,50 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Routes, Route } from 'react-router-dom';
-import ValidatorNode from './routes/VN/ValidatorNode';
-import Connections from './routes/Connections/Connections';
-import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
-import MonitoredSubstates from './routes/MonitoredSubstates/MonitoredSubstates';
-import MonitoredNftCollections from './routes/MonitoredNftCollections/MonitoredNftCollections';
-import NftGallery from './routes/NftGallery/NftGallery';
-import ErrorPage from './routes/ErrorPage';
-import Layout from './theme/LayoutMain';
+import { Routes, Route } from "react-router-dom";
+import ValidatorNode from "./routes/VN/ValidatorNode";
+import Connections from "./routes/Connections/Connections";
+import RecentTransactions from "./routes/RecentTransactions/RecentTransactions";
+import MonitoredSubstates from "./routes/MonitoredSubstates/MonitoredSubstates";
+import MonitoredNftCollections from "./routes/MonitoredNftCollections/MonitoredNftCollections";
+import NftGallery from "./routes/NftGallery/NftGallery";
+import ErrorPage from "./routes/ErrorPage";
+import Layout from "./theme/LayoutMain";
 
 export const breadcrumbRoutes = [
   {
-    label: 'Home',
-    path: '/',
+    label: "Home",
+    path: "/",
     dynamic: false,
   },
   {
-    label: 'Connections',
-    path: '/connections',
+    label: "Connections",
+    path: "/connections",
     dynamic: false,
   },
   {
-    label: 'Transactions',
-    path: '/transactions',
+    label: "Transactions",
+    path: "/transactions",
     dynamic: false,
   },
   {
-    label: 'Monitored Substates',
-    path: '/monitored_substates',
+    label: "Monitored Substates",
+    path: "/monitored_substates",
     dynamic: false,
   },
   {
-    label: 'Monitored NFTs',
-    path: '/nfts',
+    label: "Monitored NFTs",
+    path: "/nfts",
     dynamic: false,
   },
   {
-    label: 'NFT Gallery',
-    path: '/nfts/:resourceAddress',
+    label: "NFT Gallery",
+    path: "/nfts/:resourceAddress",
     dynamic: true,
   },
   {
-    label: 'Error',
-    path: '*',
+    label: "Error",
+    path: "*",
     dynamic: false,
   },
 ];

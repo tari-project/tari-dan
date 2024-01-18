@@ -90,7 +90,7 @@ type IPublicKey = string;
 
 type IFixedHash = string;
 
-export interface ICommand { }
+export interface ICommand {}
 
 export interface IBlock {
   id: IBlockId;
@@ -154,7 +154,7 @@ function Blocks() {
       setBlockCount(resp.count);
       listBlocks(null, resp.count).then((resp: IGetBlockReponse) => {
         let times = Object.fromEntries(
-          resp.blocks.map((block: IBlock) => [block.id, primitiveDateTimeToSecs(block.stored_at)])
+          resp.blocks.map((block: IBlock) => [block.id, primitiveDateTimeToSecs(block.stored_at)]),
         );
         setBlocks(
           resp.blocks.map((block: IBlock) => {
@@ -172,7 +172,7 @@ function Blocks() {
               show: true,
               is_dummy: block.is_dummy,
             };
-          })
+          }),
         );
       });
     });
@@ -180,7 +180,9 @@ function Blocks() {
   const sort = (column: ColumnKey, order: number) => {
     if (column) {
       setBlocks(
-        [...blocks].sort((r0: any, r1: any) => (r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0))
+        [...blocks].sort((r0: any, r1: any) =>
+          r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0,
+        ),
       );
       setLastSort({ column, order });
     }
@@ -464,7 +466,7 @@ function Blocks() {
                       </DataTableCell>
                     </TableRow>
                   );
-                }
+                },
               )}
             {blocks.filter(({ show }) => show === true).length === 0 && (
               <TableRow>

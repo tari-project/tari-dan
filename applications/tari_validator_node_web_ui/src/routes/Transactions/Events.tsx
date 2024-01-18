@@ -20,27 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import {
-  TableContainer,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  Collapse,
-} from '@mui/material';
-import {
-  DataTableCell,
-  CodeBlock,
-  AccordionIconButton,
-} from '../../Components/StyledComponents';
-import { shortenString } from '../../utils/helpers';
-import CopyToClipboard from '../../Components/CopyToClipboard';
-import { renderJson } from '../../utils/helpers';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import CodeBlockExpand from '../../Components/CodeBlock';
+import { useState } from "react";
+import { TableContainer, Table, TableHead, TableRow, TableCell, TableBody, Collapse } from "@mui/material";
+import { DataTableCell, CodeBlock, AccordionIconButton } from "../../Components/StyledComponents";
+import { shortenString } from "../../utils/helpers";
+import CopyToClipboard from "../../Components/CopyToClipboard";
+import { renderJson } from "../../utils/helpers";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import CodeBlockExpand from "../../Components/CodeBlock";
 
 interface Event {
   component_address: string;
@@ -50,15 +38,12 @@ interface Event {
   payload: any;
 }
 
-function RowData(
-  { component_address, template_address, topic, tx_hash, payload }: Event,
-  index: number
-) {
+function RowData({ component_address, template_address, topic, tx_hash, payload }: Event, index: number) {
   const [open, setOpen] = useState(false);
   return (
     <>
       <TableRow key={index}>
-        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+        <DataTableCell sx={{ borderBottom: "none", textAlign: "center" }}>
           <AccordionIconButton
             open={open}
             aria-label="expand row"
@@ -87,9 +72,7 @@ function RowData(
       <TableRow>
         <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={5}>
           <Collapse in={open} timeout="auto" unmountOnExit>
-            <CodeBlockExpand title="Payload">
-              {renderJson(payload)}
-            </CodeBlockExpand>
+            <CodeBlockExpand title="Payload">{renderJson(payload)}</CodeBlockExpand>
           </Collapse>
         </DataTableCell>
       </TableRow>
@@ -111,29 +94,18 @@ export default function Events({ data }: { data: Event[] }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {data.map(
-            (
-              {
-                component_address,
-                template_address,
-                topic,
-                tx_hash,
-                payload,
-              }: Event,
-              index: number
-            ) => {
-              return (
-                <RowData
-                  component_address={component_address}
-                  template_address={template_address}
-                  topic={topic}
-                  tx_hash={tx_hash}
-                  payload={payload}
-                  key={index}
-                />
-              );
-            }
-          )}
+          {data.map(({ component_address, template_address, topic, tx_hash, payload }: Event, index: number) => {
+            return (
+              <RowData
+                component_address={component_address}
+                template_address={template_address}
+                topic={topic}
+                tx_hash={tx_hash}
+                payload={payload}
+                key={index}
+              />
+            );
+          })}
         </TableBody>
       </Table>
     </TableContainer>

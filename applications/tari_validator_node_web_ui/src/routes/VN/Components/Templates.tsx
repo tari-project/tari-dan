@@ -20,32 +20,29 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import { getTemplates } from '../../../utils/json_rpc';
-import { shortenString } from './helpers';
-import './Templates.css';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import {
-  DataTableCell,
-  BoxHeading2,
-} from '../../../Components/StyledComponents';
-import { Link } from 'react-router-dom';
-import CopyToClipboard from '../../../Components/CopyToClipboard';
-import IconButton from '@mui/material/IconButton';
-import KeyboardArrowRightIcon from '@mui/icons-material/KeyboardArrowRight';
-import HeadingMenu from '../../../Components/HeadingMenu';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import TablePagination from '@mui/material/TablePagination';
-import SearchFilter from '../../../Components/SearchFilter';
-import Typography from '@mui/material/Typography';
-import Fade from '@mui/material/Fade';
-import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
+import { useEffect, useState } from "react";
+import { getTemplates } from "../../../utils/json_rpc";
+import { shortenString } from "./helpers";
+import "./Templates.css";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import { DataTableCell, BoxHeading2 } from "../../../Components/StyledComponents";
+import { Link } from "react-router-dom";
+import CopyToClipboard from "../../../Components/CopyToClipboard";
+import IconButton from "@mui/material/IconButton";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import HeadingMenu from "../../../Components/HeadingMenu";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import TablePagination from "@mui/material/TablePagination";
+import SearchFilter from "../../../Components/SearchFilter";
+import Typography from "@mui/material/Typography";
+import Fade from "@mui/material/Fade";
+import FileDownloadOutlinedIcon from "@mui/icons-material/FileDownloadOutlined";
 
 export interface ITemplate {
   id: string;
@@ -62,7 +59,7 @@ type ColumnKey = keyof ITemplate;
 
 function Templates() {
   const [templates, setTemplates] = useState<ITemplate[]>([]);
-  const [lastSort, setLastSort] = useState({ column: '', order: -1 });
+  const [lastSort, setLastSort] = useState({ column: "", order: -1 });
 
   useEffect(() => {
     getTemplates(10).then((response) => {
@@ -70,35 +67,21 @@ function Templates() {
         response.templates
           .slice()
           .sort((a: ITemplate, b: ITemplate) => b.height - a.height)
-          .map(
-            ({
-              address,
-              binary_sha,
-              height,
-              name,
-              url,
-              show = true,
-            }: ITemplate) => ({
-              id: toHex(address),
-              address,
-              binary_sha,
-              height,
-              name,
-              url,
-              show,
-            })
-          )
+          .map(({ address, binary_sha, height, name, url, show = true }: ITemplate) => ({
+            id: toHex(address),
+            address,
+            binary_sha,
+            height,
+            name,
+            url,
+            show,
+          })),
       );
     });
   }, []);
 
   const toHex = (str: Uint8Array) => {
-    return (
-      '0x' +
-      Array.prototype.map
-        .call(str, (x: number) => ('00' + x.toString(16)).slice(-2))
-        .join('')
-    );
+    return "0x" + Array.prototype.map.call(str, (x: number) => ("00" + x.toString(16)).slice(-2)).join("");
   };
 
   const sort = (column: ColumnKey, order: number) => {
@@ -109,8 +92,8 @@ function Templates() {
     if (column) {
       setTemplates(
         [...templates].sort((r0: any, r1: any) =>
-          r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0
-        )
+          r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0,
+        ),
       );
       setLastSort({ column, order });
     }
@@ -120,16 +103,13 @@ function Templates() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   // Avoid a layout jump when reaching the last page with empty rows.
-  const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - templates.length) : 0;
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - templates.length) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
   };
 
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
@@ -143,16 +123,14 @@ function Templates() {
           setPage={setPage}
           filterItems={[
             {
-              title: 'Template Address',
-              value: 'id',
-              filterFn: (value: string, row: ITemplate) =>
-                row.id.toLowerCase().includes(value.toLowerCase()),
+              title: "Template Address",
+              value: "id",
+              filterFn: (value: string, row: ITemplate) => row.id.toLowerCase().includes(value.toLowerCase()),
             },
             {
-              title: 'Mined Height',
-              value: 'height',
-              filterFn: (value: string, row: ITemplate) =>
-                row.height.toString().includes(value),
+              title: "Mined Height",
+              value: "height",
+              filterFn: (value: string, row: ITemplate) => row.height.toString().includes(value),
             },
           ]}
           placeholder="Search for Templates"
@@ -162,18 +140,18 @@ function Templates() {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell style={{ minWidth: '300px' }}>
+              <TableCell style={{ minWidth: "300px" }}>
                 <HeadingMenu
                   menuTitle="Address"
                   menuItems={[
                     {
-                      title: 'Sort Ascending',
-                      fn: () => sort('id', 1),
+                      title: "Sort Ascending",
+                      fn: () => sort("id", 1),
                       icon: <KeyboardArrowUpIcon />,
                     },
                     {
-                      title: 'Sort Descending',
-                      fn: () => sort('id', -1),
+                      title: "Sort Descending",
+                      fn: () => sort("id", -1),
                       icon: <KeyboardArrowDownIcon />,
                     },
                   ]}
@@ -184,18 +162,18 @@ function Templates() {
                 />
               </TableCell>
               <TableCell>Download URL</TableCell>
-              <TableCell style={{ textAlign: 'center', width: '210px' }}>
+              <TableCell style={{ textAlign: "center", width: "210px" }}>
                 <HeadingMenu
                   menuTitle="Mined Height"
                   menuItems={[
                     {
-                      title: 'Sort Ascending',
-                      fn: () => sort('height', 1),
+                      title: "Sort Ascending",
+                      fn: () => sort("height", 1),
                       icon: <KeyboardArrowUpIcon />,
                     },
                     {
-                      title: 'Sort Descending',
-                      fn: () => sort('height', -1),
+                      title: "Sort Descending",
+                      fn: () => sort("height", -1),
                       icon: <KeyboardArrowDownIcon />,
                     },
                   ]}
@@ -205,8 +183,8 @@ function Templates() {
                   sortFunction={sort}
                 />
               </TableCell>
-              <TableCell style={{ textAlign: 'center' }}>Status</TableCell>
-              <TableCell style={{ textAlign: 'center' }}>Functions</TableCell>
+              <TableCell style={{ textAlign: "center" }}>Status</TableCell>
+              <TableCell style={{ textAlign: "center" }}>Functions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -216,11 +194,7 @@ function Templates() {
               .map(({ address, binary_sha, height, url, id }) => (
                 <TableRow key={id}>
                   <DataTableCell>
-                    <Link
-                      to={`/templates/${toHex(address)}`}
-                      state={[address]}
-                      style={{ textDecoration: 'none' }}
-                    >
+                    <Link to={`/templates/${toHex(address)}`} state={[address]} style={{ textDecoration: "none" }}>
                       {shortenString(toHex(address))}
                     </Link>
                     <CopyToClipboard copy={toHex(address)} />
@@ -233,10 +207,10 @@ function Templates() {
                           target="_blank"
                           rel="noreferrer"
                           style={{
-                            textDecoration: 'none',
-                            display: 'inline-flex',
-                            gap: '10px',
-                            alignItems: 'center',
+                            textDecoration: "none",
+                            display: "inline-flex",
+                            gap: "10px",
+                            alignItems: "center",
                           }}
                         >
                           Download
@@ -244,8 +218,8 @@ function Templates() {
                             <FileDownloadOutlinedIcon
                               color="primary"
                               style={{
-                                width: '18px',
-                                height: '18px',
+                                width: "18px",
+                                height: "18px",
                               }}
                             />
                           </IconButton>
@@ -253,13 +227,9 @@ function Templates() {
                       </>
                     )}
                   </DataTableCell>
-                  <DataTableCell style={{ textAlign: 'center' }}>
-                    {height}
-                  </DataTableCell>
-                  <DataTableCell style={{ textAlign: 'center' }}>
-                    Active
-                  </DataTableCell>
-                  <DataTableCell style={{ textAlign: 'center' }}>
+                  <DataTableCell style={{ textAlign: "center" }}>{height}</DataTableCell>
+                  <DataTableCell style={{ textAlign: "center" }}>Active</DataTableCell>
+                  <DataTableCell style={{ textAlign: "center" }}>
                     <Link to={`/templates/${toHex(address)}`} state={[address]}>
                       <IconButton>
                         <KeyboardArrowRightIcon color="primary" />
@@ -270,13 +240,8 @@ function Templates() {
               ))}
             {templates.filter(({ show }) => show === true).length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} style={{ textAlign: 'center' }}>
-                  <Fade
-                    in={
-                      templates.filter(({ show }) => show === true).length === 0
-                    }
-                    timeout={500}
-                  >
+                <TableCell colSpan={4} style={{ textAlign: "center" }}>
+                  <Fade in={templates.filter(({ show }) => show === true).length === 0} timeout={500}>
                     <Typography variant="h5">No results found</Typography>
                   </Fade>
                 </TableCell>

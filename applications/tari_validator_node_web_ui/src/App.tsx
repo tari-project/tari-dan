@@ -35,12 +35,7 @@ import Layout from "./theme/LayoutMain";
 import CommitteeMembers from "./routes/Committees/CommitteeMembers";
 import { createContext, useState, useEffect } from "react";
 import { IEpoch, IIdentity } from "./utils/interfaces";
-import {
-  getEpochManagerStats,
-  getIdentity,
-  getRecentTransactions,
-  getShardKey,
-} from "./utils/json_rpc";
+import { getEpochManagerStats, getIdentity, getRecentTransactions, getShardKey } from "./utils/json_rpc";
 import TransactionDetails from "./routes/Transactions/TransactionDetails";
 import BlockDetails from "./routes/Blocks/BlockDetails";
 
@@ -172,11 +167,9 @@ export default function App() {
   useEffect(() => {
     if (epoch !== undefined && identity !== undefined) {
       // The *10 is from the hardcoded constant in VN.
-      getShardKey(epoch.current_epoch * 10, identity.public_key).then(
-        (response) => {
-          setShardKey(response.shard_key);
-        },
-      );
+      getShardKey(epoch.current_epoch * 10, identity.public_key).then((response) => {
+        setShardKey(response.shard_key);
+      });
     }
   }, [epoch, identity]);
 
@@ -189,14 +182,11 @@ export default function App() {
             <Route path="committees" element={<Committees />} />
             <Route path="connections" element={<Connections />} />
             <Route path="fees" element={<Fees />} />
-            <Route path="blocks" element={<Blocks/>} />
+            <Route path="blocks" element={<Blocks />} />
             <Route path="templates" element={<Templates />} />
             <Route path="vns" element={<ValidatorNodes />} />
             <Route path="mempool" element={<Mempool />} />
-            <Route
-              path="transactions/:transactionHash"
-              element={<TransactionDetails />}
-            />
+            <Route path="transactions/:transactionHash" element={<TransactionDetails />} />
             <Route path="blocks/:blockId" element={<BlockDetails />} />
             <Route path="templates/:address" element={<TemplateFunctions />} />
             <Route path="committees/:address" element={<CommitteeMembers />} />

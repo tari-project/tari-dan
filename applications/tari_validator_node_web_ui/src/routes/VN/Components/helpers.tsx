@@ -103,8 +103,7 @@ function compare(a: any, b: any) {
 }
 
 function toHexString(byteArray: number[]) {
-  if (!Array.isArray(byteArray))
-    throw new Error("Expected input to be an array");
+  if (!Array.isArray(byteArray)) throw new Error("Expected input to be an array");
   return Array.from(byteArray, function (byte) {
     return ("0" + (byte & 0xff).toString(16)).slice(-2);
   }).join("");
@@ -119,8 +118,7 @@ function fromHexString(hexString: string) {
 }
 
 function shortenString(string: string, start: number = 8, end: number = 8) {
-  if (typeof string !== "string")
-    throw new Error("Expected input to be a string");
+  if (typeof string !== "string") throw new Error("Expected input to be a string");
   return string.substring(0, start) + "..." + string.slice(-end);
 }
 

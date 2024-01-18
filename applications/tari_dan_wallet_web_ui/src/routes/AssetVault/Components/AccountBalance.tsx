@@ -20,16 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import Box from '@mui/material/Box';
-import Fade from '@mui/material/Fade';
-import IconButton from '@mui/material/IconButton';
-import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { IoEyeOffOutline, IoEyeOutline } from 'react-icons/io5';
-import FetchStatusCheck from '../../../Components/FetchStatusCheck';
-import { useAccountsGetBalances } from '../../../api/hooks/useAccounts';
-import TariGem from '../../../assets/TariGem';
-import useAccountStore from '../../../store/accountStore';
+import Box from "@mui/material/Box";
+import Fade from "@mui/material/Fade";
+import IconButton from "@mui/material/IconButton";
+import Typography from "@mui/material/Typography";
+import { useTheme } from "@mui/material/styles";
+import { IoEyeOffOutline, IoEyeOutline } from "react-icons/io5";
+import FetchStatusCheck from "../../../Components/FetchStatusCheck";
+import { useAccountsGetBalances } from "../../../api/hooks/useAccounts";
+import TariGem from "../../../assets/TariGem";
+import useAccountStore from "../../../store/accountStore";
 
 function AccountBalance({ accountName }: { accountName: string }) {
   const { showBalance, setShowBalance } = useAccountStore();
@@ -38,17 +38,15 @@ function AccountBalance({ accountName }: { accountName: string }) {
     isError: balancesIsError,
     error: balancesError,
     isFetching: balancesIsFetching,
-  } = useAccountsGetBalances(accountName || '');
+  } = useAccountsGetBalances(accountName || "");
   const theme = useTheme();
 
   const balance =
-    balancesData?.balances[0]?.balance &&
-    balancesData?.balances[0]?.confidential_balance
-      ? balancesData?.balances[0]?.balance +
-        balancesData?.balances[0]?.confidential_balance
+    balancesData?.balances[0]?.balance && balancesData?.balances[0]?.confidential_balance
+      ? balancesData?.balances[0]?.balance + balancesData?.balances[0]?.confidential_balance
       : 0;
 
-  const formattedBalance = balance.toLocaleString('en-US', {
+  const formattedBalance = balance.toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -57,7 +55,7 @@ function AccountBalance({ accountName }: { accountName: string }) {
     <>
       <FetchStatusCheck
         isError={balancesIsError}
-        errorMessage={balancesError?.message || 'Error fetching data'}
+        errorMessage={balancesError?.message || "Error fetching data"}
         isLoading={false}
       />
       <Fade in={!balancesIsFetching && !balancesIsError} timeout={100}>
@@ -69,26 +67,25 @@ function AccountBalance({ accountName }: { accountName: string }) {
           </Box>
           <Box
             style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
               gap: theme.spacing(1),
-              minWidth: '230px',
+              minWidth: "230px",
             }}
           >
             <Typography variant="h2">
               {showBalance
                 ? (
                     <>
-                      <TariGem fill={theme.palette.text.primary} />{' '}
-                      {formattedBalance}
+                      <TariGem fill={theme.palette.text.primary} /> {formattedBalance}
                     </>
                   ) || (
                     <>
                       <TariGem fill={theme.palette.text.primary} /> 0
                     </>
                   )
-                : '************'}
+                : "************"}
             </Typography>
             <IconButton onClick={() => setShowBalance(!showBalance)}>
               {showBalance ? (

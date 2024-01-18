@@ -29,10 +29,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import {
-  DataTableCell,
-  BoxHeading2,
-} from "../../../Components/StyledComponents";
+import { DataTableCell, BoxHeading2 } from "../../../Components/StyledComponents";
 import AddIcon from "@mui/icons-material/Add";
 import Button from "@mui/material/Button";
 import { TextField } from "@mui/material";
@@ -84,10 +81,7 @@ function Connections() {
   };
 
   const onSubmitAddPeer = async () => {
-    await addPeer(
-      formState.publicKey,
-      formState.address ? [formState.address] : [],
-    );
+    await addPeer(formState.publicKey, formState.address ? [formState.address] : []);
     setFormState({ publicKey: "", address: "" });
     setShowAddPeerDialog(false);
   };
@@ -124,10 +118,7 @@ function Connections() {
               <Button variant="contained" type="submit">
                 Add Peer
               </Button>
-              <Button
-                variant="outlined"
-                onClick={() => showAddPeerDialog(false)}
-              >
+              <Button variant="outlined" onClick={() => showAddPeerDialog(false)}>
                 Cancel
               </Button>
             </Form>
@@ -136,11 +127,7 @@ function Connections() {
         {!showPeerDialog && (
           <Fade in={!showPeerDialog}>
             <div className="flex-container">
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={() => showAddPeerDialog()}
-              >
+              <Button variant="outlined" startIcon={<AddIcon />} onClick={() => showAddPeerDialog()}>
                 Add Peer
               </Button>
             </div>
@@ -160,29 +147,18 @@ function Connections() {
           </TableHead>
           <TableBody>
             {connections &&
-              connections.map(
-                ({
-                  connection_id,
-                  address,
-                  age,
-                  direction,
-                  peer_id,
-                  ping_latency,
-                }) => (
-                  <TableRow key={connection_id}>
-                    <DataTableCell>
-                      {peer_id ? shortenString(peer_id) : "--"}
-                      <CopyToClipboard copy={peer_id} />
-                    </DataTableCell>
-                    <DataTableCell>{address}</DataTableCell>
-                    <DataTableCell>{displayDuration(age)}</DataTableCell>
-                    <DataTableCell>{direction}</DataTableCell>
-                    <DataTableCell>
-                      {ping_latency ? displayDuration(ping_latency) : "--"}
-                    </DataTableCell>
-                  </TableRow>
-                ),
-              )}
+              connections.map(({ connection_id, address, age, direction, peer_id, ping_latency }) => (
+                <TableRow key={connection_id}>
+                  <DataTableCell>
+                    {peer_id ? shortenString(peer_id) : "--"}
+                    <CopyToClipboard copy={peer_id} />
+                  </DataTableCell>
+                  <DataTableCell>{address}</DataTableCell>
+                  <DataTableCell>{displayDuration(age)}</DataTableCell>
+                  <DataTableCell>{direction}</DataTableCell>
+                  <DataTableCell>{ping_latency ? displayDuration(ping_latency) : "--"}</DataTableCell>
+                </TableRow>
+              ))}
           </TableBody>
         </Table>
       </TableContainer>
@@ -201,14 +177,10 @@ function displayDuration(duration: Duration) {
     return `${duration.nanos / 1000}ns`;
   }
   if (duration.secs > 60 * 60) {
-    return `${(duration.secs / 60 / 60).toFixed(0)}h${(
-      duration.secs / 60
-    ).toFixed(0)}m`;
+    return `${(duration.secs / 60 / 60).toFixed(0)}h${(duration.secs / 60).toFixed(0)}m`;
   }
   if (duration.secs > 60) {
-    return `${(duration.secs / 60).toFixed(0)}m${(duration.secs % 60).toFixed(
-      0,
-    )}s`;
+    return `${(duration.secs / 60).toFixed(0)}m${(duration.secs % 60).toFixed(0)}s`;
   }
   return `${duration.secs}.${(duration.nanos / 1000000).toFixed(0)}s`;
 }
