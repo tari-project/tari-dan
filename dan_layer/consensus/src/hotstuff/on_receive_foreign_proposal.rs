@@ -3,7 +3,7 @@
 use std::ops::DerefMut;
 
 use log::*;
-use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, shard_bucket::ShardBucket, NodeHeight};
+use tari_dan_common_types::{committee::CommitteeShard, optional::Optional, shard::Shard, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -69,7 +69,7 @@ where TConsensusSpec: ConsensusSpec
             .epoch_manager
             .get_committee_shard(block.epoch(), vn.shard_key)
             .await?;
-        let foreign_proposal = ForeignProposal::new(committee_shard.bucket(), *block.id());
+        let foreign_proposal = ForeignProposal::new(committee_shard.shard(), *block.id());
         if self
             .store
             .with_read_tx(|tx| ForeignProposal::exists(tx, &foreign_proposal))?
@@ -83,9 +83,9 @@ where TConsensusSpec: ConsensusSpec
         }
 
         let local_shard = self.epoch_manager.get_local_committee_shard(block.epoch()).await?;
-        self.validate_proposed_block(&from, &block, committee_shard.bucket(), local_shard.bucket())?;
+        self.validate_proposed_block(&from, &block, committee_shard.shard(), local_shard.shard())?;
         // Is this ok? Can foreign node send invalid block that should still increment the counter?
-        self.foreign_receive_counter.increment(&committee_shard.bucket());
+        self.foreign_receive_counter.increment(&committee_shard.shard());
         self.store.with_write_tx(|tx| {
             self.foreign_receive_counter.save(tx)?;
             foreign_proposal.upsert(tx)?;
@@ -166,8 +166,8 @@ where TConsensusSpec: ConsensusSpec
         &self,
         from: &TConsensusSpec::Addr,
         candidate_block: &Block,
-        foreign_bucket: ShardBucket,
-        local_bucket: ShardBucket,
+        foreign_bucket: Shard,
+        local_bucket: Shard,
     ) -> Result<(), ProposalValidationError> {
         let incoming_index = match candidate_block.get_foreign_index(&local_bucket) {
             Some(i) => *i,

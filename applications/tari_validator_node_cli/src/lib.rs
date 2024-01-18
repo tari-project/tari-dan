@@ -29,4 +29,4 @@ pub mod prompt;
 pub mod table;
 mod cli_range;
 pub mod component_manager;
-pub mod versioned_substate_address;
+pub mod versioned_substate_id;

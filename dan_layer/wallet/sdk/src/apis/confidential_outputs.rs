@@ -4,7 +4,7 @@
 use log::*;
 use tari_common_types::types::PublicKey;
 use tari_dan_common_types::optional::{IsNotFoundError, Optional};
-use tari_engine_types::{confidential::ConfidentialOutput, substate::SubstateAddress};
+use tari_engine_types::{confidential::ConfidentialOutput, substate::SubstateId};
 use tari_key_manager::key_manager::DerivedKey;
 use tari_template_lib::models::Amount;
 use tari_transaction::TransactionId;
@@ -47,7 +47,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
 
     pub fn lock_outputs_by_amount(
         &self,
-        vault_address: &SubstateAddress,
+        vault_address: &SubstateId,
         amount: Amount,
         locked_by_proof_id: ConfidentialProofId,
         dry_run: bool,
@@ -92,10 +92,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         Ok(())
     }
 
-    pub fn add_proof(
-        &self,
-        vault_address: &SubstateAddress,
-    ) -> Result<ConfidentialProofId, ConfidentialOutputsApiError> {
+    pub fn add_proof(&self, vault_address: &SubstateId) -> Result<ConfidentialProofId, ConfidentialOutputsApiError> {
         let mut tx = self.store.create_write_tx()?;
         let proof_id = tx.proofs_insert(vault_address)?;
         tx.commit()?;
@@ -159,7 +156,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         Ok(outputs_with_masks)
     }
 
-    pub fn get_unspent_balance(&self, vault_addr: &SubstateAddress) -> Result<u64, ConfidentialOutputsApiError> {
+    pub fn get_unspent_balance(&self, vault_addr: &SubstateId) -> Result<u64, ConfidentialOutputsApiError> {
         let mut tx = self.store.create_read_tx()?;
         let balance = tx.outputs_get_unspent_balance(vault_addr)?;
         Ok(balance)
@@ -167,8 +164,8 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
 
     pub fn verify_and_update_confidential_outputs<'i, I: IntoIterator<Item = &'i ConfidentialOutput>>(
         &self,
-        account_addr: &SubstateAddress,
-        vault_addr: &SubstateAddress,
+        account_addr: &SubstateId,
+        vault_addr: &SubstateId,
         outputs: I,
     ) -> Result<(), ConfidentialOutputsApiError> {
         let account = self.accounts_api.get_account_by_address(account_addr)?;
@@ -214,7 +211,7 @@ impl<'a, TStore: WalletStore> ConfidentialOutputsApi<'a, TStore> {
         &self,
         account: &Account,
         key: &DerivedKey<PublicKey>,
-        vault_address: &SubstateAddress,
+        vault_address: &SubstateId,
         output: &ConfidentialOutput,
     ) -> Result<ConfidentialOutputModel, ConfidentialOutputsApiError> {
         let unblinded_result = self.crypto_api.unblind_output(

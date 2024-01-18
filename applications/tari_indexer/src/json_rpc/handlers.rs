@@ -314,11 +314,11 @@ impl JsonRpcHandlers {
                             ),
                         )),
                         SubstateResult::Up {
-                            address,
+                            id,
                             substate,
                             created_by_tx,
                         } => Ok(JsonRpcResponse::success(answer_id, GetSubstateResponse {
-                            address,
+                            address: id,
                             version: substate.version(),
                             substate,
                             created_by_transaction: created_by_tx,

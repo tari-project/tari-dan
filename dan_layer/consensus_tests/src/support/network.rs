@@ -9,7 +9,7 @@ use std::{
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket};
+use tari_dan_common_types::{committee::Committee, shard::Shard};
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, TransactionPool},
     StateStore,
@@ -157,7 +157,7 @@ pub enum TestNetworkDestination {
 }
 
 impl TestNetworkDestination {
-    pub fn is_for(&self, addr: &TestAddress, bucket: ShardBucket) -> bool {
+    pub fn is_for(&self, addr: &TestAddress, bucket: Shard) -> bool {
         match self {
             TestNetworkDestination::All => true,
             TestNetworkDestination::Address(a) => a == addr,
@@ -172,8 +172,7 @@ impl TestNetworkDestination {
 
 pub struct TestNetworkWorker {
     rx_new_transaction: Option<mpsc::Receiver<(TestNetworkDestination, ExecutedTransaction)>>,
-    tx_new_transactions:
-        HashMap<TestAddress, (ShardBucket, mpsc::Sender<TransactionId>, SqliteStateStore<TestAddress>)>,
+    tx_new_transactions: HashMap<TestAddress, (Shard, mpsc::Sender<TransactionId>, SqliteStateStore<TestAddress>)>,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
     #[allow(clippy::type_complexity)]
     rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>>>,
@@ -327,7 +326,7 @@ impl TestNetworkWorker {
         self.tx_hs_message.get(&to).unwrap().send((from, msg)).await.unwrap();
     }
 
-    async fn is_offline_destination(&self, addr: &TestAddress, bucket: ShardBucket) -> bool {
+    async fn is_offline_destination(&self, addr: &TestAddress, bucket: Shard) -> bool {
         let lock = self.offline_destinations.read().await;
         lock.iter().any(|d| d.is_for(addr, bucket))
     }

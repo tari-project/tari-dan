@@ -8,7 +8,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{shard_bucket::ShardBucket, NodeHeight};
+use tari_dan_common_types::{shard::Shard, NodeHeight};
 
 use super::BlockId;
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
@@ -45,14 +45,14 @@ impl FromStr for ForeignProposalState {
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
 pub struct ForeignProposal {
-    pub bucket: ShardBucket,
+    pub bucket: Shard,
     pub block_id: BlockId,
     pub state: ForeignProposalState,
     pub mined_at: Option<NodeHeight>,
 }
 
 impl ForeignProposal {
-    pub fn new(bucket: ShardBucket, block_id: BlockId) -> Self {
+    pub fn new(bucket: Shard, block_id: BlockId) -> Self {
         Self {
             bucket,
             block_id,

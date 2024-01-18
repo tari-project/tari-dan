@@ -7,7 +7,7 @@ use indexmap::IndexMap;
 use tari_bor::encode_into;
 use tari_engine_types::{
     fees::FeeSource,
-    substate::{SubstateAddress, SubstateValue},
+    substate::{SubstateId, SubstateValue},
 };
 
 use super::FeeTable;
@@ -41,7 +41,7 @@ impl RuntimeModule for FeeModule {
     fn on_before_finalize(
         &self,
         track: &StateTracker,
-        changes: &IndexMap<SubstateAddress, SubstateValue>,
+        changes: &IndexMap<SubstateId, SubstateValue>,
     ) -> Result<(), RuntimeModuleError> {
         let total_storage = changes
             .values()

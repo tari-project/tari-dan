@@ -51,7 +51,7 @@ use tari_common::{
     exit_codes::{ExitCode, ExitError},
 };
 use tari_dan_app_utilities::{consensus_constants::ConsensusConstants, keypair::setup_keypair_prompt};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_dan_storage::global::DbFactory;
 use tari_dan_storage_sqlite::SqliteDbFactory;
 use tari_shutdown::ShutdownSignal;
@@ -91,7 +91,7 @@ pub enum ShardKeyError {
 #[derive(Serialize, Deserialize)]
 pub struct ShardKey {
     is_registered: bool,
-    shard_id: Option<ShardId>,
+    substate_address: Option<SubstateAddress>,
 }
 
 pub async fn run_validator_node(config: &ApplicationConfig, shutdown_signal: ShutdownSignal) -> Result<(), ExitError> {
