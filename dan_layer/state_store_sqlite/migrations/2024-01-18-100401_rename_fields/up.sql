@@ -12,6 +12,6 @@ alter table locked_outputs
 drop index substates_uniq_shard_id;
 create unique index substates_uniq_address on substates (address);
 
-drop index substates_uniq_shard_id;
+drop index locked_outputs_uniq_idx_shard_id;
 create unique index locked_outputs_uniq_idx_substate_address on locked_outputs (substate_address);
     
