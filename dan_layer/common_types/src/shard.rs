@@ -19,7 +19,7 @@ impl Shard {
         self.0
     }
 
-    pub fn to_shard_range(self, num_committees: u32) -> RangeInclusive<SubstateAddress> {
+    pub fn to_substate_address_range(self, num_committees: u32) -> RangeInclusive<SubstateAddress> {
         if num_committees == 0 {
             return RangeInclusive::new(SubstateAddress::zero(), SubstateAddress::from_u256(U256::MAX));
         }
@@ -72,7 +72,7 @@ mod test {
             let mut max_committee_size = U256::ZERO;
             for bucket_index in 0..num_of_committees {
                 let bucket = super::Shard::from(bucket_index);
-                let range = bucket.to_shard_range(num_of_committees);
+                let range = bucket.to_substate_address_range(num_of_committees);
                 if bucket_index > 0 {
                     assert_eq!(
                         range.start().to_u256(),

@@ -91,7 +91,7 @@ impl SubstateAddress {
 
     pub fn to_committee_range(&self, num_committees: u32) -> RangeInclusive<SubstateAddress> {
         let shard = self.to_committee_shard(num_committees);
-        shard.to_shard_range(num_committees)
+        shard.to_substate_address_range(num_committees)
     }
 }
 

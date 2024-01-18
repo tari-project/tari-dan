@@ -766,8 +766,8 @@ impl JsonRpcHandlers {
         let committees = validators_per_bucket
             .into_iter()
             .map(|(bucket, validators)| CommitteeShardInfo {
-                bucket,
-                shard_range: bucket.to_shard_range(num_committees),
+                shard: bucket,
+                substate_address_range: bucket.to_substate_address_range(num_committees),
                 validators,
             })
             .collect();

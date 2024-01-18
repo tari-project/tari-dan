@@ -239,8 +239,8 @@ pub struct GetNetworkCommitteeResponse<TAddr> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommitteeShardInfo<TAddr> {
-    pub bucket: Shard,
-    pub shard_range: RangeInclusive<SubstateAddress>,
+    pub shard: Shard,
+    pub substate_address_range: RangeInclusive<SubstateAddress>,
     pub validators: Vec<ValidatorNode<TAddr>>,
 }
 
