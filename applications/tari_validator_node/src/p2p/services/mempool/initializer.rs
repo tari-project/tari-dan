@@ -55,7 +55,9 @@ where
     TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
     TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
-    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(100000);
+    // This channel only needs to be size 1, because each mempool request must wait for a reply and the mempool is
+    // running on a single task and so there is no benefit to buffering multiple requests.
+    let (tx_mempool_request, rx_mempool_request) = mpsc::channel(1);
 
     let mempool = MempoolService::new(
         rx_mempool_request,

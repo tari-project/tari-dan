@@ -173,17 +173,24 @@ where
                         .await,
                 );
             },
-            MempoolRequest::RemoveTransaction {
-                transaction_id: transaction_hash,
-            } => self.remove_transaction(&transaction_hash),
+            MempoolRequest::RemoveTransactions { transaction_ids, reply } => {
+                let num_found = self.remove_transactions(&transaction_ids);
+                handle::<_, MempoolError>(reply, Ok(num_found));
+            },
             MempoolRequest::GetMempoolSize { reply } => {
                 let _ignore = reply.send(self.transactions.len());
             },
         }
     }
 
-    fn remove_transaction(&mut self, id: &TransactionId) {
-        self.transactions.remove(id);
+    fn remove_transactions(&mut self, ids: &[TransactionId]) -> usize {
+        let mut num_found = 0;
+        for id in ids {
+            if self.transactions.remove(id) {
+                num_found += 1;
+            }
+        }
+        num_found
     }
 
     async fn handle_new_transaction_from_local(
