@@ -20,15 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from 'react';
-import Button from '@mui/material/Button';
-import Menu from '@mui/material/Menu';
-import MenuItem from '@mui/material/MenuItem';
-import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
-import ListItemText from '@mui/material/ListItemText';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import MenuList from '@mui/material/MenuList';
-import FilterListOutlinedIcon from '@mui/icons-material/FilterListOutlined';
+import React from "react";
+import Button from "@mui/material/Button";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import UnfoldMoreIcon from "@mui/icons-material/UnfoldMore";
+import ListItemText from "@mui/material/ListItemText";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import MenuList from "@mui/material/MenuList";
+import FilterListOutlinedIcon from "@mui/icons-material/FilterListOutlined";
 
 interface MenuItem {
   title: string;
@@ -57,14 +57,14 @@ function HeadingMenu({ menuTitle, menuItems }: Props) {
   return (
     <div>
       <Button
-        aria-owns={anchorEl ? 'simple-menu' : undefined}
+        aria-owns={anchorEl ? "simple-menu" : undefined}
         aria-haspopup="true"
         onClick={handleClick}
         // onMouseOver={handleClick}
         startIcon={<UnfoldMoreIcon />}
         style={{
-          textTransform: 'none',
-          color: '#000000',
+          textTransform: "none",
+          color: "#000000",
         }}
       >
         {menuTitle}
@@ -76,16 +76,10 @@ function HeadingMenu({ menuTitle, menuItems }: Props) {
         onClose={handleClose}
         MenuListProps={{ onMouseLeave: handleClose }}
       >
-        <MenuList style={{ outline: 'none' }} className="annoying">
+        <MenuList style={{ outline: "none" }} className="annoying">
           {menuItems?.map((item, index) => (
             <MenuItem key={index} onClick={item.fn}>
-              <ListItemIcon>
-                {item.icon ? (
-                  item.icon
-                ) : (
-                  <FilterListOutlinedIcon fontSize="small" />
-                )}
-              </ListItemIcon>
+              <ListItemIcon>{item.icon ? item.icon : <FilterListOutlinedIcon fontSize="small" />}</ListItemIcon>
               <ListItemText>{item.title}</ListItemText>
             </MenuItem>
           ))}

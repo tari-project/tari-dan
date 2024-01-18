@@ -20,26 +20,23 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import Box from '@mui/material/Box';
-import Tab from '@mui/material/Tab';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Tabs from '@mui/material/Tabs';
-import Typography from '@mui/material/Typography';
-import { useState } from 'react';
-import CopyToClipboard from '../../../Components/CopyToClipboard';
-import FetchStatusCheck from '../../../Components/FetchStatusCheck';
-import { DataTableCell } from '../../../Components/StyledComponents';
-import {
-  useAccountNFTsList,
-  useAccountsGetBalances,
-} from '../../../api/hooks/useAccounts';
-import useAccountStore from '../../../store/accountStore';
-import { removeTagged, shortenString } from '../../../utils/helpers';
+import Box from "@mui/material/Box";
+import Tab from "@mui/material/Tab";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Tabs from "@mui/material/Tabs";
+import Typography from "@mui/material/Typography";
+import { useState } from "react";
+import CopyToClipboard from "../../../Components/CopyToClipboard";
+import FetchStatusCheck from "../../../Components/FetchStatusCheck";
+import { DataTableCell } from "../../../Components/StyledComponents";
+import { useAccountNFTsList, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
+import useAccountStore from "../../../store/accountStore";
+import { removeTagged, shortenString } from "../../../utils/helpers";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -61,13 +58,7 @@ interface NftsListProps {
   is_burned: boolean;
 }
 
-function BalanceRow({
-  token_symbol,
-  resource_address,
-  resource_type,
-  balance,
-  confidential_balance,
-}: BalanceRowProps) {
+function BalanceRow({ token_symbol, resource_address, resource_type, balance, confidential_balance }: BalanceRowProps) {
   const { showBalance } = useAccountStore();
   return (
     <TableRow key={token_symbol || resource_address}>
@@ -76,12 +67,8 @@ function BalanceRow({
         <CopyToClipboard copy={token_symbol || resource_address} />
       </DataTableCell>
       <DataTableCell>{resource_type}</DataTableCell>
-      <DataTableCell>
-        {showBalance ? removeTagged(balance) : '*************'}
-      </DataTableCell>
-      <DataTableCell>
-        {showBalance ? removeTagged(confidential_balance) : '**************'}
-      </DataTableCell>
+      <DataTableCell>{showBalance ? removeTagged(balance) : "*************"}</DataTableCell>
+      <DataTableCell>{showBalance ? removeTagged(confidential_balance) : "**************"}</DataTableCell>
     </TableRow>
   );
 }
@@ -119,7 +106,7 @@ function TabPanel(props: TabPanelProps) {
 function tabProps(index: number) {
   return {
     id: `asset-tab-${index}`,
-    'aria-controls': `asset-tabpanel-${index}`,
+    "aria-controls": `asset-tabpanel-${index}`,
   };
 }
 
@@ -146,14 +133,9 @@ function Assets({ accountName }: { accountName: string }) {
   };
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs
-          value={value}
-          onChange={handleChange}
-          aria-label="account assets"
-          variant="standard"
-        >
+    <Box sx={{ width: "100%" }}>
+      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+        <Tabs value={value} onChange={handleChange} aria-label="account assets" variant="standard">
           <Tab label="Tokens" {...tabProps(0)} style={{ width: 150 }} />
           <Tab label="NFTs" {...tabProps(1)} style={{ width: 150 }} />
         </Tabs>
@@ -162,7 +144,7 @@ function Assets({ accountName }: { accountName: string }) {
         {balancesIsError || balancesIsFetching ? (
           <FetchStatusCheck
             isError={balancesIsError}
-            errorMessage={balancesError?.message || 'Error fetching data'}
+            errorMessage={balancesError?.message || "Error fetching data"}
             isLoading={balancesIsFetching}
           />
         ) : (
@@ -197,7 +179,7 @@ function Assets({ accountName }: { accountName: string }) {
                         confidential_balance={confidential_balance}
                       />
                     );
-                  }
+                  },
                 )}
               </TableBody>
             </Table>
@@ -208,7 +190,7 @@ function Assets({ accountName }: { accountName: string }) {
         {nftsListIsError || nftsListIsFetching ? (
           <FetchStatusCheck
             isError={nftsListIsError}
-            errorMessage={nftsListError?.message || 'Error fetching data'}
+            errorMessage={nftsListError?.message || "Error fetching data"}
             isLoading={nftsListIsFetching}
           />
         ) : (
@@ -222,17 +204,9 @@ function Assets({ accountName }: { accountName: string }) {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {nftsListData?.nfts.map(
-                  ({ token_symbol, metadata, is_burned }: NftsListProps) => {
-                    return (
-                      <NftsList
-                        token_symbol={token_symbol}
-                        metadata={metadata}
-                        is_burned={is_burned}
-                      />
-                    );
-                  }
-                )}
+                {nftsListData?.nfts.map(({ token_symbol, metadata, is_burned }: NftsListProps) => {
+                  return <NftsList token_symbol={token_symbol} metadata={metadata} is_burned={is_burned} />;
+                })}
               </TableBody>
             </Table>
           </TableContainer>

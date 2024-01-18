@@ -20,20 +20,13 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState, useEffect } from 'react';
-import { fromHexString } from '../VN/Components/helpers';
-import EChartsReact from 'echarts-for-react';
-import {
-  ICommitteeChart,
-  GetNetworkCommitteesResponse, CommitteeShardInfo,
-} from '../../utils/interfaces';
-import '../../theme/echarts.css';
+import { useState, useEffect } from "react";
+import { fromHexString } from "../VN/Components/helpers";
+import EChartsReact from "echarts-for-react";
+import { ICommitteeChart, GetNetworkCommitteesResponse, CommitteeShardInfo } from "../../utils/interfaces";
+import "../../theme/echarts.css";
 
-export default function CommitteesRadial({
-  committees,
-}: {
-  committees: GetNetworkCommitteesResponse
-}) {
+export default function CommitteesRadial({ committees }: { committees: GetNetworkCommitteesResponse }) {
   const [chartData, setChartData] = useState<ICommitteeChart>({
     activeleft: [],
     inactiveleft: [],
@@ -44,10 +37,10 @@ export default function CommitteesRadial({
   const [titles, setTitles] = useState<string[]>([]);
 
   const TOTAL_WIDTH = 256;
-  const INACTIVE_COLOR = 'rgba(0, 0, 0, 0)';
+  const INACTIVE_COLOR = "rgba(0, 0, 0, 0)";
   const ACTIVE_COLOR = (params: any) => {
     let index = params.dataIndex;
-    var colorList = ['#ECA86A', '#DB7E7E', '#7AC1C2', '#318EFA', '#9D5CF9'];
+    var colorList = ["#ECA86A", "#DB7E7E", "#7AC1C2", "#318EFA", "#9D5CF9"];
     return colorList[index % colorList.length];
   };
 
@@ -83,9 +76,7 @@ export default function CommitteesRadial({
           break;
         case start > end:
           info.activeleft.push(end);
-          info.inactiveleft.push(
-            TOTAL_WIDTH - (TOTAL_WIDTH - start) - end
-          );
+          info.inactiveleft.push(TOTAL_WIDTH - (TOTAL_WIDTH - start) - end);
           info.activemiddle.push(0);
           info.inactiveright.push(0);
           info.activeright.push(TOTAL_WIDTH - start);
@@ -95,21 +86,22 @@ export default function CommitteesRadial({
       }
     });
     setChartData(info);
-    const newTitles = dataset.map(
-      (info) => `Committee ${info.bucket}`
-    );
+    const newTitles = dataset.map((info) => `Committee ${info.bucket}`);
     setTitles(newTitles);
   }, [committees]);
 
   function tooltipFormatter(params: any) {
     const dataIndex = params[0].dataIndex;
     const data = committees.committees[dataIndex];
-    const {validators, shard_range: {start, end}} = data;
+    const {
+      validators,
+      shard_range: { start, end },
+    } = data;
 
     const memberList = validators
       .map((member) => `<li>${member.address}</li>`)
       .slice(0, 5)
-      .join('');
+      .join("");
 
     return `<b>Range:</b> <br />
             ${start},<br />
@@ -124,16 +116,16 @@ export default function CommitteesRadial({
       max: TOTAL_WIDTH,
     },
     radiusAxis: {
-      type: 'category',
+      type: "category",
       data: titles,
       z: 10,
       axisPointer: {
-        type: 'shadow',
+        type: "shadow",
         label: {
           show: true,
-          formatter: '{value}',
+          formatter: "{value}",
           textStyle: {
-            color: '#fff',
+            color: "#fff",
             fontSize: 12,
           },
         },
@@ -142,77 +134,77 @@ export default function CommitteesRadial({
     tooltip: {
       show: true,
       enterable: true,
-      trigger: 'axis',
+      trigger: "axis",
       formatter: tooltipFormatter,
       position: function (point: any) {
         const left = point[0] + 10;
         const top = point[1] - 10;
         return [left, top];
       },
-      backgroundColor: '#ffffffe6',
+      backgroundColor: "#ffffffe6",
     },
     polar: {},
     series: [
       {
-        type: 'bar',
+        type: "bar",
         data: chartData.activeleft,
-        coordinateSystem: 'polar',
-        name: 'ActiveLeft',
-        stack: 'a',
+        coordinateSystem: "polar",
+        name: "ActiveLeft",
+        stack: "a",
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         itemStyle: {
           color: ACTIVE_COLOR,
         },
       },
       {
-        type: 'bar',
+        type: "bar",
         data: chartData.inactiveleft,
-        coordinateSystem: 'polar',
-        name: 'InactiveLeft',
-        stack: 'a',
+        coordinateSystem: "polar",
+        name: "InactiveLeft",
+        stack: "a",
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         itemStyle: {
           color: INACTIVE_COLOR,
         },
       },
       {
-        type: 'bar',
+        type: "bar",
         data: chartData.activemiddle,
-        coordinateSystem: 'polar',
-        name: 'ActiveMiddle',
-        stack: 'a',
+        coordinateSystem: "polar",
+        name: "ActiveMiddle",
+        stack: "a",
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         itemStyle: {
           color: ACTIVE_COLOR,
         },
       },
       {
-        type: 'bar',
+        type: "bar",
         data: chartData.inactiveright,
-        coordinateSystem: 'polar',
-        name: 'InactiveRight',
-        stack: 'a',
+        coordinateSystem: "polar",
+        name: "InactiveRight",
+        stack: "a",
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         itemStyle: {
           color: INACTIVE_COLOR,
         },
       },
       {
-        type: 'bar',
+        type: "bar",
         data: chartData.activeright,
-        coordinateSystem: 'polar',
-        name: 'ActiveRight',
-        stack: 'a',
+        coordinateSystem: "polar",
+        name: "ActiveRight",
+        stack: "a",
         emphasis: {
-          focus: 'none',
+          focus: "none",
         },
         itemStyle: {
           color: ACTIVE_COLOR,

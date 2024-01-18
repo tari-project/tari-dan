@@ -86,7 +86,7 @@ async function addPeer(public_key: string, addresses: string[]) {
   });
 }
 async function registerValidatorNode(feeClaimPublicKeyHex: string) {
-  return await jsonRpc('register_validator_node', { fee_claim_public_key: feeClaimPublicKeyHex });
+  return await jsonRpc("register_validator_node", { fee_claim_public_key: feeClaimPublicKeyHex });
 }
 async function getRecentTransactions() {
   return await jsonRpc("get_recent_transactions");

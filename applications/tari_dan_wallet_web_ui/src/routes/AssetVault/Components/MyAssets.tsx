@@ -20,28 +20,21 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import Grid from '@mui/material/Grid';
-import Box from '@mui/material/Box';
-import Divider from '@mui/material/Divider';
-import Typography from '@mui/material/Typography';
-import { useTheme } from '@mui/material/styles';
-import { useEffect } from 'react';
-import {
-  InnerHeading,
-  StyledPaper,
-} from '../../../Components/StyledComponents';
-import {
-  useAccountNFTsList,
-  useAccountsGet,
-  useAccountsGetBalances,
-} from '../../../api/hooks/useAccounts';
-import useAccountStore from '../../../store/accountStore';
-import Transactions from '../../Transactions/Transactions';
-import AccountBalance from './AccountBalance';
-import AccountDetails from './AccountDetails';
-import ActionMenu from './ActionMenu';
-import Assets from './Assets';
-import SelectAccount from './SelectAccount';
+import Grid from "@mui/material/Grid";
+import Box from "@mui/material/Box";
+import Divider from "@mui/material/Divider";
+import Typography from "@mui/material/Typography";
+import { useTheme } from "@mui/material/styles";
+import { useEffect } from "react";
+import { InnerHeading, StyledPaper } from "../../../Components/StyledComponents";
+import { useAccountNFTsList, useAccountsGet, useAccountsGetBalances } from "../../../api/hooks/useAccounts";
+import useAccountStore from "../../../store/accountStore";
+import Transactions from "../../Transactions/Transactions";
+import AccountBalance from "./AccountBalance";
+import AccountDetails from "./AccountDetails";
+import ActionMenu from "./ActionMenu";
+import Assets from "./Assets";
+import SelectAccount from "./SelectAccount";
 
 function MyAssets() {
   const accountName = useAccountStore((state) => state.accountName);
@@ -62,10 +55,10 @@ function MyAssets() {
         <Box
           className="flex-container"
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            width: '100%',
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            width: "100%",
           }}
         >
           <Typography
@@ -86,7 +79,7 @@ function MyAssets() {
         md={12}
         lg={12}
         style={{
-          position: 'sticky',
+          position: "sticky",
           top: 50,
           background: theme.palette.background.default,
           opacity: 0.9,
@@ -97,8 +90,8 @@ function MyAssets() {
         <Box
           className="flex-container"
           style={{
-            justifyContent: 'space-between',
-            alignItems: 'center',
+            justifyContent: "space-between",
+            alignItems: "center",
           }}
         >
           <AccountBalance accountName={accountName} />

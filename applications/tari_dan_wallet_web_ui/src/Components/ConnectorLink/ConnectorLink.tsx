@@ -20,84 +20,71 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React, { useEffect, useState, useRef } from 'react';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import CloseIcon from '@mui/icons-material/Close';
-import IconButton from '@mui/material/IconButton';
-import './ConnectorLink.css';
-import Permissions from './Permissions';
-import CheckMark from './CheckMark';
-import ConnectorLogo from './ConnectorLogo';
-import { parse } from '../../utils/tari_permissions';
-import { webrtc } from '../../utils/json_rpc';
-import ConfirmTransaction from './ConfirmTransaction';
-import Stepper from '../Stepper';
-import { useTheme } from '@mui/material/styles';
+import React, { useEffect, useState, useRef } from "react";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
+import Typography from "@mui/material/Typography";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import CloseIcon from "@mui/icons-material/Close";
+import IconButton from "@mui/material/IconButton";
+import "./ConnectorLink.css";
+import Permissions from "./Permissions";
+import CheckMark from "./CheckMark";
+import ConnectorLogo from "./ConnectorLogo";
+import { parse } from "../../utils/tari_permissions";
+import { webrtc } from "../../utils/json_rpc";
+import ConfirmTransaction from "./ConfirmTransaction";
+import Stepper from "../Stepper";
+import { useTheme } from "@mui/material/styles";
 
 const ConnectorDialog = () => {
   const [page, setPage] = useState(1);
   const [isOpen, setIsOpen] = useState(false);
   const [linkDetected, setLinkDetected] = useState(false);
-  const [link, _setLink] = useState('');
-  const [signalingServerJWT, setSignalingServerJWT] = useState('');
+  const [link, _setLink] = useState("");
+  const [signalingServerJWT, setSignalingServerJWT] = useState("");
   const [permissions, setPermissions] = useState([]);
   const [optionalPermissions, setOptionalPermissions] = useState([]);
-  const [name, setName] = useState('');
-  const [chosenOptionalPermissions, setChosenOptionalPermissions] = useState<
-    boolean[]
-  >([]);
+  const [name, setName] = useState("");
+  const [chosenOptionalPermissions, setChosenOptionalPermissions] = useState<boolean[]>([]);
   const [activeStep, setActiveStep] = useState(0);
   const linkRef = useRef<HTMLInputElement>(null);
   const theme = useTheme();
 
   const setLink = (value: string) => {
-    const re =
-      /tari:\/\/([^\\]*)\/([a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+)\/(.*)\/(.*)/i;
+    const re = /tari:\/\/([^\\]*)\/([a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+)\/(.*)\/(.*)/i;
     let groups;
     if ((groups = re.exec(value))) {
       setName(decodeURIComponent(groups[1]));
       setSignalingServerJWT(groups[2]);
-      setPermissions(
-        JSON.parse(groups[3]).map((permission: any) => parse(permission))
-      );
-      setOptionalPermissions(
-        JSON.parse(groups[4]).map((permission: any) => parse(permission))
-      );
+      setPermissions(JSON.parse(groups[3]).map((permission: any) => parse(permission)));
+      setOptionalPermissions(JSON.parse(groups[4]).map((permission: any) => parse(permission)));
     }
     _setLink(value);
   };
 
-  useEffect(
-    () =>
-      setChosenOptionalPermissions(
-        Array(optionalPermissions.length).fill(true)
-      ),
-    [optionalPermissions]
-  );
+  useEffect(() => setChosenOptionalPermissions(Array(optionalPermissions.length).fill(true)), [optionalPermissions]);
 
   async function getClipboardContent() {
     if (navigator.clipboard && navigator.clipboard.readText) {
       try {
         const clipboardData = await navigator.clipboard.readText();
-        if (clipboardData.startsWith('tari://')) {
+        if (clipboardData.startsWith("tari://")) {
           setIsOpen(true);
           setLinkDetected(true);
           setLink(clipboardData);
         } else {
           setLinkDetected(false);
-          setLink('');
+          setLink("");
         }
       } catch (err) {
         console.error(`Failed to read clipboard contents: ${err}`);
       }
     } else {
-      console.warn('Clipboard API not supported in this browser');
+      console.warn("Clipboard API not supported in this browser");
     }
   }
 
@@ -118,20 +105,16 @@ const ConnectorDialog = () => {
   };
 
   const handleAuth = () => {
-    console.log('chosenOptionalPermissions', chosenOptionalPermissions);
+    console.log("chosenOptionalPermissions", chosenOptionalPermissions);
     let allowedPermissions = [
       ...permissions,
-      ...optionalPermissions.filter(
-        (value, index) => chosenOptionalPermissions[index]
-      ),
+      ...optionalPermissions.filter((value, index) => chosenOptionalPermissions[index]),
     ];
-    console.log('jwt', signalingServerJWT);
-    console.log('perm', JSON.stringify(allowedPermissions));
-    webrtc(signalingServerJWT, JSON.stringify(allowedPermissions), name).then(
-      (resp) => {
-        setPage(page + 1);
-      }
-    );
+    console.log("jwt", signalingServerJWT);
+    console.log("perm", JSON.stringify(allowedPermissions));
+    webrtc(signalingServerJWT, JSON.stringify(allowedPermissions), name).then((resp) => {
+      setPage(page + 1);
+    });
   };
 
   const handleConnect = (e: React.FormEvent<HTMLFormElement>) => {
@@ -154,13 +137,9 @@ const ConnectorDialog = () => {
         if (linkDetected) {
           return (
             <div className="dialog-inner">
-              <DialogContentText style={{ paddingBottom: '20px' }}>
+              <DialogContentText style={{ paddingBottom: "20px" }}>
                 A connector link was detected. <br />
-                Would you like to connect to{' '}
-                <code style={{ color: 'purple', fontSize: '14px' }}>
-                  {link}
-                </code>
-                ?
+                Would you like to connect to <code style={{ color: "purple", fontSize: "14px" }}>{link}</code>?
               </DialogContentText>
               <DialogActions>
                 <Button variant="outlined" onClick={handleClose}>
@@ -175,24 +154,17 @@ const ConnectorDialog = () => {
         } else {
           return (
             <div className="dialog-inner">
-              <DialogContentText>
-                To connect your wallet, add a connector link here:
-              </DialogContentText>
+              <DialogContentText>To connect your wallet, add a connector link here:</DialogContentText>
               <form
                 onSubmit={handleConnect}
                 style={{
-                  marginTop: '1rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '1rem',
+                  marginTop: "1rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "1rem",
                 }}
               >
-                <TextField
-                  name="link"
-                  label="Connector Link"
-                  inputRef={linkRef}
-                  fullWidth
-                />
+                <TextField name="link" label="Connector Link" inputRef={linkRef} fullWidth />
                 <div className="dialog-actions">
                   <Button variant="outlined" onClick={handleClose}>
                     Cancel
@@ -248,7 +220,7 @@ const ConnectorDialog = () => {
       case 4:
         return (
           <div className="dialog-inner">
-            <div style={{ textAlign: 'center', paddingBottom: '50px' }}>
+            <div style={{ textAlign: "center", paddingBottom: "50px" }}>
               <CheckMark />
               <Typography variant="h3">Wallet Connected</Typography>
             </div>
@@ -266,14 +238,14 @@ const ConnectorDialog = () => {
         color="primary"
         onClick={handleOpen}
         style={{
-          height: '48px',
+          height: "48px",
         }}
       >
         Connect
       </Button>
       <Dialog open={isOpen} onClose={handleClose}>
         <div className="dialog-heading">
-          <div style={{ height: '24px', width: '24px' }}></div>
+          <div style={{ height: "24px", width: "24px" }}></div>
           <ConnectorLogo fill={theme.palette.text.primary} />
           <IconButton onClick={handleClose}>
             <CloseIcon />
