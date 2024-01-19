@@ -4,7 +4,7 @@
 use serde::{Deserialize, Serialize};
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::transactions::{tari_amount::MicroMinotari, transaction_components::TransactionOutput};
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 
 #[derive(Debug, Clone)]
 pub struct BaseLayerMetadata {
@@ -28,7 +28,7 @@ pub struct BlockInfo {
 #[derive(Debug, Clone, Serialize)]
 pub struct ValidatorNode {
     pub public_key: PublicKey,
-    pub shard_key: ShardId,
+    pub shard_key: SubstateAddress,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

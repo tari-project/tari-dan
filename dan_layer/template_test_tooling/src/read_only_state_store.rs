@@ -6,7 +6,7 @@ use tari_engine_types::{
     component::ComponentHeader,
     indexed_value::IndexedValue,
     resource::Resource,
-    substate::{Substate, SubstateAddress},
+    substate::{Substate, SubstateId},
     vault::Vault,
 };
 use tari_template_lib::models::{ComponentAddress, ResourceAddress, VaultId};
@@ -20,17 +20,17 @@ impl ReadOnlyStateStore {
     }
 
     pub fn get_component(&self, component_address: ComponentAddress) -> Result<ComponentHeader, StateStoreError> {
-        let substate = self.get_substate(&SubstateAddress::Component(component_address))?;
+        let substate = self.get_substate(&SubstateId::Component(component_address))?;
         Ok(substate.into_substate_value().into_component().unwrap())
     }
 
     pub fn get_resource(&self, resource_address: &ResourceAddress) -> Result<Resource, StateStoreError> {
-        let substate = self.get_substate(&SubstateAddress::Resource(*resource_address))?;
+        let substate = self.get_substate(&SubstateId::Resource(*resource_address))?;
         Ok(substate.into_substate_value().into_resource().unwrap())
     }
 
     pub fn get_vault(&self, vault_id: &VaultId) -> Result<Vault, StateStoreError> {
-        let substate = self.get_substate(&SubstateAddress::Vault(*vault_id))?;
+        let substate = self.get_substate(&SubstateId::Vault(*vault_id))?;
         Ok(substate.into_substate_value().into_vault().unwrap())
     }
 
@@ -39,7 +39,7 @@ impl ReadOnlyStateStore {
         Ok(IndexedValue::from_value(component.into_state()).unwrap())
     }
 
-    pub fn get_substate(&self, address: &SubstateAddress) -> Result<Substate, StateStoreError> {
+    pub fn get_substate(&self, address: &SubstateId) -> Result<Substate, StateStoreError> {
         let tx = self.store.read_access()?;
         let substate = tx.get_state::<_, Substate>(address)?;
         Ok(substate)

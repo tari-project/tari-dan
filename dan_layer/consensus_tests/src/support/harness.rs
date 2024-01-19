@@ -10,7 +10,7 @@ use futures::{stream::FuturesUnordered, StreamExt};
 use tari_common_types::types::{PrivateKey, PublicKey};
 use tari_consensus::hotstuff::HotstuffEvent;
 use tari_crypto::keys::{PublicKey as _, SecretKey};
-use tari_dan_common_types::{committee::Committee, shard_bucket::ShardBucket, Epoch, NodeHeight};
+use tari_dan_common_types::{committee::Committee, shard::Shard, Epoch, NodeHeight};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, Decision, TransactionPoolStage, TransactionRecord},
     StateStore,
@@ -279,7 +279,7 @@ impl Test {
 }
 
 pub struct TestBuilder {
-    committees: HashMap<ShardBucket, Committee<TestAddress>>,
+    committees: HashMap<Shard, Committee<TestAddress>>,
     sql_address: String,
     timeout: Option<Duration>,
     debug_sql_file: Option<String>,
@@ -320,7 +320,7 @@ impl TestBuilder {
         self
     }
 
-    pub fn add_committee<T: Into<ShardBucket>>(mut self, bucket: T, addresses: Vec<&'static str>) -> Self {
+    pub fn add_committee<T: Into<Shard>>(mut self, bucket: T, addresses: Vec<&'static str>) -> Self {
         let entry = self
             .committees
             .entry(bucket.into())

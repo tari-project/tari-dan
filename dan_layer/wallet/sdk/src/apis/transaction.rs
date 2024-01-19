@@ -11,7 +11,7 @@ use tari_template_lib::prelude::ComponentAddress;
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 use crate::{
-    models::{TransactionStatus, VersionedSubstateAddress, WalletTransaction},
+    models::{TransactionStatus, VersionedSubstateId, WalletTransaction},
     network::{TransactionFinalizedResult, TransactionQueryResult, WalletNetworkInterface},
     storage::{WalletStorageError, WalletStore, WalletStoreReader, WalletStoreWriter},
 };
@@ -251,8 +251,8 @@ where
 
             tx.substates_insert_root(
                 transaction_id,
-                VersionedSubstateAddress {
-                    address: component_addr.clone(),
+                VersionedSubstateId {
+                    substate_id: component_addr.clone(),
                     version: substate.version(),
                 },
                 Some(header.module_name.clone()),
@@ -264,8 +264,8 @@ where
             for owned_addr in value.referenced_substates() {
                 if let Some(pos) = rest.iter().position(|(addr, _)| addr == &owned_addr) {
                     let (_, s) = rest.swap_remove(pos);
-                    tx.substates_insert_child(transaction_id, component_addr.clone(), VersionedSubstateAddress {
-                        address: owned_addr,
+                    tx.substates_insert_child(transaction_id, component_addr.clone(), VersionedSubstateId {
+                        substate_id: owned_addr,
                         version: s.version(),
                     })?;
                 }
@@ -275,8 +275,8 @@ where
         for (addr, substate) in rest {
             tx.substates_insert_root(
                 transaction_id,
-                VersionedSubstateAddress {
-                    address: addr.clone(),
+                VersionedSubstateId {
+                    substate_id: addr.clone(),
                     version: substate.version(),
                 },
                 None,

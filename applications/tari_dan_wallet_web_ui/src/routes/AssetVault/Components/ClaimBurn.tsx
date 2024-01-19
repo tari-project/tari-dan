@@ -72,9 +72,9 @@ export default function ClaimBurn() {
     }
     setClaimBurnFormState({
       ...claimBurnFormState,
-      "key": key,
-      "account": account,
-      "newAccount": new_account_name,
+      key: key,
+      account: account,
+      newAccount: new_account_name,
       filled: claimBurnFormState.is_valid_json && claimBurnFormState.fee !== "" && e.target.value !== "",
     });
   };
@@ -107,7 +107,7 @@ export default function ClaimBurn() {
       [e.target.name]: e.target.value,
       filled: claimBurnFormState.key !== "" && claimBurnFormState.is_valid_json && e.target.value !== "",
     });
-  }
+  };
 
   const onClaimBurnFeeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setClaimBurnFormState({
@@ -115,16 +115,27 @@ export default function ClaimBurn() {
       [e.target.name]: e.target.value,
       filled: claimBurnFormState.key !== "" && claimBurnFormState.is_valid_json && e.target.value !== "",
     });
-  }
+  };
 
   const onClaimBurn = async () => {
     try {
       setClaimBurnFormState({ ...claimBurnFormState, disabled: true });
-      await accountsClaimBurn(claimBurnFormState.account, JSON.parse(claimBurnFormState.claimProof), +claimBurnFormState.fee, +claimBurnFormState.key[0]);
+      await accountsClaimBurn(
+        claimBurnFormState.account,
+        JSON.parse(claimBurnFormState.claimProof),
+        +claimBurnFormState.fee,
+        +claimBurnFormState.key[0],
+      );
       setOpen(false);
       setPopup({ title: "Claimed", error: false });
       setClaimBurnFormState({
-        key: "", account: "", claimProof: "", fee: "", is_valid_json: false, filled: false, disabled: false,
+        key: "",
+        account: "",
+        claimProof: "",
+        fee: "",
+        is_valid_json: false,
+        filled: false,
+        disabled: false,
         newAccount: false,
       });
     } catch (e: any) {
@@ -143,12 +154,21 @@ export default function ClaimBurn() {
   };
 
   const formattedKey = (key: any[]) => {
-    let account = dataAccountsList.accounts.find((account: any) => account.account.key_index === +key[0])
+    let account = dataAccountsList.accounts.find((account: any) => account.account.key_index === +key[0]);
     if (account === undefined) {
-      return <div><b>{key[0]}</b> {key[1]}</div>
+      return (
+        <div>
+          <b>{key[0]}</b> {key[1]}
+        </div>
+      );
     }
-    return <div><b>{key[0]}</b> {key[1]}<br></br>Account <i>{account.account.name}</i></div>
-  }
+    return (
+      <div>
+        <b>{key[0]}</b> {key[1]}
+        <br></br>Account <i>{account.account.name}</i>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -177,13 +197,14 @@ export default function ClaimBurn() {
                 ))}
               </Select>
             </FormControl>
-            <TextField name="account"
+            <TextField
+              name="account"
               label="Account Name"
               value={claimBurnFormState.account}
               onChange={onClaimBurnAccountNameChange}
               style={{ flexGrow: 1 }}
-              disabled={claimBurnFormState.disabled || !claimBurnFormState.newAccount}>
-            </TextField>
+              disabled={claimBurnFormState.disabled || !claimBurnFormState.newAccount}
+            ></TextField>
             <TextField
               name="claimProof"
               label="Claim Proof"
@@ -209,7 +230,11 @@ export default function ClaimBurn() {
               <Button variant="outlined" onClick={handleClose} disabled={claimBurnFormState.disabled}>
                 Cancel
               </Button>
-              <Button variant="contained" type="submit" disabled={!claimBurnFormState.filled || claimBurnFormState.disabled}>
+              <Button
+                variant="contained"
+                type="submit"
+                disabled={!claimBurnFormState.filled || claimBurnFormState.disabled}
+              >
                 Claim Burn
               </Button>
             </Box>

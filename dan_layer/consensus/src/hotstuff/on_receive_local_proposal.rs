@@ -11,7 +11,7 @@ use log::*;
 use tari_dan_common_types::{
     committee::{Committee, CommitteeShard},
     optional::Optional,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     NodeHeight,
 };
 use tari_dan_storage::{
@@ -159,12 +159,12 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         &self,
         tx: &mut <TConsensusSpec::StateStore as StateStore>::WriteTransaction<'_>,
         num_committees: u32,
-        local_bucket: ShardBucket,
+        local_bucket: Shard,
         block: &Block,
         justify_block: &BlockId,
     ) -> Result<bool, HotStuffError> {
         let mut foreign_counters = ForeignSendCounters::get(tx.deref_mut(), justify_block)?;
-        let non_local_buckets = proposer::get_non_local_buckets(tx.deref_mut(), block, num_committees, local_bucket)?;
+        let non_local_buckets = proposer::get_non_local_shards(tx.deref_mut(), block, num_committees, local_bucket)?;
         let mut foreign_indexes = HashMap::new();
         for non_local_bucket in non_local_buckets {
             foreign_indexes
@@ -234,7 +234,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         if !self.check_foreign_indexes(
             tx,
             local_committee_shard.num_committees(),
-            local_committee_shard.bucket(),
+            local_committee_shard.shard(),
             &candidate_block,
             justify_block.id(),
         )? {

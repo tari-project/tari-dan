@@ -66,8 +66,8 @@ async function getMempoolStats() {
 async function getShardKey(height: number, public_key: string) {
   return await jsonRpc("get_shard_key", [height, public_key]);
 }
-async function getCommittee(epoch: number, shard_id: string) {
-  return await jsonRpc("get_committee", { epoch, shard_id });
+async function getCommittee(epoch: number, substate_address: string) {
+  return await jsonRpc("get_committee", { epoch, substate_address });
 }
 async function getAllVns(epoch: number) {
   return await jsonRpc("get_all_vns", epoch);
@@ -86,7 +86,7 @@ async function addPeer(public_key: string, addresses: string[]) {
   });
 }
 async function registerValidatorNode(feeClaimPublicKeyHex: string) {
-  return await jsonRpc('register_validator_node', { fee_claim_public_key: feeClaimPublicKeyHex });
+  return await jsonRpc("register_validator_node", { fee_claim_public_key: feeClaimPublicKeyHex });
 }
 async function getRecentTransactions() {
   return await jsonRpc("get_recent_transactions");

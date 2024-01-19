@@ -20,34 +20,25 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import {
-  getNonFungibles,
-  getNonFungibleCount,
-  getNonFungibleCollections,
-} from '../../../utils/json_rpc';
-import { Form, useParams } from 'react-router-dom';
-import { renderJson } from '../../../utils/helpers';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import {
-  DataTableCell,
-  CodeBlock,
-  AccordionIconButton,
-  BoxHeading2,
-} from '../../../Components/StyledComponents';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import Collapse from '@mui/material/Collapse';
-import TablePagination from '@mui/material/TablePagination';
-import Typography from '@mui/material/Typography';
-import { Button, ImageList, ImageListItem, ImageListItemBar, TextField } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import { ConfirmDialog } from '../../../Components/AlertDialog';
+import { useEffect, useState } from "react";
+import { getNonFungibles, getNonFungibleCount, getNonFungibleCollections } from "../../../utils/json_rpc";
+import { Form, useParams } from "react-router-dom";
+import { renderJson } from "../../../utils/helpers";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import { DataTableCell, CodeBlock, AccordionIconButton, BoxHeading2 } from "../../../Components/StyledComponents";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import Collapse from "@mui/material/Collapse";
+import TablePagination from "@mui/material/TablePagination";
+import Typography from "@mui/material/Typography";
+import { Button, ImageList, ImageListItem, ImageListItemBar, TextField } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import { ConfirmDialog } from "../../../Components/AlertDialog";
 
 interface IImageData {
   img: string;
@@ -61,18 +52,18 @@ function NftGallery() {
   let { resourceAddress } = useParams();
 
   const updateCollection = () => {
-    if(resourceAddress !== undefined) {
-      getNonFungibles(resourceAddress,0,10).then((resp) => {
-        console.log({resp});
+    if (resourceAddress !== undefined) {
+      getNonFungibles(resourceAddress, 0, 10).then((resp) => {
+        console.log({ resp });
 
         let nfts: any = [];
         resp.forEach((nft: any, i: number) => {
           console.log(nft);
-          let nft_data = nft.substate.substate.NonFungible.data['@@TAGGED@@'][1];
-          let {image_url, name} = nft_data;
+          let nft_data = nft.substate.substate.NonFungible.data["@@TAGGED@@"][1];
+          let { image_url, name } = nft_data;
           console.log(image_url);
           console.log(name);
-          nfts.push({image_url, name, index: i});
+          nfts.push({ image_url, name, index: i });
         });
 
         setItems(
@@ -80,7 +71,7 @@ function NftGallery() {
             img: nft.image_url,
             title: nft.name,
             index: nft.index,
-          }))
+          })),
         );
       });
     }
@@ -94,20 +85,16 @@ function NftGallery() {
     <ImageList cols={4} gap={8}>
       {items.map((item) => (
         <ImageListItem key={item.img}>
-        <img
-          src={`${item.img}?size=248&fit=fill&auto=format`}
-          srcSet={`${item.img}?size=248&fit=fill&auto=format&dpr=2 4x`}
-          alt={item.title}
-          loading="lazy"
-        />
-        <ImageListItemBar
-          title={item.title}
-          subtitle={<span># {item.index}</span>}
-          position="below"
-        />
-      </ImageListItem>
-    ))}
-  </ImageList>
+          <img
+            src={`${item.img}?size=248&fit=fill&auto=format`}
+            srcSet={`${item.img}?size=248&fit=fill&auto=format&dpr=2 4x`}
+            alt={item.title}
+            loading="lazy"
+          />
+          <ImageListItemBar title={item.title} subtitle={<span># {item.index}</span>} position="below" />
+        </ImageListItem>
+      ))}
+    </ImageList>
   );
 }
 

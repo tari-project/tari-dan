@@ -25,7 +25,7 @@ use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut};
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
-use tari_dan_common_types::{optional::Optional, shard_bucket::ShardBucket, Epoch, PeerAddress, ShardId};
+use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, PeerAddress, SubstateAddress};
 use tari_dan_p2p::{DanMessage, NewTransactionMessage};
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, SubstateRecord, TransactionPool, TransactionRecord},
@@ -58,7 +58,7 @@ const LOG_TARGET: &str = "tari::validator_node::mempool::service";
 struct MempoolTransactionExecution {
     result: Result<ExecutionResult, MempoolError>,
     should_propagate: bool,
-    sender_bucket: Option<ShardBucket>,
+    sender_shard: Option<Shard>,
 }
 
 #[derive(Debug)]
@@ -247,22 +247,22 @@ where
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
         let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
-        let maybe_sender_bucket = self
+        let maybe_sender_shard = self
             .epoch_manager
             .get_validator_node(current_epoch, &from)
             .await
             .optional()?
-            .and_then(|s| s.committee_bucket);
+            .and_then(|s| s.committee_shard);
 
         // Only input shards propagate transactions to output shards. Check that this is true.
         if !unverified_output_shards.is_empty() {
-            let Some(sender_bucket) = maybe_sender_bucket else {
+            let Some(sender_shard) = maybe_sender_shard else {
                 debug!(target: LOG_TARGET, "Sender {from} isn't registered but tried to send a new transaction with output shards");
                 return Ok(());
             };
             let mut is_input_shard = transaction
                 .all_inputs_iter()
-                .any(|s| s.to_committee_bucket(num_committees) == sender_bucket);
+                .any(|s| s.to_committee_shard(num_committees) == sender_shard);
             // Special temporary case: if there are no input shards an output shard will also propagate. No inputs is
             // invalid, however we must support them for now because of CreateFreeTestCoin transactions.
             is_input_shard |= transaction.inputs().len() + transaction.input_refs().len() == 0;
@@ -272,7 +272,7 @@ where
             }
         }
 
-        self.handle_new_transaction(transaction, unverified_output_shards, true, maybe_sender_bucket)
+        self.handle_new_transaction(transaction, unverified_output_shards, true, maybe_sender_shard)
             .await?;
 
         Ok(())
@@ -282,9 +282,9 @@ where
     async fn handle_new_transaction(
         &mut self,
         transaction: Transaction,
-        unverified_output_shards: Vec<ShardId>,
+        unverified_output_shards: Vec<SubstateAddress>,
         should_propagate: bool,
-        sender_bucket: Option<ShardBucket>,
+        sender_shard: Option<Shard>,
     ) -> Result<(), MempoolError> {
         let mut transaction = TransactionRecord::new(transaction);
         self.state_store.with_write_tx(|tx| transaction.insert(tx))?;
@@ -316,7 +316,7 @@ where
         }
 
         let current_epoch = self.epoch_manager.current_epoch().await?;
-        let tx_shard_id = ShardId::for_transaction_receipt(transaction.id().into_array().into());
+        let tx_substate_address = SubstateAddress::for_transaction_receipt(transaction.id().into_array().into());
 
         let local_committee_shard = self.epoch_manager.get_local_committee_shard(current_epoch).await?;
 
@@ -327,7 +327,7 @@ where
         let is_output_shard = local_committee_shard.includes_any_shard(
             // Known output shards
             // This is to allow for the txreceipt output
-            iter::once(&tx_shard_id)
+            iter::once(&tx_substate_address)
                 .chain(unverified_output_shards.iter())
                 .chain(claim_shards.iter()),
         );
@@ -335,7 +335,7 @@ where
         if is_input_shard || is_output_shard {
             debug!(target: LOG_TARGET, "🎱 New transaction {} in mempool", transaction.id());
             self.transactions.insert(*transaction.id());
-            self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_bucket);
+            self.queue_transaction_for_execution(transaction.clone(), current_epoch, should_propagate, sender_shard);
 
             if should_propagate {
                 // This validator is involved, we to send the transaction to local replicas
@@ -373,7 +373,7 @@ where
                                 transaction,
                                 output_shards: vec![],
                             },
-                            sender_bucket,
+                            sender_shard,
                         )
                         .await
                     {
@@ -424,7 +424,7 @@ where
         transaction: Transaction,
         current_epoch: Epoch,
         should_propagate: bool,
-        sender_bucket: Option<ShardBucket>,
+        sender_shard: Option<Shard>,
     ) {
         let substate_resolver = self.substate_resolver.clone();
         let executor = self.transaction_executor.clone();
@@ -434,7 +434,7 @@ where
                 MempoolTransactionExecution {
                     result,
                     should_propagate,
-                    sender_bucket,
+                    sender_shard,
                 }
             }),
         ));
@@ -445,7 +445,7 @@ where
         let MempoolTransactionExecution {
             result,
             should_propagate,
-            sender_bucket,
+            sender_shard,
         } = result;
         // This is due to a bug or possibly db failure only
         let (transaction_id, exec_result) = result?;
@@ -591,15 +591,15 @@ where
             // Forward the transaction to any output shards that are not part of the input shard set as these have
             // already been forwarded
             let num_committees = self.epoch_manager.get_num_committees(current_epoch).await?;
-            let input_buckets: HashSet<ShardBucket> = executed
+            let input_shards: HashSet<Shard> = executed
                 .transaction()
                 .all_inputs_iter()
-                .map(|s| s.to_committee_bucket(num_committees))
+                .map(|s| s.to_committee_shard(num_committees))
                 .collect::<HashSet<_>>();
             let output_shards = executed
                 .resulting_outputs()
                 .iter()
-                .filter(|s| !input_buckets.contains(&s.to_committee_bucket(num_committees)))
+                .filter(|s| !input_shards.contains(&s.to_committee_shard(num_committees)))
                 .copied()
                 .collect();
 
@@ -612,7 +612,7 @@ where
                         transaction: executed.transaction().clone(),
                         output_shards: executed.resulting_outputs().to_vec(),
                     },
-                    sender_bucket,
+                    sender_shard,
                 )
                 .await
             {

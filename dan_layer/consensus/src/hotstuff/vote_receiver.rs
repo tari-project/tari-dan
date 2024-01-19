@@ -101,7 +101,7 @@ where TConsensusSpec: ConsensusSpec
             });
         }
 
-        if !local_committee_shard.includes_shard(&sender_vn.shard_key) {
+        if !local_committee_shard.includes_substate_address(&sender_vn.shard_key) {
             return Err(HotStuffError::ReceivedMessageFromNonCommitteeMember {
                 epoch: current_epoch,
                 sender: message.signature.public_key.to_string(),

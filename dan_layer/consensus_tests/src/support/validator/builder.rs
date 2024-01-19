@@ -3,7 +3,7 @@
 
 use tari_common_types::types::PublicKey;
 use tari_consensus::hotstuff::{ConsensusWorker, ConsensusWorkerContext, HotstuffWorker};
-use tari_dan_common_types::{shard_bucket::ShardBucket, ShardId};
+use tari_dan_common_types::{shard::Shard, SubstateAddress};
 use tari_dan_storage::consensus_models::{ForeignReceiveCounters, TransactionPool};
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -25,8 +25,8 @@ use crate::support::{
 pub struct ValidatorBuilder {
     pub address: TestAddress,
     pub public_key: PublicKey,
-    pub shard: ShardId,
-    pub bucket: ShardBucket,
+    pub shard: SubstateAddress,
+    pub bucket: Shard,
     pub sql_url: String,
     pub leader_strategy: RoundRobinLeaderStrategy,
     pub epoch_manager: Option<TestEpochManager>,
@@ -37,8 +37,8 @@ impl ValidatorBuilder {
         Self {
             address: TestAddress::new("default"),
             public_key: PublicKey::default(),
-            shard: ShardId::zero(),
-            bucket: ShardBucket::from(0),
+            shard: SubstateAddress::zero(),
+            bucket: Shard::from(0),
             sql_url: ":memory".to_string(),
             leader_strategy: RoundRobinLeaderStrategy::new(),
             epoch_manager: None,
@@ -51,12 +51,12 @@ impl ValidatorBuilder {
         self
     }
 
-    pub fn with_bucket(&mut self, bucket: ShardBucket) -> &mut Self {
+    pub fn with_bucket(&mut self, bucket: Shard) -> &mut Self {
         self.bucket = bucket;
         self
     }
 
-    pub fn with_shard(&mut self, shard: ShardId) -> &mut Self {
+    pub fn with_shard(&mut self, shard: SubstateAddress) -> &mut Self {
         self.shard = shard;
         self
     }

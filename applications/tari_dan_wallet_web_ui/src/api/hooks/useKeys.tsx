@@ -20,16 +20,16 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { jsonRpc } from '../../utils/json_rpc';
-import { apiError } from '../helpers/types';
-import queryClient from '../queryClient';
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { jsonRpc } from "../../utils/json_rpc";
+import { apiError } from "../helpers/types";
+import queryClient from "../queryClient";
 
 export const useKeysList = () => {
   return useQuery({
-    queryKey: ['keys_list'],
+    queryKey: ["keys_list"],
     queryFn: () => {
-      return jsonRpc('keys.list', []);
+      return jsonRpc("keys.list", []);
     },
     onError: (error: apiError) => {
       error;
@@ -38,19 +38,19 @@ export const useKeysList = () => {
 };
 
 export const useKeysCreate = () => {
-  return useMutation(() => jsonRpc('keys.create', {}), {
+  return useMutation(() => jsonRpc("keys.create", {}), {
     onError: (error: apiError) => {
       error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['keys_list']);
+      queryClient.invalidateQueries(["keys_list"]);
     },
   });
 };
 
 export const useKeysSetActive = () => {
   const setActive = async (index: number) => {
-    const result = await jsonRpc('keys.set_active', [index]);
+    const result = await jsonRpc("keys.set_active", [index]);
     return result;
   };
 
@@ -59,7 +59,7 @@ export const useKeysSetActive = () => {
       error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['keys_list']);
+      queryClient.invalidateQueries(["keys_list"]);
     },
   });
 };

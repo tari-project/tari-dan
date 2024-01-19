@@ -5,39 +5,39 @@ use std::{fmt::Display, str::FromStr};
 
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::ShardId;
-use tari_engine_types::{serde_with, substate::SubstateAddress};
+use tari_dan_common_types::SubstateAddress;
+use tari_engine_types::{serde_with, substate::SubstateId};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub struct VersionedSubstateAddress {
+pub struct VersionedSubstateId {
     #[serde(with = "serde_with::string")]
-    pub address: SubstateAddress,
+    pub substate_id: SubstateId,
     pub version: u32,
 }
 
-impl VersionedSubstateAddress {
-    pub fn to_shard_id(&self) -> ShardId {
-        ShardId::from_address(&self.address, self.version)
+impl VersionedSubstateId {
+    pub fn to_substate_address(&self) -> SubstateAddress {
+        SubstateAddress::from_address(&self.substate_id, self.version)
     }
 }
 
-impl FromStr for VersionedSubstateAddress {
+impl FromStr for VersionedSubstateId {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.split(':');
-        let address = parts.next().ok_or_else(|| anyhow!("Invalid substate address"))?;
-        let address = SubstateAddress::from_str(address)?;
+        let address = parts.next().ok_or_else(|| anyhow!("Invalid substate id"))?;
+        let address = SubstateId::from_str(address)?;
         let version = parts.next().map(|v| v.parse()).transpose()?;
         Ok(Self {
-            address,
+            substate_id: address,
             version: version.unwrap_or(0),
         })
     }
 }
 
-impl Display for VersionedSubstateAddress {
+impl Display for VersionedSubstateId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", self.address, self.version)
+        write!(f, "{}:{}", self.substate_id, self.version)
     }
 }

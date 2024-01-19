@@ -16,8 +16,7 @@
     {
       "name": "keys/create",
       "summary": "",
-      "tags": [
-      ],
+      "tags": [],
       "params": [],
       "result": {
         "name": "KeysCreateResponse",
@@ -25,14 +24,12 @@
           "$ref": "#/components/schemas/KeysCreateResponse"
         }
       },
-      "errors": [
-      ],
+      "errors": [],
       "examples": [
         {
           "name": "default",
           "description": "",
-          "params": [
-          ],
+          "params": [],
           "result": {
             "name": "example1",
             "value": {
@@ -45,8 +42,7 @@
     }
   ],
   "components": {
-    "contentDescriptors": {
-    },
+    "contentDescriptors": {},
     "schemas": {
       "KeysCreateResponse": {
         "type": "object",

@@ -21,15 +21,7 @@
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import React from "react";
-import {
-  Grid,
-  Table,
-  TableContainer,
-  TableBody,
-  TableHead,
-  TableRow,
-  TableCell,
-} from "@mui/material";
+import { Grid, Table, TableContainer, TableBody, TableHead, TableRow, TableCell } from "@mui/material";
 import StatusChip from "../../Components/StatusChip";
 
 function Transaction({ transaction }: any) {

@@ -18,7 +18,7 @@ tari_template_lib = { workspace = true }
 tari_transaction = { workspace = true }
 tari_transaction_manifest = { workspace = true }
 tari_bor = { workspace = true, default-features = true }
-# Needed for VersionedSubstateAddress
+# Needed for VersionedSubstateId
 tari_dan_wallet_sdk = { workspace = true }
 
 anyhow = { workspace = true }

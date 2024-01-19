@@ -47,7 +47,7 @@ use tari_dan_app_utilities::{
     template_manager::{implementation::TemplateManager, interface::TemplateManagerHandle},
     transaction_executor::TariDanTransactionProcessor,
 };
-use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, ShardId};
+use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, SubstateAddress};
 use tari_dan_engine::fees::FeeTable;
 use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
@@ -59,7 +59,7 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
-use tari_engine_types::{resource::Resource, substate::SubstateAddress};
+use tari_engine_types::{resource::Resource, substate::SubstateId};
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_indexer_lib::substate_scanner::SubstateScanner;
 use tari_networking::{MessagingMode, NetworkingHandle, SwarmConfig};
@@ -442,14 +442,14 @@ where
     TTx::Addr: NodeAddressable + Serialize,
 {
     let genesis_block = Block::genesis();
-    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
-    let shard_id = ShardId::from_address(&address, 0);
+    let substate_id = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let substate_address = SubstateAddress::from_address(&substate_id, 0);
     let mut metadata: Metadata = Default::default();
     metadata.insert(TOKEN_SYMBOL, "ID".to_string());
-    if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
+    if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
         // Create the resource for public identity
         SubstateRecord {
-            address,
+            substate_id,
             version: 0,
             substate_value: Resource::new(
                 ResourceType::NonFungible,
@@ -470,13 +470,13 @@ where
         .create(tx)?;
     }
 
-    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
-    let shard_id = ShardId::from_address(&address, 0);
+    let substate_id = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let substate_address = SubstateAddress::from_address(&substate_id, 0);
     let mut metadata = Metadata::new();
     metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());
-    if !SubstateRecord::exists(tx.deref_mut(), &shard_id)? {
+    if !SubstateRecord::exists(tx.deref_mut(), &substate_address)? {
         SubstateRecord {
-            address,
+            substate_id,
             version: 0,
             substate_value: Resource::new(
                 ResourceType::Confidential,

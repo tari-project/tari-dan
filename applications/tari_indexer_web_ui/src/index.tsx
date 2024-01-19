@@ -20,55 +20,53 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './theme/theme.css';
-import reportWebVitals from './reportWebVitals';
-import { createBrowserRouter, RouterProvider } from 'react-router-dom';
-import App from './App';
-import Connections from './routes/Connections/Connections';
-import RecentTransactions from './routes/RecentTransactions/RecentTransactions';
-import ErrorPage from './routes/ErrorPage';
-import MonitoredSubstates from './routes/VN/Components/MonitoredSubstates';
-import MonitoredNftCollections from './routes/VN/Components/MonitoredNftCollections';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./theme/theme.css";
+import reportWebVitals from "./reportWebVitals";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import App from "./App";
+import Connections from "./routes/Connections/Connections";
+import RecentTransactions from "./routes/RecentTransactions/RecentTransactions";
+import ErrorPage from "./routes/ErrorPage";
+import MonitoredSubstates from "./routes/VN/Components/MonitoredSubstates";
+import MonitoredNftCollections from "./routes/VN/Components/MonitoredNftCollections";
 
 const router = createBrowserRouter([
   {
-    path: '*',
+    path: "*",
     element: <App />,
     errorElement: <ErrorPage />,
     children: [
       {
-        path: 'connections',
+        path: "connections",
         element: <Connections />,
       },
       {
-        path: 'monitored_substates',
+        path: "monitored_substates",
         element: <MonitoredSubstates />,
       },
       {
-        path: 'nfts',
+        path: "nfts",
         element: <MonitoredNftCollections />,
       },
       {
-        path: 'transactions',
+        path: "transactions",
         element: <RecentTransactions />,
       },
       {
-        path: 'app',
+        path: "app",
         element: <App />,
       },
     ],
   },
 ]);
 
-const root = ReactDOM.createRoot(
-  document.getElementById('root') as HTMLElement
-);
+const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
 root.render(
   <React.StrictMode>
     <RouterProvider router={router} />
-  </React.StrictMode>
+  </React.StrictMode>,
 );
 
 // If you want to start measuring performance in your app, pass a function

@@ -20,22 +20,22 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import Connections from './Components/Connections';
-import Info from './Components/Info';
-import { IIdentity } from '../../utils/interfaces';
-import { getIdentity } from '../../utils/json_rpc';
-import RecentTransactions from './Components/RecentTransactions';
-import './ValidatorNode.css';
-import { StyledPaper } from '../../Components/StyledComponents';
-import Grid from '@mui/material/Grid';
-import SecondaryHeading from '../../Components/SecondaryHeading';
-import MonitoredSubstates from './Components/MonitoredSubstates';
-import MonitoredNftCollections from './Components/MonitoredNftCollections';
+import { useEffect, useState } from "react";
+import Connections from "./Components/Connections";
+import Info from "./Components/Info";
+import { IIdentity } from "../../utils/interfaces";
+import { getIdentity } from "../../utils/json_rpc";
+import RecentTransactions from "./Components/RecentTransactions";
+import "./ValidatorNode.css";
+import { StyledPaper } from "../../Components/StyledComponents";
+import Grid from "@mui/material/Grid";
+import SecondaryHeading from "../../Components/SecondaryHeading";
+import MonitoredSubstates from "./Components/MonitoredSubstates";
+import MonitoredNftCollections from "./Components/MonitoredNftCollections";
 
 function ValidatorNode() {
   const [identity, setIdentity] = useState<IIdentity | undefined>(undefined);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   // Initial fetch
   useEffect(() => {
     getIdentity()
@@ -44,13 +44,13 @@ function ValidatorNode() {
       })
       .catch((reason) => {
         console.log(reason);
-        setError('Json RPC error, please check console');
+        setError("Json RPC error, please check console");
       });
   }, []);
   useEffect(() => {
     // getRecentTransactions();
   }, []);
-  if (error !== '') {
+  if (error !== "") {
     return <div className="error">{error}</div>;
   }
   if (identity === undefined) return <div>Loading</div>;

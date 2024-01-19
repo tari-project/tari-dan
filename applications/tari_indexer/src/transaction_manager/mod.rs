@@ -28,9 +28,9 @@ use log::*;
 use tari_dan_common_types::{
     optional::{IsNotFoundError, Optional},
     NodeAddressable,
-    ShardId,
+    SubstateAddress,
 };
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_epoch_manager::EpochManagerReader;
 use tari_indexer_lib::{
     substate_cache::SubstateCache,
@@ -94,10 +94,10 @@ where
             .autofill_transaction(transaction, required_substates)
             .await?;
 
-        let transaction_shard_id = ShardId::for_transaction_receipt(tx_hash.into_array().into());
+        let transaction_substate_address = SubstateAddress::for_transaction_receipt(tx_hash.into_array().into());
 
         if autofilled_transaction.involved_shards_iter().count() == 0 {
-            self.try_with_committee(iter::once(transaction_shard_id), |mut client| {
+            self.try_with_committee(iter::once(transaction_substate_address), |mut client| {
                 let transaction = autofilled_transaction.clone();
                 async move { client.submit_transaction(transaction).await }
             })
@@ -115,8 +115,8 @@ where
         &self,
         transaction_id: TransactionId,
     ) -> Result<TransactionResultStatus, TransactionManagerError> {
-        let transaction_shard_id = ShardId::for_transaction_receipt(transaction_id.into_array().into());
-        self.try_with_committee(iter::once(transaction_shard_id), |mut client| async move {
+        let transaction_substate_address = SubstateAddress::for_transaction_receipt(transaction_id.into_array().into());
+        self.try_with_committee(iter::once(transaction_substate_address), |mut client| async move {
             client.get_finalized_transaction_result(transaction_id).await.optional()
         })
         .await?
@@ -128,10 +128,10 @@ where
 
     pub async fn get_substate(
         &self,
-        substate_address: SubstateAddress,
+        substate_address: SubstateId,
         version: u32,
     ) -> Result<SubstateResult, TransactionManagerError> {
-        let shard = ShardId::from_address(&substate_address, version);
+        let shard = SubstateAddress::from_address(&substate_address, version);
 
         self.try_with_committee(iter::once(shard), |mut client| {
             // This double clone looks strange, but it's needed because this function is called in a loop
@@ -140,7 +140,7 @@ where
             async move {
                 let substate_address = substate_address.clone();
                 client
-                    .get_substate(ShardId::from_address(&substate_address, version))
+                    .get_substate(SubstateAddress::from_address(&substate_address, version))
                     .await
             }
         })
@@ -152,7 +152,7 @@ where
     /// called.
     async fn try_with_committee<'a, F, T, E, TFut, IShard>(
         &self,
-        shard_ids: IShard,
+        substate_addresses: IShard,
         mut callback: F,
     ) -> Result<T, TransactionManagerError>
     where
@@ -161,13 +161,13 @@ where
         TFut: Future<Output = Result<T, E>> + 'a,
         T: 'static,
         E: Display,
-        IShard: IntoIterator<Item = ShardId>,
+        IShard: IntoIterator<Item = SubstateAddress>,
     {
         let epoch = self.epoch_manager.current_epoch().await?;
         // Get all unique members. The hashset already "shuffles" items owing to the random hash function.
         let mut all_members = HashSet::new();
-        for shard_id in shard_ids {
-            let committee = self.epoch_manager.get_committee(epoch, shard_id).await?;
+        for substate_address in substate_addresses {
+            let committee = self.epoch_manager.get_committee(epoch, substate_address).await?;
             all_members.extend(committee.into_addresses());
         }
 

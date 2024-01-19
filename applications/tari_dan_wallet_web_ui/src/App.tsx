@@ -20,67 +20,67 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { Routes, Route } from 'react-router-dom';
-import Accounts from './routes/Accounts/Accounts';
-import AccountDetails from './routes/AccountDetails/AccountDetails';
+import { Routes, Route } from "react-router-dom";
+import Accounts from "./routes/Accounts/Accounts";
+import AccountDetails from "./routes/AccountDetails/AccountDetails";
 import DialogContent from "@mui/material/DialogContent";
 import DialogTitle from "@mui/material/DialogTitle";
-import Keys from './routes/Keys/Keys';
-import ErrorPage from './routes/ErrorPage';
-import Wallet from './routes/Wallet/Wallet';
-import Layout from './theme/LayoutMain';
-import AccessTokensLayout from './routes/AccessTokens/AccessTokens';
-import Transactions from './routes/Transactions/TransactionsLayout';
-import TransactionDetails from './routes/Transactions/TransactionDetails';
-import AssetVault from './routes/AssetVault/AssetVault';
-import SettingsPage from './routes/Settings/Settings';
-import { Dialog } from '@mui/material';
-import useAccountStore from './store/accountStore';
+import Keys from "./routes/Keys/Keys";
+import ErrorPage from "./routes/ErrorPage";
+import Wallet from "./routes/Wallet/Wallet";
+import Layout from "./theme/LayoutMain";
+import AccessTokensLayout from "./routes/AccessTokens/AccessTokens";
+import Transactions from "./routes/Transactions/TransactionsLayout";
+import TransactionDetails from "./routes/Transactions/TransactionDetails";
+import AssetVault from "./routes/AssetVault/AssetVault";
+import SettingsPage from "./routes/Settings/Settings";
+import { Dialog } from "@mui/material";
+import useAccountStore from "./store/accountStore";
 
 export const breadcrumbRoutes = [
   {
-    label: 'Home',
-    path: '/',
+    label: "Home",
+    path: "/",
     dynamic: false,
   },
   {
-    label: 'Accounts',
-    path: '/accounts',
+    label: "Accounts",
+    path: "/accounts",
     dynamic: false,
   },
   {
-    label: 'Keys',
-    path: '/keys',
+    label: "Keys",
+    path: "/keys",
     dynamic: false,
   },
   {
-    label: 'Access Tokens',
-    path: '/access-tokens',
+    label: "Access Tokens",
+    path: "/access-tokens",
     dynamic: false,
   },
   {
-    label: 'Account Details',
-    path: '/accounts/:name',
+    label: "Account Details",
+    path: "/accounts/:name",
     dynamic: true,
   },
   {
-    label: 'Transactions',
-    path: '/transactions',
+    label: "Transactions",
+    path: "/transactions",
     dynamic: false,
   },
   {
-    label: 'Transaction Details',
-    path: '/transactions/:id',
+    label: "Transaction Details",
+    path: "/transactions/:id",
     dynamic: true,
   },
   {
-    label: 'Wallet',
-    path: '/wallet',
+    label: "Wallet",
+    path: "/wallet",
     dynamic: false,
   },
   {
-    label: 'Settings',
-    path: '/settings',
+    label: "Settings",
+    path: "/settings",
     dynamic: false,
   },
 ];
@@ -89,7 +89,7 @@ function App() {
   const { popup, setPopup } = useAccountStore();
   const handleClose = () => {
     setPopup({ visible: false });
-  }
+  };
   return (
     <div>
       <Routes>
@@ -108,11 +108,9 @@ function App() {
       </Routes>
       <Dialog open={popup.visible} onClose={handleClose}>
         <DialogTitle>
-          {(popup?.error ? <div style={{ color: "red" }}>{popup?.title}</div> : <div>{popup?.title}</div>)}
+          {popup?.error ? <div style={{ color: "red" }}>{popup?.title}</div> : <div>{popup?.title}</div>}
         </DialogTitle>
-        <DialogContent className="dialog-content">
-          {popup?.message}
-        </DialogContent>
+        <DialogContent className="dialog-content">{popup?.message}</DialogContent>
       </Dialog>
     </div>
   );
