@@ -20,23 +20,23 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState, useRef } from 'react';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import CloseIcon from '@mui/icons-material/Close';
-import IconButton from '@mui/material/IconButton';
-import './ConnectorLink.css';
-import CheckMark from './CheckMark';
-import ConnectorLogo from './ConnectorLogo';
+import { useEffect, useState, useRef } from "react";
+import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import CloseIcon from "@mui/icons-material/Close";
+import IconButton from "@mui/material/IconButton";
+import "./ConnectorLink.css";
+import CheckMark from "./CheckMark";
+import ConnectorLogo from "./ConnectorLogo";
 
 const ConnectorDialog = () => {
   const [page, setPage] = useState(1);
   const [isOpen, setIsOpen] = useState(false);
   const [linkDetected, setLinkDetected] = useState(false);
-  const [link, _setLink] = useState('');
+  const [link, _setLink] = useState("");
   const linkRef = useRef<HTMLInputElement>(null);
 
   async function getClipboardContent() {
@@ -44,19 +44,19 @@ const ConnectorDialog = () => {
       try {
         const clipboardData = await navigator.clipboard.readText();
         // currently checks for the value 'transaction://' - this needs to be replaced with the correct value
-        if (clipboardData.startsWith('transaction://')) {
+        if (clipboardData.startsWith("transaction://")) {
           setIsOpen(true);
           setLinkDetected(true);
           _setLink(clipboardData);
         } else {
           setLinkDetected(false);
-          _setLink('');
+          _setLink("");
         }
       } catch (err) {
         console.error(`Failed to read clipboard contents: ${err}`);
       }
     } else {
-      console.warn('Clipboard API not supported in this browser');
+      console.warn("Clipboard API not supported in this browser");
     }
   }
 
@@ -82,9 +82,7 @@ const ConnectorDialog = () => {
         return (
           <div className="dialog-inner">
             <Typography>Opensea.com wants to send a transaction.</Typography>
-            <Typography style={{ marginBottom: '20px' }}>
-              Transaction details go here ...
-            </Typography>
+            <Typography style={{ marginBottom: "20px" }}>Transaction details go here ...</Typography>
             <DialogActions>
               <Button onClick={handleClose} variant="outlined">
                 Deny
@@ -98,7 +96,7 @@ const ConnectorDialog = () => {
       case 2:
         return (
           <div className="dialog-inner">
-            <div style={{ textAlign: 'center', paddingBottom: '50px' }}>
+            <div style={{ textAlign: "center", paddingBottom: "50px" }}>
               <CheckMark />
               <Typography variant="h3">Transaction Approved</Typography>
             </div>
@@ -116,7 +114,7 @@ const ConnectorDialog = () => {
       </Button> */}
       <Dialog open={isOpen} onClose={handleClose}>
         <div className="dialog-heading">
-          <div style={{ height: '24px', width: '24px' }}></div>
+          <div style={{ height: "24px", width: "24px" }}></div>
           <ConnectorLogo />
           <IconButton onClick={handleClose}>
             <CloseIcon />

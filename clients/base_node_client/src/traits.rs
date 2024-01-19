@@ -4,7 +4,7 @@
 use async_trait::async_trait;
 use tari_common_types::types::{FixedHash, PublicKey};
 use tari_core::{blocks::BlockHeader, transactions::transaction_components::CodeTemplateRegistration};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 
 use crate::{
     error::BaseNodeClientError,
@@ -20,7 +20,7 @@ pub trait BaseNodeClient: Send + Sync + Clone {
         &mut self,
         height: u64,
         public_key: &PublicKey,
-    ) -> Result<Option<ShardId>, BaseNodeClientError>;
+    ) -> Result<Option<SubstateAddress>, BaseNodeClientError>;
     async fn get_template_registrations(
         &mut self,
         start_hash: Option<FixedHash>,

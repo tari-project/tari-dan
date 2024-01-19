@@ -121,7 +121,7 @@ diesel::table! {
         id -> Integer,
         block_id -> Text,
         transaction_id -> Text,
-        shard_id -> Text,
+        substate_address -> Text,
         created_at -> Timestamp,
     }
 }
@@ -168,8 +168,8 @@ diesel::table! {
 diesel::table! {
     substates (id) {
         id -> Integer,
-        shard_id -> Text,
         address -> Text,
+        substate_id -> Text,
         version -> Integer,
         data -> Text,
         state_hash -> Text,

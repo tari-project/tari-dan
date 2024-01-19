@@ -33,15 +33,7 @@ import Button from "@mui/material/Button";
 import { DataTableCell } from "../../../Components/StyledComponents";
 import { TextField } from "@mui/material";
 
-function Info({
-  epoch,
-  identity,
-  shardKey,
-}: {
-  epoch: IEpoch;
-  identity: IIdentity;
-  shardKey: string | null;
-}) {
+function Info({ epoch, identity, shardKey }: { epoch: IEpoch; identity: IIdentity; shardKey: string | null }) {
   const [registering, setRegistering] = useState(false);
   const [registerMessage, setRegisterMessage] = useState("");
   const [feeClaimPublicKey, setRegisterFeeClaimPublicKey] = useState("");
@@ -52,9 +44,7 @@ function Info({
         setRegistering(false);
         setRegisterMessage(response.message);
       } else {
-        setRegisterMessage(
-          `Registration successful, the TxId ${response.transaction_id}`,
-        );
+        setRegisterMessage(`Registration successful, the TxId ${response.transaction_id}`);
       }
     });
   };
@@ -86,16 +76,10 @@ function Info({
                 value={feeClaimPublicKey}
                 onChange={(e) => setRegisterFeeClaimPublicKey(e.target.value)}
               />
-              <Button
-                disabled={registering}
-                variant="contained"
-                onClick={registering ? () => {} : register}
-              >
+              <Button disabled={registering} variant="contained" onClick={registering ? () => {} : register}>
                 Register
               </Button>
-              {registerMessage ? (
-                <span style={{ marginLeft: "20px" }}>{registerMessage}</span>
-              ) : null}
+              {registerMessage ? <span style={{ marginLeft: "20px" }}>{registerMessage}</span> : null}
             </DataTableCell>
           </TableRow>
         </>
@@ -124,9 +108,7 @@ function Info({
             </TableRow>
             <TableRow>
               <TableCell>Listen addresses</TableCell>
-              <DataTableCell>
-                {identity.public_addresses?.join("\n")}
-              </DataTableCell>
+              <DataTableCell>{identity.public_addresses?.join("\n")}</DataTableCell>
             </TableRow>
             <TableRow>
               <TableCell>Public key</TableCell>

@@ -16,7 +16,7 @@ use tari_dan_wallet_sdk::{
     WalletSdkConfig,
 };
 use tari_dan_wallet_storage_sqlite::SqliteWalletStore;
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_template_lib::{
     constants::CONFIDENTIAL_TARI_RESOURCE_ADDRESS,
     models::{Amount, EncryptedData},
@@ -167,13 +167,13 @@ impl Test {
         }
     }
 
-    pub fn test_account_address() -> SubstateAddress {
+    pub fn test_account_address() -> SubstateId {
         "component_0dc41b5cc74b36d696c7b140323a40a2f98b71df5d60e5a6bf4c1a071d15f562"
             .parse()
             .unwrap()
     }
 
-    pub fn test_vault_address() -> SubstateAddress {
+    pub fn test_vault_address() -> SubstateId {
         "vault_0dc41b5cc74b36d696c7b140323a40a2f98b71df5d60e5a6bf4c1a071d15f562"
             .parse()
             .unwrap()
@@ -233,7 +233,7 @@ impl WalletNetworkInterface for PanicIndexer {
     #[allow(clippy::diverging_sub_expression)]
     async fn query_substate(
         &self,
-        _address: &SubstateAddress,
+        _address: &SubstateId,
         _version: Option<u32>,
         _local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {

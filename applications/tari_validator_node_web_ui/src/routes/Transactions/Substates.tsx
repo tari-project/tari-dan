@@ -20,21 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import {
-  TableContainer,
-  Table,
-  TableRow,
-  TableBody,
-  Collapse,
-} from '@mui/material';
-import { renderJson } from '../../utils/helpers';
-import { DataTableCell } from '../../Components/StyledComponents';
-import { AccordionIconButton } from '../../Components/StyledComponents';
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
-import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
-import { IoArrowDownCircle, IoArrowUpCircle } from 'react-icons/io5';
-import CodeBlockDialog from '../../Components/CodeBlock';
+import { useState } from "react";
+import { TableContainer, Table, TableRow, TableBody, Collapse } from "@mui/material";
+import { renderJson } from "../../utils/helpers";
+import { DataTableCell } from "../../Components/StyledComponents";
+import { AccordionIconButton } from "../../Components/StyledComponents";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
+import { IoArrowDownCircle, IoArrowUpCircle } from "react-icons/io5";
+import CodeBlockDialog from "../../Components/CodeBlock";
 
 function RowData({ info, state }: any, index: number) {
   const [open, setOpen] = useState(false);
@@ -43,7 +37,7 @@ function RowData({ info, state }: any, index: number) {
   return (
     <>
       <TableRow key={`${index}-1`}>
-        <DataTableCell sx={{ borderBottom: 'none', textAlign: 'center' }}>
+        <DataTableCell sx={{ borderBottom: "none", textAlign: "center" }}>
           <AccordionIconButton
             open={open}
             aria-label="expand row"
@@ -58,37 +52,29 @@ function RowData({ info, state }: any, index: number) {
         <DataTableCell>
           <div
             style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-start',
-              gap: '0.5rem',
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "flex-start",
+              gap: "0.5rem",
             }}
           >
-            {state === 'Up' ? (
-              <IoArrowUpCircle
-                style={{ width: 22, height: 22, color: '#5F9C91' }}
-              />
+            {state === "Up" ? (
+              <IoArrowUpCircle style={{ width: 22, height: 22, color: "#5F9C91" }} />
             ) : (
-              <IoArrowDownCircle
-                style={{ width: 22, height: 22, color: '#ECA86A' }}
-              />
+              <IoArrowDownCircle style={{ width: 22, height: 22, color: "#ECA86A" }} />
             )}
             {state}
           </div>
         </DataTableCell>
         <DataTableCell>{itemKey}</DataTableCell>
         <DataTableCell>
-          {itemValue && typeof itemValue === 'object'
-            ? JSON.stringify(itemValue)
-            : String(itemValue)}
+          {itemValue && typeof itemValue === "object" ? JSON.stringify(itemValue) : String(itemValue)}
         </DataTableCell>
       </TableRow>
       <TableRow key={`${index}-2`}>
         <DataTableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={4}>
           <Collapse in={open} timeout="auto" unmountOnExit>
-            <CodeBlockDialog title="Substate">
-              {renderJson(info)}
-            </CodeBlockDialog>
+            <CodeBlockDialog title="Substate">{renderJson(info)}</CodeBlockDialog>
           </Collapse>
         </DataTableCell>
       </TableRow>
@@ -96,7 +82,7 @@ function RowData({ info, state }: any, index: number) {
   );
 }
 
-export default function Substates({ upData, downData }: { upData: any, downData:any }) {
+export default function Substates({ upData, downData }: { upData: any; downData: any }) {
   // const down = data.Accept.down_substates;
   const up = upData;
   const down = downData;

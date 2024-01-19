@@ -12,7 +12,7 @@ use tari_dan_wallet_sdk::network::{
     TransactionQueryResult,
     WalletNetworkInterface,
 };
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_indexer_client::{
     error::IndexerClientError,
     json_rpc_client::IndexerJsonRpcClient,
@@ -63,7 +63,7 @@ impl WalletNetworkInterface for IndexerJsonRpcNetworkInterface {
 
     async fn query_substate(
         &self,
-        address: &SubstateAddress,
+        address: &SubstateId,
         version: Option<u32>,
         local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error> {

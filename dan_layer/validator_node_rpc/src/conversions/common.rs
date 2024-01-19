@@ -25,7 +25,7 @@ use std::convert::{TryFrom, TryInto};
 use anyhow::anyhow;
 use tari_common_types::types::{PrivateKey, PublicKey, Signature};
 use tari_crypto::{hashing::DomainSeparation, signatures::SchnorrSignature, tari_utilities::ByteArray};
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_storage::consensus_models::{ValidatorSchnorrSignature, ValidatorSignature};
 use tari_transaction::TransactionSignature;
 
@@ -102,27 +102,27 @@ impl From<TransactionSignature> for proto::common::SignatureAndPublicKey {
     }
 }
 
-// -------------------------------- ShardId -------------------------------- //
-impl TryFrom<proto::common::ShardId> for ShardId {
+// -------------------------------- SubstateAddress -------------------------------- //
+impl TryFrom<proto::common::SubstateAddress> for SubstateAddress {
     type Error = anyhow::Error;
 
-    fn try_from(shard_id: proto::common::ShardId) -> Result<Self, Self::Error> {
-        Ok(shard_id.bytes.try_into()?)
+    fn try_from(address: proto::common::SubstateAddress) -> Result<Self, Self::Error> {
+        Ok(address.bytes.try_into()?)
     }
 }
 
-impl From<ShardId> for proto::common::ShardId {
-    fn from(shard_id: ShardId) -> Self {
+impl From<SubstateAddress> for proto::common::SubstateAddress {
+    fn from(address: SubstateAddress) -> Self {
         Self {
-            bytes: shard_id.as_bytes().to_vec(),
+            bytes: address.as_bytes().to_vec(),
         }
     }
 }
 
-impl From<&ShardId> for proto::common::ShardId {
-    fn from(shard_id: &ShardId) -> Self {
+impl From<&SubstateAddress> for proto::common::SubstateAddress {
+    fn from(address: &SubstateAddress) -> Self {
         Self {
-            bytes: shard_id.as_bytes().to_vec(),
+            bytes: address.as_bytes().to_vec(),
         }
     }
 }

@@ -20,38 +20,28 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useState } from 'react';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import {
-  useKeysCreate,
-  useKeysList,
-  useKeysSetActive,
-} from '../../../api/hooks/useKeys';
-import { BoxHeading2 } from '../../../Components/StyledComponents';
-import AddIcon from '@mui/icons-material/Add';
-import Fade from '@mui/material/Fade';
-import { Form } from 'react-router-dom';
-import Button from '@mui/material/Button/Button';
-import { DataTableCell } from '../../../Components/StyledComponents';
-import FetchStatusCheck from '../../../Components/FetchStatusCheck';
+import { useState } from "react";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import { useKeysCreate, useKeysList, useKeysSetActive } from "../../../api/hooks/useKeys";
+import { BoxHeading2 } from "../../../Components/StyledComponents";
+import AddIcon from "@mui/icons-material/Add";
+import Fade from "@mui/material/Fade";
+import { Form } from "react-router-dom";
+import Button from "@mui/material/Button/Button";
+import { DataTableCell } from "../../../Components/StyledComponents";
+import FetchStatusCheck from "../../../Components/FetchStatusCheck";
 
 function Key(key: any, setActive: any) {
   return (
     <TableRow key={key[0]}>
       <DataTableCell>{key[0]}</DataTableCell>
       <DataTableCell>{key[1]}</DataTableCell>
-      <DataTableCell>
-        {key[2] ? (
-          <b>Active</b>
-        ) : (
-          <div onClick={() => setActive(key[0])}>Activate</div>
-        )}
-      </DataTableCell>
+      <DataTableCell>{key[2] ? <b>Active</b> : <div onClick={() => setActive(key[0])}>Activate</div>}</DataTableCell>
     </TableRow>
   );
 }
@@ -80,7 +70,7 @@ function Keys() {
       <FetchStatusCheck
         isLoading={isLoading}
         isError={isError}
-        errorMessage={error?.message || 'Error fetching data'}
+        errorMessage={error?.message || "Error fetching data"}
       />
       <Fade in={!isLoading && !isError}>
         <div>
@@ -91,10 +81,7 @@ function Keys() {
                   <Button variant="contained" type="submit">
                     Add Key
                   </Button>
-                  <Button
-                    variant="outlined"
-                    onClick={() => showAddKeyDialog(false)}
-                  >
+                  <Button variant="outlined" onClick={() => showAddKeyDialog(false)}>
                     Cancel
                   </Button>
                 </Form>
@@ -103,17 +90,13 @@ function Keys() {
             {!showKeyDialog && (
               <Fade in={!showKeyDialog}>
                 <div className="flex-container">
-                  <Button
-                    variant="outlined"
-                    startIcon={<AddIcon />}
-                    onClick={() => showAddKeyDialog()}
-                  >
+                  <Button variant="outlined" startIcon={<AddIcon />} onClick={() => showAddKeyDialog()}>
                     Add Key
                   </Button>
                 </div>
               </Fade>
             )}
-          </BoxHeading2>{' '}
+          </BoxHeading2>{" "}
           <TableContainer>
             <Table>
               <TableHead>
@@ -123,9 +106,7 @@ function Keys() {
                   <TableCell>Active</TableCell>
                 </TableRow>
               </TableHead>
-              <TableBody>
-                {data && data.keys.map((key: any) => Key(key, setActive))}
-              </TableBody>
+              <TableBody>{data && data.keys.map((key: any) => Key(key, setActive))}</TableBody>
             </Table>
           </TableContainer>
         </div>

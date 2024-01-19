@@ -8,7 +8,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_engine_types::commit_result::{ExecuteResult, FinalizeResult, RejectReason};
 use tari_transaction::{Transaction, TransactionId};
 
@@ -25,7 +25,7 @@ pub struct TransactionRecord {
     pub transaction: Transaction,
     pub result: Option<ExecuteResult>,
     pub execution_time: Option<Duration>,
-    pub resulting_outputs: Vec<ShardId>,
+    pub resulting_outputs: Vec<SubstateAddress>,
     pub final_decision: Option<Decision>,
     pub finalized_time: Option<Duration>,
     pub abort_details: Option<String>,
@@ -50,7 +50,7 @@ impl TransactionRecord {
         execution_time: Option<Duration>,
         final_decision: Option<Decision>,
         finalized_time: Option<Duration>,
-        resulting_outputs: Vec<ShardId>,
+        resulting_outputs: Vec<SubstateAddress>,
         abort_details: Option<String>,
     ) -> Self {
         Self {
@@ -84,11 +84,11 @@ impl TransactionRecord {
         self.result.as_ref()
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         self.transaction.involved_shards_iter().chain(&self.resulting_outputs)
     }
 
-    pub fn resulting_outputs(&self) -> &[ShardId] {
+    pub fn resulting_outputs(&self) -> &[SubstateAddress] {
         &self.resulting_outputs
     }
 
@@ -214,7 +214,7 @@ impl TransactionRecord {
     pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         transactions: I,
-    ) -> Result<HashMap<TransactionId, HashSet<ShardId>>, StorageError> {
+    ) -> Result<HashMap<TransactionId, HashSet<SubstateAddress>>, StorageError> {
         let (transactions, missing) = Self::get_any(tx, transactions)?;
         if !missing.is_empty() {
             return Err(StorageError::NotFound {

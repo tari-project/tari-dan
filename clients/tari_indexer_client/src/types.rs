@@ -13,14 +13,14 @@ use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
     serde_with as serde_tools,
-    substate::{Substate, SubstateAddress},
+    substate::{Substate, SubstateId},
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateRequest {
     #[serde(with = "serde_tools::string")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: Option<u32>,
     #[serde(default)]
     pub local_search_only: bool,
@@ -29,7 +29,7 @@ pub struct GetSubstateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetSubstateResponse {
     #[serde(with = "serde_tools::string")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: u32,
     pub substate: Substate,
     pub created_by_transaction: TransactionId,
@@ -39,7 +39,7 @@ pub struct GetSubstateResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InspectSubstateRequest {
     #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: Option<u32>,
 }
 
@@ -47,7 +47,7 @@ pub struct InspectSubstateRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InspectSubstateResponse {
     #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: u32,
     pub substate_contents: serde_json::Value,
     pub created_by_transaction: TransactionId,
@@ -100,28 +100,28 @@ pub struct GetIdentityResponse {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddAddressRequest {
     #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
 }
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeleteAddressRequest {
     #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
 }
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetNonFungibleCountRequest {
     #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
 }
 
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetNonFungiblesRequest {
     #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub start_index: u64,
     pub end_index: u64,
 }
@@ -136,7 +136,7 @@ pub struct GetNonFungiblesResponse {
 pub struct NonFungibleSubstate {
     pub index: u64,
     #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub substate: Substate,
 }
 
@@ -144,7 +144,7 @@ pub struct NonFungibleSubstate {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetRelatedTransactionsRequest {
     #[serde_as(as = "DisplayFromStr")]
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: Option<u32>,
 }
 

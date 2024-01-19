@@ -122,12 +122,12 @@ export class NonFungibleId {
   }
   toJSON() {
     switch (typeof this.value) {
-      case 'string':
-        return { 'string': this.value };
-      case 'number':
-        return { 'Uint64': this.value };
+      case "string":
+        return { string: this.value };
+      case "number":
+        return { Uint64: this.value };
     }
-    return { 'U256': this.value };
+    return { U256: this.value };
   }
 }
 
@@ -200,7 +200,7 @@ export class VaultId {
   }
 }
 
-export type SubstateAddressType =
+export type SubstateIdType =
   | ResourceAddress
   | ComponentAddress
   | VaultId
@@ -208,8 +208,8 @@ export type SubstateAddressType =
   | NonFungibleAddress
   | NonFungibleIndexAddress;
 
-export class SubstateAddress {
-  private value: SubstateAddressType;
+export class SubstateId {
+  private value: SubstateIdType;
   constructor(value: any) {
     if (value.hasOwnProperty("Component")) {
       this.value = new ComponentAddress(value.ComponentAddress);
@@ -249,9 +249,9 @@ export class SubstateAddress {
 }
 
 export class TariPermissionAccountBalance {
-  private value: SubstateAddress;
+  private value: SubstateId;
   constructor(value: any) {
-    this.value = new SubstateAddress(value);
+    this.value = new SubstateId(value);
   }
   toString() {
     return `AccountBalance(${this.value.toString()})`;
@@ -267,7 +267,7 @@ export class TariPermissionAccountInfo {
     return `AccountInfo`;
   }
   toJSON() {
-    return "AccountInfo"
+    return "AccountInfo";
   }
 }
 
@@ -298,7 +298,7 @@ export class TariPermissionKeyList {
     return `KeyList`;
   }
   toJSON() {
-    return "KeyList"
+    return "KeyList";
   }
 }
 
@@ -308,12 +308,12 @@ export class TariPermissionTransactionGet {
     return `TransactionGet`;
   }
   toJSON() {
-    return "TransactionGet"
+    return "TransactionGet";
   }
 }
 export class TariPermissionTransactionSend {
-  private value?: SubstateAddress;
-  constructor(value?: SubstateAddress) {
+  private value?: SubstateId;
+  constructor(value?: SubstateId) {
     this.value = value;
   }
   toString() {
@@ -324,34 +324,32 @@ export class TariPermissionTransactionSend {
     }
   }
   toJSON() {
-    console.log('JSON TariPermissionTransactionSend', this.value)
+    console.log("JSON TariPermissionTransactionSend", this.value);
     if (this.value === undefined) {
-      return { "TransactionSend": null }
+      return { TransactionSend: null };
     } else {
-      return { "TransactionSend": this.value }
+      return { TransactionSend: this.value };
     }
   }
 }
 
 export class TariPermissionGetNft {
-  private value0?: SubstateAddress;
+  private value0?: SubstateId;
   private value1?: ResourceAddress;
-  constructor(value0?: SubstateAddress, value1?: ResourceAddress) {
+  constructor(value0?: SubstateId, value1?: ResourceAddress) {
     this.value0 = value0;
     this.value1 = value1;
   }
   toString() {
     let svalue0, svalue1;
     if (this.value0) {
-      svalue0 = this.value0.toString()
-    }
-    else {
+      svalue0 = this.value0.toString();
+    } else {
       svalue0 = "any";
     }
     if (this.value1) {
-      svalue1 = this.value1.toString()
-    }
-    else {
+      svalue1 = this.value1.toString();
+    } else {
       svalue1 = "any";
     }
     return `GetNft(${svalue0},${svalue1})`;
@@ -369,8 +367,7 @@ export class TariPermissionNftGetOwnershipProof {
   toString() {
     if (this.value) {
       return `NftGetOwnershipProof(${this.value?.toString()})`;
-    }
-    else {
+    } else {
       return `NftGetOwnershipProof(any)`;
     }
   }

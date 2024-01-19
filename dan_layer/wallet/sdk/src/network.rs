@@ -9,7 +9,7 @@ use serde_json::Value;
 use tari_dan_storage::consensus_models::Decision;
 use tari_engine_types::{
     commit_result::ExecuteResult,
-    substate::{Substate, SubstateAddress},
+    substate::{Substate, SubstateId},
 };
 use tari_transaction::{SubstateRequirement, Transaction, TransactionId};
 
@@ -19,7 +19,7 @@ pub trait WalletNetworkInterface {
 
     async fn query_substate(
         &self,
-        address: &SubstateAddress,
+        address: &SubstateId,
         version: Option<u32>,
         local_search_only: bool,
     ) -> Result<SubstateQueryResult, Self::Error>;
@@ -44,7 +44,7 @@ pub trait WalletNetworkInterface {
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SubstateQueryResult {
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub version: u32,
     pub substate: Substate,
     pub created_by_transaction: TransactionId,

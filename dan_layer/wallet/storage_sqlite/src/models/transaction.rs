@@ -5,7 +5,7 @@ use std::{str::FromStr, time::Duration};
 
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{Epoch, ShardId};
+use tari_dan_common_types::{Epoch, SubstateAddress};
 use tari_dan_wallet_sdk::{
     models::{TransactionStatus, WalletTransaction},
     storage::WalletStorageError,
@@ -42,8 +42,8 @@ pub struct Transaction {
 /// Struct used to keep inputs and outputs in a single field as json
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionInputs {
-    pub inputs: Vec<ShardId>,
-    pub input_refs: Vec<ShardId>,
+    pub inputs: Vec<SubstateAddress>,
+    pub input_refs: Vec<SubstateAddress>,
 }
 
 impl Transaction {

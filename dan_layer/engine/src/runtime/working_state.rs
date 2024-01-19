@@ -26,10 +26,10 @@ use tari_engine_types::{
     proof::{ContainerRef, LockedResource, Proof},
     resource::Resource,
     resource_container::ResourceContainer,
-    substate::{Substate, SubstateAddress, SubstateDiff, SubstateValue},
+    substate::{Substate, SubstateDiff, SubstateId, SubstateValue},
     transaction_receipt::TransactionReceipt,
     vault::Vault,
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
     TemplateAddress,
 };
 use tari_template_lib::{
@@ -74,7 +74,7 @@ pub(super) struct WorkingState {
     events: Vec<Event>,
     logs: Vec<LogEntry>,
     buckets: HashMap<BucketId, Bucket>,
-    address_allocations: HashMap<u32, SubstateAddress>,
+    address_allocations: HashMap<u32, SubstateId>,
     address_allocation_id: u32,
     proofs: HashMap<ProofId, Proof>,
 
@@ -123,7 +123,7 @@ impl WorkingState {
         }
     }
 
-    pub fn substate_exists(&self, address: &SubstateAddress) -> Result<bool, RuntimeError> {
+    pub fn substate_exists(&self, address: &SubstateId) -> Result<bool, RuntimeError> {
         // All public identity resources exist
         if address
             .as_non_fungible_address()
@@ -136,7 +136,7 @@ impl WorkingState {
         self.store.exists(address)
     }
 
-    pub fn new_substate<K: Into<SubstateAddress>, V: Into<SubstateValue>>(
+    pub fn new_substate<K: Into<SubstateId>, V: Into<SubstateValue>>(
         &mut self,
         address: K,
         value: V,
@@ -147,11 +147,7 @@ impl WorkingState {
         Ok(())
     }
 
-    pub fn lock_substate(
-        &mut self,
-        addr: &SubstateAddress,
-        lock_flag: LockFlag,
-    ) -> Result<LockedSubstate, RuntimeError> {
+    pub fn lock_substate(&mut self, addr: &SubstateId, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError> {
         let lock_id = self.store.try_lock(addr, lock_flag)?;
         Ok(LockedSubstate::new(addr.clone(), lock_id, lock_flag))
     }
@@ -294,7 +290,7 @@ impl WorkingState {
     }
 
     pub fn get_current_epoch(&self) -> Result<Epoch, RuntimeError> {
-        let address = VirtualSubstateAddress::CurrentEpoch;
+        let address = VirtualSubstateId::CurrentEpoch;
         let current_epoch =
             self.virtual_substates
                 .get(&address)
@@ -404,7 +400,7 @@ impl WorkingState {
         // and not depositing it.
         for token_id in bucket.into_non_fungible_ids().into_iter().flatten() {
             let address = NonFungibleAddress::new(resource_address, token_id);
-            let locked_nft = self.lock_substate(&SubstateAddress::NonFungible(address.clone()), LockFlag::Write)?;
+            let locked_nft = self.lock_substate(&SubstateId::NonFungible(address.clone()), LockFlag::Write)?;
             let nft = self.get_non_fungible_mut(&locked_nft)?;
 
             if nft.is_burnt() {
@@ -444,7 +440,7 @@ impl WorkingState {
                     .unlock(proof)?;
             },
             ContainerRef::Vault(vault_id) => {
-                let vault_lock = self.lock_substate(&SubstateAddress::Vault(vault_id), LockFlag::Write)?;
+                let vault_lock = self.lock_substate(&SubstateId::Vault(vault_id), LockFlag::Write)?;
                 self.get_vault_mut(&vault_lock)?.unlock(proof)?;
                 self.unlock_substate(vault_lock)?;
             },
@@ -464,7 +460,7 @@ impl WorkingState {
                 .as_resource_address()
                 .ok_or_else(|| RuntimeError::InvariantError {
                     function: "mint_resource",
-                    details: "LockedSubstate address is not a ResourceAddress".to_string(),
+                    details: "LockedSubstate substate_id is not a ResourceAddress".to_string(),
                 })?;
 
         let resource_container = match mint_arg {
@@ -504,7 +500,7 @@ impl WorkingState {
 
                 for (id, (data, mut_data)) in tokens {
                     let nft_address = NonFungibleAddress::new(resource_address, id.clone());
-                    let addr = SubstateAddress::NonFungible(nft_address.clone());
+                    let addr = SubstateId::NonFungible(nft_address.clone());
                     if self.substate_exists(&addr)? {
                         return Err(RuntimeError::DuplicateNonFungibleId {
                             token_id: nft_address.id().clone(),
@@ -553,7 +549,7 @@ impl WorkingState {
             .as_vault_id()
             .ok_or_else(|| RuntimeError::InvariantError {
                 function: "recall_resource_from_vault",
-                details: "LockedSubstate address is not a VaultId".to_string(),
+                details: "LockedSubstate substate_id is not a VaultId".to_string(),
             })?;
 
         let vault_mut = self.get_vault_mut(vault_lock)?;
@@ -667,7 +663,7 @@ impl WorkingState {
         Ok(())
     }
 
-    pub fn new_address_allocation<T: Into<SubstateAddress> + Clone>(
+    pub fn new_address_allocation<T: Into<SubstateId> + Clone>(
         &mut self,
         address: T,
     ) -> Result<AddressAllocation<T>, RuntimeError> {
@@ -678,7 +674,7 @@ impl WorkingState {
         Ok(allocation)
     }
 
-    pub fn take_allocated_address<T: TryFrom<SubstateAddress, Error = SubstateAddress>>(
+    pub fn take_allocated_address<T: TryFrom<SubstateId, Error = SubstateId>>(
         &mut self,
         id: u32,
     ) -> Result<T, RuntimeError> {
@@ -697,7 +693,7 @@ impl WorkingState {
     pub fn take_fee_claim(&mut self, epoch: Epoch, validator_public_key: PublicKey) -> Result<FeeClaim, RuntimeError> {
         let substate = self
             .virtual_substates
-            .remove(&VirtualSubstateAddress::UnclaimedValidatorFee {
+            .remove(&VirtualSubstateId::UnclaimedValidatorFee {
                 epoch: epoch.as_u64(),
                 address: validator_public_key.clone(),
             })
@@ -771,7 +767,7 @@ impl WorkingState {
         Authorization::new(self)
     }
 
-    pub fn take_mutated_substates(&mut self) -> IndexMap<SubstateAddress, SubstateValue> {
+    pub fn take_mutated_substates(&mut self) -> IndexMap<SubstateId, SubstateValue> {
         let mut up_states = self.store.take_mutated_substates();
         up_states.extend(
             self.new_fee_claims
@@ -796,7 +792,7 @@ impl WorkingState {
     pub fn finalize_fees(
         &mut self,
         transaction_hash: Hash,
-        substates_to_persist: &mut IndexMap<SubstateAddress, SubstateValue>,
+        substates_to_persist: &mut IndexMap<SubstateId, SubstateValue>,
     ) -> Result<TransactionReceipt, RuntimeError> {
         let total_fees = self
             .fee_state
@@ -832,10 +828,10 @@ impl WorkingState {
             }
 
             let vault_mut = substates_to_persist
-                .get_mut(&SubstateAddress::Vault(refund_vault))
+                .get_mut(&SubstateId::Vault(refund_vault))
                 .expect("invariant: vault that made fee payment not in changeset")
                 .as_vault_mut()
-                .expect("invariant: substate address for fee refund is not a vault");
+                .expect("invariant: substate substate_id for fee refund is not a vault");
             vault_mut.resource_container_mut().deposit(resx.recall_all()?)?;
         }
 
@@ -1050,7 +1046,7 @@ impl WorkingState {
     pub fn generate_substate_diff(
         &self,
         transaction_receipt: TransactionReceipt,
-        substates_to_persist: IndexMap<SubstateAddress, SubstateValue>,
+        substates_to_persist: IndexMap<SubstateId, SubstateValue>,
     ) -> Result<SubstateDiff, RuntimeError> {
         let mut substate_diff = SubstateDiff::new();
 
@@ -1067,11 +1063,11 @@ impl WorkingState {
 
         // Special case: unclaimed confidential outputs are downed without being upped if claimed
         for claimed in &self.claimed_confidential_outputs {
-            substate_diff.down(SubstateAddress::UnclaimedConfidentialOutput(*claimed), 0);
+            substate_diff.down(SubstateId::UnclaimedConfidentialOutput(*claimed), 0);
         }
 
         substate_diff.up(
-            SubstateAddress::TransactionReceipt(transaction_receipt.transaction_hash.into()),
+            SubstateId::TransactionReceipt(transaction_receipt.transaction_hash.into()),
             Substate::new(0, SubstateValue::TransactionReceipt(transaction_receipt)),
         );
 
@@ -1084,7 +1080,7 @@ impl WorkingState {
 
     pub fn check_component_scope<T: Into<ActionIdent>>(
         &self,
-        address: &SubstateAddress,
+        address: &SubstateId,
         action: T,
     ) -> Result<(), RuntimeError> {
         // Since we dont propagate _owned_ substate references up the call stack, if the substate is in scope, then it

@@ -20,25 +20,21 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import PageHeading from '../../Components/PageHeading';
-import Grid from '@mui/material/Grid';
-import { StyledPaper } from '../../Components/StyledComponents';
-import TableContainer from '@mui/material/TableContainer';
-import Table from '@mui/material/Table';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import TableCell from '@mui/material/TableCell';
-import TableBody from '@mui/material/TableBody';
-import { useParams } from 'react-router-dom';
-import {
-  useAccountsGetBalances,
-  useAccountsGet,
-  useAccountNFTsList,
-} from '../../api/hooks/useAccounts';
-import { removeTagged, shortenString } from '../../utils/helpers';
-import { DataTableCell } from '../../Components/StyledComponents';
-import CopyToClipboard from '../../Components/CopyToClipboard';
-import FetchStatusCheck from '../../Components/FetchStatusCheck';
+import PageHeading from "../../Components/PageHeading";
+import Grid from "@mui/material/Grid";
+import { StyledPaper } from "../../Components/StyledComponents";
+import TableContainer from "@mui/material/TableContainer";
+import Table from "@mui/material/Table";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import TableCell from "@mui/material/TableCell";
+import TableBody from "@mui/material/TableBody";
+import { useParams } from "react-router-dom";
+import { useAccountsGetBalances, useAccountsGet, useAccountNFTsList } from "../../api/hooks/useAccounts";
+import { removeTagged, shortenString } from "../../utils/helpers";
+import { DataTableCell } from "../../Components/StyledComponents";
+import CopyToClipboard from "../../Components/CopyToClipboard";
+import FetchStatusCheck from "../../Components/FetchStatusCheck";
 
 function BalanceRow(props: any) {
   return (
@@ -71,7 +67,7 @@ function AccountDetailsLayout() {
     isLoading: balancesIsLoading,
     isError: balancesIsError,
     error: balancesError,
-  } = useAccountsGetBalances(name || '');
+  } = useAccountsGetBalances(name || "");
 
   const {
     data: nftsListData,
@@ -85,7 +81,7 @@ function AccountDetailsLayout() {
     isLoading: accountsIsLoading,
     isError: accountsIsError,
     error: accountsError,
-  } = useAccountsGet(name || '');
+  } = useAccountsGet(name || "");
 
   return (
     <>
@@ -96,7 +92,7 @@ function AccountDetailsLayout() {
         <StyledPaper>
           <FetchStatusCheck
             isError={accountsIsError}
-            errorMessage={accountsError?.message || 'Error fetching data'}
+            errorMessage={accountsError?.message || "Error fetching data"}
             isLoading={accountsIsLoading}
           />
           <TableContainer>
@@ -114,9 +110,7 @@ function AccountDetailsLayout() {
                     <DataTableCell>{accountsData.account.name}</DataTableCell>
                     <DataTableCell>
                       {shortenString(accountsData.account.address.Component)}
-                      <CopyToClipboard
-                        copy={accountsData.account.address.Component}
-                      />
+                      <CopyToClipboard copy={accountsData.account.address.Component} />
                     </DataTableCell>
                     <DataTableCell>
                       {shortenString(accountsData.public_key)}
@@ -134,7 +128,7 @@ function AccountDetailsLayout() {
           Balances
           <FetchStatusCheck
             isError={balancesIsError}
-            errorMessage={balancesError?.message || 'Error fetching data'}
+            errorMessage={balancesError?.message || "Error fetching data"}
             isLoading={balancesIsLoading}
           />
           <TableContainer>
@@ -148,9 +142,7 @@ function AccountDetailsLayout() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {balancesData?.balances.map((balance: number, index: number) =>
-                  BalanceRow(balance)
-                )}
+                {balancesData?.balances.map((balance: number, index: number) => BalanceRow(balance))}
               </TableBody>
             </Table>
           </TableContainer>
@@ -161,7 +153,7 @@ function AccountDetailsLayout() {
           Account NFTs
           <FetchStatusCheck
             isError={nftsListIsError}
-            errorMessage={nftsListError?.message || 'Error fetching data'}
+            errorMessage={nftsListError?.message || "Error fetching data"}
             isLoading={nftsListIsLoading}
           />
           <TableContainer>
@@ -173,11 +165,7 @@ function AccountDetailsLayout() {
                   <TableCell>Is Burned</TableCell>
                 </TableRow>
               </TableHead>
-              <TableBody>
-                {nftsListData?.nfts.map((nft: any, index: number) =>
-                  NftsList(nft)
-                )}
-              </TableBody>
+              <TableBody>{nftsListData?.nfts.map((nft: any, index: number) => NftsList(nft))}</TableBody>
             </Table>
           </TableContainer>
         </StyledPaper>

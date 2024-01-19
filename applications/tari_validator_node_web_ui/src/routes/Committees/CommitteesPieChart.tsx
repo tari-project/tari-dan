@@ -31,20 +31,14 @@ const MyChartComponent = ({ chartData }: MyChartComponentProps) => {
 
   useEffect(() => {
     const mappedTitles = chartData.committees.map((shardInfo) => {
-      return `${shardInfo.shard_range.start.slice(
-        0,
-        6,
-      )}... - ${shardInfo.shard_range.end.slice(0, 6)}...`;
+      return `${shardInfo.shard_range.start.slice(0, 6)}... - ${shardInfo.shard_range.end.slice(0, 6)}...`;
     });
     setTitles(mappedTitles);
 
     const mappedContent = chartData.committees.reverse().map((shardInfo) => {
       const data: any = {
         value: shardInfo.validators.length,
-        name: `${shardInfo.shard_range.start.slice(
-          0,
-          6,
-        )}... - ${shardInfo.shard_range.end.slice(0, 6)}...`,
+        name: `${shardInfo.shard_range.start.slice(0, 6)}... - ${shardInfo.shard_range.end.slice(0, 6)}...`,
         committee: shardInfo.validators,
         link: `/committees/${shardInfo.shard_range.start},${shardInfo.shard_range.end}`,
         range: `${shardInfo.shard_range.start}<br />${shardInfo.shard_range.end}`,

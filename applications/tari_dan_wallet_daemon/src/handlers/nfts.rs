@@ -7,16 +7,12 @@ use anyhow::anyhow;
 use log::info;
 use tari_common_types::types::PublicKey;
 use tari_crypto::{keys::PublicKey as PK, ristretto::RistrettoSecretKey, tari_utilities::ByteArray};
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     models::Account,
 };
-use tari_engine_types::{
-    component::new_component_address_from_parts,
-    instruction::Instruction,
-    substate::SubstateAddress,
-};
+use tari_engine_types::{component::new_component_address_from_parts, instruction::Instruction, substate::SubstateId};
 use tari_template_builtin::ACCOUNT_NFT_TEMPLATE_ADDRESS;
 use tari_template_lib::{
     args,
@@ -123,7 +119,7 @@ pub async fn handle_mint_account_nft(
     let mut accrued_fee = Amount::new(0);
     if sdk
         .substate_api()
-        .scan_for_substate(&SubstateAddress::Component(component_address), None)
+        .scan_for_substate(&SubstateId::Component(component_address), None)
         .await
         .is_err()
     {
@@ -173,12 +169,9 @@ async fn mint_account_nft(
 
     let mut inputs = inputs
         .iter()
-        .map(|v| SubstateRequirement::new(v.address.clone(), Some(v.version)))
+        .map(|v| SubstateRequirement::new(v.substate_id.clone(), Some(v.version)))
         .collect::<Vec<_>>();
-    inputs.extend([SubstateRequirement::new(
-        SubstateAddress::Component(component_address),
-        None,
-    )]);
+    inputs.extend([SubstateRequirement::new(SubstateId::Component(component_address), None)]);
 
     let instructions = vec![
         Instruction::CallMethod {
@@ -271,7 +264,7 @@ async fn create_account_nft(
         .await?;
     let inputs = inputs
         .iter()
-        .map(|addr| ShardId::from_address(&addr.address, addr.version))
+        .map(|addr| SubstateAddress::from_address(&addr.substate_id, addr.version))
         .collect::<Vec<_>>();
 
     let transaction = Transaction::builder()

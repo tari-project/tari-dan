@@ -10,7 +10,7 @@ use std::{
 
 use indexmap::IndexSet;
 use serde::{Deserialize, Serialize};
-use tari_dan_common_types::{optional::Optional, ShardId};
+use tari_dan_common_types::{optional::Optional, SubstateAddress};
 use tari_engine_types::{
     commit_result::{ExecuteResult, FinalizeResult, RejectReason},
     lock::LockFlag,
@@ -28,7 +28,7 @@ use crate::{
 pub struct ExecutedTransaction {
     transaction: Transaction,
     result: ExecuteResult,
-    resulting_outputs: Vec<ShardId>,
+    resulting_outputs: Vec<SubstateAddress>,
     execution_time: Duration,
     final_decision: Option<Decision>,
     finalized_time: Option<Duration>,
@@ -39,7 +39,7 @@ impl ExecutedTransaction {
     pub fn new(
         transaction: Transaction,
         result: ExecuteResult,
-        resulting_outputs: Vec<ShardId>,
+        resulting_outputs: Vec<SubstateAddress>,
         execution_time: Duration,
     ) -> Self {
         Self {
@@ -89,7 +89,7 @@ impl ExecutedTransaction {
         &self.result
     }
 
-    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &ShardId> + '_ {
+    pub fn involved_shards_iter(&self) -> impl Iterator<Item = &SubstateAddress> + '_ {
         self.transaction.all_inputs_iter().chain(&self.resulting_outputs)
     }
 
@@ -128,7 +128,7 @@ impl ExecutedTransaction {
     }
 
     /// Returns the outputs that resulted from execution.
-    pub fn resulting_outputs(&self) -> &[ShardId] {
+    pub fn resulting_outputs(&self) -> &[SubstateAddress] {
         &self.resulting_outputs
     }
 
@@ -296,7 +296,7 @@ impl ExecutedTransaction {
     pub fn get_involved_shards<'a, TTx: StateStoreReadTransaction, I: IntoIterator<Item = &'a TransactionId>>(
         tx: &mut TTx,
         transactions: I,
-    ) -> Result<HashMap<TransactionId, HashSet<ShardId>>, StorageError> {
+    ) -> Result<HashMap<TransactionId, HashSet<SubstateAddress>>, StorageError> {
         let transactions = Self::get_all(tx, transactions)?;
         Ok(transactions
             .into_iter()

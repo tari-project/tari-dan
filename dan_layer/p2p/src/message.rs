@@ -5,7 +5,7 @@ use std::fmt::{Display, Formatter};
 
 use serde::Serialize;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_transaction::Transaction;
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -81,5 +81,5 @@ pub struct NewTransactionMessage {
     pub transaction: Transaction,
     /// Output shards that a validator has determined by executing the transaction
     // TODO: The only way to verify this is to execute the transaction again.
-    pub output_shards: Vec<ShardId>,
+    pub output_shards: Vec<SubstateAddress>,
 }

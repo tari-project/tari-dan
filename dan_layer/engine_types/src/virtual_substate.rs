@@ -9,16 +9,16 @@ use tari_common_types::types::PublicKey;
 use crate::fee_claim::FeeClaim;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum VirtualSubstateAddress {
+pub enum VirtualSubstateId {
     CurrentEpoch,
     UnclaimedValidatorFee { epoch: u64, address: PublicKey },
 }
 
-impl Display for VirtualSubstateAddress {
+impl Display for VirtualSubstateId {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            VirtualSubstateAddress::CurrentEpoch => write!(f, "Virtual(CurrentEpoch)"),
-            VirtualSubstateAddress::UnclaimedValidatorFee { epoch, address } => {
+            VirtualSubstateId::CurrentEpoch => write!(f, "Virtual(CurrentEpoch)"),
+            VirtualSubstateId::UnclaimedValidatorFee { epoch, address } => {
                 write!(
                     f,
                     "Virtual(UnclaimedValidatorFee(epoch = {}, address = {:.7}))",

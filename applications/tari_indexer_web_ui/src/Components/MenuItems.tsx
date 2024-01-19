@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { NavLink } from 'react-router-dom';
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
+import { NavLink } from "react-router-dom";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
 import {
   IoHomeOutline,
   IoHome,
@@ -35,10 +35,10 @@ import {
   IoImage,
   IoExtensionPuzzleOutline,
   IoExtensionPuzzle,
-} from 'react-icons/io5';
-import Tooltip from '@mui/material/Tooltip';
-import Fade from '@mui/material/Fade';
-import theme from '../theme/theme';
+} from "react-icons/io5";
+import Tooltip from "@mui/material/Tooltip";
+import Fade from "@mui/material/Fade";
+import theme from "../theme/theme";
 
 const iconStyle = {
   height: 22,
@@ -53,45 +53,45 @@ const activeIconStyle = {
 
 const mainItems = [
   {
-    title: 'Home',
+    title: "Home",
     icon: <IoHomeOutline style={iconStyle} />,
     activeIcon: <IoHome style={activeIconStyle} />,
-    link: '/',
+    link: "/",
   },
   {
-    title: 'Monitored substates',
+    title: "Monitored substates",
     icon: <IoExtensionPuzzleOutline style={iconStyle} />,
     activeIcon: <IoExtensionPuzzle style={activeIconStyle} />,
-    link: 'monitored_substates',
+    link: "monitored_substates",
   },
   {
-    title: 'Monitored NFT collections',
+    title: "Monitored NFT collections",
     icon: <IoImageOutline style={iconStyle} />,
     activeIcon: <IoImage style={activeIconStyle} />,
-    link: 'nfts',
+    link: "nfts",
   },
   {
-    title: 'Recent Transactions',
+    title: "Recent Transactions",
     icon: <IoBarChartOutline style={iconStyle} />,
     activeIcon: <IoBarChart style={activeIconStyle} />,
-    link: 'transactions',
+    link: "transactions",
   },
   {
-    title: 'Connections',
+    title: "Connections",
     icon: <IoGitNetworkOutline style={iconStyle} />,
     activeIcon: <IoGitNetwork style={activeIconStyle} />,
-    link: 'connections',
+    link: "connections",
   },
 ];
 
 const MainMenu = mainItems.map(({ title, icon, activeIcon, link }) => {
   return (
-    <NavLink to={link} key={title} style={{ textDecoration: 'none' }}>
+    <NavLink to={link} key={title} style={{ textDecoration: "none" }}>
       {({ isActive }) => (
         <ListItemButton
           sx={{
-            paddingLeft: '22px',
-            paddingRight: '22px',
+            paddingLeft: "22px",
+            paddingRight: "22px",
           }}
           disableRipple
         >

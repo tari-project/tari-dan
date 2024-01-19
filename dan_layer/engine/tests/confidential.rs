@@ -1,7 +1,7 @@
 //   Copyright 2023 The Tari Project
 //   SPDX-License-Identifier: BSD-3-Clause
 
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress},
@@ -19,7 +19,7 @@ use tari_template_test_tooling::{
 use tari_transaction::Transaction;
 use tari_transaction_manifest::ManifestValue;
 
-fn setup(initial_supply: ConfidentialOutputProof) -> (TemplateTest, ComponentAddress, SubstateAddress) {
+fn setup(initial_supply: ConfidentialOutputProof) -> (TemplateTest, ComponentAddress, SubstateId) {
     let mut template_test = TemplateTest::new(vec![
         "tests/templates/confidential/faucet",
         "tests/templates/confidential/utilities",

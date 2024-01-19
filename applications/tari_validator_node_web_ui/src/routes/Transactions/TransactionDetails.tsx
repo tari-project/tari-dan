@@ -152,11 +152,11 @@ export default function TransactionDetails() {
         return <span>Accepted</span>;
       }
       if (result.finalize.result.AcceptFeeRejectRest) {
-        return (
+        return
           <span>
             {result.finalize.result.AcceptFeeRejectRest[1].ExecutionFailure}
           </span>
-        );
+        ;
       }
       if (result.finalize.result.Reject) {
         return (
@@ -278,14 +278,8 @@ export default function TransactionDetails() {
                   </>
                 )}
                 {transaction?.fee_instructions && (
-                  <Accordion
-                    expanded={expandedPanels.includes("panel1")}
-                    onChange={handleChange("panel1")}
-                  >
-                    <AccordionSummary
-                      aria-controls="panel1bh-content"
-                      id="panel1bh-header"
-                    >
+                  <Accordion expanded={expandedPanels.includes("panel1")} onChange={handleChange("panel1")}>
+                    <AccordionSummary aria-controls="panel1bh-content" id="panel1bh-header">
                       <Typography>Fee Instructions</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -294,14 +288,8 @@ export default function TransactionDetails() {
                   </Accordion>
                 )}
                 {transaction?.instructions && (
-                  <Accordion
-                    expanded={expandedPanels.includes("panel2")}
-                    onChange={handleChange("panel2")}
-                  >
-                    <AccordionSummary
-                      aria-controls="panel2bh-content"
-                      id="panel1bh-header"
-                    >
+                  <Accordion expanded={expandedPanels.includes("panel2")} onChange={handleChange("panel2")}>
+                    <AccordionSummary aria-controls="panel2bh-content" id="panel1bh-header">
                       <Typography>Instructions</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -310,14 +298,8 @@ export default function TransactionDetails() {
                   </Accordion>
                 )}
                 {result && (
-                  <Accordion
-                    expanded={expandedPanels.includes("panel3")}
-                    onChange={handleChange("panel3")}
-                  >
-                    <AccordionSummary
-                      aria-controls="panel3bh-content"
-                      id="panel1bh-header"
-                    >
+                  <Accordion expanded={expandedPanels.includes("panel3")} onChange={handleChange("panel3")}>
+                    <AccordionSummary aria-controls="panel3bh-content" id="panel1bh-header">
                       <Typography>Events</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -326,14 +308,8 @@ export default function TransactionDetails() {
                   </Accordion>
                 )}
                 {result && (
-                  <Accordion
-                    expanded={expandedPanels.includes("panel4")}
-                    onChange={handleChange("panel4")}
-                  >
-                    <AccordionSummary
-                      aria-controls="panel4bh-content"
-                      id="panel1bh-header"
-                    >
+                  <Accordion expanded={expandedPanels.includes("panel4")} onChange={handleChange("panel4")}>
+                    <AccordionSummary aria-controls="panel4bh-content" id="panel1bh-header">
                       <Typography>Logs</Typography>
                     </AccordionSummary>
                     <AccordionDetails>
@@ -342,14 +318,8 @@ export default function TransactionDetails() {
                   </Accordion>
                 )}
                 {upSubstate && (
-                  <Accordion
-                    expanded={expandedPanels.includes("panel5")}
-                    onChange={handleChange("panel5")}
-                  >
-                    <AccordionSummary
-                      aria-controls="panel5bh-content"
-                      id="panel1bh-header"
-                    >
+                  <Accordion expanded={expandedPanels.includes("panel5")} onChange={handleChange("panel5")}>
+                    <AccordionSummary aria-controls="panel5bh-content" id="panel1bh-header">
                       <Typography>Substates</Typography>
                     </AccordionSummary>
                     <AccordionDetails>

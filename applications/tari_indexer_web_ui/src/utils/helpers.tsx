@@ -38,10 +38,10 @@ const renderJson = (json: any) => {
         ],
       </>
     );
-  } else if (typeof json === 'object' && json !== null) {
+  } else if (typeof json === "object" && json !== null) {
     return (
       <>
-        {'{'}
+        {"{"}
         <ul>
           {Object.keys(json).map((key) => (
             <li>
@@ -49,12 +49,11 @@ const renderJson = (json: any) => {
             </li>
           ))}
         </ul>
-        {'}'}
+        {"}"}
       </>
     );
   } else {
-    if (typeof json === 'string')
-      return <span className="string">"{json}"</span>;
+    if (typeof json === "string") return <span className="string">"{json}"</span>;
     return <span className="other">{json}</span>;
   }
 };
