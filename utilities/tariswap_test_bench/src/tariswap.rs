@@ -2,7 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use log::info;
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_dan_wallet_sdk::{apis::key_manager::TRANSACTION_BRANCH, models::Account};
 use tari_template_lib::{
     args,
@@ -68,8 +68,8 @@ impl Runner {
                 let transaction = Transaction::builder()
                     .with_input_refs(vec![
                         // Use resources as input refs to allow concurrent access.
-                        ShardId::from_address(&faucet.resource_address.into(), 0),
-                        ShardId::from_address(&XTR2.into(), 0),
+                        SubstateAddress::from_address(&faucet.resource_address.into(), 0),
+                        SubstateAddress::from_address(&XTR2.into(), 0),
                     ])
                     .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), Amount(1000))
                     .call_method(account.address.as_component_address().unwrap(), "withdraw", args![
@@ -123,8 +123,8 @@ impl Runner {
                 let transaction = Transaction::builder()
                     // Use resources as input refs to allow concurrent access.
                     .with_input_refs(vec![
-                        ShardId::from_address(&faucet.resource_address.into(), 0),
-                        ShardId::from_address(&XTR2.into(), 0),
+                        SubstateAddress::from_address(&faucet.resource_address.into(), 0),
+                        SubstateAddress::from_address(&XTR2.into(), 0),
                     ])
                     .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), Amount(1000))
                     .call_method(tariswap.component_address, "get_pool_balance", args![ XTR2, ])
@@ -171,8 +171,8 @@ impl Runner {
                 let transaction = Transaction::builder()
                     // Use resources as input refs to allow concurrent access.
                     .with_input_refs(vec![
-                        ShardId::from_address(&faucet.resource_address.into(), 0),
-                        ShardId::from_address(&XTR2.into(), 0),
+                        SubstateAddress::from_address(&faucet.resource_address.into(), 0),
+                        SubstateAddress::from_address(&XTR2.into(), 0),
                     ])
                     .fee_transaction_pay_from_component(account.address.as_component_address().unwrap(), Amount(1000))
                     .call_method(tariswap.component_address, "get_pool_balance", args![XTR2])

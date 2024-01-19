@@ -178,7 +178,7 @@ impl Transaction {
     }
 
     /// Returns all substates addresses referenced by this transaction
-    pub fn to_referenced_substates(&self) -> Result<HashSet<SubstateAddress>, IndexedValueError> {
+    pub fn to_referenced_substates(&self) -> Result<HashSet<SubstateId>, IndexedValueError> {
         let all_instructions = self.instructions().iter().chain(self.fee_instructions());
 
         let mut substates = HashSet::new();
@@ -195,14 +195,14 @@ impl Transaction {
                     args,
                     ..
                 } => {
-                    substates.insert(SubstateAddress::Component(*component_address));
+                    substates.insert(SubstateId::Component(*component_address));
                     for arg in args.iter().filter_map(|a| a.as_literal_bytes()) {
                         let value = IndexedValue::from_raw(arg)?;
                         substates.extend(value.referenced_substates());
                     }
                 },
                 Instruction::ClaimBurn { claim } => {
-                    substates.insert(SubstateAddress::UnclaimedConfidentialOutput(claim.output_address));
+                    substates.insert(SubstateId::UnclaimedConfidentialOutput(claim.output_address));
                 },
                 _ => {},
             }
