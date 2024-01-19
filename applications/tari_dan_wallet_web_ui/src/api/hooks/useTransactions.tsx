@@ -20,15 +20,15 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useQuery } from '@tanstack/react-query';
-import { getAllTransaction, jsonRpc } from '../../utils/json_rpc';
-import { apiError } from '../helpers/types';
+import { useQuery } from "@tanstack/react-query";
+import { getAllTransaction, jsonRpc } from "../../utils/json_rpc";
+import { apiError } from "../helpers/types";
 
 const useTransactionDetails = (hash: string) => {
   return useQuery({
-    queryKey: ['transaction_details'],
+    queryKey: ["transaction_details"],
     queryFn: () => {
-      return jsonRpc('transactions.get', [hash]);
+      return jsonRpc("transactions.get", [hash]);
     },
     onError: (error: apiError) => {
       error;
@@ -38,7 +38,7 @@ const useTransactionDetails = (hash: string) => {
 
 const useGetAllTransactions = (status: string | null | undefined, component: string | null | undefined) => {
   return useQuery({
-    queryKey: ['transactions'],
+    queryKey: ["transactions"],
     queryFn: () => getAllTransaction(status, component),
     onError: (error: apiError) => {
       error;

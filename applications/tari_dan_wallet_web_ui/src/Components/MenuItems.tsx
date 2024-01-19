@@ -20,10 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { NavLink } from 'react-router-dom';
-import ListItemButton from '@mui/material/ListItemButton';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
+import { NavLink } from "react-router-dom";
+import ListItemButton from "@mui/material/ListItemButton";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
 import {
   IoHomeOutline,
   IoHome,
@@ -37,12 +37,12 @@ import {
   IoTicket,
   IoSettingsOutline,
   IoSettings,
-} from 'react-icons/io5';
-import Tooltip from '@mui/material/Tooltip';
-import Fade from '@mui/material/Fade';
-import ThemeSwitcher from './ThemeSwitcher';
-import Box from '@mui/material/Box';
-import { useTheme } from '@mui/material/styles';
+} from "react-icons/io5";
+import Tooltip from "@mui/material/Tooltip";
+import Fade from "@mui/material/Fade";
+import ThemeSwitcher from "./ThemeSwitcher";
+import Box from "@mui/material/Box";
+import { useTheme } from "@mui/material/styles";
 
 function MainListItems() {
   const theme = useTheme();
@@ -60,10 +60,10 @@ function MainListItems() {
 
   const mainItems = [
     {
-      title: 'Home',
+      title: "Home",
       icon: <IoHomeOutline style={iconStyle} />,
       activeIcon: <IoHome style={activeIconStyle} />,
-      link: '/',
+      link: "/",
     },
     // {
     //   title: 'Accounts',
@@ -90,20 +90,20 @@ function MainListItems() {
     //   link: 'access-tokens',
     // },
     {
-      title: 'Settings',
+      title: "Settings",
       icon: <IoSettingsOutline style={iconStyle} />,
       activeIcon: <IoSettings style={activeIconStyle} />,
-      link: 'settings',
+      link: "settings",
     },
   ];
 
   return (
     <Box
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        height: 'calc(100vh - 84px)',
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        height: "calc(100vh - 84px)",
       }}
     >
       <Box>
@@ -112,15 +112,15 @@ function MainListItems() {
             to={link}
             key={title}
             style={{
-              textDecoration: 'none',
-              color: 'inherit',
+              textDecoration: "none",
+              color: "inherit",
             }}
           >
             {({ isActive }) => (
               <ListItemButton
                 sx={{
-                  paddingLeft: '22px',
-                  paddingRight: '22px',
+                  paddingLeft: "22px",
+                  paddingRight: "22px",
                 }}
               >
                 <Tooltip

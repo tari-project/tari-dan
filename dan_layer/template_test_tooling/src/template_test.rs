@@ -35,9 +35,9 @@ use tari_engine_types::{
     component::{ComponentBody, ComponentHeader},
     instruction::Instruction,
     resource_container::ResourceContainer,
-    substate::{Substate, SubstateAddress, SubstateDiff},
+    substate::{Substate, SubstateDiff, SubstateId},
     vault::Vault,
-    virtual_substate::{VirtualSubstate, VirtualSubstateAddress},
+    virtual_substate::{VirtualSubstate, VirtualSubstateId},
 };
 use tari_template_builtin::{ACCOUNT_NFT_TEMPLATE_ADDRESS, ACCOUNT_TEMPLATE_ADDRESS};
 use tari_template_lib::{
@@ -63,7 +63,7 @@ pub struct TemplateTest {
     track_calls: TrackCallsModule,
     secret_key: RistrettoSecretKey,
     public_key: RistrettoPublicKey,
-    last_outputs: HashSet<SubstateAddress>,
+    last_outputs: HashSet<SubstateId>,
     name_to_template: HashMap<String, TemplateAddress>,
     state_store: MemoryStateStore,
     enable_fees: bool,
@@ -119,7 +119,7 @@ impl TemplateTest {
         }
 
         let mut virtual_substates = VirtualSubstates::new();
-        virtual_substates.insert(VirtualSubstateAddress::CurrentEpoch, VirtualSubstate::CurrentEpoch(0));
+        virtual_substates.insert(VirtualSubstateId::CurrentEpoch, VirtualSubstate::CurrentEpoch(0));
 
         Self {
             package: Arc::new(package),
@@ -163,7 +163,7 @@ impl TemplateTest {
             vault_id,
             ResourceContainer::confidential(CONFIDENTIAL_TARI_RESOURCE_ADDRESS, vec![], initial_supply),
         );
-        tx.set_state(&SubstateAddress::Vault(vault_id), Substate::new(0, vault))
+        tx.set_state(&SubstateId::Vault(vault_id), Substate::new(0, vault))
             .unwrap();
 
         // This must mirror the test faucet component
@@ -176,7 +176,7 @@ impl TemplateTest {
         })
         .unwrap();
         tx.set_state(
-            &SubstateAddress::Component(test_faucet_component()),
+            &SubstateId::Component(test_faucet_component()),
             Substate::new(0, ComponentHeader {
                 template_address: test_faucet_template_address,
                 module_name: "TestFaucet".to_string(),
@@ -208,7 +208,7 @@ impl TemplateTest {
         self
     }
 
-    pub fn set_virtual_substate(&mut self, address: VirtualSubstateAddress, value: VirtualSubstate) -> &mut Self {
+    pub fn set_virtual_substate(&mut self, address: VirtualSubstateId, value: VirtualSubstate) -> &mut Self {
         self.virtual_substates.insert(address, value);
         self
     }
@@ -239,7 +239,7 @@ impl TemplateTest {
         self.track_calls.clear();
     }
 
-    pub fn get_previous_output_address(&self, ty: SubstateType) -> SubstateAddress {
+    pub fn get_previous_output_address(&self, ty: SubstateType) -> SubstateId {
         self.last_outputs
             .iter()
             .find(|addr| ty.matches(addr))
@@ -566,7 +566,7 @@ impl TemplateTest {
     pub fn print_state(&self) {
         let tx = self.state_store.read_access().unwrap();
         for (k, v) in tx.iter_raw() {
-            let k: SubstateAddress = decode_exact(k).unwrap();
+            let k: SubstateId = decode_exact(k).unwrap();
             let v: Substate = decode_exact(v).unwrap();
 
             eprintln!("[{}]: {}", k, v.into_substate_value());
@@ -584,14 +584,14 @@ pub enum SubstateType {
 }
 
 impl SubstateType {
-    pub fn matches(&self, addr: &SubstateAddress) -> bool {
+    pub fn matches(&self, addr: &SubstateId) -> bool {
         #[allow(clippy::match_like_matches_macro)]
         match (self, addr) {
-            (SubstateType::Component, SubstateAddress::Component(_)) => true,
-            (SubstateType::Resource, SubstateAddress::Resource(_)) => true,
-            (SubstateType::Vault, SubstateAddress::Vault(_)) => true,
-            (SubstateType::NonFungible, SubstateAddress::NonFungible(_)) => true,
-            (SubstateType::NonFungibleIndex, SubstateAddress::NonFungibleIndex(_)) => true,
+            (SubstateType::Component, SubstateId::Component(_)) => true,
+            (SubstateType::Resource, SubstateId::Resource(_)) => true,
+            (SubstateType::Vault, SubstateId::Vault(_)) => true,
+            (SubstateType::NonFungible, SubstateId::NonFungible(_)) => true,
+            (SubstateType::NonFungibleIndex, SubstateId::NonFungibleIndex(_)) => true,
             _ => false,
         }
     }

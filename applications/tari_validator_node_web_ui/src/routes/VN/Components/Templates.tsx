@@ -30,10 +30,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import {
-  DataTableCell,
-  BoxHeading2,
-} from "../../../Components/StyledComponents";
+import { DataTableCell, BoxHeading2 } from "../../../Components/StyledComponents";
 import { Link } from "react-router-dom";
 import CopyToClipboard from "../../../Components/CopyToClipboard";
 import IconButton from "@mui/material/IconButton";
@@ -70,14 +67,7 @@ function Templates() {
         response.templates
           .slice()
           .sort((a: ITemplate, b: ITemplate) => b.height - a.height)
-          .map(
-            ({
-              address,
-              binary_sha,
-              height,
-              name,
-              url,
-              show = true,
+          .map(({ address, binary_sha, height, name, url, show = true
             }: ITemplate) => ({
               id: toHex(address),
               address,
@@ -93,12 +83,7 @@ function Templates() {
   }, []);
 
   const toHex = (str: Uint8Array) => {
-    return (
-      "0x" +
-      Array.prototype.map
-        .call(str, (x: number) => ("00" + x.toString(16)).slice(-2))
-        .join("")
-    );
+    return "0x" + Array.prototype.map.call(str, (x: number) => ("00" + x.toString(16)).slice(-2)).join("");
   };
 
   const sort = (column: ColumnKey, order: number) => {
@@ -124,8 +109,7 @@ function Templates() {
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
   // Avoid a layout jump when reaching the last page with empty rows.
-  const emptyRows =
-    page > 0 ? Math.max(0, (1 + page) * rowsPerPage - templates.length) : 0;
+  const emptyRows = page > 0 ? Math.max(0, (1 + page) * rowsPerPage - templates.length) : 0;
 
   const handleChangePage = (event: unknown, newPage: number) => {
     setPage(newPage);
@@ -149,14 +133,12 @@ function Templates() {
             {
               title: "Template Address",
               value: "id",
-              filterFn: (value: string, row: ITemplate) =>
-                row.id.toLowerCase().includes(value.toLowerCase()),
+              filterFn: (value: string, row: ITemplate) => row.id.toLowerCase().includes(value.toLowerCase()),
             },
             {
               title: "Mined Height",
               value: "height",
-              filterFn: (value: string, row: ITemplate) =>
-                row.height.toString().includes(value),
+              filterFn: (value: string, row: ITemplate) => row.height.toString().includes(value),
             },
           ]}
           placeholder="Search for Templates"
@@ -221,11 +203,7 @@ function Templates() {
               .map(({ address, binary_sha, height, url, id, name }) => (
                 <TableRow key={id}>
                   <DataTableCell>
-                    <Link
-                      to={`/templates/${toHex(address)}`}
-                      state={[address]}
-                      style={{ textDecoration: "none" }}
-                    >
+                    <Link to={`/templates/${toHex(address)}`} state={[address]} style={{ textDecoration: "none" }}>
                       {shortenString(toHex(address))}
                     </Link>
                     <CopyToClipboard copy={toHex(address)} />
@@ -259,12 +237,8 @@ function Templates() {
                       </>
                     )}
                   </DataTableCell>
-                  <DataTableCell style={{ textAlign: "center" }}>
-                    {height}
-                  </DataTableCell>
-                  <DataTableCell style={{ textAlign: "center" }}>
-                    Active
-                  </DataTableCell>
+                  <DataTableCell style={{ textAlign: "center" }}>{height}</DataTableCell>
+                  <DataTableCell style={{ textAlign: "center" }}>Active</DataTableCell>
                   <DataTableCell style={{ textAlign: "center" }}>
                     <Link to={`/templates/${toHex(address)}`} state={[address]}>
                       <IconButton>

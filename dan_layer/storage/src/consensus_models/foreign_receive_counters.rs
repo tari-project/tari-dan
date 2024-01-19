@@ -3,13 +3,13 @@
 
 use std::collections::HashMap;
 
-use tari_dan_common_types::shard_bucket::ShardBucket;
+use tari_dan_common_types::shard::Shard;
 
 use crate::{StateStoreReadTransaction, StateStoreWriteTransaction, StorageError};
 
 #[derive(Debug, Clone)]
 pub struct ForeignReceiveCounters {
-    pub counters: HashMap<ShardBucket, u64>,
+    pub counters: HashMap<Shard, u64>,
 }
 
 impl Default for ForeignReceiveCounters {
@@ -25,12 +25,12 @@ impl ForeignReceiveCounters {
         }
     }
 
-    pub fn increment(&mut self, bucket: &ShardBucket) {
+    pub fn increment(&mut self, bucket: &Shard) {
         *self.counters.entry(*bucket).or_default() += 1;
     }
 
     // If we haven't received any messages from this shard yet, return 0
-    pub fn get_index(&self, bucket: &ShardBucket) -> u64 {
+    pub fn get_index(&self, bucket: &Shard) -> u64 {
         self.counters.get(bucket).copied().unwrap_or_default()
     }
 }

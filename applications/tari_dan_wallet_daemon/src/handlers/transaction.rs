@@ -10,7 +10,7 @@ use tari_dan_wallet_sdk::{
     apis::{jwt::JrpcPermission, key_manager},
     network::{TransactionFinalizedResult, TransactionQueryResult},
 };
-use tari_engine_types::{indexed_value::IndexedValue, instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{indexed_value::IndexedValue, instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{args, args::Arg, models::Amount};
 use tari_transaction::Transaction;
 use tari_wallet_daemon_client::types::{
@@ -101,7 +101,7 @@ pub async fn handle_submit(
     let inputs = if req.override_inputs {
         req.inputs
     } else {
-        // If we are not overriding inputs, we will use inputs that we know about in the local substate address db
+        // If we are not overriding inputs, we will use inputs that we know about in the local substate id db
         let mut substates = get_referenced_substate_addresses(&req.instructions)?;
         substates.extend(get_referenced_substate_addresses(&req.fee_instructions)?);
         let substates = substates.into_iter().collect::<Vec<_>>();
@@ -321,7 +321,7 @@ pub async fn handle_wait_result(
     }
 }
 
-fn get_referenced_substate_addresses(instructions: &[Instruction]) -> anyhow::Result<HashSet<SubstateAddress>> {
+fn get_referenced_substate_addresses(instructions: &[Instruction]) -> anyhow::Result<HashSet<SubstateId>> {
     let mut substates = HashSet::new();
     for instruction in instructions {
         match instruction {
@@ -330,7 +330,7 @@ fn get_referenced_substate_addresses(instructions: &[Instruction]) -> anyhow::Re
                 args,
                 ..
             } => {
-                substates.insert(SubstateAddress::Component(*component_address));
+                substates.insert(SubstateId::Component(*component_address));
                 for arg in args {
                     if let Arg::Literal(bytes) = arg {
                         let val = IndexedValue::from_raw(bytes)?;

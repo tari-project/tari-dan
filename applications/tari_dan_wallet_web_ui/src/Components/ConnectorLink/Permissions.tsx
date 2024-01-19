@@ -20,21 +20,31 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import { useEffect, useState } from 'react';
-import FormControl from '@mui/material/FormControl';
-import FormGroup from '@mui/material/FormGroup';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import FormHelperText from '@mui/material/FormHelperText';
-import Switch from '@mui/material/Switch';
-import Divider from '@mui/material/Divider';
-import Typography from '@mui/material/Typography';
-import './Permissions.css';
-import { TariPermission } from '../../utils/tari_permissions';
+import { useEffect, useState } from "react";
+import FormControl from "@mui/material/FormControl";
+import FormGroup from "@mui/material/FormGroup";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import FormHelperText from "@mui/material/FormHelperText";
+import Switch from "@mui/material/Switch";
+import Divider from "@mui/material/Divider";
+import Typography from "@mui/material/Typography";
+import "./Permissions.css";
+import { TariPermission } from "../../utils/tari_permissions";
 
-export default function Permissions({ requiredPermissions, optionalPermissions, setOptionalPermissions }: { requiredPermissions: TariPermission[], optionalPermissions: TariPermission[], setOptionalPermissions: any }) {
-  const [permissions, setPermissions] = useState(optionalPermissions.map((permission, index) => {
-    return ({ id: index, name: permission.toString(), checked: true });
-  }));
+export default function Permissions({
+  requiredPermissions,
+  optionalPermissions,
+  setOptionalPermissions,
+}: {
+  requiredPermissions: TariPermission[];
+  optionalPermissions: TariPermission[];
+  setOptionalPermissions: any;
+}) {
+  const [permissions, setPermissions] = useState(
+    optionalPermissions.map((permission, index) => {
+      return { id: index, name: permission.toString(), checked: true };
+    }),
+  );
 
   const handleChange = (index: number) => {
     setPermissions(
@@ -46,7 +56,7 @@ export default function Permissions({ requiredPermissions, optionalPermissions, 
           };
         }
         return item;
-      })
+      }),
     );
   };
 
@@ -54,26 +64,17 @@ export default function Permissions({ requiredPermissions, optionalPermissions, 
 
   return (
     <>
-      <Typography style={{ textAlign: 'center', marginBottom: '20px' }}>
+      <Typography style={{ textAlign: "center", marginBottom: "20px" }}>
         Select what the app is allowed to access:
       </Typography>
-      <FormControl
-        component="fieldset"
-        variant="standard"
-        style={{ width: '100%' }}
-      >
+      <FormControl component="fieldset" variant="standard" style={{ width: "100%" }}>
         <Divider />
         <FormGroup>
           {requiredPermissions.map((permissions) => {
             return (
               <>
                 <FormControlLabel
-                  control={
-                    <Switch
-                      checked={true}
-                      disabled={true}
-                    />
-                  }
+                  control={<Switch checked={true} disabled={true} />}
                   label={permissions.toString()}
                   labelPlacement="start"
                   key={permissions.toString()}
@@ -89,14 +90,7 @@ export default function Permissions({ requiredPermissions, optionalPermissions, 
             return (
               <>
                 <FormControlLabel
-                  control={
-                    <Switch
-                      checked={checked}
-                      onChange={() => handleChange(id)}
-                      name={name}
-                      value={name}
-                    />
-                  }
+                  control={<Switch checked={checked} onChange={() => handleChange(id)} name={name} value={name} />}
                   label={name}
                   labelPlacement="start"
                   key={id}
@@ -107,9 +101,8 @@ export default function Permissions({ requiredPermissions, optionalPermissions, 
             );
           })}
         </FormGroup>
-        <FormHelperText style={{ marginBottom: '20px', marginTop: '20px' }}>
-          You may be sharing sensitive information with this site. Approve or
-          deny access above.
+        <FormHelperText style={{ marginBottom: "20px", marginTop: "20px" }}>
+          You may be sharing sensitive information with this site. Approve or deny access above.
         </FormHelperText>
       </FormControl>
     </>

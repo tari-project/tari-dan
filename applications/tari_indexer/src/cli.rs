@@ -26,7 +26,7 @@ use clap::Parser;
 use minotari_app_utilities::common_cli_args::CommonCliArgs;
 use tari_common::configuration::{ConfigOverrideProvider, Network};
 use tari_dan_app_utilities::p2p_config::ReachabilityMode;
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -36,7 +36,7 @@ pub struct Cli {
     pub common: CommonCliArgs,
 
     #[clap(long, short = 'a', multiple_values = true)]
-    pub address: Vec<SubstateAddress>,
+    pub address: Vec<SubstateId>,
 
     #[clap(long, short = 'i')]
     pub dan_layer_scanning_internal: Option<u64>,

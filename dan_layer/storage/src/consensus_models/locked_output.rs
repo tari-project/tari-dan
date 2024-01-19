@@ -3,7 +3,7 @@
 
 use std::{borrow::Borrow, ops::DerefMut};
 
-use tari_dan_common_types::ShardId;
+use tari_dan_common_types::SubstateAddress;
 use tari_transaction::TransactionId;
 
 use crate::{
@@ -17,7 +17,7 @@ use crate::{
 pub struct LockedOutput {
     pub block_id: BlockId,
     pub transaction_id: TransactionId,
-    pub shard_id: ShardId,
+    pub substate_address: SubstateAddress,
 }
 
 impl LockedOutput {
@@ -25,7 +25,7 @@ impl LockedOutput {
         tx: &mut TTx,
         block_id: &BlockId,
         transaction_id: &TransactionId,
-        output_shards: &[ShardId],
+        output_shards: &[SubstateAddress],
     ) -> Result<SubstateLockState, StorageError>
     where
         TTx: StateStoreWriteTransaction + DerefMut,
@@ -37,8 +37,13 @@ impl LockedOutput {
         tx.locked_outputs_acquire_all(block_id, transaction_id, output_shards)
     }
 
-    pub fn check_locks<TTx>(tx: &mut TTx, output_shards: &[ShardId]) -> Result<SubstateLockState, StorageError>
-    where TTx: StateStoreReadTransaction {
+    pub fn check_locks<TTx>(
+        tx: &mut TTx,
+        output_shards: &[SubstateAddress],
+    ) -> Result<SubstateLockState, StorageError>
+    where
+        TTx: StateStoreReadTransaction,
+    {
         if tx.substates_any_exist(output_shards)? {
             return Ok(SubstateLockState::SomeOutputSubstatesExist);
         }
@@ -49,7 +54,7 @@ impl LockedOutput {
     where
         TTx: StateStoreWriteTransaction,
         I: IntoIterator<Item = B>,
-        B: Borrow<ShardId>,
+        B: Borrow<SubstateAddress>,
     {
         tx.locked_outputs_release_all(output_shards)
     }

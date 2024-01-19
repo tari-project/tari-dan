@@ -22,7 +22,7 @@
 
 use std::{collections::HashMap, fs};
 
-use tari_engine_types::{instruction::Instruction, substate::SubstateAddress};
+use tari_engine_types::{instruction::Instruction, substate::SubstateId};
 use tari_template_lib::{
     args,
     models::{Amount, ComponentAddress, ResourceAddress, TemplateAddress},
@@ -41,22 +41,16 @@ fn manifest_smoke_test() {
         TemplateAddress::from_hex("c2b621869ec2929d3b9503ea41054f01b468ce99e50254b58e460f608ae377f7").unwrap();
 
     let globals = HashMap::from([
-        (
-            "account".to_string(),
-            SubstateAddress::Component(account_component).into(),
-        ),
+        ("account".to_string(), SubstateId::Component(account_component).into()),
         (
             "picture_seller_addr".to_string(),
-            SubstateAddress::Component(picture_seller_component).into(),
+            SubstateId::Component(picture_seller_component).into(),
         ),
         (
             "test_faucet".to_string(),
-            SubstateAddress::Component(test_faucet_component).into(),
+            SubstateId::Component(test_faucet_component).into(),
         ),
-        (
-            "xtr_resource".to_string(),
-            SubstateAddress::Resource(xtr_resource).into(),
-        ),
+        ("xtr_resource".to_string(), SubstateId::Resource(xtr_resource).into()),
     ]);
     let ManifestInstructions {
         instructions,

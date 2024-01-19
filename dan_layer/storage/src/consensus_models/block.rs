@@ -15,10 +15,10 @@ use tari_dan_common_types::{
     hashing,
     optional::Optional,
     serde_with,
-    shard_bucket::ShardBucket,
+    shard::Shard,
     Epoch,
     NodeHeight,
-    ShardId,
+    SubstateAddress,
 };
 use tari_transaction::TransactionId;
 use time::PrimitiveDateTime;
@@ -69,7 +69,7 @@ pub struct Block {
     /// Flag that indicates that the block has been committed.
     is_committed: bool,
     /// Counter for each foreign shard for reliable broadcast.
-    foreign_indexes: HashMap<ShardBucket, u64>,
+    foreign_indexes: HashMap<Shard, u64>,
     /// Timestamp when was this stored.
     stored_at: Option<PrimitiveDateTime>,
     /// Signature of block by the proposer.
@@ -85,7 +85,7 @@ impl Block {
         proposed_by: PublicKey,
         commands: BTreeSet<Command>,
         total_leader_fee: u64,
-        foreign_indexes: HashMap<ShardBucket, u64>,
+        foreign_indexes: HashMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
     ) -> Self {
         let mut block = Self {
@@ -122,7 +122,7 @@ impl Block {
         is_dummy: bool,
         is_processed: bool,
         is_committed: bool,
-        foreign_indexes: HashMap<ShardBucket, u64>,
+        foreign_indexes: HashMap<Shard, u64>,
         signature: Option<ValidatorSchnorrSignature>,
         created_at: PrimitiveDateTime,
     ) -> Self {
@@ -213,13 +213,7 @@ impl Block {
             .chain(&self.proposed_by)
             .chain(&self.merkle_root)
             .chain(&self.commands)
-            .chain(
-                &self
-                    .foreign_indexes
-                    .iter()
-                    .collect::<Vec<(&ShardBucket, &u64)>>()
-                    .sort(),
-            )
+            .chain(&self.foreign_indexes.iter().collect::<Vec<(&Shard, &u64)>>().sort())
             .result()
     }
 }
@@ -332,11 +326,11 @@ impl Block {
         self.is_committed
     }
 
-    pub fn get_foreign_index(&self, bucket: &ShardBucket) -> Option<&u64> {
+    pub fn get_foreign_index(&self, bucket: &Shard) -> Option<&u64> {
         self.foreign_indexes.get(bucket)
     }
 
-    pub fn get_foreign_indexes(&self) -> &HashMap<ShardBucket, u64> {
+    pub fn get_foreign_indexes(&self) -> &HashMap<Shard, u64> {
         &self.foreign_indexes
     }
 
@@ -437,7 +431,7 @@ impl Block {
     pub fn find_involved_shards<TTx: StateStoreReadTransaction>(
         &self,
         tx: &mut TTx,
-    ) -> Result<HashSet<ShardId>, StorageError> {
+    ) -> Result<HashSet<SubstateAddress>, StorageError> {
         tx.transactions_fetch_involved_shards(self.all_transaction_ids().copied().collect())
     }
 
@@ -554,7 +548,7 @@ impl Block {
                         }));
                     } else {
                         updates.push(SubstateUpdate::Destroy {
-                            shard_id: substate.to_shard_id(),
+                            address: substate.to_substate_address(),
                             proof: QuorumCertificate::get(tx, &destroyed.justify)?,
                             destroyed_by_transaction: destroyed.by_transaction,
                         });

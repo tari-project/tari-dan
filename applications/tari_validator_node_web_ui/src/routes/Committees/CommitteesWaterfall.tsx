@@ -23,19 +23,11 @@
 import { useState, useEffect } from "react";
 import { fromHexString } from "../VN/Components/helpers";
 import EChartsReact from "echarts-for-react";
-import {
-  ICommittees,
-  ICommitteeChart,
-  ICommitteeMap,
-} from "../../utils/interfaces";
+import { ICommittees, ICommitteeChart, ICommitteeMap } from "../../utils/interfaces";
 import "../../theme/echarts.css";
 import { CommitteeShardInfo } from "../../utils/interfaces";
 
-export default function CommitteesWaterfall({
-  committees,
-}: {
-  committees: CommitteeShardInfo[];
-}) {
+export default function CommitteesWaterfall({ committees }: { committees: CommitteeShardInfo[] }) {
   const [chartData, setChartData] = useState<ICommitteeChart>({
     activeleft: [],
     inactiveleft: [],
@@ -83,9 +75,7 @@ export default function CommitteesWaterfall({
           break;
         case firstValue > secondValue:
           info.activeleft.push(secondValue);
-          info.inactiveleft.push(
-            TOTAL_WIDTH - (TOTAL_WIDTH - firstValue) - secondValue,
-          );
+          info.inactiveleft.push(TOTAL_WIDTH - (TOTAL_WIDTH - firstValue) - secondValue);
           info.activemiddle.push(0);
           info.inactiveright.push(0);
           info.activeright.push(TOTAL_WIDTH - firstValue);

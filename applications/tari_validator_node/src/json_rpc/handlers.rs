@@ -32,7 +32,7 @@ use log::*;
 use serde_json::{self as json, json};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_dan_app_utilities::{keypair::RistrettoKeypair, template_manager::interface::TemplateManagerHandle};
-use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, PeerAddress, ShardId};
+use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, PeerAddress, SubstateAddress};
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction, LeafBlock, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
@@ -225,7 +225,7 @@ impl JsonRpcHandlers {
         let request: GetStateRequest = value.parse_params()?;
 
         let mut tx = self.state_store.create_read_tx().unwrap();
-        match SubstateRecord::get(&mut tx, &request.shard_id).optional() {
+        match SubstateRecord::get(&mut tx, &request.address).optional() {
             Ok(Some(state)) => Ok(JsonRpcResponse::success(answer_id, GetStateResponse {
                 data: state.into_substate().to_bytes(),
             })),
@@ -351,8 +351,8 @@ impl JsonRpcHandlers {
         let maybe_substate = self
             .state_store
             .with_read_tx(|tx| {
-                let shard_id = ShardId::from_address(&data.address, data.version);
-                SubstateRecord::get(tx, &shard_id).optional()
+                let address = SubstateAddress::from_address(&data.address, data.version);
+                SubstateRecord::get(tx, &address).optional()
             })
             .map_err(internal_error(answer_id))?;
 
@@ -712,7 +712,11 @@ impl JsonRpcHandlers {
     pub async fn get_committee(&self, value: JsonRpcExtractor) -> JrpcResult {
         let answer_id = value.get_answer_id();
         let request = value.parse_params::<GetCommitteeRequest>()?;
-        if let Ok(committee) = self.epoch_manager.get_committee(request.epoch, request.shard_id).await {
+        if let Ok(committee) = self
+            .epoch_manager
+            .get_committee(request.epoch, request.substate_address)
+            .await
+        {
             let response = json!({ "committee": committee });
             Ok(JsonRpcResponse::success(answer_id, response))
         } else {
@@ -746,14 +750,14 @@ impl JsonRpcHandlers {
             .await
             .map_err(internal_error(answer_id))?;
 
-        validators.sort_by(|vn_a, vn_b| vn_b.committee_bucket.cmp(&vn_a.committee_bucket));
+        validators.sort_by(|vn_a, vn_b| vn_b.committee_shard.cmp(&vn_a.committee_shard));
         // Group by bucket, IndexMap used to preserve ordering
         let mut validators_per_bucket = IndexMap::with_capacity(validators.len());
         for validator in validators {
             validators_per_bucket
                 .entry(
                     validator
-                        .committee_bucket
+                        .committee_shard
                         .expect("validator committee bucket must have been populated within valid epoch"),
                 )
                 .or_insert_with(Vec::new)
@@ -763,8 +767,8 @@ impl JsonRpcHandlers {
         let committees = validators_per_bucket
             .into_iter()
             .map(|(bucket, validators)| CommitteeShardInfo {
-                bucket,
-                shard_range: bucket.to_shard_range(num_committees),
+                shard: bucket,
+                substate_address_range: bucket.to_substate_address_range(num_committees),
                 validators,
             })
             .collect();

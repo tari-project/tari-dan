@@ -3,12 +3,12 @@
 
 use std::fmt::{Display, Formatter};
 
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Account {
     pub name: Option<String>,
-    pub address: SubstateAddress,
+    pub address: SubstateId,
     pub key_index: u64,
     pub is_default: bool,
 }

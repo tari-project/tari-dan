@@ -62,7 +62,7 @@ use tari_engine_types::{
     confidential::{ConfidentialClaim, ConfidentialOutput},
     indexed_value::IndexedValue,
     lock::LockFlag,
-    substate::{SubstateAddress, SubstateValue},
+    substate::{SubstateId, SubstateValue},
 };
 use tari_template_lib::{
     args::{
@@ -100,7 +100,7 @@ pub trait RuntimeInterface: Send + Sync {
 
     fn load_component(&self, address: &ComponentAddress) -> Result<ComponentHeader, RuntimeError>;
 
-    fn lock_substate(&self, address: &SubstateAddress, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError>;
+    fn lock_substate(&self, address: &SubstateId, lock_flag: LockFlag) -> Result<LockedSubstate, RuntimeError>;
 
     fn get_substate(&self, lock: &LockedSubstate) -> Result<SubstateValue, RuntimeError>;
     fn component_invoke(

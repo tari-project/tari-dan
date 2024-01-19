@@ -26,7 +26,7 @@ import { useTransactionDetails } from "../../api/hooks/useTransactions";
 import { Accordion, AccordionDetails, AccordionSummary } from "../../Components/Accordion";
 import { Grid, Table, TableContainer, TableBody, TableRow, TableCell, Button, Fade, Alert } from "@mui/material";
 import Typography from "@mui/material/Typography";
-import { saveAs } from 'file-saver';
+import { saveAs } from "file-saver";
 import { DataTableCell, StyledPaper } from "../../Components/StyledComponents";
 import PageHeading from "../../Components/PageHeading";
 import Events from "./Events";
@@ -66,25 +66,22 @@ export default function TransactionDetails() {
   const renderResult = (result: any) => {
     if (result) {
       if (result.result.Accept) {
-        return (
-          <span>Accepted</span>);
+        return <span>Accepted</span>;
       }
       if (result.result.AcceptFeeRejectRest) {
-        return (
-          <span>{result.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>
-        );
+        return <span>{result.result.AcceptFeeRejectRest[1].ExecutionFailure}</span>;
       }
       if (result.result.Reject) {
         return (
-          <span>{Object.keys(result.result.Reject)[0]} - {result.result.Reject[Object.keys(result.result.Reject)[0]]}</span>
-        )
+          <span>
+            {Object.keys(result.result.Reject)[0]} - {result.result.Reject[Object.keys(result.result.Reject)[0]]}
+          </span>
+        );
       }
     } else {
-      return (
-        <span>In progress</span>
-      );
+      return <span>In progress</span>;
     }
-  }
+  };
 
   const renderContent = () => {
     if (isLoading) {
@@ -113,10 +110,10 @@ export default function TransactionDetails() {
     console.log(data);
     const handleDownload = () => {
       const json = JSON.stringify(data, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const filename = `tx-${data?.transaction?.id}.json` || 'tx-unknown_id.json';
+      const blob = new Blob([json], { type: "application/json" });
+      const filename = `tx-${data?.transaction?.id}.json` || "tx-unknown_id.json";
       saveAs(blob, filename);
-    }
+    };
 
     if (data.status === "Rejected" || data.status === "InvalidTransaction") {
       return (
@@ -140,7 +137,11 @@ export default function TransactionDetails() {
                 </TableRow>
                 <TableRow>
                   <TableCell>JSON</TableCell>
-                  <DataTableCell><Button variant="outlined" onClick={handleDownload}>Download</Button></DataTableCell>
+                  <DataTableCell>
+                    <Button variant="outlined" onClick={handleDownload}>
+                      Download
+                    </Button>
+                  </DataTableCell>
                 </TableRow>
                 <TableRow>
                   <TableCell>Reason</TableCell>
@@ -188,7 +189,11 @@ export default function TransactionDetails() {
                   </TableRow>
                   <TableRow>
                     <TableCell>JSON</TableCell>
-                    <DataTableCell><Button variant="outlined" onClick={handleDownload}>Download</Button></DataTableCell>
+                    <DataTableCell>
+                      <Button variant="outlined" onClick={handleDownload}>
+                        Download
+                      </Button>
+                    </DataTableCell>
                   </TableRow>
                   {data?.transaction_failure ? (
                     <TableRow>
@@ -208,7 +213,7 @@ export default function TransactionDetails() {
                 alignItems: "center",
                 padding: "2rem 1rem 0.5rem 1rem",
               }}
-            // className="flex-container"
+              // className="flex-container"
             >
               <Typography variant="h5">More Info</Typography>
               <div

@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use proc_macro2::Ident;
 use syn::Lit;
-use tari_engine_types::{instruction::Instruction, substate::SubstateAddress, TemplateAddress};
+use tari_engine_types::{instruction::Instruction, substate::SubstateId, TemplateAddress};
 use tari_template_lib::{
     arg,
     args::Arg,
@@ -156,16 +156,16 @@ impl ManifestInstructionGenerator {
                         .get(&ident.to_string())
                         .or_else(|| self.global_aliases.get(&ident.to_string()))
                         .map(|v| match v {
-                            ManifestValue::SubstateAddress(addr) => match addr {
-                                SubstateAddress::Component(addr) => Ok(arg!(*addr)),
-                                SubstateAddress::Resource(addr) => Ok(arg!(*addr)),
+                            ManifestValue::SubstateId(addr) => match addr {
+                                SubstateId::Component(addr) => Ok(arg!(*addr)),
+                                SubstateId::Resource(addr) => Ok(arg!(*addr)),
                                 // TODO: should tx receipt addresses be allowed to be reference ?
-                                SubstateAddress::TransactionReceipt(addr) => Ok(arg!(*addr)),
-                                SubstateAddress::Vault(addr) => Ok(arg!(*addr)),
-                                SubstateAddress::NonFungible(addr) => Ok(arg!(addr)),
-                                SubstateAddress::UnclaimedConfidentialOutput(addr) => Ok(arg!(*addr)),
-                                SubstateAddress::NonFungibleIndex(addr) => Ok(arg!(addr)),
-                                SubstateAddress::FeeClaim(addr) => Ok(arg!(*addr)),
+                                SubstateId::TransactionReceipt(addr) => Ok(arg!(*addr)),
+                                SubstateId::Vault(addr) => Ok(arg!(*addr)),
+                                SubstateId::NonFungible(addr) => Ok(arg!(addr)),
+                                SubstateId::UnclaimedConfidentialOutput(addr) => Ok(arg!(*addr)),
+                                SubstateId::NonFungibleIndex(addr) => Ok(arg!(addr)),
+                                SubstateId::FeeClaim(addr) => Ok(arg!(*addr)),
                             },
                             ManifestValue::Literal(lit) => lit_to_arg(lit),
                             ManifestValue::NonFungibleId(id) => Ok(arg!(id.clone())),

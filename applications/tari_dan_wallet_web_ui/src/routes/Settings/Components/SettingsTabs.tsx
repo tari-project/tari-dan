@@ -20,14 +20,14 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-import * as React from 'react';
-import Tabs from '@mui/material/Tabs';
-import Tab from '@mui/material/Tab';
-import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
-import Divider from '@mui/material/Divider';
-import { ISettingsMenu } from '../Settings';
-import { useTheme } from '@mui/material/styles';
+import * as React from "react";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
+import Typography from "@mui/material/Typography";
+import Box from "@mui/material/Box";
+import Divider from "@mui/material/Divider";
+import { ISettingsMenu } from "../Settings";
+import { useTheme } from "@mui/material/styles";
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -58,15 +58,11 @@ function CustomTabPanel(props: TabPanelProps) {
 function a11yProps(index: number) {
   return {
     id: `simple-tab-${index}`,
-    'aria-controls': `simple-tabpanel-${index}`,
+    "aria-controls": `simple-tabpanel-${index}`,
   };
 }
 
-export default function SettingsTabs({
-  menuItems,
-}: {
-  menuItems: ISettingsMenu[];
-}) {
+export default function SettingsTabs({ menuItems }: { menuItems: ISettingsMenu[] }) {
   const [value, setValue] = React.useState(0);
   const theme = useTheme();
 
@@ -75,14 +71,7 @@ export default function SettingsTabs({
   };
 
   const menuLabels = menuItems.map((item, index) => {
-    return (
-      <Tab
-        label={item.label}
-        {...a11yProps(index)}
-        key={index}
-        style={{ minWidth: 150 }}
-      />
-    );
+    return <Tab label={item.label} {...a11yProps(index)} key={index} style={{ minWidth: 150 }} />;
   });
 
   const menuContents = menuItems.map((item, index) => {
@@ -104,8 +93,8 @@ export default function SettingsTabs({
   });
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+    <Box sx={{ width: "100%" }}>
+      <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
         <Tabs
           value={value}
           onChange={handleChange}

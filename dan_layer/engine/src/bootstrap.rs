@@ -3,7 +3,7 @@
 
 use tari_engine_types::{
     resource::Resource,
-    substate::{Substate, SubstateAddress},
+    substate::{Substate, SubstateId},
 };
 use tari_template_lib::{
     auth::{AccessRule, ResourceAccessRules},
@@ -17,7 +17,7 @@ use tari_template_lib::{
 use crate::state_store::{StateStoreError, StateWriter};
 
 pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStoreError> {
-    let address = SubstateAddress::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
+    let address = SubstateId::Resource(PUBLIC_IDENTITY_RESOURCE_ADDRESS);
     let mut metadata = Metadata::new();
     metadata.insert(TOKEN_SYMBOL, "ID".to_string());
     // Create the resource for badges
@@ -36,7 +36,7 @@ pub fn bootstrap_state<T: StateWriter>(state_db: &mut T) -> Result<(), StateStor
     )?;
 
     // Create the second layer tari resource
-    let address = SubstateAddress::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
+    let address = SubstateId::Resource(CONFIDENTIAL_TARI_RESOURCE_ADDRESS);
     let mut metadata = Metadata::new();
     // TODO: decide on symbol for L2 tari
     metadata.insert(TOKEN_SYMBOL, "tXTR2".to_string());

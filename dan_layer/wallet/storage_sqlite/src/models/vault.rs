@@ -6,7 +6,7 @@ use std::str::FromStr;
 use chrono::NaiveDateTime;
 use diesel::{Identifiable, Queryable};
 use tari_dan_wallet_sdk::storage::WalletStorageError;
-use tari_engine_types::substate::SubstateAddress;
+use tari_engine_types::substate::SubstateId;
 use tari_template_lib::{
     models::{Amount, ResourceAddress},
     resource::ResourceType,
@@ -31,11 +31,11 @@ pub struct Vault {
 impl Vault {
     pub(crate) fn try_into_vault(
         self,
-        account_address: SubstateAddress,
+        account_address: SubstateId,
     ) -> Result<tari_dan_wallet_sdk::models::VaultModel, WalletStorageError> {
         Ok(tari_dan_wallet_sdk::models::VaultModel {
             account_address,
-            address: SubstateAddress::from_str(&self.address).map_err(|e| WalletStorageError::DecodingError {
+            address: SubstateId::from_str(&self.address).map_err(|e| WalletStorageError::DecodingError {
                 operation: "try_into_vault",
                 item: "vault.address",
                 details: e.to_string(),
