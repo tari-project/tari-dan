@@ -9,7 +9,7 @@ use std::{
 use futures::{stream::FuturesUnordered, FutureExt, StreamExt};
 use itertools::Itertools;
 use tari_consensus::messages::HotstuffMessage;
-use tari_dan_common_types::{committee::Committee, shard::Shard};
+use tari_dan_common_types::shard::Shard;
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, TransactionPool},
     StateStore,
@@ -175,7 +175,7 @@ pub struct TestNetworkWorker {
     tx_new_transactions: HashMap<TestAddress, (Shard, mpsc::Sender<TransactionId>, SqliteStateStore<TestAddress>)>,
     tx_hs_message: HashMap<TestAddress, mpsc::Sender<(TestAddress, HotstuffMessage)>>,
     #[allow(clippy::type_complexity)]
-    rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Committee<TestAddress>, HotstuffMessage)>>>,
+    rx_broadcast: Option<HashMap<TestAddress, mpsc::Receiver<(Vec<TestAddress>, HotstuffMessage)>>>,
     #[allow(clippy::type_complexity)]
     rx_leader: Option<HashMap<TestAddress, mpsc::Receiver<(TestAddress, HotstuffMessage)>>>,
     rx_mempool: Option<HashMap<TestAddress, mpsc::UnboundedReceiver<Transaction>>>,
@@ -281,23 +281,23 @@ impl TestNetworkWorker {
         }
     }
 
-    pub async fn handle_broadcast(&mut self, from: TestAddress, to: Committee<TestAddress>, msg: HotstuffMessage) {
-        log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.addresses().join(", "));
-        for vn in to.addresses() {
+    pub async fn handle_broadcast(&mut self, from: TestAddress, to: Vec<TestAddress>, msg: HotstuffMessage) {
+        log::debug!("🌎️ Broadcast {} from {} to {}", msg, from, to.iter().join(", "));
+        for vn in to {
             if let Some(hotstuff_filter) = &self.hotstuff_filter {
-                if !hotstuff_filter(&from, vn, &msg) {
+                if !hotstuff_filter(&from, &vn, &msg) {
                     self.num_filtered_messages
                         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     continue;
                 }
             }
             // TODO: support for taking a whole committee bucket offline
-            if *vn != from && self.is_offline_destination(vn, u32::MAX.into()).await {
+            if vn != from && self.is_offline_destination(&vn, u32::MAX.into()).await {
                 continue;
             }
 
             self.tx_hs_message
-                .get(vn)
+                .get(&vn)
                 .unwrap()
                 .send((from.clone(), msg.clone()))
                 .await

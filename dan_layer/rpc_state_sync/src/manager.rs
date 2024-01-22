@@ -11,6 +11,7 @@ use tari_consensus::{
     traits::{ConsensusSpec, LeaderStrategy, SyncManager, SyncStatus},
 };
 use tari_dan_common_types::{committee::Committee, optional::Optional, NodeHeight, PeerAddress};
+use tari_dan_p2p::proto::rpc::{GetHighQcRequest, SyncBlocksRequest};
 use tari_dan_storage::{
     consensus_models::{
         Block,
@@ -31,7 +32,6 @@ use tari_rpc_framework::RpcError;
 use tari_transaction::Transaction;
 use tari_validator_node_rpc::{
     client::{TariValidatorNodeRpcClientFactory, ValidatorNodeClientFactory},
-    proto::rpc::{GetHighQcRequest, SyncBlocksRequest},
     rpc_service::ValidatorNodeRpcClient,
 };
 

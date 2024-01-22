@@ -8,10 +8,26 @@ repository.workspace = true
 license.workspace = true
 
 [dependencies]
+tari_bor = { workspace = true }
+tari_common_types = { workspace = true }
 tari_consensus = { workspace = true }
+tari_crypto = { workspace = true }
 tari_dan_common_types = { workspace = true }
+tari_dan_storage = { workspace = true }
+tari_engine_types = { workspace = true }
+tari_networking = { workspace = true }
+tari_template_lib = { workspace = true }
 tari_transaction = { workspace = true }
 
-async-trait = { workspace = true }
+anyhow = { workspace = true }
 serde = { workspace = true, default-features = true }
+prost = { workspace = true }
 
+[build-dependencies]
+proto_builder = { workspace = true }
+
+[package.metadata.cargo-machete]
+ignored = [
+    # Used via OUT_DIR macro, not detectable
+    "prost",
+]

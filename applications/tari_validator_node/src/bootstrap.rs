@@ -49,6 +49,7 @@ use tari_dan_app_utilities::{
 };
 use tari_dan_common_types::{Epoch, NodeAddressable, NodeHeight, PeerAddress, SubstateAddress};
 use tari_dan_engine::fees::FeeTable;
+use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, ExecutedTransaction, ForeignReceiveCounters, SubstateRecord},
     global::GlobalDb,
@@ -61,7 +62,7 @@ use tari_dan_storage_sqlite::global::SqliteGlobalDbAdapter;
 use tari_engine_types::{resource::Resource, substate::SubstateId};
 use tari_epoch_manager::base_layer::{EpochManagerConfig, EpochManagerHandle};
 use tari_indexer_lib::substate_scanner::SubstateScanner;
-use tari_networking::{NetworkingHandle, SwarmConfig};
+use tari_networking::{MessagingMode, NetworkingHandle, SwarmConfig};
 use tari_rpc_framework::RpcServer;
 use tari_shutdown::ShutdownSignal;
 use tari_state_store_sqlite::SqliteStateStore;
@@ -74,7 +75,7 @@ use tari_template_lib::{
     resource::TOKEN_SYMBOL,
 };
 use tari_transaction::Transaction;
-use tari_validator_node_rpc::{client::TariValidatorNodeRpcClientFactory, proto};
+use tari_validator_node_rpc::client::TariValidatorNodeRpcClientFactory;
 use tokio::{sync::mpsc, task::JoinHandle};
 
 use crate::{
@@ -99,7 +100,7 @@ use crate::{
                 TransactionSignatureValidator,
                 Validator,
             },
-            message_dispatcher,
+            messaging::{ConsensusInboundMessaging, ConsensusOutboundMessaging, Gossip},
         },
     },
     registration,
@@ -131,8 +132,8 @@ pub async fn spawn_services(
         }));
 
     // Networking
-    let (message_senders, message_receivers) = message_dispatcher::new_messaging_channel(30);
-    let (tx_messages, rx_messages) = mpsc::channel(100);
+    let (tx_consensus_messages, rx_consensus_messages) = mpsc::unbounded_channel();
+    let (tx_gossip_messages, rx_gossip_messages) = mpsc::unbounded_channel();
     let identity = identity::Keypair::sr25519_from_bytes(keypair.secret_key().as_bytes().to_vec()).map_err(|e| {
         ExitError::new(
             ExitCode::ConfigError,
@@ -152,9 +153,12 @@ pub async fn spawn_services(
             p.addresses.into_iter().map(move |a| (peer_id, a))
         })
         .collect();
-    let (mut networking, join_handle) = tari_networking::spawn::<proto::network::Message>(
+    let (mut networking, join_handle) = tari_networking::spawn(
         identity,
-        tx_messages,
+        MessagingMode::Enabled {
+            tx_messages: tx_consensus_messages,
+            tx_gossip_messages,
+        },
         tari_networking::Config {
             listener_port: config.validator_node.p2p.listener_port,
             swarm: SwarmConfig {
@@ -174,14 +178,6 @@ pub async fn spawn_services(
 
     // Spawn messaging
     let message_logger = SqliteMessageLogger::new(config.validator_node.data_dir.join("message_log.sqlite"));
-    let (outbound_messaging, join_handle) =
-        message_dispatcher::spawn(networking.clone(), rx_messages, message_senders, message_logger);
-    handles.push(join_handle);
-
-    let message_dispatcher::DanMessageReceivers {
-        rx_consensus_message,
-        rx_new_transaction_message,
-    } = message_receivers;
 
     // Connect to shard db
     let state_store =
@@ -230,12 +226,24 @@ pub async fn spawn_services(
     // Consensus
     let (tx_executed_transaction, rx_executed_transaction) = mpsc::channel(10);
     let foreign_receive_counter = state_store.with_read_tx(|tx| ForeignReceiveCounters::get(tx))?;
+
+    let local_address = PeerAddress::from(keypair.public_key().clone());
+    let (loopback_sender, loopback_receiver) = mpsc::unbounded_channel();
+    let inbound_messaging = ConsensusInboundMessaging::new(
+        local_address,
+        rx_consensus_messages,
+        loopback_receiver,
+        message_logger.clone(),
+    );
+    let outbound_messaging =
+        ConsensusOutboundMessaging::new(loopback_sender, networking.clone(), message_logger.clone());
+
     let (consensus_join_handle, consensus_handle, rx_consensus_to_mempool) = consensus::spawn(
         state_store.clone(),
         keypair.clone(),
         epoch_manager.clone(),
         rx_executed_transaction,
-        rx_consensus_message,
+        inbound_messaging,
         outbound_messaging.clone(),
         validator_node_client_factory.clone(),
         foreign_receive_counter,
@@ -262,9 +270,11 @@ pub async fn spawn_services(
         epoch_manager.clone(),
         virtual_substate_manager.clone(),
     );
+
+    let gossip = Gossip::new(networking.clone(), rx_gossip_messages);
+
     let (mempool, join_handle) = mempool::spawn(
-        rx_new_transaction_message,
-        outbound_messaging,
+        gossip,
         tx_executed_transaction,
         epoch_manager.clone(),
         payload_processor.clone(),
@@ -377,7 +387,7 @@ fn ensure_directories_exist(config: &ApplicationConfig) -> io::Result<()> {
 
 pub struct Services {
     pub keypair: RistrettoKeypair,
-    pub networking: NetworkingHandle<proto::network::Message>,
+    pub networking: NetworkingHandle<TariMessagingSpec>,
     pub mempool: MempoolHandle,
     pub epoch_manager: EpochManagerHandle<PeerAddress>,
     pub template_manager: TemplateManagerHandle,
@@ -395,16 +405,13 @@ impl Services {
         // JoinHandler panics if polled again after reading the Result, we fuse the future to prevent this.
         let fused = self.handles.iter_mut().map(|h| h.fuse());
         let (res, _, _) = future::select_all(fused).await;
-        match res {
-            Ok(res) => res,
-            Err(e) => Err(anyhow!("Task panicked: {}", e)),
-        }
+        res.unwrap_or_else(|e| Err(anyhow!("Task panicked: {}", e)))
     }
 }
 
 async fn spawn_p2p_rpc(
     config: &ApplicationConfig,
-    networking: &mut NetworkingHandle<proto::network::Message>,
+    networking: &mut NetworkingHandle<TariMessagingSpec>,
     shard_store_store: SqliteStateStore<PeerAddress>,
     mempool: MempoolHandle,
     virtual_substate_manager: VirtualSubstateManager<SqliteStateStore<PeerAddress>, EpochManagerHandle<PeerAddress>>,

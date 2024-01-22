@@ -10,12 +10,18 @@ use tari_epoch_manager::EpochManagerError;
 use tari_mmr::BalancedBinaryMerkleProofError;
 use tari_transaction::TransactionId;
 
+use crate::traits::{InboundMessagingError, OutboundMessagingError};
+
 #[derive(Debug, thiserror::Error)]
 pub enum HotStuffError {
     #[error("Storage error: {0}")]
     StorageError(#[from] StorageError),
     #[error("Internal channel send error when {context}")]
     InternalChannelClosed { context: &'static str },
+    #[error("Inbound messaging error: {0}")]
+    InboundMessagingError(#[from] InboundMessagingError),
+    #[error("Outbound messaging error: {0}")]
+    OutboundMessagingError(#[from] OutboundMessagingError),
     #[error("Epoch {epoch} is not active. {details}")]
     EpochNotActive { epoch: Epoch, details: String },
     #[error("Not registered for current epoch {epoch}")]

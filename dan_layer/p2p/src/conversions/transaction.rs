@@ -27,7 +27,6 @@ use tari_bor::decode_exact;
 use tari_common_types::types::{Commitment, PrivateKey, PublicKey};
 use tari_crypto::{ristretto::RistrettoComSig, tari_utilities::ByteArray};
 use tari_dan_common_types::Epoch;
-use tari_dan_p2p::NewTransactionMessage;
 use tari_engine_types::{
     confidential::{ConfidentialClaim, ConfidentialOutput},
     instruction::Instruction,
@@ -47,6 +46,7 @@ use crate::{
         transaction::{instruction::InstructionType, OptionalVersion},
     },
     utils::checked_copy_fixed,
+    NewTransactionMessage,
 };
 
 // -------------------------------- NewTransactionMessage -------------------------------- //

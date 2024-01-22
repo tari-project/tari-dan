@@ -49,7 +49,7 @@ where TCodec: messaging::Codec + Send + Clone + 'static
     pub peer_sync: peer_sync::Behaviour<MemoryPeerStore>,
 
     pub substream: substream::Behaviour,
-    pub messaging: messaging::Behaviour<TCodec>,
+    pub messaging: Toggle<messaging::Behaviour<TCodec>>,
     pub gossipsub: gossipsub::Behaviour,
 }
 
@@ -118,10 +118,14 @@ where
             };
 
             // Messaging
-            let messaging = messaging::Behaviour::new(
-                StreamProtocol::try_from_owned(config.messaging_protocol)?,
-                messaging::Config::default(),
-            );
+            let messaging = if config.enable_messaging {
+                Some(messaging::Behaviour::new(
+                    StreamProtocol::try_from_owned(config.messaging_protocol)?,
+                    messaging::Config::default(),
+                ))
+            } else {
+                None
+            };
 
             // Substreams
             let substream = substream::Behaviour::new(supported_protocols, substream::Config::default());
@@ -154,7 +158,7 @@ where
                 autonat,
                 gossipsub,
                 substream,
-                messaging,
+                messaging: Toggle::from(messaging),
                 connection_limits,
                 mdns: Toggle::from(maybe_mdns),
                 peer_sync,

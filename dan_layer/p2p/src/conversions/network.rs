@@ -23,9 +23,8 @@
 use std::convert::{TryFrom, TryInto};
 
 use anyhow::anyhow;
-use tari_dan_p2p::{DanMessage, Message};
 
-use crate::proto;
+use crate::{proto, DanMessage, Message};
 
 // -------------------------------- Message -------------------------------- //
 impl From<&Message> for proto::network::Message {

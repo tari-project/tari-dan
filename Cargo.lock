@@ -9166,10 +9166,19 @@ dependencies = [
 name = "tari_dan_p2p"
 version = "0.3.0"
 dependencies = [
- "async-trait",
+ "anyhow",
+ "prost 0.12.3",
+ "proto_builder",
  "serde",
+ "tari_bor",
+ "tari_common_types",
  "tari_consensus",
+ "tari_crypto",
  "tari_dan_common_types",
+ "tari_dan_storage",
+ "tari_engine_types",
+ "tari_networking",
+ "tari_template_lib",
  "tari_transaction",
 ]
 
@@ -9428,6 +9437,7 @@ dependencies = [
  "tari_dan_app_utilities",
  "tari_dan_common_types",
  "tari_dan_engine",
+ "tari_dan_p2p",
  "tari_dan_storage",
  "tari_dan_storage_sqlite",
  "tari_engine_types",
@@ -9649,6 +9659,7 @@ dependencies = [
  "log",
  "tari_consensus",
  "tari_dan_common_types",
+ "tari_dan_p2p",
  "tari_dan_storage",
  "tari_epoch_manager",
  "tari_rpc_framework",
@@ -10010,13 +10021,9 @@ dependencies = [
  "anyhow",
  "async-trait",
  "prost 0.12.3",
- "prost-build 0.12.3",
  "proto_builder",
  "serde",
  "tari_bor",
- "tari_common_types",
- "tari_consensus",
- "tari_crypto",
  "tari_dan_common_types",
  "tari_dan_p2p",
  "tari_dan_storage",
@@ -10024,7 +10031,6 @@ dependencies = [
  "tari_networking",
  "tari_rpc_framework",
  "tari_rpc_macros",
- "tari_template_lib",
  "tari_transaction",
  "thiserror",
 ]
