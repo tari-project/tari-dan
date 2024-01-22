@@ -67,17 +67,15 @@ function Templates() {
         response.templates
           .slice()
           .sort((a: ITemplate, b: ITemplate) => b.height - a.height)
-          .map(({ address, binary_sha, height, name, url, show = true
-            }: ITemplate) => ({
-              id: toHex(address),
-              address,
-              binary_sha,
-              height,
-              name,
-              url,
-              show,
-            }),
-          ),
+          .map(({ address, binary_sha, height, name, url, show = true }: ITemplate) => ({
+            id: toHex(address),
+            address,
+            binary_sha,
+            height,
+            name,
+            url,
+            show,
+          })),
       );
     });
   }, []);
@@ -94,11 +92,7 @@ function Templates() {
     if (column) {
       setTemplates(
         [...templates].sort((r0: any, r1: any) =>
-          r0[column] > r1[column]
-            ? order
-            : r0[column] < r1[column]
-            ? -order
-            : 0,
+          r0[column] > r1[column] ? order : r0[column] < r1[column] ? -order : 0,
         ),
       );
       setLastSort({ column, order });
@@ -115,9 +109,7 @@ function Templates() {
     setPage(newPage);
   };
 
-  const handleChangeRowsPerPage = (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0);
   };
@@ -251,10 +243,7 @@ function Templates() {
             {templates.filter(({ show }) => show).length === 0 && (
               <TableRow>
                 <TableCell colSpan={4} style={{ textAlign: "center" }}>
-                  <Fade
-                    in={templates.filter(({ show }) => show).length === 0}
-                    timeout={500}
-                  >
+                  <Fade in={templates.filter(({ show }) => show).length === 0} timeout={500}>
                     <Typography variant="h5">No results found</Typography>
                   </Fade>
                 </TableCell>
