@@ -33,6 +33,7 @@ use serde_json::{self as json, json};
 use tari_base_node_client::{grpc::GrpcBaseNodeClient, BaseNodeClient};
 use tari_dan_app_utilities::{keypair::RistrettoKeypair, template_manager::interface::TemplateManagerHandle};
 use tari_dan_common_types::{optional::Optional, public_key_to_peer_id, PeerAddress, SubstateAddress};
+use tari_dan_p2p::TariMessagingSpec;
 use tari_dan_storage::{
     consensus_models::{Block, ExecutedTransaction, LeafBlock, QuorumDecision, SubstateRecord, TransactionRecord},
     Ordering,
@@ -88,7 +89,6 @@ use tari_validator_node_client::{
         TemplateRegistrationResponse,
     },
 };
-use tari_validator_node_rpc::proto;
 
 use crate::{
     dry_run_transaction_processor::DryRunTransactionProcessor,
@@ -107,7 +107,7 @@ pub struct JsonRpcHandlers {
     mempool: MempoolHandle,
     template_manager: TemplateManagerHandle,
     epoch_manager: EpochManagerHandle<PeerAddress>,
-    networking: NetworkingHandle<proto::network::Message>,
+    networking: NetworkingHandle<TariMessagingSpec>,
     base_node_client: GrpcBaseNodeClient,
     state_store: SqliteStateStore<PeerAddress>,
     dry_run_transaction_processor: DryRunTransactionProcessor,
@@ -307,18 +307,18 @@ impl JsonRpcHandlers {
         let answer_id = value.get_answer_id();
         let request: GetTransactionResultRequest = value.parse_params()?;
 
-        let executed = self
+        let transaction = self
             .state_store
-            .with_read_tx(|tx| ExecutedTransaction::get(tx, &request.transaction_id))
+            .with_read_tx(|tx| TransactionRecord::get(tx, &request.transaction_id))
             .optional()
             .map_err(internal_error(answer_id))?
             .ok_or_else(|| not_found(answer_id, format!("Transaction {} not found", request.transaction_id)))?;
 
         let response = GetTransactionResultResponse {
-            final_decision: executed.final_decision(),
-            finalized_time: executed.finalized_time(),
-            execution_time: executed.execution_time(),
-            result: executed.into_final_result(),
+            final_decision: transaction.final_decision(),
+            finalized_time: transaction.finalized_time(),
+            execution_time: transaction.execution_time(),
+            result: transaction.result,
         };
         Ok(JsonRpcResponse::success(answer_id, response))
     }

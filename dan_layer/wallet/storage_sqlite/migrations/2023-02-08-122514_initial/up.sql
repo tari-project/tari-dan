@@ -71,7 +71,7 @@ CREATE UNIQUE INDEX substates_uniq_address ON substates (address);
 CREATE TABLE accounts
 (
     id              INTEGER  NOT NULL PRIMARY KEY AUTOINCREMENT,
-    name            TEXT     NOT NULL,
+    name            TEXT     NULL,
     address         TEXT     NOT NULL,
     owner_key_index BIGINT   NOT NULL,
     created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -79,7 +79,7 @@ CREATE TABLE accounts
 );
 
 CREATE UNIQUE INDEX accounts_uniq_address ON accounts (address);
-CREATE UNIQUE INDEX accounts_uniq_name ON accounts (name);
+CREATE UNIQUE INDEX accounts_uniq_name ON accounts (name) WHERE name IS NOT NULL;
 
 -- Vaults
 CREATE TABLE vaults

@@ -240,7 +240,7 @@ pub trait WalletStoreWriter {
     fn accounts_set_default(&mut self, substate_id: &SubstateId) -> Result<(), WalletStorageError>;
     fn accounts_insert(
         &mut self,
-        account_name: &str,
+        account_name: Option<&str>,
         substate_id: &SubstateId,
         owner_key_index: u64,
         is_default: bool,

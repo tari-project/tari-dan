@@ -3,31 +3,27 @@
 
 use log::*;
 use tari_dan_storage::{consensus_models::TransactionRecord, StateStore};
-use tokio::sync::mpsc;
 
 use crate::{
     hotstuff::error::HotStuffError,
     messages::{HotstuffMessage, RequestMissingTransactionsMessage, RequestedTransactionMessage},
-    traits::ConsensusSpec,
+    traits::{ConsensusSpec, OutboundMessaging},
 };
 
 const LOG_TARGET: &str = "tari::dan::consensus::hotstuff::on_receive_request_missing_transactions";
 
 pub struct OnReceiveRequestMissingTransactions<TConsensusSpec: ConsensusSpec> {
     store: TConsensusSpec::StateStore,
-    tx_request_missing_tx: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+    outbound_messaging: TConsensusSpec::OutboundMessaging,
 }
 
 impl<TConsensusSpec> OnReceiveRequestMissingTransactions<TConsensusSpec>
 where TConsensusSpec: ConsensusSpec
 {
-    pub fn new(
-        store: TConsensusSpec::StateStore,
-        tx_request_missing_tx: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
-    ) -> Self {
+    pub fn new(store: TConsensusSpec::StateStore, outbound_messaging: TConsensusSpec::OutboundMessaging) -> Self {
         Self {
             store,
-            tx_request_missing_tx,
+            outbound_messaging,
         }
     }
 
@@ -40,19 +36,16 @@ where TConsensusSpec: ConsensusSpec
         let (txs, _) = self
             .store
             .with_read_tx(|tx| TransactionRecord::get_any(tx, &msg.transactions))?;
-        self.tx_request_missing_tx
-            .send((
+        self.outbound_messaging
+            .send(
                 from,
                 HotstuffMessage::RequestedTransaction(RequestedTransactionMessage {
                     epoch: msg.epoch,
                     block_id: msg.block_id,
                     transactions: txs.into_iter().map(|tx| tx.into_transaction()).collect(),
                 }),
-            ))
-            .await
-            .map_err(|_| HotStuffError::InternalChannelClosed {
-                context: "tx_new_transaction in OnReceiveRequestMissingTransactions::handle",
-            })?;
+            )
+            .await?;
         Ok(())
     }
 }

@@ -20,13 +20,10 @@
 //  WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 //  USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-use tari_dan_common_types::NodeHeight;
-
 #[derive(Clone, Debug)]
 pub struct ConsensusConstants {
     pub base_layer_confirmations: u64,
     pub committee_size: u32,
-    pub hotstuff_rounds: u64,
 }
 
 impl ConsensusConstants {
@@ -34,11 +31,6 @@ impl ConsensusConstants {
         Self {
             base_layer_confirmations: 3,
             committee_size: 7,
-            hotstuff_rounds: 4,
         }
-    }
-
-    pub fn max_payload_height(&self) -> NodeHeight {
-        NodeHeight(self.hotstuff_rounds)
     }
 }

@@ -9,14 +9,7 @@ use std::{
 };
 
 use chrono::NaiveDateTime;
-use diesel::{
-    sql_query,
-    sql_types::{BigInt, Bool, Text},
-    OptionalExtension,
-    QueryDsl,
-    RunQueryDsl,
-    SqliteConnection,
-};
+use diesel::{OptionalExtension, QueryDsl, RunQueryDsl, SqliteConnection};
 use log::*;
 use serde::Serialize;
 use tari_common_types::types::{Commitment, PublicKey};
@@ -409,23 +402,27 @@ impl WalletStoreWriter for WriteTransaction<'_> {
 
     fn accounts_insert(
         &mut self,
-        account_name: &str,
+        account_name: Option<&str>,
         address: &SubstateId,
         owner_key_index: u64,
         is_default: bool,
     ) -> Result<(), WalletStorageError> {
+        use crate::schema::accounts;
+
         if is_default {
-            diesel::update(crate::schema::accounts::table)
+            diesel::update(accounts::table)
                 .set(crate::schema::accounts::is_default.eq(false))
                 .execute(self.connection())
                 .map_err(|e| WalletStorageError::general("accounts_insert clear previous default", e))?;
         }
 
-        sql_query("INSERT INTO accounts (name, address, owner_key_index, is_default) VALUES (?, ?, ?, ?)")
-            .bind::<Text, _>(account_name)
-            .bind::<Text, _>(address.to_string())
-            .bind::<BigInt, _>(owner_key_index as i64)
-            .bind::<Bool, _>(is_default)
+        diesel::insert_into(accounts::table)
+            .values((
+                accounts::name.eq(account_name),
+                accounts::address.eq(address.to_string()),
+                accounts::owner_key_index.eq(owner_key_index as i64),
+                accounts::is_default.eq(is_default),
+            ))
             .execute(self.connection())
             .map_err(|e| WalletStorageError::general("accounts_insert", e))?;
 

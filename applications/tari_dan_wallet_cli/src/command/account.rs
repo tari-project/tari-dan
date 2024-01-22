@@ -338,7 +338,7 @@ async fn handle_list(client: &mut WalletDaemonClient) -> Result<(), anyhow::Erro
     println!("Accounts:");
     for AccountInfo { account, public_key } in resp.accounts {
         table.add_row(table_row!(
-            account.name,
+            account.name.as_deref().unwrap_or("<None>"),
             account.address,
             public_key,
             if account.is_default { "✅" } else { "" }
@@ -354,7 +354,8 @@ async fn handle_get(args: GetArgs, client: &mut WalletDaemonClient) -> Result<()
 
     println!(
         "Account {} substate_address: {}",
-        resp.account.name, resp.account.address
+        resp.account.name.as_deref().unwrap_or("<None>"),
+        resp.account.address
     );
     println!();
 

@@ -4,6 +4,7 @@
 use std::collections::HashSet;
 
 use log::*;
+use tari_dan_p2p::proto::rpc::{sync_blocks_response::SyncData, QuorumCertificates, SyncBlocksResponse, Transactions};
 use tari_dan_storage::{
     consensus_models::{Block, BlockId, LeafBlock, QuorumCertificate, SubstateUpdate, TransactionRecord},
     StateStore,
@@ -11,12 +12,6 @@ use tari_dan_storage::{
     StorageError,
 };
 use tari_rpc_framework::RpcStatus;
-use tari_validator_node_rpc::proto::rpc::{
-    sync_blocks_response::SyncData,
-    QuorumCertificates,
-    SyncBlocksResponse,
-    Transactions,
-};
 use tokio::sync::mpsc;
 
 const LOG_TARGET: &str = "tari::dan::rpc::sync_task";

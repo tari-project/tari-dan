@@ -143,6 +143,11 @@ loggers:
     appenders:
       - consensus
 
+  tari::dan::networking:
+    level: debug
+    appenders:
+      - network
+
   tari::dan::engine:
     level: debug
     appenders:

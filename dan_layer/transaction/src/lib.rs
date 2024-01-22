@@ -26,6 +26,8 @@ mod signature;
 mod transaction;
 mod transaction_id;
 
+pub use builder::TransactionBuilder;
 pub use signature::{TransactionSignature, TransactionSignatureFields};
+pub use tari_engine_types::instruction::Instruction;
 pub use transaction::*;
 pub use transaction_id::*;

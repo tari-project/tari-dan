@@ -282,7 +282,7 @@ async fn handle_submit_manifest(
     client: &mut WalletDaemonClient,
 ) -> Result<(), anyhow::Error> {
     let contents = fs::read_to_string(&args.manifest).map_err(|e| anyhow!("Failed to read manifest: {}", e))?;
-    let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?)?;
+    let instructions = parse_manifest(&contents, parse_globals(args.input_variables)?, Default::default())?;
     let common = args.common;
 
     let fee_account;
@@ -294,12 +294,16 @@ async fn handle_submit_manifest(
 
     let request = TransactionSubmitRequest {
         signing_key_index: None,
-        fee_instructions: vec![Instruction::CallMethod {
-            component_address: fee_account.address.as_component_address().unwrap(),
-            method: "pay_fee".to_string(),
-            args: args![Amount::try_from(common.max_fee.unwrap_or(1000))?],
-        }],
-        instructions,
+        fee_instructions: instructions
+            .fee_instructions
+            .into_iter()
+            .chain(vec![Instruction::CallMethod {
+                component_address: fee_account.address.as_component_address().unwrap(),
+                method: "pay_fee".to_string(),
+                args: args![Amount::try_from(common.max_fee.unwrap_or(1000))?],
+            }])
+            .collect(),
+        instructions: instructions.instructions,
         inputs: common.inputs,
         override_inputs: common.override_inputs.unwrap_or_default(),
         is_dry_run: common.dry_run,

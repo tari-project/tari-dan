@@ -19,7 +19,7 @@ use tari_dan_storage::{
     StateStore,
 };
 use tari_epoch_manager::EpochManagerReader;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 
 use super::proposer::{self, Proposer};
 use crate::{
@@ -30,7 +30,7 @@ use crate::{
         HotstuffEvent,
         ProposalValidationError,
     },
-    messages::{HotstuffMessage, ProposalMessage},
+    messages::ProposalMessage,
     traits::{ConsensusSpec, LeaderStrategy},
 };
 
@@ -51,7 +51,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         epoch_manager: TConsensusSpec::EpochManager,
         leader_strategy: TConsensusSpec::LeaderStrategy,
         pacemaker: PaceMakerHandle,
-        tx_leader: mpsc::Sender<(TConsensusSpec::Addr, HotstuffMessage)>,
+        outbound_messaging: TConsensusSpec::OutboundMessaging,
         vote_signing_service: TConsensusSpec::SignatureService,
         state_manager: TConsensusSpec::StateManager,
         transaction_pool: TransactionPool<TConsensusSpec::StateStore>,
@@ -71,14 +71,14 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
                 leader_strategy,
                 state_manager,
                 transaction_pool,
-                tx_leader,
+                outbound_messaging,
                 tx_events,
                 proposer,
             ),
         }
     }
 
-    pub async fn handle(&self, message: ProposalMessage) -> Result<(), HotStuffError> {
+    pub async fn handle(&mut self, message: ProposalMessage) -> Result<(), HotStuffError> {
         let ProposalMessage { block } = message;
 
         debug!(
@@ -93,7 +93,7 @@ impl<TConsensusSpec: ConsensusSpec> OnReceiveLocalProposalHandler<TConsensusSpec
         Ok(())
     }
 
-    async fn process_block(&self, block: Block) -> Result<(), HotStuffError> {
+    async fn process_block(&mut self, block: Block) -> Result<(), HotStuffError> {
         if !self.epoch_manager.is_epoch_active(block.epoch()).await? {
             return Err(HotStuffError::EpochNotActive {
                 epoch: block.epoch(),

@@ -24,10 +24,9 @@ use std::{collections::HashSet, fmt::Display, iter, ops::DerefMut};
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use log::*;
-use sqlite_message_logger::SqliteMessageLogger;
 use tari_dan_app_utilities::transaction_executor::{TransactionExecutor, TransactionProcessorError};
 use tari_dan_common_types::{optional::Optional, shard::Shard, Epoch, PeerAddress, SubstateAddress};
-use tari_dan_p2p::NewTransactionMessage;
+use tari_dan_p2p::{DanMessage, NewTransactionMessage};
 use tari_dan_storage::{
     consensus_models::{ExecutedTransaction, SubstateRecord, TransactionPool, TransactionRecord},
     StateStore,
@@ -43,12 +42,12 @@ use crate::{
     p2p::services::{
         mempool::{
             executor::{execute_transaction, ExecutionResult},
-            gossip::Gossip,
+            gossip::MempoolGossip,
             handle::MempoolRequest,
             traits::SubstateResolver,
             Validator,
         },
-        message_dispatcher::OutboundMessaging,
+        messaging::Gossip,
     },
     substate_resolver::SubstateResolverError,
 };
@@ -66,7 +65,6 @@ struct MempoolTransactionExecution {
 pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateResolver> {
     transactions: HashSet<TransactionId>,
     pending_executions: FuturesUnordered<BoxFuture<'static, MempoolTransactionExecution>>,
-    new_transactions: mpsc::Receiver<(PeerAddress, NewTransactionMessage)>,
     mempool_requests: mpsc::Receiver<MempoolRequest>,
     tx_executed_transactions: mpsc::Sender<TransactionId>,
     epoch_manager: EpochManagerHandle<PeerAddress>,
@@ -76,7 +74,7 @@ pub struct MempoolService<TValidator, TExecutedValidator, TExecutor, TSubstateRe
     substate_resolver: TSubstateResolver,
     state_store: SqliteStateStore<PeerAddress>,
     transaction_pool: TransactionPool<SqliteStateStore<PeerAddress>>,
-    gossip: Gossip<PeerAddress>,
+    gossip: MempoolGossip<PeerAddress>,
     rx_consensus_to_mempool: mpsc::UnboundedReceiver<Transaction>,
     consensus_handle: ConsensusHandle,
 }
@@ -89,11 +87,9 @@ where
     TExecutor: TransactionExecutor<Error = TransactionProcessorError> + Clone + Send + Sync + 'static,
     TSubstateResolver: SubstateResolver<Error = SubstateResolverError> + Clone + Send + Sync + 'static,
 {
-    // #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        new_transactions: mpsc::Receiver<(PeerAddress, NewTransactionMessage)>,
         mempool_requests: mpsc::Receiver<MempoolRequest>,
-        outbound: OutboundMessaging<PeerAddress, SqliteMessageLogger>,
+        gossip: Gossip,
         tx_executed_transactions: mpsc::Sender<TransactionId>,
         epoch_manager: EpochManagerHandle<PeerAddress>,
         transaction_executor: TExecutor,
@@ -105,10 +101,9 @@ where
         consensus_handle: ConsensusHandle,
     ) -> Self {
         Self {
-            gossip: Gossip::new(epoch_manager.clone(), outbound),
+            gossip: MempoolGossip::new(epoch_manager.clone(), gossip),
             transactions: Default::default(),
             pending_executions: FuturesUnordered::new(),
-            new_transactions,
             mempool_requests,
             tx_executed_transactions,
             epoch_manager,
@@ -134,8 +129,8 @@ where
                         error!(target: LOG_TARGET, "Possible bug: handle_execution_complete failed: {}", e);
                     }
                 },
-                Some((from, msg)) = self.new_transactions.recv() => {
-                    if let Err(e) = self.handle_new_transaction_from_remote(from, msg).await {
+                Some(result) = self.gossip.next_message() => {
+                    if let Err(e) = self.handle_new_transaction_from_remote(result).await {
                         warn!(target: LOG_TARGET, "Mempool rejected transaction: {}", e);
                     }
                 }
@@ -178,17 +173,24 @@ where
                         .await,
                 );
             },
-            MempoolRequest::RemoveTransaction {
-                transaction_id: transaction_hash,
-            } => self.remove_transaction(&transaction_hash),
+            MempoolRequest::RemoveTransactions { transaction_ids, reply } => {
+                let num_found = self.remove_transactions(&transaction_ids);
+                handle::<_, MempoolError>(reply, Ok(num_found));
+            },
             MempoolRequest::GetMempoolSize { reply } => {
                 let _ignore = reply.send(self.transactions.len());
             },
         }
     }
 
-    fn remove_transaction(&mut self, id: &TransactionId) {
-        self.transactions.remove(id);
+    fn remove_transactions(&mut self, ids: &[TransactionId]) -> usize {
+        let mut num_found = 0;
+        for id in ids {
+            if self.transactions.remove(id) {
+                num_found += 1;
+            }
+        }
+        num_found
     }
 
     async fn handle_new_transaction_from_local(
@@ -214,13 +216,14 @@ where
 
     async fn handle_new_transaction_from_remote(
         &mut self,
-        from: PeerAddress,
-        msg: NewTransactionMessage,
+        result: Result<(PeerAddress, DanMessage), MempoolError>,
     ) -> Result<(), MempoolError> {
+        let (from, msg) = result?;
+        let DanMessage::NewTransaction(msg) = msg;
         let NewTransactionMessage {
             transaction,
             output_shards: unverified_output_shards,
-        } = msg;
+        } = *msg;
 
         if !self.consensus_handle.get_current_state().is_running() {
             info!(
@@ -369,8 +372,7 @@ where
                             NewTransactionMessage {
                                 transaction,
                                 output_shards: vec![],
-                            }
-                            .into(),
+                            },
                             sender_shard,
                         )
                         .await
@@ -401,8 +403,7 @@ where
                         NewTransactionMessage {
                             transaction,
                             output_shards: vec![],
-                        }
-                        .into(),
+                        },
                     )
                     .await
                 {
@@ -610,8 +611,7 @@ where
                     NewTransactionMessage {
                         transaction: executed.transaction().clone(),
                         output_shards: executed.resulting_outputs().to_vec(),
-                    }
-                    .into(),
+                    },
                     sender_shard,
                 )
                 .await

@@ -128,7 +128,7 @@ where
         for account in accounts {
             info!(
                 target: LOG_TARGET,
-                "👁️‍🗨️ Refreshing account '{}' {}", account.name, account.address
+                "👁️‍🗨️ Refreshing account {}", account
             );
             let is_updated = self.refresh_account(&account.address).await?;
 
@@ -139,7 +139,7 @@ where
             } else {
                 info!(
                     target: LOG_TARGET,
-                    "👁️‍🗨️ Account '{}' {} is up to date", account.name, account.address
+                    "👁️‍🗨️ Account {} is up to date", account
                 );
             }
         }
@@ -565,7 +565,7 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateId> {
                 .component()
                 .expect("Value was not component for component address")
                 .template_address !=
-                *ACCOUNT_TEMPLATE_ADDRESS
+                ACCOUNT_TEMPLATE_ADDRESS
         {
             return None;
         }
@@ -577,6 +577,6 @@ fn find_new_account_address(diff: &SubstateDiff) -> Option<&SubstateId> {
 fn is_account(s: &Substate) -> bool {
     s.substate_value()
         .component()
-        .filter(|c| c.template_address == *ACCOUNT_TEMPLATE_ADDRESS)
+        .filter(|c| c.template_address == ACCOUNT_TEMPLATE_ADDRESS)
         .is_some()
 }

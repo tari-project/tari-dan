@@ -40,6 +40,8 @@ pub struct Cli {
     pub signaling_server_address: Option<SocketAddr>,
     #[clap(long, alias = "indexer-url")]
     pub indexer_node_json_rpc_url: Option<String>,
+    #[clap(long)]
+    pub derive_secret: Option<u64>,
 }
 
 impl Cli {

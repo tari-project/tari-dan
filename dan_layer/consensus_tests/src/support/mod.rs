@@ -10,6 +10,7 @@ mod harness;
 mod helpers;
 mod leader_strategy;
 pub mod logging;
+mod messaging_impls;
 mod network;
 mod signing_service;
 mod spec;

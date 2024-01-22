@@ -16,6 +16,7 @@ pub struct Config {
     pub max_connections_per_peer: Option<u32>,
     pub enable_mdns: bool,
     pub enable_relay: bool,
+    pub enable_messaging: bool,
     pub idle_connection_timeout: Duration,
 }
 
@@ -29,6 +30,7 @@ impl Default for Config {
             max_connections_per_peer: Some(3),
             enable_mdns: false,
             enable_relay: false,
+            enable_messaging: true,
             idle_connection_timeout: Duration::from_secs(10 * 60),
         }
     }
