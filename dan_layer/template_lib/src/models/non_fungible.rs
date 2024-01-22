@@ -2,6 +2,7 @@
 //   SPDX-License-Identifier: BSD-3-Clause
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_with::{serde_as, Bytes};
 use tari_bor::BorTag;
 use tari_template_abi::{
     call_engine,
@@ -22,9 +23,10 @@ use crate::{
 const DELIM: char = ':';
 
 /// The unique identification of a non-fungible token inside it's parent resource
+#[serde_as]
 #[derive(Debug, Clone, Ord, PartialOrd, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub enum NonFungibleId {
-    U256(#[serde(with = "serde_byte_array")] [u8; 32]),
+    U256(#[serde_as(as = "Bytes")] [u8; 32]),
     String(String),
     Uint32(u32),
     Uint64(u64),

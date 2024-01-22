@@ -29,11 +29,13 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use serde_with::{serde_as, Bytes};
 
 /// Representation of a 32-byte hash value
+#[serde_as]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Default, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct Hash([u8; 32]);
+pub struct Hash(#[serde_as(as = "Bytes")] [u8; 32]);
 
 impl Hash {
     pub const fn from_array(bytes: [u8; 32]) -> Self {
