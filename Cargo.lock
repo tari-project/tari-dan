@@ -7991,15 +7991,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-byte-array"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63213ee4ed648dbd87db6fa993d4275b46bfb4ddfd95b3756045007c2b28f742"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "serde-value"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8011,9 +8002,9 @@ dependencies = [
 
 [[package]]
 name = "serde_bytes"
-version = "0.11.12"
+version = "0.11.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab33ec92f677585af6d88c65593ae2375adde54efdbf16d597f2cbc7a6d368ff"
+checksum = "8b8497c313fd43ab992087548117643f6fcd935cbf36f176ffda0aacf9591734"
 dependencies = [
  "serde",
 ]
@@ -9808,8 +9799,8 @@ version = "0.3.0"
 dependencies = [
  "newtype-ops",
  "serde",
- "serde-byte-array",
  "serde_json",
+ "serde_with",
  "tari_bor",
  "tari_template_abi",
  "tari_template_macros",

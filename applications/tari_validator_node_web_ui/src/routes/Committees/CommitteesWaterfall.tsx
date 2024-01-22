@@ -23,7 +23,7 @@
 import { useState, useEffect } from "react";
 import { fromHexString } from "../VN/Components/helpers";
 import EChartsReact from "echarts-for-react";
-import { ICommittees, ICommitteeChart, ICommitteeMap } from "../../utils/interfaces";
+import { ICommitteeChart } from "../../utils/interfaces";
 import "../../theme/echarts.css";
 import { CommitteeShardInfo } from "../../utils/interfaces";
 
@@ -56,8 +56,8 @@ export default function CommitteesWaterfall({ committees }: { committees: Commit
     };
 
     committees.forEach((data) => {
-      const firstValue = fromHexString(data.shard_range.start)[0];
-      const secondValue = fromHexString(data.shard_range.end)[0];
+      const firstValue = fromHexString(data.substate_address_range.start)[0];
+      const secondValue = fromHexString(data.substate_address_range.end)[0];
       switch (true) {
         case firstValue === secondValue:
           info.activeleft.push(0);
@@ -86,15 +86,15 @@ export default function CommitteesWaterfall({ committees }: { committees: Commit
     });
     setChartData(info);
     setDivHeight(committees.length * 50);
-    const newTitles = committees.map((data) => `Committee ${data.bucket}`);
+    const newTitles = committees.map((data) => `Committee ${data.shard}`);
     setTitles(newTitles);
   }, [committees]);
 
   function tooltipFormatter(params: any) {
     const dataIndex = params[0].dataIndex;
     const data = committees[dataIndex];
-    const begin = fromHexString(data.shard_range.start)[0];
-    const end = fromHexString(data.shard_range.end)[0];
+    const begin = fromHexString(data.substate_address_range.start)[0];
+    const end = fromHexString(data.substate_address_range.end)[0];
 
     const memberList = data.validators
       .map((member) => `<li>${member.address}</li>`)
